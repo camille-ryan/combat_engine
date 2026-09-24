@@ -161,8 +161,12 @@ def parse(row_id: int, document: str, source: str = "") -> Monster:
     swaps = {m.name: m.ref_id}
     for a in m.abilities:
         swaps.setdefault(a.name, f"{m.ref_id}a{a.index}")
+    # What is printed beside the numbers is mechanics, not prose, and several
+    # creatures are named after their own type. Scrubbing "goblin" out of a
+    # goblin's rules would hide a word the spec already prints in its tags.
+    keep = {m.role, m.size, m.origin, m.kind, "minion", "elite", "solo", "leader"}
     for a in m.abilities:
-        a.spec = scrub(a.spec, swaps)
+        a.spec = scrub(a.spec, swaps, keep)
     return m
 
 

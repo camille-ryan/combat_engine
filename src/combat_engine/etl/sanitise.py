@@ -67,7 +67,12 @@ RULES_TERMS = {
 }  # fmt: skip
 
 
-def scrub(body: str, replacements: dict[str, str]) -> str:
+#: Words that appear inside printed names and carry no identity of their own.
+#: Scrubbing them would only make a spec harder to read.
+_NOISE = {"the", "of", "and", "a", "an", "in", "on", "to", "with", "its", "it"}
+
+
+def scrub(body: str, replacements: dict[str, str], keep: set[str] | None = None) -> str:
     """Swap each printed name for the id of whatever it names.
 
     An ability's name maps to that ability's own id rather than the stat
@@ -78,13 +83,32 @@ def scrub(body: str, replacements: dict[str, str]) -> str:
     Longest first, so a three-word disease name is caught before the two-word
     monster name inside it leaves a fragment behind. Possessives look after
     themselves: the trailing `'s` simply survives the substitution.
+
+    **Single words of a name count as the name.** A stat block does not repeat
+    itself in full -- it writes "the goblin shifts 1 square" and "the
+    blackblade's previous space", and matching only the whole name left both
+    of those standing. Every word is therefore swapped as well, except the
+    ones in `keep`: a monster's own role, size, origin and type are printed
+    beside its numbers because they are mechanical, and a creature whose name
+    contains its type should not have the type scrubbed out of its rules.
     """
     out = body
-    usable = {
-        name: ref
-        for name, ref in replacements.items()
-        if name and len(name) > 2 and name.lower() not in RULES_TERMS
-    }
+    # A rules term protects its own words too. "Combat advantage" was safe as
+    # a phrase and both halves of it were not, so an ability *named* Combat
+    # Advantage turned the sentence describing it into "it has m237a1 m237a1
+    # against" -- and a power named after a shield made its own requirement
+    # line read "you must be using a p289".
+    kept = {w.lower() for w in (keep or set())} | _NOISE
+    for term in RULES_TERMS:
+        kept.add(term)
+        kept.update(term.split())
+    usable: dict[str, str] = {}
+    for name, ref in replacements.items():
+        if not name:
+            continue
+        for token in {name, *re.findall(r"[A-Za-z]+", name)}:
+            if len(token) > 2 and token.lower() not in kept:
+                usable.setdefault(token, ref)
     for name in sorted(usable, key=len, reverse=True):
         out = re.sub(rf"\b{re.escape(name)}\b", usable[name], out, flags=re.I)
     return out
