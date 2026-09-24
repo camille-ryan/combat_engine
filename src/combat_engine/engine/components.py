@@ -351,7 +351,15 @@ class Gear:
 
     @property
     def main(self) -> Weapon | None:
-        """What is in hand. The first weapon listed is the one being swung."""
+        """What is being swung -- the first weapon that can be swung.
+
+        Not simply `weapons[0]`: an archer's list starts with a bow, and
+        taking the first thing listed had it clubbing people with the bow
+        whenever a melee attack asked what was in hand.
+        """
+        melee = self.melee
+        if melee:
+            return melee[0]
         return self.weapons[0] if self.weapons else None
 
     @property

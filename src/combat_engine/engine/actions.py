@@ -34,6 +34,9 @@ class Action:
     targets: tuple[int, ...] = ()
     dest: Square | None = None
     origin: Square | None = None
+    #: Which half of a two-branch range line this option uses. 0 for
+    #: everything that prints one range, which is almost everything.
+    branch: int = 0
     #: What this acts on, when that is not the actor and not a square: a live
     #: effect for `sustain`, and later a conjuration to walk or command.
     #:
@@ -114,45 +117,58 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
 
 
 def _aimings(world: World, actor: int, ref: str) -> list[Action]:
-    """One action per distinct way of aiming this power."""
+    """One action per distinct way of aiming this power.
+
+    A row printing "Melee or Ranged weapon" is two ways of using it that
+    disagree about reach, provoking, weapon and often ability, so each
+    branch is enumerated separately. That is what makes both of them
+    reachable by clicking, and what lets a policy weigh one against the
+    other instead of being handed whichever was declared first.
+    """
     p = get(ref)
     if p is None:
         return []
+    if len(p.branches) > 1:
+        return [a for b in p.branches for a in _aiming_branch(world, actor, ref, p, b)]
+    return _aiming_branch(world, actor, ref, p, 0)
+
+
+def _aiming_branch(world: World, actor: int, ref: str, p, branch: int) -> list[Action]:  # noqa: ANN001
     cost = p.action
+    reach = p.reach_of(branch)
+
+    def act(**kw) -> Action:  # noqa: ANN003
+        return Action(kind="power", cost=cost, ref=ref, branch=branch, **kw)
 
     if not p.is_attack:
-        return [Action(kind="power", cost=cost, ref=ref)]
+        return [act()]
 
-    if p.reach.kind == "close_blast":
+    if reach.kind == "close_blast":
         # One option per place the blast can be laid down, keyed by the square
         # it is aimed at -- for a blast 3 that is the ring two squares out.
         out = []
         for aim in aim_points(world, actor, p):
-            hit = candidates(world, actor, p, aim)
+            hit = candidates(world, actor, p, aim, branch)
             if hit:
-                out.append(
-                    Action(kind="power", cost=cost, ref=ref, targets=tuple(hit), origin=aim)
-                )
+                out.append(act(targets=tuple(hit), origin=aim))
         return out
 
-    if p.reach.kind == "area_burst":
+    if reach.kind == "area_burst":
         out = []
         for origin in _burst_origins(world, actor, p):
-            hit = candidates(world, actor, p, origin)
+            hit = candidates(world, actor, p, origin, branch)
             if hit:
-                out.append(
-                    Action(kind="power", cost=cost, ref=ref, targets=tuple(hit), origin=origin)
-                )
+                out.append(act(targets=tuple(hit), origin=origin))
         return out
 
-    pool = candidates(world, actor, p)
+    pool = candidates(world, actor, p, None, branch)
     if p.target.everyone:
-        return [Action(kind="power", cost=cost, ref=ref, targets=tuple(pool))] if pool else []
+        return [act(targets=tuple(pool))] if pool else []
     if p.target.count == 1:
-        return [Action(kind="power", cost=cost, ref=ref, targets=(t,)) for t in pool]
+        return [act(targets=(t,)) for t in pool]
     # "Up to N creatures": offer the whole pool, capped. A policy that wants a
     # subset asks for one; the interface lets the player click them.
-    return [Action(kind="power", cost=cost, ref=ref, targets=tuple(pool[: p.target.count]))]
+    return [act(targets=tuple(pool[: p.target.count]))]
 
 
 def _burst_origins(world: World, actor: int, p) -> list[Square]:  # noqa: ANN001
@@ -279,6 +295,7 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             origin=action.origin,
             spend=True,
             opportunity=action.cost is ActionType.OPPORTUNITY,
+            branch=action.branch,
         )
 
     if action.kind == "move":

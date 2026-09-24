@@ -97,6 +97,16 @@ class Cast:
     #: True when this use *is* an opportunity attack. Read by the attack
     #: context, so "+2 to AC against opportunity attacks" can be written.
     opportunity: bool = False
+    #: Which half of a "Melee or Ranged weapon" line is being used. 0 is the
+    #: printed first one. A body almost never reads this -- `c.w()` and
+    #: `c.strike()` already honour it, which is the point.
+    branch: int = 0
+
+    @property
+    def ranged(self) -> bool:
+        """Is this use a ranged one? Asks the branch, not the keywords."""
+        p = self._declared()
+        return bool(p and p.reach_of(self.branch).kind in ("ranged", "area_burst"))
 
     def cancel(self) -> None:
         """Stop the thing that triggered this.
@@ -433,7 +443,12 @@ class Cast:
         weapon_power = p is None or Keyword.WEAPON in p.keywords
         gear = self.world.get(self.me, Gear)
         if weapon_power and gear is not None:
-            ranged = p is not None and Keyword.RANGED in p.keywords
+            # Same question `c.w()` asks, and it has to be asked the same
+            # way: the branch where there is one, the keyword otherwise.
+            if p is not None and p.reach.alt is not None:
+                ranged = self.ranged
+            else:
+                ranged = p is not None and Keyword.RANGED in p.keywords
             weapon = (gear.ranged if ranged and gear.ranged else gear.main)
             if weapon is not None:
                 bonus += weapon.proficiency
@@ -503,9 +518,16 @@ class Cast:
             return f"{count}d4"
         weapon = gear.off if hand == "off" else gear.main
         p = self._declared()
-        fires = ranged if ranged is not None else (
-            p is not None and Keyword.RANGED in p.keywords
-        )
+        # The branch is the better answer where there is one: a row printing
+        # "Melee or Ranged weapon" carries the RANGED keyword for both
+        # halves, so the keyword alone put a bow in the hand of its melee
+        # branch.
+        if ranged is not None:
+            fires = ranged
+        elif p is not None and p.reach.alt is not None:
+            fires = self.ranged
+        else:
+            fires = p is not None and Keyword.RANGED in p.keywords
         if fires and gear.ranged is not None:
             weapon = gear.ranged
         if weapon is None:
@@ -548,11 +570,12 @@ class Cast:
         from .dsl import get
 
         p = get(self.ref)
-        if p is None or p.attack is None:
+        line = p.attack_of(self.branch) if p else None
+        if line is None:
             raise ValueError(f"{self.ref} declared no attack line; call c.attack(...)")
         return self.attack(
-            p.attack.bonus_for(self.world, self.me, self.ref) + plus,
-            p.attack.vs,
+            line.bonus_for(self.world, self.me, self.ref, self.branch) + plus,
+            line.vs,
             on=on,
             advantage=advantage,
         )
@@ -692,7 +715,7 @@ class Cast:
         self.result = attack(
             self.world, self.me, who, bonus, vs, self.ref,
             advantage=advantage, opportunity=self.opportunity,
-            among=tuple(self.targets) or (who,),
+            among=tuple(self.targets) or (who,), branch=self.branch,
         )
         return self.result
 

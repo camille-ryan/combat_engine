@@ -76,6 +76,7 @@ def attack(
     ignore_cover: bool = False,
     opportunity: bool = False,
     among: tuple[int, ...] = (),
+    branch: int = 0,
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
@@ -105,7 +106,7 @@ def attack(
             situational += 2
         if not ignore_cover:
             situational -= int(
-                cover_between(world, attacker, target, ranged=_is_ranged(power))
+                cover_between(world, attacker, target, ranged=_is_ranged(power, branch))
             )
         situational += _mark_penalty(world, attacker, among or (target,))
 
@@ -170,17 +171,19 @@ def attack(
     return result
 
 
-def _is_ranged(ref: str) -> bool:
+def _is_ranged(ref: str, branch: int = 0) -> bool:
     """Is this row a ranged attack? Only those take cover from creatures.
 
     Read off the power's own range line rather than guessed, and False for a
     row nothing is declared for -- no cover is the safer wrong answer than
-    a penalty nobody can explain.
+    a penalty nobody can explain. `branch` matters for a row printing two
+    ranges: its melee half takes no cover from bodies and its ranged half
+    does.
     """
     from .dsl import get
 
     p = get(ref)
-    return p is not None and p.reach.kind == "ranged"
+    return p is not None and p.reach_of(branch).kind == "ranged"
 
 
 def _mods(world: World, eid: int, what: str, ctx: dict) -> int:

@@ -431,7 +431,13 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
         if p is None:
             continue
         ok, why = usable(world, actor, p)
-        aims_at = _clickable(world, actor, p)
+        # Both halves of a two-branch row, unioned. The squares are what the
+        # board offers, and a click resolves to the first option that reaches
+        # it -- so an adjacent enemy is taken in melee and a distant one at
+        # range, which is what a player means by clicking either.
+        aims_at = sorted(
+            {sq for b in p.branches for sq in _clickable(world, actor, p, b)}
+        )
         indices = by_ref.get(ref, [])
         printed = session.wire.printed(ref)
         affordable = session.encounter.can_spend(actor, p.action)
@@ -459,7 +465,9 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
                 aimed=[],
                 option_index=indices[0] if indices else None,
                 option_indices=indices,
-                option_label=None,
+                option_label=" or ".join(
+                    p.label_of(b) for b in p.branches
+                ) if len(p.branches) > 1 else None,
                 affordable=affordable,
                 pays=_pays(session, options[indices[0]]).value if indices else None,
                 cost_note=_cost_note(session, options[indices[0]]) if indices else None,
@@ -468,7 +476,7 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
     return out
 
 
-def _clickable(world, actor: int, p) -> list:  # noqa: ANN001
+def _clickable(world, actor: int, p, branch: int = 0) -> list:  # noqa: ANN001
     """The squares a player may click to use this power.
 
     Two different questions wear the same name. For a melee or ranged power
@@ -482,9 +490,9 @@ def _clickable(world, actor: int, p) -> list:  # noqa: ANN001
     """
     if not p.is_attack:
         return []
-    if p.reach.kind in ("area_burst", "close_blast"):
+    if p.reach_of(branch).kind in ("area_burst", "close_blast"):
         return aim_points(world, actor, p)
-    return sorted(area_of(world, actor, p))
+    return sorted(area_of(world, actor, p, None, branch))
 
 
 def _footprints(world, actor: int, p, aims_at: list) -> dict[str, list]:  # noqa: ANN001

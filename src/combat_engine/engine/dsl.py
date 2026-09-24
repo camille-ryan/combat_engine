@@ -42,9 +42,14 @@ class Range:
     size: int = 1
     #: For an area burst: how far away the origin square may be.
     within: int = 10
+    #: The other half of a range line that prints two -- "Melee or Ranged
+    #: weapon". Seventy-two rows in PHB1 do, across cleric, ranger, rogue
+    #: and warlord, and a row that can only hold one of them is declared
+    #: half-right with nothing to say so.
+    alt: Range | None = None
 
     def __str__(self) -> str:
-        return {
+        mine = {
             "melee": f"Melee {self.size}",
             "ranged": f"Ranged {self.size}",
             "close_burst": f"Close burst {self.size}",
@@ -52,6 +57,22 @@ class Range:
             "area_burst": f"Area burst {self.size} within {self.within}",
             "personal": "Personal",
         }[self.kind]
+        return f"{mine} or {self.alt}" if self.alt else mine
+
+    def branch(self, which: int) -> Range:
+        """One branch on its own. 0 is this range, 1 is the other.
+
+        Branch 0 drops `alt`, so the thing handed round afterwards is a
+        plain single range and nothing downstream has to keep remembering
+        that it might be half of a pair.
+        """
+        if which and self.alt:
+            return self.alt
+        return Range(self.kind, self.size, self.within) if self.alt else self
+
+    @property
+    def branches(self) -> tuple[int, ...]:
+        return (0, 1) if self.alt else (0,)
 
 
 def Melee(n: int = 1) -> Range:
@@ -72,6 +93,17 @@ def CloseBlast(n: int) -> Range:
 
 def AreaBurst(n: int, within: int) -> Range:
     return Range("area_burst", n, within)
+
+
+def MeleeOrRanged(melee: int = 1, ranged: int = 10) -> Range:
+    """"Melee or Ranged weapon" -- one printed line, two ways to use it.
+
+    The two branches disagree about more than distance: whether using it
+    provokes, which weapon it rolls, and often which ability attacks. Each
+    is offered as its own option, so picking one is a thing the player does
+    rather than something decided at declaration time.
+    """
+    return Range("melee", melee, alt=Range("ranged", ranged))
 
 
 PERSONAL = Range("personal", 0)
@@ -164,8 +196,13 @@ class Attack:
     #: A monster's finished attack bonus, level included, as printed.
     printed: int | None = None
 
-    def bonus_for(self, world: World, actor: int, ref: str = "") -> int:
-        """The bonus to roll with, under whatever scaling is in force."""
+    def bonus_for(self, world: World, actor: int, ref: str = "", branch: int = 0) -> int:
+        """The bonus to roll with, under whatever scaling is in force.
+
+        `branch` reaches `_attack_bonus`, which needs it to know whether the
+        weapon it should take proficiency from is the one in hand or the one
+        being fired.
+        """
         from .cast import Cast
         from .components import Stats
 
@@ -176,7 +213,8 @@ class Attack:
             raise ValueError("an Attack needs either an ability or a printed bonus")
         # `ref` matters: proficiency applies to a weapon power and not to an
         # implement one, and `_attack_bonus` reads the keywords off it.
-        return Cast(world=world, me=actor, ref=ref)._attack_bonus(self.ability) + self.plus
+        probe = Cast(world=world, me=actor, ref=ref, branch=branch)
+        return probe._attack_bonus(self.ability) + self.plus
 
     def __str__(self) -> str:
         if self.printed is not None:
@@ -237,6 +275,12 @@ class Power:
     attack: Attack | None = None
     #: The printed damage, when the row is simple enough to declare it.
     damage: Damage | None = None
+    #: The other branch's attack and damage, for a `MeleeOrRanged` row whose
+    #: two halves differ -- "Strength vs. AC (melee) or Dexterity vs. AC
+    #: (ranged)". Left unset when both branches roll the same line, which is
+    #: every rogue row and no ranger one.
+    attack_alt: Attack | None = None
+    damage_alt: Damage | None = None
     #: A printed Requirement line, as a predicate on the caster.
     requires: Callable[[World, int], bool] | None = None
     requires_text: str = ""
@@ -269,9 +313,43 @@ class Power:
     def is_attack(self) -> bool:
         return self.target.side != "self" or self.target.count > 0
 
+    # -- one branch of a two-branch row -------------------------------------
+    #
+    # A row printing "Melee or Ranged weapon" is two ways of using one power,
+    # and they disagree about four independent things: how far it reaches,
+    # whether it provokes, which weapon it rolls, and often which ability
+    # attacks. Each of those is asked at a different place, so each asks by
+    # branch rather than reading the header directly.
+
+    @property
+    def branches(self) -> tuple[int, ...]:
+        return self.reach.branches
+
+    def reach_of(self, branch: int = 0) -> Range:
+        return self.reach.branch(branch)
+
+    def attack_of(self, branch: int = 0) -> Attack | None:
+        return self.attack_alt or self.attack if branch else self.attack
+
+    def damage_of(self, branch: int = 0) -> Damage | None:
+        return self.damage_alt or self.damage if branch else self.damage
+
+    def provokes_on(self, branch: int = 0) -> bool:
+        """Does *this branch* leave an opening? The melee half does not."""
+        if self.no_provoke:
+            return False
+        return self.reach_of(branch).kind in ("ranged", "area_burst")
+
+    def label_of(self, branch: int = 0) -> str:
+        """What to call this branch on the card. Empty for a single-branch row."""
+        return "" if not self.reach.alt else self.reach_of(branch).kind
+
     @property
     def provokes(self) -> bool:
         """Does using this leave an opening for anyone standing next to you?
+
+        The melee branch of a two-branch row does not, so a caller that
+        knows which branch is in play should ask `provokes_on` instead.
 
         Ranged and area powers do; melee and close powers do not. Taking aim
         at something across the room is what turns your back on the creature
@@ -285,22 +363,24 @@ class Power:
             return False
         return self.reach.kind in ("ranged", "area_burst")
 
-    def hit_chance(self, world: World, actor: int, target: int) -> float:
+    def hit_chance(self, world: World, actor: int, target: int, branch: int = 0) -> float:
         """Probability this power hits, from the declared attack line.
 
         Returns 0.5 when the power did not declare one -- an honest "no idea"
         that keeps a scorer from preferring undeclared powers or avoiding
         them.
         """
-        if self.attack is None:
+        line = self.attack_of(branch)
+        if line is None:
             return 0.5
         from .query import cover_between, defence, has_combat_advantage
 
-        bonus = self.attack.bonus_for(world, actor, self.ref)
+        bonus = line.bonus_for(world, actor, self.ref, branch)
         if has_combat_advantage(world, actor, target):
             bonus += 2
-        bonus -= int(cover_between(world, actor, target, ranged=self.reach.kind == "ranged"))
-        need = defence(world, target, self.attack.vs) - bonus
+        ranged = self.reach_of(branch).kind == "ranged"
+        bonus -= int(cover_between(world, actor, target, ranged=ranged))
+        need = defence(world, target, line.vs) - bonus
         return min(0.95, max(0.05, (21 - need) / 20))
 
     def __str__(self) -> str:
@@ -322,6 +402,8 @@ def power(
     keywords: Iterable[Keyword] = (),
     attack: Attack | None = None,
     damage: Damage | None = None,
+    attack_alt: Attack | None = None,
+    damage_alt: Damage | None = None,
     requires: Callable[[World, int], bool] | None = None,
     requires_text: str = "",
     trigger: str = "",
@@ -355,6 +437,8 @@ def power(
             keywords=tuple(keywords),
             attack=attack,
             damage=damage,
+            attack_alt=attack_alt,
+            damage_alt=damage_alt,
             requires=requires,
             requires_text=requires_text,
             trigger=trigger,
@@ -384,7 +468,9 @@ def declared() -> list[str]:
 # --------------------------------------------------------------------------
 
 
-def area_of(world: World, actor: int, p: Power, origin: Square | None = None) -> frozenset[Square]:
+def area_of(
+    world: World, actor: int, p: Power, origin: Square | None = None, branch: int = 0
+) -> frozenset[Square]:
     """The squares a power covers, given where its origin was placed.
 
     Clipped to the board. A ranged 20 power on a board sixteen squares wide
@@ -392,7 +478,7 @@ def area_of(world: World, actor: int, p: Power, origin: Square | None = None) ->
     highlights what it is given lights up squares that are not there.
     """
     mine = squares(world, actor)
-    r = p.reach
+    r = p.reach_of(branch)
     if r.kind == "close_burst":
         out = spread(mine, r.size)
     elif r.kind == "close_blast":
@@ -428,7 +514,9 @@ def aim_points(world: World, actor: int, p: Power) -> list[Square]:
     return []
 
 
-def candidates(world: World, actor: int, p: Power, origin: Square | None = None) -> list[int]:
+def candidates(
+    world: World, actor: int, p: Power, origin: Square | None = None, branch: int = 0
+) -> list[int]:
     """Everyone this power could legally be aimed at right now.
 
     An area power is checked at both ends. The **origin** has to be somewhere
@@ -452,12 +540,13 @@ def candidates(world: World, actor: int, p: Power, origin: Square | None = None)
         "other": [c for c in creatures(world) if c != actor],
     }[p.target.side]
 
-    aimed = origin is not None and p.reach.kind in ("area_burst", "close_blast")
+    reach = p.reach_of(branch)
+    aimed = origin is not None and reach.kind in ("area_burst", "close_blast")
     if aimed and origin not in aim_points(world, actor, p):
         return []
 
-    area = area_of(world, actor, p, origin)
-    if p.reach.kind == "area_burst" and origin is not None:
+    area = area_of(world, actor, p, origin, branch)
+    if reach.kind == "area_burst" and origin is not None:
         return [
             c
             for c in pool
@@ -499,12 +588,12 @@ def usable(world: World, actor: int, p: Power) -> tuple[bool, str]:
                 return False, f"one {p.group} power per encounter"
     if p.requires is not None and not p.requires(world, actor):
         return False, p.requires_text or "requirement not met"
-    if p.is_attack and not _can_land(world, actor, p):
+    if p.is_attack and not any(_can_land(world, actor, p, b) for b in p.branches):
         return False, _no_targets(world, actor, p)
     return True, ""
 
 
-def _can_land(world: World, actor: int, p: Power) -> bool:
+def _can_land(world: World, actor: int, p: Power, branch: int = 0) -> bool:
     """Is there any way to aim this that catches somebody?
 
     For an area power that means trying the placements, not the default one.
@@ -512,9 +601,11 @@ def _can_land(world: World, actor: int, p: Power) -> bool:
     adjacent square, and a blast that happens to point away from everybody
     reported itself unusable while three creatures stood in range.
     """
-    if p.reach.kind in ("area_burst", "close_blast"):
-        return any(candidates(world, actor, p, aim) for aim in aim_points(world, actor, p))
-    return bool(candidates(world, actor, p))
+    if p.reach_of(branch).kind in ("area_burst", "close_blast"):
+        return any(
+            candidates(world, actor, p, aim, branch) for aim in aim_points(world, actor, p)
+        )
+    return bool(candidates(world, actor, p, None, branch))
 
 
 def _group_spent(world: World, actor: int, p: Power) -> bool:
@@ -545,9 +636,10 @@ def _no_targets(world: World, actor: int, p: Power) -> str:
     if not live:
         return "no targets"
     nearest = min(distance_between(world, actor, c) for c in live)
-    if p.reach.kind in ("melee", "close_burst", "close_blast"):
+    furthest = max(p.reach_of(b).size for b in p.branches)
+    if p.reach.kind in ("melee", "close_burst", "close_blast") and not p.reach.alt:
         return f"nearest is {nearest} squares away"
-    return f"nearest is {nearest} squares away, range {p.reach.size}"
+    return f"nearest is {nearest} squares away, range {furthest}"
 
 
 # --------------------------------------------------------------------------
@@ -565,6 +657,7 @@ def use(
     spend: bool = True,
     trigger: Any = None,
     opportunity: bool = False,
+    branch: int = 0,
 ) -> bool:
     """Use a power. Returns False if it could not be used.
 
@@ -574,6 +667,10 @@ def use(
     `trigger` is the event being answered, for a row the dispatcher is
     offering. The body reads it as `c.trigger` and an interrupt stops it with
     `c.cancel()`.
+
+    `branch` picks which half of a "Melee or Ranged weapon" line is being
+    used. 0 is the printed first one and is what every single-branch row
+    gets without asking.
     """
     from .components import Powers
 
@@ -587,7 +684,7 @@ def use(
     if targets is not None:
         chosen = targets
     else:
-        chosen, origin = _auto_targets(world, actor, p, origin)
+        chosen, origin = _auto_targets(world, actor, p, origin, branch)
     cast = Cast(
         world=world,
         me=actor,
@@ -596,10 +693,11 @@ def use(
         origin=origin,
         trigger=trigger,
         opportunity=opportunity,
+        branch=branch,
     )
     cast.used()
 
-    if p.provokes and not _survive_provoking(world, actor, ref):
+    if p.provokes_on(branch) and not _survive_provoking(world, actor, ref):
         # Stopped before it went off -- stunned by an interrupt, or killed.
         # The power is *not* spent: the action was lost, not used.
         return False
@@ -656,7 +754,7 @@ def _survive_provoking(world: World, actor: int, ref: str) -> bool:
 
 
 def _auto_targets(
-    world: World, actor: int, p: Power, origin: Square | None
+    world: World, actor: int, p: Power, origin: Square | None, branch: int = 0
 ) -> tuple[list[int], Square | None]:
     """Who this power lands on when the caller did not say, and where it aimed.
 
@@ -671,16 +769,16 @@ def _auto_targets(
     dropped the zone on the caster's own feet and the damage somewhere else
     entirely. Two answers to "where is this power" is one too many.
     """
-    if origin is None and p.reach.kind in ("area_burst", "close_blast"):
+    if origin is None and p.reach_of(branch).kind in ("area_burst", "close_blast"):
         best: list[int] = []
         chosen: Square | None = None
         for aim in aim_points(world, actor, p):
-            hit = candidates(world, actor, p, aim)
+            hit = candidates(world, actor, p, aim, branch)
             if len(hit) > len(best):
                 best, chosen = hit, aim
         if best:
             return (best if p.target.everyone else best[: p.target.count]), chosen
-    pool = candidates(world, actor, p, origin)
+    pool = candidates(world, actor, p, origin, branch)
     if p.target.everyone:
         return pool, origin
     return pool[: p.target.count], origin
