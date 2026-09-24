@@ -219,7 +219,12 @@ class Powers:
     """What a creature can do, by id. Never by name."""
 
     known: list[str] = field(default_factory=list)
-    spent: set[str] = field(default_factory=set)
+    #: How many times each row has been used this encounter. A count rather
+    #: than a set, because a few powers are usable twice -- and one of them
+    #: is the cleric's heal, which a party without is not a party.
+    used: dict[str, int] = field(default_factory=dict)
+    #: The round each was last used, for "once per round" on top of that.
+    last_round: dict[str, int] = field(default_factory=dict)
     #: Recharge powers that came back up this turn, and those still down.
     recharging: dict[str, int] = field(default_factory=dict)
     #: What this creature's basic attack is. A monster points at one of its
@@ -237,8 +242,24 @@ class Powers:
                 out.append(extra)
         return out
 
+    @property
+    def spent(self) -> set[str]:
+        """Rows used at least once. Kept for readers that only ask that."""
+        return {ref for ref, n in self.used.items() if n > 0}
+
+    def times(self, ref: str) -> int:
+        return self.used.get(ref, 0)
+
+    def note_use(self, ref: str, round_: int) -> None:
+        self.used[ref] = self.used.get(ref, 0) + 1
+        self.last_round[ref] = round_
+
+    def restore(self, ref: str) -> None:
+        self.used.pop(ref, None)
+        self.last_round.pop(ref, None)
+
     def available(self, ref: str) -> bool:
-        return ref in self.all and ref not in self.spent
+        return ref in self.all and self.times(ref) == 0
 
 
 @dataclass

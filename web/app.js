@@ -834,9 +834,9 @@ function optionButton(s, o) {
   const label = o.label || o.kind || `#${o.index}`;
   const line = div("option-line");
   line.appendChild(div("option-label", label));
-  // `targets` is ActorIds, and most labels already read "Power → Human Bandit
-  // 1". Printing the raw ids beside that put "npc_1" next to the name it
-  // stands for. Resolve to labels and keep only what the label does not
+  // `targets` holds wire ids, and most labels already read "Power → <the
+  // creature>". Printing the raw ids beside that put "npc_1" next to the name
+  // it stands for. Resolve to labels and keep only what the label does not
   // already say — which leaves the self-buffs and the multi-target powers,
   // the two cases where it tells you something.
   const extra = namedTargets(o).filter((t) => !label.includes(t));

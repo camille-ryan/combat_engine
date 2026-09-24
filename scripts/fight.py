@@ -35,10 +35,10 @@ from combat_engine.engine.query import alive, creatures
 from combat_engine.engine.scaling import PRESETS
 
 PARTY = [
-    ("fighter", ["p997", "p992", "p1000"]),
-    ("cleric", ["p841", "p889"]),
-    ("rogue", ["p704", "p970"]),
-    ("wizard", ["p1167", "p1166", "p463"]),
+    ("fighter", ["p997", "p992", "p1000", "p289", "p1429"]),
+    ("cleric", ["p841", "p889", "p1455", "p891", "p913"]),
+    ("rogue", ["p704", "p970", "p1382", "p163"]),
+    ("wizard", ["p1167", "p1166", "p463", "p159", "p185"]),
 ]
 
 

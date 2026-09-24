@@ -195,6 +195,11 @@ class Power:
     #: A printed Trigger line. Set for immediate and opportunity actions.
     trigger: str = ""
     recharge: int = 0
+    #: How many times per encounter. Two for the cleric's heal; one for
+    #: everything else that is not at-will.
+    uses: int = 1
+    #: True when those uses may not be spent on the same round.
+    once_per_round: bool = False
 
     @property
     def is_attack(self) -> bool:
@@ -240,6 +245,8 @@ def power(
     requires_text: str = "",
     trigger: str = "",
     recharge: int = 0,
+    uses: int = 1,
+    once_per_round: bool = False,
 ) -> Callable[[Body], Body]:
     """Declare one power or one monster ability.
 
@@ -266,6 +273,8 @@ def power(
             requires_text=requires_text,
             trigger=trigger,
             recharge=recharge,
+            uses=uses,
+            once_per_round=once_per_round,
         )
         return body
 
@@ -380,8 +389,15 @@ def usable(world: World, actor: int, p: Power) -> tuple[bool, str]:
     if not can_act(world, actor):
         return False, "cannot act"
     powers = world.get(actor, Powers)
-    if powers is not None and not powers.available(p.ref):
-        return False, "expended" if p.ref in powers.spent else "not known"
+    if powers is not None:
+        if p.ref not in powers.all:
+            return False, "not known"
+        if p.usage is not Usage.AT_WILL:
+            used = powers.times(p.ref)
+            if used >= p.uses:
+                return False, "expended" if p.uses == 1 else f"used {used} of {p.uses}"
+            if p.once_per_round and powers.last_round.get(p.ref) == world.round:
+                return False, "already used this round"
     if p.requires is not None and not p.requires(world, actor):
         return False, p.requires_text or "requirement not met"
     if p.is_attack and not candidates(world, actor, p):
@@ -435,13 +451,13 @@ def use(
         return False
 
     chosen = targets if targets is not None else _auto_targets(world, actor, p, origin)
-    cast = Cast(world=world, me=actor, ref=ref, targets=list(chosen))
+    cast = Cast(world=world, me=actor, ref=ref, targets=list(chosen), origin=origin)
     cast.used()
 
     if spend and p.usage is not Usage.AT_WILL:
         powers = world.get(actor, Powers)
         if powers is not None:
-            powers.spent.add(ref)
+            powers.note_use(ref, world.round)
 
     if not chosen:
         p.body(cast)

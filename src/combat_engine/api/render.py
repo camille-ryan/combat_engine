@@ -30,7 +30,8 @@ from combat_engine.engine.actions import legal
 from combat_engine.engine.dsl import aim_points, area_of, candidates
 from combat_engine.engine.durations import When
 from combat_engine.engine.events import Event
-from combat_engine.engine.movement import OVERHEAD, mode_of, reachable
+from combat_engine.engine.grid import distance
+from combat_engine.engine.movement import OVERHEAD, costs, mode_of, reachable
 from combat_engine.engine.query import (
     alive,
     creatures,
@@ -136,7 +137,7 @@ def actor_dto(session: Session, eid: int) -> dto.ActorDTO:
         level=stats.level if stats else 1,
         role=_monster_field(ident.ref, "role"),
         rank=_rank(ident.ref),
-        size=pos.size.name.lower(),
+        size=pos.size.value,
         speed=speed(world, eid),
         initiative_mod=(init.bonus if (init := world.get(eid, Initiative)) else 0),
         senses=_monster_field(ident.ref, "senses"),
@@ -359,8 +360,10 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
         if action.ref:
             by_ref.setdefault(action.ref, []).append(i)
 
+    # The same order `session.roster_refs` produces, because the page sends
+    # back a position in this list and both ends have to agree on it.
     out: list[dto.PowerDTO] = []
-    for ref in known.all:
+    for ref in session.roster_refs():
         p = get(ref)
         if p is None:
             continue
@@ -418,11 +421,20 @@ def economy(session: Session) -> dto.EconomyDTO:
 
 
 def movement(session: Session) -> dto.MovementDTO | None:
-    """Where the acting creature could go, split by what it costs.
+    """Where the acting creature can walk this turn, and what it costs there.
 
-    `free` is what the printed speed reaches; `costly` is what needs the
-    standard action spent as a second move. A flyer's reachable set already
-    excludes squares it could not land in.
+    Both lists are inside the creature's **speed** -- this is one move action,
+    not two. `costly` is the squares that cost more to reach than their
+    distance suggests, because the way there crosses difficult ground or
+    bends round a wall; `free` is the rest.
+
+    An earlier version had `costly` mean "reachable by spending the standard
+    action as a second move", which doubled the highlighted range and told a
+    player they could walk twice as far as they could.
+
+    Not the same thing as the move options in `options`, which each carry a
+    path. This is the shape of the turn, which is what a player looks at
+    before weighing any single square.
     """
     world = session.world
     actor = session.current
@@ -431,16 +443,19 @@ def movement(session: Session) -> dto.MovementDTO | None:
     budget = world.get(actor, Budget)
     if budget is None:
         return None
+    if not session.encounter.can_spend(actor, ActionType.MOVE):
+        return dto.MovementDTO()
+
     pace = speed(world, actor)
-    free = reachable(world, actor, pace) if budget.move > 0 else {}
-    far = reachable(world, actor, pace * 2) if budget.standard > 0 else {}
+    here = world.need(actor, Position).square
+    priced = costs(world, actor, pace)
+    free, costly = [], []
+    for square, cost in sorted(priced.items()):
+        (costly if cost > distance(here, square) else free).append(square)
+
     mode = mode_of(world, actor, None)
-    shift_reach = reachable(world, actor, 1, mode="walk" if mode in OVERHEAD else None)
-    return dto.MovementDTO(
-        free=sorted(free),
-        costly=sorted(set(far) - set(free)),
-        shift=sorted(shift_reach),
-    )
+    step = reachable(world, actor, 1, mode="walk" if mode in OVERHEAD else None)
+    return dto.MovementDTO(free=free, costly=costly, shift=sorted(step))
 
 
 def pending(session: Session) -> dto.PendingDTO | None:

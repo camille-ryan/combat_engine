@@ -36,7 +36,7 @@ def footprint(origin: Square, size: Size) -> frozenset[Square]:
     `origin` is the low corner of the footprint, so a Large creature at
     (3, 3) fills (3,3), (4,3), (3,4) and (4,4).
     """
-    n = int(size)
+    n = size.squares
     x, y = origin
     return frozenset((x + dx, y + dy) for dx, dy in product(range(n), range(n)))
 

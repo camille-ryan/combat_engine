@@ -175,6 +175,17 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
                     path=tuple(path),
                 )
             )
+        # A shift is its own action: one square, and it provokes nothing.
+        # Offered separately because walking to the same square and shifting
+        # to it are different decisions with different consequences.
+        from .movement import OVERHEAD, mode_of, reachable
+
+        mode = mode_of(world, actor, None)
+        step = reachable(world, actor, 1, mode="walk" if mode in OVERHEAD else None)
+        for dest in sorted(step):
+            out.append(
+                Action(kind="shift", cost=ActionType.MOVE, dest=dest, path=(dest,))
+            )
     return out
 
 
@@ -188,7 +199,7 @@ def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
         health is not None
         and health.surges > 0
         and known is not None
-        and "second-wind" not in known.spent
+        and known.times("second-wind") == 0
         and encounter.can_spend(actor, ActionType.STANDARD)
     ):
         out.append(Action(kind="second_wind", cost=ActionType.STANDARD))
@@ -227,6 +238,12 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         walk(world, actor, list(action.path))
         return True
 
+    if action.kind == "shift":
+        from .movement import shift
+
+        shift(world, actor, action.dest)
+        return True
+
     if action.kind == "stand":
         for eff in world.effects.of(actor):
             if Condition.PRONE in eff.conditions:
@@ -238,7 +255,7 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         health = world.need(actor, Health)
         known = world.get(actor, Powers)
         if known is not None:
-            known.spent.add("second-wind")
+            known.note_use("second-wind", world.round)
         health.surges -= 1
         world.heal(actor, actor, health.surge_value)
         from .cast import Cast
@@ -264,4 +281,4 @@ def recharge(world: World, actor: int) -> None:
         if p is None or p.usage is not Usage.RECHARGE or p.recharge <= 0:
             continue
         if world.rng.d20().total >= p.recharge:
-            known.spent.discard(ref)
+            known.restore(ref)

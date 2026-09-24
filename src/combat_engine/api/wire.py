@@ -1,9 +1,8 @@
 """The boundary where ids become names.
 
-The engine holds `m145` and entity 7. A player wants to read "Dire Rat" and
-"the second one". Both translations happen here and nowhere else, which is
-what keeps a publisher's prose out of the engine rather than merely out of
-sight.
+The engine holds `m145` and entity 7. A player wants to read a name and "the
+second one". Both translations happen here and nowhere else, which is what
+keeps a publisher's prose out of the engine rather than merely out of sight.
 
 Two separate jobs:
 
@@ -47,7 +46,7 @@ class Wire:
         w = cls(show_names=names_enabled())
         table = localisation() if w.show_names else {}
         counts: dict[str, int] = {}
-        for eid, ident in world.each(Ident):
+        for eid, ident in _creatures(world):
             side = world.get(eid, Side)
             prefix = "pc" if side and side.team is Team.PC else "npc"
             counts[prefix] = counts.get(prefix, 0) + 1
@@ -109,7 +108,7 @@ class Wire:
                 counts[wid.split("_")[0]], int(wid.split("_")[1])
             )
         table = localisation() if self.show_names else {}
-        for eid, ident in world.each(Ident):
+        for eid, ident in _creatures(world):
             if eid in self.to_wire:
                 continue
             side = world.get(eid, Side)
@@ -119,6 +118,22 @@ class Wire:
             self.to_wire[eid] = wid
             self.to_eid[wid] = eid
             self.labels[wid] = self._label(ident, table, counts)
+
+
+def _creatures(world: World) -> list[tuple[int, Ident]]:
+    """Entities that get a `pc_`/`npc_` id.
+
+    Only things that fight. A zone is an entity with an `Ident` too, and
+    numbering it as a creature handed one a `npc_5` -- which then turned up
+    as the actor of the event announcing the zone had expired.
+    """
+    from combat_engine.engine import Health, Position
+
+    return [
+        (eid, ident)
+        for eid, ident in world.each(Ident)
+        if world.has(eid, Health) and world.has(eid, Position)
+    ]
 
 
 #: Things the engine names itself, which no localisation file covers. They

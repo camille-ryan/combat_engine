@@ -136,15 +136,41 @@ class Relation(StrEnum):
     GRANTS_CA_TO = "grants_ca_to"
 
 
-class Size(IntEnum):
-    """The value is the creature's footprint in squares on a side."""
+class Size(StrEnum):
+    """A creature's size category.
 
-    TINY = 1
-    SMALL = 1
-    MEDIUM = 1
-    LARGE = 2
-    HUGE = 3
-    GARGANTUAN = 4
+    The footprint is a **property**, not the value. Making the value the
+    number of squares looked tidy and was wrong: Tiny, Small and Medium all
+    occupy one square, so they collapsed into aliases of each other and every
+    character on the board reported itself as Tiny.
+    """
+
+    TINY = "tiny"
+    SMALL = "small"
+    MEDIUM = "medium"
+    LARGE = "large"
+    HUGE = "huge"
+    GARGANTUAN = "gargantuan"
+
+    @property
+    def squares(self) -> int:
+        """How many squares on a side this creature occupies."""
+        return _FOOTPRINT[self]
+
+    @property
+    def reach_bonus(self) -> int:
+        """Extra reach that comes from bulk alone."""
+        return max(0, self.squares - 1)
+
+
+_FOOTPRINT = {
+    Size.TINY: 1,
+    Size.SMALL: 1,
+    Size.MEDIUM: 1,
+    Size.LARGE: 2,
+    Size.HUGE: 3,
+    Size.GARGANTUAN: 4,
+}
 
 
 class Cover(IntEnum):

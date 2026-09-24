@@ -208,10 +208,10 @@ function hpBlock(a) {
 /**
  * A patch of ground: what it is called, and whose it is.
  *
- * The owner is the point. An aura is labelled from the op that declared it and
- * the creature's stat block calls the trait something else entirely — "aura of
- * agony" on the board, "Rancid Air" on the card — so the shading alone is a
- * dead end. Naming the creature turns it into a question the card can answer.
+ * The owner is the point. An aura is labelled from the power that declared it,
+ * and the creature's stat block usually calls the same trait something else
+ * entirely, so the shading alone is a dead end. Naming the creature turns it
+ * into a question the card can answer.
  */
 export function zoneCard(zone, ownerLabel) {
   const card = div("card-body");

@@ -47,10 +47,10 @@ from combat_engine.engine.scaling import PRESETS
 from .wire import Wire
 
 PARTY = [
-    ("fighter", ["p997", "p992", "p1000"]),
-    ("cleric", ["p841", "p889"]),
-    ("rogue", ["p704", "p970"]),
-    ("wizard", ["p1167", "p1166", "p463"]),
+    ("fighter", ["p997", "p992", "p1000", "p289", "p1429"]),
+    ("cleric", ["p841", "p889", "p1455", "p891", "p913"]),
+    ("rogue", ["p704", "p970", "p1382", "p163"]),
+    ("wizard", ["p1167", "p1166", "p463", "p159", "p185"]),
 ]
 
 
@@ -249,6 +249,67 @@ class Session:
         self.gate.answer(index)
         if not self.gate.busy:
             self._after_action(None)
+
+    # -- playing by pointing at squares --------------------------------------
+
+    def walk_to(self, square: tuple[int, int], *, shift: bool = False) -> None:
+        """Move to a square the player clicked.
+
+        Resolved to one of the same options `legal` produced, so clicking the
+        board and picking from the list are the same act and cannot disagree
+        about what is allowed.
+        """
+        wanted = "shift" if shift else "move"
+        for i, option in enumerate(self.options()):
+            if option.kind == wanted and option.dest == square:
+                self.act(i)
+                return
+        raise LookupError(
+            f"cannot {wanted} to {square}"
+            + (" -- out of reach" if not shift else " -- a shift is one square")
+        )
+
+    def aim(self, power_index: int, square: tuple[int, int]) -> None:
+        """Use the `power_index`th entry of the roster, aimed at a square.
+
+        The square means whichever of two things the power needs: the origin
+        of a burst or a blast, or whoever is standing there.
+        """
+        from combat_engine.engine.query import squares as occupies
+
+        refs = self.roster_refs()
+        if not 0 <= power_index < len(refs):
+            raise LookupError(f"no power {power_index}")
+        ref = refs[power_index]
+
+        standing = [
+            c
+            for c in self.world.entities
+            if self.world.has(c, Ident) and square in occupies(self.world, c)
+        ]
+        for i, option in enumerate(self.options()):
+            if option.kind != "power" or option.ref != ref:
+                continue
+            if option.origin == square or any(t in standing for t in option.targets):
+                self.act(i)
+                return
+        raise LookupError(f"{ref} cannot be aimed at {square}")
+
+    def roster_refs(self) -> list[str]:
+        """The refs behind the roster, in the order the page is shown them.
+
+        The page sends back a position in that list, so both ends have to
+        derive it the same way -- hence one function, called by both.
+        """
+        from combat_engine.engine import Powers, get
+
+        actor = self.current
+        if actor is None:
+            return []
+        known = self.world.get(actor, Powers)
+        if known is None:
+            return []
+        return [ref for ref in known.all if get(ref) is not None]
 
     def _after_action(self, choice: Action | None) -> None:
         """Advance past anything the player does not control."""

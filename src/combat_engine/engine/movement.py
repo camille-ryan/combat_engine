@@ -353,3 +353,20 @@ def reachable(
             if _clear(world, eid, footprint(sq, pos.size))
         }
     return paths
+
+
+def costs(world: World, eid: int, budget: int, *, mode: str | None = None) -> dict[Square, int]:
+    """What reaching each square actually costs, in squares of movement.
+
+    Same search as `reachable`, reported the other way round. A caller that
+    wants to know *why* a square is expensive -- difficult terrain, a detour
+    round a wall -- compares this against the straight-line distance.
+    """
+    pos = world.get(eid, Position)
+    if pos is None:
+        return {}
+    rough = world.difficult()
+    out: dict[Square, int] = {}
+    for sq, path in reachable(world, eid, budget, mode=mode).items():
+        out[sq] = sum(2 if step in rough else 1 for step in path)
+    return out

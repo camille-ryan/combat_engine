@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from .components import Budget, Health, Initiative, Powers
 from .events import Died, RoundEnd, RoundStart, SavingThrow, TurnEnd, TurnStart
 from .query import active, alive, can_act, can_react, creatures, team
-from .types import DOWNGRADES, ActionType, Condition, Team
+from .types import DOWNGRADES, ActionType, Condition, Team, Usage
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -225,5 +225,10 @@ class Encounter:
 
 def refresh_encounter_powers(world: World) -> None:
     """Short rest: encounter powers come back, daily ones do not."""
+    from .dsl import get
+
     for _, powers in world.each(Powers):
-        powers.spent = {p for p in powers.spent if p.startswith("daily:")}
+        for ref in list(powers.used):
+            declared = get(ref)
+            if declared is None or declared.usage is not Usage.DAILY:
+                powers.restore(ref)

@@ -25,6 +25,7 @@ from .components import Gear, Health, Mod, Mods, Position, Stats
 from .durations import Effect, When
 from .events import Event, Note, PowerUsed
 from .grid import Square, spread
+from .grid import distance as _distance
 from .movement import forced, shift, teleport, walk
 from .query import (
     adjacent,
@@ -49,6 +50,7 @@ from .types import (
     Relation,
     Window,
 )
+from .zones import Zone
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -64,6 +66,8 @@ class Cast:
     targets: list[int] = field(default_factory=list)
     target: int | None = None
     index: int = 0
+    #: Where an area power was aimed. None for everything else.
+    origin: Square | None = None
     #: The most recent attack this cast rolled. `c.hit` reads off it.
     result: AttackResult | None = None
 
@@ -139,6 +143,17 @@ class Cast:
         who = self._who(on)
         health = self.world.get(who, Health) if who else None
         return health is not None and health.bloodied
+
+    def wounded(self, on: int | None = None) -> bool:
+        """Has lost any hit points at all. What a healing power looks for."""
+        who = self._who(on)
+        health = self.world.get(who, Health) if who else None
+        return health is not None and health.hp < health.max_hp
+
+    def speed_of(self, who: int | None = None) -> int:
+        from .query import speed
+
+        return speed(self.world, self._who(who) or self.me)
 
     # -- the attacker's numbers ---------------------------------------------
 
@@ -410,6 +425,25 @@ class Cast:
         dest = self.world.decide(mover, "move", sorted(paths), f"{self.ref}: move {squares_}")
         return walk(self.world, mover, paths[dest])
 
+    def flee(self, squares_: int, *, on: int | None = None) -> int:
+        """The target runs, under its own power, as far from you as it can.
+
+        Not forced movement, which matters: it is the creature moving, so it
+        provokes on the way out, and that is usually the entire point of the
+        power. A push of the same distance would be safe for the target and a
+        different card altogether.
+        """
+        from .movement import walk
+
+        who = self._who(on)
+        if who is None or squares_ <= 0:
+            return 0
+        paths = self.world.reachable_paths(who, squares_)
+        if not paths:
+            return 0
+        away = max(sorted(paths), key=lambda sq: _distance(sq, self.here))
+        return walk(self.world, who, paths[away])
+
     def teleport(self, squares_: int, *, who: int | None = None) -> bool:
         mover = self.me if who is None else who
         origin = squares(self.world, mover)
@@ -575,6 +609,14 @@ class Cast:
 
     # -- areas ---------------------------------------------------------------
 
+    def area(self) -> frozenset[Square]:
+        """The squares this power is covering, for the ones that leave
+        something behind. Empty for a power that has no area."""
+        from .dsl import area_of, get
+
+        p = get(self.ref)
+        return area_of(self.world, self.me, p, self.origin) if p else frozenset()
+
     def zone(
         self,
         area: Iterable[Square],
@@ -589,6 +631,51 @@ class Cast:
 
     def aura(self, radius: int, *, label: str = "", until: When = When.ENCOUNTER) -> int:
         return self.world.zones.aura(self.me, label or self.ref, radius, until)
+
+    def hazard(
+        self,
+        area: Iterable[Square],
+        amount: int,
+        dtype: DamageType = DamageType.UNTYPED,
+        *,
+        label: str = "",
+        until: When = When.SUSTAIN,
+        difficult: bool = False,
+    ) -> int:
+        """A zone that hurts whoever is standing in it.
+
+        The commonest zone in the game: "any creature that enters the zone or
+        starts its turn there takes N damage, and can take it only once per
+        turn". All three clauses are here -- entering, starting, and the
+        once-per-turn latch -- because writing them out per power would be
+        three chances to get the latch wrong.
+        """
+        from .events import TurnStart, ZoneEntered
+
+        zone = self.zone(area, label=label, until=until, difficult=difficult)
+        struck: dict[int, int] = {}
+        source = self.me
+
+        def bite(who: int) -> None:
+            if struck.get(who) == self.world.round:
+                return
+            struck[who] = self.world.round
+            self.world.damage(source, who, amount, dtype, detail=f"{self.ref} zone")
+
+        def on_enter(ev: ZoneEntered) -> None:
+            if ev.zone == zone:
+                bite(ev.actor)
+
+        def on_turn(ev: TurnStart) -> None:
+            if not ev.ghost and ev.actor in self.world.zones.occupants(zone):
+                bite(ev.actor)
+
+        for event, fn in ((ZoneEntered, on_enter), (TurnStart, on_turn)):
+            sub = self.world.bus.on(event, fn, owner=source)
+            zone_effect = self.world.get(zone, Zone).effect
+            if zone_effect is not None:
+                zone_effect.subs.append(sub)
+        return zone
 
     # -- choices and commentary ---------------------------------------------
 

@@ -60,9 +60,18 @@ class DecideRequest(BaseModel):
 
 
 class AimRequest(BaseModel):
+    """A click on the board.
+
+    With no `power_index` it is a move: walk to the square, or shift to it
+    when `mode` says so. With one, it is that entry of the roster aimed at
+    the square -- at whatever is standing there, or at that square as the
+    origin of a burst or a blast.
+    """
+
     actor_id: str | None = None
-    power: str | None = None
-    square: tuple[int, int] | None = None
+    square: tuple[int, int]
+    power_index: int | None = None
+    mode: str | None = None
 
 
 def _session(encounter_id: str) -> Session:
@@ -124,26 +133,26 @@ async def decide(encounter_id: str, body: DecideRequest) -> dto.EncounterStateDT
 
 @app.post("/api/encounter/{encounter_id}/aim")
 async def aim(encounter_id: str, body: AimRequest) -> dto.EncounterStateDTO:
-    """Where a blast or burst would land if pointed at a square.
+    """Point at a square and do the thing that means.
 
-    Read-only: it changes nothing, it only lets the page shade the squares
-    before a player commits. A blast is keyed by the square it is aimed at,
-    so for a blast 3 those are the ring two out.
+    This **acts**. It is how the board is played -- clicking a square is the
+    ordinary way to move and to attack, and the enumerated action list beside
+    it is the same set of choices written out. So it resolves the click to
+    one of those options and takes it, rather than being a preview: the two
+    modes differ in what a player is shown, never in what the engine accepts.
     """
     session = _session(encounter_id)
-    out = render.state(session)
-    if body.power and body.square:
-        from combat_engine.engine import get
-        from combat_engine.engine.dsl import area_of
-
-        p = get(body.power)
-        actor = session.current
-        if p is not None and actor is not None:
-            covered = sorted(area_of(session.world, actor, p, tuple(body.square)))
-            for option in out.options:
-                if option.kind == "power" and option.origin == tuple(body.square):
-                    option.affected = covered
-    return out
+    if not session.awaiting:
+        raise HTTPException(409, "not waiting for a decision")
+    square = tuple(body.square)
+    try:
+        if body.power_index is None:
+            session.walk_to(square, shift=body.mode == "shift")
+        else:
+            session.aim(body.power_index, square)
+    except LookupError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return render.state(session)
 
 
 @app.post("/api/encounter/{encounter_id}/end")
