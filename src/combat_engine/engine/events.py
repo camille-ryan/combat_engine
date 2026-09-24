@@ -37,10 +37,6 @@ class Event:
     def kind(self) -> str:
         return type(self).__name__
 
-    def cancel(self, reason: str = "") -> None:
-        self.cancelled = True
-        self.reason = reason
-
     def wire(self) -> dict[str, Any]:
         out = {"seq": self.seq, "kind": self.kind, "depth": self.depth}
         out.update(asdict(self))
@@ -98,7 +94,35 @@ class TurnEnd(Event):
 
 
 @dataclass
-class MoveStart(Event):
+class Decision(Event):
+    """An event somebody may refuse. Most events are not one.
+
+    Thirty-odd of the classes below are notifications: they say a thing
+    happened and there is nothing to argue about. Five are proposals, and
+    only those carry `cancel`.
+
+    The distinction used to live on the base class, so every event
+    advertised that it could be refused and a `cancel()` on any of the other
+    thirty-three compiled, ran, logged nothing and did nothing. Putting the
+    method here makes that an AttributeError where it is written instead of
+    silence where it is read.
+
+    **Refusing is only half of it.** A proposal is refused by a listener and
+    honoured by the *emitter*, and four separate bugs came from an emitter
+    that announced something and then went ahead from its own local
+    variables. If you emit one of these and then do the work yourself, pass
+    the work as `emit`'s second argument: the callback is handed the event,
+    so reading the agreed answer is the natural thing to write and the stale
+    local is not in scope.
+    """
+
+    def cancel(self, reason: str = "") -> None:
+        self.cancelled = True
+        self.reason = reason
+
+
+@dataclass
+class MoveStart(Decision):
     actor: int
     kind_: str  # "walk", "shift", "teleport", "push", "pull", "slide"
 
@@ -152,7 +176,7 @@ class AdjacencyLost(Event):
 
 
 @dataclass
-class ForcedMove(Event):
+class ForcedMove(Decision):
     """Somebody is being pushed, pulled or slid.
 
     Cancellable: a creature that cannot be moved refuses it here. `power` is
@@ -168,7 +192,7 @@ class ForcedMove(Event):
 
 
 @dataclass
-class OpportunityWindow(Event):
+class OpportunityWindow(Decision):
     """`actor` may take an opportunity action against `provoker`.
 
     The engine opens the window and never decides what goes in it -- a
@@ -193,7 +217,7 @@ class PowerUsed(Event):
 
 
 @dataclass
-class AttackDeclared(Event):
+class AttackDeclared(Decision):
     attacker: int
     target: int
     power: str
@@ -232,7 +256,7 @@ class Miss(Event):
 
 
 @dataclass
-class DamageRolled(Event):
+class DamageRolled(Decision):
     source: int
     target: int
     amount: int
@@ -255,6 +279,12 @@ class DamageApplied(Event):
     dtype: DamageType
     absorbed: int
     hp: int
+    #: The docstring above has promised this since the class was written and
+    #: the field was never there. `triggers._power_of` reads it, so
+    #: `by_melee`, `by_ranged` and `by_keyword` were all silently false on
+    #: this event -- and one content row had already been routed off `Hit`
+    #: to work around it without anyone noticing why.
+    detail: str = ""
 
 
 @dataclass

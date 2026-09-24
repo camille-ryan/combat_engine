@@ -405,20 +405,23 @@ def forced(
 
     shove = ForcedMove(source=source, target=target, how=how, squares=amount)
     shove.power = power
-    # The returned event is read, so a listener may refuse the shove. It was
-    # emitted and dropped, which made "cannot be pushed, pulled or slid" --
-    # a whole class of monster trait -- unsayable, and made any `BEFORE`
-    # listener that cancelled it fail without a sound.
-    # Read the count back off the event, not off the local. A listener that
-    # shortens a shove -- "moves 1 square fewer when pushed, pulled or slid"
-    # -- wrote to `ev.squares` and nothing looked at it again.
-    if world.bus.emit(shove).cancelled:
-        return 0
-    from .resolve import _mods
 
-    amount = max(0, shove.squares - _mods(world, target, "forced", {"how": how.value}))
-    if amount <= 0:
+    # The shove is negotiated, so the agreed distance is worked out inside
+    # the callback, which is handed the event and cannot see `amount`. A
+    # listener may refuse the shove outright ("cannot be pushed, pulled or
+    # slid") or shorten it ("moves 1 square fewer"), and both used to be
+    # written against a local that nothing read back.
+    agreed = 0
+
+    def settle(ev: ForcedMove) -> None:
+        nonlocal agreed
+        from .resolve import _mods
+
+        agreed = max(0, ev.squares - _mods(world, ev.target, "forced", {"how": how.value}))
+
+    if world.bus.emit(shove, settle).cancelled or agreed <= 0:
         return 0
+    amount = agreed
     if to is not None:
         # A row that names the square it wants. Still one step at a time, so
         # everything that watches a move still sees each of them.

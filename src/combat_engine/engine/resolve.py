@@ -360,6 +360,7 @@ def deal_damage(
             dtype=dtype,
             absorbed=absorbed,
             hp=health.hp,
+            detail=detail,
         )
     )
     if not was_bloodied and health.bloodied and health.hp > 0:
@@ -419,6 +420,14 @@ def _check_down(world: World, eid: int, health: Health) -> None:
     # printed sentence every row using it carries is "drops to 0 hit points
     # **or fewer**", and those rows were missing almost every death.
     world.bus.emit(Dropped(actor=eid, dead=health.hp <= health.dying_at))
+    # Read hit points again. A row that answers its own `Dropped` by healing
+    # itself -- the shape the `dying` flag exists for -- was healed inside
+    # the emit and then knocked unconscious, prone and dying regardless,
+    # because this decided all of that from the reading it took on the way
+    # in. `heal`'s own revival cannot help: the "dropped" effect does not
+    # exist yet, so there is nothing for it to clear.
+    if health.hp > 0:
+        return
     if health.hp <= health.dying_at:
         _die(world, eid)
         return

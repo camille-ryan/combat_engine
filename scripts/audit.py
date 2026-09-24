@@ -212,6 +212,75 @@ def _own_movement(world, ref: str, cursor: int, owner: int) -> set[str]:  # noqa
     return kinds
 
 
+def _decisions_are_honoured() -> list[str]:
+    """Refusing a `Decision` must actually prevent it.
+
+    Five events are proposals rather than announcements. A listener refuses
+    one; the *emitter* has to honour that, and four separate bugs came from
+    an emitter that announced something and then went ahead from its own
+    local variables -- each of them silent, each found only when a content
+    author happened to write a row that needed it.
+
+    So this refuses each one and checks the consequence does not happen.
+    That is a guarantee rather than a convention, and conventions are what
+    failed all four times.
+    """
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.events import (
+        AttackDeclared,
+        DamageRolled,
+        Decision,
+        ForcedMove,
+        MoveStart,
+        Window,
+    )
+    from combat_engine.engine.movement import forced, walk
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import attack, deal_damage
+    from combat_engine.engine.types import Defense, Forced
+
+    out: list[str] = []
+
+    def board_():  # noqa: ANN202
+        world, me, _ = board("m145a0", 1)
+        return world, me, sorted(enemies(world, me))[0]
+
+    # MoveStart: a refused walk covers no ground.
+    world, me, _foe = board_()
+    world.bus.on(MoveStart, lambda ev: ev.cancel("probe"), window=Window.BEFORE)
+    here = world.get(me, Position).square
+    if walk(world, me, [(here[0], here[1] - 1)]) != 0:
+        out.append("MoveStart: refusing it did not stop the walk")
+
+    # ForcedMove: a refused shove moves nobody.
+    world, me, foe = board_()
+    world.bus.on(ForcedMove, lambda ev: ev.cancel("probe"), window=Window.BEFORE)
+    if forced(world, me, foe, Forced.PUSH, 3) != 0:
+        out.append("ForcedMove: refusing it did not stop the push")
+
+    # DamageRolled: a refused blow takes no hit points.
+    world, me, foe = board_()
+    world.bus.on(DamageRolled, lambda ev: ev.cancel("probe"), window=Window.BEFORE)
+    before = world.need(foe, Health).hp
+    deal_damage(world, me, foe, 10)
+    if world.need(foe, Health).hp != before:
+        out.append("DamageRolled: refusing it did not stop the damage")
+
+    # AttackDeclared: a refused attack never rolls.
+    world, me, foe = board_()
+    world.bus.on(AttackDeclared, lambda ev: ev.cancel("probe"), window=Window.BEFORE)
+    if not attack(world, me, foe, 30, Defense.AC, power="probe").cancelled:
+        out.append("AttackDeclared: refusing it did not stop the attack")
+
+    # And the other side of the split: a notification cannot be refused at
+    # all, which is what keeps `cancel()` off thirty-three other classes.
+    from combat_engine.engine.events import Hit
+
+    if issubclass(Hit, Decision) or hasattr(Hit, "cancel"):
+        out.append("Hit is a notification and should not carry cancel()")
+    return out
+
+
 def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     """Make the thing happen that this row triggers off, and see if it fires.
 
@@ -508,6 +577,10 @@ def main() -> int:
             continue
         chosen.append(ref)
 
+    refused = _decisions_are_honoured()
+    for line in refused:
+        print(f"  IGNORED {line}")
+
     broken, silent, never = [], [], []
     for ref in chosen:
         r = audit(ref)
@@ -537,7 +610,12 @@ def main() -> int:
         print(f"  {len(broken)} raise, {len(silent)} silent")
     if never:
         print(f"  {len(never)} never usable here -- often a Requirement the board cannot meet")
-    return 1 if (broken or silent) else 0
+    if refused:
+        print(f"  {len(refused)} negotiable event(s) ignored a refusal")
+    # `refused` fails the run. An engine that announces a thing and then
+    # does it anyway is a worse fault than any single row being wrong, and
+    # it is the one that has been silent four times.
+    return 1 if (broken or silent or refused) else 0
 
 
 if __name__ == "__main__":
