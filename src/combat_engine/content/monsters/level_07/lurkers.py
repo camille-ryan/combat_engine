@@ -99,14 +99,14 @@ from combat_engine.engine.events import (
     Event,
     Hit,
     Miss,
+    Moved,
     MoveEnd,
     MoveStart,
     RelationCleared,
+    TurnEnd,
     TurnStart,
 )
-from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
-    adjacent,
     distance_between,
     has_combat_advantage,
     squares,
@@ -114,7 +114,6 @@ from combat_engine.engine.query import (
 )
 from combat_engine.engine.triggers import (
     Trigger,
-    Moved,
     both,
     by_melee,
     enemy_within,
@@ -239,7 +238,7 @@ def m451a2(c: Cast) -> None:
         if who is None or team(c.world, who) is team(c.world, me):
             return False
         for past in reversed(c.world.bus.log):
-            if getattr(past, "actor", None) == me and past.kind == "TurnEnd":
+            if isinstance(past, TurnEnd) and past.actor == me and not past.ghost:
                 return False
             if isinstance(past, Hit) and past.target == me and past.attacker == who:
                 return True

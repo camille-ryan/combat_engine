@@ -60,12 +60,10 @@ STOPWORDS = {
 #: order. Making the multi-word test smarter would suppress real names, since
 #: plenty of them are ordinary words too. An explicit list with a reason each
 #: is the honest version: it says out loud what is being waived.
-ALLOWED = {
-    # Both in ENCOUNTERS.md, describing tactics rather than naming anything:
-    # "the Lurker strikes from the shadows", "a classic meat-shield dynamic".
-    "from the shadows",
-    "meat shield",
-}
+#: Emptied once the phrase rule above learned to ask whether any word in a
+#: phrase is actually a word. Both entries that lived here -- "from the
+#: shadows" and "meat shield" -- are now suppressed on their merits.
+ALLOWED: set[str] = set()
 
 
 #: Rules terms the engine is entitled to say. A game system cannot be
@@ -214,13 +212,39 @@ def _identifies(name: str, refs: list[str], rules: set[str]) -> bool:
     name is in no dictionary. It must also be long enough, and rare enough among
     the names, to be worth believing.
     """
-    if name in rules or name in ALLOWED:
+    if name in rules or name in ALLOWED or _stem(name) in rules:
         return False
     if " " in name:
-        return any(w not in STOPWORDS for w in name.split())
+        # Function words do not count towards the length: "from the
+        # shadows" is one idea, not three, and treating it as three made it
+        # a finding on its own length.
+        words = [w for w in name.split() if w not in STOPWORDS]
+        if not words:
+            return False
+        # A phrase is a name worth reporting when **some word in it is not a
+        # word** -- an invented one -- or when it is long enough that the
+        # collision is not chance. Two ordinary words in a row is chance:
+        # "blink out", "threatening reach", "guarded area" and "poison
+        # weapon" are all published names and all things a rules sentence
+        # says by accident, and reporting them taught the reader to skim.
+        #
+        # The cost is real and worth stating: a genuine two-word name made
+        # of two ordinary words -- "writhing coils" -- is now missed. That
+        # is the trade, and the ETL scrubber is the other line of defence.
+        return len(words) >= 3 or any(
+            w not in rules and _stem(w) not in rules for w in words
+        )
     return (
         name not in rules and len(name) >= SHORTEST and len(refs) <= COMMON_ENOUGH
     )
+
+
+def _stem(word: str) -> str:
+    """Crudely singular. The dictionary has "narrow" and not "narrows"."""
+    for suffix in ("es", "s"):
+        if word.endswith(suffix) and len(word) > len(suffix) + 2:
+            return word[: -len(suffix)]
+    return word
 
 
 def _hits(line: str, index: dict[str, list[str]]) -> list[tuple[str, list[str]]]:

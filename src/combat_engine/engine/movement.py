@@ -372,13 +372,13 @@ def shift(
     return moved
 
 
-def teleport(world: World, eid: int, to: Square) -> bool:
+def teleport(world: World, eid: int, to: Square, *, share: bool = False) -> bool:
     # Reads the answer, like `walk` and `shift`. A row that stops movement
     # can then decide for itself whether a teleport counts, by looking at
     # `ev.kind_` -- which is a choice it cannot make if this is ignored.
     if world.bus.emit(MoveStart(actor=eid, kind_="teleport")).cancelled:
         return False
-    moved = step(world, eid, to, kind="teleport", mode="walk")
+    moved = step(world, eid, to, kind="teleport", mode="walk", through=share)
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0), kind_="teleport"))
     return moved

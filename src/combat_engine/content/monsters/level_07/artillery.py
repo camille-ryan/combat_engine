@@ -671,7 +671,6 @@ def m4876a0(c: Cast) -> None:
             2,
             until=When.ENCOUNTER,
             on=foe,
-            kind="untyped",
             when=lambda _ctx, who=foe: _hemmed_in(c, who),
         )
         if hold is not None:

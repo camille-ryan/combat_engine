@@ -337,11 +337,18 @@ class Cast:
             return False
         return self.world.relations.holds(Relation.MARKED_BY, self.me if by is None else by, who)
 
-    def save(self, *, on: int | None = None, bonus: int = 0) -> bool:
+    def save(
+        self, *, on: int | None = None, bonus: int = 0, against: str = ""
+    ) -> bool:
         """Roll a saving throw now against one save-ends effect.
 
         A few powers hand somebody an extra save out of turn. Returns True
         if something was shaken off.
+
+        `against` picks which one: `"ongoing"` for the commonest printed
+        form -- "a saving throw against an ongoing damage effect" -- or a
+        label fragment. Without it this takes whichever save-ends effect it
+        finds first, which may well be a daze when the row means the burn.
 
         Falls back to the caster when there is no target. A row declared
         `target=NO_TARGET` that answers its own trigger has `c.target` as
@@ -352,6 +359,10 @@ class Cast:
         if who is None:
             return False
         for effect in self.world.effects.of(who):
+            if against == "ongoing" and effect.ongoing is None:
+                continue
+            if against and against not in ("ongoing", "") and against not in effect.label:
+                continue
             if effect.when is When.SAVE_ENDS:
                 effect.save_mod += bonus
                 self.world.effects.save(effect)
@@ -1103,7 +1114,12 @@ class Cast:
         return word.lower() in getattr(self.world, "terrain", frozenset())
 
     def teleport(
-        self, squares_: int, *, who: int | None = None, to: Square | None = None
+        self,
+        squares_: int,
+        *,
+        who: int | None = None,
+        to: Square | None = None,
+        share: bool = False,
     ) -> bool:
         """Blink somewhere. `to` names the square, as `c.shift` already allowed.
 
@@ -1117,14 +1133,21 @@ class Cast:
         options = [
             sq
             for sq in spread(origin, squares_)
-            if self.world.grid.passable(sq) and self.world.grid.occupant(sq) in (None, mover)
+            if self.world.grid.passable(sq)
+            and (share or self.world.grid.occupant(sq) in (None, mover))
         ]
         if to is not None:
-            return teleport(self.world, mover, to) if to in options else False
+            # `share` arrives into an occupied square, which a row landing
+            # somebody in a dying creature's space needs: `resolve._die`
+            # lifts the body *after* `Dropped` is announced, so the square
+            # is still taken during the interrupt window.
+            return (
+                teleport(self.world, mover, to, share=share) if to in options else False
+            )
         if not options:
             return False
         dest = self.world.decide(mover, "teleport", sorted(options), f"{self.ref}: teleport")
-        return teleport(self.world, mover, dest)
+        return teleport(self.world, mover, dest, share=share)
 
     # -- conditions and modifiers -------------------------------------------
 
@@ -1680,6 +1703,54 @@ class Cast:
             from_attack=False,
         )
 
+    def run_at(self, victim: int) -> bool:
+        """Walk into reach of a named creature, the way a charge's move does.
+
+        `c.move` picks its own destination through the decider, which is
+        right for "it moves" and useless for "it charges *that one*". The
+        path is chosen here, shortest first, the same way `actions._charges`
+        chooses one. Returns whether the target is in reach afterwards.
+        """
+        from .movement import walk
+        from .query import squares
+
+        beside = spread(squares(self.world, victim), 1)
+        paths = self.world.reachable_paths(self.me, self.speed_of())
+        best = min(
+            (
+                (len(path), dest, path)
+                for dest, path in paths.items()
+                if dest in beside and path
+            ),
+            default=None,
+        )
+        if best is not None:
+            walk(self.world, self.me, list(best[2]))
+        return self.adjacent(victim)
+
+    def charge_at(self, victim: int, ref: str = "") -> bool:
+        """Run at somebody and swing, with the swing marked as a charge.
+
+        `actions.perform` builds a charge out of a walk plus
+        `use(..., charge=True)`, and a row whose printed Effect *is* the
+        charge is doing the same thing from inside a body. The flag is not
+        decoration: it is what puts `charge` on the attack events and in
+        both modifier contexts, which is what every charge rider reads.
+
+        Three content files had grown their own copy of this.
+        """
+        from .components import Powers
+        from .dsl import use
+
+        if not self.run_at(victim):
+            return False
+        if not ref:
+            known = self.world.get(self.me, Powers)
+            ref = (known.basic if known else "") or "mba"
+        return use(
+            self.world, self.me, ref, targets=[victim], spend=False, charge=True
+        )
+
     def overrun(self, to: Square | None = None) -> list[int]:
         """Trample: walk through whoever is in the way, and say who that was.
 
@@ -1939,8 +2010,17 @@ class Cast:
                 effect.subs.append(self.world.bus.on(AttackRolled, spend, owner=who))
         return effect
 
-    def penalty(self, what: str | Defense, value: int, **kw: Any) -> Effect | None:
-        return self.bonus(what, -abs(value), kind="untyped", **kw)
+    def penalty(
+        self, what: str | Defense, value: int, *, kind: str = "untyped", **kw: Any
+    ) -> Effect | None:
+        """A negative modifier. `kind` is real, not hard-coded.
+
+        It used to pass `kind="untyped"` *and* splat `**kw`, so any caller
+        naming a kind got `TypeError: got multiple values for keyword
+        argument 'kind'` -- a crash rather than a rejection, and a printed
+        "-2 power penalty" could not be written at all.
+        """
+        return self.bonus(what, -abs(value), kind=kind, **kw)
 
     # -- standing arrangements -----------------------------------------------
 
@@ -2089,7 +2169,9 @@ class Cast:
         self.burns(zone, amount, dtype)
         return zone
 
-    def burns(self, zone: int, amount: int, dtype: DamageType = DamageType.UNTYPED) -> None:
+    def burns(
+        self, zone: int, amount: str | int, dtype: DamageType = DamageType.UNTYPED
+    ) -> None:
         """Give an existing zone teeth: enter it or start a turn in it and it
         bites, once per turn.
 
@@ -2107,7 +2189,12 @@ class Cast:
             if struck.get(who) == self.world.round:
                 return
             struck[who] = self.world.round
-            self.world.damage(source, who, amount, dtype, detail=f"{self.ref} zone")
+            # Rolled per bite when it is dice, not once when the zone is
+            # made. A flat number stays flat. Several auras print "takes
+            # 1d8 fire damage" and had to hand-roll the whole watcher pair
+            # because this only took an int.
+            bit = self.roll(amount) if isinstance(amount, str) else amount
+            self.world.damage(source, who, bit, dtype, detail=f"{self.ref} zone")
 
         def on_enter(ev: ZoneEntered) -> None:
             if ev.zone == zone:

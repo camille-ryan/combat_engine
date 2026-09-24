@@ -332,6 +332,22 @@ class Effects:
             ):
                 self.end(eff, "not sustained")
 
+    def _warn_sustainless(self, eff: Effect) -> None:
+        """A `When.SUSTAIN` effect nobody can sustain lapses after a round.
+
+        `c.zone`, `c.aura`, `c.hazard` and `c.conjure` all pass a
+        `sustain_cost`; `c.watch` and `c.bonus` have no way to, so an
+        effect they create with `When.SUSTAIN` gets none -- and
+        `_sustain_by_default` refuses it, so it ends after one round
+        looking exactly like a duration that was written wrong. Said out
+        loud rather than left to be discovered.
+        """
+        if eff.when is When.SUSTAIN and eff.sustain_cost is None:
+            self.world.bus.emit(
+                Note(text=f"{eff.label or eff} is sustained but costs nothing "
+                          "to sustain, so nothing can keep it going")
+            )
+
     def _sustain_by_default(self, eff: Effect) -> bool:
         """Keep a sustained effect going if its action was never spent.
 
@@ -359,7 +375,12 @@ class Effects:
     def save(self, eff: Effect) -> None:
         """Roll a saving throw against one effect now."""
         holder = self.world.get(eff.owner, Mods)
-        bonus = eff.save_mod + (holder.total("save") if holder else 0)
+        # With a context. It was called with none, so a `when=` gate on a
+        # save bonus ran against `{}` and anything reading a key was
+        # silently false -- "enemies within the aura take -2 to saving
+        # throws" could not be written the obvious way.
+        ctx = {"actor": eff.owner, "effect": eff, "label": eff.label}
+        bonus = eff.save_mod + (holder.total("save", ctx) if holder else 0)
         roll = self.world.rng.d20()
         saved = roll.total + bonus >= 10
         self.world.bus.emit(

@@ -449,6 +449,21 @@ def _area_rows(world, caster: int, exclude: str) -> list[str]:  # noqa: ANN001
     return out[:2]
 
 
+def _after_its_own_use(world, ref: str, cursor: int) -> set[str]:  # noqa: ANN001
+    """Event kinds logged after this row's own `PowerUsed`.
+
+    A triggered row is fired by provoking it, and the provocation is an
+    attack -- which drops creatures, applies conditions and expires effects
+    on its own account. Everything before the row ran is the provocation's;
+    everything after is by definition the row's consequences.
+    """
+    log = world.bus.log[cursor:]
+    for i, e in enumerate(log):
+        if e.kind == "PowerUsed" and getattr(e, "power", None) == ref:
+            return {x.kind for x in log[i + 1:]}
+    return set()
+
+
 def _revive_everyone(world, except_: int) -> None:  # noqa: ANN001
     """Undo the harness's own killing, so the next probe has a board."""
     from combat_engine.engine import Conditions, Health
@@ -621,7 +636,13 @@ def audit(ref: str) -> Result:
                 if not _provoke(world, caster, ref, cursor):
                     continue
                 out.fired += 1
-                out.events |= {e.kind for e in world.bus.log[cursor:]} - PROVOKE_NOISE
+                # Only what happened *after* the row itself went off. The
+                # old form subtracted a fixed list of event kinds, which
+                # left `Dropped`, `Died`, `ConditionApplied` and
+                # `EffectExpired` from the provocation credited to the row
+                # -- so a row whose body could not act on this board still
+                # passed, carrying the consequences of being attacked.
+                out.events |= _after_its_own_use(world, ref, cursor) - PROVOKE_NOISE
                 out.events |= _own_movement(world, ref, cursor, caster)
                 if set(world.effects.live) - had:
                     out.events.add("ConditionApplied")

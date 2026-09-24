@@ -266,7 +266,15 @@ def ally_within(squares: int) -> Callable[[World, int, Event], bool]:
     from .query import distance_between, team
 
     def check(world: World, me: int, ev: Event) -> bool:
-        who = getattr(ev, "actor", getattr(ev, "target", None))
+        # The creature the event is *about*. On an attack that is the one
+        # swinging, not the one being swung at -- `Hit`, `Miss` and
+        # `AttackDeclared` have no `actor`, so falling through to `target`
+        # measured the distance to the creature that was missed and called
+        # it an ally missing. Silently wrong, and `enemy_within` has had
+        # the right fallback all along.
+        who = getattr(ev, "actor", None)
+        if who is None:
+            who = getattr(ev, "attacker", getattr(ev, "target", None))
         if who is None or who == me:
             return False
         if team(world, who) is not team(world, me):
