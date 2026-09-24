@@ -486,6 +486,30 @@ def _changed() -> list[str]:
     return sorted({r for r in refs if r in REGISTRY})
 
 
+def _run_all(refs: list[str], jobs: int = 0) -> list[Result]:
+    """Fire every row, in parallel, in the order they were asked for.
+
+    Each row builds its own `World` and shares nothing with any other, so
+    this is embarrassingly parallel and was single-threaded -- a full sweep
+    reached 189s at a thousand rows, on a machine with ten cores, and the
+    content is not a third written. That curve is the one thing most likely
+    to make this project unpleasant to work on, so it is worth the fifteen
+    lines.
+
+    Order is preserved rather than taken as results arrive: the report is
+    read by eye and a list that reshuffles between runs is harder to diff.
+    Serial with `--jobs 1`, which is what to use when a row is crashing and
+    a traceback from the right process matters.
+    """
+    if jobs == 1 or len(refs) < 8:
+        return [audit(ref) for ref in refs]
+
+    from concurrent.futures import ProcessPoolExecutor
+
+    with ProcessPoolExecutor(max_workers=jobs or None) as pool:
+        return list(pool.map(audit, refs, chunksize=8))
+
+
 def audit(ref: str) -> Result:
     out = Result(ref=ref)
     declared = get(ref)
@@ -550,6 +574,8 @@ def main() -> int:
     ap.add_argument("--verbose", action="store_true", help="say what each row did")
     ap.add_argument("--changed", action="store_true",
                     help="only rows in content files that differ from HEAD")
+    ap.add_argument("--jobs", type=int, default=0,
+                    help="worker processes; 0 picks one per core, 1 stays serial")
     args = ap.parse_args()
 
     wanted = args.refs or (_changed() if args.changed else sorted(REGISTRY))
@@ -582,8 +608,7 @@ def main() -> int:
         print(f"  IGNORED {line}")
 
     broken, silent, never = [], [], []
-    for ref in chosen:
-        r = audit(ref)
+    for r in _run_all(chosen, args.jobs):
         if r.error:
             broken.append(r)
         elif r.fired == 0:
