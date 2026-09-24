@@ -27,6 +27,7 @@ import contextlib
 import itertools
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -275,9 +276,9 @@ def check_hosted(check: Checks) -> None:
         )
         names = [p["name"] for p in state["roster"]]
         check.that(
-            all(n.startswith(("p", "m")) for n in names),
+            all(IS_REF.match(n) for n in names),
             "with names off, every power is its id",
-            str(names),
+            str([n for n in names if not IS_REF.match(n)]),
         )
         # The printed rule is the publisher's sentences too, so it is absent
         # rather than blanked -- serving an empty "Hit:" is still serving it.
@@ -287,6 +288,16 @@ def check_hosted(check: Checks) -> None:
             if p["hit_text"] is not None or p["effect_text"] is not None
         ]
         check.that(not prose, "with names off, no printed rule text is served", str(prose[:3]))
+
+
+#: Every shape of id the engine uses for a row. A compendium power or
+#: monster ability, a class feature the books describe on the class page and
+#: give no row of its own (`cf:`), and the two attacks the engine names
+#: itself. The check used to be "starts with p or m", which was fine until
+#: the party finally carried its class features and `cf:rogue-bonus` --
+#: which *is* its own id, and is exactly what serving no printed name looks
+#: like -- read as a failure.
+IS_REF = re.compile(r"^(p\d+|m\d+a\d+|cf:[a-z0-9-]+|mba|rba|second-wind)$")
 
 
 def main() -> int:

@@ -10,6 +10,7 @@ All eight Player's Handbook classes, to level 10.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from random import Random
 
 from combat_engine.engine import (
     AC,
@@ -24,7 +25,6 @@ from combat_engine.engine import (
     WIS,
     Ability,
     Budget,
-    Build,
     Conditions,
     Defenses,
     Gear,
@@ -42,7 +42,9 @@ from combat_engine.engine import (
     Weapon,
     World,
 )
+from combat_engine.engine import Build as BuildState
 from combat_engine.engine.movement import place
+from combat_engine.engine.types import Usage
 
 #: Armour, by the bonus it gives. Light armour also takes a modifier.
 ARMOUR = {"cloth": 0, "leather": 2, "hide": 3, "chain": 6, "scale": 7, "plate": 8}
@@ -137,21 +139,78 @@ CLASSES: dict[str, ClassLine] = {
 }
 
 
-#: The build each class gets when nobody says otherwise. Every PHB1 class
-#: forks once on its own page -- a pact, a fighting style, a presence, a set
-#: of tactics -- and a good many printed rows carry a rider that applies on
-#: one side of the fork only. Picking a default is what makes those riders
-#: sayable at all; `Character(build=...)` takes the other branch.
-DEFAULT_BUILD = {
-    "cleric": "devoted",
-    "fighter": "great-weapon",
-    "paladin": "avenging",
-    "ranger": "two-blade",     # matches the two short swords it is handed
-    "rogue": "brawny",
-    "warlock": "infernal",
-    "warlord": "inspiring",
-    "wizard": "control",
+#: A class's fork, as its own page draws it.
+#:
+#: Every PHB1 class arranges three ability scores in an **A** or a **V** and
+#: asks you to take one leg. An A shares its primary -- a wizard is Int
+#: whatever it does, and the fork is which secondary it leans on. A V shares
+#: its secondary and forks on the *primary*, which is why a battle cleric and
+#: a devoted cleric barely play the same class.
+#:
+#: A character takes **one leg and stays on it.** That is what makes the fork
+#: mean anything: its powers come off that leg, its best score is that leg's
+#: primary, and a row whose rider applies on the other side simply does not
+#: apply.
+@dataclass(frozen=True)
+class Build:
+    name: str
+    primary: Ability
+    secondary: Ability
+    #: What it fights with, when the fork changes that. A two-blade ranger
+    #: and an archer are not carrying the same things.
+    weapons: tuple[Weapon, ...] = ()
+
+
+BUILDS: dict[str, tuple[Build, ...]] = {
+    # A -- Strength either way, and the fork is what backs it up.
+    "fighter": (Build("great-weapon", STR, CON), Build("guardian", STR, WIS)),
+    # V -- the fork is the primary, and the two halves share Wisdom.
+    "cleric": (Build("devoted", WIS, CHA), Build("battle", STR, WIS, (MACE,))),
+    # A -- Dexterity either way.
+    "rogue": (Build("brawny", DEX, STR), Build("trickster", DEX, CHA)),
+    # A -- Intelligence either way.
+    "wizard": (Build("control", INT, WIS), Build("war", INT, DEX)),
+    # V -- swinging or shining.
+    "paladin": (Build("avenging", STR, CHA), Build("protecting", CHA, WIS)),
+    # V -- two blades or a bow, and they are different weapons as well as
+    # different scores.
+    "ranger": (
+        Build("two-blade", STR, WIS, (SHORTSWORD, SHORTSWORD)),
+        Build("archer", DEX, WIS, (LONGBOW, SHORTSWORD)),
+    ),
+    # V -- which pact was made.
+    "warlock": (Build("infernal", CON, CHA), Build("fey", CHA, CON)),
+    # A -- Strength either way.
+    "warlord": (Build("inspiring", STR, CHA), Build("tactical", STR, INT)),
 }
+
+
+def build_of(cls: str, name: str = "") -> Build:
+    """One class's build, by name, or the first it lists."""
+    options = BUILDS.get(cls) or ()
+    if not options:
+        return Build("", CLASSES[cls].key, CON)
+    for b in options:
+        if b.name == name:
+            return b
+    return options[0]
+
+
+def scores_for(line: ClassLine, build: Build) -> dict[Ability, int]:
+    """The class's own numbers, rearranged so the build's leg is the good one.
+
+    The values are the ones read off the class page and are not invented
+    here; what the build changes is *which ability gets which*. A battle
+    cleric and a devoted cleric are the same six numbers in a different
+    order, which is exactly what picking a leg means.
+    """
+    values = sorted(line.scores.values(), reverse=True)
+    out: dict[Ability, int] = {}
+    ordered = [build.primary, build.secondary]
+    ordered += [a for a in line.scores if a not in ordered]
+    for ability, value in zip(ordered, values, strict=False):
+        out[ability] = value
+    return out
 
 
 @dataclass
@@ -160,13 +219,17 @@ class Character:
     level: int = 1
     powers: list[str] = field(default_factory=list)
     team: Team = Team.PC
-    #: Overrides `DEFAULT_BUILD`. A set, because a character makes more than
-    #: one such choice as it levels.
-    build: set[str] = field(default_factory=set)
+    #: Which leg of the fork. Empty takes the first the class lists.
+    build: str = ""
+
+    @property
+    def chosen(self) -> Build:
+        return build_of(self.cls, self.build)
 
     @property
     def choices(self) -> set[str]:
-        return self.build or {DEFAULT_BUILD.get(self.cls, "")} - {""}
+        """What a power's `c.build(...)` rider asks about."""
+        return {self.chosen.name} - {""}
 
     @property
     def line(self) -> ClassLine:
@@ -175,6 +238,82 @@ class Character:
     @property
     def ref(self) -> str:
         return f"c:{self.cls}"
+
+
+#: A character's slots at level 1: two at-wills, one encounter power, one
+#: daily. Class features and the leader's heal are on top of these, because
+#: neither is a choice the book asks you to spend a slot on.
+SLOTS = ((Usage.AT_WILL, 2), (Usage.ENCOUNTER, 1), (Usage.DAILY, 1))
+
+
+def loadout(
+    cls: str, level: int = 1, build: Build | None = None, rng: Random | None = None
+) -> list[str]:
+    """What one character knows, drawn from the leg of the fork it took.
+
+    Worked out from the registry rather than listed. A hand-written list of
+    ids goes stale the moment a row lands -- and did, twice, in two files
+    that had drifted apart: the party the web server dealt out had no class
+    features at all, so its rogue had no extra damage and its fighter could
+    not mark.
+
+    Powers are filtered to the ones that attack with **this build's primary
+    ability**, which is what taking one leg and staying on it means. A row
+    with no attack line at all -- a heal, a buff, a zone -- belongs to any
+    build and is always in the pool. If a leg turns out to be too thin to
+    fill a slot, the rest of the class makes up the difference rather than
+    the character going short.
+    """
+    import combat_engine.content  # noqa: F401  (registers the rows)
+    from combat_engine.engine.dsl import REGISTRY
+
+    pick = rng or Random(0)
+    build = build or build_of(cls)
+    mine = [p for p in REGISTRY.values() if p.cls == cls]
+
+    out = sorted(p.ref for p in mine if p.level == 0)
+    out += sorted(p.ref for p in mine if _is_class_heal(p))
+
+    for usage, count in SLOTS:
+        at_level = [p for p in mine if p.level == level and p.usage is usage]
+        on_leg = [p for p in at_level if _fits(p, build)]
+        pool = sorted(p.ref for p in (on_leg or at_level) if p.ref not in out)
+        spare = sorted(p.ref for p in at_level if p.ref not in out and p.ref not in pool)
+        chosen = pick.sample(pool, min(count, len(pool)))
+        # A thin leg is topped up from the rest of the class rather than
+        # leaving the character with one at-will.
+        while len(chosen) < count and spare:
+            chosen.append(spare.pop(0))
+        out += sorted(chosen)
+    return out
+
+
+def _fits(p, build: Build) -> bool:  # noqa: ANN001
+    """Is this power on the build's leg?
+
+    No attack line means no ability to be wrong about -- those are open to
+    everybody, which is how a cleric of either leg still gets its heals.
+    """
+    if p.attack is None or p.attack.ability is None:
+        return True
+    return p.attack.ability is build.primary
+
+
+def _is_class_heal(p) -> bool:  # noqa: ANN001
+    """The leader's signature heal: a minor action, healing, twice a fight.
+
+    It is a class feature printed at level 1 and does not spend a slot. A
+    cleric choosing between healing the party and attacking anything is not
+    a choice the book asks it to make.
+    """
+    from combat_engine.engine.types import ActionType, Keyword
+
+    return (
+        p.level <= 1
+        and Keyword.HEALING in p.keywords
+        and p.action is ActionType.MINOR
+        and p.uses > 1
+    )
 
 
 def defences(line: ClassLine, scores: dict[Ability, int], level: int) -> dict:
@@ -211,13 +350,23 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     from combat_engine.engine.types import modifier
 
     line = who.line
-    scores = dict(line.scores)
+    build = who.chosen
+    scores = scores_for(line, build)
     # Level 4, 8 and so on raise two scores by one. Applied here rather than
     # recorded, so a level 8 character is derivable from its class and level.
     for step in (4, 8):
         if who.level >= step:
-            scores[line.key] += 1
+            scores[build.primary] += 1
             scores[CON] += 1
+
+    # An empty power list means "deal me a hand", which is what both callers
+    # want and what neither of them used to do: each kept its own list of
+    # ids and both had gone stale. The draw is seeded off the fight, so the
+    # same seed deals the same character, and off a stream of its own, so
+    # dealing one does not move the dice the fight is about to roll.
+    powers = who.powers or loadout(
+        who.cls, who.level, build, Random(f"{world.rng.seed}:{who.cls}:{build.name}")
+    )
 
     # First level takes the whole Constitution *score*; every level after
     # takes the class's flat step. Surges take the modifier, not the score.
@@ -236,10 +385,10 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         Conditions(),
         Mods(),
         Budget(),
-        Powers(known=list(who.powers)),
-        Build(choices=set(who.choices)),
+        Powers(known=list(powers)),
+        BuildState(choices=set(who.choices)),
         Gear(
-            weapons=list(line.weapons),
+            weapons=list(build.weapons or line.weapons),
             shield=bool(line.shield),
             armour=line.armour,
         ),

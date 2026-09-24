@@ -197,6 +197,7 @@ def _play(page, check: Checks, problems: list[str], served: list[dict]) -> None:
         print(f"        {read.nth(i).inner_text()[:78]}")
 
     _check_animation(page, check)
+    _check_enemies_animate(page, check)
     _check_initiative(page, check, served)
 
     check.that(not problems, "still no script errors after playing",
@@ -273,6 +274,64 @@ def _check_animation(page, check: Checks) -> None:  # noqa: ANN001
     missing = sorted(ANIMATED - seen)
     if missing:
         print(f"        not seen this run (may simply not have happened): {missing}")
+
+
+ANIM_SEED = 4
+
+
+def _set_speed(page, name: str) -> None:  # noqa: ANN001
+    """Change the board speed the way a player would, without needing to see it."""
+    page.eval_on_selector(
+        "#speed",
+        "(el, v) => { el.value = v; el.dispatchEvent(new Event('change')); }",
+        name,
+    )
+
+
+def _check_enemies_animate(page, check: Checks) -> None:  # noqa: ANN001
+    """Do the monsters slide, or do they teleport?
+
+    Watched rather than inferred: every frame, note which tokens are holding
+    a transform. A monster round is four creatures and a couple of dozen
+    steps, and the snapshot that ends it used to be forced through after a
+    second and a half no matter what -- so the enemies animated for that long
+    and then jumped to wherever they had got to.
+
+    Two things had to be true before this could measure anything. The suite
+    plays at `--speed instant` so it finishes quickly, and at zero
+    milliseconds `anim.enqueue` returns without queueing -- so the animator
+    was switched off for every run of it. And the fight has to be started
+    again, because by the time this runs the earlier checks have played it
+    out, and a finished encounter has no turns left to animate.
+    """
+    # Through the page's own control, not localStorage: `anim.js` reads the
+    # stored speed once when the module loads, so writing the key afterwards
+    # changes nothing until a reload.
+    # Driven by dispatching the control's own change event: the picker lives
+    # in a panel that may be folded away, so `select_option` waits forever for
+    # something that is never going to be visible.
+    was = page.eval_on_selector("#speed", "el => el.value")
+    _set_speed(page, "normal")
+    _restart(page, ANIM_SEED)
+    page.evaluate(
+        "() => { window.__slid = new Set();"
+        " const tick = () => { for (const t of document.querySelectorAll('#board .token'))"
+        "   if (t.style.transform && t.style.transform !== 'none')"
+        "     window.__slid.add(t.dataset.actor);"
+        " requestAnimationFrame(tick); }; tick(); }"
+    )
+    # One action at a time, with a pause after each. `_play_on` on its own
+    # clicks faster than the board can play, and every render clears the
+    # transforms -- so the slide is real and simply never on screen when the
+    # watcher looks.
+    for _ in range(10):
+        _play_on(page, rounds=1)
+        page.wait_for_timeout(1200)
+    slid = set(page.evaluate("Array.from(window.__slid)"))
+    enemies = {a for a in slid if a.startswith("npc")}
+    check.that(bool(enemies), f"enemy tokens animate ({len(enemies)} of them slid)",
+               f"tokens that moved at all: {sorted(slid)}")
+    _set_speed(page, was or "instant")
 
 
 def _positions(page) -> dict:  # noqa: ANN001

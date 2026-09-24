@@ -34,7 +34,6 @@ from combat_engine.engine import (
 from combat_engine.engine.monster_math import PRESETS as MATHS
 from combat_engine.engine.query import alive, creatures
 from combat_engine.engine.scaling import PRESETS
-from combat_engine.engine.types import ActionType, Usage
 
 #: Which four classes take the field. What each of them *knows* is worked
 #: out from the registry rather than listed, because a hand-written list goes
@@ -45,52 +44,6 @@ from combat_engine.engine.types import ActionType, Usage
 #: roster than about the engine.
 PARTY = ["fighter", "cleric", "rogue", "wizard"]
 
-#: A level 1 character: every class feature, two at-wills, one encounter
-#: power and one daily. Straight out of the book.
-SLOTS = {Usage.AT_WILL: 2, Usage.ENCOUNTER: 1, Usage.DAILY: 1}
-
-
-def loadout(cls: str, level: int) -> list[str]:
-    """A legal set of powers for one class at one level, from what exists.
-
-    Deterministic -- sorted, then the first of each kind -- so the same fight
-    is the same fight, and self-updating, so it can never again be a list of
-    ids that used to be right.
-    """
-    import combat_engine.content  # noqa: F401  (registers the rows)
-    from combat_engine.engine.dsl import REGISTRY
-
-    mine = [p for p in REGISTRY.values() if p.cls == cls]
-    # Level 0 is the class itself: features, marks, channels. All of it.
-    out = sorted(p.ref for p in mine if p.level == 0)
-    # A leader's heal is a class feature that happens to be printed at level
-    # 1, and it does not spend an encounter slot. Taken out of the slots, the
-    # cleric was choosing between healing the party and attacking anything,
-    # which is not a choice the book asks it to make.
-    free = sorted(p.ref for p in mine if _is_class_heal(p))
-    out.extend(free)
-    for usage, count in SLOTS.items():
-        pool = [
-            p.ref
-            for p in sorted(mine, key=lambda p: p.ref)
-            if p.level == level and p.usage is usage and p.ref not in out
-        ]
-        out.extend(pool[:count])
-    return out
-
-
-def _is_class_heal(p) -> bool:  # noqa: ANN001
-    """The leader's signature heal: a minor action, healing, twice a fight."""
-    from combat_engine.engine.types import Keyword
-
-    return (
-        p.level <= 1
-        and Keyword.HEALING in p.keywords
-        and p.action is ActionType.MINOR
-        and p.uses > 1
-    )
-
-
 def build(
     seed: int, level: int, scaling: str, math: str = "printed"
 ) -> tuple[World, Encounter]:
@@ -99,8 +52,7 @@ def build(
     world.monster_math = MATHS[math]
 
     for i, cls in enumerate(PARTY):
-        who = chargen.Character(cls, level, loadout(cls, level))
-        chargen.spawn(world, who, (2, 3 + i * 2))
+        chargen.spawn(world, chargen.Character(cls, level), (2, 3 + i * 2))
 
     pool, found_at = _opposition(level)
     if not pool:

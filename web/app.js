@@ -1178,6 +1178,17 @@ function force() {
     clearTimeout(catchUp);
     catchUp = null;
   }
+  // The timer is a *stall* detector, not a deadline. It fired regardless, so
+  // a monster round — four creatures, six squares each, two dozen steps — ran
+  // past 1500ms and the snapshot was forced through mid-walk. `render` puts
+  // every token on its real square, so the enemies stopped where they were
+  // and reappeared at the far end: the whole monster turn animated for a
+  // second and a half and then jumped. If the animator is still working it
+  // has not stalled, so wait for it and come back.
+  if (anim.busy()) {
+    catchUp = setTimeout(force, CATCH_UP_MS);
+    return;
+  }
   if (!pendingState) return;
   state = pendingState;
   pendingState = null;

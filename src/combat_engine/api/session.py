@@ -43,15 +43,16 @@ from combat_engine.engine import (
 from combat_engine.engine.events import OpportunityWindow
 from combat_engine.engine.query import alive
 from combat_engine.engine.scaling import PRESETS
+from combat_engine.transcript import Transcript
 
 from .wire import Wire
 
-PARTY = [
-    ("fighter", ["p997", "p992", "p1000", "p289", "p1429"]),
-    ("cleric", ["p841", "p889", "p1455", "p891", "p913"]),
-    ("rogue", ["p704", "p970", "p1382", "p163"]),
-    ("wizard", ["p1167", "p1166", "p463", "p159", "p185"]),
-]
+#: Which four classes take the field. What each of them *knows* is dealt by
+#: `chargen.spawn` from the registry -- this file used to keep its own list
+#: of ids, `scripts/fight.py` kept another, and both had gone stale: the
+#: party the server dealt out carried no class features at all, so its rogue
+#: had no extra damage and its fighter could not mark.
+PARTY = ["fighter", "cleric", "rogue", "wizard"]
 
 
 @dataclass
@@ -130,6 +131,8 @@ class Session:
     level: int
     scaling: str
     gate: Turnstile = field(default_factory=Turnstile)
+    #: Every event of this fight, written to `logs/<id>.jsonl` as it happens.
+    transcript: Transcript | None = None
 
     # -- building -----------------------------------------------------------
 
@@ -146,27 +149,23 @@ class Session:
         world = World(Grid(16, 12), Rng(seed), Bus())
         world.scaling = PRESETS.get(scaling, PRESETS["full"])
 
-        wanted = pcs or [cls_ for cls_, _ in PARTY]
-        loadouts = dict(PARTY)
-        for i, name in enumerate(wanted):
+        for i, name in enumerate(pcs or PARTY):
             key = name.strip().lower()
-            chargen.spawn(
-                world,
-                chargen.Character(key, level, list(loadouts.get(key, []))),
-                (2, 3 + i * 2),
-            )
+            chargen.spawn(world, chargen.Character(key, level), (2, 3 + i * 2))
 
         pool = enemies or _opposition(level)
         if not pool:
             raise ValueError("no monster is fully written yet")
-        for i in range(4):
-            loader.spawn(world, pool[i % len(pool)], (12, 3 + i * 2), team=Team.ENEMY)
+        fielded = [pool[i % len(pool)] for i in range(4)]
+        for i, ref in enumerate(fielded):
+            loader.spawn(world, ref, (12, 3 + i * 2), team=Team.ENEMY)
 
         _tag(world)
         encounter = Encounter(world)
         policy = LinearPolicy()
+        ident = uuid.uuid4().hex[:12]
         session = cls(
-            id=uuid.uuid4().hex[:12],
+            id=ident,
             world=world,
             encounter=encounter,
             wire=Wire.of(world),
@@ -176,6 +175,21 @@ class Session:
             scaling=scaling,
         )
         session._install()
+        # Attached before the fight starts, so initiative and the traits
+        # armed at the top of round one are in the file like everything
+        # else. A transcript that begins on round two is a transcript of
+        # the wrong fight.
+        session.transcript = Transcript.open(
+            ident,
+            {
+                "seed": seed,
+                "level": level,
+                "scaling": scaling,
+                "pcs": list(pcs or PARTY),
+                "enemies": fielded,
+            },
+        )
+        session.transcript.attach(world)
         encounter.start()
         session._run_monsters()
         return session
@@ -316,6 +330,11 @@ class Session:
         if choice is not None and choice.kind == "end":
             self.encounter.advance()
         self._run_monsters()
+        # Flushed when the board comes back to the player, which is the
+        # moment a transcript is worth having on disk: whatever just looked
+        # wrong is in the file before they can ask about it.
+        if self.transcript is not None:
+            self.transcript.flush()
 
     def _run_monsters(self) -> None:
         """Play every non-character turn until it is a character's move again."""
