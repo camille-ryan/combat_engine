@@ -343,6 +343,18 @@ def by_opportunity(world: World, me: int, ev: Event) -> bool:
     return bool(getattr(ev, "opportunity", False))
 
 
+def closed_on_me(world: World, me: int, ev: Event) -> bool:
+    """Somebody *else* moved into reach of me.
+
+    "When an enemy moves adjacent to it" -- the creature's own approach does
+    not count, and `AdjacencyGained` is emitted mirrored so both ends see
+    it. Without asking who moved, a row of this shape fired on its own
+    advance as readily as on the enemy's.
+    """
+    mover = getattr(ev, "mover", 0)
+    return mover != 0 and mover != me and getattr(ev, "other", None) in (me, mover)
+
+
 def by_charge(world: World, me: int, ev: Event) -> bool:
     """Was this a charge? "When the m200 charges, ..." """
     return bool(getattr(ev, "charge", False))

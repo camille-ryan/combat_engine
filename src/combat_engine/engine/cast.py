@@ -684,6 +684,7 @@ class Cast:
         ref: str = "",
         damage_bonus: int = 0,
         attack_bonus: int = 0,
+        trigger: Any = None,
     ) -> bool:
         """Let somebody else make an attack, now, out of turn.
 
@@ -723,7 +724,14 @@ class Cast:
                 )
             )
         try:
-            return use(self.world, who, chosen, targets=[target], spend=False)
+            # The trigger goes through. A row reading "when an ally drops,
+            # the ally makes a basic attack" hands the swing to a creature
+            # that is no longer alive, and `usable`'s act gate refuses it
+            # without the event that explains why it should not.
+            return use(
+                self.world, who, chosen, targets=[target], spend=False,
+                trigger=trigger if trigger is not None else self.trigger,
+            )
         finally:
             for effect in granted:
                 if effect is not None:
@@ -855,9 +863,13 @@ class Cast:
         from .dsl import get
 
         p = get(self.ref)
-        if p is None or p.damage is None:
+        # The branch's own damage line. `damage_of` existed and had no
+        # callers anywhere, so a row printing "2d8 melee or 1d10 ranged"
+        # rolled the melee line whichever branch was used -- and looked
+        # finished, because `attack_of` and `requires_of` are both wired.
+        d = p.damage_of(self.branch) if p is not None else None
+        if p is None or d is None:
             raise ValueError(f"{self.ref} declared no damage; call c.damage(...)")
-        d = p.damage
         dice = self._converted(d)
         bonus = self._bonus_of(d.bonus)
         if half:
@@ -1278,6 +1290,66 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} vulnerable", on_end=[undo]
         )
+
+    def resist(
+        self,
+        amount: int,
+        dtype: DamageType | None = None,
+        *,
+        until: When = When.ENCOUNTER,
+        on: int | None = None,
+    ) -> Effect | None:
+        """Shrugs off `amount` of every hit, or of one damage type.
+
+        The mirror of `c.vulnerable`, which existed on its own -- so a row
+        printing "gains resist 10 to the triggering damage type" had to
+        write `c.vulnerable(-10, ...)`, which comes to the same arithmetic
+        and puts "vulnerable -10" on the card.
+        """
+        from .components import Defences
+
+        who = self._who(on) or self.me
+        kinds = [dtype] if dtype is not None else list(DamageType)
+        defences = self.world.get(who, Defences) or self.world.add(who, Defences())
+        for kind in kinds:
+            defences.resist[kind] = defences.resist.get(kind, 0) + amount
+
+        def undo() -> None:
+            for kind in kinds:
+                left = defences.resist.get(kind, 0) - amount
+                if left > 0:
+                    defences.resist[kind] = left
+                else:
+                    defences.resist.pop(kind, None)
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} resist", on_end=[undo]
+        )
+
+    def grant_row(
+        self, ref: str, *, on: int | None = None, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """Let a creature use a row it does not know, for a while.
+
+        The opposite number of `c.forbid`, and asked for twice before it
+        existed -- "gains one use of an attack it has seen", "can make two
+        attacks as a standard action". A row could be taken away and never
+        given, so anything printing this had to be left out whole rather
+        than half-written.
+        """
+        from .components import Powers
+
+        who = self._who(on) or self.me
+        known = self.world.get(who, Powers)
+        if known is None or ref in known.known:
+            return None
+        effect = self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} grants {ref}",
+            on_end=[lambda: known.known.remove(ref) if ref in known.known else None],
+        )
+        if effect is not None:
+            known.known.append(ref)
+        return effect
 
     def conjure(
         self,
@@ -1796,6 +1868,18 @@ class Cast:
         if self.world.encounter is None:
             return False
         self.world.encounter.extra_turn(self.me, at)
+        return True
+
+    def unsave(self, ev: Any = None) -> bool:
+        """Make the saving throw being rolled fail. "It automatically fails."
+
+        Only means anything inside a listener on `SavingThrow`, which is
+        announced before it is acted on.
+        """
+        ev = ev if ev is not None else self.trigger
+        if ev is None or not hasattr(ev, "saved"):
+            return False
+        ev.saved = False
         return True
 
     def had_advantage(self, ev: Any = None) -> bool:

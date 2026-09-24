@@ -18,6 +18,7 @@ because the agent finished.
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import time
 from pathlib import Path
@@ -69,7 +70,7 @@ def _report() -> None:
         return
 
     print("  when     rows    added    over   rows/min  note")
-    for before, after in zip(rows, rows[1:], strict=False):
+    for before, after in itertools.pairwise(rows):
         gained = after["total"] - before["total"]
         minutes = (after["when"] - before["when"]) / 60
         rate = gained / minutes if minutes else 0

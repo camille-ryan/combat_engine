@@ -103,6 +103,13 @@ that never applies.
   on a `Dropped` is false every time. Compare `team()` directly.
 * **`c.suffering(label)`** matches by substring and leaves the caster out
   unless you pass `include_self=True`.
+* **Two bonuses of the same `kind` do not add — the larger wins.** That is
+  the printed stacking rule, and it makes "+1, or +2 while bloodied"
+  written as a +1 plus a gated +1 come to **+1 forever**, which looks
+  exactly like a working aura. It has to be a +1 and a gated **+2**.
+* **`c.damage` maxes its dice on a critical.** A high-crit line that adds
+  an extra *rolled* die inside the crit branch gets the maximum instead of
+  a roll; `c.flat(c.roll("1d8"))` is the way to add one.
 * **`MoveStart` fires before the creature has moved.** A reaction declared
   on it resolves where nothing has happened yet; "an adjacent enemy shifts"
   wants `MoveEnd`, which carries `kind_`.

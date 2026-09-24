@@ -98,6 +98,7 @@ from .triggers import (
     by_melee,
     by_opportunity,
     by_ranged,
+    closed_on_me,
     cursed_by_me,
     either,
     enemy_target_within,

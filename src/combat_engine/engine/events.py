@@ -167,10 +167,17 @@ class MoveEnd(Event):
 
 @dataclass
 class AdjacencyGained(Event):
-    """`actor` became adjacent to `other`. Aura entry hangs off this."""
+    """`actor` became adjacent to `other`. Aura entry hangs off this.
+
+    Emitted twice, mirrored, so either creature can answer it. `mover` is
+    the one that actually moved -- without it, "when an enemy moves adjacent
+    to it" also fired when the creature closed the gap itself, which is not
+    the printed sentence and is true half the time.
+    """
 
     actor: int
     other: int
+    mover: int = 0
 
 
 @dataclass
@@ -406,7 +413,15 @@ class ActionSpent(Event):
 
 
 @dataclass
-class SavingThrow(Event):
+class SavingThrow(Decision):
+    """A saving throw, announced **before** it is acted on.
+
+    `saved` is read back, so a row printing "the target automatically fails
+    the saving throw" or "reroll it" has somewhere to go. It used to be
+    emitted and then ignored -- the caller branched on its own local -- and
+    the event was decoration.
+    """
+
     actor: int
     against: str
     natural: int

@@ -295,11 +295,14 @@ class Encounter:
         health = self.world.need(ev.actor, Health)
         roll = self.world.rng.d20()
         saved = roll.total >= 10
-        self.world.bus.emit(
+        # Read back, like every other saving throw. A death save is the
+        # one somebody is most likely to print a rider on.
+        rolled = self.world.bus.emit(
             SavingThrow(
                 actor=ev.actor, against="death", natural=roll.total, bonus=0, saved=saved
             )
         )
+        saved = rolled.saved
         if saved:
             if roll.total == 20:
                 self.world.heal(ev.actor, ev.actor, health.surge_value)

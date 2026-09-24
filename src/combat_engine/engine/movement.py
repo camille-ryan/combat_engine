@@ -134,8 +134,8 @@ def step(
 
     after = _neighbours(world, eid)
     for other in sorted(after - before):
-        world.bus.emit(AdjacencyGained(actor=eid, other=other))
-        world.bus.emit(AdjacencyGained(actor=other, other=eid))
+        world.bus.emit(AdjacencyGained(actor=eid, other=other, mover=eid))
+        world.bus.emit(AdjacencyGained(actor=other, other=eid, mover=eid))
     for other in sorted(before - after):
         world.bus.emit(AdjacencyLost(actor=eid, other=other))
         world.bus.emit(AdjacencyLost(actor=other, other=eid))

@@ -396,7 +396,10 @@ class Effects:
         bonus = eff.save_mod + (holder.total("save", ctx) if holder else 0)
         roll = self.world.rng.d20()
         saved = roll.total + bonus >= 10
-        self.world.bus.emit(
+        # Read back. The outcome is announced first so a listener can
+        # change it -- "the target automatically fails the saving throw" is
+        # a printed line and had nowhere to go -- and then acted on.
+        rolled = self.world.bus.emit(
             SavingThrow(
                 actor=eff.owner,
                 against=str(eff),
@@ -405,6 +408,7 @@ class Effects:
                 saved=saved,
             )
         )
+        saved = rolled.saved
         if saved:
             self.end(eff, "saved")
         elif eff.escalate is not None:
