@@ -103,7 +103,9 @@ def attack(
         if ca:
             situational += 2
         if not ignore_cover:
-            situational -= int(cover_between(world, attacker, target))
+            situational -= int(
+                cover_between(world, attacker, target, ranged=_is_ranged(power))
+            )
         situational += _mark_penalty(world, attacker, target)
 
         d20 = world.rng.d20()
@@ -145,12 +147,32 @@ def attack(
         landed.result = result
         world.bus.emit(landed)
 
+        # Attacking gives you away. Nothing broke hidden before, so a
+        # creature that went unseen once stayed unseen for the rest of the
+        # fight and drew combat advantage on every attack it ever made. A
+        # row that keeps its concealment says so by hiding again -- which is
+        # what the printed ones do, and it reads the same way.
+        world.relations.clear_source(Relation.HIDDEN_FROM, attacker, "attacked")
+
     declared = world.bus.emit(
         AttackDeclared(attacker=attacker, target=target, power=power, vs=vs), roll
     )
     if declared.cancelled:
         result.cancelled = True
     return result
+
+
+def _is_ranged(ref: str) -> bool:
+    """Is this row a ranged attack? Only those take cover from creatures.
+
+    Read off the power's own range line rather than guessed, and False for a
+    row nothing is declared for -- no cover is the safer wrong answer than
+    a penalty nobody can explain.
+    """
+    from .dsl import get
+
+    p = get(ref)
+    return p is not None and p.reach.kind == "ranged"
 
 
 def _mods(world: World, eid: int, what: str, ctx: dict) -> int:

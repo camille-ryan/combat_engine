@@ -30,19 +30,40 @@ from combat_engine.engine import (
 )
 
 
+def _worst_hurt(c: Cast) -> list[int]:
+    """Who the heal offers, worst off first.
+
+    Order is not cosmetic. `World.decide` takes the first option when
+    nobody is playing, so the list *is* the decision for every headless
+    fight -- and offering the whole party unsorted had the cleric healing
+    whoever happened to be first, at full health, for nothing.
+
+    Anybody untouched comes last, behind the option to keep the power.
+    """
+    allies = c.within(5, side="ally")
+    hurt = sorted((a for a in allies if c.wounded(a)), key=lambda a: -c.missing(a))
+    return hurt or []
+
+
 def _heal_an_ally(c: Cast) -> None:
     """You or an ally spends a surge and gets a little more besides.
 
     The printed text lets it land on the leader itself, so `c.within(5,
     side="ally")` -- which includes the caster -- is exactly right here
     without filtering.
+
+    Both halves are a printed **may**, and both are asked. Offering only the
+    wounded meant that with nobody yet hurt the power fired, found an empty
+    list, and was spent on nothing.
     """
-    hurt = [a for a in c.within(5, side="ally") if c.wounded(a)]
-    if not hurt:
+    who = c.choose(_worst_hurt(c), "who is healed", optional=True,
+                   decline="nobody -- keep the power")
+    if who is None:
         return
-    who = c.choose(hurt, "who is healed")
+    if not c.may("spend a healing surge", who=who):
+        return
     if c.surge(on=who):
-        c.heal(c.world.rng.roll("1d6").total, on=who)
+        c.heal(c.roll("1d6"), on=who)
 
 
 @power(

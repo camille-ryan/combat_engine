@@ -19,6 +19,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     ENCOUNTER,
+    FORT,
     FREE,
     MINOR,
     NO_TARGET,
@@ -27,6 +28,7 @@ from combat_engine.engine import (
     REACTION,
     REF,
     STANDARD,
+    WILL,
     ActionType,
     Attack,
     Cast,
@@ -818,3 +820,26 @@ def m665a3(c: Cast) -> None:
 )
 def m665a4(c: Cast) -> None:
     c.shift(1)
+
+
+#: "+2 to all defences against traps" is the same printed line on two stat
+#: blocks, so it is one function used twice rather than copied. What makes
+#: it sayable is that a trap is now a thing on the board -- `Cast.is_trap`
+#: asks the modifier's context whether the attacker is one.
+def wary_of_traps(c: Cast) -> None:
+    for d in (AC, FORT, REF, WILL):
+        c.bonus(d, 2, on=c.me, until=When.ENCOUNTER,
+                when=lambda ctx: c.is_trap(ctx.get("attacker")))
+
+
+@power(
+    "m301a4",
+    level=1,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m301a4(c: Cast) -> None:
+    """Hard to catch out with a trap. A trait, armed once."""
+    wary_of_traps(c)

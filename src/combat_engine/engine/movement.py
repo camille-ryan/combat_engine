@@ -178,7 +178,7 @@ def walk(
     for sq in path:
         if not step(world, eid, sq, kind=kind, mode=mode):
             break
-        spent += 2 if sq in world.difficult() else 1
+        spent += 2 if sq in world.difficult(eid) else 1
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0)))
     return spent
@@ -344,7 +344,7 @@ def reachable(
     if pos is None or budget <= 0:
         return {}
     overhead = mode_of(world, eid, mode) in OVERHEAD
-    rough = world.difficult()
+    rough = world.difficult(eid)
     start = pos.square
     best: dict[Square, int] = {start: 0}
     paths: dict[Square, list[Square]] = {start: []}
@@ -384,7 +384,7 @@ def costs(world: World, eid: int, budget: int, *, mode: str | None = None) -> di
     pos = world.get(eid, Position)
     if pos is None:
         return {}
-    rough = world.difficult()
+    rough = world.difficult(eid)
     out: dict[Square, int] = {}
     for sq, path in reachable(world, eid, budget, mode=mode).items():
         out[sq] = sum(2 if step in rough else 1 for step in path)

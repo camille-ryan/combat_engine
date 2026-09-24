@@ -14,6 +14,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     EACH_CREATURE,
+    ENCOUNTER,
     FORT,
     FREE,
     INTERRUPT,
@@ -440,3 +441,22 @@ def m4879a2(c: Cast) -> None:
 def m4879a3(c: Cast) -> None:
     if c.strike():
         c.pull(2)
+
+
+@power(
+    "m2821a3",
+    level=1,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m2821a3(c: Cast) -> None:
+    """At home in the wet: mud and shallow water cost it nothing.
+
+    Two words because the printed line names two kinds of going, and
+    difficult terrain carries a label now -- rough ground of any other sort
+    still slows it down, which is the point of naming them.
+    """
+    c.ignores_difficult("mud", on=c.me)
+    c.ignores_difficult("shallow water", on=c.me)

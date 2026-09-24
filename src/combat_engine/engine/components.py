@@ -117,6 +117,9 @@ class Movement:
     speed: int = 6
     #: Extra modes and their speeds, e.g. {"fly": 8, "climb": 3}.
     modes: dict[str, int] = field(default_factory=dict)
+    #: Kinds of difficult terrain this creature crosses for nothing, by the
+    #: label `Grid.difficult` gives them. `"*"` is all of it.
+    ignores: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -126,6 +129,23 @@ class Defences:
     resist: dict[DamageType, int] = field(default_factory=dict)
     vulnerable: dict[DamageType, int] = field(default_factory=dict)
     immune: set[DamageType] = field(default_factory=set)
+
+
+@dataclass
+class Trap:
+    """Marks an entity as a hazard rather than a creature.
+
+    A trap has a `Position` and attacks like anything else, but no `Health`
+    and no `Side` -- which is what keeps it out of `query.creatures`, so it
+    takes no turn, holds no initiative slot, and grants nobody cover. The
+    component exists mainly so a power can *ask*: several rows give a bonus
+    to defences "against traps", and until something on the board could be
+    one, that sentence had no subject.
+    """
+
+    ref: str = ""
+    #: A pressure plate that has gone off and not reset.
+    sprung: bool = False
 
 
 @dataclass

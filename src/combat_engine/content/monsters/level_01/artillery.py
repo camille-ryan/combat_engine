@@ -45,13 +45,14 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    Relation,
     UpTo,
     Usage,
     When,
     get,
     power,
 )
-from combat_engine.engine.events import Hit
+from combat_engine.engine.events import Hit, Miss, RelationCleared
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import alive, has_combat_advantage
 from combat_engine.engine.triggers import Trigger, both, enemy_within, targets_me
@@ -449,3 +450,42 @@ def m5029a4(c: Cast) -> None:
     """The printed effect line reads Immediate Reaction, so that is the action
     type, whatever the stat block's own header says."""
     c.teleport(2)
+
+
+@power(
+    "m264a6",
+    level=1,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m264a6(c: Cast) -> None:
+    """Shooting from cover and missing does not give it away.
+
+    Attacking normally breaks hidden -- `resolve.attack` clears it for
+    whoever swung -- so this is written as the exemption it is printed as
+    rather than as a special case inside the engine. The miss is noted while
+    the creature is still unseen, and the break is undone as it happens: the
+    `Miss` listener runs before the relation is cleared, and the
+    `RelationCleared` listener puts it back.
+    """
+    me = c.me
+    spared: set[int] = set()
+
+    def missed(ev: Miss) -> None:
+        p = get(ev.power)
+        if ev.attacker != me or p is None or p.reach.kind != "ranged":
+            return
+        if c.is_hidden(from_=ev.target):
+            spared.add(ev.target)
+
+    def broke(ev: RelationCleared) -> None:
+        if ev.kind_ is not Relation.HIDDEN_FROM or ev.source != me:
+            return
+        if ev.why == "attacked" and ev.target in spared:
+            spared.discard(ev.target)
+            c.world.relations.set(Relation.HIDDEN_FROM, me, ev.target)
+
+    c.watch(Miss, missed, until=When.ENCOUNTER, on=me, label="m264a6")
+    c.watch(RelationCleared, broke, until=When.ENCOUNTER, on=me, label="m264a6 keep")

@@ -190,8 +190,11 @@ class Grid:
     height: int
     #: Squares that stop movement and block line of effect. Walls, pillars.
     blocking: set[Square] = field(default_factory=set)
-    #: Squares that cost an extra square to enter.
-    difficult: set[Square] = field(default_factory=set)
+    #: Squares that cost an extra square to enter, and what sort of going
+    #: they are -- "mud", "rubble", "ice". A bare set could not say, so a
+    #: creature that wades through mud but not through rubble had nothing to
+    #: test. An empty label means rough ground of no particular kind.
+    difficult: dict[Square, str] = field(default_factory=dict)
     occupants: dict[Square, int] = field(default_factory=dict)
 
     def inside(self, sq: Square) -> bool:

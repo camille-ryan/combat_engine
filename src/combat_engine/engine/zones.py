@@ -44,7 +44,8 @@ class Zone:
     squares: frozenset[Square] = frozenset()
     #: Set for an aura: its radius around the owner, recomputed as it moves.
     aura: int | None = None
-    difficult: bool = False
+    #: False, True, or what sort of going it is -- see `Grid.difficult`.
+    difficult: bool | str = False
     blocks_sight: bool = False
     #: The effect whose duration this zone lives on.
     effect: Effect | None = field(default=None, repr=False)
@@ -69,7 +70,7 @@ class Zones:
         squares_: frozenset[Square] | set[Square],
         when: When,
         *,
-        difficult: bool = False,
+        difficult: bool | str = False,
         blocks_sight: bool = False,
     ) -> int:
         zone = Zone(
@@ -148,9 +149,13 @@ class Zones:
     def occupants(self, eid: int) -> list[int]:
         return sorted(self.inside.get(eid, set()))
 
-    def difficult_squares(self) -> set[Square]:
-        out: set[Square] = set()
+    def difficult_squares(self) -> dict[Square, str]:
+        """Rough squares from live zones, each with its label."""
+        out: dict[Square, str] = {}
         for _, zone in self.all():
-            if zone.difficult:
-                out |= zone.squares
+            if not zone.difficult:
+                continue
+            kind = zone.difficult if isinstance(zone.difficult, str) else ""
+            for sq in zone.squares:
+                out.setdefault(sq, kind)
         return out

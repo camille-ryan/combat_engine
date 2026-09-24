@@ -143,7 +143,17 @@ def deals_half(world: World, eid: int) -> bool:
     return any(rules(c).weakened for c in active(world, eid))
 
 
+def is_trap(world: World, eid: int) -> bool:
+    from .components import Trap
+
+    return world.get(eid, Trap) is not None
+
+
 def can_act(world: World, eid: int) -> bool:
+    # A trap has no hit points to be unconscious about. Without this it
+    # failed `conscious` and could never make the attack it exists to make.
+    if is_trap(world, eid):
+        return True
     return conscious(world, eid) and not any(rules(c).cannot_act for c in active(world, eid))
 
 
@@ -202,21 +212,44 @@ def has_combat_advantage(world: World, attacker: int, target: int) -> bool:
     return flanked_by(world, target, attacker)
 
 
-def cover_between(world: World, attacker: int, target: int) -> Cover:
+def hidden_from(world: World, eid: int) -> set[int]:
+    """Who cannot see this creature."""
+    return set(world.relations.targets(Relation.HIDDEN_FROM, eid))
+
+
+def cover_between(
+    world: World, attacker: int, target: int, *, ranged: bool = False
+) -> Cover:
     """The worst cover the target has, measured from the attacker's best square.
 
-    Creatures other than the two involved grant cover; terrain always does.
+    Worked out at the moment of the attack by tracing corner to corner --
+    `Grid.cover` does the drawing -- rather than stored anywhere, because
+    cover is a fact about two positions and both of them move.
+
+    **Terrain always blocks. Creatures block only a ranged attack, and only
+    the target's own allies do.** Both halves of that were wrong: every
+    creature on the board was counted, for every kind of attack, so a
+    fighter in a melee got a cover penalty for the enemy standing beside its
+    target, and the target's enemies were sheltering it from its friends.
+    Somebody in your way is cover your side gave you.
     """
     theirs = squares(world, target)
     mine = squares(world, attacker)
     if not theirs or not mine:
         return Cover.NONE
-    bodies = {
-        sq
-        for other in creatures(world)
-        if other not in (attacker, target)
-        for sq in squares(world, other)
-    }
+
+    bodies: set[Square] = set()
+    if ranged:
+        side = team(world, target)
+        bodies = {
+            sq
+            for other in creatures(world)
+            if other not in (attacker, target)
+            and alive(world, other)
+            and team(world, other) is side
+            for sq in squares(world, other)
+        }
+
     best = Cover.SUPERIOR
     for src in mine:
         for dst in theirs:

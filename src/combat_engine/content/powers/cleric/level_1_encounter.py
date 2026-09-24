@@ -72,6 +72,21 @@ def p890(c: Cast) -> None:
         c.flee(c.speed_of() + c.cha_mod)
 
 
+def _worst_hurt(c: Cast) -> list[int]:
+    """Who the heal offers, worst off first.
+
+    Order is not cosmetic. `World.decide` takes the first option when
+    nobody is playing, so the list *is* the decision for every headless
+    fight -- and offering the whole party unsorted had the cleric healing
+    whoever happened to be first, at full health, for nothing.
+
+    Anybody untouched comes last, behind the option to keep the power.
+    """
+    allies = c.within(5, side="ally")
+    hurt = sorted((a for a in allies if c.wounded(a)), key=lambda a: -c.missing(a))
+    return hurt or []
+
+
 @power(
     "p1455",
     level=1,
@@ -85,13 +100,22 @@ def p890(c: Cast) -> None:
     once_per_round=True,
 )
 def p1455(c: Cast) -> None:
-    """The Special line -- twice a fight, but not twice in one round."""
-    hurt = [a for a in c.within(5, side="ally") if c.wounded(a)]
-    if not hurt:
+    """The target may spend a surge; and may decline to.
+
+    Offered to every ally in the burst rather than only the hurt ones,
+    because the printed target line is "you or one ally" and a power used
+    when nobody is bleeding is a choice the player is allowed to make --
+    and to take back. Both halves are optional: who, and whether the surge
+    is actually spent.
+    """
+    who = c.choose(_worst_hurt(c), "who is healed", optional=True,
+                   decline="nobody -- keep the power")
+    if who is None:
         return
-    who = c.choose(hurt, "who is healed")
+    if not c.may("spend a healing surge", who=who):
+        return
     if c.surge(on=who):
-        c.heal(c.world.rng.roll("1d6").total, on=who)
+        c.heal(c.roll("1d6"), on=who)
 
 
 @power(

@@ -20,6 +20,7 @@ from combat_engine.engine import (
     FORT,
     FREE,
     MINOR,
+    NO_TARGET,
     ONE_CREATURE,
     PERSONAL,
     REACTION,
@@ -34,6 +35,7 @@ from combat_engine.engine import (
     Condition,
     Damage,
     DamageType,
+    Effect,
     Keyword,
     Melee,
     Ranged,
@@ -42,9 +44,11 @@ from combat_engine.engine import (
     When,
     power,
 )
+from combat_engine.engine.events import DamageApplied, Hit
 from combat_engine.engine.monster_math import LIMITED, MINION
 
 from . import aquatic_edge
+from .skirmishers import wary_of_traps
 
 #: The four conditions m5030a0 pays a damage bonus against.
 HAMPERED = (Condition.PRONE, Condition.IMMOBILIZED, Condition.SLOWED, Condition.RESTRAINED)
@@ -494,3 +498,53 @@ def m675a2(c: Cast) -> None:
 def m698a0(c: Cast) -> None:
     if c.strike():
         c.hit()
+
+
+@power(
+    "m4868a1",
+    level=1,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m4868a1(c: Cast) -> None:
+    """Cold leaves it open to whatever lands next.
+
+    Held by the creature itself rather than by whoever chilled it, because
+    the window belongs to the target: it closes at the end of *its* next
+    turn, and it closes early if something hits in the meantime. The watch
+    ends the vulnerability as soon as it is spent, which is what "against
+    the next attack that hits it" means.
+    """
+    me = c.me
+    window: list[Effect] = []
+
+    def chilled(ev: DamageApplied) -> None:
+        if ev.target != me or ev.dtype is not DamageType.COLD or not ev.amount:
+            return
+        if window:
+            return  # already open; nothing stacks
+        eff = c.vulnerable(5, until=When.EONT, on=me)
+        if eff is not None:
+            window.append(eff)
+
+    def spent(ev: Hit) -> None:
+        if ev.target == me and window:
+            c.world.effects.end(window.pop(), "the next attack landed")
+
+    c.watch(DamageApplied, chilled, until=When.ENCOUNTER, on=me, label="m4868a1")
+    c.watch(Hit, spent, until=When.ENCOUNTER, on=me, label="m4868a1 spend")
+
+
+@power(
+    "m675a3",
+    level=1,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m675a3(c: Cast) -> None:
+    """The same wariness as m301a4, off the same printed line."""
+    wary_of_traps(c)

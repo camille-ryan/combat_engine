@@ -78,9 +78,34 @@ class World:
     def reachable_squares(self, eid: int, budget: int) -> list[Any]:
         return sorted(self.reachable_paths(eid, budget))
 
-    def difficult(self) -> set[Any]:
-        """Terrain that costs extra, from the map and from any live zone."""
-        return self.grid.difficult | self.zones.difficult_squares()
+    def rough(self) -> dict[Any, str]:
+        """Every square that costs extra, and what sort of going it is."""
+        out = dict(self.grid.difficult)
+        for sq, kind in self.zones.difficult_squares().items():
+            out.setdefault(sq, kind)
+        return out
+
+    def difficult(self, for_: int | None = None) -> set[Any]:
+        """Terrain that costs extra, from the map and from any live zone.
+
+        With `for_`, the squares that cost extra **for that creature** --
+        which is not the same set, because a creature can be at home in one
+        kind of going and not another. Applied here rather than at each of
+        the three places that charge for movement, so an exemption cannot be
+        honoured by some of them and ignored by the rest.
+        """
+        rough = self.rough()
+        if for_ is None:
+            return set(rough)
+        from .components import Movement
+
+        moves = self.get(for_, Movement)
+        ignored = moves.ignores if moves else set()
+        if not ignored:
+            return set(rough)
+        if "*" in ignored:
+            return set()
+        return {sq for sq, kind in rough.items() if kind not in ignored}
 
     # -- shorthands the rest of the engine and every power body call ---------
 

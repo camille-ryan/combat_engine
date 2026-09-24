@@ -57,6 +57,25 @@ if TYPE_CHECKING:
     from .ecs import World
 
 
+class _Decline:
+    """The answer a printed "may" adds to a list of choices.
+
+    An object rather than `None` so it survives a list of options and
+    renders with words a player can read, instead of the string "None".
+    """
+
+    __slots__ = ("text",)
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def __str__(self) -> str:
+        return self.text
+
+    def __bool__(self) -> bool:
+        return False
+
+
 @dataclass
 class Cast:
     """One use of one power, aimed at one target."""
@@ -322,6 +341,64 @@ class Cast:
             return None
         return self.world.effects.apply(
             self.me, self.me, until, label=f"{self.ref} unseen", relations=pairs
+        )
+
+    def hide(self, *, from_: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
+        """Go unseen, and stay that way until something gives you away.
+
+        The same held state as `c.invisible` and a different duration: being
+        invisible runs out on a clock, being hidden lasts until you do
+        something about it -- and attacking does. `resolve.attack` breaks it
+        for whoever swung, so a row that keeps its concealment hides again
+        afterwards, which is how the printed ones read.
+        """
+        return self.invisible(to=from_, until=until)
+
+    def unhide(self) -> None:
+        """Give yourself away deliberately."""
+        self.world.relations.clear_source(Relation.HIDDEN_FROM, self.me, "revealed")
+
+    def is_hidden(self, *, from_: int | None = None) -> bool:
+        from .query import hidden_from
+
+        unseeing = hidden_from(self.world, self.me)
+        return bool(unseeing) if from_ is None else from_ in unseeing
+
+    def is_trap(self, who: int | None = None) -> bool:
+        """Is that a trap rather than a creature?
+
+        What "+2 to all defences against traps" asks, off the attacker in a
+        modifier's context: `c.bonus(AC, 2, when=lambda ctx:
+        c.is_trap(ctx["attacker"]))`.
+        """
+        from .query import is_trap
+
+        target = self._who(who)
+        return target is not None and is_trap(self.world, target)
+
+    def ignores_difficult(
+        self, kind: str = "", *, on: int | None = None, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """Cross rough ground for nothing. `kind` names which sort, or all.
+
+        `c.ignores_difficult("mud")` is the printed line "ignores difficult
+        terrain that is mud or shallow water" -- said twice, once per word.
+        With no `kind` it is every sort. The labels are the ones the map and
+        `c.zone(difficult=...)` give their squares.
+        """
+        from .components import Movement
+
+        who = self._who(on) or self.me
+        moves = self.world.get(who, Movement)
+        if moves is None:
+            return None
+        word = kind.lower() or "*"
+        if word in moves.ignores:
+            return None
+        moves.ignores.add(word)
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} sure-footed",
+            on_end=[lambda: moves.ignores.discard(word)],
         )
 
     def speed_of(self, who: int | None = None) -> int:
@@ -1020,7 +1097,7 @@ class Cast:
                     defences.vulnerable.pop(kind, None)
 
         return self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} vulnerable", undo=undo
+            who, self.me, until, label=f"{self.ref} vulnerable", on_end=[undo]
         )
 
     def rooted(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
@@ -1257,7 +1334,7 @@ class Cast:
         *,
         label: str = "",
         until: When = When.EONT,
-        difficult: bool = False,
+        difficult: bool | str = False,
     ) -> int:
         return self.world.zones.create(
             self.me, label or self.ref, frozenset(area), until, difficult=difficult
@@ -1313,10 +1390,45 @@ class Cast:
 
     # -- choices and commentary ---------------------------------------------
 
-    def choose[T](self, options: list[T], prompt: str = "") -> T | None:
+    def choose[T](
+        self, options: list[T], prompt: str = "", *, optional: bool = False,
+        decline: str = "none of them",
+    ) -> T | None:
+        """Pick one. With `optional`, "none of them" is one of the answers.
+
+        A printed **may** is a real choice and has to be offered as one. It
+        was not: a row that let a creature do something took the first
+        option in the list and did it, so an optional rider was compulsory
+        and the player never saw the word. The decline goes last, so the
+        engine's own pick -- the first option -- stays a real one.
+        """
         if not options:
             return None
-        return self.world.decide(self.me, "choose", options, prompt or self.ref)
+        pool = [*options, _Decline(decline)] if optional else list(options)
+        picked = self.world.decide(self.me, "choose", pool, prompt or self.ref)
+        return None if isinstance(picked, _Decline) else picked
+
+    def may(self, what: str, *, who: int | None = None, default: bool = True) -> bool:
+        """Ask whether an optional clause happens. `c.may("spend a surge")`.
+
+        Asked of the creature it is about rather than the caster: a heal
+        says the *target* can spend the surge, and whose surge it is decides
+        whether it is worth spending.
+
+        `default` puts that answer first, which matters more than it looks:
+        an engine with nobody playing takes the first option, so the order
+        is the answer for every fight run headless.
+        """
+        asker = self._who(who) or self.me
+        yes, no = f"yes, {what}", f"no, do not {what}"
+        pool = [yes, no] if default else [no, yes]
+        return self.world.decide(asker, "may", pool, what) == yes
+
+    def missing(self, on: int | None = None) -> int:
+        """How many hit points this creature is down. 0 when untouched."""
+        who = self._who(on)
+        health = self.world.get(who, Health) if who else None
+        return max(0, health.max_hp - health.hp) if health else 0
 
     def note(self, text: str) -> None:
         self.world.bus.emit(Note(text=text))

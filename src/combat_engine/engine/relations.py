@@ -73,6 +73,12 @@ class Relations:
             RelationCleared(kind_=kind, source=source, target=target, why=why)
         )
 
+    def clear_source(self, kind: Relation, source: int, why: str = "expired") -> None:
+        """Drop every relation of one kind that `source` holds over anybody."""
+        for k, src, target in list(self._live):
+            if k is kind and src == source:
+                self.clear(k, src, target, why)
+
     def forget(self, eid: int, why: str = "left play") -> None:
         """Drop every relation `eid` is either end of."""
         for kind, source, target in list(self._live):

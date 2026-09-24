@@ -20,6 +20,7 @@ through it, and it does two jobs:
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from .html import labelled, paragraphs, text
 
@@ -72,7 +73,52 @@ RULES_TERMS = {
 _NOISE = {"the", "of", "and", "a", "an", "in", "on", "to", "with", "its", "it"}
 
 
-def scrub(body: str, replacements: dict[str, str], keep: set[str] | None = None) -> str:
+@lru_cache(maxsize=1)
+def _MECHANICAL_WORDS() -> frozenset[str]:
+    """Every word the engine itself has a name for. Never scrubbed.
+
+    Read off the enums rather than listed here, so the two cannot drift: if
+    the engine gains a damage type, the sanitiser knows about it the same
+    day. A single-word ability name that *is* a rules word is the case this
+    exists for -- a trait called "Aquatic" whose text reads "in aquatic
+    combat", or one called "Cold" that explains what cold does. Matching the
+    name took out the only word the row was about.
+    """
+    from combat_engine.engine.types import (
+        Condition,
+        DamageType,
+        Defense,
+        Keyword,
+        Size,
+        Speed,
+    )
+
+    words: set[str] = set(RULES_TERMS)
+    for enum in (DamageType, Condition, Keyword, Defense, Size, Speed):
+        for member in enum:
+            words.add(str(member.value).lower())
+    # Terrain and the creature vocabulary a stat block's type line prints.
+    words |= {
+        "aquatic", "underwater", "underground", "difficult", "terrain",
+        "natural", "elemental", "fey", "shadow", "immortal", "aberrant",
+        "beast", "humanoid", "animate", "magical", "living", "undead",
+        "construct", "swarm", "insubstantial", "phasing", "regeneration",
+        "tiny", "small", "medium", "large", "huge", "gargantuan",
+        "artillery", "brute", "controller", "lurker", "skirmisher",
+        "soldier", "minion", "elite", "solo", "leader",
+    }  # fmt: skip
+    for term in list(words):
+        words.update(term.split())
+    return frozenset(words)
+
+
+def scrub(
+    body: str,
+    replacements: dict[str, str],
+    keep: set[str] | None = None,
+    *,
+    by_word: dict[str, str] | None = None,
+) -> str:
     """Swap each printed name for the id of whatever it names.
 
     An ability's name maps to that ability's own id rather than the stat
@@ -84,26 +130,31 @@ def scrub(body: str, replacements: dict[str, str], keep: set[str] | None = None)
     monster name inside it leaves a fragment behind. Possessives look after
     themselves: the trailing `'s` simply survives the substitution.
 
-    **Single words of a name count as the name.** A stat block does not repeat
-    itself in full -- it writes "the goblin shifts 1 square" and "the
-    blackblade's previous space", and matching only the whole name left both
-    of those standing. Every word is therefore swapped as well, except the
-    ones in `keep`: a monster's own role, size, origin and type are printed
-    beside its numbers because they are mechanical, and a creature whose name
-    contains its type should not have the type scrubbed out of its rules.
+    `replacements` are swapped **as whole phrases only**. `by_word` are
+    swapped a word at a time as well, and the distinction matters:
+
+    * A **stat block refers to itself by a fragment of its own name.** It
+      writes "the goblin shifts 1 square" and "the blackblade's previous
+      space", never the full name, so a monster's name has to come apart.
+    * An **ability never refers to itself by a fragment.** A trait whose
+      name ends in a damage type is not written as "the cold" anywhere --
+      but its rules text says *"whenever it takes cold damage"*, and taking
+      the name apart deleted the one word the row was about. Ability and
+      power names are therefore matched whole and left alone otherwise.
+
+    Words in `keep` are never swapped even out of a name: a monster's role,
+    size, origin and type are printed beside its numbers because they are
+    mechanical, and a creature named after its own type should not have the
+    type scrubbed out of its rules.
     """
     out = body
-    # A rules term protects its own words too. "Combat advantage" was safe as
-    # a phrase and both halves of it were not, so an ability *named* Combat
-    # Advantage turned the sentence describing it into "it has m237a1 m237a1
-    # against" -- and a power named after a shield made its own requirement
-    # line read "you must be using a p289".
-    kept = {w.lower() for w in (keep or set())} | _NOISE
-    for term in RULES_TERMS:
-        kept.add(term)
-        kept.update(term.split())
-    usable: dict[str, str] = {}
-    for name, ref in replacements.items():
+    kept = {w.lower() for w in (keep or set())} | _NOISE | _MECHANICAL_WORDS()
+    usable: dict[str, str] = {
+        name: ref
+        for name, ref in replacements.items()
+        if name and len(name) > 2 and name.lower() not in kept
+    }
+    for name, ref in (by_word or {}).items():
         if not name:
             continue
         for token in {name, *re.findall(r"[A-Za-z]+", name)}:

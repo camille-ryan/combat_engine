@@ -299,7 +299,7 @@ class Power:
         bonus = self.attack.bonus_for(world, actor, self.ref)
         if has_combat_advantage(world, actor, target):
             bonus += 2
-        bonus -= int(cover_between(world, actor, target))
+        bonus -= int(cover_between(world, actor, target, ranged=self.reach.kind == "ranged"))
         need = defence(world, target, self.attack.vs) - bonus
         return min(0.95, max(0.05, (21 - need) / 20))
 

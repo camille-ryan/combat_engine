@@ -158,7 +158,11 @@ def parse(row_id: int, document: str, source: str = "") -> Monster:
 
     m.flavour = read_flavour(document)
 
-    swaps = {m.name: m.ref_id}
+    # Only the stat block's own name comes apart into words -- it is the one
+    # thing that refers to itself by a fragment. An ability named "Sensitive
+    # to Cold" is matched whole, so the word `cold` survives in the sentence
+    # that explains what it does.
+    swaps = {}
     for a in m.abilities:
         swaps.setdefault(a.name, f"{m.ref_id}a{a.index}")
     # What is printed beside the numbers is mechanics, not prose, and several
@@ -166,7 +170,8 @@ def parse(row_id: int, document: str, source: str = "") -> Monster:
     # goblin's rules would hide a word the spec already prints in its tags.
     keep = {m.role, m.size, m.origin, m.kind, "minion", "elite", "solo", "leader"}
     for a in m.abilities:
-        a.spec = scrub(a.spec, swaps, keep)
+        a.spec = scrub(a.spec, {**swaps, m.name: m.ref_id}, keep,
+                       by_word={m.name: m.ref_id})
     return m
 
 
