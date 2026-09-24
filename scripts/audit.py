@@ -30,6 +30,7 @@ import argparse
 import re
 import traceback
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from combat_engine.content import chargen, loader
 from combat_engine.engine import (
@@ -46,6 +47,8 @@ from combat_engine.engine import (
 from combat_engine.engine.dsl import REGISTRY
 from combat_engine.engine.query import alive
 from combat_engine.engine.types import ActionType
+
+ROOT = Path(__file__).resolve().parents[1]
 
 #: Events that mean the power did something. A power that emits none of
 #: these on any attempt has not been written, whatever the file says.
@@ -190,6 +193,48 @@ def _fired(world, ref: str, cursor: int) -> bool:  # noqa: ANN001
     )
 
 
+#: Touching any of these changes how every row behaves, so a narrowed run
+#: is not narrowed at all -- it is wrong.
+WIDE = ("src/combat_engine/engine/", "scripts/audit.py")
+
+
+def _changed() -> list[str]:
+    """Rows declared in files that differ from HEAD.
+
+    At a hundred milliseconds a row, auditing everything is twenty seconds
+    today and about five minutes once PHB1 is written. Most runs have
+    touched a handful of rows and re-firing the other three thousand buys
+    nothing -- which is exactly how the first attempt's suite grew until
+    nobody could afford to run it.
+
+    An engine change is not narrowable: it moves every row at once, so
+    touching `engine/` widens this back to everything rather than quietly
+    checking a tenth of what it should.
+    """
+    import re
+    import subprocess
+
+    done = subprocess.run(
+        ["git", "status", "--porcelain", "-uall"],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    if done.returncode != 0:
+        return sorted(REGISTRY)
+    files = [line[3:].strip() for line in done.stdout.splitlines() if line[3:].strip()]
+    if any(f.startswith(WIDE) for f in files):
+        return sorted(REGISTRY)
+
+    refs: list[str] = []
+    for name in files:
+        if "/content/" not in name or not name.endswith(".py"):
+            continue
+        path = ROOT / name
+        if not path.exists():
+            continue
+        refs += re.findall(r'@power\(\s*"([^"]+)"', path.read_text())
+    return sorted({r for r in refs if r in REGISTRY})
+
+
 def audit(ref: str) -> Result:
     out = Result(ref=ref)
     declared = get(ref)
@@ -244,9 +289,15 @@ def main() -> int:
     ap.add_argument("--level", type=int, help="only this level")
     ap.add_argument("--monsters", action="store_true", help="monster abilities only")
     ap.add_argument("--verbose", action="store_true", help="say what each row did")
+    ap.add_argument("--changed", action="store_true",
+                    help="only rows in content files that differ from HEAD")
     args = ap.parse_args()
 
-    wanted = args.refs or sorted(REGISTRY)
+    wanted = args.refs or (_changed() if args.changed else sorted(REGISTRY))
+    if args.changed and not args.refs:
+        print(f"# {len(wanted)} row(s) in changed files. "
+              f"--all is {len(REGISTRY)} and takes about "
+              f"{len(REGISTRY) * 0.1:.0f}s\n")
     chosen: list[str] = []
     inert: list[str] = []
     for ref in wanted:
