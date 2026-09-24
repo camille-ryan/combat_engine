@@ -43,6 +43,7 @@ from combat_engine.engine import (
     Team,
     World,
     get,
+    usable,
     use,
 )
 from combat_engine.engine.dsl import REGISTRY
@@ -105,7 +106,13 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
         loader.spawn(world, ref.split("a")[0], (7, 9), team=Team.ENEMY)
         foe_team = Team.PC
     else:
-        cls = declared.cls or "fighter"
+        # A classless row -- the engine's own basic attacks -- is fielded on
+        # whoever can hold it. `rba` is a ranged basic attack and no fighter
+        # build owns a bow, so fielding one refused the row for a reason
+        # that says nothing about the row.
+        cls = declared.cls or (
+            "ranger" if declared.reach.kind in ("ranged", "area_burst") else "fighter"
+        )
         # Its class features come too. A row that triggers on a *cursed*
         # enemy dropping needs the thing that curses, and a caster holding
         # only the row under test can never satisfy its own precondition.
@@ -114,7 +121,9 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
         )
         caster = chargen.spawn(
             world,
-            chargen.Character(cls, max(1, declared.level), [ref, *features]),
+            chargen.Character(
+                cls, max(1, declared.level), [ref, *features], build=_build_for(cls, ref)
+            ),
             (6, 8),
         )
         foe_team = Team.ENEMY
@@ -240,6 +249,54 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     return _fired(world, ref, cursor)
 
 
+def _build_for(cls: str, ref: str) -> str:
+    """The build whose gear can actually hold this row.
+
+    A class's builds carry different weapons -- a two-blade ranger owns no
+    bow at all -- so a ranged row fielded on the wrong one is refused for a
+    reason that has nothing to do with the row. Picks the first build under
+    which the row is usable, and falls back to the class default.
+    """
+    from combat_engine.engine import Bus, Grid, Rng, World
+
+    declared = get(ref)
+    if declared is None:
+        return ""
+    for build in chargen.BUILDS.get(cls, ()):
+        probe = World(Grid(8, 8), Rng(1), Bus())
+        who = chargen.spawn(
+            probe, chargen.Character(cls, max(1, declared.level), [ref], build=build.name),
+            (1, 1),
+        )
+        ok, why = usable(probe, who, declared)
+        if ok or "requirement" not in why:
+            return build.name
+    return ""
+
+
+def _use_with_any_grip(world, caster: int, ref: str) -> bool:  # noqa: ANN001
+    """Use the row, drawing a different weapon first if that is what it needs.
+
+    A creature holds one legal grip at a time, so a bow is on the belt while
+    the blades are out. A ranged row is not unusable then -- it is one minor
+    action away, which is exactly what a player would spend. Trying each
+    grip is the difference between "this row does not work" and "this row
+    needs the other weapon".
+    """
+    from combat_engine.engine import Gear
+
+    if use(world, caster, ref):
+        return True
+    gear = world.get(caster, Gear)
+    if gear is None or len(gear.weapons) < 2:
+        return False
+    for weapon in gear.weapons:
+        gear.wield(weapon)
+        if use(world, caster, ref):
+            return True
+    return False
+
+
 def _use_class_features(world, caster: int, foe: int) -> None:  # noqa: ANN001
     """Fire the caster's own level-0 rows -- its curse, its quarry, its mark."""
     from combat_engine.engine.components import Powers
@@ -344,7 +401,7 @@ def audit(ref: str) -> Result:
                 if world.effects.live:
                     out.events.add("ConditionApplied")
                 continue
-            if not use(world, caster, ref):
+            if not _use_with_any_grip(world, caster, ref):
                 continue
             out.fired += 1
             out.events |= {e.kind for e in world.bus.log[cursor:]}

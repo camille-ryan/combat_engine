@@ -85,6 +85,7 @@ def legal(
     out.extend(_recovery(world, encounter, actor))
     out.extend(_sustaining(world, encounter, actor))
     out.extend(_dropping(world, encounter, actor))
+    out.extend(_wielding(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
     return out
 
@@ -129,9 +130,10 @@ def _aimings(world: World, actor: int, ref: str) -> list[Action]:
     p = get(ref)
     if p is None:
         return []
-    if len(p.branches) > 1:
-        return [a for b in p.branches for a in _aiming_branch(world, actor, ref, p, b)]
-    return _aiming_branch(world, actor, ref, p, 0)
+    open_branches = [b for b in p.branches if p.can_branch(world, actor, b)]
+    if len(open_branches) > 1:
+        return [a for b in open_branches for a in _aiming_branch(world, actor, ref, p, b)]
+    return _aiming_branch(world, actor, ref, p, open_branches[0] if open_branches else 0)
 
 
 def _aiming_branch(world: World, actor: int, ref: str, p, branch: int) -> list[Action]:  # noqa: ANN001
@@ -266,6 +268,29 @@ def _dropping(world: World, encounter: Encounter, actor: int) -> list[Action]:
     return out
 
 
+def _wielding(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Drawing or swapping a weapon. A minor action, as printed.
+
+    Without it a character was stuck for the whole fight with whatever it
+    started holding -- which matters now that a power's melee or ranged
+    branch is offered on the strength of what is in hand. A ranger who put
+    the bow away could never pick it up again.
+    """
+    from .components import Gear
+
+    gear = world.get(actor, Gear)
+    if gear is None or len(gear.weapons) < 2:
+        return []
+    if not encounter.can_spend(actor, ActionType.MINOR):
+        return []
+    held = {w.ref for w in gear.held}
+    return [
+        Action(kind="wield", cost=ActionType.MINOR, subject=i, ref=w.ref)
+        for i, w in enumerate(gear.weapons)
+        if w.ref not in held
+    ]
+
+
 def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
     out: list[Action] = []
     if (
@@ -340,6 +365,18 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             return False
         world.effects.sustain(eff)
         world.bus.emit(Note(text=f"{eff.label or eff} sustained"))
+        return True
+
+    if action.kind == "wield":
+        from .components import Gear
+
+        gear = world.get(actor, Gear)
+        if gear is None or action.subject is None:
+            return False
+        if not 0 <= action.subject < len(gear.weapons):
+            return False
+        gear.wield(gear.weapons[action.subject])
+        world.bus.emit(Note(text=f"{actor} takes up {gear.weapons[action.subject].ref}"))
         return True
 
     if action.kind == "drop":

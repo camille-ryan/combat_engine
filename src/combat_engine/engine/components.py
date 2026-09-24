@@ -376,6 +376,42 @@ class Gear:
     weapons: list[Weapon] = field(default_factory=list)
     shield: bool = False
     armour: str = "cloth"
+    #: What is on the belt rather than in the hands, by weapon ref.
+    stowed: set[str] = field(default_factory=set)
+
+    def __post_init__(self) -> None:
+        """Start with a grip that a pair of hands could actually make.
+
+        Everything carried counted as held, so an archer was holding a
+        two-handed bow *and* a short sword at once -- and since a power's
+        melee or ranged branch is offered on the strength of what is in
+        hand, that handed out both branches of every row to everybody.
+        """
+        if self.weapons and not self.stowed:
+            self.wield(self.weapons[0])
+
+    @property
+    def held(self) -> list[Weapon]:
+        """What is actually in hand right now."""
+        return [w for w in self.weapons if w.ref not in self.stowed]
+
+    def wield(self, weapon: Weapon) -> None:
+        """Take that weapon in hand, putting away whatever cannot share it.
+
+        A two-handed weapon needs both hands, so everything else goes away.
+        Otherwise a second one-hander may stay -- which is what a ranger
+        fighting with two blades is doing.
+        """
+        self.stowed.discard(weapon.ref)
+        if weapon.two_handed:
+            self.stowed |= {w.ref for w in self.weapons if w.ref != weapon.ref}
+            return
+        keep = [weapon]
+        for other in self.held:
+            if other.ref == weapon.ref or other.two_handed or len(keep) >= 2:
+                continue
+            keep.append(other)
+        self.stowed = {w.ref for w in self.weapons if w not in keep}
 
     @property
     def main(self) -> Weapon | None:
@@ -388,7 +424,8 @@ class Gear:
         melee = self.melee
         if melee:
             return melee[0]
-        return self.weapons[0] if self.weapons else None
+        held = self.held
+        return held[0] if held else (self.weapons[0] if self.weapons else None)
 
     @property
     def ranged(self) -> Weapon | None:
@@ -397,11 +434,11 @@ class Gear:
         A ranger with a short sword and a longbow has both, and a ranged
         power should be rolling the bow's dice rather than the sword's.
         """
-        return next((w for w in self.weapons if w.ranged), None)
+        return next((w for w in self.held if w.ranged), None)
 
     @property
     def melee(self) -> list[Weapon]:
-        return [w for w in self.weapons if not w.ranged]
+        return [w for w in self.held if not w.ranged]
 
     @property
     def off(self) -> Weapon | None:
@@ -436,3 +473,8 @@ class Weapon:
     @property
     def is_light_blade(self) -> bool:
         return self.group == "light blade"
+
+    @property
+    def two_handed(self) -> bool:
+        """Needs both hands, so nothing else can be held with it."""
+        return "two-handed" in self.properties

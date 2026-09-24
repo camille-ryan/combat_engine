@@ -284,6 +284,11 @@ class Power:
     #: A printed Requirement line, as a predicate on the caster.
     requires: Callable[[World, int], bool] | None = None
     requires_text: str = ""
+    #: The second branch's Requirement. A dual row's printed one is usually
+    #: the two joined by "or" -- "two melee weapons **or** a ranged weapon"
+    #: is the melee branch's requirement and the ranged branch's, and
+    #: checking it whole says yes to both when only one is true.
+    requires_alt: Callable[[World, int], bool] | None = None
     #: A printed Trigger line. Set for immediate and opportunity actions.
     trigger: str = ""
     #: The same line in a form the dispatcher can act on. With it the row is
@@ -333,6 +338,38 @@ class Power:
 
     def damage_of(self, branch: int = 0) -> Damage | None:
         return self.damage_alt or self.damage if branch else self.damage
+
+    def requires_of(self, branch: int = 0) -> Callable[[World, int], bool] | None:
+        return self.requires_alt or self.requires if branch else self.requires
+
+    def can_branch(self, world: World, actor: int, branch: int = 0) -> bool:
+        """Is this branch open to this creature, given what it is holding?
+
+        Two gates. The row's own Requirement for that branch, and the plain
+        fact that you cannot fire without something to fire and cannot swing
+        without something to swing -- which no printed line bothers to say
+        and every one of them assumes.
+        """
+        from .components import Gear
+
+        gate = self.requires_of(branch)
+        if gate is not None and not gate(world, actor):
+            return False
+        if Keyword.WEAPON not in self.keywords:
+            return True
+        gear = world.get(actor, Gear)
+        # Nothing carried means nothing to gate on. A monster's weapon
+        # attack is its claws: the row carries `Keyword.WEAPON` and the
+        # creature has no `Gear` to hold anything, and demanding one made
+        # thirty-two perfectly good monster rows unusable.
+        if gear is None or not gear.weapons:
+            return True
+        kind = self.reach_of(branch).kind
+        if kind == "ranged":
+            return gear.ranged is not None
+        if kind == "melee":
+            return bool(gear.melee)
+        return True
 
     def provokes_on(self, branch: int = 0) -> bool:
         """Does *this branch* leave an opening? The melee half does not."""
@@ -406,6 +443,7 @@ def power(
     damage_alt: Damage | None = None,
     requires: Callable[[World, int], bool] | None = None,
     requires_text: str = "",
+    requires_alt: Callable[[World, int], bool] | None = None,
     trigger: str = "",
     on: Trigger | None = None,
     recharge: int = 0,
@@ -441,6 +479,7 @@ def power(
             damage_alt=damage_alt,
             requires=requires,
             requires_text=requires_text,
+            requires_alt=requires_alt,
             trigger=trigger,
             on=on,
             recharge=recharge,
@@ -586,9 +625,10 @@ def usable(world: World, actor: int, p: Power) -> tuple[bool, str]:
                 return False, "already used this round"
             if p.group and _group_spent(world, actor, p):
                 return False, f"one {p.group} power per encounter"
-    if p.requires is not None and not p.requires(world, actor):
+    open_branches = [b for b in p.branches if p.can_branch(world, actor, b)]
+    if not open_branches:
         return False, p.requires_text or "requirement not met"
-    if p.is_attack and not any(_can_land(world, actor, p, b) for b in p.branches):
+    if p.is_attack and not any(_can_land(world, actor, p, b) for b in open_branches):
         return False, _no_targets(world, actor, p)
     return True, ""
 

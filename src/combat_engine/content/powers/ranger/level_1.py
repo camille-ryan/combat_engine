@@ -71,6 +71,18 @@ def _two_melee_or_ranged(world: World, eid: int) -> bool:
     return gear.ranged is not None or _two_melee(world, eid)
 
 
+def _has_ranged(world: World, eid: int) -> bool:
+    """The ranged half of "two melee weapons or a ranged weapon".
+
+    The printed Requirement is the two branches' requirements joined by
+    "or", so checking it whole said yes to both branches when only one was
+    true -- a two-blade ranger carrying no bow was offered the ranged
+    branch, and an archer holding one blade was offered the melee one.
+    """
+    gear = world.get(eid, Gear)
+    return gear is not None and gear.ranged is not None
+
+
 @power(
     "p1505",
     level=1,
@@ -100,7 +112,8 @@ def p1505(c: Cast) -> None:
     keywords=MARTIAL_RANGED,
     attack=Attack(STR, vs=AC, plus=2),
     attack_alt=Attack(DEX, vs=AC, plus=2),
-    requires=_two_melee_or_ranged,
+    requires=_two_melee,
+    requires_alt=_has_ranged,
     requires_text="needs two melee weapons or a ranged weapon",
 )
 def p917(c: Cast) -> None:
@@ -136,7 +149,8 @@ def p919(c: Cast) -> None:
     keywords=MARTIAL_RANGED,
     attack=Attack(STR, vs=AC),
     attack_alt=Attack(DEX, vs=AC),
-    requires=_two_melee_or_ranged,
+    requires=_two_melee,
+    requires_alt=_has_ranged,
     requires_text="needs two melee weapons or a ranged weapon",
 )
 def p87(c: Cast) -> None:
@@ -203,7 +217,8 @@ def p1510(c: Cast) -> None:
     keywords=MARTIAL_RANGED,
     attack=Attack(STR, vs=AC),
     attack_alt=Attack(DEX, vs=AC),
-    requires=_two_melee_or_ranged,
+    requires=_two_melee,
+    requires_alt=_has_ranged,
     requires_text="needs two melee weapons or a ranged weapon",
 )
 def p2209(c: Cast) -> None:
