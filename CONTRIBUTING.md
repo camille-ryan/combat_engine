@@ -30,7 +30,7 @@ suite nobody could afford to run, and the reason it got that way is that
 nothing measured it. If an instrument has never caught anything in dozens of
 runs, it should have to justify its seconds.
 
-`audit` narrows to rows in changed content files by default, and widens back
+`audit` runs only the rows in changed content files by default, and widens back
 to everything the moment anything under `engine/` is touched — an engine
 change moves every row at once, so a narrowed run there would not be narrow,
 it would be wrong.

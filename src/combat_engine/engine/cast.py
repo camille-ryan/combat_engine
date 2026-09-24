@@ -42,6 +42,7 @@ from .resolve import AttackResult, attack, deal_damage, heal, temp_hp
 from .rng import average
 from .types import (
     Ability,
+    ActionType,
     Condition,
     DamageType,
     Defense,
@@ -1335,13 +1336,31 @@ class Cast:
         label: str = "",
         until: When = When.EONT,
         difficult: bool | str = False,
+        sustain: ActionType | None = None,
     ) -> int:
         return self.world.zones.create(
-            self.me, label or self.ref, frozenset(area), until, difficult=difficult
+            self.me, label or self.ref, frozenset(area), until,
+            difficult=difficult, sustain=sustain,
         )
 
-    def aura(self, radius: int, *, label: str = "", until: When = When.ENCOUNTER) -> int:
-        return self.world.zones.aura(self.me, label or self.ref, radius, until)
+    def aura(
+        self,
+        radius: int,
+        *,
+        label: str = "",
+        until: When = When.ENCOUNTER,
+        on: int | None = None,
+        sustain: ActionType | None = None,
+    ) -> int:
+        """An aura around a creature -- or around anything with a position.
+
+        `on` is what it follows. It used to be the caster and nothing else,
+        which is what made "each creature adjacent to the sphere" unsayable:
+        `Zones.refresh` has always been willing to follow any entity with a
+        `Position`, and only this signature insisted it be `self.me`.
+        """
+        owner = self.me if on is None else on
+        return self.world.zones.aura(owner, label or self.ref, radius, until, sustain)
 
     def hazard(
         self,
@@ -1352,6 +1371,7 @@ class Cast:
         label: str = "",
         until: When = When.SUSTAIN,
         difficult: bool = False,
+        sustain: ActionType | None = ActionType.MINOR,
     ) -> int:
         """A zone that hurts whoever is standing in it.
 
@@ -1363,7 +1383,10 @@ class Cast:
         """
         from .events import TurnStart, ZoneEntered
 
-        zone = self.zone(area, label=label, until=until, difficult=difficult)
+        zone = self.zone(
+            area, label=label, until=until, difficult=difficult,
+            sustain=sustain if until is When.SUSTAIN else None,
+        )
         struck: dict[int, int] = {}
         source = self.me
 

@@ -31,6 +31,7 @@ from .events import (
 )
 from .grid import Square, spread
 from .query import creatures, squares
+from .types import ActionType
 
 if TYPE_CHECKING:
     from .durations import Effect
@@ -72,6 +73,7 @@ class Zones:
         *,
         difficult: bool | str = False,
         blocks_sight: bool = False,
+        sustain: ActionType | None = None,
     ) -> int:
         zone = Zone(
             owner=owner,
@@ -80,7 +82,7 @@ class Zones:
             difficult=difficult,
             blocks_sight=blocks_sight,
         )
-        return self._spawn(zone, when)
+        return self._spawn(zone, when, sustain)
 
     def aura(
         self,
@@ -88,14 +90,15 @@ class Zones:
         label: str,
         radius: int,
         when: When = When.ENCOUNTER,
+        sustain: ActionType | None = None,
     ) -> int:
         """An aura follows its owner. A power that says "enemies adjacent to
         you" is an aura 1 and gets no special mechanism of its own."""
         zone = Zone(owner=owner, label=label, aura=radius)
         zone.squares = spread(squares(self.world, owner), radius)
-        return self._spawn(zone, when)
+        return self._spawn(zone, when, sustain)
 
-    def _spawn(self, zone: Zone, when: When) -> int:
+    def _spawn(self, zone: Zone, when: When, sustain: ActionType | None = None) -> int:
         eid = self.world.spawn(zone, Ident(ref=f"z:{zone.label}"))
         zone.effect = self.world.effects.apply(
             eid,
@@ -103,6 +106,7 @@ class Zones:
             when,
             label=f"zone {zone.label}",
             on_end=[lambda: self.end(eid, "duration")],
+            sustain_cost=sustain,
         )
         self.inside[eid] = set()
         self.world.bus.emit(

@@ -24,16 +24,17 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from .components import Conditions, Mod, Mods
+from .components import Budget, Conditions, Mod, Mods
 from .events import (
     ConditionApplied,
     ConditionEnded,
     EffectExpired,
+    Note,
     SavingThrow,
     TurnEnd,
     TurnStart,
 )
-from .types import Condition, DamageType, Relation
+from .types import ActionType, Condition, DamageType, Relation
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -84,6 +85,9 @@ class Effect:
     subs: list[Sub] = field(default_factory=list)
     on_end: list[Callable[[], None]] = field(default_factory=list)
     sustained: int = -1
+    #: What keeping this going costs, for a `When.SUSTAIN` effect. The
+    #: printed line names it -- "Sustain Minor" is the common one.
+    sustain_cost: ActionType | None = None
     ended: bool = False
 
     def __str__(self) -> str:
@@ -120,6 +124,7 @@ class Effects:
         escalate: Callable[[Effect], None] | None = None,
         subs: Iterable[Sub] = (),
         on_end: Iterable[Callable[[], None]] = (),
+        sustain_cost: ActionType | None = None,
     ) -> Effect:
         self._next += 1
         clock = owner if when in _TARGET_CLOCKED else source
@@ -140,6 +145,7 @@ class Effects:
             subs=list(subs),
             on_end=list(on_end),
             sustained=self.world.round,
+            sustain_cost=sustain_cost,
         )
         self.live[eff.id] = eff
 
@@ -226,6 +232,22 @@ class Effects:
     def of(self, owner: int) -> list[Effect]:
         return [e for e in self.live.values() if e.owner == owner]
 
+    def sustaining(self, source: int) -> list[Effect]:
+        """What this creature is keeping going, and would lose by not.
+
+        A zone's effect is owned by the *zone entity*, so nothing a caster
+        owns mentions it -- which meant the one creature whose action keeps
+        it alive was the one creature that could not see it.
+        """
+        return sorted(
+            (
+                e
+                for e in self.live.values()
+                if e.source == source and e.sustain_cost is not None
+            ),
+            key=lambda e: e.id,
+        )
+
     def clocked_on(self, eid: int) -> list[Effect]:
         """Live effects waiting on this creature's turn boundaries."""
         return [
@@ -271,8 +293,36 @@ class Effects:
                     self.end(eff, "end of turn")
             elif eff.when is When.SAVE_ENDS:
                 self.save(eff)
-            elif eff.when is When.SUSTAIN and eff.sustained < self.world.round:
+            elif (
+                eff.when is When.SUSTAIN
+                and eff.sustained < self.world.round
+                and not self._sustain_by_default(eff)
+            ):
                 self.end(eff, "not sustained")
+
+    def _sustain_by_default(self, eff: Effect) -> bool:
+        """Keep a sustained effect going if its action was never spent.
+
+        The printed rule makes forgetting the default: sustain it or lose it.
+        That is a bad default for anybody playing a board rather than reading
+        a sheet -- the commonest way to lose a zone is not choosing to, it is
+        ending your turn. So this inverts it. The effect persists unless the
+        action it needs went somewhere else, which is a choice actually made
+        rather than one forgotten.
+
+        Two effects both wanting a minor means the second one lapses, which
+        is right: there is only one minor, and spending it here spends it.
+        """
+        cost = eff.sustain_cost
+        if cost is None:
+            return False
+        budget = self.world.get(eff.source, Budget)
+        if budget is None or getattr(budget, cost.value, 0) <= 0:
+            return False
+        setattr(budget, cost.value, getattr(budget, cost.value) - 1)
+        self.sustain(eff)
+        self.world.bus.emit(Note(text=f"{eff.label or eff} sustained"))
+        return True
 
     def save(self, eff: Effect) -> None:
         """Roll a saving throw against one effect now."""

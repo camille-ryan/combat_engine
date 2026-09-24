@@ -147,7 +147,10 @@ def actor_dto(session: Session, eid: int) -> dto.ActorDTO:
         ref=defence(world, eid, Defense.REF),
         will=defence(world, eid, Defense.WILL),
         conditions=[c.value for c in (conds.active if conds else [])],
-        effects=[condition_dto(session, e) for e in world.effects.of(eid)],
+        effects=[
+            condition_dto(session, e)
+            for e in [*world.effects.of(eid), *world.effects.sustaining(eid)]
+        ],
         traits=[],
         is_current=eid == session.current,
         level=stats.level if stats else 1,
@@ -176,6 +179,10 @@ def condition_dto(session: Session, effect) -> dto.ConditionDTO:  # noqa: ANN001
         bits.append(f"{mod.value:+d} {mod.what}")
     for kind, source, _target in effect.relations:
         bits.append(f"{kind.value.replace('_', ' ')} {wire.label(source)}")
+    if effect.sustain_cost is not None:
+        # Said plainly, because the rule here is not the printed one: this
+        # keeps itself going unless the action it names goes elsewhere.
+        bits.append(f"holds unless you spend your {effect.sustain_cost.value}")
     return dto.ConditionDTO(
         name=wire.power(effect.label) if effect.label else "effect",
         text=", ".join(bits) or "-",

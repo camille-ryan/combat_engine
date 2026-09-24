@@ -28,12 +28,20 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Action:
-    kind: str  # power | move | shift | stand | second_wind | end
+    kind: str  # power | move | shift | stand | second_wind | sustain | end
     cost: ActionType
     ref: str = ""
     targets: tuple[int, ...] = ()
     dest: Square | None = None
     origin: Square | None = None
+    #: What this acts on, when that is not the actor and not a square: a live
+    #: effect for `sustain`, and later a conjuration to walk or command.
+    #:
+    #: Everything here used to be a thing the actor did to a target or a
+    #: square, so "spend a minor to sustain e17" had no shape. Kept as a bare
+    #: int rather than a union because the `kind` already says which of the
+    #: two it is, and an Action is read far more often than it is built.
+    subject: int | None = None
     #: Only for a rejected option: why the interface should grey it out.
     blocked: str = ""
     path: tuple[Square, ...] = field(default=(), repr=False)
@@ -48,6 +56,8 @@ class Action:
             bits.append(self.ref)
         if self.targets:
             bits.append("-> " + ",".join(str(t) for t in self.targets))
+        if self.subject is not None:
+            bits.append(f"on e{self.subject}")
         if self.dest:
             bits.append(f"@{self.dest}")
         if self.blocked:
@@ -70,6 +80,7 @@ def legal(
     out.extend(_powers(world, encounter, actor, include_blocked))
     out.extend(_movement(world, encounter, actor))
     out.extend(_recovery(world, encounter, actor))
+    out.extend(_sustaining(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
     return out
 
@@ -197,6 +208,29 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     return out
 
 
+def _sustaining(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Keeping a sustained effect going, deliberately.
+
+    Mostly you do not need this: an effect whose action is still unspent
+    sustains itself at the end of your turn (`Effects._sustain_by_default`).
+    It is here for the two cases where the default is not what you want --
+    sustaining early, and choosing which of two effects gets the one minor
+    you have.
+    """
+    out: list[Action] = []
+    for eff in sorted(world.effects.live.values(), key=lambda e: e.id):
+        if eff.source != actor or eff.sustain_cost is None:
+            continue
+        if eff.sustained >= world.round:
+            continue  # already going this round
+        if not encounter.can_spend(actor, eff.sustain_cost):
+            continue
+        out.append(
+            Action(kind="sustain", cost=eff.sustain_cost, subject=eff.id, ref=eff.label)
+        )
+    return out
+
+
 def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
     out: list[Action] = []
     if (
@@ -262,6 +296,14 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             if Condition.PRONE in eff.conditions:
                 world.effects.end(eff, "stood up")
         world.bus.emit(Note(text=f"{actor} stands"))
+        return True
+
+    if action.kind == "sustain":
+        eff = world.effects.live.get(action.subject or -1)
+        if eff is None:
+            return False
+        world.effects.sustain(eff)
+        world.bus.emit(Note(text=f"{eff.label or eff} sustained"))
         return True
 
     if action.kind == "second_wind":
