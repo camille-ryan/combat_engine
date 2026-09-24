@@ -290,15 +290,24 @@ class Cast:
         held = self.world.get(who, Build)
         return held is not None and choice.lower() in held.choices
 
-    def suffering(self, label: str = "", *, by: int | None = None) -> list[int]:
+    def suffering(
+        self, label: str = "", *, by: int | None = None, include_self: bool = False
+    ) -> list[int]:
         """Everyone carrying an effect I applied. "Each creature affected by
         your X" is a common printed line and nothing could answer it.
 
         `label` picks out one power's effects; `by` defaults to the caster.
+
+        The caster is left out unless asked for. "Each creature affected by
+        your X" means the creatures you did it *to*, and a row that anchors
+        its own sustain on itself found itself in this list and politely
+        dragged itself across the board once a round.
         """
         source = self.me if by is None else by
         out = []
         for eid in creatures(self.world):
+            if eid == self.me and not include_self:
+                continue
             for eff in self.world.effects.of(eid):
                 if eff.source != source:
                     continue
@@ -333,8 +342,13 @@ class Cast:
 
         A few powers hand somebody an extra save out of turn. Returns True
         if something was shaken off.
+
+        Falls back to the caster when there is no target. A row declared
+        `target=NO_TARGET` that answers its own trigger has `c.target` as
+        None, and this used to return False without rolling or logging
+        anything -- so the row looked finished and did nothing.
         """
-        who = self._who(on)
+        who = self._who(on) or self.me
         if who is None:
             return False
         for effect in self.world.effects.of(who):
@@ -1322,11 +1336,9 @@ class Cast:
         thing available for the first, which made the gate true whenever the
         creature had the speed at all.
         """
-        from .components import Movement
+        from .query import moving_as
 
-        who = on or self.me
-        mv = self.world.get(who, Movement)
-        return bool(mv and mv.using == mode)
+        return moving_as(self.world, on or self.me, mode)
 
     def phasing(
         self, *, until: When = When.ENCOUNTER, on: int | None = None
@@ -1572,6 +1584,28 @@ class Cast:
             ev is not None
             and getattr(ev, "actor", None) == self.me
             and not alive(self.world, self.me)
+        )
+
+    def half_healing(
+        self, *, on: int | None = None, until: When = When.SAVE_ENDS
+    ) -> Effect | None:
+        """"The target regains half the normal hit points from healing."
+
+        A listener on `Healed`, which is negotiable now, rather than clawing
+        the surplus back off `Health` afterwards -- that came to the right
+        total and put the wrong number in the log.
+        """
+        from .events import Healed
+
+        who = on or self._who(None) or self.me
+
+        def halve(ev: Healed) -> None:
+            if ev.target == who:
+                ev.amount //= 2
+
+        return self.watch(
+            Healed, halve, until=until, window=Window.BEFORE, on=who,
+            label=f"{self.ref} half healing",
         )
 
     def resist_forced(
@@ -1854,16 +1888,35 @@ class Cast:
             who, self.me, until, label=f"{self.ref} {key}{value:+d}", mods=[(who, mod)]
         )
         if once and effect is not None:
-            from .events import AttackRolled
+            from .events import AttackRolled, DamageRolled
 
-            def spend(ev: AttackRolled) -> None:
-                if ev.attacker != who:
-                    return
-                if mod.applies({"attacker": ev.attacker, "target": ev.target,
-                                "power": ev.power, "advantage": ev.advantage}):
-                    self.world.effects.end(effect, "used")
+            # A one-shot *damage* bonus has to be spent on the damage, not
+            # on the roll. `resolve.attack` emits `AttackRolled` before the
+            # body ever rolls damage, so watching that ended the effect
+            # before `deal_damage` read the "damage" mods and the bonus
+            # never once applied. Correct for an attack bonus, where the
+            # roll has already been made.
+            if key == "damage":
 
-            effect.subs.append(self.world.bus.on(AttackRolled, spend, owner=who))
+                def spend_damage(ev: DamageRolled) -> None:
+                    if ev.source == who and mod.applies(
+                        {"target": ev.target, "power": ev.detail}
+                    ):
+                        self.world.effects.end(effect, "used")
+
+                effect.subs.append(
+                    self.world.bus.on(DamageRolled, spend_damage, owner=who)
+                )
+            else:
+
+                def spend(ev: AttackRolled) -> None:
+                    if ev.attacker != who:
+                        return
+                    if mod.applies({"attacker": ev.attacker, "target": ev.target,
+                                    "power": ev.power, "advantage": ev.advantage}):
+                        self.world.effects.end(effect, "used")
+
+                effect.subs.append(self.world.bus.on(AttackRolled, spend, owner=who))
         return effect
 
     def penalty(self, what: str | Defense, value: int, **kw: Any) -> Effect | None:

@@ -21,6 +21,7 @@ holds them to it.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections import Counter
 from dataclasses import dataclass, field
@@ -157,12 +158,18 @@ def _monsters(
     names: dict[str, dict[str, str]],
 ) -> None:
     scores: list[float] = []
-    rows = source.execute(
+    rows = list(source.execute(
         "SELECT ID, Txt, Source FROM Monster WHERE Level <= ? ORDER BY ID",
         (MAX_MONSTER_LEVEL,),
-    )
+    ))
+    # One pass to learn every creature's name, then the real one. A stat
+    # block that names a *different* creature could not be scrubbed before,
+    # because the scrubber only knew the one it was working on -- so 233
+    # specs carried somebody else's printed name straight through to an
+    # author who is not allowed to see one.
+    index = _creature_names(rows)
     for row in rows:
-        m = monster_parser.parse(row["ID"], row["Txt"], row["Source"])
+        m = monster_parser.parse(row["ID"], row["Txt"], row["Source"], others=index)
         scores.append(m.score)
         report.monsters += 1
         report.worst.append((m.ref_id, m.score))
@@ -193,6 +200,37 @@ def _monsters(
             report.abilities += 1
     report.scores["monster"] = sum(scores) / max(1, len(scores))
     report.worst = sorted(report.worst, key=lambda p: p[1])[:10]
+
+
+def _creature_names(rows: list) -> dict[str, str]:
+    """Every creature's printed name, mapped to its ref.
+
+    Names made entirely of words the engine already has are left out -- the
+    ones built from a damage type and a keyword are the common case. Replacing those would
+    corrupt a spec that merely used the words, which is worse than the leak:
+    an author would be handed mechanics with rules terms swapped for ids.
+    """
+    from .sanitise import mechanical
+
+    def worth_swapping(name: str) -> bool:
+        words = re.findall(r"[A-Za-z']+", name.lower())
+        return bool(words) and len(name) >= 5 and not all(
+            w in mechanical() for w in words
+        )
+
+    out: dict[str, str] = {}
+    for row in rows:
+        m = monster_parser.parse(row["ID"], row["Txt"], row["Source"])
+        if worth_swapping((m.name or "").strip()):
+            out.setdefault(m.name.strip(), m.ref_id)
+        # Ability names too. A stat block saying "recharges after the use of
+        # <another creature's power>" leaks that power's name exactly as a
+        # creature's name leaked, and its ref is just as usable.
+        for a in m.abilities:
+            nm = (a.name or "").strip()
+            if worth_swapping(nm):
+                out.setdefault(nm, f"{m.ref_id}a{a.index}")
+    return out
 
 
 def _powers(

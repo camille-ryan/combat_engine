@@ -138,7 +138,22 @@ def book_of(source: str) -> str:
     return ""
 
 
-def parse(row_id: int, document: str, source: str = "") -> Monster:
+def parse(
+    row_id: int,
+    document: str,
+    source: str = "",
+    others: dict[str, str] | None = None,
+) -> Monster:
+    """Parse one stat block.
+
+    `others` maps another creature's printed name to its ref. A stat block
+    that references a different creature -- "any <kind> within 10 squares",
+    "becomes a <creature>" -- leaked that name into the spec, because the
+    scrubber only ever knew this monster's own. Handing the index in turns
+    the reference into `m1234`, which is both scrubbed and *more* useful: an
+    author can look the id up, where prose told them nothing they were
+    allowed to act on.
+    """
     body = detail(document)
     m = Monster(id=row_id)
     m.book = book_of(source)
@@ -162,7 +177,7 @@ def parse(row_id: int, document: str, source: str = "") -> Monster:
     # thing that refers to itself by a fragment. An ability named "Sensitive
     # to Cold" is matched whole, so the word `cold` survives in the sentence
     # that explains what it does.
-    swaps = {}
+    swaps = dict(others or {})
     for a in m.abilities:
         swaps.setdefault(a.name, f"{m.ref_id}a{a.index}")
     # What is printed beside the numbers is mechanics, not prose, and several
@@ -172,6 +187,18 @@ def parse(row_id: int, document: str, source: str = "") -> Monster:
     for a in m.abilities:
         a.spec = scrub(a.spec, {**swaps, m.name: m.ref_id}, keep,
                        by_word={m.name: m.ref_id})
+        # The keywords too. A fifth of them are whole printed sentences --
+        # "recharges after the use of <a power's name>", "when a melee
+        # attack misses the <creature's name>" -- because the parenthesised
+        # group they come from carries the trigger line as well as the
+        # keywords. `spec.py` prints them verbatim, so every agent since
+        # the project began has been shown names in that field while the
+        # body beside it was scrubbed. That is the one rule the project
+        # cannot break.
+        a.keywords = tuple(
+            scrub(k, {**swaps, m.name: m.ref_id}, keep, by_word={m.name: m.ref_id})
+            for k in a.keywords
+        )
     return m
 
 

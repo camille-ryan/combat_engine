@@ -219,7 +219,35 @@ def attack(
         landed.branch = branch
         landed.opportunity = opportunity
         landed.charge = charge
-        world.bus.emit(landed)
+
+        # An immediate interrupt answering a hit may undo it -- a reroll on
+        # "when you are hit" is the printed shape, and by the rules the hit
+        # then never happened. `result.hit` was flipped and nothing looked
+        # again: the `Hit` stayed in the log, no `Miss` was ever emitted,
+        # and every rider hung on `Hit` had already paid out for a blow that
+        # ended as a miss. Dozens of rows in the tree watch `Hit`.
+        #
+        # Checked in the resolve callback, which runs after the interrupts
+        # and before the ordinary listeners -- so cancelling here stops the
+        # riders as well as the announcement.
+        def confirm(ev: Hit | Miss) -> None:
+            if result.hit != isinstance(ev, Hit):
+                ev.cancel("undone by an interrupt")
+
+        world.bus.emit(landed, confirm)
+        if landed.cancelled:
+            landed = (
+                Hit(attacker=attacker, target=target, power=power,
+                    critical=result.critical)
+                if result.hit
+                else Miss(attacker=attacker, target=target, power=power)
+            )
+            landed.result = result
+            landed.among = among or (target,)
+            landed.branch = branch
+            landed.opportunity = opportunity
+            landed.charge = charge
+            world.bus.emit(landed)
 
         # Attacking gives you away. Nothing broke hidden before, so a
         # creature that went unseen once stayed unseen for the rest of the
@@ -331,7 +359,16 @@ def deal_damage(
     # Read back off the event, the way the attack reads its target back. A
     # listener may move the blow onto somebody else -- one creature stepping
     # in front of another -- and everything below this line used the local.
-    target = rolled.target
+    #
+    # `health` moves with it. It was bound before the emit, so the redirect
+    # re-read `takes_half`, the defences and the announcement off the new
+    # target while the hit points still came off the old one -- the wrong
+    # creature was hurt, and `_check_down` was handed a mismatched pair.
+    if rolled.target != target:
+        target = rolled.target
+        health = world.get(target, Health)
+        if health is None or not alive(world, target):
+            return 0
 
     if takes_half(world, target):
         # Insubstantial halves everything, and does it before resistance so a
@@ -376,9 +413,18 @@ def heal(world: World, source: int, target: int, amount: int) -> int:
     if health.hp <= 0:
         health.hp = 0  # healing from below zero starts at zero, not at the deficit
         _revive(world, target)
+    # Announced *before* the hit points go on, so "the target regains half
+    # the normal hit points from healing effects" has a seam. It used to add
+    # first and announce after, which left a row like that clawing the
+    # surplus back off `Health` -- the total came out right and the number
+    # in the log did not.
+    offered = Healed(source=source, target=target, amount=amount, hp=health.hp)
+    if world.bus.emit(offered).cancelled:
+        return 0
     before = health.hp
-    health.hp = min(health.max_hp, health.hp + amount)
-    world.bus.emit(Healed(source=source, target=target, amount=health.hp - before, hp=health.hp))
+    health.hp = min(health.max_hp, health.hp + max(0, offered.amount))
+    offered.amount = health.hp - before
+    offered.hp = health.hp
     return health.hp - before
 
 

@@ -112,6 +112,13 @@ def _MECHANICAL_WORDS() -> frozenset[str]:
     return frozenset(words)
 
 
+def mechanical() -> frozenset[str]:
+    """Every word the engine itself has a name for. Public for the ETL,
+    which needs it to decide whether a creature's *name* is really just
+    rules terms and must not be swapped for an id."""
+    return _MECHANICAL_WORDS()
+
+
 def scrub(
     body: str,
     replacements: dict[str, str],
@@ -160,8 +167,17 @@ def scrub(
         for token in {name, *re.findall(r"[A-Za-z]+", name)}:
             if len(token) > 2 and token.lower() not in kept:
                 usable.setdefault(token, ref)
+    # Only the names that are actually in this text. The index of every
+    # creature in the compendium is four thousand entries, and running a
+    # regex for each against every spec is twenty-four million
+    # substitutions -- a two-second build became minutes. A lowercase
+    # substring test rejects all but a handful first.
+    here = out.lower()
     for name in sorted(usable, key=len, reverse=True):
+        if name.lower() not in here:
+            continue
         out = re.sub(rf"\b{re.escape(name)}\b", usable[name], out, flags=re.I)
+        here = out.lower()
     return out
 
 

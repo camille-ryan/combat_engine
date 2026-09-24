@@ -157,6 +157,12 @@ class Moved(Event):
 class MoveEnd(Event):
     actor: int
     at: Square
+    #: walk, shift, teleport, forced. A row answering "an adjacent enemy
+    #: shifts" has to wait for the move to finish -- `MoveStart` fires
+    #: before the first step, so reacting to it puts the responder where
+    #: nothing has moved yet -- and this said nothing about what kind of
+    #: move had just happened.
+    kind_: str = ""
 
 
 @dataclass
@@ -238,7 +244,7 @@ class AttackRolled(Event):
 
 
 @dataclass
-class Hit(Event):
+class Hit(Decision):
     attacker: int
     target: int
     power: str
@@ -246,7 +252,7 @@ class Hit(Event):
 
 
 @dataclass
-class Miss(Event):
+class Miss(Decision):
     attacker: int
     target: int
     power: str
@@ -288,7 +294,7 @@ class DamageApplied(Event):
 
 
 @dataclass
-class Healed(Event):
+class Healed(Decision):
     source: int
     target: int
     amount: int

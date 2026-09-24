@@ -281,7 +281,7 @@ def walk(
             break
         spent += 2 if sq in world.difficult(eid) else 1
     pos = world.get(eid, Position)
-    world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0)))
+    world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0), kind_=kind))
     return spent
 
 
@@ -368,7 +368,7 @@ def shift(
         return False
     moved = step(world, eid, to, kind="shift", mode=mode_of(world, eid, mode), through=share)
     pos = world.get(eid, Position)
-    world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0)))
+    world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0), kind_="shift"))
     return moved
 
 
@@ -380,7 +380,7 @@ def teleport(world: World, eid: int, to: Square) -> bool:
         return False
     moved = step(world, eid, to, kind="teleport", mode="walk")
     pos = world.get(eid, Position)
-    world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0)))
+    world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0), kind_="teleport"))
     return moved
 
 

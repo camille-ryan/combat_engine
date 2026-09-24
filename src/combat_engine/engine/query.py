@@ -89,6 +89,18 @@ def adjacent(world: World, a: int, b: int) -> bool:
 # -- numbers ----------------------------------------------------------------
 
 
+def moving_as(world: World, eid: int, mode: str) -> bool:
+    """Is this creature moving that way right now?
+
+    Here as well as on `Cast` because `requires=` is handed `(world, eid)`
+    and no `Cast` exists yet -- so a Requirement could not say the same
+    sentence the body says, and had to read the component directly. The same
+    split `has_combat_advantage` already has.
+    """
+    mv = world.get(eid, Movement)
+    return bool(mv and mv.using == mode)
+
+
 def speed(world: World, eid: int) -> int:
     mv = world.get(eid, Movement)
     if mv is None:
