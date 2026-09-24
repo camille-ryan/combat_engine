@@ -323,14 +323,20 @@ def settle(world: World, eid: int) -> bool:
     return False
 
 
-def shift(world: World, eid: int, to: Square, *, mode: str | None = None) -> bool:
-    """A shift is a move that does not provoke. One square unless a power says otherwise."""
+def shift(
+    world: World, eid: int, to: Square, *, mode: str | None = None, share: bool = False
+) -> bool:
+    """A shift is a move that does not provoke. One square unless a power says otherwise.
+
+    `share` is for the handful of things that move *into* somebody else's
+    square rather than beside it -- a creature that melds with its target.
+    """
     from .query import can_shift
 
     if not can_shift(world, eid):
         return False
     world.bus.emit(MoveStart(actor=eid, kind_="shift"))
-    moved = step(world, eid, to, kind="shift", mode=mode_of(world, eid, mode))
+    moved = step(world, eid, to, kind="shift", mode=mode_of(world, eid, mode), through=share)
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0)))
     return moved

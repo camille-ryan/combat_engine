@@ -996,16 +996,24 @@ class Cast:
         )
 
     def shift(
-        self, squares_: int = 1, *, who: int | None = None, to: Square | None = None
+        self,
+        squares_: int = 1,
+        *,
+        who: int | None = None,
+        to: Square | None = None,
+        share: bool = False,
     ) -> bool:
         """Shift, choosing the destination through the world's decider.
 
         `to` names the square outright, for the powers that do -- "shift into
         the space the target left" is not a choice, it is an instruction.
+
+        `share` moves *into* an occupied square, for a creature that melds
+        with the one it is on top of.
         """
         mover = self.me if who is None else who
         if to is not None:
-            return shift(self.world, mover, to)
+            return shift(self.world, mover, to, share=share)
         options = self.world.reachable_squares(mover, squares_)
         if not options:
             return False

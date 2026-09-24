@@ -44,6 +44,19 @@ work; close it from the commit rather than by hand:
 Closes #12
 ```
 
+Repeat the keyword for each one. `Closes #12, #13` closes **only #12** — the
+rest is read as prose, and six issues once stayed open after the commit that
+finished them:
+
+```
+Closes #12, closes #13, closes #14
+```
+
+`scripts/issues.py` closes the content issues from coverage, so those need no
+keyword at all. Engine issues are closed by hand, with what landed and how it
+was verified — a closing comment that only says "done" is worth nothing to
+the next reader.
+
 Commits Claude writes are authored `Claude (Camille)` with Camille as
 committer, so `git log` shows who wrote what while the account stays
 Camille's. There is an alias for it:
