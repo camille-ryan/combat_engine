@@ -309,7 +309,7 @@ def build_for(cls: str, ref: str) -> str:
     were about to want it.
     """
     from combat_engine.engine import Bus, Grid, Rng, World, usable
-    from combat_engine.engine.dsl import get
+    from combat_engine.engine.dsl import get, unmet_requirement
 
     declared = get(ref)
     if declared is None:
@@ -319,8 +319,8 @@ def build_for(cls: str, ref: str) -> str:
         who = spawn(
             probe, Character(cls, max(1, declared.level), [ref], build=build.name), (1, 1)
         )
-        ok, why = usable(probe, who, declared)
-        if ok or "requirement" not in why:
+        ok, _why = usable(probe, who, declared)
+        if ok or not unmet_requirement(probe, who, declared):
             return build.name
     return ""
 

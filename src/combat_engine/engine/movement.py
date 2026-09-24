@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     from .ecs import World
 
 #: Moves that never provoke an opportunity attack.
-_SAFE = {"shift", "teleport", "push", "pull", "slide", "place"}
+_SAFE = {"shift", "teleport", "push", "pull", "slide", "place", "swap"}
 
 #: Modes that leave the ground, and so pass over whoever is standing on it.
 #: Teleport is not one of them -- it has no path to pass along, so it has to
@@ -435,11 +435,18 @@ def forced(
         return 0
     amount = agreed
     if to is not None:
-        # A row that names the square it wants. Still one step at a time, so
-        # everything that watches a move still sees each of them.
-        return sum(
-            1 for _ in range(amount) if step(world, target, to, kind=how.value)
-        )
+        # A row that names the square it wants. **Actually** one step at a
+        # time: `step` has no adjacency check, so passing `to` straight in
+        # jumped the whole distance in a single move -- a pull 2 would drag
+        # a creature across the board -- and then called `step` against the
+        # square it was already standing in for every remaining point,
+        # announcing a Leave/Enter/Moved for a square nobody left.
+        moved = 0
+        for sq in _line(world.need(target, Position).square, to)[1:]:
+            if moved >= amount or not step(world, target, sq, kind=how.value):
+                break
+            moved += 1
+        return moved
     moved = 0
     for _ in range(amount):
         nxt = _forced_square(world, source, target, anchor, how)

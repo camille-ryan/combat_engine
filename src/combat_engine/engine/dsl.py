@@ -625,6 +625,15 @@ def candidates(
     ]
 
 
+def unmet_requirement(world: World, actor: int, p: Power) -> bool:
+    """Is this row refused *because of its Requirement line* specifically?
+
+    Asked instead of matching on the words of `usable`'s reason, which is
+    the printed sentence whenever the row has one.
+    """
+    return not any(p.can_branch(world, actor, b) for b in p.branches)
+
+
 def usable(world: World, actor: int, p: Power, *, dying: bool = False) -> tuple[bool, str]:
     """Can this power be used, and if not, why not?
 
@@ -658,6 +667,11 @@ def usable(world: World, actor: int, p: Power, *, dying: bool = False) -> tuple[
                 return False, f"one {p.group} power per encounter"
     open_branches = [b for b in p.branches if p.can_branch(world, actor, b)]
     if not open_branches:
+        # The printed sentence when there is one, because it is what the
+        # card shows. Callers that need to know *which* refusal this is
+        # should ask `unmet_requirement`, not read these words -- a custom
+        # `requires_text` hid the failure from `chargen.build_for`, which
+        # then handed a bow-only row to a two-blade ranger.
         return False, p.requires_text or "requirement not met"
     if p.is_attack and not any(_can_land(world, actor, p, b) for b in open_branches):
         return False, _no_targets(world, actor, p)

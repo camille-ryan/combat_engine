@@ -1888,7 +1888,7 @@ class Cast:
             who, self.me, until, label=f"{self.ref} {key}{value:+d}", mods=[(who, mod)]
         )
         if once and effect is not None:
-            from .events import AttackRolled, DamageRolled
+            from .events import AttackRolled, DamageRolled, Hit
 
             # A one-shot *damage* bonus has to be spent on the damage, not
             # on the roll. `resolve.attack` emits `AttackRolled` before the
@@ -1896,7 +1896,27 @@ class Cast:
             # before `deal_damage` read the "damage" mods and the bonus
             # never once applied. Correct for an attack bonus, where the
             # roll has already been made.
-            if key == "damage":
+            # Three kinds of one-shot, and they are spent at three
+            # different moments. An attack bonus is spent on the roll,
+            # because by then it has been used. A damage bonus cannot be --
+            # `AttackRolled` fires before the body rolls damage. And a
+            # *defence* bonus is spent when the blow lands or misses:
+            # `resolve.attack` re-reads the defence after announcing the
+            # roll, so spending it on `AttackRolled` removes it before the
+            # comparison it exists for, and the owner is the defender
+            # rather than the attacker, so the old filter never matched.
+            if isinstance(what, Defense):
+                from .events import Miss
+
+                def spend_defence(ev: Hit | Miss) -> None:
+                    if ev.target == who:
+                        self.world.effects.end(effect, "used")
+
+                for kind in (Hit, Miss):
+                    effect.subs.append(
+                        self.world.bus.on(kind, spend_defence, owner=who)
+                    )
+            elif key == "damage":
 
                 def spend_damage(ev: DamageRolled) -> None:
                     if ev.source == who and mod.applies(
