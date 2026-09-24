@@ -75,6 +75,7 @@ def attack(
     advantage: bool | None = None,
     ignore_cover: bool = False,
     opportunity: bool = False,
+    among: tuple[int, ...] = (),
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
@@ -106,7 +107,7 @@ def attack(
             situational -= int(
                 cover_between(world, attacker, target, ranged=_is_ranged(power))
             )
-        situational += _mark_penalty(world, attacker, target)
+        situational += _mark_penalty(world, attacker, among or (target,))
 
         d20 = world.rng.d20()
         natural = d20.total
@@ -137,6 +138,12 @@ def attack(
         # without it `c.reroll_attack` had nothing to change and silently
         # did nothing at all.
         rolled.result = result
+        # Everyone this one power use is aimed at, not just this
+        # announcement. Rides as a plain attribute so it stays off the wire
+        # and out of a replay fixture, like `result` beside it. Without it a
+        # row triggering on being *left out* of an attack cannot tell a
+        # burst that caught it from one that did not.
+        rolled.among = among or (target,)
         world.bus.emit(rolled)
 
         landed = (
@@ -145,6 +152,7 @@ def attack(
             else Miss(attacker=attacker, target=target, power=power)
         )
         landed.result = result
+        landed.among = among or (target,)
         world.bus.emit(landed)
 
         # Attacking gives you away. Nothing broke hidden before, so a
@@ -154,9 +162,9 @@ def attack(
         # what the printed ones do, and it reads the same way.
         world.relations.clear_source(Relation.HIDDEN_FROM, attacker, "attacked")
 
-    declared = world.bus.emit(
-        AttackDeclared(attacker=attacker, target=target, power=power, vs=vs), roll
-    )
+    announced = AttackDeclared(attacker=attacker, target=target, power=power, vs=vs)
+    announced.among = among or (target,)
+    declared = world.bus.emit(announced, roll)
     if declared.cancelled:
         result.cancelled = True
     return result
@@ -182,14 +190,19 @@ def _mods(world: World, eid: int, what: str, ctx: dict) -> int:
     return mods.total(what, ctx) if mods else 0
 
 
-def _mark_penalty(world: World, attacker: int, target: int) -> int:
+def _mark_penalty(world: World, attacker: int, among: tuple[int, ...]) -> int:
     """A mark costs you 2 when you attack anyone but the creature that marked you.
 
-    The penalty is for leaving your marker out of the attack -- not for being
-    marked, and not for attacking a marked creature.
+    The penalty is for leaving your marker out of **the attack** -- not for
+    being marked, and not for attacking a marked creature. `among` is every
+    target of this one power use, which is the whole point: a burst is
+    announced once per target, so judging this per announcement charged the
+    penalty on every other target's roll even when the marker was caught in
+    the same blast. The docstring said the right rule for a long time and
+    the code underneath it did not implement it.
     """
     markers = world.relations.sources(Relation.MARKED_BY, attacker)
-    if markers and target not in markers:
+    if markers and not set(markers) & set(among):
         return -2
     return 0
 

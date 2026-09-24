@@ -247,6 +247,51 @@ def enemy_within(squares: int) -> Callable[[World, int, Event], bool]:
     return check
 
 
+def by_melee(world: World, me: int, ev: Event) -> bool:
+    """Was the attack that caused this a melee one?
+
+    "Missed by a *melee* attack" is four rows, and the reach is on the power
+    rather than the event. `resolve._is_ranged` already does this lookup for
+    cover; this is the other half of the same question.
+    """
+    from .dsl import get
+
+    p = get(getattr(ev, "power", "") or "")
+    return p is not None and p.reach.kind in ("melee", "close_burst", "close_blast")
+
+
+def by_ranged(world: World, me: int, ev: Event) -> bool:
+    from .dsl import get
+
+    p = get(getattr(ev, "power", "") or "")
+    return p is not None and p.reach.kind in ("ranged", "area_burst")
+
+
+def leaves_me_out(world: World, me: int, ev: Event) -> bool:
+    """Did this attack miss me out entirely?
+
+    What a defender's mark actually asks. An attack is announced once per
+    target, so `ev.target != me` only says *this announcement* was not aimed
+    at me -- a burst that caught me still passed that test on every other
+    target's row, and both marks punished an enemy for an attack that did
+    include them. `among` carries the whole target list of the one power
+    use, which is the only thing that can answer it.
+    """
+    return me not in getattr(ev, "among", (getattr(ev, "target", None),))
+
+
+def cursed_by_me(world: World, me: int, ev: Event) -> bool:
+    """Is whoever this event is about under my curse?
+
+    Three warlock pact boons pay out when a cursed enemy drops, and the
+    curse is a relation rather than anything on the event.
+    """
+    from .types import Relation
+
+    who = getattr(ev, "actor", getattr(ev, "target", None))
+    return who is not None and world.relations.holds(Relation.CURSED_BY, me, who)
+
+
 def both(*checks: Callable[[World, int, Event], bool]) -> Callable[[World, int, Event], bool]:
     def check(world: World, me: int, ev: Event) -> bool:
         return all(c(world, me, ev) for c in checks)

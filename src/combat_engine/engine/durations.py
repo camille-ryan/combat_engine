@@ -232,6 +232,13 @@ class Effects:
     def of(self, owner: int) -> list[Effect]:
         return [e for e in self.live.values() if e.owner == owner]
 
+    def stance_of(self, eid: int) -> Effect | None:
+        """The stance this creature is in, if any. At most one, ever."""
+        for eff in self.live.values():
+            if eff.when is When.STANCE and eff.owner == eid:
+                return eff
+        return None
+
     def sustaining(self, source: int) -> list[Effect]:
         """What this creature is keeping going, and would lose by not.
 

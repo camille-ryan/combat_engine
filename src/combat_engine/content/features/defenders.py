@@ -24,6 +24,7 @@ from combat_engine.engine import (
     Melee,
     Relation,
     When,
+    leaves_me_out,
     power,
 )
 from combat_engine.engine.basic import MELEE
@@ -69,8 +70,11 @@ def p7419(c: Cast) -> None:
 
     def on_attack(ev: AttackDeclared) -> None:
         # Attacking anybody *but* the fighter is the trigger. Attacking the
-        # fighter is what the mark was asking for and costs nothing.
-        if ev.attacker != me and ev.target != me:
+        # fighter is what the mark was asking for and costs nothing -- and
+        # that has to be judged over the whole attack, not this one
+        # announcement, or a burst that caught the fighter still drew a
+        # riposte off one of its other targets.
+        if ev.attacker != me and leaves_me_out(world, me, ev):
             riposte(ev.attacker)
 
     def on_shift(ev: Moved) -> None:
@@ -105,7 +109,11 @@ def p805(c: Cast) -> None:
     struck: dict[int, int] = {}
 
     def on_attack(ev: AttackDeclared) -> None:
-        if ev.attacker != mark or ev.target == me:
+        # "Attacks somebody else" means the paladin was not among the
+        # targets at all. Testing this announcement's target instead let a
+        # burst that included the paladin pay out anyway, off whichever
+        # other target happened to be announced first.
+        if ev.attacker != mark or not leaves_me_out(c.world, me, ev):
             return
         if struck.get(mark) == c.world.round:
             return  # the first time each round, and no more

@@ -90,7 +90,11 @@ from .triggers import (
     ally_within,
     both,
     by_me,
+    by_melee,
+    by_ranged,
+    cursed_by_me,
     enemy_within,
+    leaves_me_out,
     not_me,
     targets_me,
 )

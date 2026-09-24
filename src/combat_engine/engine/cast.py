@@ -692,6 +692,7 @@ class Cast:
         self.result = attack(
             self.world, self.me, who, bonus, vs, self.ref,
             advantage=advantage, opportunity=self.opportunity,
+            among=tuple(self.targets) or (who,),
         )
         return self.result
 
@@ -1099,6 +1100,30 @@ class Cast:
 
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} vulnerable", on_end=[undo]
+        )
+
+    def stance(
+        self,
+        *,
+        on: int | None = None,
+        conditions: Iterable[Condition] = (),
+        label: str = "",
+    ) -> Effect:
+        """Assume a stance. Whatever you were in, you are not in it now.
+
+        That last part is the whole of what makes a stance a stance -- one
+        at a time, and it lasts until you take another or the fight ends.
+        `When.STANCE` has been in the enum since durations were written and
+        nothing ever set it.
+
+        Returns the effect so a body can hang mods on it the usual way.
+        """
+        who = self._who(on) or self.me
+        previous = self.world.effects.stance_of(who)
+        if previous is not None:
+            self.world.effects.end(previous, "took another stance")
+        return self.world.effects.apply(
+            who, self.me, When.STANCE, label=label or self.ref, conditions=conditions
         )
 
     def rooted(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
