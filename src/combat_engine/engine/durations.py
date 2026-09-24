@@ -88,6 +88,10 @@ class Effect:
     #: What keeping this going costs, for a `When.SUSTAIN` effect. The
     #: printed line names it -- "Sustain Minor" is the common one.
     sustain_cost: ActionType | None = None
+    #: What ending it *deliberately* costs, when the printed line offers
+    #: that -- "reverting to your normal form is a minor action". Distinct
+    #: from `sustain_cost`: one keeps a thing alive, the other kills it.
+    drop_cost: ActionType | None = None
     ended: bool = False
 
     def __str__(self) -> str:
@@ -125,6 +129,7 @@ class Effects:
         subs: Iterable[Sub] = (),
         on_end: Iterable[Callable[[], None]] = (),
         sustain_cost: ActionType | None = None,
+        drop_cost: ActionType | None = None,
     ) -> Effect:
         self._next += 1
         clock = owner if when in _TARGET_CLOCKED else source
@@ -146,6 +151,7 @@ class Effects:
             on_end=list(on_end),
             sustained=self.world.round,
             sustain_cost=sustain_cost,
+            drop_cost=drop_cost,
         )
         self.live[eff.id] = eff
 

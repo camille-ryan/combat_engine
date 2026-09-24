@@ -120,6 +120,7 @@ class Condition(StrEnum):
     PRONE = "prone"
     REMOVED = "removed"
     RESTRAINED = "restrained"
+    SHAPED = "shaped"
     ROOTED = "rooted"
     SLOWED = "slowed"
     STUNNED = "stunned"

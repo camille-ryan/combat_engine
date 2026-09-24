@@ -3,11 +3,13 @@
 Two notes that apply to most of the rows below.
 
 A great many ranger powers print two attack lines at once -- "Strength vs.
-AC (melee) or Dexterity vs. AC (ranged)" -- and the header can hold only
-one. Every such row here is written as its **ranged** branch: the range line
-becomes `Ranged(10)`, the keywords carry `Keyword.RANGED` so `c.w()` rolls
-the bow rather than the blade, and the attack and damage lines take
-Dexterity. The melee branch of those rows is not expressible yet.
+AC (melee) or Dexterity vs. AC (ranged)". Those are `MeleeOrRanged`, with
+`attack_alt` carrying the second line, and each branch is offered as its
+own option: the melee one reaches 1 square, swings what is in hand and
+provokes nothing; the ranged one reaches 20, fires the bow and opens an
+opportunity window. The damage line reads `c.attack_mod`, which is the
+modifier of whichever ability that branch attacks with, rather than naming
+Dexterity and quietly being half right.
 
 The other recurring shape is "two attacks". That is just `c.strike()` twice
 in the body, which works because the body is per-target: a row that spreads
@@ -34,6 +36,7 @@ from combat_engine.engine import (
     Gear,
     Keyword,
     Melee,
+    MeleeOrRanged,
     Ranged,
     UpTo,
     When,
@@ -92,16 +95,17 @@ def p1505(c: Cast) -> None:
     cls="ranger",
     usage=AT_WILL,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=MeleeOrRanged(1, 20),
     target=ONE_CREATURE,
     keywords=MARTIAL_RANGED,
-    attack=Attack(DEX, vs=AC, plus=2),
+    attack=Attack(STR, vs=AC, plus=2),
+    attack_alt=Attack(DEX, vs=AC, plus=2),
     requires=_two_melee_or_ranged,
     requires_text="needs two melee weapons or a ranged weapon",
 )
 def p917(c: Cast) -> None:
     if c.strike():
-        c.damage(c.w(1), c.dex_mod)
+        c.damage(c.w(1), c.attack_mod)
 
 
 @power(
@@ -127,10 +131,11 @@ def p919(c: Cast) -> None:
     cls="ranger",
     usage=AT_WILL,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=MeleeOrRanged(1, 20),
     target=UpTo(2),
     keywords=MARTIAL_RANGED,
-    attack=Attack(DEX, vs=AC),
+    attack=Attack(STR, vs=AC),
+    attack_alt=Attack(DEX, vs=AC),
     requires=_two_melee_or_ranged,
     requires_text="needs two melee weapons or a ranged weapon",
 )
@@ -139,11 +144,16 @@ def p87(c: Cast) -> None:
 
     One target and both attacks go into it; two targets and each gets one.
     `c.first and c.last` is how a per-target body asks how many there are.
+
+    The melee branch is main weapon then off-hand, as printed; the ranged
+    branch is two shots from the same bow, so `hand` only matters on the
+    branch that has two hands in it.
     """
     shots = 2 if (c.first and c.last) else 1
-    for _ in range(shots):
+    for swing in range(shots):
+        hand = "off" if (swing and c.branch == 0) else "main"
         if c.strike():
-            c.damage(c.w(1))
+            c.damage(c.w(1, hand=hand), c.attack_mod)
 
 
 @power(
@@ -152,14 +162,15 @@ def p87(c: Cast) -> None:
     cls="ranger",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=MeleeOrRanged(1, 20),
     target=ONE_CREATURE,
     keywords=MARTIAL_RANGED,
-    attack=Attack(DEX, vs=AC),
+    attack=Attack(STR, vs=AC),
+    attack_alt=Attack(DEX, vs=AC),
 )
 def p1386(c: Cast) -> None:
     if c.strike():
-        c.damage(c.w(2), c.dex_mod)
+        c.damage(c.w(2), c.attack_mod)
     c.shift(1 + c.wis_mod)
 
 
@@ -187,19 +198,26 @@ def p1510(c: Cast) -> None:
     cls="ranger",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=MeleeOrRanged(1, 20),
     target=ONE_CREATURE,
     keywords=MARTIAL_RANGED,
-    attack=Attack(DEX, vs=AC),
+    attack=Attack(STR, vs=AC),
+    attack_alt=Attack(DEX, vs=AC),
     requires=_two_melee_or_ranged,
     requires_text="needs two melee weapons or a ranged weapon",
 )
 def p2209(c: Cast) -> None:
+    """Two swings, and a bonus if both land.
+
+    Main weapon then off-hand in melee, two shots at range -- the printed
+    line names the hands only for the branch that uses two.
+    """
     landed = 0
-    for _ in range(2):
+    for swing in range(2):
+        hand = "off" if (swing and c.branch == 0) else "main"
         if c.strike():
             landed += 1
-            c.damage(c.w(1), c.dex_mod)
+            c.damage(c.w(1, hand=hand), c.attack_mod)
     if landed == 2:
         c.flat(c.wis_mod)
 
@@ -288,18 +306,19 @@ def p393(c: Cast) -> None:
     cls="ranger",
     usage=DAILY,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=MeleeOrRanged(1, 20),
     target=ONE_CREATURE,
     keywords=MARTIAL_RANGED,
-    attack=Attack(DEX, vs=AC),
+    attack=Attack(STR, vs=AC),
+    attack_alt=Attack(DEX, vs=AC),
 )
 def p868(c: Cast) -> None:
     if c.strike():
-        c.damage(c.w(2), c.dex_mod)
+        c.damage(c.w(2), c.attack_mod)
         c.slowed(until=When.SAVE_ENDS)
         c.ongoing(5)
     else:
-        c.half_damage(c.w(2), c.dex_mod)
+        c.half_damage(c.w(2), c.attack_mod)
         c.slowed()
 
 

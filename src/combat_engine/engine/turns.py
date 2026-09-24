@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .components import Budget, Health, Initiative, Powers
+from .conditions import rules
 from .events import Died, RoundEnd, RoundStart, SavingThrow, TurnEnd, TurnStart
 from .query import active, alive, can_act, can_react, creatures, team
 from .types import DOWNGRADES, ActionType, Condition, Team, Usage
@@ -188,6 +189,10 @@ class Encounter:
         if what is ActionType.OPPORTUNITY:
             return can_react(self.world, eid) and budget.opportunity_turn != self._turn_stamp()
         if self.world.turn != eid or not can_act(self.world, eid):
+            return False
+        if what is ActionType.STANDARD and any(
+            rules(c).no_standard for c in active(self.world, eid)
+        ):
             return False
         if self._one_action(eid):
             return budget.standard + budget.move + budget.minor > 0

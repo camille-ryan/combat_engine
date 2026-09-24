@@ -30,6 +30,9 @@ class Rules:
     one_action: bool = False
     #: No immediate or opportunity actions.
     no_reactions: bool = False
+    #: No standard actions. A shape you assume rather than a thing
+    #: done to you -- it still moves, and it still acts otherwise.
+    no_standard: bool = False
     cannot_move: bool = False
     #: Speed is capped at this many squares.
     speed_cap: int | None = None
@@ -66,6 +69,7 @@ RULES: dict[Condition, Rules] = {
     Condition.MARKED: Rules(),  # the -2 needs to know who is being attacked
     Condition.PETRIFIED: Rules(cannot_act=True, cannot_move=True, helpless=True),
     Condition.PINNED: Rules(no_stand=True),
+    Condition.SHAPED: Rules(no_standard=True),
     Condition.PRONE: Rules(grants_ca=True, attack=-2),
     Condition.REMOVED: Rules(cannot_act=True, cannot_move=True),
     Condition.RESTRAINED: Rules(grants_ca=True, attack=-2, cannot_move=True),

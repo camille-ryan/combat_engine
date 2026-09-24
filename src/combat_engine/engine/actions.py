@@ -84,6 +84,7 @@ def legal(
     out.extend(_movement(world, encounter, actor))
     out.extend(_recovery(world, encounter, actor))
     out.extend(_sustaining(world, encounter, actor))
+    out.extend(_dropping(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
     return out
 
@@ -247,6 +248,24 @@ def _sustaining(world: World, encounter: Encounter, actor: int) -> list[Action]:
     return out
 
 
+def _dropping(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Ending something deliberately, where the printed line allows it.
+
+    "Reverting to your normal form is a minor action" is the shape: the
+    effect is yours, it is not going to expire on its own, and stepping out
+    of it costs something. Nothing could say that before -- an effect was
+    only ever ended by its duration running out.
+    """
+    out: list[Action] = []
+    for eff in sorted(world.effects.of(actor), key=lambda e: e.id):
+        if eff.drop_cost is None or not encounter.can_spend(actor, eff.drop_cost):
+            continue
+        out.append(
+            Action(kind="drop", cost=eff.drop_cost, subject=eff.id, ref=eff.label)
+        )
+    return out
+
+
 def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
     out: list[Action] = []
     if (
@@ -321,6 +340,13 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             return False
         world.effects.sustain(eff)
         world.bus.emit(Note(text=f"{eff.label or eff} sustained"))
+        return True
+
+    if action.kind == "drop":
+        eff = world.effects.live.get(action.subject or -1)
+        if eff is None:
+            return False
+        world.effects.end(eff, "ended deliberately")
         return True
 
     if action.kind == "second_wind":

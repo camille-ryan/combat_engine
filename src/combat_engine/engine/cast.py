@@ -102,6 +102,21 @@ class Cast:
     branch: int = 0
 
     @property
+    def attack_mod(self) -> int:
+        """The modifier of whatever ability *this branch* attacks with.
+
+        A weapon power's damage line is "<the attack ability> modifier
+        damage", and on a two-branch row that is Strength in melee and
+        Dexterity at range. Writing `c.dex_mod` in the body hard-codes one
+        half of a row that has two.
+        """
+        p = self._declared()
+        line = p.attack_of(self.branch) if p else None
+        if line is None or line.ability is None:
+            return 0
+        return self.stats.mod(line.ability)
+
+    @property
     def ranged(self) -> bool:
         """Is this use a ranged one? Asks the branch, not the keywords."""
         p = self._declared()
@@ -1214,6 +1229,62 @@ class Cast:
                 return sq
         return None
 
+
+    def mode(
+        self, name: str, speed: int, *, until: When = When.ENCOUNTER, on: int | None = None
+    ) -> Effect | None:
+        """Grant a way of moving -- fly, swim, climb -- for a while.
+
+        `Movement.modes` was only ever set when a creature was loaded, so a
+        power granting flight had nothing to write to.
+        """
+        from .components import Movement
+
+        who = self._who(on) or self.me
+        moves = self.world.get(who, Movement)
+        if moves is None:
+            return None
+        had = moves.modes.get(name)
+        moves.modes[name] = max(speed, had or 0)
+
+        def undo() -> None:
+            if had is None:
+                moves.modes.pop(name, None)
+            else:
+                moves.modes[name] = had
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} {name}", on_end=[undo]
+        )
+
+    def form(
+        self,
+        *,
+        conditions: Iterable[Condition] = (),
+        modes: dict[str, int] | None = None,
+        until: When = When.ENCOUNTER,
+        revert: ActionType | None = ActionType.MINOR,
+        label: str = "",
+    ) -> Effect:
+        """Assume a shape: some conditions, some ways of moving, and a way out.
+
+        A polymorph is not a stance -- you are not choosing between forms,
+        you are in one and may step out of it -- so `revert` is what leaving
+        costs rather than "taking another ends it".
+        """
+        effect = self.world.effects.apply(
+            self.me,
+            self.me,
+            until,
+            label=label or self.ref,
+            conditions=conditions,
+            drop_cost=revert,
+        )
+        for name, speed in (modes or {}).items():
+            granted = self.mode(name, speed, until=until)
+            if granted is not None:
+                effect.on_end.append(lambda g=granted: self.world.effects.end(g, "form ended"))
+        return effect
 
     def stance(
         self,
