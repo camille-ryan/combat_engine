@@ -86,3 +86,6 @@ Game systems are not able to be trademarked, but prose is. All potentially trade
   - HP damage makes the monster less dangerous. Sequential monsters die off at hp thresholds.
   - HP damage has no effect on the monster. It has all abilities until its full hp pool is depleted.
   - In all of these, control effects with single targets only disable one part of the monster.
+
+ ## Reflavoring
+ - The eventual story engine should be able to select monsters and reflavor them to fit the story. Usually this will be just generating their names and descriptions, but sometimes this may also involve changing damage types, e.g. from fire to necrotic. 
