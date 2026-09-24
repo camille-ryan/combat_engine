@@ -149,10 +149,17 @@ def is_trap(world: World, eid: int) -> bool:
     return world.get(eid, Trap) is not None
 
 
+def is_conjuration(world: World, eid: int) -> bool:
+    from .components import Conjuration
+
+    return world.get(eid, Conjuration) is not None
+
+
 def can_act(world: World, eid: int) -> bool:
-    # A trap has no hit points to be unconscious about. Without this it
-    # failed `conscious` and could never make the attack it exists to make.
-    if is_trap(world, eid):
+    # A trap and a conjuration have no hit points to be unconscious about.
+    # Without this they failed `conscious` and could never make the attack
+    # they exist to make.
+    if is_trap(world, eid) or is_conjuration(world, eid):
         return True
     return conscious(world, eid) and not any(rules(c).cannot_act for c in active(world, eid))
 

@@ -149,6 +149,34 @@ class Trap:
 
 
 @dataclass
+class Conjuration:
+    """A thing a power put on the board that is not a creature.
+
+    A sphere of flame, a spectral guardian, a blade of force. It has a
+    `Position` -- so it occupies its square, which `Grid.occupant` and
+    `movement._clear` enforce without knowing what it is -- and a
+    `Movement`, so its creator can walk it. It has no `Health` and no
+    `Side`, which is what keeps it out of `query.creatures`: no initiative
+    slot, no turn of its own, no vote on whether the fight is over.
+
+    `by` is who conjured it. Everything it does, it does on their orders and
+    with their numbers -- a conjuration rolls the caster's attack, not one
+    of its own.
+
+    Un-attackable, deliberately. Giving it hit points would hand it an
+    initiative slot and a say in the win condition, because
+    `creatures = having(Health, Position)` is simultaneously the roster, the
+    target pool and the end of the fight. Neither printed row that needs
+    this gives the thing hit points, so that split can wait until one does.
+    """
+
+    ref: str = ""
+    by: int = 0
+    #: The effect it lives on. Ending that despawns it.
+    effect: int = 0
+
+
+@dataclass
 class Build:
     """The choices a character makes once, at creation, and lives with.
 

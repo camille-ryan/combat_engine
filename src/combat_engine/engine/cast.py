@@ -51,7 +51,6 @@ from .types import (
     Relation,
     Window,
 )
-from .zones import Zone
 
 if TYPE_CHECKING:
     from .dsl import Damage
@@ -178,6 +177,16 @@ class Cast:
     def adjacent(self, to: int | None = None) -> bool:
         other = self._who(to)
         return other is not None and adjacent(self.world, self.me, other)
+
+    def adjacent_to(self, thing: int, who: int) -> bool:
+        """Is `who` standing next to `thing`? Works for a conjuration too.
+
+        `c.adjacent` measures from the caster; this measures between two
+        named entities, which is what "adjacent to the sphere" needs.
+        """
+        from .query import adjacent
+
+        return adjacent(self.world, thing, who)
 
     def can_see(self, to: int | None = None) -> bool:
         other = self._who(to)
@@ -559,7 +568,12 @@ class Cast:
     # -- attacking -----------------------------------------------------------
 
     def strike(
-        self, *, on: int | None = None, advantage: bool | None = None, plus: int = 0
+        self,
+        *,
+        on: int | None = None,
+        advantage: bool | None = None,
+        plus: int = 0,
+        from_: int | None = None,
     ) -> AttackResult:
         """Roll the attack the header declared.
 
@@ -578,6 +592,7 @@ class Cast:
             line.vs,
             on=on,
             advantage=advantage,
+            from_=from_,
         )
 
     def grant_attack(
@@ -708,12 +723,16 @@ class Cast:
         *,
         on: int | None = None,
         advantage: bool | None = None,
+        from_: int | None = None,
     ) -> AttackResult:
         who = self._who(on)
         if who is None:
             return AttackResult()
+        # `from_` moves only where the swing comes from -- reach, cover and
+        # flanking are measured from there. The numbers stay the caster's,
+        # which is what a conjuration is: your attack, its position.
         self.result = attack(
-            self.world, self.me, who, bonus, vs, self.ref,
+            self.world, from_ or self.me, who, bonus, vs, self.ref,
             advantage=advantage, opportunity=self.opportunity,
             among=tuple(self.targets) or (who,), branch=self.branch,
         )
@@ -1125,6 +1144,77 @@ class Cast:
             who, self.me, until, label=f"{self.ref} vulnerable", on_end=[undo]
         )
 
+    def conjure(
+        self,
+        at: Square | None = None,
+        *,
+        label: str = "",
+        until: When = When.SUSTAIN,
+        sustain: ActionType | None = ActionType.MINOR,
+        speed: int = 0,
+        aura: int = 0,
+        burn: tuple[int, DamageType] | None = None,
+    ) -> int:
+        """Put a conjuration on the board and return its entity id.
+
+        It occupies its square -- which is the clause a zone could never say
+        -- and nothing may walk through it. `speed` is how far its creator
+        may move it with a move action; `aura` gives it a footprint that
+        follows it, which is what "each creature adjacent to it" reads off
+        and is also the only reason it is drawn at all.
+
+        It rolls its creator's attacks. `c.from_(sphere)` is how a body
+        makes it swing.
+
+        `burn` gives the aura teeth -- "any creature that starts its turn
+        adjacent to it takes N" -- and is set here rather than by the caller
+        because the aura's id is made in this method and fishing it back out
+        of the zone list afterwards picks up whatever else is on the board.
+        """
+        from .components import Conjuration, Ident, Movement, Position
+        from .movement import place
+        from .types import Size
+
+        where = at or self._free_square_near(self.here)
+        if where is None:
+            return 0
+        name = label or self.ref
+        eid = self.world.spawn(
+            Ident(ref=f"c:{name}"),
+            Position(square=where, size=Size.MEDIUM),
+            Movement(speed=speed),
+            Conjuration(ref=name, by=self.me),
+        )
+        place(self.world, eid, where)
+        effect = self.world.effects.apply(
+            eid,
+            self.me,
+            until,
+            label=name,
+            sustain_cost=sustain if until is When.SUSTAIN else None,
+            on_end=[lambda: self._banish(eid)],
+        )
+        conj = self.world.get(eid, Conjuration)
+        if conj is not None:
+            conj.effect = effect.id
+        if aura:
+            ring = self.aura(aura, label=name, until=until, on=eid)
+            if burn is not None:
+                self.burns(ring, burn[0], burn[1])
+        return eid
+
+    def _banish(self, eid: int) -> None:
+        """Take a conjuration off the board when whatever held it ends."""
+        if self.world.get(eid, Position) is not None:
+            self.world.despawn(eid)
+
+    def _free_square_near(self, origin: Square) -> Square | None:
+        for sq in sorted(spread({origin}, 1) - {origin}):
+            if self.world.grid.passable(sq) and self.world.grid.occupant(sq) is None:
+                return sq
+        return None
+
+
     def stance(
         self,
         *,
@@ -1429,12 +1519,25 @@ class Cast:
         once-per-turn latch -- because writing them out per power would be
         three chances to get the latch wrong.
         """
-        from .events import TurnStart, ZoneEntered
 
         zone = self.zone(
             area, label=label, until=until, difficult=difficult,
             sustain=sustain if until is When.SUSTAIN else None,
         )
+        self.burns(zone, amount, dtype)
+        return zone
+
+    def burns(self, zone: int, amount: int, dtype: DamageType = DamageType.UNTYPED) -> None:
+        """Give an existing zone teeth: enter it or start a turn in it and it
+        bites, once per turn.
+
+        Split out of `hazard` so a zone somebody else made can have them --
+        a conjuration's aura is created with the conjuration, and the thing
+        that burns you for standing beside a sphere of flame is that aura
+        rather than a second zone laid over it.
+        """
+        from .events import TurnStart, ZoneEntered
+
         struck: dict[int, int] = {}
         source = self.me
 
@@ -1452,14 +1555,13 @@ class Cast:
             if not ev.ghost and ev.actor in self.world.zones.occupants(zone):
                 bite(ev.actor)
 
-        for event, fn in ((ZoneEntered, on_enter), (TurnStart, on_turn)):
-            sub = self.world.bus.on(event, fn, owner=source)
-            zone_effect = self.world.get(zone, Zone).effect
-            if zone_effect is not None:
-                zone_effect.subs.append(sub)
-        return zone
-
-    # -- choices and commentary ---------------------------------------------
+        held = dict(self.world.zones.all()).get(zone)
+        subs = [
+            self.world.bus.on(ZoneEntered, on_enter),
+            self.world.bus.on(TurnStart, on_turn),
+        ]
+        if held is not None and held.effect is not None:
+            held.effect.subs.extend(subs)
 
     def choose[T](
         self, options: list[T], prompt: str = "", *, optional: bool = False,

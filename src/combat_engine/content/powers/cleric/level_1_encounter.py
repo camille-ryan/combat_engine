@@ -243,16 +243,16 @@ def p914(c: Cast) -> None:
     ],
 )
 def p916(c: Cast) -> None:
-    """A standing thing in one square that lashes out at the end of a turn.
+    """A standing figure that occupies its square and lashes out beside it.
 
-    There is no conjuration in `Cast`, so it is a one-square zone plus a
-    watcher. Two printed clauses go unsaid: the thing occupies its square
-    (a zone does not), and a move action shifts it three squares (a zone
-    does not move).
+    A real conjuration now, which says the two clauses the zone version
+    could not: it stands in its square so nothing walks through it, and its
+    creator can walk it three squares with a move action.
 
-    The attack is rolled by hand rather than with `c.strike()`: it happens
-    outside the cast, against whoever's turn just ended, not against a
-    declared target.
+    The attack is rolled by hand rather than with `c.strike()` because it
+    happens outside the cast -- at the end of somebody else's turn, against
+    whoever that was -- and `from_` puts the swing where the figure is
+    rather than where the cleric is.
     """
     room = [
         sq
@@ -265,14 +265,18 @@ def p916(c: Cast) -> None:
     where = c.choose(sorted(useful or room), "where it stands")
     if where is None:
         return
-    beside = spread({where}, 1)
-    c.zone([where], until=When.ENCOUNTER)
+    guardian = c.conjure(
+        where, label="p916", until=When.ENCOUNTER, sustain=None, speed=3, aura=1
+    )
+    if not guardian:
+        return
 
     def lash(ev: TurnEnd) -> None:
-        if ev.ghost or ev.actor not in c.in_squares(beside, side="enemy"):
+        if ev.ghost or not c.adjacent_to(guardian, ev.actor):
             return
-        if c.attack(c.wis_, FORT, on=ev.actor):
+        if ev.actor not in c.enemies():
+            return
+        if c.attack(c.wis_, FORT, on=ev.actor, from_=guardian):
             c.damage("1d8", c.wis_mod, dtype=DamageType.RADIANT, on=ev.actor)
 
     c.watch(TurnEnd, lash, until=When.ENCOUNTER, label="p916")
-    c.note("p916: a move action would move it up to 3 squares -- a zone does not move")
