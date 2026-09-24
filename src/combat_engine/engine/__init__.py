@@ -95,6 +95,7 @@ from .triggers import (
     by_keyword,
     by_me,
     by_melee,
+    by_opportunity,
     by_ranged,
     cursed_by_me,
     either,

@@ -257,7 +257,11 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     # foes[0] included: it is the one the class features were aimed at,
     # so it is the cursed / quarried / marked one, and leaving it out of
     # the killing meant no row triggering on that ever fired.
-    for victim in (*foes, *_allies_of(world, caster)):
+    # The caster last, and only if nothing else worked: a death throe
+    # triggers on its own downfall, and a harness that only ever kills
+    # other people can never reach one. Three such rows were written and
+    # none had ever been exercised.
+    for victim in (*foes, *_allies_of(world, caster), caster):
         health = world.get(victim, Health)
         if health is None or health.hp <= 0:
             continue

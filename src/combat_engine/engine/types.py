@@ -68,6 +68,8 @@ class Keyword(StrEnum):
     RELIABLE = "reliable"
     STANCE = "stance"
     CONJURATION = "conjuration"
+    POLYMORPH = "polymorph"
+    DISEASE = "disease"
     ILLUSION = "illusion"
     TELEPORTATION = "teleportation"
     ZONE = "zone"

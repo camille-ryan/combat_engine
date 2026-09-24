@@ -155,6 +155,22 @@ class Effects:
         )
         self.live[eff.id] = eff
 
+        # Everything the effect installs goes on **before** anything is
+        # announced. It used to emit `ConditionApplied` first, so a listener
+        # that ended the effect during that emit -- which any reaction
+        # watching for a condition can do -- ran `end()` while the mods list
+        # was still empty. `end()` removed nothing, `apply()` then installed
+        # them anyway, and the creature kept a modifier with no live effect
+        # left to ever take it off. A permanent -2 to attack, from a save-ends
+        # effect that had already been saved against.
+        for eid, mod in eff.mods:
+            holder = self.world.get(eid, Mods)
+            if holder is None:
+                holder = self.world.add(eid, Mods())
+            holder.items.append(mod)
+        for kind, s, t in eff.relations:
+            self.world.relations.set(kind, s, t)
+
         conds = self.world.get(owner, Conditions)
         for c in eff.conditions:
             if conds is not None and conds.add(c):
@@ -163,13 +179,6 @@ class Effects:
                         source=source, target=owner, condition=c, duration=when.value
                     )
                 )
-        for eid, mod in eff.mods:
-            holder = self.world.get(eid, Mods)
-            if holder is None:
-                holder = self.world.add(eid, Mods())
-            holder.items.append(mod)
-        for kind, s, t in eff.relations:
-            self.world.relations.set(kind, s, t)
 
         if when is When.INSTANT:
             self.end(eff, "instant")

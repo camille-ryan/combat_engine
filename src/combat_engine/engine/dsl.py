@@ -608,7 +608,7 @@ def candidates(
     ]
 
 
-def usable(world: World, actor: int, p: Power) -> tuple[bool, str]:
+def usable(world: World, actor: int, p: Power, *, dying: bool = False) -> tuple[bool, str]:
     """Can this power be used, and if not, why not?
 
     The reason is returned rather than logged, because the interface shows it
@@ -617,7 +617,10 @@ def usable(world: World, actor: int, p: Power) -> tuple[bool, str]:
     from .components import Powers
     from .query import can_act
 
-    if not can_act(world, actor):
+    # `dying` is for the one row shape that answers its own downfall: a
+    # death throe fires *because* the creature has dropped, so refusing it
+    # for not being able to act refuses it for the very reason it exists.
+    if not dying and not can_act(world, actor):
         return False, "cannot act"
     powers = world.get(actor, Powers)
     if powers is not None:
@@ -726,7 +729,15 @@ def use(
     p = get(ref)
     if p is None:
         return False
-    ok, _why = usable(world, actor, p)
+    # A death throe answers the actor's own `Dropped`. It fires *because*
+    # the creature has gone down, so the ordinary "can it act?" gate would
+    # always refuse it -- which is why no row of that shape had ever fired.
+    dying = (
+        trigger is not None
+        and getattr(trigger, "actor", None) == actor
+        and not alive(world, actor)
+    )
+    ok, _why = usable(world, actor, p, dying=dying)
     if not ok:
         return False
 

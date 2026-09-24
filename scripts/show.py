@@ -95,13 +95,17 @@ def main() -> int:
 
     print("=== the board afterwards " + "=" * 45)
     for eid, ident in world.each(Ident):
+        # Not everything on the board is a creature. A zone, an aura and a
+        # conjuration all carry an `Ident` and no `Health`, and assuming
+        # otherwise crashed on any monster that puts up an aura.
         health = world.get(eid, Health)
+        hp = f"{health.hp:>4}/{health.max_hp}" if health else "       -"
         note = " <- the caster" if eid == caster else ""
         conds = world.get(eid, Conditions)
         tail = f"  [{', '.join(c.value for c in conds.active)}]" if conds and conds.active else ""
         pos = world.get(eid, Position)
         where = f" at {pos.square}" if pos else ""
-        print(f"  {ident!s:<12} {health.hp:>4}/{health.max_hp}{where}{tail}{note}")
+        print(f"  {ident!s:<12} {hp}{where}{tail}{note}")
     return 0
 
 

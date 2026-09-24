@@ -134,7 +134,15 @@ class Triggers:
         for eid in list(self.encounter.order):
             if ev.cancelled:
                 return
-            if not (alive(self.world, eid) and can_act(self.world, eid)):
+            # A creature may answer its **own** downfall. A death throe
+            # triggers on dropping to 0, and by the time `Dropped` is
+            # emitted the thing is no longer alive -- so the liveness check
+            # meant no row of that shape could ever be offered to anybody.
+            # Three were already written and none of them had ever fired.
+            about_itself = getattr(ev, "actor", None) == eid
+            if not about_itself and not (
+                alive(self.world, eid) and can_act(self.world, eid)
+            ):
                 continue
             for ref in self._answers(eid, ev, window):
                 self._ask(eid, ref, ev)
@@ -148,6 +156,7 @@ class Triggers:
         known = self.world.get(eid, Powers)
         if known is None:
             return []
+        dying = getattr(ev, "actor", None) == eid and not alive(self.world, eid)
         out = []
         for ref in known.all:
             p = get(ref)
@@ -159,11 +168,11 @@ class Triggers:
                 continue
             if (eid, ref) in _IN_FLIGHT:
                 continue
-            if not self.encounter.can_spend(eid, p.action):
+            if not dying and not self.encounter.can_spend(eid, p.action):
                 continue
             if not p.on.when(self.world, eid, ev):
                 continue
-            ok, _why = usable(self.world, eid, p)
+            ok, _why = usable(self.world, eid, p, dying=dying)
             if ok:
                 out.append(ref)
         return out
@@ -185,7 +194,8 @@ class Triggers:
         options = [ref, ""]
         if self.world.decide(eid, "trigger", options, p.on.text if p.on else "") != ref:
             return
-        if not self.encounter.spend(eid, p.action):
+        dying = getattr(ev, "actor", None) == eid and not alive(self.world, eid)
+        if not dying and not self.encounter.spend(eid, p.action):
             return
 
         _IN_FLIGHT.add((eid, ref))
@@ -302,6 +312,15 @@ def by_ranged(world: World, me: int, ev: Event) -> bool:
     if p is None:
         return False
     return p.reach_of(getattr(ev, "branch", 0)).kind in ("ranged", "area_burst")
+
+
+def by_opportunity(world: World, me: int, ev: Event) -> bool:
+    """Was this an opportunity attack? "When it makes one of those, ..."
+
+    Reads the flag the attack now carries. Before that flag existed the
+    question could not be asked at all, and rows printing it were left out.
+    """
+    return bool(getattr(ev, "opportunity", False))
 
 
 def leaves_me_out(world: World, me: int, ev: Event) -> bool:

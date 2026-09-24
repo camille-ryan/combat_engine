@@ -782,6 +782,12 @@ class Cast:
             among=tuple(self.targets) or (who,), branch=self.branch,
             ignore_cover=ignore_cover,
         )
+        # An interrupt may have moved the blow onto somebody else. The roll
+        # and the `Hit` already name the new target; without this the body's
+        # `c.hit()` still paid out against the old one, so one creature got
+        # hit and a different one took the damage.
+        if on is None and self.result.target and self.result.target != who:
+            self.target = self.result.target
         return self.result
 
     @property
@@ -862,7 +868,8 @@ class Cast:
         else:
             amount = self.world.rng.roll(dice).total + bonus if dice else bonus
         return deal_damage(
-            self.world, self.me, who, amount, dtype, detail or self.ref
+            self.world, self.me, who, amount, dtype, detail or self.ref,
+            opportunity=self.opportunity,
         )
 
     def half_damage(
@@ -878,12 +885,20 @@ class Cast:
         if who is None:
             return 0
         amount = (self.world.rng.roll(dice).total + bonus) // 2 if dice else bonus // 2
-        return deal_damage(self.world, self.me, who, amount, dtype, f"{self.ref} (half)")
+        return deal_damage(
+            self.world, self.me, who, amount, dtype, f"{self.ref} (half)",
+            opportunity=self.opportunity,
+        )
 
     def flat(self, amount: int, *, dtype: DamageType = DamageType.UNTYPED,
              on: int | None = None) -> int:
         who = self._who(on)
-        return 0 if who is None else deal_damage(self.world, self.me, who, amount, dtype, self.ref)
+        if who is None:
+            return 0
+        return deal_damage(
+            self.world, self.me, who, amount, dtype, self.ref,
+            opportunity=self.opportunity,
+        )
 
     def heal(self, amount: int, *, on: int | None = None) -> int:
         who = self._who(on)
@@ -1492,6 +1507,7 @@ class Cast:
         until: When = When.EONT,
         on: int | None = None,
         to: str | int = "me",
+        once: bool = False,
     ) -> Effect | None:
         """The target grants combat advantage -- to you, an ally, or your side.
 
@@ -1511,10 +1527,24 @@ class Cast:
             beneficiaries = [self.me, *self.allies()]
         else:
             beneficiaries = [self.me]
-        return self.world.effects.apply(
+        granted = self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} advantage",
             relations=[(Relation.GRANTS_CA_TO, who, b) for b in beneficiaries],
         )
+        if once:
+            # "Grants combat advantage to the *next* attack against it."
+            # `c.bonus` has had `once` all along and this had no equivalent,
+            # so rows wanting it hand-rolled the watch that spends it.
+            from .events import AttackRolled
+
+            def spend(ev: AttackRolled) -> None:
+                if ev.target == who and not granted.ended:
+                    self.world.effects.end(granted, "spent")
+
+            granted.subs.append(
+                self.world.bus.on(AttackRolled, spend, owner=self.me)
+            )
+        return granted
 
     def bonus(
         self,

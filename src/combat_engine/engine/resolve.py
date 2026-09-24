@@ -59,6 +59,10 @@ class AttackResult:
     target_defence: int = 0
     advantage: bool = False
     cancelled: bool = False
+    #: Who the blow finally landed on. Usually the creature it was aimed at
+    #: -- but an interrupt may move it, and then the body that rolled this
+    #: has to be told, or it deals its damage to the one that was missed.
+    target: int = 0
 
     def __bool__(self) -> bool:
         return self.hit
@@ -89,6 +93,7 @@ def attack(
         # target" -- and the closure captured the parameters instead, so
         # assigning `ev.target` did nothing at all and failed silently.
         attacker, target = declared.attacker, declared.target
+        result.target = target
         if not can_act(world, attacker) or not alive(world, target):
             result.cancelled = True
             return
@@ -163,6 +168,10 @@ def attack(
         # whichever branch was used -- so without this a ranged shot let a
         # creature react as though it had been swung at.
         rolled.branch = branch
+        # Was this an opportunity attack? Several rows key off that and no
+        # event said so -- the flag lived only in the roll's own context, so
+        # a creature could not react to being hit by one.
+        rolled.opportunity = opportunity
         world.bus.emit(rolled)
 
         # The defence is read **again**, after the roll has been announced.
@@ -173,9 +182,18 @@ def attack(
         # landed; this is what it is when the blow arrives.
         against = defence(world, target, vs, ctx)
         result.target_defence = against
-        result.critical = natural == 20
-        result.hit = natural == 20 or (natural != 1 and total >= against)
+        # From the **result**, not from the local `natural`/`total`. A
+        # listener in the window above may have changed the die -- that is
+        # the whole of what `c.reroll_attack` does -- and recomputing from
+        # the locals threw the new number away and judged the old one. Every
+        # reroll row in the tree was inert.
+        result.critical = result.natural == 20
+        result.hit = result.natural == 20 or (
+            result.natural != 1 and result.total >= against
+        )
 
+        # The `Hit`/`Miss` carries it too, so a row can answer "when it is
+        # hit by an opportunity attack".
         landed = (
             Hit(attacker=attacker, target=target, power=power, critical=result.critical)
             if result.hit
@@ -184,6 +202,7 @@ def attack(
         landed.result = result
         landed.among = among or (target,)
         landed.branch = branch
+        landed.opportunity = opportunity
         world.bus.emit(landed)
 
         # Attacking gives you away. Nothing broke hidden before, so a
@@ -196,6 +215,7 @@ def attack(
     announced = AttackDeclared(attacker=attacker, target=target, power=power, vs=vs)
     announced.among = among or (target,)
     announced.branch = branch
+    announced.opportunity = opportunity
     declared = world.bus.emit(announced, roll)
     if declared.cancelled:
         result.cancelled = True
@@ -253,6 +273,7 @@ def deal_damage(
     detail: str = "",
     *,
     from_attack: bool = True,
+    opportunity: bool = False,
 ) -> int:
     """Apply damage, honouring weakened, resistance, vulnerability and temp hp.
 
@@ -267,7 +288,12 @@ def deal_damage(
         # against the target until the end of the encounter" -- and for a
         # while this line was missing, so every one of them was stored and
         # never read. Nothing failed; the damage was simply never larger.
-        amount += _mods(world, source, "damage", {"target": target, "power": detail})
+        amount += _mods(
+            world, source, "damage",
+            # `opportunity` too: a flat rider on an opportunity attack could
+            # not be gated without it, since the ctx named only these two.
+            {"target": target, "power": detail, "opportunity": opportunity},
+        )
     if from_attack and deals_half(world, source):
         amount = amount // 2
 
