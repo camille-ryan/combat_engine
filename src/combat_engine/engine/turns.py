@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from .components import Budget, Health, Initiative, Powers
 from .conditions import rules
-from .events import Died, RoundEnd, RoundStart, SavingThrow, TurnEnd, TurnStart
+from .events import ActionSpent, Died, RoundEnd, RoundStart, SavingThrow, TurnEnd, TurnStart
 from .query import active, alive, can_act, can_react, creatures, team
 from .types import DOWNGRADES, ActionType, Condition, Team, Usage
 
@@ -250,6 +250,7 @@ class Encounter:
         """Take the action if it is available. Returns False if it was not."""
         if not self.can_spend(eid, what):
             return False
+        self.world.bus.emit(ActionSpent(actor=eid, cost=what))
         budget = self.world.need(eid, Budget)
         if what in (ActionType.FREE, ActionType.NONE):
             return True

@@ -23,7 +23,7 @@ from dataclasses import MISSING, asdict, dataclass, field, fields
 from typing import Any
 
 from .grid import Square
-from .types import Condition, DamageType, Defense, Forced, Relation, Window
+from .types import ActionType, Condition, DamageType, Defense, Forced, Relation, Window
 
 
 @dataclass
@@ -336,6 +336,19 @@ class RelationCleared(Event):
     source: int
     target: int
     why: str
+
+
+@dataclass
+class ActionSpent(Event):
+    """A creature used up an action. `Encounter.spend` is the one door.
+
+    Several rows read "whenever an enemy takes a standard or a move action",
+    and nothing announced one: `PowerUsed` misses a plain walk and counts a
+    move-action power twice.
+    """
+
+    actor: int
+    cost: ActionType
 
 
 @dataclass

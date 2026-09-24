@@ -137,6 +137,24 @@ def m188a0(c: Cast) -> None:
 
 
 @power(
+    "m188a1",
+    level=2,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m188a1(c: Cast) -> None:
+    """Rough ground costs it nothing when it steps.
+
+    The printed line is about shifting in particular and `c.ignores_difficult`
+    is about moving at all; nothing tells the two apart, so the broader
+    reading is the one that can be said -- the judgement m189a1 made.
+    """
+    c.ignores_difficult(until=When.ENCOUNTER)
+
+
+@power(
     "m188a2",
     level=2,
     usage=AT_WILL,

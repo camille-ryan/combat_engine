@@ -94,6 +94,9 @@ class Cast:
     #: The event this row was offered in answer to, for a triggered power.
     #: None for everything used on its own turn.
     trigger: Any = None
+    #: Was this swing a charge? Rides the same road `opportunity` does --
+    #: several rows print a rider that only applies on one.
+    charge: bool = False
     #: True when this use *is* an opportunity attack. Read by the attack
     #: context, so "+2 to AC against opportunity attacks" can be written.
     opportunity: bool = False
@@ -781,7 +784,7 @@ class Cast:
             self.world, from_ or self.me, who, bonus, vs, self.ref,
             advantage=advantage, opportunity=self.opportunity,
             among=tuple(self.targets) or (who,), branch=self.branch,
-            ignore_cover=ignore_cover, dying=self.dying,
+            ignore_cover=ignore_cover, dying=self.dying, charge=self.charge,
         )
         # An interrupt may have moved the blow onto somebody else. The roll
         # and the `Hit` already name the new target; without this the body's
@@ -1302,6 +1305,17 @@ class Cast:
         return None
 
 
+    def phasing(
+        self, *, until: When = When.ENCOUNTER, on: int | None = None
+    ) -> Effect | None:
+        """Move through earth, rock and anything else in the way.
+
+        A mode like any other, so it expires the same way. It still has to
+        *stop* somewhere legal -- this only says the wall is not a wall on
+        the way past.
+        """
+        return self.mode("phasing", self.speed_of(on or self.me), until=until, on=on)
+
     def mode(
         self, name: str, speed: int, *, until: When = When.ENCOUNTER, on: int | None = None
     ) -> Effect | None:
@@ -1547,6 +1561,44 @@ class Cast:
             "forced", squares_, on=on or self.me, until=until, kind="untyped"
         )
 
+    def on_sustain(self, effect: Effect | None, fn: Callable[[], None]) -> bool:
+        """What happens each time this effect is sustained.
+
+        "Sustain Minor: the target takes 1d6 + 3 damage and is pulled 3."
+        The clock refreshing was the whole of what sustaining did, so the
+        payout half of every such line had nowhere to go.
+        """
+        if effect is None:
+            return False
+        effect.on_sustain.append(fn)
+        return True
+
+    def no_basic(self, *, on: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
+        """Take away what this creature's basic attack *is*, not the ability.
+
+        "Cannot make basic attacks" bars the designation -- what a granted
+        swing reaches for, and what an opportunity attack rolls. A monster's
+        basic attack is one of its own abilities, so forbidding the ref would
+        stop it using that ability at all, which the printed line does not
+        say.
+        """
+        from .components import Powers
+
+        who = on or self.me
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        was, was_opp = known.basic, known.opportunity
+
+        def restore() -> None:
+            known.basic, known.opportunity = was, was_opp
+
+        known.basic, known.opportunity = "", ""
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} no basic attack",
+            on_end=[restore],
+        )
+
     def absorb(self, ev: Any = None, *, on: int | None = None) -> int:
         """Take damage somebody else was about to suffer.
 
@@ -1579,7 +1631,7 @@ class Cast:
         if to is None:
             # The line that tramples the most. Picking the destination is
             # the whole of the decision, so it is offered rather than taken.
-            here = reachable(self.world, self.me, self.speed)
+            here = reachable(self.world, self.me, self.speed_of())
             if not here:
                 return []
             to = self.world.decide(self.me, "overrun", sorted(here), "trample to")

@@ -151,7 +151,17 @@ def _basic(stock: Stock) -> str:
     for a in stock.abilities:
         if a["ref"] in REGISTRY and a["section"] == "standard":
             declared = REGISTRY[a["ref"]]
-            if declared.action is ActionType.STANDARD and declared.reach.kind == "melee":
+            # It has to *be* an attack. A stat block whose only standard
+            # melee row is an Effect line got that row named as its basic,
+            # which dropped the engine's own melee basic out of `Powers.all`
+            # -- so the creature had no attack at all, not even an
+            # opportunity attack, which is the exact silence this exists to
+            # prevent. And a body calling `c.basic()` called itself.
+            if (
+                declared.action is ActionType.STANDARD
+                and declared.reach.kind == "melee"
+                and declared.attack is not None
+            ):
                 return a["ref"]
     return MELEE
 

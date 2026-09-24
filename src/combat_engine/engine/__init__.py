@@ -92,6 +92,7 @@ from .triggers import (
     about_me,
     ally_within,
     both,
+    by_charge,
     by_keyword,
     by_me,
     by_melee,

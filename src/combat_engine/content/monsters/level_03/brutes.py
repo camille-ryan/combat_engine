@@ -31,6 +31,7 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     Attack,
+    Budget,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -38,8 +39,10 @@ from combat_engine.engine import (
     Damage,
     DamageType,
     Defense,
+    Effect,
     Health,
     Ident,
+    Initiative,
     Keyword,
     Melee,
     Position,
@@ -47,12 +50,16 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     Size,
+    Square,
+    Stats,
     UpTo,
     Usage,
     When,
+    Window,
     World,
     distance,
     power,
+    spread,
 )
 from combat_engine.engine.dsl import use
 from combat_engine.engine.events import (
@@ -62,19 +69,27 @@ from combat_engine.engine.events import (
     DamageApplied,
     DamageRolled,
     Dropped,
+    Healed,
     Hit,
     Miss,
     TurnEnd,
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED
-from combat_engine.engine.query import alive, distance_between, flanked_by, team
+from combat_engine.engine.query import (
+    alive,
+    distance_between,
+    flanked_by,
+    squares,
+    team,
+)
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
     ally_within,
     both,
     by_melee,
+    by_ranged,
     hits_me,
     targets_me,
 )
@@ -133,6 +148,41 @@ def _beside(c: Cast, square: tuple[int, int], who: int) -> bool:
     return pos is not None and distance(square, pos.square) <= 1
 
 
+def _trample_to(c: Cast) -> Square | None:
+    """Where a trample is aimed, offered through the world's decider.
+
+    `c.overrun()` picks its own destination when given none, off a
+    `Cast.speed` that does not exist -- so the choice is made here instead,
+    the same way and through the same decider. See the report.
+    """
+    options = c.world.reachable_squares(c.me, c.speed_of())
+    if not options:
+        return None
+    return c.world.decide(c.me, "overrun", options, f"{c.ref}: trample to")
+
+
+def _squeezes_freely(c: Cast) -> None:
+    """Folding into a small space costs this creature nothing.
+
+    Half speed, the -5 to attacks and the combat advantage it hands out are
+    the *whole* of what `Condition.SQUEEZING` is, and the printed line
+    waives all three -- so the hold is taken off as it lands rather than
+    three separate counterweights being written against it. `Effects.apply`
+    installs everything before it announces, which is what makes ending an
+    effect from inside `ConditionApplied` safe.
+    """
+    me, ref = c.me, c.ref
+
+    def unsqueeze(ev: ConditionApplied) -> None:
+        if ev.target != me or ev.condition is not Condition.SQUEEZING:
+            return
+        for eff in list(c.world.effects.of(me)):
+            if Condition.SQUEEZING in eff.conditions:
+                c.world.effects.end(eff, ref)
+
+    c.watch(ConditionApplied, unsqueeze, until=When.ENCOUNTER, on=me, label=ref)
+
+
 # -- m241 -------------------------------------------------------------------
 
 
@@ -157,6 +207,44 @@ def m241a0(c: Cast) -> None:
         c.damage("2d10", 5)
     else:
         c.hit()
+
+
+@power(
+    "m241a1",
+    level=3,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m241a1(c: Cast) -> None:
+    """Half of a printed line, and the half that can be said.
+
+    "Loses the ability to use m241a2" is `c.forbid`. "Can do nothing but
+    attack the nearest enemy, charging when possible" is a constraint on
+    what the policy may *choose*, not a rule the engine holds, and is left
+    to issue #89 rather than approximated here.
+
+    No duration says "while bloodied", so the hold goes on when the crossing
+    is announced and comes off again if the creature is mended back above
+    half -- which is what the word "while" is doing.
+    """
+    me = c.me
+    held: list[Effect] = []
+
+    def berserk(ev: Bloodied) -> None:
+        if ev.actor != me or held:
+            return
+        effect = c.forbid("m241a2", on=me, until=When.ENCOUNTER)
+        if effect is not None:
+            held.append(effect)
+
+    def mended(ev: Healed) -> None:
+        if ev.target == me and held and not c.bloodied(me):
+            c.world.effects.end(held.pop(), "no longer bloodied")
+
+    c.watch(Bloodied, berserk, until=When.ENCOUNTER, on=me, label="m241a1")
+    c.watch(Healed, mended, until=When.ENCOUNTER, on=me, label="m241a1 mended")
 
 
 _M241_MISSED = "the m241 is missed by a melee attack"
@@ -666,6 +754,36 @@ def m2979a5(c: Cast) -> None:
 
 
 @power(
+    "m298a0",
+    level=3,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m298a0(c: Cast) -> None:
+    """A step in before the swing and a step out after it.
+
+    Both hang off the one announcement: `Bus.emit` runs the BEFORE window,
+    then the attack itself, then the AFTER window, so the two ends of
+    `AttackDeclared` are exactly the "before" and "after" the line prints.
+    Which attacks count is the flag the roll now carries rather than a guess
+    at the ref.
+    """
+    me = c.me
+
+    def sidestep(ev: AttackDeclared) -> None:
+        if ev.attacker == me and getattr(ev, "opportunity", False):
+            c.shift(1)
+
+    c.watch(
+        AttackDeclared, sidestep, until=When.ENCOUNTER, window=Window.BEFORE,
+        on=me, label="m298a0 in",
+    )
+    c.watch(AttackDeclared, sidestep, until=When.ENCOUNTER, on=me, label="m298a0 out")
+
+
+@power(
     "m298a1",
     level=3,
     usage=AT_WILL,
@@ -678,6 +796,39 @@ def m2979a5(c: Cast) -> None:
 def m298a1(c: Cast) -> None:
     if c.strike():
         c.hit()
+
+
+_M298_WARD = "an adjacent enemy attacks a creature the m298 is guarding"
+
+
+def _struck_my_ward(world: World, me: int, ev: AttackDeclared) -> bool:
+    """Neither half of the printed sentence is a ready-made predicate: the
+    guard is a relation, and the adjacency is to the attacker rather than to
+    whoever was swung at."""
+    if ev.attacker == me or ev.target == me:
+        return False
+    if not world.relations.holds(Relation.GUARDED_BY, me, ev.target):
+        return False
+    return (
+        team(world, ev.attacker) is not team(world, me)
+        and distance_between(world, me, ev.attacker) <= 1
+    )
+
+
+@power(
+    "m298a2",
+    level=3,
+    usage=AT_WILL,
+    action=REACTION,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+    trigger=_M298_WARD,
+    on=Trigger(AttackDeclared, when=_struck_my_ward, text=_M298_WARD),
+)
+def m298a2(c: Cast) -> None:
+    """A melee basic attack, which for a monster is one of its own rows --
+    `c.basic` reads `Powers.basic` rather than swinging a generic sword."""
+    c.basic()
 
 
 # -- m3031 ------------------------------------------------------------------
@@ -852,6 +1003,50 @@ def m3039a4(c: Cast) -> None:
     )
 
 
+_M3039_SHARED = "a m3039 ally uses m3039a4 to deal damage to the m3039"
+
+
+def _kin_shared_with_me(world: World, me: int, ev: DamageRolled) -> bool:
+    """The share m3039a4 sends this way: that row deals it flat, so the
+    damage carries its ref in `detail` and nothing else on the board does."""
+    probe = Cast(world=world, me=me, ref="m3039a5")
+    return (
+        ev.target == me
+        and ev.amount > 0
+        and ev.detail == "m3039a4"
+        and _same_row(probe, ev.source, "m3039")
+    )
+
+
+@power(
+    "m3039a5",
+    level=3,
+    usage=AT_WILL,
+    action=FREE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    trigger=_M3039_SHARED,
+    on=Trigger(DamageRolled, when=_kin_shared_with_me, text=_M3039_SHARED),
+)
+def m3039a5(c: Cast) -> None:
+    """Takes the other half too, so the ally that split the blow keeps none.
+
+    What is answered here is the *share*; what has to be taken over is the
+    remainder still sitting on the ally, and that is the event this one was
+    raised inside. `Bus.emit` nests, so the enclosing event is the last one
+    in the log at a shallower depth -- and `c.absorb` zeroes it and deals it
+    here, which is the only way damage already rolled can change hands.
+    """
+    ev = c.trigger
+    if ev is None:
+        return
+    parent = next(
+        (e for e in reversed(c.world.bus.log[: ev.seq]) if e.depth < ev.depth), None
+    )
+    if isinstance(parent, DamageRolled) and parent.target == ev.source:
+        c.absorb(parent)
+
+
 _M3039_DOWN = "the m3039 drops to 0 hit points"
 
 
@@ -879,6 +1074,19 @@ def m3039a6(c: Cast) -> None:
 
 
 # -- m371 -------------------------------------------------------------------
+
+
+@power(
+    "m371a0",
+    level=3,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m371a0(c: Cast) -> None:
+    """An ooze pours through a gap without slowing down or opening up."""
+    _squeezes_freely(c)
 
 
 @power(
@@ -910,7 +1118,71 @@ def m371a2(c: Cast) -> None:
     c.shift(4)
 
 
+_M371_SPLITS = "the m371 becomes bloodied"
+
+
+@power(
+    "m371a3",
+    level=3,
+    usage=ENCOUNTER,
+    action=FREE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    trigger=_M371_SPLITS,
+    on=Trigger(Bloodied, when=about_me, text=_M371_SPLITS),
+)
+def m371a3(c: Cast) -> None:
+    """It comes apart, and each half has half of what was left.
+
+    `c.summon` is the whole of it: `loader.spawn` alone would leave the
+    second one standing outside the initiative order, never acting. The hit
+    points are *set* rather than dealt, because the printed line divides
+    what is there and does not damage anybody -- and nothing carries over,
+    which is already true of a creature that has only just been made.
+    """
+    health = c.world.get(c.me, Health)
+    if health is None:
+        return
+    twin = c.summon("m371")
+    if not twin:
+        return
+    half = max(1, health.hp // 2)
+    health.hp = half
+    other = c.world.get(twin, Health)
+    if other is not None:
+        other.hp = half
+    c.note(f"m371a3: {c.me} splits, {half} hit points each")
+
+
 # -- m416 -------------------------------------------------------------------
+
+
+@power(
+    "m416a0",
+    level=3,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m416a0(c: Cast) -> None:
+    """Both halves key off the flag the attack now carries.
+
+    The +2 is a gated modifier, read at the moment of the roll. The extra
+    die cannot be: a damage modifier is a flat number, so it is rolled as
+    the blow lands instead.
+    """
+    me = c.me
+    c.bonus(
+        "attack", 2, until=When.ENCOUNTER, on=me,
+        when=lambda ctx: bool(ctx.get("opportunity")),
+    )
+
+    def press(ev: Hit) -> None:
+        if ev.attacker == me and getattr(ev, "opportunity", False):
+            c.damage("1d6", on=ev.target, detail="m416a0")
+
+    c.watch(Hit, press, until=When.ENCOUNTER, on=me, label="m416a0")
 
 
 @power(
@@ -949,7 +1221,105 @@ def m476a0(c: Cast) -> None:
         c.hit()
 
 
+@power(
+    "m476a1",
+    level=3,
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Melee(1),
+    target=NO_TARGET,
+    attack=Attack(vs=REF, printed=4),
+    damage=Damage("1d6", 6),
+)
+def m476a1(c: Cast) -> None:
+    """Straight through whoever is in the way.
+
+    `c.overrun` walks the line and reports whose square was entered, in
+    order, which is the only way a trample can be written: `c.move` refuses
+    an occupied square and says nothing about what it passed. Whom it
+    catches is decided by the route, so the row declares no targets -- the
+    attack line is still data in the header and `c.strike(on=...)` rolls it
+    against each one in turn.
+    """
+    where = _trample_to(c)
+    if where is None:
+        return
+    for who in c.overrun(where):
+        if c.strike(on=who):
+            c.hit(on=who)
+            c.prone(on=who)
+
+
+#: What the printed Requirement asks of whoever is in the saddle. The feat
+#: it also asks for has no counterpart -- monsters carry no feats -- and is
+#: not tested.
+MOUNTED_RIDER_LEVEL = 3
+
+
+@power(
+    "m476a2",
+    level=3,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    requires_text="the m476 must be carrying a friendly rider of 3rd level or higher",
+)
+def m476a2(c: Cast) -> None:
+    """The bonus its rider gets, added to the damage roll as it is made.
+
+    Who is in the saddle is asked at the moment of the roll rather than
+    handed a modifier when the trait arms, because a rider mounts and falls
+    off mid-fight. The printed line limits the bonus to charge attacks and
+    the engine has no charge, so it is not gated on one; see the report.
+    """
+    me = c.me
+
+    def spur(ev: DamageRolled) -> None:
+        rider = c.rider()
+        if rider is None or ev.source != rider or ev.amount <= 0:
+            return
+        if team(c.world, rider) is not team(c.world, me):
+            return
+        stats = c.world.get(rider, Stats)
+        if stats is not None and stats.level >= MOUNTED_RIDER_LEVEL:
+            ev.amount += 5
+
+    c.watch(DamageRolled, spur, until=When.ENCOUNTER, on=me, label="m476a2")
+
+
 # -- m4851 ------------------------------------------------------------------
+
+
+@power(
+    "m4851a0",
+    level=3,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m4851a0(c: Cast) -> None:
+    """An aura 1, and inside it its master takes half of what is aimed at it.
+
+    Halved on the damage roll rather than by handing the master resistance:
+    resistance is held per damage type and this is every melee or ranged
+    blow, whatever it happens to be made of. Who the master is and where it
+    is standing are both asked as the blow lands, since either can change.
+    """
+    c.aura(1, until=When.ENCOUNTER)
+    me = c.me
+
+    def shelter(ev: DamageRolled) -> None:
+        master = c.master()
+        if master is None or ev.target != master or ev.amount <= 0:
+            return
+        if distance_between(c.world, me, master) > 1:
+            return
+        if by_melee(c.world, me, ev) or by_ranged(c.world, me, ev):
+            ev.amount //= 2
+
+    c.watch(DamageRolled, shelter, until=When.ENCOUNTER, on=me, label="m4851a0")
 
 
 @power(
@@ -982,6 +1352,32 @@ def m4851a2(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.mark()
+
+
+@power(
+    "m4851a3",
+    level=3,
+    usage=AT_WILL,
+    action=MOVE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.TELEPORTATION],
+)
+def m4851a3(c: Cast) -> None:
+    """Blinks back to its master's side, as far as its speed will carry it.
+
+    The destination is named rather than left to the decider -- "a square
+    adjacent to its master" is an instruction, not a choice. `c.teleport`
+    refuses a square out of range, blocked or occupied, so the squares round
+    the master are simply tried in turn.
+    """
+    master = c.master()
+    if master is None:
+        return
+    taken = squares(c.world, master)
+    for sq in sorted(spread(taken, 1) - taken):
+        if c.teleport(c.speed_of(), to=sq):
+            return
 
 
 # -- m4925 ------------------------------------------------------------------
@@ -1154,6 +1550,109 @@ def m495a0(c: Cast) -> None:
                 c.world.effects.end(eff, "m495a0")
 
     c.watch(TurnEnd, shake_off, until=When.ENCOUNTER, on=me, label="m495a0")
+
+
+#: What would stop the extra move, and ends instead of stopping it.
+_M495_HELD_FAST = (Condition.STUNNED, Condition.DOMINATED)
+
+
+@power(
+    "m495a1",
+    level=3,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m495a1(c: Cast) -> None:
+    """A second slot in the order, and the trample that is all it is for.
+
+    `c.extra_turn` is how a creature acts at an initiative count other than
+    its own. The spliced slot always sorts above its own -- 10 higher -- so
+    the *first* of its turns in each round is that one: the trample happens
+    there, and the rest of that turn's budget is spent, because the printed
+    line buys a free action move and not a whole second turn.
+
+    Two things are left out. "Resist 5 to all damage during the move" has
+    nowhere to go: resistance is held per damage type and there is no
+    all-damage entry. The stun or domination that would have stopped the
+    move ends instead of it, as printed.
+    """
+    me = c.me
+    slots: dict[int, int] = {}
+
+    def trample(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != me:
+            return
+        slots[c.world.round] = slots.get(c.world.round, 0) + 1
+        if slots[c.world.round] != 1:
+            return
+        gripped = [
+            eff
+            for eff in c.world.effects.of(me)
+            if any(cond in _M495_HELD_FAST for cond in eff.conditions)
+        ]
+        if gripped:
+            for eff in gripped:
+                c.world.effects.end(eff, "m495a1")
+            return
+        where = _trample_to(c)
+        if where is not None:
+            _run_down(c, c.overrun(where))
+        budget = c.world.get(me, Budget)
+        if budget is not None:
+            budget.standard = budget.move = budget.minor = 0
+
+    init = c.world.get(me, Initiative)
+    if init is not None:
+        c.extra_turn(init.rolled + 10)
+    c.watch(TurnStart, trample, until=When.ENCOUNTER, on=me, label="m495a1")
+
+
+def _run_down(c: Cast, caught: list[int]) -> None:
+    """m495a4 against each creature the trample went through, and the fall.
+
+    The row that prints the attack is used rather than copied, so its damage
+    line stays in one place -- and `use` reports that a power went off, not
+    that it hit, so the hits are counted off the bus for the run.
+    """
+    me = c.me
+    landed: set[int] = set()
+
+    def tally(ev: Hit) -> None:
+        if ev.attacker == me:
+            landed.add(ev.target)
+
+    sub = c.world.bus.on(Hit, tally, owner=me)
+    try:
+        for who in caught:
+            use(c.world, me, "m495a4", targets=[who], spend=False)
+            if who in landed:
+                c.prone(on=who)
+    finally:
+        c.world.bus.off(sub)
+
+
+@power(
+    "m495a2",
+    level=3,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m495a2(c: Cast) -> None:
+    """17-20, and only once it is hurt.
+
+    `crit_range` is read as a modifier at the moment of the roll, so "while
+    bloodied" is a gate on the modifier rather than something put on and
+    taken off as its hit points cross back and forth.
+    """
+    me = c.me
+    c.bonus(
+        "crit_range", 3, until=When.ENCOUNTER, on=me,
+        when=lambda _ctx: c.bloodied(me),
+    )
 
 
 @power(

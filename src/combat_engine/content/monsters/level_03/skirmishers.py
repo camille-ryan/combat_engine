@@ -67,6 +67,7 @@ from combat_engine.engine import (
     Relation,
     Size,
     Square,
+    Stats,
     Usage,
     When,
     World,
@@ -95,6 +96,7 @@ from combat_engine.engine.query import (
     enemies,
     flanked_by,
     squares,
+    team,
 )
 from combat_engine.engine.triggers import Trigger, by_me
 
@@ -803,6 +805,47 @@ def m3071a2(c: Cast) -> None:
     """No damage: the whole of the hit line is the flinch it puts in them."""
     if c.strike():
         c.penalty("attack", 2, until=When.SAVE_ENDS)
+
+
+#: What the printed Requirement asks of whoever is in the saddle.
+_M3071_RIDER_LEVEL = 3
+
+
+@power(
+    "m3071a3",
+    level=3,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    requires_text="the m3071 must be carrying a friendly rider of 3rd level or higher",
+)
+def m3071a3(c: Cast) -> None:
+    """When it runs somebody down, whoever is on its back swings as well.
+
+    Hung on `PowerUsed` rather than written into m3071a1: that is a separate
+    row and cannot reach this one. The announcement comes before the body,
+    so the rider strikes at the same moment the mount does rather than part
+    way along the move -- there is no event for a power having finished.
+
+    Only the basic attack is granted. The printed alternative -- forgoing
+    both attacks to use one of the rider's own melee powers instead --
+    would need "the rider's melee attack powers" enumerated, and nothing
+    can ask a creature that.
+    """
+    me = c.me
+
+    def alongside(ev: PowerUsed) -> None:
+        if ev.actor != me or ev.power != "m3071a1" or not ev.targets:
+            return
+        rider = c.rider()
+        if rider is None or team(c.world, rider) is not team(c.world, me):
+            return
+        stats = c.world.get(rider, Stats)
+        if stats is not None and stats.level >= _M3071_RIDER_LEVEL:
+            c.grant_attack(rider, on=ev.targets[0])
+
+    c.watch(PowerUsed, alongside, until=When.ENCOUNTER, on=me, label="m3071a3")
 
 
 # --------------------------------------------------------------------------

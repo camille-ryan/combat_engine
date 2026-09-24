@@ -45,8 +45,10 @@ from combat_engine.engine import (
     UpTo,
     Usage,
     When,
+    Window,
     World,
     distance,
+    get,
     power,
 )
 from combat_engine.engine.events import (
@@ -54,8 +56,10 @@ from combat_engine.engine.events import (
     AdjacencyLost,
     AttackDeclared,
     Bloodied,
+    ConditionApplied,
     DamageApplied,
     Dropped,
+    ForcedMove,
     Hit,
     TurnEnd,
     TurnStart,
@@ -75,6 +79,15 @@ from combat_engine.engine.triggers import (
 
 #: The four defences, for the rows whose penalty is to all of them at once.
 ALL_DEFENCES = (Defense.AC, Defense.FORT, Defense.REF, Defense.WILL)
+
+#: The reaches a printed "by melee or ranged attacks" covers. A burst is
+#: neither, which is the whole point of the rows that name these two.
+HAND_OR_BOW = ("melee", "ranged")
+
+#: The other two conditions a creature that has dropped is carrying. A hold
+#: with any of them in it is the one `_check_down` laid on, and ending it to
+#: cancel the prone would stand the creature back up out of unconsciousness.
+DOWNED = (Condition.UNCONSCIOUS, Condition.DYING)
 
 
 def _same_row(c: Cast, who: int, ref: str) -> bool:
@@ -184,6 +197,40 @@ def m2830a0(c: Cast) -> None:
         c.flat(3 + 2 * _crowd(c, ev.actor, "m2830"), on=ev.actor)
 
     c.watch(TurnStart, swarm, until=When.ENCOUNTER, on=me, label="m2830a0")
+
+
+@power(
+    "m2830a1",
+    level=2,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m2830a1(c: Cast) -> None:
+    """Only the middle sentence of the printed three can be said.
+
+    Sharing a square is a standing property of the creature and `share=` is
+    an argument to one move, so nothing can make this one's space enterable
+    by an enemy or difficult for whoever steps in; squeezing through a gap
+    has no combat content at all. What is left is a complete printed
+    sentence: `c.immovable` refuses *all* forced movement and this one is
+    refused only from a melee or a ranged attack, so the listener is written
+    out and gated on the reach of whatever shoved it.
+    """
+    me = c.me
+
+    def brace(ev: ForcedMove) -> None:
+        if ev.target != me:
+            return
+        p = get(ev.power)
+        if p is not None and p.reach.kind in HAND_OR_BOW:
+            ev.cancel("m2830a1")
+
+    c.watch(
+        ForcedMove, brace, until=When.ENCOUNTER, window=Window.BEFORE, on=me,
+        label="m2830a1",
+    )
 
 
 @power(
@@ -442,6 +489,39 @@ def m3028a2(c: Cast) -> None:
         on=c.me,
         when=lambda _ctx: bool([a for a in c.within(1, side="ally") if a != c.me]),
     )
+
+
+@power(
+    "m3028a3",
+    level=2,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m3028a3(c: Cast) -> None:
+    """Never off its feet, and never moved against its will.
+
+    Forced movement is `c.immovable`. "Cannot be knocked prone" has no card
+    of its own -- nothing refuses a condition before it lands -- so the hold
+    carrying it is ended the moment it is announced, which `Effects.apply`
+    installs everything ahead of the announcement precisely to allow. The
+    bundle a creature gets for dropping to 0 is left alone: ending that one
+    would stand it back up out of unconsciousness.
+    """
+    me = c.me
+    c.immovable(until=When.ENCOUNTER, on=me)
+
+    def stay_up(ev: ConditionApplied) -> None:
+        if ev.target != me or ev.condition is not Condition.PRONE:
+            return
+        for eff in list(c.world.effects.of(me)):
+            if Condition.PRONE in eff.conditions and not any(
+                cond in DOWNED for cond in eff.conditions
+            ):
+                c.world.effects.end(eff, "m3028a3")
+
+    c.watch(ConditionApplied, stay_up, until=When.ENCOUNTER, on=me, label="m3028a3")
 
 
 # -- m3029 ------------------------------------------------------------------

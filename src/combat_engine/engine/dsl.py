@@ -719,6 +719,7 @@ def use(
     spend: bool = True,
     trigger: Any = None,
     opportunity: bool = False,
+    charge: bool = False,
     branch: int = 0,
 ) -> bool:
     """Use a power. Returns False if it could not be used.
@@ -765,6 +766,7 @@ def use(
         origin=origin,
         trigger=trigger,
         opportunity=opportunity,
+        charge=charge,
         branch=branch,
     )
     cast.used()

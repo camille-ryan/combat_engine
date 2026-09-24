@@ -84,6 +84,11 @@ class Effect:
     escalate: Callable[[Effect], None] | None = None
     subs: list[Sub] = field(default_factory=list)
     on_end: list[Callable[[], None]] = field(default_factory=list)
+    #: Runs each time the effect is sustained. A sustain line that also
+    #: deals damage or moves somebody has a payout half, and the clock
+    #: refreshing was all that ever happened -- so that half was silently
+    #: dropped from every row of that shape in the game.
+    on_sustain: list[Callable[[], None]] = field(default_factory=list)
     sustained: int = -1
     #: What keeping this going costs, for a `When.SUSTAIN` effect. The
     #: printed line names it -- "Sustain Minor" is the common one.
@@ -289,6 +294,8 @@ class Effects:
 
     def sustain(self, eff: Effect) -> None:
         eff.sustained = self.world.round
+        for fn in list(eff.on_sustain):
+            fn()
 
     # -- the clock -----------------------------------------------------------
 

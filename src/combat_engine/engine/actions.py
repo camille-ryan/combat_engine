@@ -15,9 +15,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .components import Health, Powers
+from .components import Budget, Health, Powers
 from .dsl import aim_points, candidates, get, usable
-from .grid import Square
+from .grid import Square, spread
 from .query import alive, can_act, is_
 from .types import ActionType, Condition, Usage
 
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Action:
-    kind: str  # power | move | shift | stand | second_wind | sustain | end
+    kind: str  # power | move | shift | charge | stand | second_wind | sustain | end
     cost: ActionType
     ref: str = ""
     targets: tuple[int, ...] = ()
@@ -82,6 +82,7 @@ def legal(
 
     out.extend(_powers(world, encounter, actor, include_blocked))
     out.extend(_movement(world, encounter, actor))
+    out.extend(_charges(world, encounter, actor))
     out.extend(_recovery(world, encounter, actor))
     out.extend(_sustaining(world, encounter, actor))
     out.extend(_dropping(world, encounter, actor))
@@ -227,6 +228,61 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     return out
 
 
+def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Run at somebody and swing. One option per enemy, not per square.
+
+    A charge is a standard action that spends the move as well: you walk at
+    least one square toward the target, end next to it, and make a melee
+    basic attack at +1. Nothing else happens that turn, which is what makes
+    it a real choice rather than a free bonus.
+
+    Offered per enemy rather than per destination -- a dozen squares around
+    one target are the same decision, and the shortest is the one anybody
+    would take.
+    """
+    from .query import enemies, speed, squares
+
+    if is_(world, actor, Condition.PRONE):
+        return []
+    if not encounter.can_spend(actor, ActionType.STANDARD):
+        return []
+    if not encounter.can_spend(actor, ActionType.MOVE):
+        return []
+
+    known = world.get(actor, Powers)
+    if known is None or not known.basic:
+        return []
+
+    reachable = world.reachable_paths(actor, speed(world, actor))
+    out: list[Action] = []
+    for foe in sorted(enemies(world, actor)):
+        if not alive(world, foe):
+            continue
+        beside = spread(squares(world, foe), 1)
+        best = min(
+            (
+                (len(path), dest, path)
+                for dest, path in reachable.items()
+                if dest in beside and path
+            ),
+            default=None,
+        )
+        if best is None:
+            continue
+        _n, dest, path = best
+        out.append(
+            Action(
+                kind="charge",
+                cost=ActionType.STANDARD,
+                ref=known.basic,
+                targets=(foe,),
+                dest=dest,
+                path=tuple(path),
+            )
+        )
+    return out
+
+
 def _sustaining(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """Keeping a sustained effect going, deliberately.
 
@@ -345,6 +401,23 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
     if action.kind == "move":
         walk(world, actor, list(action.path))
         return True
+
+    if action.kind == "charge":
+        from .dsl import use
+
+        walk(world, actor, list(action.path))
+        # The move goes with it, and so does everything else: a charge ends
+        # your turn whatever you have left. Spent after the walk so that an
+        # opportunity attack on the way in still resolves normally.
+        encounter.spend(actor, ActionType.MOVE)
+        hit = use(
+            world, actor, action.ref,
+            targets=list(action.targets) or None, spend=True, charge=True,
+        )
+        budget = world.get(actor, Budget)
+        if budget is not None:
+            budget.standard = budget.move = budget.minor = 0
+        return hit
 
     if action.kind == "shift":
         from .movement import shift

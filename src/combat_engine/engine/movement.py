@@ -203,13 +203,25 @@ def _clear(
 ) -> bool:
     """Can `eid` be in these squares? Terrain always blocks; a creature only
     blocks somebody moving along the ground."""
+    ghost = phasing(world, eid)
     for sq in target:
-        if not world.grid.passable(sq):
+        # Phasing walks through earth and rock. It still has to *stop*
+        # somewhere legal, which `settle` enforces -- this only says the
+        # wall is not a wall on the way past.
+        if not world.grid.passable(sq) and not ghost:
             return False
         who = world.grid.occupant(sq)
-        if who is not None and who != eid and not overhead:
+        if who is not None and who != eid and not (overhead or ghost):
             return False
     return True
+
+
+def phasing(world: World, eid: int) -> bool:
+    """Can this creature move through solid things?"""
+    from .components import Movement
+
+    mv = world.get(eid, Movement)
+    return bool(mv and "phasing" in mv.modes)
 
 
 def _occupied(world: World, eid: int, target: set[Square] | frozenset[Square]) -> bool:

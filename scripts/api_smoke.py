@@ -258,9 +258,20 @@ def check_roster(check: Checks, state: dict) -> None:
         "every unavailable power says why",
         str([p["name"] for p in greyed if not p["reason"]][:3]),
     )
+    # The *property*, not the situation. This used to require that somebody
+    # in this one fight had a power out of range at this one moment, which
+    # is a fact about the seed and the initiative order rather than about
+    # the interface -- and it duly failed the first time the roster shifted
+    # under it, with nothing wrong.
+    vague = [
+        p["name"] for p in greyed
+        if "squares away" in (p["reason"] or "")
+        and not any(ch.isdigit() for ch in p["reason"])
+    ]
     check.that(
-        any("squares away" in (p["reason"] or "") for p in greyed) or not greyed,
+        not vague,
         "where distance is the answer, the reason is the number",
+        str(vague[:3]),
     )
 
 

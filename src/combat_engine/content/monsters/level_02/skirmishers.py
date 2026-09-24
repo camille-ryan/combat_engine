@@ -28,13 +28,16 @@ from combat_engine.engine import (
     ENCOUNTER,
     FORT,
     FREE,
+    INTERRUPT,
     MINOR,
     NO_TARGET,
     ONE_CREATURE,
     PERSONAL,
     REACTION,
     REF,
+    SELF,
     STANDARD,
+    WILL,
     ActionType,
     Attack,
     Cast,
@@ -55,6 +58,7 @@ from combat_engine.engine import (
     use,
 )
 from combat_engine.engine.events import (
+    AttackDeclared,
     AttackRolled,
     ConditionApplied,
     ConditionEnded,
@@ -69,11 +73,15 @@ from combat_engine.engine.events import (
     ZoneExited,
 )
 from combat_engine.engine.monster_math import LIMITED
-from combat_engine.engine.query import cover_between
+from combat_engine.engine.query import cover_between, distance_between, squares
 from combat_engine.engine.triggers import (
     Trigger,
     ally_within,
+    both,
     by_me,
+    by_melee,
+    by_ranged,
+    either,
     enemy_within,
     targets_me,
 )
@@ -192,6 +200,54 @@ def _heals_its_killer(c: Cast, amount: int) -> None:
 
 def _unseen(world: World, eid: int) -> bool:
     return bool(world.relations.targets(Relation.HIDDEN_FROM, eid))
+
+
+def _beside_a_ward(c: Cast, who: int | None) -> bool:
+    """Is that creature standing next to something the caster is guarding?
+
+    Asked at the moment of the roll rather than when the trait arms: what a
+    guard is protecting can change mid-fight, and who is next to it changes
+    every time anything moves.
+    """
+    return who is not None and any(
+        distance_between(c.world, who, ward) <= 1 for ward in c.guarding()
+    )
+
+
+def _flanks_with(c: Cast, foe: int, mate: int) -> bool:
+    """Is the caster flanking `foe` with that *particular* creature?
+
+    `query.flanked_by` asks whether any ally at all is on the far side; the
+    printed line names one, so the grid is asked directly instead.
+    """
+    space = squares(c.world, foe)
+    return any(
+        c.world.grid.flanks(a, b, space)
+        for a in squares(c.world, c.me)
+        for b in squares(c.world, mate)
+    )
+
+
+def _squeezes_freely(c: Cast) -> None:
+    """Folding into a small space costs this creature nothing.
+
+    Half speed, the -5 to attacks and the combat advantage it hands out are
+    the *whole* of what `Condition.SQUEEZING` is, and the printed line
+    waives all three -- so the hold is taken off as it lands rather than
+    three separate counterweights being written against it. `Effects.apply`
+    installs everything before it announces, which is what makes ending an
+    effect from inside `ConditionApplied` safe.
+    """
+    me, ref = c.me, c.ref
+
+    def unsqueeze(ev: ConditionApplied) -> None:
+        if ev.target != me or ev.condition is not Condition.SQUEEZING:
+            return
+        for eff in list(c.world.effects.of(me)):
+            if Condition.SQUEEZING in eff.conditions:
+                c.world.effects.end(eff, ref)
+
+    c.watch(ConditionApplied, unsqueeze, until=When.ENCOUNTER, on=me, label=ref)
 
 
 # --------------------------------------------------------------------------
@@ -865,6 +921,55 @@ def m3001a0(c: Cast) -> None:
 
 
 @power(
+    "m3001a1",
+    level=2,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m3001a1(c: Cast) -> None:
+    """A standing bonus rather than an action, whatever the section line says.
+
+    Gated at the moment of the roll, because what it is guarding and who is
+    pressed against that creature both change during a fight.
+    """
+    c.bonus(
+        "attack",
+        2,
+        until=When.ENCOUNTER,
+        on=c.me,
+        when=lambda ctx: _beside_a_ward(c, ctx.get("target")),
+    )
+
+
+@power(
+    "m3001a2",
+    level=2,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m3001a2(c: Cast) -> None:
+    """An extra die whenever the two of them have an enemy between them.
+
+    Dice rather than a flat number, so it is rolled as the blow lands
+    instead of riding along as a damage modifier -- and the flanking is read
+    against the guarded creature by name, which `query.flanked_by` cannot do.
+    """
+    me = c.me
+
+    def press(ev: Hit) -> None:
+        if ev.attacker != me:
+            return
+        if any(_flanks_with(c, ev.target, ward) for ward in c.guarding()):
+            c.damage("1d6", on=ev.target, detail="m3001a2")
+
+    c.watch(Hit, press, until=When.ENCOUNTER, on=me, label="m3001a2")
+
+
+@power(
     "m3001a3",
     level=2,
     usage=AT_WILL,
@@ -879,6 +984,19 @@ def m3001a3(c: Cast) -> None:
 # --------------------------------------------------------------------------
 # m3054
 # --------------------------------------------------------------------------
+
+
+@power(
+    "m3054a0",
+    level=2,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m3054a0(c: Cast) -> None:
+    """An ooze pours through a gap without slowing down or opening up."""
+    _squeezes_freely(c)
 
 
 @power(
@@ -1290,6 +1408,32 @@ def m668a1(c: Cast) -> None:
 
 
 @power(
+    "m668a2",
+    level=2,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m668a2(c: Cast) -> None:
+    """A standing bonus rather than an action, whatever the section line says.
+
+    Only the "adjacent to" half is sayable. Nothing on the board is
+    *carried* -- there is no inventory and no way to ask who is holding
+    what -- so a creature walking off with the guarded thing gets the same
+    treatment as one standing a long way from it. See the report.
+    """
+    c.bonus(
+        "attack",
+        4,
+        until=When.ENCOUNTER,
+        on=c.me,
+        when=lambda ctx: _beside_a_ward(c, ctx.get("target")),
+    )
+
+
+
+@power(
     "m668a3",
     level=2,
     usage=ENCOUNTER,
@@ -1332,3 +1476,37 @@ def m668a3(c: Cast) -> None:
     c.watch(ConditionApplied, blind, until=When.ENCOUNTER, on=me, label="m668a3")
     c.watch(ConditionEnded, wakes, until=When.ENCOUNTER, on=me, label="m668a3 ends")
     c.watch(RelationCleared, broke, until=When.ENCOUNTER, on=me, label="m668a3 keep")
+
+
+_M668_SWUNG_AT = "the m668 is targeted by a melee or a ranged attack"
+
+
+@power(
+    "m668a4",
+    level=2,
+    usage=AT_WILL,
+    action=INTERRUPT,
+    reach=PERSONAL,
+    target=SELF,
+    attack=Attack(vs=WILL, printed=4),
+    trigger=_M668_SWUNG_AT,
+    on=Trigger(
+        AttackDeclared,
+        when=both(targets_me, either(by_melee, by_ranged)),
+        text=_M668_SWUNG_AT,
+    ),
+)
+def m668a4(c: Cast) -> None:
+    """Puts somebody else in the way of the blow.
+
+    `c.redirect` only works in the interrupt window, which is where this row
+    sits. The printed line gives the counter-attack no range at all, so the
+    header carries none and the roll is aimed at whoever swung, at whatever
+    distance. Nobody adjacent to take the blow and the row does nothing.
+    """
+    attacker = getattr(c.trigger, "attacker", None)
+    if attacker is None or not c.strike(on=attacker):
+        return
+    shields = [w for w in c.within(1) if w not in (c.me, attacker)]
+    if shields:
+        c.redirect(to=c.choose(sorted(shields), "who takes it instead"))

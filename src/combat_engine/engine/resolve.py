@@ -82,6 +82,7 @@ def attack(
     among: tuple[int, ...] = (),
     branch: int = 0,
     dying: bool = False,
+    charge: bool = False,
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
@@ -114,6 +115,7 @@ def attack(
             "power": power,
             "advantage": ca,
             "opportunity": opportunity,
+            "charge": charge,
             # What shape the attack is, so "ranged attacks against this
             # target take +4" is a one-line gate rather than a registry
             # lookup duplicating `_is_ranged`.
@@ -125,6 +127,8 @@ def attack(
         situational += _mods(world, attacker, "attack", ctx)
         if ca:
             situational += 2
+        if charge:
+            situational += 1   # the printed charge bonus
         if not ignore_cover:
             situational -= int(
                 cover_between(world, attacker, target, ranged=_is_ranged(power, branch))
@@ -181,6 +185,7 @@ def attack(
         # event said so -- the flag lived only in the roll's own context, so
         # a creature could not react to being hit by one.
         rolled.opportunity = opportunity
+        rolled.charge = charge
         world.bus.emit(rolled)
 
         # The defence is read **again**, after the roll has been announced.
@@ -213,6 +218,7 @@ def attack(
         landed.among = among or (target,)
         landed.branch = branch
         landed.opportunity = opportunity
+        landed.charge = charge
         world.bus.emit(landed)
 
         # Attacking gives you away. Nothing broke hidden before, so a
@@ -226,6 +232,7 @@ def attack(
     announced.among = among or (target,)
     announced.branch = branch
     announced.opportunity = opportunity
+    announced.charge = charge
     declared = world.bus.emit(announced, roll)
     if declared.cancelled:
         result.cancelled = True

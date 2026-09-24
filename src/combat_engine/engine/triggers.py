@@ -322,6 +322,11 @@ def by_opportunity(world: World, me: int, ev: Event) -> bool:
     return bool(getattr(ev, "opportunity", False))
 
 
+def by_charge(world: World, me: int, ev: Event) -> bool:
+    """Was this a charge? "When the m200 charges, ..." """
+    return bool(getattr(ev, "charge", False))
+
+
 def leaves_me_out(world: World, me: int, ev: Event) -> bool:
     """Did this attack miss me out entirely?
 
