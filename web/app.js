@@ -143,6 +143,17 @@ async function postJSON(url, body) {
   return res.json();
 }
 
+// True while the board is showing a snapshot the server has already moved
+// past — the reply to an action arrives before the events that explain it,
+// so the list on screen is held back until the animation catches up.
+//
+// An option index only means anything for the snapshot it came from, so
+// acting on a held one sends an index the server has no record of. It did:
+// "no option 111", every run, once dual-range roughly doubled the list.
+function settling() {
+  return busy || pendingState !== null;
+}
+
 function say(text, kind) {
   el.status.textContent = text || "";
   el.status.className = kind ? `status ${kind}` : "status";
@@ -571,7 +582,7 @@ function renderPending(p) {
     const b = document.createElement("button");
     b.className = "option pending-answer";
     b.type = "button";
-    b.disabled = busy;
+    b.disabled = settling();
     if (a.index === p.default) b.classList.add("suggested");
     const line = div("option-line");
     line.appendChild(div("option-label", withNames(a.label)));
@@ -697,7 +708,7 @@ function freeformPower(s, p) {
   const b = document.createElement("button");
   b.className = "option";
   b.type = "button";
-  b.disabled = p.affordable === false || busy;
+  b.disabled = p.affordable === false || settling();
   if (p.affordable === false) b.classList.add("unaffordable");
   if (i === aiming) b.classList.add("aiming");
 
@@ -760,7 +771,7 @@ function movementButton(name, mode, squares, note, s) {
   // Freeform walks by pointing, so there is no option carrying a price — and
   // with both the move and the standard gone the server refuses the walk. It
   // used to be offered anyway and answered with an error (#373).
-  b.disabled = busy || !squares.length || !costPayable(s, "move");
+  b.disabled = settling() || !squares.length || !costPayable(s, "move");
   if (aiming === mode) b.classList.add("aiming");
 
   const line = div("option-line");
@@ -932,7 +943,7 @@ function optionButton(s, o) {
   // affordable is false once the cost is spent this turn. Show it, greyed —
   // "my standard is gone" is information, a shorter list is not.
   const affordable = o.affordable !== false;
-  b.disabled = !affordable || busy;
+  b.disabled = !affordable || settling();
   if (!affordable) b.classList.add("unaffordable");
   if (o.kind) b.dataset.kind = o.kind;
 
@@ -1367,7 +1378,17 @@ async function act(actorId, index) {
     if (reply.status === "finished") await refreshDay();
     commit(reply);
   } catch (e) {
-    say(`Action failed: ${e.message}`, "bad");
+    // An option index is only meaningful for the snapshot it came from, and
+    // the board can still be showing an older one while the animation
+    // catches up — so a click can carry an index the server has already
+    // moved past. That is not a failure worth shouting about; it is a stale
+    // list. Fetch the current one and let the player pick again.
+    if (/no option/i.test(e.message)) {
+      commit(await getJSON(`/api/encounter/${state.id}`));
+      say("That list was out of date — try again.", "warn");
+    } else {
+      say(`Action failed: ${e.message}`, "bad");
+    }
   } finally {
     busy = false;
     if (!anim.busy()) render();

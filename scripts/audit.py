@@ -27,6 +27,7 @@ this repository is built on.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import re
 import traceback
 from dataclasses import dataclass, field
@@ -98,10 +99,24 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     if MONSTER_ABILITY.match(ref):
         caster = loader.spawn(world, ref.split("a")[0], (6, 8), team=Team.ENEMY)
         world.need(caster, Powers).known.append(ref)
+        # A second of its kind, so a row reading "an ally within 10" has
+        # one. A lone monster on a board of enemies can never satisfy its
+        # own trigger, and several rows are about their friends.
+        loader.spawn(world, ref.split("a")[0], (7, 9), team=Team.ENEMY)
         foe_team = Team.PC
     else:
         cls = declared.cls or "fighter"
-        caster = chargen.spawn(world, chargen.Character(cls, max(1, declared.level), [ref]), (6, 8))
+        # Its class features come too. A row that triggers on a *cursed*
+        # enemy dropping needs the thing that curses, and a caster holding
+        # only the row under test can never satisfy its own precondition.
+        features = sorted(
+            p.ref for p in REGISTRY.values() if p.cls == cls and p.level == 0
+        )
+        caster = chargen.spawn(
+            world,
+            chargen.Character(cls, max(1, declared.level), [ref, *features]),
+            (6, 8),
+        )
         foe_team = Team.ENEMY
 
     from combat_engine.engine import Health
@@ -146,9 +161,22 @@ LOADED = (None, 20, 1)
 #: credited only with what *it* did, not with being attacked.
 PROVOKE_NOISE = {
     "AttackDeclared", "AttackRolled", "Hit", "Miss", "DamageRolled",
-    "DamageApplied", "MoveStart", "MoveEnd", "Moved", "OpportunityWindow",
-    "AdjacencyGained", "AdjacencyLost", "TurnStart", "TurnEnd",
+    "DamageApplied", "OpportunityWindow", "TurnStart", "TurnEnd",
 }
+
+#: Movement is the *whole content* of several triggered rows -- "it shifts 1
+#: square" is what four of them do. Subtracting movement as provocation
+#: noise therefore made it impossible for any of them to be credited with
+#: anything, and they reported SILENT while firing correctly twelve times
+#: out of eight. The provocation this harness makes is an attack and a
+#: shift by somebody *else*, so movement by the row's own owner is not
+#: noise: it is the answer.
+def _own_movement(world, ref: str, cursor: int, owner: int) -> set[str]:  # noqa: ANN001
+    kinds = set()
+    for e in world.bus.log[cursor:]:
+        if e.kind in ("Moved", "MoveStart", "MoveEnd") and getattr(e, "actor", None) == owner:
+            kinds.add(e.kind)
+    return kinds
 
 
 def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
@@ -174,6 +202,15 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     foes = [f for f in enemies(world, caster) if alive(world, f)]
     if not foes:
         return False
+
+    # Put the caster in the state its own class puts it in first. A
+    # warlock's pact boon triggers on a *cursed* enemy dropping, and a
+    # harness that only swings and walks can never curse anybody -- so
+    # three correctly written rows reported themselves unusable.
+    _use_class_features(world, caster, foes[0])
+    if _fired(world, ref, cursor):
+        return True
+
     for attacker, target in ((foes[0], caster), (caster, foes[0])):
         use(world, attacker, basic(attacker), targets=[target], spend=False)
         if _fired(world, ref, cursor):
@@ -183,7 +220,45 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
             shift(world, foe, sq)
             if _fired(world, ref, cursor):
                 return True
+
+    # Somebody goes down. Several rows trigger on a creature dropping --
+    # a leader's rally, the warlock's pact boons -- and attacking and
+    # walking about can never produce one, so the harness had no way to
+    # reach them and reported every one of them unusable.
+    from combat_engine.engine import Health
+
+    # foes[0] included: it is the one the class features were aimed at,
+    # so it is the cursed / quarried / marked one, and leaving it out of
+    # the killing meant no row triggering on that ever fired.
+    for victim in (*foes, *_allies_of(world, caster)):
+        health = world.get(victim, Health)
+        if health is None or health.hp <= 0:
+            continue
+        world.damage(caster, victim, health.hp + health.max_hp)
+        if _fired(world, ref, cursor):
+            return True
     return _fired(world, ref, cursor)
+
+
+def _use_class_features(world, caster: int, foe: int) -> None:  # noqa: ANN001
+    """Fire the caster's own level-0 rows -- its curse, its quarry, its mark."""
+    from combat_engine.engine.components import Powers
+
+    known = world.get(caster, Powers)
+    if known is None:
+        return
+    for ref in list(known.all):
+        p = get(ref)
+        if p is None or p.level != 0 or p.action is ActionType.NONE:
+            continue
+        with contextlib.suppress(Exception):
+            use(world, caster, ref, targets=[foe] if p.is_attack else None, spend=False)
+
+
+def _allies_of(world, caster: int) -> list[int]:  # noqa: ANN001
+    from combat_engine.engine.query import allies
+
+    return [a for a in allies(world, caster) if alive(world, a)]
 
 
 def _fired(world, ref: str, cursor: int) -> bool:  # noqa: ANN001
@@ -265,6 +340,7 @@ def audit(ref: str) -> Result:
                     continue
                 out.fired += 1
                 out.events |= {e.kind for e in world.bus.log[cursor:]} - PROVOKE_NOISE
+                out.events |= _own_movement(world, ref, cursor, caster)
                 if world.effects.live:
                     out.events.add("ConditionApplied")
                 continue

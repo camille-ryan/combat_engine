@@ -60,8 +60,35 @@ from combat_engine.engine.events import (
     MoveStart,
     TurnStart,
 )
-from combat_engine.engine.query import has_combat_advantage, squares
-from combat_engine.engine.triggers import Trigger, both, enemy_within, targets_me
+from combat_engine.engine.query import (
+    distance_between,
+    has_combat_advantage,
+    squares,
+    team,
+)
+from combat_engine.engine.triggers import (
+    Trigger,
+    both,
+    by_melee,
+    enemy_within,
+    targets_me,
+)
+
+
+def _enemy_beside_me_hit(world: World, me: int, ev: Hit) -> bool:
+    """Whoever was *hit* is an enemy of mine, standing next to me.
+
+    `enemy_within` reads the attacker, which is the other half of the same
+    sentence -- "an enemy adjacent to it hits it". This row is the one that
+    watches somebody else land the blow, so it reads the target instead.
+    Worth moving beside the shared predicates if a second row wants it.
+    """
+    who = getattr(ev, "target", None)
+    if who is None or who == me:
+        return False
+    if team(world, who) is team(world, me):
+        return False
+    return distance_between(world, me, who) <= 1
 
 
 def _ref_of(c: Cast, who: int) -> str:
@@ -121,6 +148,9 @@ def m237a1(c: Cast) -> None:
     c.watch(Hit, rider, until=When.ENCOUNTER, on=me, label="m237a1")
 
 
+_M237_MISSED_MELEE = "missed by a melee attack"
+
+
 @power(
     "m237a2",
     level=1,
@@ -128,7 +158,8 @@ def m237a1(c: Cast) -> None:
     action=REACTION,
     reach=PERSONAL,
     target=NO_TARGET,
-    trigger="missed by a melee attack",
+    trigger=_M237_MISSED_MELEE,
+    on=Trigger(Miss, when=both(targets_me, by_melee), text=_M237_MISSED_MELEE),
 )
 def m237a2(c: Cast) -> None:
     c.shift(1)
@@ -660,6 +691,9 @@ def m5028a1(c: Cast) -> None:
         c.hit()
 
 
+_M5028_ENEMY_BESIDE_HIT = "an enemy adjacent to it is hit by an attack"
+
+
 @power(
     "m5028a2",
     level=1,
@@ -667,7 +701,8 @@ def m5028a1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=NO_TARGET,
-    trigger="an enemy adjacent to it is hit by an attack",
+    trigger=_M5028_ENEMY_BESIDE_HIT,
+    on=Trigger(Hit, when=_enemy_beside_me_hit, text=_M5028_ENEMY_BESIDE_HIT),
 )
 def m5028a2(c: Cast) -> None:
     c.shift(1)
@@ -809,6 +844,9 @@ def m665a3(c: Cast) -> None:
     c.move(max(1, c.speed_of() // 2))
 
 
+_M665_MISSED = "missed by an attack"
+
+
 @power(
     "m665a4",
     level=1,
@@ -816,7 +854,8 @@ def m665a3(c: Cast) -> None:
     action=REACTION,
     reach=PERSONAL,
     target=NO_TARGET,
-    trigger="missed by an attack",
+    trigger=_M665_MISSED,
+    on=Trigger(Miss, when=targets_me, text=_M665_MISSED),
 )
 def m665a4(c: Cast) -> None:
     c.shift(1)

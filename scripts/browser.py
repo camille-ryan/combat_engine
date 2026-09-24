@@ -107,6 +107,23 @@ def main() -> int:
         page.on("console", lambda m: problems.append(m.text) if m.type == "error" else None)
         page.on("pageerror", lambda e: problems.append(str(e)))
 
+        def failed_request(response) -> None:  # noqa: ANN001
+            """A 4xx says which call and with what, not merely that one broke.
+
+            "Failed to load resource: 400" is what the console gives, and it
+            names neither the endpoint nor the body -- so a real wire bug
+            reads exactly like noise.
+            """
+            if response.status < 400:
+                return
+            with contextlib.suppress(Exception):
+                problems.append(
+                    f"HTTP {response.status} {response.url.split('/api/')[-1]} "
+                    f"<- {response.request.post_data} :: {response.text()[:120]}"
+                )
+
+        page.on("response", failed_request)
+
         # The page keeps its state to itself, so the last snapshot it was
         # served is read off the wire rather than out of the DOM.
         served: list[dict] = []
@@ -239,6 +256,18 @@ def _play_on(page, rounds: int) -> None:  # noqa: ANN001
     """
     for _ in range(rounds):
         page.wait_for_timeout(120)
+        # The action list is disabled while the board is still playing the
+        # events behind the snapshot it is showing -- acting then would send
+        # an option index the server has already moved past. So wait for it
+        # rather than treating a settling board as an empty one.
+        # Suppressed rather than asserted: a finished fight has no enabled
+        # buttons and never will, and that is not this helper's business.
+        with contextlib.suppress(Exception):
+            page.wait_for_function(
+                "() => document.querySelectorAll"
+                "('#actions button:not([disabled])').length > 0",
+                timeout=6000,
+            )
         answers = page.locator("#actions button.pending-answer")
         if answers.count():
             answers.first.click()  # a power asked something mid-resolution
@@ -327,7 +356,13 @@ def _check_enemies_animate(page, check: Checks) -> None:  # noqa: ANN001
     # something that is never going to be visible.
     was = page.eval_on_selector("#speed", "el => el.value")
     _set_speed(page, "normal")
-    _restart(page, ANIM_SEED)
+    # A fresh page rather than the restart button: `_restart` leaves the
+    # board mid-settle often enough that the action list is empty when this
+    # starts clicking, and an empty list measures nothing.
+    page.reload(wait_until="networkidle")
+    page.wait_for_selector("#board .token", timeout=15000)
+    _set_speed(page, "normal")
+    page.wait_for_timeout(600)
     page.evaluate(
         "() => { window.__slid = new Set();"
         " const tick = () => { for (const t of document.querySelectorAll('#board .token'))"
@@ -335,13 +370,18 @@ def _check_enemies_animate(page, check: Checks) -> None:  # noqa: ANN001
         "     window.__slid.add(t.dataset.actor);"
         " requestAnimationFrame(tick); }; tick(); }"
     )
-    # One action at a time, with a pause after each. `_play_on` on its own
-    # clicks faster than the board can play, and every render clears the
-    # transforms -- so the slide is real and simply never on screen when the
-    # watcher looks.
-    for _ in range(10):
-        _play_on(page, rounds=1)
-        page.wait_for_timeout(1200)
+    # Ending turns directly rather than through `_play_on`, which prefers an
+    # attack when one is offered and so advances the round slowly. What is
+    # being watched is the monsters' turn, and the way to reach it is to
+    # stop taking your own. The pause after each is the point: every render
+    # clears the transforms, so a watcher that looks only between clicks
+    # sees a board at rest and concludes nothing moved.
+    for _ in range(8):
+        for btn in page.query_selector_all("#actions button:not([disabled])"):
+            if "end turn" in (btn.inner_text() or "").lower():
+                btn.click()
+                break
+        page.wait_for_timeout(2200)
     slid = set(page.evaluate("Array.from(window.__slid)"))
     enemies = {a for a in slid if a.startswith("npc")}
     check.that(bool(enemies), f"enemy tokens animate ({len(enemies)} of them slid)",

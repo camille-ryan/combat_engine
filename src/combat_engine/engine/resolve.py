@@ -145,6 +145,11 @@ def attack(
         # row triggering on being *left out* of an attack cannot tell a
         # burst that caught it from one that did not.
         rolled.among = among or (target,)
+        # Which half of a two-branch row swung. `by_melee` reads the range
+        # off the power, and a `MeleeOrRanged` row's range says "melee"
+        # whichever branch was used -- so without this a ranged shot let a
+        # creature react as though it had been swung at.
+        rolled.branch = branch
         world.bus.emit(rolled)
 
         landed = (
@@ -154,6 +159,7 @@ def attack(
         )
         landed.result = result
         landed.among = among or (target,)
+        landed.branch = branch
         world.bus.emit(landed)
 
         # Attacking gives you away. Nothing broke hidden before, so a
@@ -165,6 +171,7 @@ def attack(
 
     announced = AttackDeclared(attacker=attacker, target=target, power=power, vs=vs)
     announced.among = among or (target,)
+    announced.branch = branch
     declared = world.bus.emit(announced, roll)
     if declared.cancelled:
         result.cancelled = True
@@ -327,11 +334,16 @@ def _check_down(world: World, eid: int, health: Health) -> None:
 
     if health.hp > 0:
         return
+    # Announced whichever way it went. `Dropped` used to mean only "dying,
+    # not dead", so it never fired for a minion -- whose `dying_at` is 0 --
+    # nor for any blow that overshot, which in play is most kills. The
+    # printed sentence every row using it carries is "drops to 0 hit points
+    # **or fewer**", and those rows were missing almost every death.
+    world.bus.emit(Dropped(actor=eid, dead=health.hp <= health.dying_at))
     if health.hp <= health.dying_at:
         _die(world, eid)
         return
     if not is_(world, eid, Condition.DYING):
-        world.bus.emit(Dropped(actor=eid))
         world.effects.apply(
             eid, eid, When.ENCOUNTER, label="dropped", conditions=DROPPED
         )

@@ -94,6 +94,7 @@ from .triggers import (
     by_melee,
     by_ranged,
     cursed_by_me,
+    enemy_target_within,
     enemy_within,
     leaves_me_out,
     not_me,

@@ -277,9 +277,15 @@ class Bloodied(Event):
 
 @dataclass
 class Dropped(Event):
-    """Hit 0 hit points. Not the same as dying, and not the same as dead."""
+    """Went to 0 hit points or below -- dying, or dead outright.
+
+    `dead` says which. Emitted for both because every printed row that
+    reads it says "drops to 0 hit points or fewer", and a minion is always
+    the second kind.
+    """
 
     actor: int
+    dead: bool = False
 
 
 @dataclass

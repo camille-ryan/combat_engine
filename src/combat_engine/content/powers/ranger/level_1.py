@@ -40,9 +40,13 @@ from combat_engine.engine import (
     World,
     power,
 )
+from combat_engine.engine.events import AttackDeclared
+from combat_engine.engine.triggers import Trigger, both, by_melee, targets_me
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 MARTIAL_RANGED = [Keyword.MARTIAL, Keyword.WEAPON, Keyword.RANGED]
+
+_MELEE_AGAINST_YOU = "an enemy makes a melee attack against you"
 
 
 def _two_melee(world: World, eid: int) -> bool:
@@ -210,13 +214,19 @@ def p2209(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=MARTIAL_RANGED,
     attack=Attack(DEX, vs=AC),
-    trigger="an enemy makes a melee attack against you",
+    trigger=_MELEE_AGAINST_YOU,
+    on=Trigger(AttackDeclared, when=both(targets_me, by_melee), text=_MELEE_AGAINST_YOU),
 )
 def p843(c: Cast) -> None:
     """The printed line is "make a basic attack", which nothing here can call.
 
     Written out longhand instead: the same roll and the same damage a ranged
     basic attack would make, with the Wisdom bonus the Special line grants.
+
+    The printed line shoots *the triggering enemy*, and this does not: the
+    body takes whatever `use` aims it at, which with two enemies in reach is
+    the wrong one. Left as written -- the fix belongs in the dispatcher,
+    which knows the event and hands it over as `c.trigger`.
     """
     c.shift(1)
     if c.attack(c.dex_ + c.wis_mod, AC):

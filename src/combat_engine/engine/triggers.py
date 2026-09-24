@@ -190,9 +190,30 @@ class Triggers:
 
         _IN_FLIGHT.add((eid, ref))
         try:
-            use(self.world, eid, ref, trigger=ev)
+            use(self.world, eid, ref, targets=self._at(p, eid, ev), trigger=ev)
         finally:
             _IN_FLIGHT.discard((eid, ref))
+
+    def _at(self, p, eid: int, ev: Event) -> list[int] | None:  # noqa: ANN001
+        """Who a triggered row is aimed at: whoever the event was about.
+
+        "Make a basic attack against **the enemy**" means the one that just
+        swung, and the dispatcher used to pass no targets at all -- so
+        `_auto_targets` chose, and a reaction to being attacked shot back at
+        whichever enemy happened to be nearest. It shot the wrong one
+        whenever two were in reach.
+
+        Only for a row that takes a single enemy. A burst picks its own
+        targets and a self-buff has none, and neither wants overriding.
+        """
+        from .dsl import candidates
+
+        if p.target.everyone or p.target.count != 1 or p.target.side != "enemy":
+            return None
+        who = getattr(ev, "attacker", None) or getattr(ev, "actor", None)
+        if who is None or who == eid:
+            return None
+        return [who] if who in candidates(self.world, eid, p) else None
 
 
 # -- the predicates rows actually want --------------------------------------
@@ -257,14 +278,20 @@ def by_melee(world: World, me: int, ev: Event) -> bool:
     from .dsl import get
 
     p = get(getattr(ev, "power", "") or "")
-    return p is not None and p.reach.kind in ("melee", "close_burst", "close_blast")
+    if p is None:
+        return False
+    return p.reach_of(getattr(ev, "branch", 0)).kind in (
+        "melee", "close_burst", "close_blast",
+    )
 
 
 def by_ranged(world: World, me: int, ev: Event) -> bool:
     from .dsl import get
 
     p = get(getattr(ev, "power", "") or "")
-    return p is not None and p.reach.kind in ("ranged", "area_burst")
+    if p is None:
+        return False
+    return p.reach_of(getattr(ev, "branch", 0)).kind in ("ranged", "area_burst")
 
 
 def leaves_me_out(world: World, me: int, ev: Event) -> bool:
@@ -278,6 +305,26 @@ def leaves_me_out(world: World, me: int, ev: Event) -> bool:
     use, which is the only thing that can answer it.
     """
     return me not in getattr(ev, "among", (getattr(ev, "target", None),))
+
+
+def enemy_target_within(squares: int) -> Callable[[World, int, Event], bool]:
+    """An enemy of mine, within range, was *on the receiving end* of this.
+
+    "An enemy adjacent to it is hit" reads `ev.target`, where
+    `enemy_within` reads the attacker and `ally_within` wants the same
+    team. Neither says it, so a row needing it had to write its own.
+    """
+    from .query import distance_between, team
+
+    def check(world: World, me: int, ev: Event) -> bool:
+        who = getattr(ev, "target", None)
+        if who is None or who == me:
+            return False
+        if team(world, who) is team(world, me):
+            return False
+        return distance_between(world, me, who) <= squares
+
+    return check
 
 
 def cursed_by_me(world: World, me: int, ev: Event) -> bool:

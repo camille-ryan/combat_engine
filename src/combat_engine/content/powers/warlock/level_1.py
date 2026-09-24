@@ -3,10 +3,12 @@
 Implement powers throughout: no Weapon keyword, so no proficiency rides
 along with the attack.
 
-Several rows lean on a pact, on a creature's size, or on a trigger the
-engine cannot arm. Where that is the case the rest of the row is written
-and the missing clause is called out in a comment rather than approximated.
-The curse itself is `cf:warlock-curse`, and `c.cursed(...)` reads it.
+Several rows lean on a pact or on a creature's size, neither of which a
+`requires` predicate can read. Where that is the case the rest of the row is
+written and the missing clause is called out in a comment rather than
+approximated. The curse itself is `cf:warlock-curse`, and `c.cursed(...)`
+reads it -- and `cursed_by_me` is the same question asked of a trigger, which
+is what arms the three pact boons.
 """
 
 from __future__ import annotations
@@ -35,9 +37,14 @@ from combat_engine.engine import (
     distance,
     power,
 )
-from combat_engine.engine.events import DamageApplied, Moved, TurnStart
+from combat_engine.engine.events import DamageApplied, Dropped, Moved, TurnStart
+from combat_engine.engine.triggers import Trigger, cursed_by_me
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
+
+#: The three pact boons all pay out on the same line, so it is written once.
+_CURSED_DROPS = "an enemy you have cursed drops to 0 hit points or fewer"
+_ON_CURSED_DROPS = Trigger(Dropped, when=cursed_by_me, text=_CURSED_DROPS)
 
 
 @power(
@@ -293,9 +300,8 @@ def p1471(c: Cast) -> None:
     target=SELF,
     # Prerequisite: Fey Pact. Not expressible, so not declared as a
     # requirement -- a `requires` predicate has nothing to read.
-    # Nothing arms a trigger like this: `trigger` is header text the
-    # engine never checks, so the caller decides when it fires.
-    trigger="an enemy you have cursed drops to 0 hit points or fewer",
+    trigger=_CURSED_DROPS,
+    on=_ON_CURSED_DROPS,
 )
 def p2094(c: Cast) -> None:
     c.teleport(3)
@@ -310,7 +316,8 @@ def p2094(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     # Prerequisite: Infernal Pact. See p2094.
-    trigger="an enemy you have cursed drops to 0 hit points or fewer",
+    trigger=_CURSED_DROPS,
+    on=_ON_CURSED_DROPS,
 )
 def p2095(c: Cast) -> None:
     c.temp_hp(c.level, on=c.me)
@@ -356,7 +363,8 @@ def p222(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     # Prerequisite: Star Pact. See p2094.
-    trigger="an enemy you have cursed drops to 0 hit points or fewer",
+    trigger=_CURSED_DROPS,
+    on=_ON_CURSED_DROPS,
 )
 def p2263(c: Cast) -> None:
     # Printed as +1 to any single d20 roll during your next turn: attack,

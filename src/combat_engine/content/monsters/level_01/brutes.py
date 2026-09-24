@@ -305,6 +305,9 @@ def m2939a2(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=NO_TARGET,
+    # Not armed: nothing announces that an opportunity attack was *made*.
+    # `OpportunityWindow` announces the window, which opens whether or not
+    # anybody swings, so triggering off it would shift on every provocation.
     trigger="this creature makes an opportunity attack",
 )
 def m2939a3(c: Cast) -> None:
@@ -373,6 +376,9 @@ def m441a1(c: Cast) -> None:
     action=INTERRUPT,
     reach=Melee(1),
     target=ONE_CREATURE,
+    # Not armed: nothing in the engine ends a grab from the held creature's
+    # side, so no event says one did -- `RelationCleared` would fire for the
+    # grabber simply letting go.
     trigger="an enemy this creature has grabbed escapes",
 )
 def m441a2(c: Cast) -> None:

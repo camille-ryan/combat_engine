@@ -44,8 +44,16 @@ from combat_engine.engine import (
     When,
     power,
 )
-from combat_engine.engine.events import DamageApplied, Hit
+from combat_engine.engine.events import DamageApplied, Dropped, Hit, Miss
 from combat_engine.engine.monster_math import LIMITED, MINION
+from combat_engine.engine.triggers import (
+    Trigger,
+    ally_within,
+    both,
+    by_melee,
+    enemy_within,
+    targets_me,
+)
 
 from . import aquatic_edge
 from .skirmishers import wary_of_traps
@@ -75,6 +83,9 @@ def m239a0(c: Cast) -> None:
             c.flat(1)
 
 
+_M239_MISSED = "the m239 is missed by an attack"
+
+
 @power(
     "m239a1",
     level=1,
@@ -82,7 +93,8 @@ def m239a0(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    trigger="the m239 is missed by an attack",
+    trigger=_M239_MISSED,
+    on=Trigger(Miss, when=targets_me, text=_M239_MISSED),
 )
 def m239a1(c: Cast) -> None:
     c.shift(1)
@@ -161,6 +173,9 @@ def m2797a0(c: Cast) -> None:
         c.hit()
 
 
+_M2797_ALLY_DROPS = "an ally within 10 squares drops to 0 hit points"
+
+
 @power(
     "m2797a1",
     level=1,
@@ -168,7 +183,8 @@ def m2797a0(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    trigger="an ally within 10 squares drops to 0 hit points",
+    trigger=_M2797_ALLY_DROPS,
+    on=Trigger(Dropped, when=ally_within(10), text=_M2797_ALLY_DROPS),
 )
 def m2797a1(c: Cast) -> None:
     c.shift(2)
@@ -237,6 +253,9 @@ def m2978a2(c: Cast) -> None:
             c.immobilized()
 
 
+_M2978_MISSED_MELEE = "the m2978 is missed by a melee attack"
+
+
 @power(
     "m2978a3",
     level=1,
@@ -244,7 +263,8 @@ def m2978a2(c: Cast) -> None:
     action=REACTION,
     reach=PERSONAL,
     target=SELF,
-    trigger="the m2978 is missed by a melee attack",
+    trigger=_M2978_MISSED_MELEE,
+    on=Trigger(Miss, when=both(targets_me, by_melee), text=_M2978_MISSED_MELEE),
 )
 def m2978a3(c: Cast) -> None:
     c.shift(1)
@@ -421,6 +441,9 @@ def m5030a3(c: Cast) -> None:
         c.prone(held=When.EONT)
 
 
+_M5030_HIT_BY_ADJACENT = "an enemy adjacent to the m5030 hits it"
+
+
 @power(
     "m5030a4",
     level=1,
@@ -428,7 +451,8 @@ def m5030a3(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    trigger="an enemy adjacent to the m5030 hits it",
+    trigger=_M5030_HIT_BY_ADJACENT,
+    on=Trigger(Hit, when=both(targets_me, enemy_within(1)), text=_M5030_HIT_BY_ADJACENT),
 )
 def m5030a4(c: Cast) -> None:
     """Printed as a teleport to another square adjacent to whoever hit it. The
