@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import itertools
 import os
 import socket
 import subprocess
@@ -175,6 +176,12 @@ def _play(page, check: Checks, problems: list[str], served: list[dict]) -> None:
     # An area power must highlight where it can be *centred*, not the
     # footprint it would cover from where the caster stands.
     _check_area_aiming(check, served[-1] if served else None)
+    # And pointing at one of those centres must show what it would catch.
+    # Started again on a fixed seed first, because whether the creature whose
+    # turn it is happens to carry an area power is otherwise a coin toss, and
+    # a check that skips itself on half its runs is not a check.
+    _restart(page, BLAST_SEED)
+    _check_footprint(page, check, served[-1] if served else None)
 
     # Play on, so attacks happen and the log has a fight in it rather than a
     # first turn. Clicking real buttons, because that is what is being tested.
@@ -190,6 +197,7 @@ def _play(page, check: Checks, problems: list[str], served: list[dict]) -> None:
         print(f"        {read.nth(i).inner_text()[:78]}")
 
     _check_animation(page, check)
+    _check_initiative(page, check, served)
 
     check.that(not problems, "still no script errors after playing",
                "; ".join(problems[:3]))
@@ -226,6 +234,12 @@ def _play_on(page, rounds: int) -> None:  # noqa: ANN001
         pick = _first(labels, lambda t: "->" in t and "second wind" not in t)
         if pick is None:
             pick = _first(labels, lambda t: t.startswith("move to"))
+        # Ending the turn by its name rather than by its place in the list.
+        # It used to be the last button and is now the first, and a policy
+        # that presses whatever is at the bottom was pressing a power it
+        # cannot fire without a square -- so nobody's turn ever ended.
+        if pick is None:
+            pick = _first(labels, lambda t: t.startswith("end turn"))
         buttons.nth(pick if pick is not None else len(labels) - 1).click()
 
 
@@ -320,6 +334,125 @@ def _check_area_aiming(check: Checks, state: dict | None) -> None:
         if "within" in p["range_text"]:
             limit = int(p["range_text"].rsplit(" ", 1)[-1])
             check.that(far <= limit, f"{p['name']} aims no further than {limit}", f"got {far}")
+
+
+#: A fight whose first turn belongs to somebody holding an area power. The
+#: form's own fields, so this is the fight a player typing this seed gets.
+BLAST_SEED = 2
+
+
+def _restart(page, seed: int) -> None:  # noqa: ANN001
+    """Start a fresh fight from the page's own form, on a known seed."""
+    page.fill("#seed", str(seed))
+    page.click("#restart")
+    page.wait_for_selector("#board .token", timeout=15000)
+    page.wait_for_timeout(600)
+
+
+def _check_footprint(page, check: Checks, state: dict | None) -> None:  # noqa: ANN001
+    """Pointing at an aim square must show the squares that aim point hits.
+
+    The two are not the same list and for a blast they barely overlap: the
+    ring you may point at is not the nine squares that burn. So a player
+    placing a blast 3 could not see what it would cover until after using it.
+    `footprints` is the server's answer, keyed by aim square, and this walks
+    the whole way round -- pick the power, point at one of its squares, count
+    what lit up -- because the wire being right is the half that was never
+    the problem.
+    """
+    if not state or not state.get("roster"):
+        check.that(True, "nobody with a kit is acting just now (skipped)")
+        return
+    power = next((p for p in state["roster"] if p.get("footprints")), None)
+    if power is None:
+        check.that(True, "the acting creature has no blast or burst (skipped)")
+        return
+
+    name = power["name"].lower()
+    buttons = page.locator("#actions button")
+    pick = _first(
+        [buttons.nth(i).inner_text().lower() for i in range(buttons.count())],
+        lambda t: t.startswith(name),
+    )
+    if pick is None:
+        check.that(False, f"{power['name']} is offered in the action list")
+        return
+    buttons.nth(pick).click()  # aim it; the square comes next
+
+    # The aim point that catches the most, because a footprint of one square
+    # would pass this test by accident.
+    at = max(power["footprints"], key=lambda k: len(power["footprints"][k]))
+    covered = power["footprints"][at]
+    x, y = (int(n) for n in at.split(","))
+    tile = page.locator("#board .tile").nth(y * state["board"]["width"] + x)
+    box = tile.bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+
+    lit = page.evaluate(
+        "() => [...document.querySelectorAll('#highlights .hl-hit')]"
+        ".map(n => n.style.left + ',' + n.style.top)"
+    )
+    want = page.evaluate(
+        "(spec) => spec.squares.map(([x, y]) => {"
+        "  const t = document.querySelectorAll('#board .tile')[y * spec.width + x];"
+        "  return t.style.left + ',' + t.style.top; })",
+        {"squares": covered, "width": state["board"]["width"]},
+    )
+    check.that(
+        sorted(lit) == sorted(want),
+        f"{power['name']} aimed at {x},{y} lights the {len(covered)} squares it hits",
+        f"{len(lit)} squares lit, {len(want)} expected",
+    )
+    # The point of the colour: what it hits is not what you may click.
+    aims = {f"{sq[0]},{sq[1]}" for sq in power["squares"]}
+    check.that(
+        {f"{sq[0]},{sq[1]}" for sq in covered} != aims,
+        "the squares it hits are a different set from the squares it aims at",
+    )
+    buttons.nth(pick).click()  # put the power back down
+
+
+def _check_initiative(page, check: Checks, served: list[dict]) -> None:  # noqa: ANN001
+    """The strip along the top must be the initiative order.
+
+    Two halves, because the bug could be in either. `actors` used to arrive in
+    the order the world spawned creatures -- the whole party, then all the
+    monsters -- which reads exactly like an order and is not one; the page
+    draws the array as it comes. So: the strip is what the server sent, and
+    what the server sent is the order the turns happen in. Within one round
+    each creature that acts must sit further down the strip than the last one;
+    a round is what the wrap back to the top is called.
+    """
+    if not served:
+        check.that(False, "the page was served a state to draw")
+        return
+    # This encounter's states only. The page starts a fight on load and another
+    # on the reload that turns freeform on, and two fights have two initiative
+    # orders -- reading both as one is a creature acting out of turn.
+    served = [s for s in served if s.get("id") == served[-1].get("id")]
+    order = [a["id"] for a in served[-1]["actors"]]
+    strip = page.evaluate(
+        "() => [...document.querySelectorAll('#order .unit')].map(n => n.dataset.actor)"
+    )
+    check.that(strip == order, "the strip is drawn in the order the server sent",
+               f"{strip}\n          vs {order}")
+
+    spot = {a: i for i, a in enumerate(order)}
+    turns: list[tuple[int, str]] = []
+    for s in served:
+        who = s.get("current")
+        if who and s.get("round") and (not turns or turns[-1][1] != who):
+            turns.append((s["round"], who))
+    backwards = [
+        (a, b)
+        for (ra, a), (rb, b) in itertools.pairwise(turns)
+        if ra == rb and spot.get(b, -1) <= spot.get(a, -1)
+    ]
+    check.that(
+        len(turns) > 1 and not backwards,
+        f"turns run down the strip ({len(turns)} turns seen)",
+        f"went backwards inside a round: {backwards}",
+    )
 
 
 if __name__ == "__main__":

@@ -78,6 +78,11 @@ class PowerDTO(BaseModel):
     available: bool = True
     reason: str | None = None
     squares: list[Square] = Field(default_factory=list)
+    #: For an area power, what each aim square in `squares` would cover,
+    #: keyed `"x,y"`. Empty for everything else. `squares` says where a blast
+    #: may be *pointed*, which is not where it lands, and the shape it makes
+    #: is a rule -- so the page is handed it rather than working it out.
+    footprints: dict[str, list[Square]] = Field(default_factory=dict)
     aimed: list[int] = Field(default_factory=list)
     option_index: int | None = None
     option_indices: list[int] = Field(default_factory=list)

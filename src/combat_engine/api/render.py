@@ -66,7 +66,7 @@ def state(session: Session, seq: int = 0) -> dto.EncounterStateDTO:
         winner=session.encounter.winner.value if session.encounter.winner else None,
         rounds=world.round if session.encounter.finished else None,
         board=board(session),
-        actors=[actor_dto(session, eid) for eid in creatures(world)],
+        actors=[actor_dto(session, eid) for eid in initiative(session)],
         options=[option_dto(session, i, o) for i, o in enumerate(options)],
         roster=roster(session, options),
         economy=economy(session),
@@ -75,6 +75,23 @@ def state(session: Session, seq: int = 0) -> dto.EncounterStateDTO:
         seq=len(world.bus.log),
         scaling=world.scaling.describe(),
     )
+
+
+def initiative(session: Session) -> list[int]:
+    """Everyone, in the order they take their turns.
+
+    `creatures` is the order the world spawned them in, which is nobody's
+    turn order -- and it is what the page's initiative strip was drawing,
+    because the strip is `actors` and nothing else ever sorted it.
+    `Encounter.order` is the roll, and the dead keep their slot in it.
+
+    Anything not in that list -- something summoned mid-fight, or a snapshot
+    taken before the fight started -- follows in spawn order rather than
+    being dropped.
+    """
+    order = {eid: i for i, eid in enumerate(session.encounter.order)}
+    late = len(order)
+    return sorted(creatures(session.world), key=lambda eid: order.get(eid, late))
 
 
 # --------------------------------------------------------------------------
@@ -408,6 +425,7 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
         if p is None:
             continue
         ok, why = usable(world, actor, p)
+        aims_at = _clickable(world, actor, p)
         indices = by_ref.get(ref, [])
         printed = session.wire.printed(ref)
         affordable = session.encounter.can_spend(actor, p.action)
@@ -430,7 +448,8 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
                 targets=str(p.target),
                 available=bool(indices),
                 reason=None if indices else (why or "cannot be used here"),
-                squares=_clickable(world, actor, p),
+                squares=aims_at,
+                footprints=_footprints(world, actor, p, aims_at),
                 aimed=[],
                 option_index=indices[0] if indices else None,
                 option_indices=indices,
@@ -460,6 +479,20 @@ def _clickable(world, actor: int, p) -> list:  # noqa: ANN001
     if p.reach.kind in ("area_burst", "close_blast"):
         return aim_points(world, actor, p)
     return sorted(area_of(world, actor, p))
+
+
+def _footprints(world, actor: int, p, aims_at: list) -> dict[str, list]:  # noqa: ANN001
+    """What each aim square would actually catch.
+
+    Only for the two shapes where the square you click is not the square you
+    hit. A player placing a blast 3 could see the ring it may be pointed at
+    and nothing about what it would cover, so the choice was made blind and
+    read afterwards off the log. The shape is a rule, which is why it is
+    worked out here and not in the browser.
+    """
+    if p.reach.kind not in ("area_burst", "close_blast"):
+        return {}
+    return {f"{x},{y}": sorted(area_of(world, actor, p, (x, y))) for x, y in aims_at}
 
 
 def economy(session: Session) -> dto.EconomyDTO:

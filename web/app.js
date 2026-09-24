@@ -57,6 +57,12 @@ const TRIGGERED = "triggered";
 // — which is where `ALWAYS_ON` ends up, and where it belongs.
 const COST_ORDER = ["standard", "move", "minor", "immediate", "free", "none"];
 
+// What the wire calls ending your turn. `Action.kind` is "end" and both modes
+// looked for "end_turn", so neither ever found it: the button was never lifted
+// out of the buckets and sat at the bottom of "none", under every power and
+// every square you could walk to, which is the one place it must not be.
+const END_TURN = "end";
+
 let state = null;
 let stream = null;
 let lastSeq = -1;
@@ -78,6 +84,12 @@ let freeform = readFreeform();
 // same gesture and a player should not have to know that one of them is not a
 // power.
 let aiming = null;
+// The power whose aim squares are on the board right now, and which of them
+// is showing its footprint. Held because the aim squares are lit from the
+// action list and the aim point is picked on the board, and the two gestures
+// have no element in common.
+let aimed = null;
+let aimedAt = null;
 
 function readFreeform() {
   try {
@@ -146,6 +158,11 @@ function renderBoard(s) {
   clear(el.board);
   clear(el.movement);
   clear(el.highlights);
+  // The aim squares went with that layer, so nothing is aimed until somebody
+  // lights them again — otherwise the next mouse move over the board redraws
+  // a power the player has already put down.
+  aimed = null;
+  aimedAt = null;
 
   const size = boardPixelSize(width, height);
   for (const layer of [el.board, el.movement, el.highlights]) {
@@ -333,6 +350,8 @@ function namedTargets(option) {
 // already computed it.
 function highlight(option) {
   clear(el.highlights);
+  aimed = null;
+  aimedAt = null;
   if (!option) return;
   for (const sq of option.path || []) {
     const h = div("hl hl-path");
@@ -354,8 +373,10 @@ function highlight(option) {
 // -------------------------------------------------------------- turn order
 //
 // The turn order as a strip of unit icons along the top, which is how a table
-// tracks it. `s.actors` already arrives in initiative order, so the strip is
-// the array.
+// tracks it. `s.actors` arrives in initiative order, so the strip is the array
+// — and it only does since render.py sorted it by `Encounter.order`. It used
+// to arrive in the order the world spawned its creatures, which is party then
+// monsters every time and looks enough like an order to be believed.
 //
 // It replaces a vertical list that repeated each creature's initiative bonus.
 // That number decides the order once, at the start of the fight, and answers
@@ -368,6 +389,7 @@ function renderOrder(s) {
   for (const a of s.actors || []) {
     const down = isDown(a);
     const chip = div(`unit side-${a.side || "npc"}`);
+    chip.dataset.actor = a.id;
     if (a.is_current) chip.classList.add("current");
     if (down) chip.classList.add("dead");
 
@@ -449,7 +471,7 @@ function renderActions(s) {
   // when nothing in the list is worth doing, and hunting for it past nine
   // powers and four movement options is the wrong way round. Pulled out of the
   // buckets entirely so it is not also listed under "none" further down.
-  const ending = options.find((o) => o.kind === "end_turn");
+  const ending = options.find((o) => o.kind === END_TURN);
   if (ending) el.actions.appendChild(optionButton(s, ending));
 
   for (const o of options) {
@@ -559,7 +581,7 @@ function renderPendingSquares(pending) {
  * turn is still a button, because there is no square to point at for it.
  */
 function renderFreeform(s) {
-  const ending = (s.options || []).find((o) => o.kind === "end_turn");
+  const ending = (s.options || []).find((o) => o.kind === END_TURN);
   if (ending) el.actions.appendChild(optionButton(s, ending));
 
   el.actions.appendChild(
@@ -652,6 +674,11 @@ function freeformPower(s, p) {
   // the surface being played, and it was the one with no price on it at all.
   if (p.cost_note) b.appendChild(div("option-cost", p.cost_note));
 
+  // Back to whatever is actually picked, which may be nothing.
+  const restore = () => {
+    if (typeof aiming === "number") showAimable((s.roster || [])[aiming]);
+    else highlight(null);
+  };
   b.addEventListener("mouseenter", () => {
     showCard(powerCard(p));
     showAimable(p);
@@ -659,9 +686,12 @@ function freeformPower(s, p) {
   b.addEventListener("mousemove", moveCard);
   b.addEventListener("mouseleave", () => {
     hideCard();
-    if (typeof aiming === "number") showAimable((s.roster || [])[aiming]);
-    else highlight(null);
+    restore();
   });
+  // Keyboard, tabbing down the list: the squares a power can be aimed at are
+  // the whole of what the row does not say.
+  b.addEventListener("focus", () => showAimable(p));
+  b.addEventListener("blur", restore);
   b.addEventListener("click", () => {
     aiming = aiming === i ? null : i;
     render();
@@ -724,15 +754,43 @@ function movementButton(name, mode, squares, note, s) {
   return b;
 }
 
-/** Light the squares a power may be aimed at. */
-function showAimable(power) {
+/**
+ * Light the squares a power may be aimed at, and what one of them would hit.
+ *
+ * `at` is an aim square as `"x,y"`. For a blast or a burst the square you
+ * click is not a square the power lands on — a blast 3 is aimed at the ring
+ * two out and covers nine squares somewhere else entirely — so `footprints`
+ * carries, per aim point, the squares it catches. **The server drew every one
+ * of them**: which squares a shape covers is a rule, and none are read here.
+ */
+function showAimable(power, at) {
   clear(el.highlights);
+  aimed = power || null;
+  aimedAt = null;
   if (!power) return;
   for (const sq of power.squares || []) {
     const h = div("hl hl-affected");
     place(h, squareRect(sq[0], sq[1]));
     el.highlights.appendChild(h);
   }
+  const covers = at ? (power.footprints || {})[at] : null;
+  if (!covers) return;
+  aimedAt = at;
+  // After the aim squares, so it draws over them: this is the more specific
+  // answer, the same way a hovered path draws over the movement range.
+  for (const sq of covers) {
+    const h = div("hl hl-hit");
+    place(h, squareRect(sq[0], sq[1]));
+    el.highlights.appendChild(h);
+  }
+}
+
+/** Show what the aim square under the pointer would catch, if anything. */
+function previewFootprint(at) {
+  if (!aimed) return;
+  const covers = (aimed.footprints || {})[at];
+  if (covers ? at === aimedAt : aimedAt === null) return; // nothing changed
+  showAimable(aimed, covers ? at : null);
 }
 
 /**
@@ -1586,9 +1644,15 @@ el.board.addEventListener("click", (ev) => {
 el.board.addEventListener("mousemove", (ev) => {
   const { x, y } = pointerSquare(el.board, ev);
   el.hover.textContent = `(${x}, ${y})`;
+  // Point at an aim square and the blast it would make appears under the
+  // pointer. The board is the only place to do this: aiming is picked in the
+  // action list and the aim point is a square, so there is nothing else to
+  // hover.
+  previewFootprint(`${x},${y}`);
 });
 el.board.addEventListener("mouseleave", () => {
   el.hover.textContent = "";
+  previewFootprint(null);
 });
 
 const rawToggle = document.getElementById("show-raw");
