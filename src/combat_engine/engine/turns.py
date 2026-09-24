@@ -27,6 +27,7 @@ class Encounter:
 
     def __init__(self, world: World) -> None:
         self.world = world
+        world.encounter = self
         self.order: list[int] = []
         self.index = 0
         self.started = False
@@ -93,6 +94,53 @@ class Encounter:
             # of the same seed produce the same order.
             rolls.append((-init.rolled, -init.bonus, eid, eid))
         return [eid for _, _, eid, _ in sorted(rolls)]
+
+    def join(self, eid: int) -> int:
+        """Put a creature that was not here at the start into the order.
+
+        Rolls its initiative and splices it in by that, so it acts where it
+        belongs rather than wherever it happened to arrive. Anything spawned
+        mid-fight was simply absent from the order before this, which meant
+        it never got a turn at all.
+
+        Returns the slot it landed in.
+        """
+        from .query import level_term
+
+        if eid in self.order:
+            return self.order.index(eid)
+        init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
+        init.rolled = (
+            self.world.rng.d20().total
+            + init.bonus
+            + level_term(self.world, eid, init.scale)
+        )
+        return self._splice(eid, init.rolled)
+
+    def extra_turn(self, eid: int, at: int) -> int:
+        """Give a creature a *second* slot, at that initiative count.
+
+        A solo acting twice a round is one creature in two places in the
+        order, which is what the printed rule describes. Duplicated rather
+        than special-cased, so every reader of the order keeps working.
+        """
+        return self._splice(eid, at)
+
+    def _splice(self, eid: int, rolled: int) -> int:
+        """Insert a slot by initiative, keeping the current turn's place."""
+        where = len(self.order)
+        for i, other in enumerate(self.order):
+            init = self.world.get(other, Initiative)
+            if init is not None and init.rolled < rolled:
+                where = i
+                break
+        self.order.insert(where, eid)
+        # The creature whose turn it is must keep its slot. Inserting at or
+        # before the cursor shifts everything after it along by one, and
+        # without this the newcomer would steal the turn in progress.
+        if where <= self.index:
+            self.index += 1
+        return where
 
     def _begin(self, eid: int) -> None:
         self.world.turn = eid
@@ -230,8 +278,11 @@ class Encounter:
 
     def _turn_stamp(self) -> int:
         """Identifies one creature's turn. Opportunity actions refresh on it."""
-        slot = self.order.index(self.world.turn) if self.world.turn in self.order else 0
-        return self.world.round * 1000 + slot
+        # The slot being played, not the first slot this creature owns. A
+        # solo with a second turn holds two, and looking the eid up gave
+        # both of them the same stamp -- so its opportunity action never
+        # refreshed on the second one.
+        return self.world.round * 1000 + self.index
 
     # -- dying ---------------------------------------------------------------
 

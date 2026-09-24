@@ -49,6 +49,7 @@ from .types import (
     Forced,
     Keyword,
     Relation,
+    Team,
     Window,
 )
 
@@ -1499,6 +1500,155 @@ class Cast:
         return self.world.effects.apply(
             self.me, self.me, until, label=f"{self.ref} quarry",
             relations=[(Relation.QUARRY_OF, self.me, who)],
+        )
+
+    # -- the three relations that simply name a second creature -------------
+    #
+    # A master, a rider and a guard are all the same shape: the stat block
+    # says "its master" or "a creature guarded by it" and expects the engine
+    # to know who that is. Source is the one in charge, target the one it is
+    # responsible for, matching `Relation`.
+
+    def absorb(self, ev: Any = None, *, on: int | None = None) -> int:
+        """Take damage somebody else was about to suffer.
+
+        Reads the `DamageRolled` off `c.trigger` by default, zeroes it, and
+        deals it to the absorber instead. Moving damage already dealt was not
+        possible at all before this: the event carried the number and nothing
+        could take it over.
+        """
+        ev = ev if ev is not None else self.trigger
+        taken = max(0, getattr(ev, "amount", 0)) if ev is not None else 0
+        if taken <= 0:
+            return 0
+        ev.amount = 0
+        return deal_damage(
+            self.world, getattr(ev, "source", self.me), on or self.me, taken,
+            getattr(ev, "dtype", DamageType.UNTYPED), f"{self.ref} (absorbed)",
+            from_attack=False,
+        )
+
+    def overrun(self, to: Square | None = None) -> list[int]:
+        """Trample: walk through whoever is in the way, and say who that was.
+
+        The body attacks each one. `c.move` refuses an occupied square and
+        reports nothing about what it passed, so a trample could not be
+        written at all.
+        """
+        from .movement import overrun as trample
+        from .movement import reachable
+
+        if to is None:
+            # The line that tramples the most. Picking the destination is
+            # the whole of the decision, so it is offered rather than taken.
+            here = reachable(self.world, self.me, self.speed)
+            if not here:
+                return []
+            to = self.world.decide(self.me, "overrun", sorted(here), "trample to")
+        return trample(self.world, self.me, to)
+
+    def summon(self, ref: str, at: Square | None = None, *, team: Team | None = None) -> int:
+        """Put a creature on the board mid-fight and give it a turn.
+
+        The two halves are equally necessary: `loader.spawn` alone makes an
+        entity that is not in the initiative order, so it stands there and
+        never acts. "Splits into two" and every summoner print this.
+        """
+        from combat_engine.content import loader
+
+        where = at or self._free_square_near(self.here)
+        if where is None:
+            return 0
+        from .query import team as side_of
+
+        made = loader.spawn(
+            self.world, ref, where, team=team or side_of(self.world, self.me) or Team.ENEMY
+        )
+        if self.world.encounter is not None:
+            self.world.encounter.join(made)
+        return made
+
+    def extra_turn(self, at: int) -> bool:
+        """Act again this round, at that initiative count. Solos do this."""
+        if self.world.encounter is None:
+            return False
+        self.world.encounter.extra_turn(self.me, at)
+        return True
+
+    def forbid(
+        self, ref: str, *, on: int | None = None, until: When = When.SAVE_ENDS
+    ) -> Effect | None:
+        """Take a row away for a while. "Loses the ability to use ..."
+
+        Not the same as spending it: the creature still has the row and
+        simply cannot reach it, so it comes back when the effect ends.
+        """
+        from .components import Powers
+
+        who = self._who(on)
+        if who is None:
+            return None
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        known.forbidden.add(ref)
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} forbids {ref}",
+            on_end=lambda: known.forbidden.discard(ref),
+        )
+
+    def master(self) -> int | None:
+        """Whoever this creature serves, if anybody."""
+        found = self.world.relations.sources(Relation.MASTER_OF, self.me)
+        return found[0] if found else None
+
+    def servants(self) -> list[int]:
+        """Everything that serves this creature."""
+        return self.world.relations.targets(Relation.MASTER_OF, self.me)
+
+    def bind(self, *, on: int | None = None) -> bool:
+        """Make that creature this one's servant."""
+        who = self._who(on)
+        if who is None:
+            return False
+        self.world.relations.set(Relation.MASTER_OF, self.me, who)
+        return True
+
+    def rider(self) -> int | None:
+        """Whoever is riding this creature."""
+        found = self.world.relations.targets(Relation.RIDDEN_BY, self.me)
+        return found[0] if found else None
+
+    def mount(self) -> int | None:
+        """Whatever this creature is riding."""
+        found = self.world.relations.sources(Relation.RIDDEN_BY, self.me)
+        return found[0] if found else None
+
+    def ride(self, *, on: int | None = None) -> bool:
+        """Get on. The mount carries you when it moves."""
+        who = self._who(on)
+        if who is None:
+            return False
+        self.world.relations.set(Relation.RIDDEN_BY, who, self.me)
+        return True
+
+    def guard(self, *, on: int | None = None) -> bool:
+        """Take that creature under this one's protection."""
+        who = self._who(on)
+        if who is None:
+            return False
+        self.world.relations.set(Relation.GUARDED_BY, self.me, who)
+        return True
+
+    def guarding(self) -> list[int]:
+        """Everything this creature is guarding."""
+        return self.world.relations.targets(Relation.GUARDED_BY, self.me)
+
+    def is_guarded(self, on: int | None = None) -> bool:
+        """Is that creature under *this* one's protection?"""
+        who = self._who(on)
+        return who is not None and self.world.relations.holds(
+            Relation.GUARDED_BY, self.me, who
         )
 
     def grants_advantage(

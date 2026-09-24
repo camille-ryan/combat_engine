@@ -36,6 +36,9 @@ class Rules:
     cannot_move: bool = False
     #: Speed is capped at this many squares.
     speed_cap: int | None = None
+    #: Half speed rather than a cap. Squeezing is the only thing that does
+    #: this, and it is a fraction of whatever the speed happens to be.
+    halve_speed: bool = False
     #: Damage the creature deals is halved.
     weakened: bool = False
     #: Treated as helpless: a coup de grace target.
@@ -77,6 +80,9 @@ RULES: dict[Condition, Rules] = {
     # after any one power, because three classes impose it.
     Condition.ROOTED: Rules(no_shift=True),
     Condition.SLOWED: Rules(speed_cap=2),
+    # A big creature folding itself into a small space: half speed, -5 to
+    # attack, and it grants combat advantage to everybody.
+    Condition.SQUEEZING: Rules(grants_ca=True, attack=-5, halve_speed=True),
     Condition.STUNNED: Rules(grants_ca=True, cannot_act=True, no_reactions=True),
     Condition.SURPRISED: Rules(grants_ca=True, cannot_act=True, no_reactions=True),
     Condition.UNCONSCIOUS: Rules(

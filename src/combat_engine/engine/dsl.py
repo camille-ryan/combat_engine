@@ -626,6 +626,8 @@ def usable(world: World, actor: int, p: Power, *, dying: bool = False) -> tuple[
     if powers is not None:
         if p.ref not in powers.all:
             return False, "not known"
+        if p.ref in powers.forbidden:
+            return False, "cannot be used right now"
         # Checked for every usage, because **every printed "1/round" rider
         # is on an at-will** -- and this lived inside the not-at-will branch,
         # so the guard was unreachable and the header field was decoration.

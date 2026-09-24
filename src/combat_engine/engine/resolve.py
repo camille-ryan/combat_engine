@@ -137,8 +137,12 @@ def attack(
         result.advantage = ca
         # Provisional, so an interrupt watching the roll can ask whether it
         # is about to be hit -- which is exactly when a shield gets raised.
-        result.critical = natural == 20
-        result.hit = natural == 20 or (natural != 1 and total >= against)
+        # A critical is not always a 20: "crits on a 17-20" is standard on
+        # high-crit weapons and on solos, and the number was hard-coded in
+        # both of the places it is decided.
+        floor = 20 - _mods(world, attacker, "crit_range", ctx)
+        result.critical = natural >= floor
+        result.hit = result.critical or (natural != 1 and total >= against)
 
         rolled = AttackRolled(
             attacker=attacker,
@@ -187,8 +191,9 @@ def attack(
         # the whole of what `c.reroll_attack` does -- and recomputing from
         # the locals threw the new number away and judged the old one. Every
         # reroll row in the tree was inert.
-        result.critical = result.natural == 20
-        result.hit = result.natural == 20 or (
+        floor = 20 - _mods(world, attacker, "crit_range", ctx)
+        result.critical = result.natural >= floor
+        result.hit = result.critical or (
             result.natural != 1 and result.total >= against
         )
 
@@ -303,6 +308,10 @@ def deal_damage(
     if rolled.cancelled:
         return 0
     amount = max(0, rolled.amount)
+    # Read back off the event, the way the attack reads its target back. A
+    # listener may move the blow onto somebody else -- one creature stepping
+    # in front of another -- and everything below this line used the local.
+    target = rolled.target
 
     if takes_half(world, target):
         # Insubstantial halves everything, and does it before resistance so a

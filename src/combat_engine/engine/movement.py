@@ -43,7 +43,7 @@ from .events import (
 )
 from .grid import Square, distance, footprint, neighbours, spread
 from .query import adjacent, alive, can_move, creatures, enemies, squares
-from .types import Forced, Size
+from .types import Forced, Relation, Size
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -69,7 +69,15 @@ def _neighbours(world: World, eid: int) -> set[int]:
     return {o for o in creatures(world) if o != eid and adjacent(world, eid, o)}
 
 
-def step(world: World, eid: int, to: Square, *, kind: str = "walk", mode: str = "walk") -> bool:
+def step(
+    world: World,
+    eid: int,
+    to: Square,
+    *,
+    kind: str = "walk",
+    mode: str = "walk",
+    through: bool = False,
+) -> bool:
     """Move one square. Returns False if the square could not be entered.
 
     The order matters: leaving is announced from the old square, the
@@ -80,7 +88,10 @@ def step(world: World, eid: int, to: Square, *, kind: str = "walk", mode: str = 
     if pos is None:
         return False
     target = footprint(to, pos.size)
-    overhead = mode in OVERHEAD
+    # `through` is trampling and melding: entering a square somebody else is
+    # standing in. Terrain still blocks, which is what `overhead` already
+    # means to `_clear`.
+    overhead = mode in OVERHEAD or through
     if not _clear(world, eid, target, overhead=overhead):
         return False
 
@@ -109,6 +120,18 @@ def step(world: World, eid: int, to: Square, *, kind: str = "walk", mode: str = 
 
     world.bus.emit(Moved(actor=eid, from_=from_, to=to))
 
+    # A mount carries its rider. Set after the mount has arrived, so the
+    # rider is put down in the square the mount is actually standing in --
+    # and quietly, because the rider is being carried rather than moving,
+    # and being carried past somebody provokes nothing.
+    for passenger in world.relations.targets(Relation.RIDDEN_BY, eid):
+        seat = world.get(passenger, Position)
+        if seat is not None and seat.square != to:
+            world.grid.lift(passenger)
+            seat.square = to
+            world.grid.place(passenger, footprint(to, seat.size))
+            world.bus.emit(Moved(actor=passenger, from_=from_, to=to))
+
     after = _neighbours(world, eid)
     for other in sorted(after - before):
         world.bus.emit(AdjacencyGained(actor=eid, other=other))
@@ -117,6 +140,58 @@ def step(world: World, eid: int, to: Square, *, kind: str = "walk", mode: str = 
         world.bus.emit(AdjacencyLost(actor=eid, other=other))
         world.bus.emit(AdjacencyLost(actor=other, other=eid))
     return pos.square != from_
+
+
+def overrun(world: World, eid: int, to: Square, *, kind: str = "walk") -> list[int]:
+    """Walk to a square, going straight through anybody in the way.
+
+    Returns everyone whose space was entered, in the order they were
+    trampled, so the body can attack each one. The mover must end somewhere
+    free -- the trample ends where it can stand -- and the walk stops at the
+    last square it could.
+    """
+    entered: list[int] = []
+    pos = world.get(eid, Position)
+    if pos is None:
+        return entered
+    for sq in _line(pos.square, to)[1:]:
+        under = {
+            who
+            for s in footprint(sq, pos.size)
+            if (who := world.grid.occupant(s)) is not None and who != eid
+        }
+        if not step(world, eid, sq, kind=kind, through=True):
+            break
+        for who in sorted(under):
+            if who not in entered:
+                entered.append(who)
+    # It cannot finish standing on somebody, so shuffle into the nearest
+    # free square. That is the printed rule rather than a convenience.
+    if _occupied(world, eid, pos.squares):
+        _retreat(world, eid)
+    return entered
+
+
+def _retreat(world: World, eid: int) -> bool:
+    """Shuffle out of an occupied square into the nearest free one."""
+    pos = world.get(eid, Position)
+    if pos is None:
+        return False
+    for sq in sorted(spread(pos.squares, 1)):
+        if _clear(world, eid, footprint(sq, pos.size)) and sq != pos.square:
+            return step(world, eid, sq, kind="teleport")
+    return False
+
+
+def _line(a: Square, b: Square) -> list[Square]:
+    """Every square from a to b, diagonals counting as one step."""
+    out = [a]
+    x, y = a
+    while (x, y) != b:
+        x += (b[0] > x) - (b[0] < x)
+        y += (b[1] > y) - (b[1] < y)
+        out.append((x, y))
+    return out
 
 
 def _clear(

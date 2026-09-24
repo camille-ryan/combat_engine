@@ -45,6 +45,10 @@ class World:
         self.terrain: set[str] = set()
         #: Whose turn it is. None between rounds and before combat starts.
         self.turn: int | None = None
+        #: The fight in progress, once one has been made. A back-reference
+        #: rather than a lookup, because a power body that summons something
+        #: has to put it in the initiative order and had no way to reach it.
+        self.encounter: Any = None
         self._stores: dict[type, dict[int, Any]] = {}
         self._alive: list[int] = []
         self._next = 0

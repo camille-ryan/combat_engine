@@ -97,12 +97,16 @@ def speed(world: World, eid: int) -> int:
     mods = world.get(eid, Mods)
     if mods is not None:
         base += mods.total("speed")
+    halved = False
     for c in active(world, eid):
         cap = rules(c).speed_cap
         if cap is not None:
             base = min(base, cap)
+        halved = halved or rules(c).halve_speed
         if rules(c).cannot_move:
             return 0
+    if halved:
+        base //= 2
     return max(0, base)
 
 

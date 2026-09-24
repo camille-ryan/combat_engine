@@ -213,13 +213,17 @@ def _hits(line: str, index: dict[str, list[str]]) -> list[tuple[str, list[str]]]
     Built from the line's own word n-grams rather than by trying 17,000
     regexes -- one pass over the line instead of one pass per name.
     """
-    words = re.findall(r"[a-z']+", line.lower())
     out: list[tuple[str, list[str]]] = []
-    for size in range(min(6, len(words)), 0, -1):
-        for i in range(len(words) - size + 1):
-            phrase = " ".join(words[i : i + size])
-            if phrase in index:
-                out.append((phrase, index[phrase]))
+    # Within runs of prose only. Punctuation is a boundary -- a method
+    # signature is not a sentence, and reading across the opening bracket
+    # made every `def <verb>(self` pair look like a two-word name.
+    for run in re.findall(r"[a-z'](?:[a-z' -]*[a-z'])?", line.lower()):
+        words = re.findall(r"[a-z']+", run)
+        for size in range(min(6, len(words)), 0, -1):
+            for i in range(len(words) - size + 1):
+                phrase = " ".join(words[i : i + size])
+                if phrase in index:
+                    out.append((phrase, index[phrase]))
     return out
 
 

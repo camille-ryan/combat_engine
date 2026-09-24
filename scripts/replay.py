@@ -39,6 +39,7 @@ CASES = [
     {"name": "level-1-full", "seed": 7, "level": 1, "scaling": "full"},
     {"name": "level-1-alt", "seed": 11, "level": 1, "scaling": "full"},
     {"name": "level-1-bounded", "seed": 7, "level": 1, "scaling": "bounded"},
+    {"name": "level-3-full", "seed": 5, "level": 3, "scaling": "full"},
     {"name": "level-5-full", "seed": 3, "level": 5, "scaling": "full"},
     {"name": "level-5-bounded", "seed": 3, "level": 5, "scaling": "bounded"},
 ]

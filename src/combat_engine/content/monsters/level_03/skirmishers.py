@@ -776,7 +776,7 @@ def m3071a0(c: Cast) -> None:
     target=ONE_CREATURE,
 )
 def m3071a1(c: Cast) -> None:
-    """Trample and keep going, with the target given no opening as it leaves.
+    """Trample and keep going; leaving provokes nothing from the target.
 
     The hooves are m3071a0 rather than a copy, so the damage line stays in
     one place, and the attack is taken before the move for the reason level 1
@@ -1015,7 +1015,7 @@ def m411a0(c: Cast) -> None:
     target=ONE_CREATURE,
 )
 def m411a1(c: Cast) -> None:
-    """Swoop, bite, and away, with the target given no opening as it goes."""
+    """Swoop, bite, and away; leaving provokes nothing from the target."""
     c.no_provoke(from_=c.target)
     c.basic()
     c.move(8)
@@ -1080,7 +1080,7 @@ def m478a2(c: Cast) -> None:
     is what is asked: taking the human form lifts m478a1 out of what the
     creature knows and reverting hands it back.
     """
-    human = c.choose(["human", "dire rat"], "which shape") == "human"
+    human = c.choose(["upright", "beast"], "which shape") == "upright"
     _reshape(c, drops="m478a1" if human else "")
 
 

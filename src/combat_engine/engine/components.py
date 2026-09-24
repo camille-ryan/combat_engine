@@ -302,6 +302,9 @@ class Powers:
     basic: str = "mba"
     #: A power that replaces the basic attack when opportunity knocks.
     opportunity: str = ""
+    #: Rows taken away for a while. Not the same as spent: a forbidden row
+    #: is one the creature still has and cannot currently reach.
+    forbidden: set[str] = field(default_factory=set)
 
     @property
     def all(self) -> list[str]:

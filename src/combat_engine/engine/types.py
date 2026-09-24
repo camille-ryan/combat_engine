@@ -127,6 +127,7 @@ class Condition(StrEnum):
     SHAPED = "shaped"
     ROOTED = "rooted"
     SLOWED = "slowed"
+    SQUEEZING = "squeezing"
     STUNNED = "stunned"
     SURPRISED = "surprised"
     UNCONSCIOUS = "unconscious"
@@ -149,6 +150,14 @@ class Relation(StrEnum):
     QUARRY_OF = "quarry_of"
     #: Granted explicitly by a power. Flanking is *computed*, not stored here.
     GRANTS_CA_TO = "grants_ca_to"
+    #: The three that simply name a *second* creature, with no condition
+    #: attached. Source is the one in charge -- the master, the mount, the
+    #: guard -- and the target is the one it is responsible for. Several
+    #: stat blocks print "its master", "its rider", "a creature guarded by
+    #: it", and before these there was no way to ask who that was.
+    MASTER_OF = "master_of"
+    RIDDEN_BY = "ridden_by"
+    GUARDED_BY = "guarded_by"
 
 
 class Size(StrEnum):

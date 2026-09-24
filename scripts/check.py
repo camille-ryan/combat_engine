@@ -40,8 +40,8 @@ class Instrument:
 
 
 CHECKS = (
-    Instrument("ruff", ("uv", "run", "ruff", "check", "."),
-               "style, dead imports, undefined names"),
+    Instrument("ruff", ("uv", "run", "scripts/lint.py"),
+               "style, dead imports, undefined names, shadowed methods"),
     Instrument("audit", ("uv", "run", "scripts/audit.py", "--changed"),
                "every declared row fires, and does something"),
     Instrument("leaks", ("uv", "run", "scripts/leaks.py"),
