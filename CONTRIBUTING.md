@@ -44,6 +44,22 @@ hour. It is kept in the repo rather than handed out ad hoc, because it
 drifted behind the engine twice and the second time an agent wrote around a
 method that had existed for a day.
 
+### When a row cannot be written
+
+Leave it out — no stub, no placeholder — and add it to `docs/blocked.json`
+with the `Cast` method or header field it wanted. `coverage.py` counts the
+hole; that file records *why*, which nothing else did.
+
+```
+uv run scripts/blocked.py --ready
+```
+
+lists the rows whose gap has since been built. Three level-5 rows sat
+waiting on `c.moving_as` for four levels after it existed, because the
+reason lived only in a wave's report and an issue comment, and neither is
+something you can grep. Adding the entry is the last step of leaving a row
+out.
+
 ## Git
 
 Work is tracked in **GitHub Issues**. Open one before starting unplanned
