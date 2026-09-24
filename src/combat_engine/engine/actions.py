@@ -85,6 +85,12 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
             continue
         if p.action is ActionType.NONE:
             continue  # a trait; armed at the start of the fight, never chosen
+        if p.out_of_combat:
+            # Declared on rows that light a torch or mend a cloak. The field
+            # existed and only `audit.py` read it, so the four wizard
+            # cantrips were offered as combat actions like anything else --
+            # and got taken, because a policy picks from what it is given.
+            continue
         ok, why = usable(world, actor, p)
         if not encounter.can_spend(actor, p.action):
             ok, why = False, "no action left"

@@ -979,7 +979,12 @@ class Cast:
         result = self.strike(on=who, advantage=True)
         result.critical = True
         result.hit = True
-        self.damage("5d6", on=who, detail="coup de grace")
+        # `c.flat`, not `c.damage`: the extra 5d6 of a coup de grace is not
+        # part of the attack's damage and a critical does not maximise it.
+        # Rolled through `c.damage` with the critical flag already up, it
+        # came out a flat 30 every time, on top of an automatic critical,
+        # from a level 1 monster.
+        self.flat(self.roll("5d6"), on=who)
         return True
 
     def vulnerable(

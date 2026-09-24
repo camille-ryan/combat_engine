@@ -34,15 +34,15 @@ from combat_engine.engine import (
 from combat_engine.engine.monster_math import PRESETS as MATHS
 from combat_engine.engine.query import alive, creatures
 from combat_engine.engine.scaling import PRESETS
-from combat_engine.engine.types import Usage
+from combat_engine.engine.types import ActionType, Usage
 
 #: Which four classes take the field. What each of them *knows* is worked
 #: out from the registry rather than listed, because a hand-written list goes
 #: stale the moment a row lands -- and it did. For a long while this party
-#: carried no class features at all: no mark, no channel, no sneak attack.
-#: The rogue was swinging a dagger for 1d4 and nothing else, which is not a
-#: rogue, and the fight it produced said more about the roster than the
-#: engine.
+#: carried no class features at all: no mark, no channel, no extra damage.
+#: The rogue was swinging a dagger for 1d4 with none of its extra damage,
+#: which is not a rogue, and the fight it produced said more about the
+#: roster than about the engine.
 PARTY = ["fighter", "cleric", "rogue", "wizard"]
 
 #: A level 1 character: every class feature, two at-wills, one encounter
@@ -63,10 +63,32 @@ def loadout(cls: str, level: int) -> list[str]:
     mine = [p for p in REGISTRY.values() if p.cls == cls]
     # Level 0 is the class itself: features, marks, channels. All of it.
     out = sorted(p.ref for p in mine if p.level == 0)
+    # A leader's heal is a class feature that happens to be printed at level
+    # 1, and it does not spend an encounter slot. Taken out of the slots, the
+    # cleric was choosing between healing the party and attacking anything,
+    # which is not a choice the book asks it to make.
+    free = sorted(p.ref for p in mine if _is_class_heal(p))
+    out.extend(free)
     for usage, count in SLOTS.items():
-        pool = sorted(p.ref for p in mine if p.level == level and p.usage is usage)
+        pool = [
+            p.ref
+            for p in sorted(mine, key=lambda p: p.ref)
+            if p.level == level and p.usage is usage and p.ref not in out
+        ]
         out.extend(pool[:count])
     return out
+
+
+def _is_class_heal(p) -> bool:  # noqa: ANN001
+    """The leader's signature heal: a minor action, healing, twice a fight."""
+    from combat_engine.engine.types import Keyword
+
+    return (
+        p.level <= 1
+        and Keyword.HEALING in p.keywords
+        and p.action is ActionType.MINOR
+        and p.uses > 1
+    )
 
 
 def build(
@@ -103,12 +125,41 @@ def _opposition(level: int) -> tuple[list[str], int]:
 
     A fight against nothing is not a useful thing to print, so rather than
     refuse, this drops to whatever level has been written and says which.
+
+    Sorted by role rather than by id, and taken one role at a time, so the
+    four that turn up are a mixed band. Taking the first four by id gave an
+    all-brute line-up with half again the party's hit points and more damage
+    per swing, and a demo fight that says more about alphabetical order than
+    about the engine.
     """
     for candidate in range(min(level, 13), 0, -1):
         pool = loader.pick(candidate)
         if pool:
-            return pool, candidate
+            return _one_of_each(pool), candidate
     return [], level
+
+
+#: The order roles are drawn in. A soldier and a brute in front, something
+#: shooting from the back, a skirmisher moving. What a published encounter
+#: looks like.
+ROLE_ORDER = ["soldier", "brute", "artillery", "skirmisher", "controller", "lurker"]
+
+
+def _one_of_each(pool: list[str]) -> list[str]:
+    """Reorder a pool so consecutive picks come from different roles."""
+    from combat_engine.etl.build import game
+
+    db = game()
+    by_role: dict[str, list[str]] = {}
+    for ref in pool:
+        row = db.execute("SELECT role FROM monster WHERE ref = ?", (ref,)).fetchone()
+        by_role.setdefault((row["role"] if row else "") or "", []).append(ref)
+    out: list[str] = []
+    while any(by_role.values()):
+        for role in [*ROLE_ORDER, *sorted(set(by_role) - set(ROLE_ORDER))]:
+            if by_role.get(role):
+                out.append(by_role[role].pop(0))
+    return out
 
 
 def _tag(world: World) -> None:

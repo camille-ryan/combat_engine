@@ -118,24 +118,32 @@ def attack(
         result.critical = natural == 20
         result.hit = natural == 20 or (natural != 1 and total >= against)
 
-        world.bus.emit(
-            AttackRolled(
-                attacker=attacker,
-                target=target,
-                power=power,
-                vs=vs,
-                natural=natural,
-                bonus=bonus + situational,
-                total=total,
-                defence=against,
-                advantage=ca,
-            )
+        rolled = AttackRolled(
+            attacker=attacker,
+            target=target,
+            power=power,
+            vs=vs,
+            natural=natural,
+            bonus=bonus + situational,
+            total=total,
+            defence=against,
+            advantage=ca,
         )
-        if result.hit:
-            world.bus.emit(Hit(attacker=attacker, target=target, power=power,
-                               critical=result.critical))
-        else:
-            world.bus.emit(Miss(attacker=attacker, target=target, power=power))
+        # The live `AttackResult` rides along as a plain attribute rather
+        # than a field, so it never reaches the wire or a replay fixture.
+        # It is what an interrupt that rerolls the attack has to reach --
+        # without it `c.reroll_attack` had nothing to change and silently
+        # did nothing at all.
+        rolled.result = result
+        world.bus.emit(rolled)
+
+        landed = (
+            Hit(attacker=attacker, target=target, power=power, critical=result.critical)
+            if result.hit
+            else Miss(attacker=attacker, target=target, power=power)
+        )
+        landed.result = result
+        world.bus.emit(landed)
 
     declared = world.bus.emit(
         AttackDeclared(attacker=attacker, target=target, power=power, vs=vs), roll

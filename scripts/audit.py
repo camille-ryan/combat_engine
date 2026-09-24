@@ -44,6 +44,7 @@ from combat_engine.engine import (
     use,
 )
 from combat_engine.engine.dsl import REGISTRY
+from combat_engine.engine.query import alive
 from combat_engine.engine.types import ActionType
 
 #: Events that mean the power did something. A power that emits none of
@@ -138,6 +139,57 @@ START_NOISE = {"RoundStart", "TurnStart", "PowerUsed"}
 LOADED = (None, 20, 1)
 
 
+#: What the provocation itself emits. Subtracted so a triggered row is
+#: credited only with what *it* did, not with being attacked.
+PROVOKE_NOISE = {
+    "AttackDeclared", "AttackRolled", "Hit", "Miss", "DamageRolled",
+    "DamageApplied", "MoveStart", "MoveEnd", "Moved", "OpportunityWindow",
+    "AdjacencyGained", "AdjacencyLost", "TurnStart", "TurnEnd",
+}
+
+
+def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Make the thing happen that this row triggers off, and see if it fires.
+
+    Three situations between them cover nearly every printed trigger at this
+    tier: somebody swings at the row's owner, the owner swings at somebody,
+    and somebody walks past. The row is offered by the real dispatcher, so
+    its predicate and its action budget are exercised too -- which a direct
+    call skips entirely.
+    """
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.movement import shift
+    from combat_engine.engine.query import enemies
+
+    def basic(eid: int) -> str:
+        """Whatever *this* creature swings with. Hardcoding the generic melee
+        basic meant every attack in here was refused as "not known", because
+        a monster's basic is one of its own abilities."""
+        known = world.get(eid, Powers)
+        return known.basic if known else ""
+
+    foes = [f for f in enemies(world, caster) if alive(world, f)]
+    if not foes:
+        return False
+    for attacker, target in ((foes[0], caster), (caster, foes[0])):
+        use(world, attacker, basic(attacker), targets=[target], spend=False)
+        if _fired(world, ref, cursor):
+            return True
+    for foe in foes[:2]:
+        for sq in sorted(world.reachable_squares(foe, 1)):
+            shift(world, foe, sq)
+            if _fired(world, ref, cursor):
+                return True
+    return _fired(world, ref, cursor)
+
+
+def _fired(world, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    return any(
+        getattr(e, "power", None) == ref or getattr(e, "ref", None) == ref
+        for e in world.bus.log[cursor:]
+    )
+
+
 def audit(ref: str) -> Result:
     out = Result(ref=ref)
     declared = get(ref)
@@ -146,6 +198,12 @@ def audit(ref: str) -> Result:
     # is correctly refused. Firing it a second time would report every trait
     # in the game as unusable, which is the instrument lying about the fix.
     trait = declared is not None and declared.action is ActionType.NONE
+    # A row with a declared trigger reads the event it is answering. Calling
+    # it as a plain action hands it no event, so its first line finds nothing
+    # to respond to and it returns -- reported as silent, when what was wrong
+    # was the way it was fired. These are played instead: the dispatcher is
+    # allowed to offer them, in the situation the trigger names.
+    triggered = declared is not None and declared.on is not None
     for seed, face in ((s, f) for f in LOADED for s in range(1, TRIES + 1)):
         try:
             world, caster, armed = board(ref, seed)
@@ -154,6 +212,14 @@ def audit(ref: str) -> Result:
             if trait:
                 out.fired += 1
                 out.events |= armed
+                if world.effects.live:
+                    out.events.add("ConditionApplied")
+                continue
+            if triggered:
+                if not _provoke(world, caster, ref, cursor):
+                    continue
+                out.fired += 1
+                out.events |= {e.kind for e in world.bus.log[cursor:]} - PROVOKE_NOISE
                 if world.effects.live:
                     out.events.add("ConditionApplied")
                 continue

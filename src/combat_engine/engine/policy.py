@@ -116,7 +116,7 @@ def features(
         # A burst says "each creature", and that includes your own side.
         # Counting them as targets is how the wizard came to be aiming a
         # close blast at the fighter and scoring it well.
-        # Aiming at *yourself* is not friendly fire. Counting it as such
+        # Aiming at *yourself* does not catch an ally. Counting it as such
         # gave every `target=SELF` row a score of 6 - 7 = -1, so the policy
         # preferred almost anything to a class feature and the marks, the
         # channels and the strikers' riders were never used at all.
