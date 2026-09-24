@@ -92,9 +92,14 @@ that never applies.
   The damage context has `target`, `power`, `opportunity`, `charge` -- and
   **no `attacker`, no `ranged`**. "Melee attacks deal N extra" has to gate
   on `get(ctx["power"]).reach.kind`.
-* **Defaults differ on purpose.** `c.may(...)` asks **`c.target`** -- a heal
-  asks whose surge is being spent. `c.speed_of()` and `c.save()` default to
-  the **caster**. For a caster-side "you can", write `who=c.me`.
+* **Defaults differ, and not always on purpose.** `c.may(...)` asks
+  **`c.target`** deliberately -- a heal asks whose surge is being spent.
+  `c.speed_of()`, `c.save()`, `c.resist()` and `c.surge_value()` default to
+  the **caster**. `c.bonus`, `c.penalty` and `c.forbid` still fall to
+  `c.target`, so on a `target=NO_TARGET` self-buff they apply to nobody and
+  return `None` while the row still audits as having done something. For a
+  caster-side "you can", write `who=c.me`; for a caster-side modifier,
+  `on=c.me`.
 * **"Did this attack have combat advantage?" is `ev.result.advantage`**,
   read off the `Hit`. Asking `has_combat_advantage` again is too late: a
   one-shot grant has already been spent. The live `AttackResult` rides on

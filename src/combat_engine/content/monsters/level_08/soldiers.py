@@ -40,15 +40,21 @@ announced once per target, so a burst that left the m4918 out would have
 read as several attacks, most of which left it out. `PowerUsed` fires once
 per use and carries the whole target list, which is the printed question.
 
-One row is left out: m61a5 wants its weapon attacks to target Reflex
-instead of AC, and `AttackDeclared.vs` is announced, is mutable and is
-never read back. See the report.
+**"Its weapon attacks target Reflex instead of AC"** is `AttackDeclared.vs`,
+set in the interrupt window before the die is rolled. `resolve.attack` reads
+the defence back off the event now, where it used to read the enclosing
+parameter -- so this row was left out of the tree until it did. The other
+half of the same sentence, "deal fire damage", is not kept: `DamageRolled`
+carries a mutable `dtype` and `deal_damage` reads its own local for
+resistance and for the announcement, so a listener that sets it changes
+nothing. See the report.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.level_06.brutes import _is_bloodied
 from combat_engine.content.monsters.level_06.skirmishers import _fiery_blows, _renew
 from combat_engine.content.monsters.level_07.lurkers import _shift_beside
 from combat_engine.content.monsters.level_07.soldiers import _recharge_on
@@ -93,6 +99,7 @@ from combat_engine.engine import (
     UpTo,
     Usage,
     When,
+    Window,
     World,
     distance,
     footprint,
@@ -103,6 +110,7 @@ from combat_engine.engine import (
 from combat_engine.engine.components import Budget
 from combat_engine.engine.dsl import use
 from combat_engine.engine.events import (
+    AttackDeclared,
     Bloodied,
     ConditionApplied,
     DamageApplied,
@@ -1166,6 +1174,52 @@ def m61a4(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.dazed(until=When.EONT)
+
+
+def _is_weapon_row(ref: str) -> bool:
+    """Was that a weapon attack? Read off the row, which is where the keyword
+    lives -- the attack events carry only the ref."""
+    row = get(ref) if ref else None
+    return row is not None and Keyword.WEAPON in row.keywords
+
+
+@power(
+    "m61a5",
+    level=8,
+    usage=AT_WILL,
+    action=MINOR,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.FIRE],
+    requires=_is_bloodied,
+    requires_text="the m61 must be bloodied",
+)
+def m61a5(c: Cast) -> None:
+    """Which defence a weapon attack goes against, switched for a round.
+
+    `AttackDeclared` is emitted before the die is rolled and `resolve.attack`
+    reads `vs` back off it, so the swap is one assignment in the interrupt
+    window. It is armed per attack rather than per row because "its weapon
+    attacks" is not a named row and the creature has two of them.
+
+    The other half of the printed sentence -- that those attacks deal fire
+    damage -- is not kept. `DamageRolled.dtype` is mutable and nothing reads
+    it back, so setting it would be a line that looks like it works.
+    """
+    me = c.me
+
+    def aim(ev: AttackDeclared) -> None:
+        if ev.attacker == me and _is_weapon_row(ev.power):
+            ev.vs = REF
+
+    c.watch(
+        AttackDeclared,
+        aim,
+        until=When.SONT,
+        window=Window.BEFORE,
+        on=me,
+        label=c.ref,
+    )
 
 
 # ==========================================================================

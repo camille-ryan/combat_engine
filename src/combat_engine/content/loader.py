@@ -123,7 +123,12 @@ def spawn(world: World, ref: str, square: tuple[int, int], *, team: Team = Team.
             },
             scale="monster",
         ),
-        Health(max_hp=max(1, row["hp"]), surges=0),
+        # One surge per tier: heroic 1, paragon 2, epic 3. The compendium
+        # records none, and zero made every printed leader line of the form
+        # "an adjacent ally can spend a healing surge" inert between
+        # monsters -- the row fired and did nothing, which is what a wrong
+        # row looks like.
+        Health(max_hp=max(1, row["hp"]), surges=1 + max(0, row["level"] - 1) // 10),
         Movement(speed=row["speed"], modes=modes),
         Defences(resist=resist, vulnerable=vulnerable, immune=immune),
         Initiative(bonus=row["initiative"] - printed, scale="monster"),

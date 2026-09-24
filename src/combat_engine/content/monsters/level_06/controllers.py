@@ -42,6 +42,7 @@ from typing import Any
 
 from combat_engine.content.monsters.level_03.controllers import (
     _SAVE_ENDS_ON_ME,
+    _nonminion,
     _same_stock,
     _save_ends_on_me,
 )
@@ -1172,6 +1173,51 @@ def m4804a4(c: Cast) -> None:
 # --------------------------------------------------------------------------
 # m4887
 # --------------------------------------------------------------------------
+
+
+@power(
+    "m4887a0",
+    level=6,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m4887a0(c: Cast) -> None:
+    """Its own dead get up again as something lesser.
+
+    The square is taken at the moment of the `Dropped`, which is emitted
+    before `_die` lifts the body off the grid -- afterwards there is nothing
+    left to read a position from.
+
+    "At the start of **its** next turn" is the fallen ally's clock, and a
+    corpse is skipped by `Encounter.advance`, so it has no next turn to wait
+    for. The arrival is hung on the m4887's instead, which keeps the one
+    round of delay the printed line is for.
+    """
+    me = c.me
+    ring = c.aura(5, until=When.ENCOUNTER, label=c.ref)
+    waiting: list[Square] = []
+
+    def claim(ev: Dropped) -> None:
+        who = ev.actor
+        if who == me or team(c.world, who) is not team(c.world, me):
+            return
+        if who not in c.world.zones.occupants(ring):
+            return
+        if not c.is_kind("ghoul", on=who) or not _nonminion(c.world, who):
+            return
+        where = c.world.get(who, Position)
+        waiting.append(where.square if where is not None else c.here)
+
+    def rise(ev: TurnStart) -> None:
+        if ev.actor != me or ev.ghost:
+            return
+        while waiting:
+            c.summon("m499", waiting.pop(0))
+
+    c.watch(Dropped, claim, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.watch(TurnStart, rise, until=When.ENCOUNTER, on=me, label=f"{c.ref} rise")
 
 
 @power(

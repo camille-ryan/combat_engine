@@ -357,8 +357,16 @@ def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
         out.append(Action(kind="stand", cost=ActionType.MOVE))
     health = world.get(actor, Health)
     known = world.get(actor, Powers)
+    # Second wind is a character's action. Monsters carry surges -- one per
+    # tier -- because leader rows spend them ("an adjacent ally can spend a
+    # healing surge"), not so that every monster can heal itself for a
+    # quarter of its hit points once a fight. Granting the surges without
+    # this had them taking second wind the moment they were bloodied.
+    from .components import Build
+
     if (
-        health is not None
+        world.get(actor, Build) is not None
+        and health is not None
         and health.surges > 0
         and known is not None
         and known.times("second-wind") == 0

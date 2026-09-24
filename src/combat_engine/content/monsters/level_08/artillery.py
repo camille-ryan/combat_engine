@@ -77,6 +77,7 @@ from combat_engine.engine import (
     ENCOUNTER,
     FORT,
     FREE,
+    INTERRUPT,
     MINOR,
     NO_TARGET,
     ONE_CREATURE,
@@ -1123,6 +1124,46 @@ def m4716a2(c: Cast) -> None:
     if c.strike():
         c.hit()
         _sapped(c, 5, DamageType.ACID, defences=(AC,))
+
+
+_M4716_SAVED = "an enemy makes a successful saving throw"
+
+
+def _an_enemy_saved(world: World, me: int, ev: Event) -> bool:
+    """The throw has been rolled and announced, and not yet acted on.
+
+    `SavingThrow` carries its outcome and `Effects.save` reads it back, so an
+    interrupt in this window still has something to change. Sides are
+    compared with `team` rather than `query.enemies`: a creature saving
+    against ongoing damage may be dying, and `enemies` filters out the dead.
+    """
+    who = getattr(ev, "actor", None)
+    return (
+        bool(getattr(ev, "saved", False))
+        and who is not None
+        and who != me
+        and team(world, who) is not team(world, me)
+    )
+
+
+@power(
+    "m4716a3",
+    level=8,
+    usage=ENCOUNTER,
+    action=INTERRUPT,
+    reach=Ranged(10),
+    target=ONE_CREATURE,
+    keywords=[Keyword.IMPLEMENT, Keyword.RANGED],
+    attack=Attack(vs=WILL, printed=13),
+    trigger=_M4716_SAVED,
+    on=Trigger(SavingThrow, when=_an_enemy_saved, text=_M4716_SAVED),
+)
+def m4716a3(c: Cast) -> None:
+    """The whole of the hit is the saving throw going the other way -- no
+    damage at all. `c.unsave` writes the answer back onto the announcement,
+    which is what `Effects.save` then acts on."""
+    if c.strike():
+        c.unsave()
 
 
 # --------------------------------------------------------------------------

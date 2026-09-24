@@ -81,6 +81,7 @@ from combat_engine.engine import (
     power,
     use,
 )
+from combat_engine.engine.grid import Square, distance, spread
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     adjacent,
@@ -89,6 +90,7 @@ from combat_engine.engine.query import (
     enemies,
     has_combat_advantage,
 )
+from combat_engine.engine.query import squares as squares_of
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
@@ -115,6 +117,25 @@ def _has_an_opening(world: World, eid: int) -> bool:
 
 def _beside_an_ally(world: World, eid: int) -> bool:
     return any(a != eid and adjacent(world, a, eid) for a in allies(world, eid))
+
+
+def _free_squares_near(c: Cast, radius: int, how_many: int) -> list[Square]:
+    """Empty, passable squares within `radius`, nearest first.
+
+    For a printed "appears within N squares", which names a distance and no
+    square. `Cast._free_square_near` only looks at the ring next door, which
+    is not room enough for four arrivals. Ties break on the square itself so
+    a replay of the same seed puts them in the same places.
+    """
+    mine = squares_of(c.world, c.me)
+    here = c.here
+    free = [
+        sq
+        for sq in spread(mine, radius) - mine
+        if c.world.grid.passable(sq) and c.world.grid.occupant(sq) is None
+    ]
+    free.sort(key=lambda sq: (distance(here, sq), sq))
+    return free[:how_many]
 
 
 def _dominated_by(world: World, master: int, who: int) -> bool:
@@ -365,6 +386,35 @@ def m2801a4(c: Cast) -> None:
         c.dazed(until=When.SAVE_ENDS)
     else:
         c.hit(half=True)
+
+
+_M2801_BLED = "the m2801 is first bloodied"
+
+
+@power(
+    "m2801a5",
+    level=5,
+    usage=ENCOUNTER,
+    action=FREE,
+    reach=CloseBurst(5),
+    target=NO_TARGET,
+    trigger=_M2801_BLED,
+    on=Trigger(Bloodied, when=about_me, text=_M2801_BLED),
+)
+def m2801a5(c: Cast) -> None:
+    """Four of them, each in a free square within 5, on the m2801's side.
+
+    `c.summon` is both halves -- `loader.spawn` alone leaves a creature
+    standing outside the initiative order, never acting. It rolls the
+    newcomer its own initiative, so "acts on the m2801's initiative count"
+    is the one clause not kept: the order is spliced by the roll and there
+    is no way in to place a slot beside another creature's.
+
+    Declared with no target: `Bloodied` names nobody but the creature it is
+    about, so a targeted row would be aimed back at the m2801 itself.
+    """
+    for where in _free_squares_near(c, 5, 4):
+        c.summon("m1065", at=where)
 
 
 # --------------------------------------------------------------------------

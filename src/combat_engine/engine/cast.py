@@ -370,8 +370,14 @@ class Cast:
         return False
 
     def surge_value(self, of: int | None = None) -> int:
-        """A quarter of that creature's maximum, which is what a surge heals."""
-        who = self._who(of) or self.me
+        """A quarter of that creature's maximum, which is what a surge heals.
+
+        **Defaults to the caster.** It used to fall to `c.target`, and the
+        docstring read as though it did not -- so "you regain hit points
+        equal to your healing surge value" written as `c.surge_value()`
+        quietly healed off the victim's maximum instead of yours.
+        """
+        who = self.me if of is None else of
         health = self.world.get(who, Health)
         return health.surge_value if health else 0
 
@@ -1717,6 +1723,20 @@ class Cast:
             label=f"{self.ref} half healing",
         )
 
+    def threatens(
+        self, squares_: int = 2, *, on: int | None = None, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """How far this creature threatens for opportunity attacks.
+
+        "It can make opportunity attacks against enemies within 2 squares"
+        had no expression: the window was opened from a ring fixed at one.
+        A held modifier, so "gains reach 2" can raise it too.
+        """
+        return self.bonus(
+            "reach", max(0, squares_ - 1), on=on or self.me, until=until,
+            kind="untyped",
+        )
+
     def resist_forced(
         self, squares_: int = 1, *, on: int | None = None, until: When = When.ENCOUNTER
     ) -> Effect | None:
@@ -1848,12 +1868,27 @@ class Cast:
         from .movement import reachable
 
         if to is None:
-            # The line that tramples the most. Picking the destination is
-            # the whole of the decision, so it is offered rather than taken.
+            # The line that tramples the most, *ranked*. This said so and
+            # did not: it offered the reachable squares in sorted order, and
+            # with no decider installed `World.decide` takes the first --
+            # the lowest-sorted square on the board. So a bare `c.overrun()`
+            # reliably walked away from everybody and trampled nobody, which
+            # is exactly what a wrong row looks like.
+            from .movement import _line
+            from .query import enemies as _foes
+            from .query import squares as _sq
+
             here = reachable(self.world, self.me, self.speed_of())
             if not here:
                 return []
-            to = self.world.decide(self.me, "overrun", sorted(here), "trample to")
+            theirs = {s: f for f in _foes(self.world, self.me) for s in _sq(self.world, f)}
+
+            def crossed(dest: Square) -> int:
+                path = _line(self.here, dest)
+                return len({theirs[s] for s in path if s in theirs})
+
+            ranked = sorted(here, key=lambda d: (-crossed(d), d))
+            to = self.world.decide(self.me, "overrun", ranked, "trample to")
         return trample(self.world, self.me, to)
 
     def summon(self, ref: str, at: Square | None = None, *, team: Team | None = None) -> int:
@@ -2284,7 +2319,7 @@ class Cast:
     def hazard(
         self,
         area: Iterable[Square],
-        amount: int,
+        amount: str | int,
         dtype: DamageType = DamageType.UNTYPED,
         *,
         label: str = "",

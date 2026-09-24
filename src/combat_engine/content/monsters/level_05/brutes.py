@@ -30,6 +30,7 @@ from combat_engine.engine import (
     FREE,
     INTERRUPT,
     MINOR,
+    MOVE,
     NO_TARGET,
     ONE_CREATURE,
     OPPORTUNITY,
@@ -63,6 +64,7 @@ from combat_engine.engine import (
     UpTo,
     Usage,
     When,
+    Window,
     World,
     get,
     power,
@@ -96,6 +98,7 @@ from combat_engine.engine.query import (
     has_combat_advantage,
     hidden_from,
     is_,
+    moving_as,
     squares,
 )
 from combat_engine.engine.triggers import (
@@ -138,6 +141,17 @@ def _has_an_opening(world: World, eid: int) -> bool:
     one actually aimed at.
     """
     return any(has_combat_advantage(world, eid, foe) for foe in enemies(world, eid))
+
+
+def _is_climbing(world: World, eid: int) -> bool:
+    """A printed "Requirement: it must be climbing", asked from a header.
+
+    `query.moving_as` is what `c.moving_as` asks, for a `requires=` gate that
+    is handed `(world, eid)` and no `Cast`. It reads what the creature is
+    *doing*; `Movement.modes` only ever said what it could do, which made a
+    gate like this true for anything with a climb speed at all.
+    """
+    return moving_as(world, eid, "climb")
 
 
 def _has_shield(world: World, eid: int) -> bool:
@@ -935,6 +949,34 @@ def m381a2(c: Cast) -> None:
 
 
 @power(
+    "m4709a0",
+    level=5,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m4709a0(c: Cast) -> None:
+    """Not `c.no_provoke`, which waives the window outright: the printed line
+    waives it only while the creature is on a wall, so the opening is refused
+    as it opens and only then."""
+    me = c.me
+
+    def veto(ev: OpportunityWindow) -> None:
+        if ev.provoker == me and c.moving_as("climb"):
+            ev.cancel(c.ref)
+
+    c.watch(
+        OpportunityWindow,
+        veto,
+        until=When.ENCOUNTER,
+        window=Window.BEFORE,
+        on=me,
+        label="m4709a0",
+    )
+
+
+@power(
     "m4709a1",
     level=5,
     usage=AT_WILL,
@@ -1021,6 +1063,25 @@ def m4791a1(c: Cast) -> None:
         c.hit()
 
 
+@power(
+    "m4791a2",
+    level=5,
+    usage=ENCOUNTER,
+    action=MOVE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    requires=_is_climbing,
+    requires_text="the m4791 must be climbing",
+)
+def m4791a2(c: Cast) -> None:
+    """It lets go of the wall, so the flight is granted for the move and taken
+    back when the turn ends: `mode_of` picks flight over a walk when the
+    creature has it, which is what makes `c.move` a flight rather than a
+    scramble."""
+    c.mode("fly", 5, until=When.EOT)
+    c.move(5)
+
+
 _M4791_DOWN = "the m4791 drops to 0 hit points"
 
 
@@ -1096,6 +1157,23 @@ def m4792a2(c: Cast) -> None:
     for _ in range(4):
         if c.strike():
             c.hit()
+
+
+@power(
+    "m4792a3",
+    level=5,
+    usage=ENCOUNTER,
+    action=MOVE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    requires=_is_climbing,
+    requires_text="the m4792 must be climbing",
+)
+def m4792a3(c: Cast) -> None:
+    """The flight is granted for the move and taken back at the end of the
+    turn, so `mode_of` reads it while `c.move` is running and not after."""
+    c.mode("fly", 5, until=When.EOT)
+    c.move(5)
 
 
 # -- m4850 ------------------------------------------------------------------

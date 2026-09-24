@@ -1,9 +1,13 @@
 """Cleric, level 5: daily attacks.
 
-Two of the three leave something behind that has to be kept alive -- a
+Two of the four leave something behind that has to be kept alive -- a
 square the weapon stands in, a ring of light on the floor -- so both are
 `When.SUSTAIN` with a minor action on them, and the payout half of the
 printed Sustain line goes through `c.on_sustain`.
+
+One prints "the target cannot attack", which is neither `c.forbid` (one
+named row) nor `c.no_basic` (what a row is used *as*) but `c.cannot_attack`,
+and it refuses at the declaration so nothing is rolled and no rider fires.
 """
 
 from __future__ import annotations
@@ -16,6 +20,8 @@ from combat_engine.engine import (
     NO_TARGET,
     ONE_CREATURE,
     STANDARD,
+    STR,
+    WILL,
     WIS,
     Attack,
     Cast,
@@ -208,3 +214,25 @@ def p928(c: Cast) -> None:
         held.effect.on_end.append(
             lambda: c.world.effects.end(watching, "the zone ended")
         )
+
+
+@power(
+    "p915",
+    level=5,
+    cls="cleric",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+    keywords=[Keyword.CHARM, Keyword.DIVINE, Keyword.WEAPON],
+    attack=Attack(STR, vs=WILL),
+)
+def p915(c: Cast) -> None:
+    """The miss line is not a lesser version of the hit: it bars the target
+    from attacking the cleric alone, and on the cleric's clock rather than
+    until it shakes it off."""
+    if c.strike():
+        c.damage(c.w(), c.str_mod)
+        c.cannot_attack(until=When.SAVE_ENDS)
+    else:
+        c.cannot_attack(against=c.me, until=When.EONT)

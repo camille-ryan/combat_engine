@@ -87,6 +87,7 @@ from combat_engine.engine import (
     Damage,
     DamageType,
     Effect,
+    Health,
     Keyword,
     Melee,
     Mod,
@@ -112,6 +113,7 @@ from combat_engine.engine.events import (
     Event,
     Hit,
     Miss,
+    PowerUsed,
     SavingThrow,
     TurnEnd,
     ZoneEntered,
@@ -351,6 +353,72 @@ def m2851a2(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.dazed(until=When.EONT)
+
+
+def _m2851_bloodied(world: World, eid: int) -> bool:
+    """A printed "usable only while bloodied", asked of the creature."""
+    health = world.get(eid, Health)
+    return health is not None and health.bloodied
+
+
+@power(
+    "m2851a3",
+    level=8,
+    usage=ENCOUNTER,
+    action=MINOR,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    requires=_m2851_bloodied,
+    requires_text="usable only while bloodied",
+)
+def m2851a3(c: Cast) -> None:
+    """Two swings for one standard action, at the cost of the other two rows.
+
+    The printed line names one of the rows it takes away by id and the other
+    only in prose; by elimination it is the remaining attack, this creature
+    having four rows of which one is the club the line keeps and one is this.
+
+    The second swing is not `c.grant_row` -- there is no ref for "two club
+    attacks", and granting the club back to a creature that already knows it
+    does nothing. It is hung on the first instead: `PowerUsed` is announced
+    before the body runs, and `use` has not yet marked the row in flight, so
+    the extra swing goes through from here. The latch is what stops it
+    answering itself.
+
+    The -2 is a gated modifier rather than a bonus handed to `use`, so it is
+    paid by both swings, which is what the card says.
+
+    Both of those take `on=c.me`: everything on `Cast` aims at `c.target` by
+    default and this row has none, so without it the row applies to nobody
+    and reports itself as having worked.
+    """
+    me = c.me
+    for ref in ("m2851a1", "m2851a2"):
+        c.forbid(ref, on=me, until=When.ENCOUNTER)
+    c.penalty(
+        "attack",
+        2,
+        on=me,
+        until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") == "m2851a0",
+    )
+    swinging = False
+
+    def again(ev: PowerUsed) -> None:
+        nonlocal swinging
+        if swinging or ev.actor != me or ev.power != "m2851a0":
+            return
+        reachable = sorted(f for f in c.within(1, side="enemy") if alive(c.world, f))
+        foe = c.choose(reachable, "who the second blow finds") if reachable else None
+        if foe is None:
+            return
+        swinging = True
+        try:
+            use(c.world, me, "m2851a0", targets=[foe], spend=False)
+        finally:
+            swinging = False
+
+    c.watch(PowerUsed, again, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # --------------------------------------------------------------------------

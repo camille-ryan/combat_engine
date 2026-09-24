@@ -38,6 +38,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.level_05.brutes import _is_climbing
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -690,6 +691,24 @@ def m4793a3(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(10, DamageType.POISON)
+
+
+@power(
+    "m4793a4",
+    level=5,
+    usage=ENCOUNTER,
+    action=MOVE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    requires=_is_climbing,
+    requires_text="the m4793 must be climbing",
+)
+def m4793a4(c: Cast) -> None:
+    """The flight lasts the move and no longer, which is why it is granted
+    here and clocked to the end of the turn: `mode_of` prefers flight to a
+    walk, and that is what makes `c.move` leave the wall."""
+    c.mode("fly", 5, until=When.EOT)
+    c.move(5)
 
 
 # --------------------------------------------------------------------------

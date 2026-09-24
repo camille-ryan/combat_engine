@@ -362,6 +362,11 @@ def deal_damage(
     if rolled.cancelled:
         return 0
     amount = max(0, rolled.amount)
+    # The type too. It is on the event and mutable, and every reader below
+    # -- immunity, resistance, vulnerability, and the DamageApplied that is
+    # announced -- used the local, so "its weapon attacks deal fire damage"
+    # set the field and changed nothing.
+    dtype = rolled.dtype
     # Read back off the event, the way the attack reads its target back. A
     # listener may move the blow onto somebody else -- one creature stepping
     # in front of another -- and everything below this line used the local.

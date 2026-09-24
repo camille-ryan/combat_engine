@@ -183,11 +183,6 @@ class Size(StrEnum):
         """How many squares on a side this creature occupies."""
         return _FOOTPRINT[self]
 
-    @property
-    def reach_bonus(self) -> int:
-        """Extra reach that comes from bulk alone."""
-        return max(0, self.squares - 1)
-
 
 _FOOTPRINT = {
     Size.TINY: 1,

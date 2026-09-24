@@ -102,11 +102,29 @@ def step(
         world.bus.emit(LeaveSquare(actor=eid, square=sq))
 
     if kind not in _SAFE:
+        # How far each watcher threatens is asked of the watcher, below.
+        # It was a ring fixed at one square around the destination, so "it
+        # can make opportunity attacks against enemies within 2 squares"
+        # had nowhere to go -- the row that wanted it watched `Moved` and
+        # fired a beat after the engine's own window, which interrupts.
+        # The common ring, computed once. Almost nothing has extended reach,
+        # and asking each watcher separately turned a full audit from 84
+        # seconds into 331 -- the cost is per watcher per step, and a fight
+        # takes thousands of steps.
         after_reach = spread(target, 1)
-        leaving = {o for o in before if not (after_reach & squares(world, o))}
-        for other in sorted(leaving):
-            if other in enemies(world, eid):
-                world.bus.emit(OpportunityWindow(actor=other, provoker=eid, why="moved away"))
+        foes = enemies(world, eid)
+        for other in sorted(before):
+            if other not in foes:
+                continue
+            reach = _threat(world, other)
+            if reach == 1:
+                left = not (after_reach & squares(world, other))
+            else:
+                left = not (spread(squares(world, other), reach) & target)
+            if left:
+                world.bus.emit(
+                    OpportunityWindow(actor=other, provoker=eid, why="moved away")
+                )
 
     world.grid.lift(eid)
     pos.square = to
@@ -214,6 +232,21 @@ def _clear(
         if who is not None and who != eid and not (overhead or ghost):
             return False
     return True
+
+
+def _threat(world: World, eid: int) -> int:
+    """How far this creature threatens, in squares. One unless modified.
+
+    Checks the component before doing any work: the overwhelming majority
+    of creatures carry no modifiers at all, and this is asked once per
+    watcher per step.
+    """
+    from .components import Mods
+
+    mods = world.get(eid, Mods)
+    if mods is None or not mods.items:
+        return 1
+    return max(1, 1 + mods.total("reach", {}))
 
 
 def phasing(world: World, eid: int) -> bool:

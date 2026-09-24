@@ -1747,3 +1747,46 @@ def m78a2(c: Cast) -> None:
     """
     for who in {c.me, *c.within(5, side="ally")}:
         c.bonus("attack", 2, until=When.EONT, on=who)
+
+
+#: The five the printed trigger names. Untyped damage is not one of them, and
+#: neither is the sixth element the card leaves out.
+_M78_ELEMENTS = (
+    DamageType.ACID,
+    DamageType.COLD,
+    DamageType.FIRE,
+    DamageType.LIGHTNING,
+    DamageType.THUNDER,
+)
+
+_M78_SCALDED = "the m78 takes acid, cold, fire, lightning or thunder damage"
+
+
+def _element_struck_me(world: World, me: int, ev: Event) -> bool:
+    """`DamageApplied` names its subject `target`, so `about_me` -- which
+    reads `ev.actor` and only that -- is false here forever."""
+    return (
+        getattr(ev, "target", None) == me
+        and getattr(ev, "amount", 0) > 0
+        and getattr(ev, "dtype", None) in _M78_ELEMENTS
+    )
+
+
+@power(
+    "m78a3",
+    level=8,
+    usage=ENCOUNTER,
+    action=FREE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    trigger=_M78_SCALDED,
+    on=Trigger(DamageApplied, when=_element_struck_me, text=_M78_SCALDED),
+)
+def m78a3(c: Cast) -> None:
+    """Resist to the one type that just arrived, read off the event rather
+    than chosen: the printed line says "the triggering damage type". A free
+    action resolves after the blow, so the first hit of that type is taken in
+    full and every later one is not."""
+    dtype = getattr(c.trigger, "dtype", None)
+    if dtype is not None:
+        c.resist(10, dtype, until=When.ENCOUNTER)
