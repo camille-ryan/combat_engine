@@ -102,6 +102,14 @@ class World:
         return eid
 
     def despawn(self, eid: int) -> None:
+        """Take an entity out of play, unwinding everything it was holding up.
+
+        Effects and relations go first. An effect on somebody else that was
+        waiting for *this* creature's turn to expire would otherwise wait
+        forever, since a creature that has left play never takes another one.
+        """
+        self.effects.forget(eid, "left play")
+        self.relations.forget(eid, "left play")
         for store in self._stores.values():
             store.pop(eid, None)
         if eid in self._alive:

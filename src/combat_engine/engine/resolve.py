@@ -263,7 +263,17 @@ def _revive(world: World, eid: int) -> None:
 
 
 def _die(world: World, eid: int) -> None:
+    """Kill a creature. The body stays an entity; the initiative slot stays too.
+
+    Anything this creature was imposing on somebody else that is measured in
+    turns keeps running until its slot comes around -- see `Effects.bereave`
+    and `Encounter.advance`. Only what nothing could ever end is cleared now.
+    """
     world.bus.emit(Died(actor=eid))
-    world.effects.forget(eid, "died")
-    world.relations.forget(eid, "died")
+    world.effects.bereave(eid, "died")
+    for kind, source, target in list(world.relations._live):
+        # Relations carried by a live effect expire with it. A bare one --
+        # a grab, most often -- ends now, because a corpse holds nobody.
+        if eid in (source, target) and not world.effects.carries(kind, source, target):
+            world.relations.clear(kind, source, target, "died")
     world.grid.lift(eid)

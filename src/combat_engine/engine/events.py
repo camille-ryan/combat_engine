@@ -73,12 +73,16 @@ class RoundEnd(Event):
 class TurnStart(Event):
     actor: int
     round: int
+    #: The creature is dead and takes no actions. The turn is ticked anyway
+    #: so that durations measured against it can reach their end.
+    ghost: bool = False
 
 
 @dataclass
 class TurnEnd(Event):
     actor: int
     round: int
+    ghost: bool = False
 
 
 # -- movement ---------------------------------------------------------------

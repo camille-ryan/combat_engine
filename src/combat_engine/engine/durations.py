@@ -56,6 +56,10 @@ class When(StrEnum):
 #: creature that applied it.
 _TARGET_CLOCKED = {When.EOTNT, When.SOTNT, When.SAVE_ENDS}
 
+#: Durations that no turn boundary will ever end. If the creature holding one
+#: up dies, nothing is coming to clear it, so death has to.
+_UNREACHABLE = {When.ENCOUNTER, When.STANCE, When.SUSTAIN}
+
 
 @dataclass
 class Effect:
@@ -181,8 +185,34 @@ class Effects:
             self.world.bus.emit(EffectExpired(actor=eff.owner, what=str(eff), why=why))
 
     def forget(self, eid: int, why: str = "left play") -> None:
+        """End everything `eid` is either end of. Total removal only."""
         for eff in list(self.live.values()):
-            if eff.owner == eid or eff.source == eid:
+            if eff.owner == eid or eff.source == eid or eff.clock == eid:
+                self.end(eff, why)
+
+    def bereave(self, eid: int, why: str = "died") -> None:
+        """Clean up after a creature's death without cutting durations short.
+
+        A daze that lasts "until the end of your next turn" does **not** end
+        the instant you are killed. It ends when you would have acted -- the
+        effect runs to your slot in the initiative order and expires there.
+        `Encounter` keeps the dead in the order and ticks a silent turn for
+        exactly this, so a turn-clocked effect needs no help here.
+
+        What does need help is everything with no clock to reach:
+
+        * effects *on* the corpse, which are meaningless now;
+        * effects it was the source of that expire at the end of the
+          encounter, on a stance, or on being sustained -- nothing will ever
+          come to end those, so they would hang forever.
+
+        A save-ends effect is clocked on whoever is suffering it, so the
+        source dying is none of its business either way.
+        """
+        for eff in list(self.live.values()):
+            on_the_corpse = eff.owner == eid
+            nothing_will_end_it = eff.source == eid and eff.when in _UNREACHABLE
+            if on_the_corpse or nothing_will_end_it:
                 self.end(eff, why)
 
     def end_encounter(self) -> None:
@@ -191,6 +221,20 @@ class Effects:
 
     def of(self, owner: int) -> list[Effect]:
         return [e for e in self.live.values() if e.owner == owner]
+
+    def clocked_on(self, eid: int) -> list[Effect]:
+        """Live effects waiting on this creature's turn boundaries."""
+        return [
+            e
+            for e in self.live.values()
+            if e.clock == eid and e.when not in _UNREACHABLE and e.when is not When.INSTANT
+        ]
+
+    def carries(self, kind: Relation, source: int, target: int) -> bool:
+        """Is this relation held up by a live effect that will end it?"""
+        return any(
+            (kind, source, target) in eff.relations for eff in self.live.values()
+        )
 
     def sustain(self, eff: Effect) -> None:
         eff.sustained = self.world.round

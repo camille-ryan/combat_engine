@@ -91,8 +91,27 @@ class Encounter:
             if alive(self.world, nxt):
                 self._begin(nxt)
                 return nxt
+            self._ghost(nxt)
         self.finish()
         return None
+
+    def _ghost(self, eid: int) -> None:
+        """Tick a dead creature's slot without giving it a turn.
+
+        A creature killed after dazing somebody "until the end of your next
+        turn" does not release that daze by dying -- the daze lasts until the
+        point it *would have* acted. The dead therefore keep their place in
+        the order, and their slot still opens and closes so that anything
+        measured against it can come to an end.
+
+        Nobody acts on a ghost turn. `world.turn` is left alone, so nothing
+        reads it as the dead creature's turn, and `ghost=True` is on both
+        events so the interface and any policy can ignore the pair outright.
+        """
+        if not self.world.effects.clocked_on(eid):
+            return
+        self.world.bus.emit(TurnStart(actor=eid, round=self.world.round, ghost=True))
+        self.world.bus.emit(TurnEnd(actor=eid, round=self.world.round, ghost=True))
 
     @property
     def over(self) -> bool:
