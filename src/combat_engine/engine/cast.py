@@ -1798,6 +1798,49 @@ class Cast:
         self.world.encounter.extra_turn(self.me, at)
         return True
 
+    def had_advantage(self, ev: Any = None) -> bool:
+        """Did *that* attack have combat advantage? Reads the event.
+
+        Asking `has_combat_advantage` again after the fact is too late: a
+        one-shot grant has already been spent by the time `Hit` is
+        announced, so the question comes back false and two traits on the
+        same stat block quietly fail to combine. The live `AttackResult`
+        rides on the attack events, and this is where to read it.
+        """
+        ev = ev if ev is not None else self.trigger
+        result = getattr(ev, "result", None) if ev is not None else None
+        return bool(result and result.advantage)
+
+    def cannot_attack(
+        self,
+        *,
+        on: int | None = None,
+        against: int | None = None,
+        until: When = When.SAVE_ENDS,
+    ) -> Effect | None:
+        """Bar a creature from attacking -- everything, or one creature.
+
+        "The target cannot attack (save ends)" and "cannot attack **you**"
+        are the charm and fear shapes, and neither could be said: `c.forbid`
+        takes one named row away and `c.no_basic` takes away what a row is
+        used *as*. Refuses at the declaration, so nothing is rolled and no
+        rider fires.
+        """
+        from .events import AttackDeclared
+
+        who = self._who(on)
+        if who is None:
+            return None
+
+        def refuse(ev: AttackDeclared) -> None:
+            if ev.attacker == who and (against is None or ev.target == against):
+                ev.cancel("cannot attack")
+
+        return self.watch(
+            AttackDeclared, refuse, until=until, window=Window.BEFORE, on=who,
+            label=f"{self.ref} cannot attack",
+        )
+
     def forbid(
         self, ref: str, *, on: int | None = None, until: When = When.SAVE_ENDS
     ) -> Effect | None:

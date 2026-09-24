@@ -170,16 +170,17 @@ def _worst_burn(c: Cast, who: int) -> Effect | None:
     return max(burning, key=lambda e: e.ongoing[0]) if burning else None
 
 
-def _dodges_openings(c: Cast) -> None:
-    """+2 to AC against opportunity attacks, and nothing else.
+def _dodges_openings(c: Cast, amount: int = 2) -> None:
+    """Better AC against opportunity attacks, and nothing else.
 
     A gate on the modifier rather than something put on and taken off,
     because the attack context carries `opportunity`. Racial, so it does not
-    displace a power bonus to the same defence.
+    displace a power bonus to the same defence. `amount` is the printed
+    number: two here, five on one of the level 8 stat blocks.
     """
     c.bonus(
         AC,
-        2,
+        amount,
         until=When.ENCOUNTER,
         on=c.me,
         kind="racial",

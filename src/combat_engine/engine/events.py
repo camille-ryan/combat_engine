@@ -375,6 +375,24 @@ class RelationCleared(Event):
 
 
 @dataclass
+class EffectApplied(Event):
+    """An effect landed on somebody, whatever it carries.
+
+    `ConditionApplied` only fires for effects that impose a *condition*, so
+    a save-ends effect carrying nothing but ongoing damage announced
+    nothing at all -- and "subject to an effect that a save can end" could
+    only be declared on the half of the cases that happen to daze you.
+    Named by two waves three levels apart.
+    """
+
+    source: int
+    target: int
+    duration: str
+    label: str = ""
+    save_ends: bool = False
+
+
+@dataclass
 class ActionSpent(Event):
     """A creature used up an action. `Encounter.spend` is the one door.
 

@@ -28,6 +28,7 @@ from .components import Budget, Conditions, Mod, Mods
 from .events import (
     ConditionApplied,
     ConditionEnded,
+    EffectApplied,
     EffectExpired,
     Note,
     SavingThrow,
@@ -178,6 +179,18 @@ class Effects:
             holder.items.append(mod)
         for kind, s, t in eff.relations:
             self.world.relations.set(kind, s, t)
+
+        # Announced for every effect, not only the ones that impose a
+        # condition. A save-ends effect carrying nothing but ongoing damage
+        # said nothing at all, so "subject to an effect a save can end"
+        # could only be declared on the half of the cases that daze you.
+        self.world.bus.emit(
+            EffectApplied(
+                source=source, target=owner, duration=when.value,
+                label=eff.label, save_ends=when is When.SAVE_ENDS,
+            )
+        )
+        self._warn_sustainless(eff)
 
         conds = self.world.get(owner, Conditions)
         for c in eff.conditions:
