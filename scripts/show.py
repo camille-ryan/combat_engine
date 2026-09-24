@@ -69,6 +69,10 @@ def main() -> int:
     print(f"  target   {declared.target}")
     if declared.attack:
         print(f"  attack   {declared.attack}")
+    if declared.damage:
+        # The one header field the MM1-to-MM3 conversion exists for, and for
+        # a while the one you could not see on the card.
+        print(f"  damage   {declared.damage}")
     if declared.keywords:
         print(f"  keywords {', '.join(k.value for k in declared.keywords)}")
     if declared.requires_text:

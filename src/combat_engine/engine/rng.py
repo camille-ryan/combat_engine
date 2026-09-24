@@ -38,11 +38,19 @@ class Rng:
     seed: int
     _r: random.Random = field(init=False, repr=False)
     rolls: list[Roll] = field(default_factory=list, repr=False)
+    #: Force every d20 to this face. For the audit, which needs to exercise
+    #: the critical and the fumble branches deliberately -- a natural 20 is
+    #: one roll in twenty, and eight seeds a row is not enough to find a
+    #: crash that only happens on one. It found none for a year; the first
+    #: forced pass found a minion raising on every crit in the game.
+    loaded: int | None = None
 
     def __post_init__(self) -> None:
         self._r = random.Random(self.seed)
 
     def die(self, faces: int) -> int:
+        if self.loaded is not None and faces == 20:
+            return self.loaded
         return self._r.randint(1, faces)
 
     def d20(self) -> Roll:

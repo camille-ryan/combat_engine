@@ -32,16 +32,50 @@ class Encounter:
         self.finished = False
         world.bus.on(TurnEnd, self._death_saves)
         world.bus.on(Died, self._on_death)
+        from .triggers import Triggers
+
+        #: Offers a row when its printed trigger happens. Armed at `start`,
+        #: because it walks the initiative order to decide who may answer.
+        self.triggers = Triggers(world, self)
 
     # -- the clock -----------------------------------------------------------
 
     def start(self) -> None:
         self.order = self._roll_initiative()
+        self.triggers.arm()
+        self._arm_traits()
         self.started = True
         self.world.round = 1
         self.index = 0
         self.world.bus.emit(RoundStart(round=1))
         self._begin(self.order[0])
+
+    def _arm_traits(self) -> None:
+        """Turn on everything that is simply *true* of a creature.
+
+        A trait -- `action=NONE` -- is not something anybody does. A rogue's
+        extra damage, a fighter's answer to being ignored, a monster's aura:
+        they are in force from the moment the fight starts and no turn is
+        spent on them.
+
+        Until this existed a trait was an action like any other, and the
+        policy re-took it every turn it had a spare moment. Seven rounds in,
+        the rogue had armed its extra damage seventy-one times -- seventy-one
+        separate watchers, each with its own once-a-round latch, each paying
+        out. Arming once, here, is both the rule and the fix.
+        """
+        from .components import Powers
+        from .dsl import get, use
+        from .types import ActionType
+
+        for eid in self.order:
+            known = self.world.get(eid, Powers)
+            if known is None:
+                continue
+            for ref in known.all:
+                p = get(ref)
+                if p is not None and p.action is ActionType.NONE:
+                    use(self.world, eid, ref, spend=True)
 
     def _roll_initiative(self) -> list[int]:
         rolls: list[tuple[int, int, int, int]] = []
@@ -138,6 +172,7 @@ class Encounter:
             return
         self.finished = True
         self.world.turn = None
+        self.triggers.disarm()
         self.world.effects.end_encounter()
 
     # -- spending actions ----------------------------------------------------

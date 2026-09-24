@@ -213,7 +213,9 @@ def settle(world: World, eid: int) -> bool:
 
 def shift(world: World, eid: int, to: Square, *, mode: str | None = None) -> bool:
     """A shift is a move that does not provoke. One square unless a power says otherwise."""
-    if not can_move(world, eid):
+    from .query import can_shift
+
+    if not can_shift(world, eid):
         return False
     world.bus.emit(MoveStart(actor=eid, kind_="shift"))
     moved = step(world, eid, to, kind="shift", mode=mode_of(world, eid, mode))

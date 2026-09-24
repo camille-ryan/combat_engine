@@ -31,6 +31,7 @@ from .events import (
     Healed,
     Hit,
     Miss,
+    SurgeSpent,
     TempHP,
 )
 from .query import (
@@ -41,6 +42,7 @@ from .query import (
     deals_half,
     defence,
     has_combat_advantage,
+    takes_half,
 )
 from .types import Condition, DamageType, Defense, Relation
 
@@ -72,6 +74,7 @@ def attack(
     *,
     advantage: bool | None = None,
     ignore_cover: bool = False,
+    opportunity: bool = False,
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
@@ -83,7 +86,17 @@ def attack(
             return
 
         ca = has_combat_advantage(world, attacker, target) if advantage is None else advantage
-        ctx = {"attacker": attacker, "target": target, "power": power, "advantage": ca}
+        # `opportunity` is in the context because "+2 to AC against
+        # opportunity attacks" cannot be written without it, and gating on
+        # the power's ref instead catches a standard-action basic and misses
+        # a creature whose opportunity attack is something else.
+        ctx = {
+            "attacker": attacker,
+            "target": target,
+            "power": power,
+            "advantage": ca,
+            "opportunity": opportunity,
+        }
 
         situational = attack_penalty(world, attacker)
         situational += _mods(world, attacker, "attack", ctx)
@@ -188,6 +201,11 @@ def deal_damage(
         return 0
     amount = max(0, rolled.amount)
 
+    if takes_half(world, target):
+        # Insubstantial halves everything, and does it before resistance so a
+        # creature with both does not get the better of the two twice.
+        amount = amount // 2
+
     defences = world.get(target, Defences)
     if defences is not None and dtype is not DamageType.UNTYPED:
         if dtype in defences.immune:
@@ -229,6 +247,21 @@ def heal(world: World, source: int, target: int, amount: int) -> int:
     health.hp = min(health.max_hp, health.hp + amount)
     world.bus.emit(Healed(source=source, target=target, amount=health.hp - before, hp=health.hp))
     return health.hp - before
+
+
+def spend_surge(world: World, eid: int) -> bool:
+    """Take one healing surge off a creature. False if it had none.
+
+    The only place a surge is decremented. Four sites were each doing it by
+    hand and none announced it, so "when a creature spends a healing surge"
+    was a sentence the engine could not observe.
+    """
+    health = world.get(eid, Health)
+    if health is None or health.surges <= 0:
+        return False
+    health.surges -= 1
+    world.bus.emit(SurgeSpent(actor=eid, left=health.surges))
+    return True
 
 
 def temp_hp(world: World, source: int, target: int, amount: int) -> None:

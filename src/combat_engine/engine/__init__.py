@@ -10,6 +10,7 @@ from .basic import MELEE, RANGED  # registers the basic attacks
 from .cast import Cast
 from .components import (
     Budget,
+    Build,
     Conditions,
     Defences,
     Defenses,
@@ -30,6 +31,7 @@ from .dsl import (
     EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
@@ -82,6 +84,16 @@ from .grid import Grid, Square, distance, footprint, spread
 from .monster_math import AS_PRINTED, TO_MM3
 from .policy import LinearPolicy, Memory, Policy, install, take_turn
 from .rng import Rng
+from .triggers import (
+    Trigger,
+    about_me,
+    ally_within,
+    both,
+    by_me,
+    enemy_within,
+    not_me,
+    targets_me,
+)
 from .turns import Encounter
 from .types import (
     Ability,

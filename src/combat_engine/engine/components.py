@@ -129,6 +129,24 @@ class Defences:
 
 
 @dataclass
+class Build:
+    """The choices a character makes once, at creation, and lives with.
+
+    A warlock's pact, a ranger's fighting style, a warlord's presence, a
+    rogue's tactics, the ability a class lets you elect. None of them is a
+    feat and none is a power; they are the fork in a class's own page, and
+    a great many printed rows carry a rider that only applies on one side
+    of it -- "if you have the X build, the target also ...".
+
+    Held as a set of plain words rather than a field per class, because the
+    engine never needs to know what any of them *mean*: a row asks
+    `c.build("infernal")` and nothing else does anything with it.
+    """
+
+    choices: set[str] = field(default_factory=set)
+
+
+@dataclass
 class Initiative:
     """`bonus` excludes the level term, which `scaling` supplies."""
 
@@ -260,6 +278,19 @@ class Powers:
 
     def restore(self, ref: str) -> None:
         self.used.pop(ref, None)
+        self.last_round.pop(ref, None)
+
+    def unuse(self, ref: str) -> None:
+        """Give back one use. What a reliable power does when it misses.
+
+        Not `restore`: a row with two uses that has spent both and then
+        misses gets one back, not both.
+        """
+        left = self.used.get(ref, 0) - 1
+        if left > 0:
+            self.used[ref] = left
+        else:
+            self.used.pop(ref, None)
         self.last_round.pop(ref, None)
 
     def available(self, ref: str) -> bool:

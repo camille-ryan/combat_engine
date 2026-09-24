@@ -32,7 +32,14 @@ def main() -> int:
     )
     ap.add_argument("refs", nargs="*", help="power or monster ids, e.g. p289 m145")
     ap.add_argument("--class", dest="cls", help="any of the eight PHB1 classes")
-    ap.add_argument("--level", type=int, help="power level")
+    ap.add_argument(
+        "--level",
+        type=int,
+        action="append",
+        help="power level; repeatable, because a class's level 0 and level 1 "
+        "belong in one brief and two runs concatenated end with a spurious "
+        "'nothing to write' that two agents in a row reported as a lie",
+    )
     ap.add_argument("--monsters", type=int, help="every monster at this level")
     ap.add_argument("--role", help="narrow --monsters to one role")
     ap.add_argument(
@@ -48,7 +55,7 @@ def main() -> int:
     declared = _declared()
 
     refs: list[str] = list(args.refs)
-    if args.cls or args.level is not None:
+    if args.cls or args.level:
         refs += _powers(db, args.cls, args.level, args.book)
     if args.monsters is not None:
         refs += _monsters(db, args.monsters, args.role)
@@ -82,7 +89,7 @@ def _declared() -> set[str]:
     return set(REGISTRY)
 
 
-def _powers(db, cls: str | None, level: int | None, book: str = "") -> list[str]:  # noqa: ANN001
+def _powers(db, cls: str | None, levels: list[int] | None, book: str = "") -> list[str]:  # noqa: ANN001
     """Powers matching the filters, in a stable order.
 
     `book` is a membership test rather than a LIKE: `Source` is a
@@ -95,9 +102,9 @@ def _powers(db, cls: str | None, level: int | None, book: str = "") -> list[str]
     if cls:
         where.append("lower(class) = ?")
         params.append(cls.lower())
-    if level is not None:
-        where.append("level = ?")
-        params.append(level)
+    if levels:
+        where.append("level IN (" + ",".join("?" * len(levels)) + ")")
+        params.extend(levels)
     sql = "SELECT ref, books FROM power"
     if where:
         sql += " WHERE " + " AND ".join(where)

@@ -1,4 +1,4 @@
-"""The two defenders' marking features, and the paladin's healing touch.
+"""The two defenders' marking features, and the paladin's hand-off heal.
 
 A defender's whole job is that leaving it alone costs you, and these are the
 rows that make that true. Without them a fighter is a creature with a sword.
@@ -9,12 +9,13 @@ from __future__ import annotations
 from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
-    INTERRUPT,
     MINOR,
+    NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     SELF,
+    ActionType,
     Cast,
     CloseBurst,
     DamageType,
@@ -35,10 +36,13 @@ from combat_engine.engine.query import alive
     "p7419",
     level=0,
     cls="fighter",
-    usage=AT_WILL,
-    action=INTERRUPT,
+    # A trait: the arrangement stands from the moment the fight begins. The
+    # riposte inside it is the immediate action, and it costs one each time
+    # it fires; arming is not itself something the fighter does.
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=NO_TARGET,
     keywords=[Keyword.MARTIAL, Keyword.WEAPON],
     trigger="an enemy you marked, adjacent to you, shifts or attacks somebody else",
 )
@@ -132,9 +136,8 @@ def p1566(c: Cast) -> None:
     """
     who = c.target
     mine = c.world.get(c.me, Health)
-    if who is None or mine is None or mine.surges <= 0:
+    if who is None or mine is None or not c.spend_surge(on=c.me):
         return
-    mine.surges -= 1
     theirs = c.world.get(who, Health)
     if theirs is not None:
         c.heal(theirs.surge_value, on=who)

@@ -94,7 +94,7 @@ def p1589(c: Cast) -> None:
     attack=Attack(WIS, vs=WILL),
 )
 def p146(c: Cast) -> None:
-    """Radiant light that only the restless dead feel.
+    """Radiant light that only the undead feel.
 
     Its printed target line is "each undead creature in the burst", so
     everything else in the blast is simply not a target -- the body checks

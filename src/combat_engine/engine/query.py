@@ -151,6 +151,16 @@ def can_react(world: World, eid: int) -> bool:
     return can_act(world, eid) and not any(rules(c).no_reactions for c in active(world, eid))
 
 
+def takes_half(world: World, eid: int) -> bool:
+    """Insubstantial: everything that reaches this creature is halved."""
+    return any(rules(c).insubstantial for c in active(world, eid))
+
+
+def can_shift(world: World, eid: int) -> bool:
+    """A shift is barred separately from a walk, and by different powers."""
+    return can_move(world, eid) and not any(rules(c).no_shift for c in active(world, eid))
+
+
 def can_move(world: World, eid: int) -> bool:
     return can_act(world, eid) and not any(rules(c).cannot_move for c in active(world, eid))
 

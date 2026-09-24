@@ -44,6 +44,7 @@ from combat_engine.engine import (
     use,
 )
 from combat_engine.engine.dsl import REGISTRY
+from combat_engine.engine.types import ActionType
 
 #: Events that mean the power did something. A power that emits none of
 #: these on any attempt has not been written, whatever the file says.
@@ -81,8 +82,12 @@ class Result:
         return not self.error and not (self.events & DID_SOMETHING)
 
 
-def board(ref: str, seed: int) -> tuple[World, int]:
-    """A caster with the row, and four creatures within reach of it."""
+def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
+    """A caster with the row, four creatures in reach, and the fight started.
+
+    The third value is what got emitted while the encounter was starting,
+    which is where a trait does its work.
+    """
     world = World(Grid(24, 16), Rng(seed), Bus())
     declared = get(ref)
 
@@ -115,17 +120,43 @@ def board(ref: str, seed: int) -> tuple[World, int]:
     caster_health = world.need(caster, Health)
     caster_health.hp = max(1, caster_health.max_hp - 5)
 
+    mark = len(world.bus.log)
     Encounter(world).start()
+    armed = {e.kind for e in world.bus.log[mark:]} - START_NOISE
     world.turn = caster
-    return world, caster
+    return world, caster, armed
+
+
+#: What starting a fight emits no matter who is in it. Subtracted from what
+#: a trait is credited with, or every trait would look busy.
+START_NOISE = {"RoundStart", "TurnStart", "PowerUsed"}
+
+
+#: Every d20 face worth forcing. None is "roll it"; 20 and 1 are the two
+#: branches a random pass almost never reaches, and both are where a row
+#: does something it does nowhere else.
+LOADED = (None, 20, 1)
 
 
 def audit(ref: str) -> Result:
     out = Result(ref=ref)
-    for seed in range(1, TRIES + 1):
+    declared = get(ref)
+    # A trait is armed by `Encounter.start`, not taken as an action, so by
+    # the time the board is built it is already in force and using it again
+    # is correctly refused. Firing it a second time would report every trait
+    # in the game as unusable, which is the instrument lying about the fix.
+    trait = declared is not None and declared.action is ActionType.NONE
+    for seed, face in ((s, f) for f in LOADED for s in range(1, TRIES + 1)):
         try:
-            world, caster = board(ref, seed)
+            world, caster, armed = board(ref, seed)
+            world.rng.loaded = face
             cursor = len(world.bus.log)
+            if trait:
+                out.fired += 1
+                out.events |= armed
+                if world.effects.live:
+                    out.events.add("ConditionApplied")
+                continue
             if not use(world, caster, ref):
                 continue
             out.fired += 1

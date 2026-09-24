@@ -14,12 +14,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .cast import Cast
 from .grid import Square, area_burst, blast, blast_placements, spread
 from .monster_math import NORMAL
 from .query import alive, allies, creatures, enemies, line_of_effect, squares
+from .triggers import Trigger
 from .types import Ability, ActionType, DamageType, Defense, Keyword, Usage
 
 if TYPE_CHECKING:
@@ -118,6 +119,10 @@ ONE_ALLY = Target("ally", 1)
 SELF = Target("self", 1)
 EACH_ENEMY = Target("enemy", 99, everyone=True)
 EACH_CREATURE = Target("any", 99, everyone=True)
+#: Everyone in the area **except** the caster. A close burst declared with
+#: `EACH_CREATURE` catches the creature standing at its centre, which is the
+#: printed reading for some rows and plainly not for others.
+EACH_OTHER = Target("other", 99, everyone=True)
 EACH_ALLY = Target("ally", 99, everyone=True)
 NO_TARGET = Target("self", 0, label="None")
 
@@ -237,6 +242,10 @@ class Power:
     requires_text: str = ""
     #: A printed Trigger line. Set for immediate and opportunity actions.
     trigger: str = ""
+    #: The same line in a form the dispatcher can act on. With it the row is
+    #: offered when its trigger happens; without it `trigger` is prose and
+    #: nothing reads it. See `engine/triggers.py`.
+    on: Trigger | None = None
     recharge: int = 0
     #: How many times per encounter. Two for the cleric's heal; one for
     #: everything else that is not at-will.
@@ -316,6 +325,7 @@ def power(
     requires: Callable[[World, int], bool] | None = None,
     requires_text: str = "",
     trigger: str = "",
+    on: Trigger | None = None,
     recharge: int = 0,
     uses: int = 1,
     once_per_round: bool = False,
@@ -348,6 +358,7 @@ def power(
             requires=requires,
             requires_text=requires_text,
             trigger=trigger,
+            on=on,
             recharge=recharge,
             uses=uses,
             once_per_round=once_per_round,
@@ -552,11 +563,17 @@ def use(
     targets: list[int] | None = None,
     origin: Square | None = None,
     spend: bool = True,
+    trigger: Any = None,
+    opportunity: bool = False,
 ) -> bool:
     """Use a power. Returns False if it could not be used.
 
     The body runs once per target. A power with no targets runs once with
     `c.target` set to None, which is what a personal or zone-only power wants.
+
+    `trigger` is the event being answered, for a row the dispatcher is
+    offering. The body reads it as `c.trigger` and an interrupt stops it with
+    `c.cancel()`.
     """
     from .components import Powers
 
@@ -567,8 +584,19 @@ def use(
     if not ok:
         return False
 
-    chosen = targets if targets is not None else _auto_targets(world, actor, p, origin)
-    cast = Cast(world=world, me=actor, ref=ref, targets=list(chosen), origin=origin)
+    if targets is not None:
+        chosen = targets
+    else:
+        chosen, origin = _auto_targets(world, actor, p, origin)
+    cast = Cast(
+        world=world,
+        me=actor,
+        ref=ref,
+        targets=list(chosen),
+        origin=origin,
+        trigger=trigger,
+        opportunity=opportunity,
+    )
     cast.used()
 
     if p.provokes and not _survive_provoking(world, actor, ref):
@@ -584,6 +612,7 @@ def use(
     if not chosen:
         p.body(cast)
         return True
+    landed = False
     for i, t in enumerate(chosen):
         if not alive(world, t):
             continue
@@ -591,6 +620,15 @@ def use(
         cast.target = t
         cast.result = None
         p.body(cast)
+        landed = landed or bool(cast.result and cast.result.hit)
+
+    # Reliable: a daily that misses everything is not spent. The keyword was
+    # declared and nothing read it, so the two fighter dailies that carry it
+    # were costing a use per miss -- which is the entire point of the word.
+    if spend and Keyword.RELIABLE in p.keywords and not landed:
+        powers = world.get(actor, Powers)
+        if powers is not None:
+            powers.unuse(ref)
     return True
 
 
@@ -617,23 +655,32 @@ def _survive_provoking(world: World, actor: int, ref: str) -> bool:
     return can_act(world, actor)
 
 
-def _auto_targets(world: World, actor: int, p: Power, origin: Square | None) -> list[int]:
-    """Who this power lands on when the caller did not say.
+def _auto_targets(
+    world: World, actor: int, p: Power, origin: Square | None
+) -> tuple[list[int], Square | None]:
+    """Who this power lands on when the caller did not say, and where it aimed.
 
     An area power with no origin would otherwise centre on the caster's own
     square, which catches almost nothing and is never what was meant. The
     interface and any policy always pass an origin; this is the default for
     everything else, and it aims where the power does most.
+
+    The aim comes back with the targets, and for a while it did not. The
+    caster's `origin` stayed None while the targets were the ones standing
+    round the square this picked, so a burst that leaves a zone behind
+    dropped the zone on the caster's own feet and the damage somewhere else
+    entirely. Two answers to "where is this power" is one too many.
     """
     if origin is None and p.reach.kind in ("area_burst", "close_blast"):
         best: list[int] = []
+        chosen: Square | None = None
         for aim in aim_points(world, actor, p):
             hit = candidates(world, actor, p, aim)
             if len(hit) > len(best):
-                best = hit
+                best, chosen = hit, aim
         if best:
-            return best if p.target.everyone else best[: p.target.count]
+            return (best if p.target.everyone else best[: p.target.count]), chosen
     pool = candidates(world, actor, p, origin)
     if p.target.everyone:
-        return pool
-    return pool[: p.target.count]
+        return pool, origin
+    return pool[: p.target.count], origin

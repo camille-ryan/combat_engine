@@ -34,13 +34,39 @@ from combat_engine.engine import (
 from combat_engine.engine.monster_math import PRESETS as MATHS
 from combat_engine.engine.query import alive, creatures
 from combat_engine.engine.scaling import PRESETS
+from combat_engine.engine.types import Usage
 
-PARTY = [
-    ("fighter", ["p997", "p992", "p1000", "p289", "p1429"]),
-    ("cleric", ["p841", "p889", "p1455", "p891", "p913"]),
-    ("rogue", ["p704", "p970", "p1382", "p163"]),
-    ("wizard", ["p1167", "p1166", "p463", "p159", "p185"]),
-]
+#: Which four classes take the field. What each of them *knows* is worked
+#: out from the registry rather than listed, because a hand-written list goes
+#: stale the moment a row lands -- and it did. For a long while this party
+#: carried no class features at all: no mark, no channel, no sneak attack.
+#: The rogue was swinging a dagger for 1d4 and nothing else, which is not a
+#: rogue, and the fight it produced said more about the roster than the
+#: engine.
+PARTY = ["fighter", "cleric", "rogue", "wizard"]
+
+#: A level 1 character: every class feature, two at-wills, one encounter
+#: power and one daily. Straight out of the book.
+SLOTS = {Usage.AT_WILL: 2, Usage.ENCOUNTER: 1, Usage.DAILY: 1}
+
+
+def loadout(cls: str, level: int) -> list[str]:
+    """A legal set of powers for one class at one level, from what exists.
+
+    Deterministic -- sorted, then the first of each kind -- so the same fight
+    is the same fight, and self-updating, so it can never again be a list of
+    ids that used to be right.
+    """
+    import combat_engine.content  # noqa: F401  (registers the rows)
+    from combat_engine.engine.dsl import REGISTRY
+
+    mine = [p for p in REGISTRY.values() if p.cls == cls]
+    # Level 0 is the class itself: features, marks, channels. All of it.
+    out = sorted(p.ref for p in mine if p.level == 0)
+    for usage, count in SLOTS.items():
+        pool = sorted(p.ref for p in mine if p.level == level and p.usage is usage)
+        out.extend(pool[:count])
+    return out
 
 
 def build(
@@ -50,8 +76,9 @@ def build(
     world.scaling = PRESETS[scaling]
     world.monster_math = MATHS[math]
 
-    for i, (cls, powers) in enumerate(PARTY):
-        chargen.spawn(world, chargen.Character(cls, level, powers), (2, 3 + i * 2))
+    for i, cls in enumerate(PARTY):
+        who = chargen.Character(cls, level, loadout(cls, level))
+        chargen.spawn(world, who, (2, 3 + i * 2))
 
     pool, found_at = _opposition(level)
     if not pool:

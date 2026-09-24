@@ -16,11 +16,12 @@ from collections.abc import Callable
 
 from combat_engine.engine import (
     AT_WILL,
-    FREE,
+    ENCOUNTER,
     MINOR,
+    NO_TARGET,
     ONE_CREATURE,
     PERSONAL,
-    SELF,
+    ActionType,
     Cast,
     Gear,
     Keyword,
@@ -65,18 +66,22 @@ def _light_blade_or_bow(world: World, eid: int) -> bool:
 
 
 @power(
-    "cf:rogue-strike",
+    "cf:rogue-bonus",
     level=0,
     cls="rogue",
-    usage=AT_WILL,
-    action=FREE,
+    # A trait, not an action. Nobody *does* this -- it is simply true of a
+    # rogue, and `Encounter._arm_traits` turns it on when the fight starts.
+    # As an at-will free action the policy re-took it every spare moment and
+    # stacked a fresh watcher each time.
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
     reach=PERSONAL,
-    target=SELF,
+    target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
     requires=_light_blade_or_bow,
     requires_text="needs a light blade, a crossbow or a sling",
 )
-def rogue_strike(c: Cast) -> None:
+def rogue_bonus(c: Cast) -> None:
     """Once a round, a hit against a creature you have the drop on hurts more.
 
     Combat advantage is asked of the board at the moment of the hit rather
@@ -87,7 +92,7 @@ def rogue_strike(c: Cast) -> None:
         c,
         "2d6",
         applies=lambda target: has_combat_advantage(c.world, c.me, target),
-        label="cf:rogue-strike",
+        label="cf:rogue-bonus",
     )
 
 

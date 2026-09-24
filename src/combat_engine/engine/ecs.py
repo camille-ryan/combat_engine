@@ -39,6 +39,10 @@ class World:
         #: Which edition's monster maths a fight runs on. Swap for TO_MM3 to
         #: rescale Monster Manual 1 and 2 damage; see `monster_math.py`.
         self.monster_math = AS_PRINTED
+        #: Where this fight is happening -- "aquatic", "underground". Words
+        #: rather than a type, because the engine never needs to know what
+        #: any of them mean: a row asks `c.terrain("aquatic")`.
+        self.terrain: set[str] = set()
         #: Whose turn it is. None between rounds and before combat starts.
         self.turn: int | None = None
         self._stores: dict[type, dict[int, Any]] = {}

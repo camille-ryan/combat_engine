@@ -39,6 +39,16 @@ class Rules:
     helpless: bool = False
     #: Cannot flank, and cannot draw line of sight.
     blind: bool = False
+    #: Damage the creature *takes* is halved. Distinct from resistance: it
+    #: applies to everything, and it is a property of the creature rather
+    #: than of the damage type.
+    insubstantial: bool = False
+    #: Prone and may not stand up yet. Prone itself is the other half.
+    no_stand: bool = False
+    #: May still walk, but may not shift. Several powers bar the one without
+    #: barring the other, and `cannot_move` is the wrong card for them --
+    #: it stops walking too.
+    no_shift: bool = False
 
 
 NOTHING = Rules()
@@ -52,11 +62,16 @@ RULES: dict[Condition, Rules] = {
     Condition.GRABBED: Rules(cannot_move=True),
     Condition.HELPLESS: Rules(grants_ca=True, helpless=True),
     Condition.IMMOBILIZED: Rules(cannot_move=True),
+    Condition.INSUBSTANTIAL: Rules(insubstantial=True),
     Condition.MARKED: Rules(),  # the -2 needs to know who is being attacked
     Condition.PETRIFIED: Rules(cannot_act=True, cannot_move=True, helpless=True),
+    Condition.PINNED: Rules(no_stand=True),
     Condition.PRONE: Rules(grants_ca=True, attack=-2),
     Condition.REMOVED: Rules(cannot_act=True, cannot_move=True),
     Condition.RESTRAINED: Rules(grants_ca=True, attack=-2, cannot_move=True),
+    # "Cannot shift" on its own. Named for what it does rather than
+    # after any one power, because three classes impose it.
+    Condition.ROOTED: Rules(no_shift=True),
     Condition.SLOWED: Rules(speed_cap=2),
     Condition.STUNNED: Rules(grants_ca=True, cannot_act=True, no_reactions=True),
     Condition.SURPRISED: Rules(grants_ca=True, cannot_act=True, no_reactions=True),

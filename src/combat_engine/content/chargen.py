@@ -24,6 +24,7 @@ from combat_engine.engine import (
     WIS,
     Ability,
     Budget,
+    Build,
     Conditions,
     Defenses,
     Gear,
@@ -136,12 +137,36 @@ CLASSES: dict[str, ClassLine] = {
 }
 
 
+#: The build each class gets when nobody says otherwise. Every PHB1 class
+#: forks once on its own page -- a pact, a fighting style, a presence, a set
+#: of tactics -- and a good many printed rows carry a rider that applies on
+#: one side of the fork only. Picking a default is what makes those riders
+#: sayable at all; `Character(build=...)` takes the other branch.
+DEFAULT_BUILD = {
+    "cleric": "devoted",
+    "fighter": "great-weapon",
+    "paladin": "avenging",
+    "ranger": "two-blade",     # matches the two short swords it is handed
+    "rogue": "brawny",
+    "warlock": "infernal",
+    "warlord": "inspiring",
+    "wizard": "control",
+}
+
+
 @dataclass
 class Character:
     cls: str
     level: int = 1
     powers: list[str] = field(default_factory=list)
     team: Team = Team.PC
+    #: Overrides `DEFAULT_BUILD`. A set, because a character makes more than
+    #: one such choice as it levels.
+    build: set[str] = field(default_factory=set)
+
+    @property
+    def choices(self) -> set[str]:
+        return self.build or {DEFAULT_BUILD.get(self.cls, "")} - {""}
 
     @property
     def line(self) -> ClassLine:
@@ -212,6 +237,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         Mods(),
         Budget(),
         Powers(known=list(who.powers)),
+        Build(choices=set(who.choices)),
         Gear(
             weapons=list(line.weapons),
             shield=bool(line.shield),

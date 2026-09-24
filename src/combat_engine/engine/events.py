@@ -251,6 +251,19 @@ class Healed(Event):
 
 
 @dataclass
+class SurgeSpent(Event):
+    """A healing surge left somebody's pool.
+
+    Emitted from every place that decrements one, which is the only way a
+    row reading "when a creature spends a healing surge in this aura" can
+    ever see it happen -- three separate sites were decrementing silently.
+    """
+
+    actor: int
+    left: int
+
+
+@dataclass
 class TempHP(Event):
     source: int
     target: int

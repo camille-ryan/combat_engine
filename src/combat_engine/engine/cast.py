@@ -71,6 +71,23 @@ class Cast:
     origin: Square | None = None
     #: The most recent attack this cast rolled. `c.landed` reads off it.
     result: AttackResult | None = None
+    #: The event this row was offered in answer to, for a triggered power.
+    #: None for everything used on its own turn.
+    trigger: Any = None
+    #: True when this use *is* an opportunity attack. Read by the attack
+    #: context, so "+2 to AC against opportunity attacks" can be written.
+    opportunity: bool = False
+
+    def cancel(self) -> None:
+        """Stop the thing that triggered this.
+
+        Only an immediate interrupt can: by the time a reaction runs, its
+        window has already closed and the attack has happened. Calling it
+        from a reaction does nothing, which is the printed rule rather than
+        an oversight.
+        """
+        if self.trigger is not None:
+            self.trigger.cancel()
 
     # -- who and where -------------------------------------------------------
 
@@ -184,6 +201,38 @@ class Cast:
         """Is this creature of that type? `c.is_kind("undead")`."""
         return word.lower() in self.kinds_of(on)
 
+    def build(self, choice: str, *, on: int | None = None) -> bool:
+        """Did this character take that build? `c.build("infernal")`.
+
+        Defaults to the *caster*, unlike almost everything else here: a
+        build rider is always about whoever is using the power, never about
+        who it lands on. Four agents across three classes asked for this
+        independently, which is how it got written.
+        """
+        from .components import Build
+
+        who = self.me if on is None else on
+        held = self.world.get(who, Build)
+        return held is not None and choice.lower() in held.choices
+
+    def suffering(self, label: str = "", *, by: int | None = None) -> list[int]:
+        """Everyone carrying an effect I applied. "Each creature affected by
+        your X" is a common printed line and nothing could answer it.
+
+        `label` picks out one power's effects; `by` defaults to the caster.
+        """
+        source = self.me if by is None else by
+        out = []
+        for eid in creatures(self.world):
+            for eff in self.world.effects.of(eid):
+                if eff.source != source:
+                    continue
+                if label and label not in eff.label:
+                    continue
+                out.append(eid)
+                break
+        return out
+
     def roll(self, dice: str | int) -> int:
         """Roll dice and get the number, without applying it to anybody.
 
@@ -232,12 +281,9 @@ class Cast:
         The paladin's touch reads exactly that: the paladin pays and somebody
         else is healed.
         """
-        who = self._who(on) or self.me
-        health = self.world.get(who, Health)
-        if health is None or health.surges <= 0:
-            return False
-        health.surges -= 1
-        return True
+        from .resolve import spend_surge
+
+        return spend_surge(self.world, self._who(on) or self.me)
 
     def size_of(self, on: int | None = None):  # noqa: ANN201
         from .components import Position
@@ -503,9 +549,17 @@ class Cast:
         )
 
     def swap(self, other: int, *, who: int | None = None) -> bool:
-        """Two creatures change places. Either both move or neither does."""
+        """Two creatures change places. Either both move or neither does.
+
+        Routed through `movement.step` rather than `place`, which is setup
+        only and announces nothing. Done the quiet way, two creatures
+        exchanged squares with no `Moved` and no adjacency change, so a
+        fighter's mark watching for movement never saw it, an aura never
+        noticed anyone arriving, and a row whose whole content was a swap
+        could not be anything but silent to the audit.
+        """
         from .components import Position
-        from .movement import place
+        from .movement import step
 
         a = who if who is not None else self.me
         first = self.world.get(a, Position)
@@ -513,10 +567,12 @@ class Cast:
         if first is None or second is None:
             return False
         here, there = first.square, second.square
+        # Both are lifted before either lands, or each sees the other's
+        # square as occupied and neither moves.
         self.world.grid.lift(a)
         self.world.grid.lift(other)
-        place(self.world, a, there)
-        place(self.world, other, here)
+        step(self.world, a, there, kind="swap", mode="walk")
+        step(self.world, other, here, kind="swap", mode="walk")
         return True
 
     def basic(
@@ -556,7 +612,8 @@ class Cast:
         if who is None:
             return AttackResult()
         self.result = attack(
-            self.world, self.me, who, bonus, vs, self.ref, advantage=advantage
+            self.world, self.me, who, bonus, vs, self.ref,
+            advantage=advantage, opportunity=self.opportunity,
         )
         return self.result
 
@@ -667,11 +724,12 @@ class Cast:
 
     def surge(self, *, on: int | None = None, bonus: int = 0) -> int:
         """Spend a healing surge: a quarter of maximum hit points."""
+        from .resolve import spend_surge
+
         who = self._who(on)
         health = self.world.get(who, Health) if who else None
-        if health is None or health.surges <= 0:
+        if health is None or not spend_surge(self.world, who):
             return 0
-        health.surges -= 1
         return heal(self.world, self.me, who, health.surge_value + bonus)
 
     def temp_hp(self, amount: int, *, on: int | None = None) -> None:
@@ -781,7 +839,46 @@ class Cast:
         away = max(sorted(paths), key=lambda sq: _distance(sq, self.here))
         return walk(self.world, who, paths[away])
 
-    def teleport(self, squares_: int, *, who: int | None = None) -> bool:
+    def reroll_attack(self, *, keep: str = "new") -> bool:
+        """Make the triggering attack roll again. `keep` is new, best or worst.
+
+        Reads the attack off `c.trigger`, so it only means anything inside a
+        row the dispatcher offered. Rerolling is not cancelling: the attack
+        still happens, with a different number.
+        """
+        ev = self.trigger
+        result = getattr(ev, "result", None) if ev is not None else None
+        if result is None:
+            return False
+        fresh = self.world.rng.d20().total
+        old = result.natural
+        face = {"new": fresh, "best": max(old, fresh), "worst": min(old, fresh)}[keep]
+        shift_ = face - old
+        result.natural = face
+        result.total += shift_
+        result.critical = face == 20
+        result.hit = face == 20 or (face != 1 and result.total >= result.target_defence)
+        return True
+
+    def terrain(self, word: str) -> bool:
+        """Is the fight being had in that sort of place? `c.terrain("aquatic")`.
+
+        A property of the encounter, not of anybody in it. Several creatures
+        print a rider that only applies underwater, and writing only the
+        bonus half would have buffed them in every dry fight there is.
+        """
+        return word.lower() in getattr(self.world, "terrain", frozenset())
+
+    def teleport(
+        self, squares_: int, *, who: int | None = None, to: Square | None = None
+    ) -> bool:
+        """Blink somewhere. `to` names the square, as `c.shift` already allowed.
+
+        Without it the destination goes through the decider, which with no
+        decider installed takes the lowest-sorted square -- fine for a player
+        being asked, useless for a row whose printed line says exactly where
+        it arrives.
+        """
         mover = self.me if who is None else who
         origin = squares(self.world, mover)
         options = [
@@ -789,6 +886,8 @@ class Cast:
             for sq in spread(origin, squares_)
             if self.world.grid.passable(sq) and self.world.grid.occupant(sq) in (None, mover)
         ]
+        if to is not None:
+            return teleport(self.world, mover, to) if to in options else False
         if not options:
             return False
         dest = self.world.decide(mover, "teleport", sorted(options), f"{self.ref}: teleport")
@@ -826,10 +925,21 @@ class Cast:
             escalate=escalate,
         )
 
-    def prone(self, *, on: int | None = None) -> Effect | None:
+    def prone(
+        self, *, on: int | None = None, held: When | None = None
+    ) -> Effect | None:
         """Knocked prone. It lasts until the creature stands up, not until a
-        turn boundary, so it hangs on the encounter clock."""
-        return self.condition(Condition.PRONE, until=When.ENCOUNTER, on=on)
+        turn boundary, so it hangs on the encounter clock.
+
+        `held` is for "falls prone and cannot stand up until ...", which is a
+        second, shorter clock on top of the first: the creature is prone for
+        as long as prone normally lasts, and for `held` it may not do the one
+        thing that ends it.
+        """
+        effect = self.condition(Condition.PRONE, until=When.ENCOUNTER, on=on)
+        if held is not None:
+            self.condition(Condition.PINNED, until=held, on=on)
+        return effect
 
     def dazed(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
         return self.condition(Condition.DAZED, until=until, on=on)
@@ -848,6 +958,79 @@ class Cast:
 
     def blinded(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
         return self.condition(Condition.BLINDED, until=until, on=on)
+
+    def coup_de_grace(self, *, on: int | None = None) -> bool:
+        """Finish a helpless creature. Automatic critical, plus a flat 5d6.
+
+        Four rows across two monster batches asked for this, and every one of
+        them would otherwise have spelled out the auto-crit rule in its own
+        body. It is a rule of the game rather than a property of any power,
+        so it lives here and they all get the same one.
+
+        False if the target is not actually helpless, which is the printed
+        requirement and worth checking rather than trusting the caller.
+        """
+        from .conditions import rules
+        from .query import active
+
+        who = self._who(on)
+        if who is None or not any(rules(c).helpless for c in active(self.world, who)):
+            return False
+        result = self.strike(on=who, advantage=True)
+        result.critical = True
+        result.hit = True
+        self.damage("5d6", on=who, detail="coup de grace")
+        return True
+
+    def vulnerable(
+        self,
+        amount: int,
+        dtype: DamageType | None = None,
+        *,
+        until: When = When.SAVE_ENDS,
+        on: int | None = None,
+    ) -> Effect | None:
+        """Takes `amount` extra from every hit, or from one damage type.
+
+        Held by the *target*, not by whoever inflicted it: a save-ends
+        duration is rolled by whoever carries the effect, and "vulnerable 5
+        until it saves" is the target's save to make.
+        """
+        from .components import Defences
+
+        who = self._who(on)
+        if who is None:
+            return None
+        kinds = [dtype] if dtype is not None else list(DamageType)
+        defences = self.world.get(who, Defences) or self.world.add(who, Defences())
+        for kind in kinds:
+            defences.vulnerable[kind] = defences.vulnerable.get(kind, 0) + amount
+
+        def undo() -> None:
+            for kind in kinds:
+                left = defences.vulnerable.get(kind, 0) - amount
+                if left > 0:
+                    defences.vulnerable[kind] = left
+                else:
+                    defences.vulnerable.pop(kind, None)
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} vulnerable", undo=undo
+        )
+
+    def rooted(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
+        """Cannot shift. Still walks, which is why this is not `immobilized`.
+
+        "Slowed and cannot shift" is one printed line in at least three
+        classes, and until this existed the second half was quietly dropped.
+        """
+        return self.condition(Condition.ROOTED, until=until, on=on)
+
+    def insubstantial(
+        self, *, until: When = When.EONT, on: int | None = None
+    ) -> Effect | None:
+        """Halves all damage taken. A property of the creature, not the damage."""
+        return self.condition(Condition.INSUBSTANTIAL, until=until, on=on)
 
     def unconscious(self, *, until: When = When.SAVE_ENDS, on: int | None = None) -> Effect | None:
         return self.condition(Condition.UNCONSCIOUS, until=until, on=on)
@@ -1035,8 +1218,15 @@ class Cast:
         holder: list[Effect] = []
 
         def fire(ev: Any) -> None:
+            before = len(self.world.bus.log)
             fn(ev)
-            if once and holder:
+            # `once` means "fire once", not "live for one event", and those
+            # differ for every trigger with a guard -- which is most of them.
+            # Ending unconditionally burned the effect on the first event of
+            # the right *class*, so "the first time you hit a bloodied enemy"
+            # was spent by the first attack that missed a healthy one.
+            # Whether the body did anything is read off the log.
+            if once and holder and len(self.world.bus.log) > before:
                 self.world.effects.end(holder[0], "used")
 
         sub = self.world.bus.on(event, fire, window=window, owner=self.me)
@@ -1140,9 +1330,18 @@ class Cast:
 
 
 def _max_of(dice: str | int) -> int:
-    """Every die showing its highest face. What a critical hit deals."""
+    """Every die showing its highest face. What a critical hit deals.
+
+    No dice at all is a real expression, not a malformed one: a minion's
+    damage is a flat number and nothing else. This returned `int("")` for
+    it, so every minion in the game raised on a natural 20 -- about one
+    attack in twenty, which is exactly rare enough that eight seeds a row
+    missed it.
+    """
     if isinstance(dice, int):
         return dice
+    if not dice:
+        return 0
     n, _, rest = dice.partition("d")
     faces, sign, tail = rest.partition("+")
     if not sign:

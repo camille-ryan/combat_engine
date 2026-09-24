@@ -166,8 +166,9 @@ def p1064(c: Cast) -> None:
         friend = c.choose(helpers, "who gets the guard")
         # "against the target's attacks": a defence mod is gated on who is
         # attacking, which is what the attacker sees in `ctx`.
-        # Inspiring Presence would make this 1 + Charisma; there is no class
-        # build to read, so the printed +2 stands.
+        # One build makes this 1 + Charisma; `c.build(...)` can say which
+        # now, so the rider is expressible where the printed +2 was all
+        # this could say before.
         c.bonus(AC, 2, on=friend, when=lambda ctx: ctx.get("attacker") == foe)
 
 

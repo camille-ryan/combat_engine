@@ -83,6 +83,8 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
         p = get(ref)
         if p is None:
             continue
+        if p.action is ActionType.NONE:
+            continue  # a trait; armed at the start of the fight, never chosen
         ok, why = usable(world, actor, p)
         if not encounter.can_spend(actor, p.action):
             ok, why = False, "no action left"
@@ -191,7 +193,11 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
 
 def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
     out: list[Action] = []
-    if is_(world, actor, Condition.PRONE) and encounter.can_spend(actor, ActionType.MOVE):
+    if (
+        is_(world, actor, Condition.PRONE)
+        and not is_(world, actor, Condition.PINNED)
+        and encounter.can_spend(actor, ActionType.MOVE)
+    ):
         out.append(Action(kind="stand", cost=ActionType.MOVE))
     health = world.get(actor, Health)
     known = world.get(actor, Powers)
@@ -232,6 +238,7 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             targets=list(action.targets) or None,
             origin=action.origin,
             spend=True,
+            opportunity=action.cost is ActionType.OPPORTUNITY,
         )
 
     if action.kind == "move":
@@ -256,7 +263,9 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         known = world.get(actor, Powers)
         if known is not None:
             known.note_use("second-wind", world.round)
-        health.surges -= 1
+        from .resolve import spend_surge
+
+        spend_surge(world, actor)
         world.heal(actor, actor, health.surge_value)
         from .cast import Cast
 
