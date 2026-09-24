@@ -1433,14 +1433,28 @@ class Cast:
             label=f"{self.ref} no provoke",
         )
 
-    def grants_advantage(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
-        """The target grants combat advantage to the attacker specifically."""
+    def grants_advantage(
+        self,
+        *,
+        until: When = When.EONT,
+        on: int | None = None,
+        to: str = "me",
+    ) -> Effect | None:
+        """The target grants combat advantage -- to you, or to your side.
+
+        `to="allies"` is the printed "grants combat advantage to you and
+        your allies", which is a common enough line that two rows had
+        already hand-rolled the same list of relations. The relation names
+        one beneficiary, so a side is that relation once per ally, held on
+        a single effect so they all end together.
+        """
         who = self._who(on)
         if who is None:
             return None
+        beneficiaries = [self.me] if to == "me" else [self.me, *self.allies()]
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} advantage",
-            relations=[(Relation.GRANTS_CA_TO, who, self.me)],
+            relations=[(Relation.GRANTS_CA_TO, who, b) for b in beneficiaries],
         )
 
     def bonus(

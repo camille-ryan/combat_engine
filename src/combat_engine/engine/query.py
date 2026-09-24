@@ -143,6 +143,68 @@ def deals_half(world: World, eid: int) -> bool:
     return any(rules(c).weakened for c in active(world, eid))
 
 
+#: Roles whose whole point is to stay out of melee, whatever else they can
+#: also do. Read alongside what a creature *can* reach with, because the two
+#: answer different questions.
+_STANDOFF = {"artillery", "controller", "lurker"}
+
+
+def range_profile(world: World, eid: int) -> str:
+    """What this creature can reach with: melee, ranged, hybrid, or none.
+
+    Derived from its own declared rows rather than written down anywhere.
+    A hand-applied tag would be one more thing to keep in step with the
+    content, and the content already says it -- every row carries its reach
+    in the header, which is exactly the point of the header being data.
+    """
+    from .components import Powers
+    from .dsl import get
+
+    known = world.get(eid, Powers)
+    if known is None:
+        return "none"
+    near = far = False
+    for ref in known.all:
+        p = get(ref)
+        if p is None or not p.is_attack:
+            continue
+        for branch in p.branches:
+            kind = p.reach_of(branch).kind
+            far = far or kind in ("ranged", "area_burst")
+            near = near or kind in ("melee", "close_burst", "close_blast")
+    if far and near:
+        return "hybrid"
+    return "ranged" if far else "melee" if near else "none"
+
+
+def prefers_range(world: World, eid: int) -> bool:
+    """Does this creature want to be *out* of melee?
+
+    Capability alone does not say. Nearly every ranged monster also carries
+    a melee basic, so by reach almost none of them are purely ranged -- at
+    the heroic tier it is 44 melee and 25 hybrid, and not one pure shooter.
+    What separates an artillery that happens to have claws from a brute
+    that happens to throw something is the role it was written for, which
+    the stat block already records.
+    """
+    from .components import Ident
+
+    profile = range_profile(world, eid)
+    if profile in ("melee", "none"):
+        return False
+    if profile == "ranged":
+        return True
+    ident = world.get(eid, Ident)
+    if ident is None or not ident.ref.startswith("m"):
+        return False
+    from combat_engine.content.loader import load
+
+    try:
+        return (load(ident.ref).row.get("role") or "") in _STANDOFF
+    except Exception:
+        return False
+
+
 def is_trap(world: World, eid: int) -> bool:
     from .components import Trap
 
