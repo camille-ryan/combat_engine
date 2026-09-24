@@ -104,6 +104,11 @@ def attack(
             "power": power,
             "advantage": ca,
             "opportunity": opportunity,
+            # What shape the attack is, so "ranged attacks against this
+            # target take +4" is a one-line gate rather than a registry
+            # lookup duplicating `_is_ranged`.
+            "ranged": _is_ranged(power, branch),
+            "branch": branch,
         }
 
         situational = attack_penalty(world, attacker)

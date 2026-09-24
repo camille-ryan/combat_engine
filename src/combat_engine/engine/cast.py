@@ -467,6 +467,16 @@ class Cast:
     def mod(self, a: Ability) -> int:
         return self.stats.mod(a)
 
+    def score(self, a: Ability) -> int:
+        """The raw ability score -- 15, 18 -- not its modifier or bonus.
+
+        A printed Requirement reads "Dexterity 15 or higher" and means the
+        score. `c.dex_` is the *attack bonus* (half level, modifier and
+        proficiency) and `c.dex_mod` the modifier, so a row testing either
+        against 15 fails quietly and for a reason nothing reports.
+        """
+        return self.stats.score(a)
+
     def _attack_bonus(self, a: Ability) -> int:
         """Half level, the ability modifier, and the weapon where it counts.
 
@@ -1433,25 +1443,74 @@ class Cast:
             label=f"{self.ref} no provoke",
         )
 
+    def immovable(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
+        """Cannot be pushed, pulled or slid. The counterpart of `c.no_provoke`.
+
+        `ForcedMove` is cancellable, so this is a listener that refuses --
+        but three rows had each written that listener out, and `c.rooted`
+        is the wrong card: that bars a shift and leaves being shoved alone.
+        """
+        from .events import ForcedMove
+
+        who = self._who(on) or self.me
+
+        def refuse(ev: ForcedMove) -> None:
+            if ev.target == who:
+                ev.cancel("immovable")
+
+        return self.watch(
+            ForcedMove, refuse, until=until, window=Window.BEFORE, on=who,
+            label=f"{self.ref} immovable",
+        )
+
+    def is_quarry(self, on: int | None = None) -> bool:
+        """Is this creature the ranger's quarry?
+
+        Relational, like `c.cursed`: a second ranger's quarry is not yours.
+        Several rows read "one creature that is your quarry" and had no way
+        to ask -- the quarry lived in a closure, so the only thing that knew
+        was the rider paying out.
+        """
+        who = self._who(on)
+        return who is not None and self.world.relations.holds(
+            Relation.QUARRY_OF, self.me, who
+        )
+
+    def quarry(self, *, on: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
+        """Name a creature your quarry."""
+        who = self._who(on)
+        if who is None:
+            return None
+        return self.world.effects.apply(
+            self.me, self.me, until, label=f"{self.ref} quarry",
+            relations=[(Relation.QUARRY_OF, self.me, who)],
+        )
+
     def grants_advantage(
         self,
         *,
         until: When = When.EONT,
         on: int | None = None,
-        to: str = "me",
+        to: str | int = "me",
     ) -> Effect | None:
-        """The target grants combat advantage -- to you, or to your side.
+        """The target grants combat advantage -- to you, an ally, or your side.
 
-        `to="allies"` is the printed "grants combat advantage to you and
-        your allies", which is a common enough line that two rows had
-        already hand-rolled the same list of relations. The relation names
-        one beneficiary, so a side is that relation once per ally, held on
-        a single effect so they all end together.
+        The relation names **one** beneficiary, so anything wider is that
+        relation once per creature, held on a single effect so they all end
+        together. Four rows had hand-rolled that before this took an
+        argument: `to="allies"` for "you and your allies", and `to=<id>`
+        for "one ally gains combat advantage against the target", which is
+        the printed line this method used to say wrong.
         """
         who = self._who(on)
         if who is None:
             return None
-        beneficiaries = [self.me] if to == "me" else [self.me, *self.allies()]
+        if isinstance(to, int):
+            beneficiaries = [to]
+        elif to == "allies":
+            beneficiaries = [self.me, *self.allies()]
+        else:
+            beneficiaries = [self.me]
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} advantage",
             relations=[(Relation.GRANTS_CA_TO, who, b) for b in beneficiaries],

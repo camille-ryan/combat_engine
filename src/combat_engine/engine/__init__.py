@@ -97,12 +97,14 @@ from .triggers import (
     by_melee,
     by_ranged,
     cursed_by_me,
+    either,
     enemy_target_within,
     enemy_within,
     hits_me,
     leaves_me_out,
     not_me,
     targets_me,
+    targets_my_side,
     would_hit_me,
 )
 from .turns import Encounter

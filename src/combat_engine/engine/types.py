@@ -142,6 +142,9 @@ class Relation(StrEnum):
     #: warlock powers read "if the target is cursed", and they mean cursed
     #: *by you*, not cursed by anybody.
     CURSED_BY = "cursed_by"
+    #: The ranger's quarry. Relational for the same reason a curse is:
+    #: two rangers in a party each have their own.
+    QUARRY_OF = "quarry_of"
     #: Granted explicitly by a power. Flanking is *computed*, not stored here.
     GRANTS_CA_TO = "grants_ca_to"
 

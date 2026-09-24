@@ -37,8 +37,10 @@ from combat_engine.engine import (
 from combat_engine.engine.scaling import PRESETS
 from combat_engine.etl.build import game
 
-#: Which class carries a given power, for building the caster.
-OWNER = {"fighter": "fighter", "cleric": "cleric", "rogue": "rogue", "wizard": "wizard"}
+#: This used to be a four-entry map with a fighter fallback, from when only
+#: four classes existed -- so every warlord, paladin, ranger and warlock row
+#: was rendered on a fighter, with the wrong ability modifiers and no
+#: `Build`, which meant no `c.build(...)` rider could ever fire here.
 
 #: What to stand in front of the caster. Medium, so a push has somewhere to
 #: go and a burst catches a sensible number of them.
@@ -124,8 +126,18 @@ def _board(
         caster = loader.spawn(world, owner, (4, 6), team=Team.ENEMY)
         foe_team = Team.PC
     else:
-        cls = OWNER.get(declared.cls, "fighter")
-        caster = chargen.spawn(world, chargen.Character(cls, 1, [ref]), (4, 6))
+        cls = declared.cls or "fighter"
+        # And the build whose gear can hold the row, the way `audit.py`
+        # picks one -- a ranged ranger row fielded on a two-blade ranger is
+        # refused for a reason that says nothing about the row.
+        caster = chargen.spawn(
+            world,
+            chargen.Character(
+                cls, max(1, declared.level), [ref],
+                build=chargen.build_for(cls, ref),
+            ),
+            (4, 6),
+        )
         foe_team = Team.ENEMY
 
     # Targets in a line just past the caster, so a melee power reaches the

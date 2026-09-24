@@ -299,6 +299,32 @@ def _fits(p, build: Build) -> bool:  # noqa: ANN001
     return p.attack.ability is build.primary
 
 
+def build_for(cls: str, ref: str) -> str:
+    """The build whose gear can actually hold this row.
+
+    A class's builds carry different weapons -- a two-blade ranger owns no
+    bow at all -- so a ranged row fielded on the wrong one is refused for a
+    reason that has nothing to do with the row. Lives here rather than in a
+    script because choosing a build is character creation, and two scripts
+    were about to want it.
+    """
+    from combat_engine.engine import Bus, Grid, Rng, World, usable
+    from combat_engine.engine.dsl import get
+
+    declared = get(ref)
+    if declared is None:
+        return ""
+    for build in BUILDS.get(cls, ()):
+        probe = World(Grid(8, 8), Rng(1), Bus())
+        who = spawn(
+            probe, Character(cls, max(1, declared.level), [ref], build=build.name), (1, 1)
+        )
+        ok, why = usable(probe, who, declared)
+        if ok or "requirement" not in why:
+            return build.name
+    return ""
+
+
 def _is_class_heal(p) -> bool:  # noqa: ANN001
     """The leader's signature heal: a minor action, healing, twice a fight.
 

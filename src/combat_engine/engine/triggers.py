@@ -399,3 +399,24 @@ def both(*checks: Callable[[World, int, Event], bool]) -> Callable[[World, int, 
         return all(c(world, me, ev) for c in checks)
 
     return check
+
+
+def either(*checks: Callable[[World, int, Event], bool]) -> Callable[[World, int, Event], bool]:
+    """Any one of these. "You **or** an ally" is a very common opener and
+    only `both` existed, so every row saying it wrote its own."""
+
+    def check(world: World, me: int, ev: Event) -> bool:
+        return any(c(world, me, ev) for c in checks)
+
+    return check
+
+
+def targets_my_side(world: World, me: int, ev: Event) -> bool:
+    """This was aimed at me or at somebody on my side, at any range.
+
+    `ally_within(n)` forces a radius the printed line usually does not name.
+    """
+    from .query import team
+
+    who = getattr(ev, "target", None)
+    return who is not None and team(world, who) is team(world, me)
