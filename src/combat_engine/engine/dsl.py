@@ -12,7 +12,7 @@ being only one kind of thing to share.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -299,7 +299,7 @@ class Power:
     #: The same line in a form the dispatcher can act on. With it the row is
     #: offered when its trigger happens; without it `trigger` is prose and
     #: nothing reads it. See `engine/triggers.py`.
-    on: Trigger | None = None
+    on: Trigger | Sequence[Trigger] | None = None
     recharge: int = 0
     #: How many times per encounter. Two for the cleric's heal; one for
     #: everything else that is not at-will.
@@ -334,6 +334,23 @@ class Power:
     @property
     def branches(self) -> tuple[int, ...]:
         return self.reach.branches
+
+    @property
+    def triggers(self) -> tuple[Trigger, ...]:
+        """Every printed Trigger this row answers, as a tuple.
+
+        A `Trigger` names one event class, and several printed lines name
+        more than one thing -- "pushed, pulled, slid, **or knocked prone**"
+        is a `ForcedMove` and a `ConditionApplied`. Declaring one of them
+        left the row looking finished and quietly missing the rest, which is
+        worse than leaving it out.
+
+        `on=` therefore takes one or a sequence, and everything that reads it
+        goes through here so neither form is special.
+        """
+        if self.on is None:
+            return ()
+        return (self.on,) if isinstance(self.on, Trigger) else tuple(self.on)
 
     def reach_of(self, branch: int = 0) -> Range:
         return self.reach.branch(branch)
@@ -450,7 +467,7 @@ def power(
     requires_text: str = "",
     requires_alt: Callable[[World, int], bool] | None = None,
     trigger: str = "",
-    on: Trigger | None = None,
+    on: Trigger | Sequence[Trigger] | None = None,
     recharge: int = 0,
     uses: int = 1,
     once_per_round: bool = False,

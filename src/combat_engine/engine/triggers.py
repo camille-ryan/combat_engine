@@ -102,11 +102,11 @@ class Triggers:
 
         watched: dict[type[Event], set[Window]] = {}
         for p in REGISTRY.values():
-            if p.on is None:
-                continue
             window = WINDOW_OF.get(p.action)
-            if window is not None:
-                watched.setdefault(p.on.event, set()).add(window)
+            if window is None:
+                continue
+            for trig in p.triggers:
+                watched.setdefault(trig.event, set()).add(window)
 
         for etype, windows in watched.items():
             for window in sorted(windows, key=lambda w: w.name):
@@ -161,17 +161,20 @@ class Triggers:
         out = []
         for ref in known.all:
             p = get(ref)
-            if p is None or p.on is None:
+            if p is None or not p.triggers:
                 continue
             if WINDOW_OF.get(p.action) is not window:
                 continue
-            if not isinstance(ev, p.on.event):
+            # Any of them. A row naming several printed triggers answers
+            # whichever one actually happened.
+            if not any(
+                isinstance(ev, t.event) and t.when(self.world, eid, ev)
+                for t in p.triggers
+            ):
                 continue
             if (eid, ref) in _IN_FLIGHT:
                 continue
             if not dying and not self.encounter.can_spend(eid, p.action):
-                continue
-            if not p.on.when(self.world, eid, ev):
                 continue
             ok, _why = usable(self.world, eid, p, dying=dying)
             if ok:
@@ -193,7 +196,11 @@ class Triggers:
         if p is None:
             return
         options = [ref, ""]
-        if self.world.decide(eid, "trigger", options, p.on.text if p.on else "") != ref:
+        # Comma-joined rather than " or "-joined: an author writing the
+        # second fragment naturally ("or knocked prone") would otherwise get
+        # "or or" on the card.
+        printed = ", ".join(t.text for t in p.triggers if t.text)
+        if self.world.decide(eid, "trigger", options, printed) != ref:
             return
         dying = getattr(ev, "actor", None) == eid and not alive(self.world, eid)
         if not dying and not self.encounter.spend(eid, p.action):
@@ -241,6 +248,12 @@ def by_me(world: World, me: int, ev: Event) -> bool:
 
 
 def about_me(world: World, me: int, ev: Event) -> bool:
+    """Reads `ev.actor`, and **only** `ev.actor`.
+
+    Several events name their subject `target` instead -- `ConditionApplied`
+    is the common one -- and on those this is silently false, which looks
+    exactly like a trigger that never happens. Use `targets_me` there.
+    """
     return getattr(ev, "actor", None) == me
 
 

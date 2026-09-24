@@ -302,7 +302,7 @@ def _area_rows(world, caster: int, exclude: str) -> list[str]:  # noqa: ANN001
     out = []
     for other in known.all:
         p = get(other)
-        if p is None or other == exclude or p.on is not None:
+        if p is None or other == exclude or p.triggers:
             continue
         if p.reach.kind in ("close_burst", "close_blast", "area_burst"):
             out.append(other)
@@ -430,7 +430,7 @@ def audit(ref: str) -> Result:
     # to respond to and it returns -- reported as silent, when what was wrong
     # was the way it was fired. These are played instead: the dispatcher is
     # allowed to offer them, in the situation the trigger names.
-    triggered = declared is not None and declared.on is not None
+    triggered = declared is not None and bool(declared.triggers)
     for seed, face in ((s, f) for f in LOADED for s in range(1, TRIES + 1)):
         try:
             world, caster, armed = board(ref, seed)
