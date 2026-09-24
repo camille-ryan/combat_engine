@@ -781,7 +781,7 @@ class Cast:
             self.world, from_ or self.me, who, bonus, vs, self.ref,
             advantage=advantage, opportunity=self.opportunity,
             among=tuple(self.targets) or (who,), branch=self.branch,
-            ignore_cover=ignore_cover,
+            ignore_cover=ignore_cover, dying=self.dying,
         )
         # An interrupt may have moved the blow onto somebody else. The roll
         # and the `Hit` already name the new target; without this the body's
@@ -1516,6 +1516,36 @@ class Cast:
     # says "its master" or "a creature guarded by it" and expects the engine
     # to know who that is. Source is the one in charge, target the one it is
     # responsible for, matching `Relation`.
+
+    @property
+    def dying(self) -> bool:
+        """Is this row a death throe, answering its owner's own downfall?
+
+        The killing blow usually overshoots `dying_at`, so by the time the
+        row runs its owner is not alive -- and every gate that asks whether
+        it can act would refuse it for the reason it exists.
+        """
+        ev = self.trigger
+        return (
+            ev is not None
+            and getattr(ev, "actor", None) == self.me
+            and not alive(self.world, self.me)
+        )
+
+    def resist_forced(
+        self, squares_: int = 1, *, on: int | None = None, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """Shorten every push, pull and slide against this creature.
+
+        "Moves 1 square fewer than the effect specifies." A held modifier
+        rather than a watcher, because it applies to shoves from anywhere.
+
+        Defaults to the caster rather than to `c.target`: every row printing
+        this is describing itself.
+        """
+        return self.bonus(
+            "forced", squares_, on=on or self.me, until=until, kind="untyped"
+        )
 
     def absorb(self, ev: Any = None, *, on: int | None = None) -> int:
         """Take damage somebody else was about to suffer.

@@ -100,7 +100,13 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
 
     if MONSTER_ABILITY.match(ref):
         caster = loader.spawn(world, ref.split("a")[0], (6, 8), team=Team.ENEMY)
-        world.need(caster, Powers).known.append(ref)
+        # Only if `loader.spawn` did not already know it, which it does for
+        # every declared row. Appending regardless put the ref in twice, so
+        # the dispatcher offered it twice and every triggered monster row
+        # paid out twice in the log the log is read to count.
+        known = world.need(caster, Powers).known
+        if ref not in known:
+            known.append(ref)
         # A second of its kind, so a row reading "an ally within 10" has
         # one. A lone monster on a board of enemies can never satisfy its
         # own trigger, and several rows are about their friends.
@@ -242,6 +248,14 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         use(world, attacker, basic(attacker), targets=[target], spend=False)
         if _fired(world, ref, cursor):
             return True
+
+    # A burst or a blast of its own. "When the m5027 hits with a close or
+    # area attack" is a common enough shape, and a harness that only ever
+    # swings a basic can never produce one.
+    for other in _area_rows(world, caster, ref):
+        use(world, caster, other, spend=False)
+        if _fired(world, ref, cursor):
+            return True
     for foe in foes[:2]:
         for sq in sorted(world.reachable_squares(foe, 1)):
             shift(world, foe, sq)
@@ -262,6 +276,13 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     # other people can never reach one. Three such rows were written and
     # none had ever been exercised.
     for victim in (*foes, *_allies_of(world, caster), caster):
+        if victim == caster:
+            # Put everybody else back on their feet first. A death throe is
+            # an attack on whoever is still standing, and by this point the
+            # harness has killed all of them -- so the burst declared
+            # against an empty board and looked like a row that does
+            # nothing. Three level-4 rows and one at level 3 failed this way.
+            _revive_everyone(world, caster)
         health = world.get(victim, Health)
         if health is None or health.hp <= 0:
             continue
@@ -269,6 +290,38 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         if _fired(world, ref, cursor):
             return True
     return _fired(world, ref, cursor)
+
+
+def _area_rows(world, caster: int, exclude: str) -> list[str]:  # noqa: ANN001
+    """This creature's own close and area attacks, cheapest first."""
+    from combat_engine.engine.components import Powers
+
+    known = world.get(caster, Powers)
+    if known is None:
+        return []
+    out = []
+    for other in known.all:
+        p = get(other)
+        if p is None or other == exclude or p.on is not None:
+            continue
+        if p.reach.kind in ("close_burst", "close_blast", "area_burst"):
+            out.append(other)
+    return out[:2]
+
+
+def _revive_everyone(world, except_: int) -> None:  # noqa: ANN001
+    """Undo the harness's own killing, so the next probe has a board."""
+    from combat_engine.engine import Conditions, Health
+    from combat_engine.engine.types import Condition
+
+    for eid, health in list(world.each(Health)):
+        if eid == except_:
+            continue
+        health.hp = health.max_hp
+        conds = world.get(eid, Conditions)
+        if conds is not None:
+            for cond in (Condition.DYING, Condition.UNCONSCIOUS, Condition.PRONE):
+                conds.counts.pop(cond, None)
 
 
 def _use_with_any_grip(world, caster: int, ref: str) -> bool:  # noqa: ANN001

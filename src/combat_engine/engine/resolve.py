@@ -81,6 +81,7 @@ def attack(
     opportunity: bool = False,
     among: tuple[int, ...] = (),
     branch: int = 0,
+    dying: bool = False,
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
@@ -94,7 +95,11 @@ def attack(
         # assigning `ev.target` did nothing at all and failed silently.
         attacker, target = declared.attacker, declared.target
         result.target = target
-        if not can_act(world, attacker) or not alive(world, target):
+        # `dying` is a death throe swinging on its way down. The killing
+        # blow usually overshoots `dying_at` -- and always does for a minion
+        # -- so the attacker is not alive by the time its own `Dropped` is
+        # answered, and the whole burst declared and then cancelled.
+        if (not dying and not can_act(world, attacker)) or not alive(world, target):
             result.cancelled = True
             return
 

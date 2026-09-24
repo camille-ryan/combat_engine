@@ -387,7 +387,15 @@ def forced(
     # emitted and dropped, which made "cannot be pushed, pulled or slid" --
     # a whole class of monster trait -- unsayable, and made any `BEFORE`
     # listener that cancelled it fail without a sound.
+    # Read the count back off the event, not off the local. A listener that
+    # shortens a shove -- "moves 1 square fewer when pushed, pulled or slid"
+    # -- wrote to `ev.squares` and nothing looked at it again.
     if world.bus.emit(shove).cancelled:
+        return 0
+    from .resolve import _mods
+
+    amount = max(0, shove.squares - _mods(world, target, "forced", {"how": how.value}))
+    if amount <= 0:
         return 0
     if to is not None:
         # A row that names the square it wants. Still one step at a time, so
