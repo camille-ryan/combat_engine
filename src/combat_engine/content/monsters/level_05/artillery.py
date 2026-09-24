@@ -236,11 +236,11 @@ def m2817a2(c: Cast) -> None:
     the way `Attack.bonus_for` trims a header's, so the row still moves with
     whatever scaling the fight is being played on.
 
-    "Each eye ray must target a different creature" is `UpTo(2)`, whose
+    "Each beam must target a different creature" is `UpTo(2)`, whose
     targets are distinct; the body is called once for each of them.
     """
     bonus = c.world.scaling.trim(10, c.level)
-    ray = c.choose(list(_M2817_RAYS), "which eye ray") or _M2817_RAYS[0]
+    ray = c.choose(list(_M2817_RAYS), "which beam") or _M2817_RAYS[0]
 
     if ray == 1:
         if c.attack(bonus, REF):

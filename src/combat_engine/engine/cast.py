@@ -1313,6 +1313,21 @@ class Cast:
         return None
 
 
+    def moving_as(self, mode: str, *, on: int | None = None) -> bool:
+        """Is this creature moving that way **right now**?
+
+        "Requirement: the creature must be climbing" and "while it is not
+        flying" are about what it is doing, not what it could do. `c.mode`
+        and `Movement.modes` answer the second question and were the only
+        thing available for the first, which made the gate true whenever the
+        creature had the speed at all.
+        """
+        from .components import Movement
+
+        who = on or self.me
+        mv = self.world.get(who, Movement)
+        return bool(mv and mv.using == mode)
+
     def phasing(
         self, *, until: When = When.ENCOUNTER, on: int | None = None
     ) -> Effect | None:

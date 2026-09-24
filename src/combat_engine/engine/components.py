@@ -120,6 +120,14 @@ class Movement:
     #: Kinds of difficult terrain this creature crosses for nothing, by the
     #: label `Grid.difficult` gives them. `"*"` is all of it.
     ignores: set[str] = field(default_factory=set)
+    #: How the creature is moving **right now**, or "" between moves.
+    #:
+    #: `modes` says what it *can* do and never what it *is* doing, so
+    #: "Requirement: must be climbing" and "while it is not flying" could not
+    #: be written at all -- a gate on `modes` is true whenever the creature
+    #: has the speed, which is not the printed sentence. Four rows across two
+    #: waves asked for this.
+    using: str = ""
 
 
 @dataclass

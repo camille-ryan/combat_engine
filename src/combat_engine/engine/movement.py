@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .components import Position
+from .components import Movement, Position
 from .events import (
     AdjacencyGained,
     AdjacencyLost,
@@ -267,6 +267,15 @@ def walk(
     if world.bus.emit(MoveStart(actor=eid, kind_=kind)).cancelled:
         return 0
     spent = 0
+    # Held past the end of the move, not just during it. "Requirement: the
+    # creature must be climbing" is checked when a power is *used*, and the
+    # creature is standing still at that moment -- a flag that only held
+    # mid-step would be false exactly when the question gets asked. A
+    # creature that climbed a wall is still on the wall; `settle` puts a
+    # flyer down at the end of its turn and clears it there.
+    mv = world.get(eid, Movement)
+    if mv is not None:
+        mv.using = "" if mode == "walk" else mode
     for sq in path:
         if not step(world, eid, sq, kind=kind, mode=mode):
             break
@@ -320,6 +329,9 @@ def settle(world: World, eid: int) -> bool:
     when the turn ends. The nearest square it fits in wins, and ties are
     broken in sorted order so two runs of a seed land it in the same place.
     """
+    mv = world.get(eid, Movement)
+    if mv is not None and mv.using == "fly":
+        mv.using = ""       # it comes down; it is not flying any more
     pos = world.get(eid, Position)
     if pos is None or _clear(world, eid, pos.squares):
         if pos is not None:

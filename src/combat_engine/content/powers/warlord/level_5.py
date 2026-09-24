@@ -103,7 +103,7 @@ def p1574(c: Cast) -> None:
         return
     pool = [a for a in _squad(c, 5) if _saves(c, a, by=victim)]
     who = c.choose(pool, "who shakes off something it caused")
-    if who is not None and c.may("try to shake it off", who=who):
+    if who is not None and c.may("try to throw it off", who=who):
         c.world.effects.save(_saves(c, who, by=victim)[0])
 
 
