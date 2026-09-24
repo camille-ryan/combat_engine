@@ -60,6 +60,9 @@ TRIES = 8
 #: Somebody to stand in front of the caster: Medium, so a push has room.
 DUMMY = "m145"
 
+#: And one undead, for the rows that only affect those.
+UNDEAD = "m416"
+
 #: A monster ability's id. Spelled out rather than `startswith("m")`, which
 #: also matches `mba` -- the engine's own melee basic attack -- and sent the
 #: auditor looking for a monster called "mb".
@@ -94,8 +97,14 @@ def board(ref: str, seed: int) -> tuple[World, int]:
 
     from combat_engine.engine import Health
 
-    for square in ((7, 8), (8, 9), (9, 8), (7, 10)):
-        hurt = loader.spawn(world, DUMMY, square, team=foe_team)
+    # One of them undead, because a few rows only affect those and a board
+    # without one makes them look silent when they are simply particular.
+    # All four inside a close burst 2, which is the smallest area any row
+    # here uses -- a creature one square outside it is no test at all.
+    for square, what in (
+        ((7, 8), DUMMY), ((7, 9), UNDEAD), ((6, 9), DUMMY), ((5, 7), DUMMY)
+    ):
+        hurt = loader.spawn(world, what, square, team=foe_team)
         world.need(hurt, Health).hp -= 5
 
     # A wounded ally, because a great many powers heal one and a board of
@@ -141,7 +150,8 @@ def main() -> int:
     args = ap.parse_args()
 
     wanted = args.refs or sorted(REGISTRY)
-    chosen = []
+    chosen: list[str] = []
+    inert: list[str] = []
     for ref in wanted:
         p = get(ref)
         if p is None:
@@ -152,6 +162,11 @@ def main() -> int:
         if args.level is not None and p.level != args.level:
             continue
         if args.monsters and not ref.startswith("m"):
+            continue
+        if p.out_of_combat:
+            # Declared inert. A cantrip that lights a torch is not a silent
+            # power, it is a power with nothing to say in a fight.
+            inert.append(ref)
             continue
         chosen.append(ref)
 
@@ -177,6 +192,9 @@ def main() -> int:
 
     ok = len(chosen) - len(broken) - len(silent) - len(never)
     print(f"\n  {ok} of {len(chosen)} rows fire and do something")
+    if inert:
+        print(f"  {len(inert)} declared out of combat, not fired: {', '.join(inert[:6])}"
+              + (" ..." if len(inert) > 6 else ""))
     if broken or silent:
         print(f"  {len(broken)} raise, {len(silent)} silent")
     if never:

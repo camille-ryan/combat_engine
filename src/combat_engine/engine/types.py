@@ -132,6 +132,10 @@ class Relation(StrEnum):
     MARKED_BY = "marked_by"
     DOMINATED_BY = "dominated_by"
     HIDDEN_FROM = "hidden_from"
+    #: The warlock's mark. Relational for the usual reason -- several
+    #: warlock powers read "if the target is cursed", and they mean cursed
+    #: *by you*, not cursed by anybody.
+    CURSED_BY = "cursed_by"
     #: Granted explicitly by a power. Flanking is *computed*, not stored here.
     GRANTS_CA_TO = "grants_ca_to"
 

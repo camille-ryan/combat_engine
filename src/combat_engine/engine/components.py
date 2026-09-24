@@ -312,6 +312,29 @@ class Gear:
         """
         return next((w for w in self.weapons if w.ranged), None)
 
+    @property
+    def melee(self) -> list[Weapon]:
+        return [w for w in self.weapons if not w.ranged]
+
+    @property
+    def off(self) -> Weapon | None:
+        """The second melee weapon, for a creature fighting with two.
+
+        Its own property rather than `weapons[1]`, because a ranger carrying
+        a blade and a bow has a second weapon and is not fighting with two.
+        """
+        melee = self.melee
+        return melee[1] if len(melee) > 1 else None
+
+    @property
+    def two_weapon(self) -> bool:
+        """Is this creature wielding two melee weapons?
+
+        A printed Requirement several rows carry. Counting melee weapons
+        rather than weapons, for the same reason as `off`.
+        """
+        return len(self.melee) > 1 and not self.shield
+
 
 @dataclass
 class Weapon:

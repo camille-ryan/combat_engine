@@ -117,9 +117,12 @@ CLASSES: dict[str, ClassLine] = {
         (LONGSWORD,), STR,
         {STR: 16, CON: 13, DEX: 10, INT: 8, WIS: 12, CHA: 16},
     ),
+    # Two blades and a bow. The two-weapon build is the one several of its
+    # level 1 rows require outright, and a ranger carrying one sword could
+    # never use them.
     "ranger": ClassLine(
         "ranger", 12, 5, 6, {"fort": 1, "ref": 1}, "leather", 0,
-        (SHORTSWORD, LONGBOW), DEX,
+        (SHORTSWORD, SHORTSWORD, LONGBOW), DEX,
         {STR: 14, CON: 13, DEX: 18, INT: 8, WIS: 12, CHA: 10},
     ),
     "warlock": ClassLine(

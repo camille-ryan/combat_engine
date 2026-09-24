@@ -110,6 +110,10 @@ class Target:
 
 
 ONE_CREATURE = Target("enemy", 1)
+#: A power aimed at anybody at all. `ONE_CREATURE` is the *enemy* pool, so a
+#: beneficial row pointed at it is unusable on the only creatures it is ever
+#: meant for.
+ANY_CREATURE = Target("any", 1)
 ONE_ALLY = Target("ally", 1)
 SELF = Target("self", 1)
 EACH_ENEMY = Target("enemy", 99, everyone=True)
@@ -239,9 +243,18 @@ class Power:
     uses: int = 1
     #: True when those uses may not be spent on the same round.
     once_per_round: bool = False
+    #: Rows sharing a group share one budget. Several classes have a set of
+    #: powers of which only one may be used per fight, and `uses` alone is
+    #: per row and cannot say so.
+    group: str = ""
     #: Set on the few rows whose printed text says they do not provoke,
     #: despite being ranged or area.
     no_provoke: bool = False
+    #: True for a row that does nothing in a fight and is not supposed to --
+    #: a cantrip that lights a torch, a ritual. Declared rather than
+    #: inferred, so `scripts/audit.py` can tell "deliberately inert" from
+    #: "written wrong", which is a distinction nothing else can draw.
+    out_of_combat: bool = False
 
     @property
     def is_attack(self) -> bool:
@@ -306,7 +319,9 @@ def power(
     recharge: int = 0,
     uses: int = 1,
     once_per_round: bool = False,
+    group: str = "",
     no_provoke: bool = False,
+    out_of_combat: bool = False,
 ) -> Callable[[Body], Body]:
     """Declare one power or one monster ability.
 
@@ -336,7 +351,9 @@ def power(
             recharge=recharge,
             uses=uses,
             once_per_round=once_per_round,
+            group=group,
             no_provoke=no_provoke,
+            out_of_combat=out_of_combat,
         )
         return body
 
@@ -467,6 +484,8 @@ def usable(world: World, actor: int, p: Power) -> tuple[bool, str]:
                 return False, "expended" if p.uses == 1 else f"used {used} of {p.uses}"
             if p.once_per_round and powers.last_round.get(p.ref) == world.round:
                 return False, "already used this round"
+            if p.group and _group_spent(world, actor, p):
+                return False, f"one {p.group} power per encounter"
     if p.requires is not None and not p.requires(world, actor):
         return False, p.requires_text or "requirement not met"
     if p.is_attack and not _can_land(world, actor, p):
@@ -485,6 +504,22 @@ def _can_land(world: World, actor: int, p: Power) -> bool:
     if p.reach.kind in ("area_burst", "close_blast"):
         return any(candidates(world, actor, p, aim) for aim in aim_points(world, actor, p))
     return bool(candidates(world, actor, p))
+
+
+def _group_spent(world: World, actor: int, p: Power) -> bool:
+    """Has a sibling of this row already been used this fight?"""
+    from .components import Powers
+
+    powers = world.get(actor, Powers)
+    if powers is None:
+        return False
+    return any(
+        other != p.ref
+        and (sib := REGISTRY.get(other)) is not None
+        and sib.group == p.group
+        and powers.times(other) > 0
+        for other in powers.all
+    )
 
 
 def _no_targets(world: World, actor: int, p: Power) -> str:

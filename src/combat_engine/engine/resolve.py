@@ -172,6 +172,12 @@ def deal_damage(
     if health is None or not alive(world, target):
         return 0
 
+    if from_attack:
+        # A bonus to damage is a thing powers grant constantly -- "+4 damage
+        # against the target until the end of the encounter" -- and for a
+        # while this line was missing, so every one of them was stored and
+        # never read. Nothing failed; the damage was simply never larger.
+        amount += _mods(world, source, "damage", {"target": target, "power": detail})
     if from_attack and deals_half(world, source):
         amount = amount // 2
 

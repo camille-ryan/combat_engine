@@ -151,6 +151,133 @@ class Cast:
         health = self.world.get(who, Health) if who else None
         return health is not None and health.hp < health.max_hp
 
+    def kinds_of(self, on: int | None = None) -> frozenset[str]:
+        """A creature's type words: undead, goblin, beast, natural, and so on.
+
+        Off the stat block's own type line. A power that reads "each undead
+        creature in the burst" asks this; a character has none, which is the
+        right answer for one.
+        """
+        from .components import Ident
+
+        who = self._who(on)
+        ident = self.world.get(who, Ident) if who else None
+        if ident is None or not ident.ref.startswith("m"):
+            return frozenset()
+        from combat_engine.content.loader import load
+
+        try:
+            import json
+
+            row = load(ident.ref).row
+        except Exception:  # a ref with no row is simply typeless
+            return frozenset()
+        words = set(json.loads(row.get("keywords") or "[]"))
+        for column in ("kind", "origin"):
+            if row.get(column):
+                words.add(row[column])
+        # The type line parenthesises its subtypes -- "(undead)" -- and a
+        # power asking whether something is undead should not have to know.
+        return frozenset(w.strip("() ,.").lower() for w in words if w.strip("() ,."))
+
+    def is_kind(self, word: str, on: int | None = None) -> bool:
+        """Is this creature of that type? `c.is_kind("undead")`."""
+        return word.lower() in self.kinds_of(on)
+
+    def roll(self, dice: str | int) -> int:
+        """Roll dice and get the number, without applying it to anybody.
+
+        `c.damage` was the only documented way to turn dice into a total and
+        it also deals them, so a power wanting a number for something else
+        had to reach past the API.
+        """
+        return self.world.rng.roll(dice).total
+
+    def marked(self, on: int | None = None, *, by: int | None = None) -> bool:
+        """Is that creature marked -- **by you**, unless told otherwise?
+
+        `c.is_(Condition.MARKED)` is true of a mark laid by anybody, which
+        quietly pays a paladin's bonus off the fighter's mark.
+        """
+        who = self._who(on)
+        if who is None:
+            return False
+        return self.world.relations.holds(Relation.MARKED_BY, self.me if by is None else by, who)
+
+    def save(self, *, on: int | None = None, bonus: int = 0) -> bool:
+        """Roll a saving throw now against one save-ends effect.
+
+        A few powers hand somebody an extra save out of turn. Returns True
+        if something was shaken off.
+        """
+        who = self._who(on)
+        if who is None:
+            return False
+        for effect in self.world.effects.of(who):
+            if effect.when is When.SAVE_ENDS:
+                effect.save_mod += bonus
+                self.world.effects.save(effect)
+                return effect.ended
+        return False
+
+    def surge_value(self, of: int | None = None) -> int:
+        """A quarter of that creature's maximum, which is what a surge heals."""
+        who = self._who(of) or self.me
+        health = self.world.get(who, Health)
+        return health.surge_value if health else 0
+
+    def spend_surge(self, *, on: int | None = None) -> bool:
+        """Spend a surge and gain nothing for it.
+
+        The paladin's touch reads exactly that: the paladin pays and somebody
+        else is healed.
+        """
+        who = self._who(on) or self.me
+        health = self.world.get(who, Health)
+        if health is None or health.surges <= 0:
+            return False
+        health.surges -= 1
+        return True
+
+    def size_of(self, on: int | None = None):  # noqa: ANN201
+        from .components import Position
+        from .types import Size
+
+        pos = self.world.get(self._who(on), Position) if self._who(on) else None
+        return pos.size if pos else Size.MEDIUM
+
+    def turn_of(self) -> int | None:
+        """Whose turn it is, for a trigger that cares."""
+        return self.world.turn
+
+    def effect(
+        self, label: str, *, until: When = When.SAVE_ENDS, on: int | None = None
+    ) -> Effect | None:
+        """A named hold with no mechanical content of its own.
+
+        For the rows that say "the target is subjected to <something> (save
+        ends)" and then describe what that lets *you* do. The effect exists
+        so it can be seen, saved against, and hung things on.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        return self.world.effects.apply(who, self.me, until, label=label)
+
+    def invisible(self, *, to: int | None = None, until: When = When.SONT) -> Effect | None:
+        """You cannot be seen -- by one creature, or by everybody.
+
+        Held as `HIDDEN_FROM`, which `query.has_combat_advantage` already
+        reads, so being unseen grants the advantage it should.
+        """
+        watchers = [to] if to is not None else self.enemies()
+        pairs = [(Relation.HIDDEN_FROM, self.me, w) for w in watchers if w is not None]
+        if not pairs:
+            return None
+        return self.world.effects.apply(
+            self.me, self.me, until, label=f"{self.ref} unseen", relations=pairs
+        )
+
     def speed_of(self, who: int | None = None) -> int:
         from .query import speed
 
@@ -240,7 +367,7 @@ class Cast:
     def level(self) -> int:
         return self.stats.level
 
-    def w(self, count: int = 1) -> str:
+    def w(self, count: int = 1, *, hand: str = "main", ranged: bool | None = None) -> str:
         """`count`[W]: the wielded weapon's damage dice, that many times.
 
         A ranged power rolls the ranged weapon, where the creature has one.
@@ -250,9 +377,12 @@ class Cast:
         gear = self.world.get(self.me, Gear)
         if gear is None:
             return f"{count}d4"
-        weapon = gear.main
+        weapon = gear.off if hand == "off" else gear.main
         p = self._declared()
-        if p is not None and Keyword.RANGED in p.keywords and gear.ranged is not None:
+        fires = ranged if ranged is not None else (
+            p is not None and Keyword.RANGED in p.keywords
+        )
+        if fires and gear.ranged is not None:
             weapon = gear.ranged
         if weapon is None:
             return f"{count}d4"
@@ -265,17 +395,26 @@ class Cast:
         return get(self.ref)
 
     def wielding(self, prop: str) -> bool:
+        """Does the caster meet a printed Requirement line?
+
+        `"shield"`, `"two-weapon"`, a weapon group like `"light blade"`, or
+        a weapon property like `"two-handed"`.
+        """
         gear = self.world.get(self.me, Gear)
         if gear is None:
             return False
         if prop == "shield":
             return gear.shield
+        if prop in ("two-weapon", "two melee weapons"):
+            return gear.two_weapon
         weapon = gear.main
         return weapon is not None and (prop in weapon.properties or weapon.group == prop)
 
     # -- attacking -----------------------------------------------------------
 
-    def strike(self, *, on: int | None = None, advantage: bool | None = None) -> AttackResult:
+    def strike(
+        self, *, on: int | None = None, advantage: bool | None = None, plus: int = 0
+    ) -> AttackResult:
         """Roll the attack the header declared.
 
         The overwhelmingly common case: the printed `Attack:` line is a plain
@@ -288,11 +427,122 @@ class Cast:
         if p is None or p.attack is None:
             raise ValueError(f"{self.ref} declared no attack line; call c.attack(...)")
         return self.attack(
-            p.attack.bonus_for(self.world, self.me, self.ref),
+            p.attack.bonus_for(self.world, self.me, self.ref) + plus,
             p.attack.vs,
             on=on,
             advantage=advantage,
         )
+
+    def grant_attack(
+        self,
+        who: int,
+        *,
+        on: int | None = None,
+        ref: str = "",
+        damage_bonus: int = 0,
+        attack_bonus: int = 0,
+    ) -> bool:
+        """Let somebody else make an attack, now, out of turn.
+
+        The warlord's entire reason to exist, and a thing `Cast` could not
+        say at all: `c.strike()` always rolls for the caster. Without this
+        the class's signature row has no content whatsoever.
+
+        `ref` defaults to that creature's own basic attack, so a monster
+        whose basic has been replaced attacks with the right thing.
+        """
+        from .components import Powers
+        from .dsl import use
+
+        target = self._who(on)
+        if target is None or not alive(self.world, who):
+            return False
+        known = self.world.get(who, Powers)
+        from .basic import MELEE
+
+        chosen = ref or (known.basic if known else MELEE) or MELEE
+
+        granted = []
+        if damage_bonus:
+            granted.append(
+                self.world.effects.apply(
+                    who, self.me, When.EOT,
+                    label=f"{self.ref} granted damage",
+                    mods=[(who, Mod(what="damage", value=damage_bonus, kind="power"))],
+                )
+            )
+        if attack_bonus:
+            granted.append(
+                self.world.effects.apply(
+                    who, self.me, When.EOT,
+                    label=f"{self.ref} granted attack",
+                    mods=[(who, Mod(what="attack", value=attack_bonus, kind="power"))],
+                )
+            )
+        try:
+            return use(self.world, who, chosen, targets=[target], spend=False)
+        finally:
+            for effect in granted:
+                if effect is not None:
+                    self.world.effects.end(effect, "the granted attack is over")
+
+    def provoke(self, attacker: int, *, on: int | None = None, why: str = "") -> None:
+        """Open an opportunity window for a named creature against a target.
+
+        A handful of rows say "it provokes an opportunity attack from an ally
+        of your choice". The engine already has the window and a controller
+        to answer it; this is the door in.
+        """
+        from .events import OpportunityWindow
+
+        victim = self._who(on)
+        if victim is None:
+            return
+        self.world.bus.emit(
+            OpportunityWindow(actor=attacker, provoker=victim, why=why or self.ref)
+        )
+
+    def swap(self, other: int, *, who: int | None = None) -> bool:
+        """Two creatures change places. Either both move or neither does."""
+        from .components import Position
+        from .movement import place
+
+        a = who if who is not None else self.me
+        first = self.world.get(a, Position)
+        second = self.world.get(other, Position)
+        if first is None or second is None:
+            return False
+        here, there = first.square, second.square
+        self.world.grid.lift(a)
+        self.world.grid.lift(other)
+        place(self.world, a, there)
+        place(self.world, other, here)
+        return True
+
+    def basic(
+        self, *, on: int | None = None, who: int | None = None, ranged: bool = False
+    ) -> bool:
+        """Make a basic attack -- whichever row that creature's actually is.
+
+        A great many powers grant one, and spelling it out longhand gets it
+        wrong for any creature whose basic attack has been replaced: a
+        monster points `Powers.basic` at one of its own abilities, and a
+        hand-written copy of "roll and deal weapon damage" would quietly
+        ignore that.
+        """
+        from .basic import MELEE, RANGED
+        from .components import Powers
+        from .dsl import use
+
+        attacker = self.me if who is None else who
+        target = self._who(on)
+        if target is None:
+            return False
+        known = self.world.get(attacker, Powers)
+        ref = (known.basic if known else MELEE) or MELEE
+        if ranged:
+            ref = RANGED if known is None or not known.known else ref
+        return use(self.world, attacker, ref, targets=[target], spend=False)
 
     def attack(
         self,
@@ -446,18 +696,38 @@ class Cast:
 
     # -- moving things around ------------------------------------------------
 
-    def push(self, squares_: int, *, on: int | None = None,
-             anchor: Square | None = None) -> int:
+    def push(
+        self,
+        squares_: int,
+        *,
+        on: int | None = None,
+        anchor: Square | None = None,
+        to: Square | None = None,
+        by: int | None = None,
+    ) -> int:
+        """`to` names the destination outright, for a row that does.
+        `by` names who is doing the moving, when it is not the caster."""
         who = self._who(on)
         return 0 if who is None else forced(
-            self.world, self.me, who, Forced.PUSH, squares_, anchor=anchor
+            self.world, by if by is not None else self.me, who,
+            Forced.PUSH, squares_, anchor=anchor, to=to,
         )
 
-    def pull(self, squares_: int, *, on: int | None = None,
-             anchor: Square | None = None) -> int:
+    def pull(
+        self,
+        squares_: int,
+        *,
+        on: int | None = None,
+        anchor: Square | None = None,
+        to: Square | None = None,
+        by: int | None = None,
+    ) -> int:
+        """`to` names the destination outright, for a row that does.
+        `by` names who is doing the moving, when it is not the caster."""
         who = self._who(on)
         return 0 if who is None else forced(
-            self.world, self.me, who, Forced.PULL, squares_, anchor=anchor
+            self.world, by if by is not None else self.me, who,
+            Forced.PULL, squares_, anchor=anchor, to=to,
         )
 
     def slide(self, squares_: int, *, on: int | None = None,
@@ -532,8 +802,16 @@ class Cast:
         until: When = When.EONT,
         on: int | None = None,
         save_mod: int = 0,
+        ongoing: tuple[int, DamageType] | None = None,
         escalate: Callable[[Effect], None] | None = None,
     ) -> Effect | None:
+        """Apply one or more conditions for a duration.
+
+        `ongoing` hangs damage on the *same* effect, which matters when the
+        printed line reads "slowed and takes ongoing 5 damage (save ends
+        both)". Applying the two separately gives the victim two saving
+        throws and lets it shake off half of a thing the book says is one.
+        """
         who = self._who(on)
         if who is None:
             return None
@@ -544,6 +822,7 @@ class Cast:
             label=self.ref,
             conditions=conditions,
             save_mod=save_mod,
+            ongoing=ongoing,
             escalate=escalate,
         )
 
@@ -582,6 +861,28 @@ class Cast:
             relations=[(Relation.MARKED_BY, self.me, who)],
         )
 
+    def curse(self, *, on: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
+        """Curse a creature. Lasts the fight unless something says otherwise.
+
+        Relational, because a warlock power that reads "if the target is
+        cursed" means cursed *by you*. Two warlocks in a party curse
+        separately and neither reads the other's.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} curse",
+            relations=[(Relation.CURSED_BY, self.me, who)],
+        )
+
+    def cursed(self, on: int | None = None) -> bool:
+        """Has *this* caster cursed that creature?"""
+        who = self._who(on)
+        return who is not None and self.world.relations.holds(
+            Relation.CURSED_BY, self.me, who
+        )
+
     def grab(self, *, on: int | None = None) -> Effect | None:
         who = self._who(on)
         if who is None:
@@ -589,6 +890,34 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, When.ENCOUNTER, label=f"{self.ref} grab",
             relations=[(Relation.GRABBED_BY, self.me, who)],
+        )
+
+    def no_provoke(
+        self, *, from_: int | None = None, until: When = When.EOTNT
+    ) -> Effect | None:
+        """Walking away from that creature does not give it an opening.
+
+        A handful of rows say so outright. Implemented as an interrupt on the
+        opportunity window rather than as a flag movement would have to
+        consult, so it applies wherever the window opens and needs nothing
+        added to the movement rules.
+        """
+        from .events import OpportunityWindow
+
+        who = self._who(from_)
+        me = self.me
+
+        def veto(ev: OpportunityWindow) -> None:
+            if ev.provoker == me and (who is None or ev.actor == who):
+                ev.cancel("the power says it does not provoke")
+
+        return self.watch(
+            OpportunityWindow,
+            veto,
+            until=until,
+            window=Window.BEFORE,
+            on=me,
+            label=f"{self.ref} no provoke",
         )
 
     def grants_advantage(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
@@ -652,6 +981,39 @@ class Cast:
 
     # -- standing arrangements -----------------------------------------------
 
+    def on_attack(
+        self,
+        fn: Callable[[Any], None],
+        *,
+        by: int | None = None,
+        until: When = When.EONT,
+        once: bool = False,
+        once_per_round: bool = False,
+        label: str = "",
+    ) -> Effect:
+        """"Whenever that creature attacks..." -- the commonest trigger in 4e.
+
+        Written out by hand it is a `watch` plus a filter plus a latch, three
+        times per class. Here once.
+        """
+        from .events import AttackDeclared
+
+        who = self._who(by)
+        seen: dict[int, int] = {}
+
+        def guard(ev: AttackDeclared) -> None:
+            if who is not None and ev.attacker != who:
+                return
+            if once_per_round and seen.get(0) == self.world.round:
+                return
+            seen[0] = self.world.round
+            fn(ev)
+
+        return self.watch(
+            AttackDeclared, guard, until=until, once=once,
+            label=label or f"{self.ref} on attack",
+        )
+
     def watch(
         self,
         event: type[Event],
@@ -660,6 +1022,7 @@ class Cast:
         until: When = When.EONT,
         window: Window = Window.AFTER,
         on: int | None = None,
+        once: bool = False,
         label: str = "",
     ) -> Effect:
         """Arm a trigger that expires with a duration.
@@ -669,10 +1032,19 @@ class Cast:
         runs out the trigger goes with it and nothing has to remember.
         """
         who = self._who(on) or self.me
-        sub = self.world.bus.on(event, fn, window=window, owner=self.me)
-        return self.world.effects.apply(
+        holder: list[Effect] = []
+
+        def fire(ev: Any) -> None:
+            fn(ev)
+            if once and holder:
+                self.world.effects.end(holder[0], "used")
+
+        sub = self.world.bus.on(event, fire, window=window, owner=self.me)
+        effect = self.world.effects.apply(
             who, self.me, until, label=label or f"{self.ref} trigger", subs=[sub]
         )
+        holder.append(effect)
+        return effect
 
     # -- areas ---------------------------------------------------------------
 

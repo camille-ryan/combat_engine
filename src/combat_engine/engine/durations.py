@@ -42,6 +42,10 @@ if TYPE_CHECKING:
 
 class When(StrEnum):
     INSTANT = "instant"
+    #: The end of the turn happening right now. Distinct from EONT, which
+    #: latches past it to the end of your *next* turn -- a power reading
+    #: "on your next attack this turn" needs this one and had no spelling.
+    EOT = "end of this turn"
     EONT = "end of source's next turn"
     SONT = "start of source's next turn"
     EOTNT = "end of target's next turn"
@@ -258,7 +262,9 @@ class Effects:
         for eff in list(self.live.values()):
             if eff.clock != ev.actor:
                 continue
-            if eff.when in (When.EONT, When.EOTNT):
+            if eff.when is When.EOT:
+                self.end(eff, "end of turn")
+            elif eff.when in (When.EONT, When.EOTNT):
                 if eff.latch:
                     eff.latch = False
                 else:

@@ -241,6 +241,7 @@ def forced(
     amount: int,
     *,
     anchor: Square | None = None,
+    to: Square | None = None,
 ) -> int:
     """Push, pull or slide `target` up to `amount` squares.
 
@@ -260,6 +261,12 @@ def forced(
         anchor = src.square if src else pos.square
 
     world.bus.emit(ForcedMove(source=source, target=target, how=how, squares=amount))
+    if to is not None:
+        # A row that names the square it wants. Still one step at a time, so
+        # everything that watches a move still sees each of them.
+        return sum(
+            1 for _ in range(amount) if step(world, target, to, kind=how.value)
+        )
     moved = 0
     for _ in range(amount):
         nxt = _forced_square(world, source, target, anchor, how)

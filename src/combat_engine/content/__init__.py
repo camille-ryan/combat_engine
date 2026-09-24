@@ -28,4 +28,5 @@ def _load(package: str) -> None:
 
 
 _load("powers")
+_load("features")
 _load("monsters")

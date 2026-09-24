@@ -1,0 +1,108 @@
+"""The leaders' features: healing a friend, and the divine channels.
+
+A leader's job is that the party is better with it than without, and the
+heal is most of that. Both the cleric's and the warlord's are the same
+printed row with a different keyword on it, so they are the same function
+twice rather than one shared one -- they are separate rows in the book and a
+later errata to one should not silently move the other.
+"""
+
+from __future__ import annotations
+
+from combat_engine.engine import (
+    EACH_ENEMY,
+    ENCOUNTER,
+    FREE,
+    MINOR,
+    ONE_ALLY,
+    PERSONAL,
+    SELF,
+    STANDARD,
+    WILL,
+    WIS,
+    Attack,
+    Cast,
+    CloseBurst,
+    DamageType,
+    Keyword,
+    When,
+    power,
+)
+
+
+def _heal_an_ally(c: Cast) -> None:
+    """You or an ally spends a surge and gets a little more besides.
+
+    The printed text lets it land on the leader itself, so `c.within(5,
+    side="ally")` -- which includes the caster -- is exactly right here
+    without filtering.
+    """
+    hurt = [a for a in c.within(5, side="ally") if c.wounded(a)]
+    if not hurt:
+        return
+    who = c.choose(hurt, "who is healed")
+    if c.surge(on=who):
+        c.heal(c.world.rng.roll("1d6").total, on=who)
+
+
+@power(
+    "p1590",
+    level=0,
+    cls="warlord",
+    usage=ENCOUNTER,
+    action=MINOR,
+    reach=CloseBurst(5),
+    target=ONE_ALLY,
+    keywords=[Keyword.HEALING, Keyword.MARTIAL],
+    uses=2,
+    once_per_round=True,
+)
+def p1590(c: Cast) -> None:
+    """Twice a fight, but not twice in one round -- the Special line."""
+    _heal_an_ally(c)
+
+
+@power(
+    "p1589",
+    level=0,
+    cls="cleric",
+    usage=ENCOUNTER,
+    action=FREE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.DIVINE],
+)
+def p1589(c: Cast) -> None:
+    """A small bonus to the cleric's next attack roll or saving throw.
+
+    Applied to both, and the first one used consumes it, which is what
+    "your next attack roll **or** saving throw" means.
+    """
+    c.bonus("attack", 1, until=When.EONT, on=c.me, once=True)
+    c.bonus("save", 1, until=When.EONT, on=c.me)
+
+
+@power(
+    "p146",
+    level=0,
+    cls="cleric",
+    usage=ENCOUNTER,
+    action=STANDARD,
+    reach=CloseBurst(2),
+    target=EACH_ENEMY,
+    keywords=[Keyword.DIVINE, Keyword.IMPLEMENT, Keyword.RADIANT],
+    attack=Attack(WIS, vs=WILL),
+)
+def p146(c: Cast) -> None:
+    """Radiant light that only the restless dead feel.
+
+    Its printed target line is "each undead creature in the burst", so
+    everything else in the blast is simply not a target -- the body checks
+    the creature's own type words rather than being handed a filtered list.
+    """
+    if not c.is_kind("undead"):
+        return
+    if c.strike():
+        c.damage("1d10", c.wis_mod, dtype=DamageType.RADIANT)
+        c.push(3 + c.cha_mod)
+        c.immobilized()
