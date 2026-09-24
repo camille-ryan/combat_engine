@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 class World:
     def __init__(self, grid: Grid, rng: Rng, bus: Bus) -> None:
         from .durations import Effects
+        from .monster_math import AS_PRINTED
         from .relations import Relations
         from .scaling import FULL
         from .zones import Zones
@@ -35,6 +36,9 @@ class World:
         #: How much a level is worth. Swap for BOUNDED to flatten the
         #: treadmill; see `engine/scaling.py`.
         self.scaling = FULL
+        #: Which edition's monster maths a fight runs on. Swap for TO_MM3 to
+        #: rescale Monster Manual 1 and 2 damage; see `monster_math.py`.
+        self.monster_math = AS_PRINTED
         #: Whose turn it is. None between rounds and before combat starts.
         self.turn: int | None = None
         self._stores: dict[type, dict[int, Any]] = {}

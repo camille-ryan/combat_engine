@@ -24,6 +24,10 @@ from .types import Ability, Condition, DamageType, Defense, Size, Team, modifier
 class Ident:
     ref: str
     tag: str = ""
+    #: Which book this row's numbers were printed under: MM1, MM2, MM3, or
+    #: empty for a character. `monster_math` needs it to know what it is
+    #: converting *from*.
+    book: str = ""
 
     def __str__(self) -> str:
         return f"{self.ref}{('#' + self.tag) if self.tag else ''}"

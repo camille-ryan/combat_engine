@@ -64,6 +64,15 @@ class Stock:
         return self.row["role"]
 
     @property
+    def book(self) -> str:
+        """Which Monster Manual printed it, so its maths can be converted."""
+        return self.row["book"] or ""
+
+    @property
+    def rank(self) -> str:
+        return self.row["rank"] or "standard"
+
+    @property
     def declared(self) -> list[str]:
         return [a["ref"] for a in self.abilities if a["ref"] in REGISTRY]
 
@@ -98,7 +107,7 @@ def spawn(world: World, ref: str, square: tuple[int, int], *, team: Team = Team.
     known = stock.declared
     printed = world.scaling.printed_monster(row["level"])
     eid = world.spawn(
-        Ident(ref=ref),
+        Ident(ref=ref, book=row["book"] or ""),
         Position(square=square, size=SIZES.get(row["size"], Size.MEDIUM)),
         Side(team=team),
         Stats(level=row["level"], scores=scores),

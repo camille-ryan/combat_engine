@@ -18,8 +18,9 @@ from typing import TYPE_CHECKING
 
 from .cast import Cast
 from .grid import Square, area_burst, blast, blast_placements, spread
+from .monster_math import NORMAL
 from .query import alive, allies, creatures, enemies, line_of_effect, squares
-from .types import Ability, ActionType, Defense, Keyword, Usage
+from .types import Ability, ActionType, DamageType, Defense, Keyword, Usage
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -176,6 +177,42 @@ class Attack:
         return f"{name}{tail} vs. {self.vs.value.upper()}"
 
 
+@dataclass(frozen=True)
+class Damage:
+    """A printed damage expression, in the header so it can be rescaled.
+
+    The same move as `Attack`, for a sharper reason. Monster Manual 1 and 3
+    are two different sets of maths, and converting between them is almost
+    entirely a damage conversion -- see `engine/monster_math.py`. Damage
+    written as a literal inside a body cannot be converted at all, so a row
+    that wants to be convertible says its damage here and lets `c.hit()`
+    apply it.
+
+    A power doing something more involved still calls `c.damage(...)` in its
+    body and simply is not rescalable. That is an honest limit and it will be
+    the minority.
+
+    Two payoffs beyond the conversion, both free: a policy can forecast
+    damage instead of learning it from logs, and the card can print it.
+    """
+
+    dice: str = ""
+    #: Added on top: a monster's flat bonus, or a character's ability
+    #: modifier named as a string -- "str", "dex" -- resolved at use.
+    bonus: str | int = 0
+    dtype: DamageType = DamageType.UNTYPED
+    #: `normal`, `limited` (encounter or recharge) or `minion`. MM3 scales
+    #: the three differently.
+    kind: str = NORMAL
+    #: Half on a miss, which most weapon dailies say.
+    half_on_miss: bool = False
+
+    def __str__(self) -> str:
+        tail = "" if not self.bonus else f" + {self.bonus}"
+        kind = "" if self.dtype is DamageType.UNTYPED else f" {self.dtype.value}"
+        return f"{self.dice}{tail}{kind} damage"
+
+
 @dataclass
 class Power:
     ref: str
@@ -189,6 +226,8 @@ class Power:
     keywords: tuple[Keyword, ...] = ()
     #: The printed Attack line, when there is one. Read by policies.
     attack: Attack | None = None
+    #: The printed damage, when the row is simple enough to declare it.
+    damage: Damage | None = None
     #: A printed Requirement line, as a predicate on the caster.
     requires: Callable[[World, int], bool] | None = None
     requires_text: str = ""
@@ -260,6 +299,7 @@ def power(
     target: Target = ONE_CREATURE,
     keywords: Iterable[Keyword] = (),
     attack: Attack | None = None,
+    damage: Damage | None = None,
     requires: Callable[[World, int], bool] | None = None,
     requires_text: str = "",
     trigger: str = "",
@@ -289,6 +329,7 @@ def power(
             target=target,
             keywords=tuple(keywords),
             attack=attack,
+            damage=damage,
             requires=requires,
             requires_text=requires_text,
             trigger=trigger,
@@ -428,9 +469,22 @@ def usable(world: World, actor: int, p: Power) -> tuple[bool, str]:
                 return False, "already used this round"
     if p.requires is not None and not p.requires(world, actor):
         return False, p.requires_text or "requirement not met"
-    if p.is_attack and not candidates(world, actor, p):
+    if p.is_attack and not _can_land(world, actor, p):
         return False, _no_targets(world, actor, p)
     return True, ""
+
+
+def _can_land(world: World, actor: int, p: Power) -> bool:
+    """Is there any way to aim this that catches somebody?
+
+    For an area power that means trying the placements, not the default one.
+    Asking `candidates` with no origin centres a blast on an arbitrary
+    adjacent square, and a blast that happens to point away from everybody
+    reported itself unusable while three creatures stood in range.
+    """
+    if p.reach.kind in ("area_burst", "close_blast"):
+        return any(candidates(world, actor, p, aim) for aim in aim_points(world, actor, p))
+    return bool(candidates(world, actor, p))
 
 
 def _no_targets(world: World, actor: int, p: Power) -> str:

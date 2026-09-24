@@ -50,8 +50,10 @@ CREATE TABLE monster (
   hp INTEGER, ac INTEGER, fort INTEGER, ref_def INTEGER, will INTEGER,
   initiative INTEGER, speed INTEGER, modes TEXT, scores TEXT,
   resist TEXT, vulnerable TEXT, immune TEXT, senses TEXT,
+  book TEXT, rank TEXT,
   dialect TEXT, score REAL
 );
+CREATE INDEX monster_book ON monster(book, level);
 CREATE INDEX monster_level ON monster(level, role);
 
 CREATE TABLE monster_power (
@@ -149,15 +151,17 @@ def _monsters(
 ) -> None:
     scores: list[float] = []
     rows = source.execute(
-        "SELECT ID, Txt FROM Monster WHERE Level <= ? ORDER BY ID", (MAX_MONSTER_LEVEL,)
+        "SELECT ID, Txt, Source FROM Monster WHERE Level <= ? ORDER BY ID",
+        (MAX_MONSTER_LEVEL,),
     )
     for row in rows:
-        m = monster_parser.parse(row["ID"], row["Txt"])
+        m = monster_parser.parse(row["ID"], row["Txt"], row["Source"])
         scores.append(m.score)
         report.monsters += 1
         report.worst.append((m.ref_id, m.score))
         out.execute(
-            "INSERT INTO monster VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO monster VALUES "
+            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 m.ref_id, m.id, m.level, m.role,
                 int(m.minion), int(m.leader), int(m.elite), int(m.solo),
@@ -165,7 +169,7 @@ def _monsters(
                 m.hp, m.ac, m.fort, m.ref, m.will,
                 m.initiative, m.speed, json.dumps(m.modes), json.dumps(m.scores),
                 json.dumps(m.resist), json.dumps(m.vulnerable), json.dumps(m.immune),
-                m.senses, m.dialect, m.score,
+                m.senses, m.book, m.rank, m.dialect, m.score,
             ),
         )
         names[m.ref_id] = {"name": m.name, "flavour": m.flavour}

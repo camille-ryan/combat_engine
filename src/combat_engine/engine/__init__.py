@@ -40,6 +40,7 @@ from .dsl import (
     Attack,
     CloseBlast,
     CloseBurst,
+    Damage,
     Melee,
     Power,
     Ranged,
@@ -56,6 +57,7 @@ from .durations import Effect, Effects, When
 from .ecs import World
 from .events import Bus, Event
 from .grid import Grid, Square, distance, footprint, spread
+from .monster_math import AS_PRINTED, TO_MM3
 from .policy import LinearPolicy, Memory, Policy, install, take_turn
 from .rng import Rng
 from .turns import Encounter

@@ -31,6 +31,7 @@ from combat_engine.engine import (
     install,
     take_turn,
 )
+from combat_engine.engine.monster_math import PRESETS as MATHS
 from combat_engine.engine.query import alive, creatures
 from combat_engine.engine.scaling import PRESETS
 
@@ -42,9 +43,12 @@ PARTY = [
 ]
 
 
-def build(seed: int, level: int, scaling: str) -> tuple[World, Encounter]:
+def build(
+    seed: int, level: int, scaling: str, math: str = "printed"
+) -> tuple[World, Encounter]:
     world = World(Grid(16, 12), Rng(seed), Bus())
     world.scaling = PRESETS[scaling]
+    world.monster_math = MATHS[math]
 
     for i, (cls, powers) in enumerate(PARTY):
         chargen.spawn(world, chargen.Character(cls, level, powers), (2, 3 + i * 2))
@@ -96,11 +100,17 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--level", type=int, default=1)
     ap.add_argument("--scaling", choices=sorted(PRESETS), default="full")
+    ap.add_argument(
+        "--monster-math",
+        choices=sorted(MATHS),
+        default="printed",
+        help="rescale Monster Manual 1 and 2 damage to the MM3 curve",
+    )
     ap.add_argument("--quiet", action="store_true", help="the summary only")
     ap.add_argument("--rounds", type=int, default=30, help="give up after this many")
     args = ap.parse_args()
 
-    world, encounter = build(args.seed, args.level, args.scaling)
+    world, encounter = build(args.seed, args.level, args.scaling, args.monster_math)
     policy = LinearPolicy()
     install(world, encounter, {}, default=policy)
 
@@ -116,7 +126,11 @@ def main() -> int:
         print(world.bus.render())
         print()
 
-    print(f"seed {args.seed}   level {args.level}   scaling {world.scaling.describe()}")
+    print(
+        f"seed {args.seed}   level {args.level}   "
+        f"scaling {world.scaling.describe()}   "
+        f"monsters {world.monster_math.describe()}"
+    )
     print(f"rounds {world.round}   events {len(world.bus.log)}   winner {encounter.winner}")
     print()
     from combat_engine.engine import Health

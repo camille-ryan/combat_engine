@@ -74,6 +74,13 @@ class Monster:
     senses: str = ""
     abilities: list[Ability] = field(default_factory=list)
     dialect: str = ""
+    #: Which of the Monster Manuals this row was printed in: MM1, MM2, MM3,
+    #: or empty for anything else. `engine/monster_math.py` needs it to know
+    #: what set of maths a row's numbers came from, and therefore what it is
+    #: converting from.
+    book: str = ""
+    #: standard, elite, solo or minion.
+    rank: str = "standard"
     #: Which labels were actually found in the source.
     found: set[str] = field(default_factory=set)
     #: For the localisation table only. Never stored in game.db.
@@ -110,9 +117,31 @@ class Monster:
 # --------------------------------------------------------------------------
 
 
-def parse(row_id: int, document: str) -> Monster:
+#: A monster's `Source` lists every book it ever appeared in, oldest first
+#: in practice but not reliably, so the *earliest* of these that is present
+#: is the one whose maths its numbers are on.
+MANUALS = (("Monster Manual", "MM1"), ("Monster Manual 2", "MM2"),
+           ("Monster Manual 3", "MM3"))  # fmt: skip
+
+
+def book_of(source: str) -> str:
+    """Which Monster Manual printed this, if any.
+
+    `Source` is a comma-separated list and a row often names five books, so
+    a `LIKE '%Monster Manual%'` matches all three and is useless. The list is
+    split and matched exactly.
+    """
+    listed = {b.strip() for b in (source or "").split(",")}
+    for name, tag in MANUALS:
+        if name in listed:
+            return tag
+    return ""
+
+
+def parse(row_id: int, document: str, source: str = "") -> Monster:
     body = detail(document)
     m = Monster(id=row_id)
+    m.book = book_of(source)
     _header(m, body)
     if '<h2>' in body and 'class="bodytable"' in body:
         m.dialect = "later"
@@ -166,6 +195,8 @@ def _header(m: Monster, body: str) -> None:
         m.leader = "leader" in low
         m.elite = "elite" in low
         m.solo = "solo" in low
+        m.rank = ("solo" if m.solo else "elite" if m.elite
+                  else "minion" if m.minion else "standard")
         for role in _ROLES:
             if role in low:
                 m.role = role

@@ -53,6 +53,7 @@ from .types import (
 from .zones import Zone
 
 if TYPE_CHECKING:
+    from .dsl import Damage
     from .ecs import World
 
 
@@ -68,7 +69,7 @@ class Cast:
     index: int = 0
     #: Where an area power was aimed. None for everything else.
     origin: Square | None = None
-    #: The most recent attack this cast rolled. `c.hit` reads off it.
+    #: The most recent attack this cast rolled. `c.landed` reads off it.
     result: AttackResult | None = None
 
     # -- who and where -------------------------------------------------------
@@ -294,7 +295,12 @@ class Cast:
         return self.result
 
     @property
-    def hit(self) -> bool:
+    def landed(self) -> bool:
+        """Did the last attack hit? `c.hit()` is the damage; this is the question.
+
+        Rarely needed -- `if c.strike():` already answers it -- but a body
+        that rolls once and then branches twice wants to ask again.
+        """
         return self.result is not None and self.result.hit
 
     @property
@@ -302,6 +308,51 @@ class Cast:
         return self.result is not None and self.result.critical
 
     # -- damage and healing --------------------------------------------------
+
+    def hit(self, *, on: int | None = None, half: bool = False) -> int:
+        """Deal the damage the header declared.
+
+        The common case, and the one that can be converted between editions:
+        the expression lives in the header as data, so `world.monster_math`
+        can rescale an older monster to the newer curve without anybody
+        rewriting a body. See `engine/monster_math.py`.
+
+        `half` is the "Miss: half damage" line -- rolled, then halved.
+        """
+        from .dsl import get
+
+        p = get(self.ref)
+        if p is None or p.damage is None:
+            raise ValueError(f"{self.ref} declared no damage; call c.damage(...)")
+        d = p.damage
+        dice = self._converted(d)
+        bonus = self._bonus_of(d.bonus)
+        if half:
+            return self.half_damage(dice, bonus, dtype=d.dtype, on=on)
+        return self.damage(dice, bonus, dtype=d.dtype, on=on)
+
+    def _converted(self, d: Damage) -> str:
+        """The declared dice, under whichever edition's maths is in force."""
+        from .components import Ident
+
+        if not d.dice:
+            return ""
+        ident = self.world.get(self.me, Ident)
+        book = getattr(ident, "book", "") if ident else ""
+        return self.world.monster_math.convert(
+            d.dice, book=book, level=self.stats.level, kind=d.kind
+        )
+
+    def _bonus_of(self, bonus: str | int) -> int:
+        """A flat number, or an ability modifier named as a string."""
+        if isinstance(bonus, int):
+            return bonus
+        if not bonus:
+            return 0
+        try:
+            return self.stats.mod(Ability(bonus.lower()))
+        except ValueError:
+            return 0
 
     def damage(
         self,

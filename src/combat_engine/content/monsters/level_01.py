@@ -1,9 +1,11 @@
 """Monster abilities, level 1.
 
 A stat block's numbers load from `game.db`; this is only its behaviour. The
-attack line is written exactly as printed -- `Attack(vs=AC, printed=6)` --
-and `engine/scaling.py` takes the level back out of it, so these read the
-same as the page they came from however the treadmill is set.
+attack and damage lines are written exactly as printed -- `Attack(vs=AC,
+printed=6)` and `Damage("1d10", 5)` -- and the engine takes the level back
+out of the attack and rescales the damage if a fight is being played on
+another edition's maths. See `engine/scaling.py` and
+`engine/monster_math.py`.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from combat_engine.engine import (
     Attack,
     Cast,
     CloseBlast,
+    Damage,
     DamageType,
     Keyword,
     Melee,
@@ -25,6 +28,7 @@ from combat_engine.engine import (
     When,
     power,
 )
+from combat_engine.engine.monster_math import LIMITED
 
 
 @power(
@@ -35,10 +39,11 @@ from combat_engine.engine import (
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=6),
+    damage=Damage("1d10", 5),
 )
 def m145a0(c: Cast) -> None:
     if c.strike():
-        c.damage("1d10", 5)
+        c.hit()
         # The disease is a save at the end of the fight, not during it, so
         # it hangs on the encounter clock and rolls once when that runs out.
         c.condition(until=When.ENCOUNTER, save_mod=0)
@@ -52,10 +57,11 @@ def m145a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=4),
+    damage=Damage("1d6", 4),
 )
 def m280a0(c: Cast) -> None:
     if c.strike():
-        c.damage("1d6", 4)
+        c.hit()
 
 
 @power(
@@ -66,10 +72,11 @@ def m280a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=4),
+    damage=Damage("1d10", 4),
 )
 def m1063a0(c: Cast) -> None:
     if c.strike():
-        c.damage("1d10", 4)
+        c.hit()
 
 
 @power(
@@ -80,10 +87,11 @@ def m1063a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=6),
+    damage=Damage("2d8", 2),
 )
 def m206a0(c: Cast) -> None:
     if c.strike():
-        c.damage("2d8", 2)
+        c.hit()
 
 
 @power(
@@ -96,7 +104,8 @@ def m206a0(c: Cast) -> None:
     target=EACH_CREATURE,
     keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=4),
+    damage=Damage("3d6", 1, dtype=DamageType.FIRE, kind=LIMITED),
 )
 def m206a1(c: Cast) -> None:
     if c.strike():
-        c.damage("3d6", 1, dtype=DamageType.FIRE)
+        c.hit()
