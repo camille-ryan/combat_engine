@@ -291,6 +291,7 @@ def deal_damage(
     *,
     from_attack: bool = True,
     opportunity: bool = False,
+    charge: bool = False,
 ) -> int:
     """Apply damage, honouring weakened, resistance, vulnerability and temp hp.
 
@@ -307,9 +308,16 @@ def deal_damage(
         # never read. Nothing failed; the damage was simply never larger.
         amount += _mods(
             world, source, "damage",
-            # `opportunity` too: a flat rider on an opportunity attack could
-            # not be gated without it, since the ctx named only these two.
-            {"target": target, "power": detail, "opportunity": opportunity},
+            # `opportunity` and `charge` too: a flat rider on either could
+            # not be gated without them, since the ctx named only the first
+            # two. A gate on a key the ctx does not carry is silently false,
+            # which is the worst way for a rider to be wrong.
+            {
+                "target": target,
+                "power": detail,
+                "opportunity": opportunity,
+                "charge": charge,
+            },
         )
     if from_attack and deals_half(world, source):
         amount = amount // 2

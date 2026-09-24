@@ -52,6 +52,22 @@ STOPWORDS = {
     "when", "which", "who", "will", "with", "you", "your",
 }
 
+#: Ordinary English that happens to be somebody's printed name.
+#:
+#: The single-word test asks a dictionary -- an invented name is in no
+#: dictionary -- and the multi-word test does not, so any name built from
+#: common words collides with prose that merely contains those words in that
+#: order. Making the multi-word test smarter would suppress real names, since
+#: plenty of them are ordinary words too. An explicit list with a reason each
+#: is the honest version: it says out loud what is being waived.
+ALLOWED = {
+    # Both in ENCOUNTERS.md, describing tactics rather than naming anything:
+    # "the Lurker strikes from the shadows", "a classic meat-shield dynamic".
+    "from the shadows",
+    "meat shield",
+}
+
+
 #: Rules terms the engine is entitled to say. A game system cannot be
 #: trademarked, so the words that *are* the mechanics -- dazed, combat
 #: advantage, saving throw -- are not what this script is protecting. Proper
@@ -198,7 +214,7 @@ def _identifies(name: str, refs: list[str], rules: set[str]) -> bool:
     name is in no dictionary. It must also be long enough, and rare enough among
     the names, to be worth believing.
     """
-    if name in rules:
+    if name in rules or name in ALLOWED:
         return False
     if " " in name:
         return any(w not in STOPWORDS for w in name.split())

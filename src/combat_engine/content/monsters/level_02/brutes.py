@@ -52,6 +52,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.events import (
+    ActionSpent,
     AdjacencyGained,
     AdjacencyLost,
     AttackDeclared,
@@ -83,6 +84,10 @@ ALL_DEFENCES = (Defense.AC, Defense.FORT, Defense.REF, Defense.WILL)
 #: The reaches a printed "by melee or ranged attacks" covers. A burst is
 #: neither, which is the whole point of the rows that name these two.
 HAND_OR_BOW = ("melee", "ranged")
+
+#: The two action costs m2858a0 bites for. `ActionSpent` announces every
+#: cost there is, and the printed line names these.
+COSTLY = (ActionType.STANDARD, ActionType.MOVE)
 
 #: The other two conditions a creature that has dropped is carrying. A hold
 #: with any of them in it is the one `_check_down` laid on, and ending it to
@@ -263,6 +268,49 @@ def m2830a2(c: Cast) -> None:
 
 
 # -- m2858 ------------------------------------------------------------------
+
+#: What however many of these auras can take off a creature between them.
+_M2858_CAP = 5
+
+
+@power(
+    "m2858a0",
+    level=2,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m2858a0(c: Cast) -> None:
+    """An aura 1 that bites whoever is standing in it for *doing* something.
+
+    `ActionSpent` announces every cost there is, free and immediate
+    included, so the two the printed line names are the two that pay out.
+
+    The cap is on the total from however many of these auras a creature is
+    in at once, and each aura is a separate row paying its own 1. Which of
+    them are covering the victim is counted here and the ones past the fifth
+    keep quiet, which is what makes five the ceiling without anybody adding
+    up. Counted at the moment of the action rather than stored, because it
+    changes every time either of them moves.
+    """
+    c.aura(1, until=When.ENCOUNTER)
+    me = c.me
+
+    def sear(ev: ActionSpent) -> None:
+        if ev.cost not in COSTLY or ev.actor == me or ev.actor not in c.enemies():
+            return
+        if c.distance(ev.actor) > 1:
+            return
+        burning = sorted(
+            other
+            for other in c.within(1, of=ev.actor, side="ally")
+            if _same_row(c, other, "m2858")
+        )
+        if me in burning[:_M2858_CAP]:
+            c.flat(1, on=ev.actor)
+
+    c.watch(ActionSpent, sear, until=When.ENCOUNTER, on=me, label="m2858a0")
 
 
 @power(
@@ -811,6 +859,26 @@ def m4810a3(c: Cast) -> None:
 
 
 # -- m4862 ------------------------------------------------------------------
+
+
+@power(
+    "m4862a0",
+    level=2,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m4862a0(c: Cast) -> None:
+    """Earth and rock are not in its way.
+
+    `c.phasing` is a movement mode like flying, so it lasts the fight and
+    comes off the same way anything else would. The printed line names two
+    materials and the board knows one sort of blocking terrain, so the mode
+    covers all of it -- and the creature still has to *stop* somewhere it
+    could stand, which is the printed rule rather than a limitation.
+    """
+    c.phasing(until=When.ENCOUNTER)
 
 
 @power(

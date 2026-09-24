@@ -51,6 +51,7 @@ from combat_engine.engine import (
     FORT,
     FREE,
     INTERRUPT,
+    MELEE,
     MINOR,
     MOVE,
     NO_TARGET,
@@ -153,6 +154,38 @@ def _struck(c: Cast, ref: str, times: int, victim: int | None = None) -> list[in
     finally:
         c.world.bus.off(sub)
     return hits
+
+
+def _basic_ref(c: Cast) -> str:
+    """Which row this creature's basic attack actually is.
+
+    `c.basic()` makes the swing and says only whether it went off, so a row
+    that pays for landing two of them needs the ref as well, to tell its own
+    hits from anything else going on in the same window.
+    """
+    known = c.world.get(c.me, Powers)
+    return (known.basic if known else MELEE) or MELEE
+
+
+def _charge_rider(c: Cast, dice: str, *, prone: bool = False) -> None:
+    """Extra damage, and sometimes a fall, on anything it lands on a charge.
+
+    Read off the `Hit`, which carries `charge` the way it carries
+    `opportunity`. A damage modifier would not do it: the printed line adds
+    dice rather than a number, and one of the two knocks the target down as
+    well.
+    """
+    me = c.me
+    ref = c.ref
+
+    def rider(ev: Hit) -> None:
+        if ev.attacker != me or not getattr(ev, "charge", False):
+            return
+        c.damage(dice, on=ev.target, detail=ref)
+        if prone:
+            c.prone(on=ev.target)
+
+    c.watch(Hit, rider, until=When.ENCOUNTER, on=me, label=ref)
 
 
 def _guarded_move(c: Cast, squares_: int) -> None:
@@ -428,6 +461,19 @@ def m200a0(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.shift(1)
+
+
+@power(
+    "m200a1",
+    level=4,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m200a1(c: Cast) -> None:
+    """A rider on every charge it makes, so a trait rather than an action."""
+    _charge_rider(c, "1d6", prone=True)
 
 
 @power(
@@ -789,6 +835,51 @@ def m319a1(c: Cast) -> None:
 
 
 # --------------------------------------------------------------------------
+# m4708
+# --------------------------------------------------------------------------
+
+
+@power(
+    "m4708a0",
+    level=4,
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+)
+def m4708a0(c: Cast) -> None:
+    """Half its speed, and the swing taken first for the usual reason.
+
+    The attack this names is one the stat block never prints, so it is the
+    creature's basic one -- and `c.basic` is what says that without naming
+    a row. "Shifts **or** climbs" is one distance either way: the engine has
+    one move op and a climb speed is a mode rather than a separate action,
+    so what is left of the choice is the number of squares, which is the
+    same for both.
+    """
+    c.basic()
+    c.shift(c.speed_of() // 2)
+
+
+@power(
+    "m4708a1",
+    level=4,
+    usage=Usage.RECHARGE,
+    recharge=6,
+    action=STANDARD,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+)
+def m4708a1(c: Cast) -> None:
+    """Both swings at the one creature, and landing the pair puts it down."""
+    victim = c.target
+    if victim is None:
+        return
+    if len(_struck(c, _basic_ref(c), 2, victim)) >= 2:
+        c.prone(on=victim)
+
+
+# --------------------------------------------------------------------------
 # m500
 # --------------------------------------------------------------------------
 
@@ -806,6 +897,35 @@ def m319a1(c: Cast) -> None:
 def m500a0(c: Cast) -> None:
     if c.strike():
         c.hit()
+
+
+@power(
+    "m500a1",
+    level=4,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m500a1(c: Cast) -> None:
+    """Extra on a charge, and only while it is in the air.
+
+    Being airborne is not a state the engine holds: `movement.mode_of` has
+    it that a creature which *can* fly does, whenever it moves, which makes
+    having the mode the whole of the question -- and it is a real one,
+    because flight can be taken away. Asked at the moment of the hit rather
+    than when the trait is armed, for that reason.
+    """
+    me = c.me
+
+    def rider(ev: Hit) -> None:
+        if ev.attacker != me or not getattr(ev, "charge", False):
+            return
+        moves = c.world.get(me, Movement)
+        if moves is not None and moves.modes.get("fly"):
+            c.damage("2d6", on=ev.target, detail="m500a1")
+
+    c.watch(Hit, rider, until=When.ENCOUNTER, on=me, label="m500a1")
 
 
 @power(
@@ -894,7 +1014,8 @@ def m111a0(c: Cast) -> None:
     requires_text="must not already have hold of a creature",
 )
 def m111a1(c: Cast) -> None:
-    """The escape DC is not written: there is no escape check in the engine
+    """The escape DC is not written: nothing in the engine lets a grabbed
+    creature try to get free
     to set a number for. The burn is hung on the grab rather than on a
     saving throw, which is what the printed duration says."""
     victim = c.target
@@ -1032,27 +1153,31 @@ def m2883a2(c: Cast) -> None:
 def m2883a3(c: Cast) -> None:
     """Half out of the world until it swings, and a minor keeps it there.
 
-    Phasing -- walking through what is in the way -- has no spelling in the
-    engine, so what is written is the half that has one: insubstantial, on
-    the sustain clock the printed Sustain Minor line names. The effect is
-    applied through the effects table rather than through `c.condition`
-    because only the table takes a sustain cost, and without one a
-    `When.SUSTAIN` hold lapses at the first turn boundary with no way to
-    keep it. Attacking ends it whether or not the attack lands, so the watch
-    is on the roll, and it is torn down with the shape.
+    Both halves are written: insubstantial as the condition, and phasing as
+    the movement mode of the same name. The hold goes through the effects
+    table rather than through `c.condition` because only the table takes a
+    sustain cost, and without one a `When.SUSTAIN` effect lapses at the
+    first turn boundary with nothing able to keep it. Attacking ends it
+    whether or not the attack lands, so the watch is on the roll, and both
+    the watch and the mode are torn down with the shape.
     """
     me = c.me
     shape = c.world.effects.apply(
         me, me, When.SUSTAIN, label=c.ref,
         conditions=(Condition.INSUBSTANTIAL,), sustain_cost=MINOR,
     )
+    ghost = c.phasing(until=When.ENCOUNTER)
 
     def reveal(ev: AttackRolled) -> None:
         if ev.attacker == me:
             c.world.effects.end(shape, "it attacked")
 
     seen = c.watch(AttackRolled, reveal, until=When.ENCOUNTER, on=me, label=c.ref)
-    shape.on_end.append(lambda: c.world.effects.end(seen, "the phase is over"))
+    for held in (seen, ghost):
+        if held is not None:
+            shape.on_end.append(
+                lambda h=held: c.world.effects.end(h, "the phase is over")
+            )
 
 
 # --------------------------------------------------------------------------
@@ -1453,7 +1578,7 @@ def m4886a2(c: Cast) -> None:
     unless it has already attacked, which is the only case the two readings
     differ on, and the relation is the only thing that can be asked.
 
-    Not written: the -2 to escape the grab. There is no escape check in the
+    Not written: the -2 to getting free of the grab. Nothing in the
     engine to penalise -- nothing anywhere rolls one. The other half of that
     sentence is, as `Condition.PINNED` on the encounter's clock, ended with
     the grab.

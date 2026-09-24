@@ -50,7 +50,6 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     Size,
-    Square,
     Stats,
     UpTo,
     Usage,
@@ -146,19 +145,6 @@ def _beside(c: Cast, square: tuple[int, int], who: int) -> bool:
     """Would standing on that square put the caster next to that creature?"""
     pos = c.world.get(who, Position)
     return pos is not None and distance(square, pos.square) <= 1
-
-
-def _trample_to(c: Cast) -> Square | None:
-    """Where a trample is aimed, offered through the world's decider.
-
-    `c.overrun()` picks its own destination when given none, off a
-    `Cast.speed` that does not exist -- so the choice is made here instead,
-    the same way and through the same decider. See the report.
-    """
-    options = c.world.reachable_squares(c.me, c.speed_of())
-    if not options:
-        return None
-    return c.world.decide(c.me, "overrun", options, f"{c.ref}: trample to")
 
 
 def _squeezes_freely(c: Cast) -> None:
@@ -1241,10 +1227,7 @@ def m476a1(c: Cast) -> None:
     attack line is still data in the header and `c.strike(on=...)` rolls it
     against each one in turn.
     """
-    where = _trample_to(c)
-    if where is None:
-        return
-    for who in c.overrun(where):
+    for who in c.overrun():
         if c.strike(on=who):
             c.hit(on=who)
             c.prone(on=who)
@@ -1254,6 +1237,20 @@ def m476a1(c: Cast) -> None:
 #: it also asks for has no counterpart -- monsters carry no feats -- and is
 #: not tested.
 MOUNTED_RIDER_LEVEL = 3
+
+
+def _qualified_rider(c: Cast) -> int | None:
+    """Whoever is in the saddle, if the printed Requirement lets them ride.
+
+    Asked at the moment rather than when the trait arms: a rider mounts and
+    falls off mid-fight, and a modifier handed out at the start of the
+    encounter would be handed to the wrong creature or to nobody.
+    """
+    rider = c.rider()
+    if rider is None or team(c.world, rider) is not team(c.world, c.me):
+        return None
+    stats = c.world.get(rider, Stats)
+    return rider if stats is not None and stats.level >= MOUNTED_RIDER_LEVEL else None
 
 
 @power(
@@ -1266,26 +1263,29 @@ MOUNTED_RIDER_LEVEL = 3
     requires_text="the m476 must be carrying a friendly rider of 3rd level or higher",
 )
 def m476a2(c: Cast) -> None:
-    """The bonus its rider gets, added to the damage roll as it is made.
+    """A bonus to the rider's damage roll, and only when it came in at a run.
 
-    Who is in the saddle is asked at the moment of the roll rather than
-    handed a modifier when the trait arms, because a rider mounts and falls
-    off mid-fight. The printed line limits the bonus to charge attacks and
-    the engine has no charge, so it is not gated on one; see the report.
+    Two watches rather than a gated `c.bonus("damage", 5)`: `charge` rides
+    on the attack events and on the *attack* modifier context, and the
+    damage one carries only `opportunity` -- so a damage modifier cannot ask
+    the question. The charging blow is marked as it lands and the first
+    damage the rider rolls against that creature spends the mark, which is
+    the roll the printed line is adding to.
     """
     me = c.me
+    charged: set[int] = set()
+
+    def came_in(ev: Hit) -> None:
+        if ev.attacker == _qualified_rider(c) and getattr(ev, "charge", False):
+            charged.add(ev.target)
 
     def spur(ev: DamageRolled) -> None:
-        rider = c.rider()
-        if rider is None or ev.source != rider or ev.amount <= 0:
-            return
-        if team(c.world, rider) is not team(c.world, me):
-            return
-        stats = c.world.get(rider, Stats)
-        if stats is not None and stats.level >= MOUNTED_RIDER_LEVEL:
+        if ev.target in charged and ev.source == _qualified_rider(c):
+            charged.discard(ev.target)
             ev.amount += 5
 
-    c.watch(DamageRolled, spur, until=When.ENCOUNTER, on=me, label="m476a2")
+    c.watch(Hit, came_in, until=When.ENCOUNTER, on=me, label="m476a2")
+    c.watch(DamageRolled, spur, until=When.ENCOUNTER, on=me, label="m476a2 spur")
 
 
 # -- m4851 ------------------------------------------------------------------
@@ -1596,9 +1596,7 @@ def m495a1(c: Cast) -> None:
             for eff in gripped:
                 c.world.effects.end(eff, "m495a1")
             return
-        where = _trample_to(c)
-        if where is not None:
-            _run_down(c, c.overrun(where))
+        _run_down(c, c.overrun())
         budget = c.world.get(me, Budget)
         if budget is not None:
             budget.standard = budget.move = budget.minor = 0

@@ -873,7 +873,7 @@ class Cast:
             amount = self.world.rng.roll(dice).total + bonus if dice else bonus
         return deal_damage(
             self.world, self.me, who, amount, dtype, detail or self.ref,
-            opportunity=self.opportunity,
+            opportunity=self.opportunity, charge=self.charge,
         )
 
     def half_damage(
@@ -891,7 +891,7 @@ class Cast:
         amount = (self.world.rng.roll(dice).total + bonus) // 2 if dice else bonus // 2
         return deal_damage(
             self.world, self.me, who, amount, dtype, f"{self.ref} (half)",
-            opportunity=self.opportunity,
+            opportunity=self.opportunity, charge=self.charge,
         )
 
     def flat(self, amount: int, *, dtype: DamageType = DamageType.UNTYPED,
@@ -901,7 +901,7 @@ class Cast:
             return 0
         return deal_damage(
             self.world, self.me, who, amount, dtype, self.ref,
-            opportunity=self.opportunity,
+            opportunity=self.opportunity, charge=self.charge,
         )
 
     def heal(self, amount: int, *, on: int | None = None) -> int:
