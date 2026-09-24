@@ -311,10 +311,14 @@ def cover_between(
     if not theirs or not mine:
         return Cover.NONE
 
-    bodies: set[Square] = set()
+    # A zone of darkness or fog. The flag was stored and nothing ever read
+    # it, so such a zone blocked nothing -- the whole point of the zone.
+    # Counted for every attack, not just ranged ones: it is terrain, not a
+    # creature, and terrain has always blocked both.
+    bodies: set[Square] = set(_blinding_squares(world, attacker, target))
     if ranged:
         side = team(world, target)
-        bodies = {
+        bodies |= {
             sq
             for other in creatures(world)
             if other not in (attacker, target)
@@ -328,6 +332,23 @@ def cover_between(
         for dst in theirs:
             best = min(best, world.grid.cover(src, dst, blockers=bodies))
     return best
+
+
+def _blinding_squares(world: World, attacker: int, target: int) -> set[Square]:
+    """Squares of sight-blocking zones, minus the ones either party stands in.
+
+    A creature inside the fog is not sheltered from the rest of it, and the
+    one standing in it cannot use it as cover against the world outside.
+    """
+    zones = getattr(world, "zones", None)
+    if zones is None:
+        return set()
+    here = squares(world, attacker) | squares(world, target)
+    out: set[Square] = set()
+    for _eid, zone in zones.all():
+        if zone.blocks_sight:
+            out |= set(zone.squares) - here
+    return out
 
 
 def line_of_effect(world: World, a: int, b: int) -> bool:

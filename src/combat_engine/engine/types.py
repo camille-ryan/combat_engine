@@ -69,6 +69,8 @@ class Keyword(StrEnum):
     STANCE = "stance"
     CONJURATION = "conjuration"
     POLYMORPH = "polymorph"
+    SLEEP = "sleep"
+    GAZE = "gaze"
     DISEASE = "disease"
     ILLUSION = "illusion"
     TELEPORTATION = "teleportation"

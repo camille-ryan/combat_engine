@@ -403,6 +403,11 @@ class Sub:
     window: Window
     once: bool
     owner: int | None
+    #: Runs after every ordinary listener in the same window. Expiry uses
+    #: it: `Effects` subscribes when the world is built, so it was always
+    #: first, and a watch hung on "the end of its next turn" was torn down
+    #: before its own listener was ever reached.
+    late: bool = False
 
 
 class Bus:
@@ -422,6 +427,7 @@ class Bus:
         window: Window = Window.AFTER,
         once: bool = False,
         owner: int | None = None,
+        late: bool = False,
     ) -> Sub:
         """Watch `etype`. The returned handle is what a duration cancels with.
 
@@ -429,7 +435,7 @@ class Bus:
         the same seed produce the same log.
         """
         self._next_sub += 1
-        sub = Sub(self._next_sub, etype, fn, window, once, owner)
+        sub = Sub(self._next_sub, etype, fn, window, once, owner, late)
         self._subs.append(sub)
         return sub
 
@@ -461,7 +467,8 @@ class Bus:
     def _run(self, ev: Event, window: Window) -> None:
         # Copy: a listener may subscribe or unsubscribe while this runs, and
         # an interrupt that cancels stops the rest of its own window.
-        for sub in list(self._subs):
+        ordered = [s for s in self._subs if not s.late] + [s for s in self._subs if s.late]
+        for sub in ordered:
             if sub.window is not window or not isinstance(ev, sub.etype):
                 continue
             if sub not in self._subs:

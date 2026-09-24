@@ -701,6 +701,14 @@ def _no_targets(world: World, actor: int, p: Power) -> str:
 # --------------------------------------------------------------------------
 
 
+#: Refs currently running, keyed by actor. A row that grants an attack can
+#: reach itself -- two creatures whose basic attack is "on a miss, an ally
+#: attacks" handed it back and forth 131 times before the stack died. The
+#: dispatcher kept a set like this for triggered rows; every other route in
+#: had none, so the guard lives here now and `triggers` shares it.
+_IN_FLIGHT: set[tuple[int, str]] = set()
+
+
 def use(
     world: World,
     actor: int,
@@ -742,6 +750,8 @@ def use(
     ok, _why = usable(world, actor, p, dying=dying)
     if not ok:
         return False
+    if (actor, ref) in _IN_FLIGHT:
+        return False
 
     if targets is not None:
         chosen = targets
@@ -775,18 +785,22 @@ def use(
                 # at-will could be used all turn.
                 powers.note_round(ref, world.round)
 
-    if not chosen:
-        p.body(cast)
-        return True
-    landed = False
-    for i, t in enumerate(chosen):
-        if not alive(world, t):
-            continue
-        cast.index = i
-        cast.target = t
-        cast.result = None
-        p.body(cast)
-        landed = landed or bool(cast.result and cast.result.hit)
+    _IN_FLIGHT.add((actor, ref))
+    try:
+        if not chosen:
+            p.body(cast)
+            return True
+        landed = False
+        for i, t in enumerate(chosen):
+            if not alive(world, t):
+                continue
+            cast.index = i
+            cast.target = t
+            cast.result = None
+            p.body(cast)
+            landed = landed or bool(cast.result and cast.result.hit)
+    finally:
+        _IN_FLIGHT.discard((actor, ref))
 
     # Reliable: a daily that misses everything is not spent. The keyword was
     # declared and nothing read it, so the two fighter dailies that carry it

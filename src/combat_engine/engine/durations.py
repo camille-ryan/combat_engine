@@ -109,7 +109,10 @@ class Effects:
         self.live: dict[int, Effect] = {}
         self._next = 0
         world.bus.on(TurnStart, self._on_turn_start)
-        world.bus.on(TurnEnd, self._on_turn_end)
+        # Last in its window. Expiry is the close of the turn, not the start
+        # of its ending -- a row reading "if the target ends its next turn
+        # ..." had its watch removed before the watch could answer.
+        world.bus.on(TurnEnd, self._on_turn_end, late=True)
 
     # -- applying ------------------------------------------------------------
 

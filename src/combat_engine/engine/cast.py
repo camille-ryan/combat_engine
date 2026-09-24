@@ -1629,11 +1629,17 @@ class Cast:
         known = self.world.get(who, Powers)
         if known is None:
             return None
-        known.forbidden.add(ref)
-        return self.world.effects.apply(
+        # The effect first. Adding to `forbidden` before it exists meant a
+        # caller that swallowed the raise left the row taken away with
+        # nothing alive to ever give it back.
+        effect = self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} forbids {ref}",
-            on_end=lambda: known.forbidden.discard(ref),
+            on_end=[lambda: known.forbidden.discard(ref)],
         )
+        if effect is None:
+            return None
+        known.forbidden.add(ref)
+        return effect
 
     def master(self) -> int | None:
         """Whoever this creature serves, if anybody."""
@@ -1874,11 +1880,12 @@ class Cast:
         label: str = "",
         until: When = When.EONT,
         difficult: bool | str = False,
+        blocks_sight: bool = False,
         sustain: ActionType | None = None,
     ) -> int:
         return self.world.zones.create(
             self.me, label or self.ref, frozenset(area), until,
-            difficult=difficult, sustain=sustain,
+            difficult=difficult, blocks_sight=blocks_sight, sustain=sustain,
         )
 
     def aura(

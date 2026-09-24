@@ -69,8 +69,9 @@ class Trigger:
 
 #: Refs currently resolving, keyed by responder. A reaction that emits the
 #: event it watches -- a riposte is an attack, and attacks are what it
-#: watches -- would otherwise answer itself forever.
-_IN_FLIGHT: set[tuple[int, str]] = set()
+#: watches -- would otherwise answer itself forever. The set itself lives in
+#: `dsl` now, because every other route into a row needed the same guard and
+#: only this one had it; imported where used, since `dsl` imports this back.
 
 
 WINDOW_OF = {
@@ -151,7 +152,7 @@ class Triggers:
 
     def _answers(self, eid: int, ev: Event, window: Window) -> list[str]:
         """Which of this creature's rows this event triggers, in order."""
-        from .dsl import get, usable
+        from .dsl import _IN_FLIGHT, get, usable
 
         known = self.world.get(eid, Powers)
         if known is None:
@@ -198,11 +199,9 @@ class Triggers:
         if not dying and not self.encounter.spend(eid, p.action):
             return
 
-        _IN_FLIGHT.add((eid, ref))
-        try:
-            use(self.world, eid, ref, targets=self._at(p, eid, ev), trigger=ev)
-        finally:
-            _IN_FLIGHT.discard((eid, ref))
+        # `use` adds the pair itself, so nothing is added here -- doing both
+        # would have the inner check refuse every triggered row.
+        use(self.world, eid, ref, targets=self._at(p, eid, ev), trigger=ev)
 
     def _at(self, p, eid: int, ev: Event) -> list[int] | None:  # noqa: ANN001
         """Who a triggered row is aimed at: whoever the event was about.
