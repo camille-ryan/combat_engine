@@ -138,15 +138,42 @@ class Attack:
 
     A power whose attack bonus depends on the situation ignores this and
     calls `c.attack(...)` with whatever it worked out.
+
+    A monster writes its line the other way round. A stat block prints a
+    finished total -- `+6 vs. AC` -- with the creature's level already inside
+    it, so `Attack(vs=AC, printed=6)` says exactly what the page says and the
+    engine takes the level back out according to `world.scaling`. That keeps
+    the two sides of a fight moving together when the treadmill is turned
+    down, and it is less for an author to work out, not more.
     """
 
-    ability: Ability
-    vs: Defense
+    #: A character's line names an ability. A monster's does not.
+    ability: Ability | None = None
+    vs: Defense = Defense.AC
     plus: int = 0
+    #: A monster's finished attack bonus, level included, as printed.
+    printed: int | None = None
+
+    def bonus_for(self, world: World, actor: int, ref: str = "") -> int:
+        """The bonus to roll with, under whatever scaling is in force."""
+        from .cast import Cast
+        from .components import Stats
+
+        if self.printed is not None:
+            stats = world.get(actor, Stats)
+            return world.scaling.trim(self.printed, stats.level if stats else 1)
+        if self.ability is None:
+            raise ValueError("an Attack needs either an ability or a printed bonus")
+        # `ref` matters: proficiency applies to a weapon power and not to an
+        # implement one, and `_attack_bonus` reads the keywords off it.
+        return Cast(world=world, me=actor, ref=ref)._attack_bonus(self.ability) + self.plus
 
     def __str__(self) -> str:
+        if self.printed is not None:
+            return f"{self.printed:+d} vs. {self.vs.value.upper()}"
         tail = f" {self.plus:+d}" if self.plus else ""
-        return f"{self.ability.value.title()}{tail} vs. {self.vs.value.upper()}"
+        name = self.ability.value.title() if self.ability else "?"
+        return f"{name}{tail} vs. {self.vs.value.upper()}"
 
 
 @dataclass
@@ -182,11 +209,9 @@ class Power:
         """
         if self.attack is None:
             return 0.5
-        from .cast import Cast
         from .query import cover_between, defence, has_combat_advantage
 
-        c = Cast(world=world, me=actor, ref=self.ref, target=target)
-        bonus = c._attack_bonus(self.attack.ability) + self.attack.plus
+        bonus = self.attack.bonus_for(world, actor, self.ref)
         if has_combat_advantage(world, actor, target):
             bonus += 2
         bonus -= int(cover_between(world, actor, target))
@@ -408,6 +433,21 @@ def use(
 
 
 def _auto_targets(world: World, actor: int, p: Power, origin: Square | None) -> list[int]:
+    """Who this power lands on when the caller did not say.
+
+    An area power with no origin would otherwise centre on the caster's own
+    square, which catches almost nothing and is never what was meant. The
+    interface and any policy always pass an origin; this is the default for
+    everything else, and it aims where the power does most.
+    """
+    if origin is None and p.reach.kind in ("area_burst", "close_blast"):
+        best: list[int] = []
+        for aim in aim_points(world, actor, p):
+            hit = candidates(world, actor, p, aim)
+            if len(hit) > len(best):
+                best = hit
+        if best:
+            return best if p.target.everyone else best[: p.target.count]
     pool = candidates(world, actor, p, origin)
     if p.target.everyone:
         return pool

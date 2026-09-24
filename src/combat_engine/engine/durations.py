@@ -264,11 +264,12 @@ class Effects:
                 else:
                     self.end(eff, "end of turn")
             elif eff.when is When.SAVE_ENDS:
-                self._save(eff)
+                self.save(eff)
             elif eff.when is When.SUSTAIN and eff.sustained < self.world.round:
                 self.end(eff, "not sustained")
 
-    def _save(self, eff: Effect) -> None:
+    def save(self, eff: Effect) -> None:
+        """Roll a saving throw against one effect now."""
         holder = self.world.get(eff.owner, Mods)
         bonus = eff.save_mod + (holder.total("save") if holder else 0)
         roll = self.world.rng.d20()

@@ -122,17 +122,18 @@ def parse(row_id: int, document: str) -> Monster:
         _earlier_stats(m, body)
     _scores(m, body)
     _abilities(m, body)
-    # The stat block talks about itself -- "the target contracts dire rat
-    # filth fever" -- so its own name and its abilities' names come out of
-    # every spec before anyone sees one.
+    # A stat block names itself in its own rules text, so its name and its
+    # abilities' names come out of every spec before anyone sees one.
     from .sanitise import flavour as read_flavour
     from .sanitise import scrub
 
     m.flavour = read_flavour(document)
 
-    names = [m.name, *(a.name for a in m.abilities)]
+    swaps = {m.name: m.ref_id}
     for a in m.abilities:
-        a.spec = scrub(a.spec, names, m.ref_id)
+        swaps.setdefault(a.name, f"{m.ref_id}a{a.index}")
+    for a in m.abilities:
+        a.spec = scrub(a.spec, swaps)
     return m
 
 

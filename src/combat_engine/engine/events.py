@@ -19,7 +19,7 @@ when they finish, so a trigger that fires mid-event reads in causal order.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import MISSING, asdict, dataclass, field, fields
 from typing import Any
 
 from .grid import Square
@@ -50,8 +50,17 @@ class Event:
         return out
 
     def __str__(self) -> str:
+        # Fields sitting at their default are noise. `ghost=False` on every
+        # turn boundary in a fight is a lot of nothing to read past.
         skip = {"seq", "depth", "cancelled", "reason"}
-        bits = [f"{f.name}={getattr(self, f.name)!r}" for f in fields(self) if f.name not in skip]
+        bits = []
+        for f in fields(self):
+            if f.name in skip:
+                continue
+            value = getattr(self, f.name)
+            if f.default is not MISSING and value == f.default:
+                continue
+            bits.append(f"{f.name}={value!r}")
         tail = f"  CANCELLED({self.reason})" if self.cancelled else ""
         return f"{self.kind}({', '.join(bits)}){tail}"
 

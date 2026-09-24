@@ -10,11 +10,11 @@ through it, and it does two jobs:
 * **drop the flavour.** A power's page has a name in its `<h1>` and a line
   of italics under it. Both go. What is left is the lines that carry a
   mechanical label, which is exactly what needs coding.
-* **scrub self-reference.** A stat block says "the target contracts dire rat
-  filth fever", and a power's own name turns up inside its own Effect line
-  often enough to matter. Those get replaced with the row's id, so the spec
-  reads "contracts m145 filth fever" and the agent learns nothing it should
-  not have.
+* **scrub self-reference.** A stat block names itself in its own rules --
+  "the target contracts <name> filth fever" -- and a power's name turns up
+  inside its own Effect line often enough to matter. Those become the row's
+  id, so the spec reads "contracts m145 filth fever" and the author learns
+  nothing they should not have.
 """
 
 from __future__ import annotations
@@ -35,16 +35,46 @@ MECHANICAL = {
 }  # fmt: skip
 
 
-def scrub(body: str, names: list[str], ref: str) -> str:
-    """Replace every printed name in `names` with `ref`.
+#: Rules terms that are also, unhelpfully, printed names. A monster ability
+#: called "Combat Advantage" must not turn the words *combat advantage* into
+#: an id wherever they appear -- the sentence "against any target it has
+#: combat advantage against" becomes unreadable, and the term is mechanics
+#: rather than prose, so it was never at risk. `scripts/leaks.py` reads this
+#: same set, so the two halves cannot drift apart.
+RULES_TERMS = {
+    "combat advantage", "second wind", "healing surge", "opportunity attack",
+    "saving throw", "basic attack", "melee basic attack", "ranged basic attack",
+    "difficult terrain", "line of effect", "line of sight", "action point",
+    "temporary hit points", "hit points", "bloodied", "resistance",
+    "vulnerability", "short rest", "extended rest", "death save", "aura",
+    "zone", "burst", "blast", "reach", "cover", "concealment", "flanking",
+    "mark", "shift", "charge", "grab", "escape", "stand", "initiative",
+    "target", "trigger", "effect", "attack", "damage", "heal", "push",
+    "pull", "slide", "teleport", "prone", "move", "turn", "split", "level",
+    "speed", "range", "hit", "miss", "special", "requirement", "sustain",
+}  # fmt: skip
 
-    Longest first, so "Dire Rat Filth Fever" is caught before "Dire Rat"
-    leaves a fragment behind. Possessives are handled because the trailing
-    `'s` simply survives the substitution.
+
+def scrub(body: str, replacements: dict[str, str]) -> str:
+    """Swap each printed name for the id of whatever it names.
+
+    An ability's name maps to that ability's own id rather than the stat
+    block's, so "makes three <name> attacks" still says *which* attack -- the
+    first version pointed every cross-reference at the monster and threw that
+    away.
+
+    Longest first, so a three-word disease name is caught before the two-word
+    monster name inside it leaves a fragment behind. Possessives look after
+    themselves: the trailing `'s` simply survives the substitution.
     """
     out = body
-    for name in sorted({n for n in names if n and len(n) > 2}, key=len, reverse=True):
-        out = re.sub(rf"\b{re.escape(name)}\b", ref, out, flags=re.I)
+    usable = {
+        name: ref
+        for name, ref in replacements.items()
+        if name and len(name) > 2 and name.lower() not in RULES_TERMS
+    }
+    for name in sorted(usable, key=len, reverse=True):
+        out = re.sub(rf"\b{re.escape(name)}\b", usable[name], out, flags=re.I)
     return out
 
 
@@ -77,7 +107,7 @@ def flavour(document: str) -> str:
     return "\n".join(lines).strip()
 
 
-def power_spec(document: str, ref: str, names: list[str]) -> str:
+def power_spec(document: str, ref: str, name: str) -> str:
     """One power's mechanical lines, with nothing an agent must not see.
 
     Keeps `powerstat` paragraphs outright -- they are the usage, keywords,
@@ -112,4 +142,11 @@ def power_spec(document: str, ref: str, names: list[str]) -> str:
         if mechanical:
             lines.append(f"{pair[0]}: {pair[1]}".strip())
 
-    return scrub("\n".join(line for line in lines if line.strip()), names, ref)
+    # The compendium appends its own errata notes -- "Update (1/24/2012)",
+    # "Updated in Class Compendium". They are about the page, not the power.
+    kept = [
+        line
+        for line in lines
+        if line.strip() and not re.match(r"^\s*Update", line, re.I)
+    ]
+    return scrub("\n".join(kept), {name: ref})

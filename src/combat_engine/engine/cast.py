@@ -39,7 +39,16 @@ from .query import (
 )
 from .resolve import AttackResult, attack, deal_damage, heal, temp_hp
 from .rng import average
-from .types import Ability, Condition, DamageType, Defense, Forced, Relation, Window
+from .types import (
+    Ability,
+    Condition,
+    DamageType,
+    Defense,
+    Forced,
+    Keyword,
+    Relation,
+    Window,
+)
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -141,15 +150,24 @@ class Cast:
         return self.stats.mod(a)
 
     def _attack_bonus(self, a: Ability) -> int:
-        """Half level, the ability modifier, and the weapon if there is one.
+        """Half level, the ability modifier, and the weapon where it counts.
 
         A printed power says "Strength vs. AC" and means all three, so `c.str_`
         means all three too. `c.str_mod` is the bare modifier, which is what
         the damage line wants.
+
+        Proficiency only applies to a **weapon** power. A cleric holding a
+        mace and casting an implement attack does not add the mace to it, and
+        adding it anyway is invisible -- every ranged cleric attack simply
+        runs two points hot for the life of the project.
         """
-        bonus = self.stats.half_level + self.stats.mod(a)
+        bonus = self.world.scaling.pc(self.stats.level) + self.stats.mod(a)
+        from .dsl import get
+
+        p = get(self.ref)
+        weapon_power = p is None or Keyword.WEAPON in p.keywords
         gear = self.world.get(self.me, Gear)
-        if gear is not None and gear.main is not None:
+        if weapon_power and gear is not None and gear.main is not None:
             bonus += gear.main.proficiency
         return bonus
 
@@ -237,8 +255,12 @@ class Cast:
         p = get(self.ref)
         if p is None or p.attack is None:
             raise ValueError(f"{self.ref} declared no attack line; call c.attack(...)")
-        bonus = self._attack_bonus(p.attack.ability) + p.attack.plus
-        return self.attack(bonus, p.attack.vs, on=on, advantage=advantage)
+        return self.attack(
+            p.attack.bonus_for(self.world, self.me, self.ref),
+            p.attack.vs,
+            on=on,
+            advantage=advantage,
+        )
 
     def attack(
         self,
@@ -363,9 +385,17 @@ class Cast:
             self.world, self.me, who, Forced.SLIDE, squares_, anchor=anchor
         )
 
-    def shift(self, squares_: int = 1, *, who: int | None = None) -> bool:
-        """Shift, choosing the destination through the world's decider."""
+    def shift(
+        self, squares_: int = 1, *, who: int | None = None, to: Square | None = None
+    ) -> bool:
+        """Shift, choosing the destination through the world's decider.
+
+        `to` names the square outright, for the powers that do -- "shift into
+        the space the target left" is not a choice, it is an instruction.
+        """
         mover = self.me if who is None else who
+        if to is not None:
+            return shift(self.world, mover, to)
         options = self.world.reachable_squares(mover, squares_)
         if not options:
             return False
@@ -479,6 +509,7 @@ class Cast:
         on: int | None = None,
         kind: str = "power",
         when: Callable[[dict[str, Any]], bool] | None = None,
+        once: bool = False,
     ) -> Effect | None:
         """A numeric modifier with a duration.
 
@@ -486,15 +517,34 @@ class Cast:
         an optional gate -- "only against the creature you marked", "only
         while you have a shield" -- written as a lambda right here rather than
         as a new kind of op.
+
+        `once` is for "to his or her **next** attack roll": the bonus ends
+        after the first attack that could use it. It is spent by watching the
+        roll rather than by consuming it inside the gate, because the gate is
+        also called when a policy is only *considering* an attack, and a
+        bonus that evaporated on being thought about would be a hard thing to
+        ever notice.
         """
         who = self._who(on)
         if who is None:
             return None
         key = what.value if isinstance(what, Defense) else what
         mod = Mod(what=key, value=value, kind=kind, when=when, label=self.ref)
-        return self.world.effects.apply(
+        effect = self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} {key}{value:+d}", mods=[(who, mod)]
         )
+        if once and effect is not None:
+            from .events import AttackRolled
+
+            def spend(ev: AttackRolled) -> None:
+                if ev.attacker != who:
+                    return
+                if mod.applies({"attacker": ev.attacker, "target": ev.target,
+                                "power": ev.power, "advantage": ev.advantage}):
+                    self.world.effects.end(effect, "used")
+
+            effect.subs.append(self.world.bus.on(AttackRolled, spend, owner=who))
+        return effect
 
     def penalty(self, what: str | Defense, value: int, **kw: Any) -> Effect | None:
         return self.bonus(what, -abs(value), kind="untyped", **kw)

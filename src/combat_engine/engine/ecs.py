@@ -25,12 +25,16 @@ class World:
     def __init__(self, grid: Grid, rng: Rng, bus: Bus) -> None:
         from .durations import Effects
         from .relations import Relations
+        from .scaling import FULL
         from .zones import Zones
 
         self.grid = grid
         self.rng = rng
         self.bus = bus
         self.round = 0
+        #: How much a level is worth. Swap for BOUNDED to flatten the
+        #: treadmill; see `engine/scaling.py`.
+        self.scaling = FULL
         #: Whose turn it is. None between rounds and before combat starts.
         self.turn: int | None = None
         self._stores: dict[type, dict[int, Any]] = {}

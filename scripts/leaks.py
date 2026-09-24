@@ -11,15 +11,15 @@ each one in every tracked file.
 Exits non-zero on a find, so it can gate a commit.
 
 Matching is by whole word sequence, longest first. Two words or more is
-reported outright: "dire rat" turning up in a source file is never a
+reported outright: "stone hurler" turning up in a source file is never a
 coincidence.
 
 One-word names are the hard part, and a hand-kept list of exceptions is the
 wrong answer -- abilities are called `Turn`, `Move`, `Split` and `Shift`, and
 that list would need feeding forever. So the rule comes out of the data
 instead: **a word used as a name by many different rows is vocabulary, not a
-name.** `Bite` names hundreds of stat blocks and identifies none of them;
-`Balhannoth` names one. Nothing to maintain, and it adapts on its own to
+name.** `Bite` names hundreds of stat blocks and identifies none of them; an
+invented-sounding one names a single row. Nothing to maintain, and it adapts on its own to
 whichever build of the compendium you have.
 """
 
@@ -32,6 +32,7 @@ import sys
 from pathlib import Path
 
 from combat_engine.etl.build import ROOT, game, localisation
+from combat_engine.etl.sanitise import RULES_TERMS
 
 #: A one-word name shared by more than this many rows is vocabulary rather
 #: than an identifier, and is not worth reporting.
@@ -60,25 +61,13 @@ STOPWORDS = {
 #: Most of it is generated from the engine's own enumerations, so a condition
 #: added to `types.py` is allowed here the moment it exists and this file
 #: never needs editing for it.
-CORE = {
-    "combat advantage", "second wind", "healing surge", "opportunity attack",
-    "saving throw", "basic attack", "melee basic attack", "difficult terrain",
-    "line of effect", "line of sight", "temporary hit points", "hit points",
-    "bloodied", "resistance", "vulnerability", "action point", "short rest",
-    "extended rest", "death save", "free action", "minor action",
-    "move action", "standard action", "immediate interrupt",
-    "immediate reaction", "at-will", "encounter", "daily", "recharge",
-    "aura", "zone", "burst", "blast", "reach", "cover", "concealment",
-    "flanking", "mark", "shift", "charge", "grab", "escape", "stand",
-    "level", "speed", "initiative", "target", "trigger", "effect", "attack",
-    "damage", "heal", "push", "pull", "slide", "teleport", "prone",
-}
+CORE = set(RULES_TERMS)
 
 
 #: The system word list, where there is one. `builder`, `dispatch` and
 #: `stable` are all published ability names and all ordinary English, and no
-#: amount of counting tells those apart from `Balhannoth` -- a dictionary
-#: does it in one lookup. Absent on some machines, hence the fallbacks.
+#: amount of counting tells those apart from an invented name -- a
+#: dictionary does it in one lookup. Absent on some machines, hence the fallbacks.
 DICTIONARY = Path("/usr/share/dict/words")
 
 
@@ -92,7 +81,7 @@ def vocabulary() -> set[str]:
       allowed the moment it exists;
     * the core rules terms above, which a rules engine has to be able to say;
     * every word appearing on at least a handful of compendium pages, which
-      covers the game's own vocabulary -- `bloodied`, `githyanki` -- that no
+      covers the game's own vocabulary -- `bloodied` and the like -- that no
       dictionary has.
 
     Each is a strict addition, so a machine without the dictionary gets a
@@ -196,17 +185,17 @@ def _identifies(name: str, refs: list[str], rules: set[str]) -> bool:
 
     The two cases need opposite treatment, which an earlier version of this
     got wrong in the worst way -- it asked whether every word was ordinary
-    English, and so waved `dire rat` straight through.
+    English, and so waved two-word monster names straight through.
 
-    **A phrase is a name.** Both halves of `dire rat` are ordinary English and
-    the pair of them is still a monster. So a multi-word match is reported
+    **A phrase is a name.** Both halves of a two-word monster name are often
+    ordinary English, and the pair of them is still a monster. So a multi-word match is reported
     unless the whole phrase is a rules term, or unless it is made entirely of
     function words -- there is a published power called `Not It`, and that is
     what the stop list is for.
 
     **A lone word is a name only if it is not a word.** `builder` and
-    `stable` are published abilities and also plain English; `Balhannoth` is
-    not in any dictionary. It must also be long enough, and rare enough among
+    `stable` are published abilities and also plain English; an invented
+    name is in no dictionary. It must also be long enough, and rare enough among
     the names, to be worth believing.
     """
     if name in rules:

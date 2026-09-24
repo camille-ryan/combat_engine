@@ -66,7 +66,7 @@ def parse(row: dict, document: str) -> Power:
         name=(row.get("Name") or "").strip(),
     )
     body = detail(document)
-    p.spec = power_spec(document, p.ref, [p.name])
+    p.spec = power_spec(document, p.ref, p.name)
     p.flavour = read_flavour(document)
     _shape(p, body)
     return p

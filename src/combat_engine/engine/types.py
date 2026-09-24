@@ -69,6 +69,18 @@ class Keyword(StrEnum):
     STANCE = "stance"
     CONJURATION = "conjuration"
     ZONE = "zone"
+    # A power's damage type is also a keyword, because resistances and
+    # immunities key off the keyword rather than off the damage roll.
+    ACID = "acid"
+    COLD = "cold"
+    FIRE = "fire"
+    FORCE = "force"
+    LIGHTNING = "lightning"
+    NECROTIC = "necrotic"
+    POISON = "poison"
+    PSYCHIC = "psychic"
+    RADIANT = "radiant"
+    THUNDER = "thunder"
 
 
 class DamageType(StrEnum):

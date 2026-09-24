@@ -47,7 +47,13 @@ class Encounter:
         rolls: list[tuple[int, int, int, int]] = []
         for eid in creatures(self.world):
             init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
-            init.rolled = self.world.rng.d20().total + init.bonus
+            from .query import level_term
+
+            init.rolled = (
+                self.world.rng.d20().total
+                + init.bonus
+                + level_term(self.world, eid, init.scale)
+            )
             # Ties go to the higher modifier, then to spawn order, so two runs
             # of the same seed produce the same order.
             rolls.append((-init.rolled, -init.bonus, eid, eid))

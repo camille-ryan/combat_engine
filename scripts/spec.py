@@ -11,8 +11,8 @@ By default only rows that have **not** been declared yet come out, so the
 output is a work list rather than a catalogue.
 
 What comes out is the mechanical lines and nothing else. No name, no flavour
-text, and no self-reference: a stat block that says "contracts dire rat filth
-fever" says "contracts m145 filth fever" here. The author writes the function
+text, and no self-reference: a stat block that names itself in its own rules
+says "contracts m145 filth fever" here instead. The author writes the function
 without ever learning what the row is called, which is the arrangement that
 keeps the engine free of a publisher's prose.
 """

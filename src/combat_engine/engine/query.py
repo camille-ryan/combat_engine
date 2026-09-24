@@ -10,7 +10,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .components import Conditions, Defenses, Health, Mods, Movement, Position, Side
+from .components import (
+    Conditions,
+    Defenses,
+    Health,
+    Mods,
+    Movement,
+    Position,
+    Side,
+    Stats,
+)
 from .conditions import rules
 from .grid import Square, between, spread
 from .types import Condition, Cover, Defense, Relation, Team
@@ -97,9 +106,26 @@ def speed(world: World, eid: int) -> int:
     return max(0, base)
 
 
+def level_term(world: World, eid: int, scale: str) -> int:
+    """What this creature's level is worth, under the current setting."""
+    stats = world.get(eid, Stats)
+    level = stats.level if stats else 1
+    if scale == "pc":
+        return world.scaling.pc(level)
+    if scale == "monster":
+        return world.scaling.monster(level)
+    return 0
+
+
 def defence(world: World, eid: int, d: Defense, ctx: dict | None = None) -> int:
-    """A defence as the attacker sees it: base, modifiers, conditions."""
-    base = world.need(eid, Defenses).base(d)
+    """A defence as the attacker sees it: base, level, modifiers, conditions.
+
+    The stored value has no level in it -- see `engine/scaling.py` -- so this
+    is the one place a defence gains one, and turning scaling off turns it
+    off everywhere at once.
+    """
+    defs = world.need(eid, Defenses)
+    base = defs.base(d) + level_term(world, eid, defs.scale)
     mods = world.get(eid, Mods)
     if mods is not None:
         base += mods.total(d.value, ctx or {})

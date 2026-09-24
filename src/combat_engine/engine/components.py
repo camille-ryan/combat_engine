@@ -67,7 +67,15 @@ class Stats:
 
 @dataclass
 class Defenses:
+    """Defences **without** their level term. See `engine/scaling.py`.
+
+    `scale` says which way the level term goes: a character's sheet is built
+    up from parts and has it added, a stat block is printed as a total and
+    had it taken out when the monster was loaded.
+    """
+
     values: dict[Defense, int] = field(default_factory=dict)
+    scale: str = "pc"  # pc | monster | none
 
     def base(self, d: Defense) -> int:
         return self.values.get(d, 10)
@@ -118,8 +126,11 @@ class Defences:
 
 @dataclass
 class Initiative:
+    """`bonus` excludes the level term, which `scaling` supplies."""
+
     bonus: int = 0
     rolled: int = 0
+    scale: str = "pc"
 
 
 # --------------------------------------------------------------------------
