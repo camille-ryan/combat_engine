@@ -78,6 +78,6 @@ Game systems are not able to be trademarked, but prose is. All potentially trade
  - Ideally at some point we can use RLHF to determine policies based on watching how the player plays.
 
  ## House Rules
- - Level bonuses are stored separately so that we can "mod" the game to remove or attenuate them (likely +1 per 5 levels)
+ - Level bonuses are stored separately so that we can "mod" the game to remove or attenuate them (likely +1 per 5 levels). Related: Option to gift players expertise, improved defenses. Additional option to gift "melee training" to relevant classes. 
  - Default mounts in 4e are creatures that die easily to AoE. Optionally, treat mounts as magic items which alter the rider's movement modes and space, and allow the mount's actions (attacks, etc.) to be used in place of the rider's. For example, use a standard action to use one of that mount's standard action abilities.
  - hex map mode
