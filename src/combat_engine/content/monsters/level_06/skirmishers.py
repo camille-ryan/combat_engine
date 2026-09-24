@@ -603,7 +603,7 @@ def m297a0(c: Cast) -> None:
 
     Two waivers, and they live in two places. "Even if the target isn't
     taking ongoing poison damage" is a per-target restriction, so it is
-    m297a2's own body that reads the guarded area as an alternative. "Even
+    m297a2's own body that reads the aura as an alternative. "Even
     if the power hasn't recharged" is a usage gate, and `Powers.restore` is
     what a recharge *is* -- so it is handed back at the top of each of this
     creature's turns for as long as somebody is standing in what it guards.
@@ -648,7 +648,7 @@ def m297a1(c: Cast) -> None:
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=9),
     requires=_poisoned_or_guarded,
-    requires_text="a creature must be poisoned or in the m297's guarded area",
+    requires_text="a creature must be poisoned or inside the m297's aura",
 )
 def m297a2(c: Cast) -> None:
     """Only into a creature already carrying poison -- or standing in the
