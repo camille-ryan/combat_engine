@@ -71,3 +71,7 @@ Game systems are not able to be trademarked, but prose is. All potentially trade
 
  - Some powers can create zones, conurations, auras, etc. If a power has an ongoing "allies adacent" or "enemies adjacent", treat it as an aura 1. These must track who originated them. They typically act on the creator's turn, and can sometimes be dispelled or interrupted by interacting with the caster.
 
+ ## Combat AI
+ - To start, we use preprogrammed policies to determine monster actions. Open questions:
+   - How do we handle compound actions like "attack dealing x damage, then move up to 2 squares". Is this treated as 25 separate options for a singal target?
+ - Ideally at some point we can use RLHF to determine policies based on watching how the player plays.
