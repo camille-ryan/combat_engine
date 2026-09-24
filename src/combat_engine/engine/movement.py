@@ -43,7 +43,7 @@ from .events import (
 )
 from .grid import Square, distance, footprint, neighbours, spread
 from .query import adjacent, alive, can_move, creatures, enemies, squares
-from .types import Forced
+from .types import Forced, Size
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -371,8 +371,17 @@ def reachable(
 ) -> dict[Square, list[Square]]:
     """Every square reachable within `budget`, with a path to each.
 
-    Plain Dijkstra over the eight steps, charging two for difficult terrain.
-    It is what the UI highlights and what a monster's move picks from.
+    Dijkstra over the eight steps, charging two for difficult terrain, and
+    **ranked by three things in order**: what it costs, what it costs you
+    that is not movement, and how straight it looks.
+
+    The third matters more than it sounds. Distance here is Chebyshev, so a
+    diagonal costs the same as a step sideways and a great many routes tie
+    on price. Whichever the search happened to reach first then won -- and
+    since the neighbours were walked in sorted order that was reliably the
+    one bearing up and left, so the drawn path wandered out to a corner and
+    came back rather than going where the crow goes. Nothing was wrong with
+    it except that no player would ever have chosen it.
 
     A flyer's search passes over occupied squares but will not offer one as a
     destination, since it has to come down at the end of the turn anyway.
@@ -383,25 +392,35 @@ def reachable(
     overhead = mode_of(world, eid, mode) in OVERHEAD
     rough = world.difficult(eid)
     start = pos.square
-    best: dict[Square, int] = {start: 0}
-    paths: dict[Square, list[Square]] = {start: []}
+    threat = _threatened_from(world, eid)
+
+    # (movement spent, squares walked under threat). Lexicographic, so a
+    # safer route wins outright and only a tie on safety is settled by cost.
+    best: dict[Square, tuple[int, int]] = {start: (0, 0)}
+    came: dict[Square, list[Square]] = {start: []}
     frontier = [start]
     while frontier:
         frontier.sort(key=lambda s: best[s])
         here = frontier.pop(0)
-        # Sorted, so which of two equal-cost routes wins is a property of
-        # the squares and not of the order the direction table happens to be
-        # written in. Reordering that table should not move anybody.
+        spent, risked = best[here]
         for nxt in sorted(neighbours(here)):
             if not _clear(world, eid, footprint(nxt, pos.size), overhead=overhead):
                 continue
-            cost = best[here] + (2 if nxt in rough else 1)
-            if cost > budget or cost >= best.get(nxt, 1 << 30):
+            step_cost = 2 if nxt in rough else 1
+            score = (spent + step_cost, risked + _provokes_step(threat, here, nxt, pos.size))
+            if score[0] > budget:
                 continue
-            best[nxt] = cost
-            paths[nxt] = [*paths[here], nxt]
+            known = best.get(nxt)
+            if known is not None and score > known:
+                continue
+            if known is not None and score == known:
+                came[nxt].append(here)      # another equally good way in
+                continue
+            best[nxt] = score
+            came[nxt] = [here]
             frontier.append(nxt)
-    paths.pop(start, None)
+
+    paths = {sq: _straightest(start, sq, came) for sq in came if sq != start}
     if overhead:
         paths = {
             sq: path
@@ -409,6 +428,63 @@ def reachable(
             if _clear(world, eid, footprint(sq, pos.size))
         }
     return paths
+
+
+def _threatened_from(world: World, eid: int) -> dict[int, frozenset[Square]]:
+    """Which squares each living enemy is standing in, for the threat test."""
+    return {
+        foe: squares(world, foe)
+        for foe in enemies(world, eid)
+        if alive(world, foe)
+    }
+
+
+def _provokes_step(
+    threat: dict[int, frozenset[Square]], here: Square, nxt: Square, size: Size
+) -> int:
+    """Does stepping from one square to the next open an opportunity window?
+
+    The same test `step` makes while moving: somebody adjacent before, and
+    out of reach after.
+    """
+    if not threat:
+        return 0
+    before = spread(footprint(here, size), 1)
+    after = spread(footprint(nxt, size), 1)
+    return int(any(
+        (before & where) and not (after & where) for where in threat.values()
+    ))
+
+
+def _straightest(start: Square, dest: Square, came: dict[Square, list[Square]]) -> list[Square]:
+    """Rebuild one of the equally good routes -- the one nearest the line.
+
+    Every predecessor recorded for a square reached it for the same price
+    and the same risk, so the choice between them is free and may as well
+    be made on looks. Walked backwards from the destination, because only
+    then is there a line to be near: the straight one from start to *here*.
+    """
+    path: list[Square] = []
+    node = dest
+    seen = {dest}
+    while node != start:
+        options = [p for p in came.get(node, ()) if p not in seen]
+        if not options:
+            break
+        node = min(options, key=lambda p: (_off_line(start, dest, p), p))
+        seen.add(node)
+        path.append(node)
+    path.reverse()
+    return [*path[1:], dest] if path and path[0] == start else [*path, dest]
+
+
+def _off_line(a: Square, b: Square, p: Square) -> int:
+    """Twice the triangle's area -- how far `p` sits off the line `a`-`b`.
+
+    An integer, and monotonic in the perpendicular distance, which is all a
+    tie-break needs. No square roots and no floats to compare.
+    """
+    return abs((b[0] - a[0]) * (a[1] - p[1]) - (a[0] - p[0]) * (b[1] - a[1]))
 
 
 def costs(world: World, eid: int, budget: int, *, mode: str | None = None) -> dict[Square, int]:
