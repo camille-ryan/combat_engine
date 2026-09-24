@@ -106,10 +106,11 @@ content/
   monsters/level_01.py … level_13.py
 ```
 
-Class features that have a compendium row use it (`p7419` Combat Challenge,
-`p805` Divine Challenge, `p1590` Inspiring Word). The ones with no row —
-Sneak Attack, Hunter's Quarry, Warlock's Curse, Channel Divinity — get
-hand-written `cf:` refs and are written from the class page.
+Class features that have a compendium row use it — `p7419` for the fighter's
+marking feature, `p805` for the paladin's, `p1590` for the warlord's heal.
+The ones with no row of their own — the rogue's extra damage on combat
+advantage, the ranger's quarry, the warlock's mark, the cleric's channelled
+power — get hand-written `cf:` refs and are written from the class page.
 
 ---
 

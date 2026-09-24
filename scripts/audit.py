@@ -1,0 +1,188 @@
+#!/usr/bin/env python
+"""Fire every declared row and report the two ways one can be wrong.
+
+    uv run scripts/audit.py
+    uv run scripts/audit.py --class wizard
+    uv run scripts/audit.py --level 1 --verbose
+
+This is what makes writing a hundred powers at a time safe. Two failures
+matter and nothing else does:
+
+* **it raises.** A bug, printed with its traceback.
+* **it does nothing.** No damage, no condition, no movement, no effect, no
+  healing. A silent no-op is exactly what a wrongly written power looks
+  like, it passes every other check in the repository, and it is invisible
+  in a fight -- the power is simply never worth using and nobody can say
+  why.
+
+A row gets several attempts with different seeds before it is called silent,
+because an attack power that misses three times running has done nothing and
+is fine.
+
+Generated from the registry, like `show.py`. No per-row ceremony: writing a
+power costs a function and nothing else, which is the entire arrangement
+this repository is built on.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import traceback
+from dataclasses import dataclass, field
+
+from combat_engine.content import chargen, loader
+from combat_engine.engine import (
+    Bus,
+    Encounter,
+    Grid,
+    Powers,
+    Rng,
+    Team,
+    World,
+    get,
+    use,
+)
+from combat_engine.engine.dsl import REGISTRY
+
+#: Events that mean the power did something. A power that emits none of
+#: these on any attempt has not been written, whatever the file says.
+DID_SOMETHING = {
+    "DamageApplied", "ConditionApplied", "Healed", "TempHP", "Moved",
+    "ForcedMove", "RelationSet", "ZoneCreated", "EffectExpired", "Note",
+    "Bloodied", "Dropped", "Died", "SavingThrow",
+}  # fmt: skip
+
+#: An effect applied is also doing something, but it only shows in the log
+#: when it *ends*, so the live effect table is checked too.
+TRIES = 8
+
+#: Somebody to stand in front of the caster: Medium, so a push has room.
+DUMMY = "m145"
+
+#: A monster ability's id. Spelled out rather than `startswith("m")`, which
+#: also matches `mba` -- the engine's own melee basic attack -- and sent the
+#: auditor looking for a monster called "mb".
+MONSTER_ABILITY = re.compile(r"^m\d+a\d+$")
+
+
+@dataclass
+class Result:
+    ref: str
+    fired: int = 0
+    error: str = ""
+    events: set[str] = field(default_factory=set)
+
+    @property
+    def silent(self) -> bool:
+        return not self.error and not (self.events & DID_SOMETHING)
+
+
+def board(ref: str, seed: int) -> tuple[World, int]:
+    """A caster with the row, and four creatures within reach of it."""
+    world = World(Grid(24, 16), Rng(seed), Bus())
+    declared = get(ref)
+
+    if MONSTER_ABILITY.match(ref):
+        caster = loader.spawn(world, ref.split("a")[0], (6, 8), team=Team.ENEMY)
+        world.need(caster, Powers).known.append(ref)
+        foe_team = Team.PC
+    else:
+        cls = declared.cls or "fighter"
+        caster = chargen.spawn(world, chargen.Character(cls, max(1, declared.level), [ref]), (6, 8))
+        foe_team = Team.ENEMY
+
+    from combat_engine.engine import Health
+
+    for square in ((7, 8), (8, 9), (9, 8), (7, 10)):
+        hurt = loader.spawn(world, DUMMY, square, team=foe_team)
+        world.need(hurt, Health).hp -= 5
+
+    # A wounded ally, because a great many powers heal one and a board of
+    # creatures at full health makes every one of them look silent.
+    ally = chargen.spawn(world, chargen.Character("cleric", 1, []), (5, 8))
+    health = world.need(ally, Health)
+    health.hp = max(1, health.max_hp // 2)
+    caster_health = world.need(caster, Health)
+    caster_health.hp = max(1, caster_health.max_hp - 5)
+
+    Encounter(world).start()
+    world.turn = caster
+    return world, caster
+
+
+def audit(ref: str) -> Result:
+    out = Result(ref=ref)
+    for seed in range(1, TRIES + 1):
+        try:
+            world, caster = board(ref, seed)
+            cursor = len(world.bus.log)
+            if not use(world, caster, ref):
+                continue
+            out.fired += 1
+            out.events |= {e.kind for e in world.bus.log[cursor:]}
+            if world.effects.live:
+                out.events.add("ConditionApplied")
+        except Exception:  # the traceback is the finding
+            out.error = traceback.format_exc()
+            return out
+    return out
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument("refs", nargs="*", help="rows to fire; default is all of them")
+    ap.add_argument("--class", dest="cls", help="only this class")
+    ap.add_argument("--level", type=int, help="only this level")
+    ap.add_argument("--monsters", action="store_true", help="monster abilities only")
+    ap.add_argument("--verbose", action="store_true", help="say what each row did")
+    args = ap.parse_args()
+
+    wanted = args.refs or sorted(REGISTRY)
+    chosen = []
+    for ref in wanted:
+        p = get(ref)
+        if p is None:
+            print(f"  {ref}: not declared")
+            continue
+        if args.cls and p.cls.lower() != args.cls.lower():
+            continue
+        if args.level is not None and p.level != args.level:
+            continue
+        if args.monsters and not ref.startswith("m"):
+            continue
+        chosen.append(ref)
+
+    broken, silent, never = [], [], []
+    for ref in chosen:
+        r = audit(ref)
+        if r.error:
+            broken.append(r)
+        elif r.fired == 0:
+            never.append(r)
+        elif r.silent:
+            silent.append(r)
+        elif args.verbose:
+            print(f"  ok      {ref:<10} {', '.join(sorted(r.events & DID_SOMETHING))}")
+
+    for r in broken:
+        print(f"\n  RAISED  {r.ref}")
+        print("      " + r.error.strip().replace("\n", "\n      ")[-900:])
+    for r in silent:
+        print(f"  SILENT  {r.ref:<10} fired {r.fired}/{TRIES} times and did nothing")
+    for r in never:
+        print(f"  UNUSED  {r.ref:<10} could not be used on the test board at all")
+
+    ok = len(chosen) - len(broken) - len(silent) - len(never)
+    print(f"\n  {ok} of {len(chosen)} rows fire and do something")
+    if broken or silent:
+        print(f"  {len(broken)} raise, {len(silent)} silent")
+    if never:
+        print(f"  {len(never)} never usable here -- often a Requirement the board cannot meet")
+    return 1 if (broken or silent) else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
