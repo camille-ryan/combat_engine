@@ -4,7 +4,7 @@ Derived numbers, not stored ones. A level 1 fighter's AC is ten, plus half
 its level, plus its armour, plus its shield, and writing that out is shorter
 and more honest than recording an 18 that nothing can check.
 
-Only the four base-set classes, and only to level 10 -- the README's scope.
+All eight Player's Handbook classes, to level 10.
 """
 
 from __future__ import annotations
@@ -43,51 +43,94 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.movement import place
 
+#: Armour, by the bonus it gives. Light armour also takes a modifier.
+ARMOUR = {"cloth": 0, "leather": 2, "hide": 3, "chain": 6, "scale": 7, "plate": 8}
 
-#: What each class brings: hit points at first level and per level after,
-#: healing surges, its armour and weapon, and the one defence it shores up.
+#: Armour that lets you add a modifier to AC. Heavy armour does not.
+LIGHT = {"cloth", "leather", "hide"}
+
+
 @dataclass(frozen=True)
 class ClassLine:
+    """One class's chassis, as its page in the book prints it.
+
+    Every number here was read off the compendium rather than remembered.
+    `defences` is a dict because the paladin adds one to all three and a
+    single field could not say so.
+    """
+
     name: str
     hp_first: int
     hp_per_level: int
     surges: int
-    defence: str
+    #: Class bonus per defence: `{"fort": 2}`, or three entries for a paladin.
+    defences: dict[str, int]
     armour: str
-    armour_bonus: int
-    shield: bool
-    weapon: Weapon | None
-    #: The ability each of its powers attacks with, most of the time.
+    #: 0 none, 1 light shield, 2 heavy shield.
+    shield: int
+    weapons: tuple[Weapon, ...]
+    #: The ability most of its powers attack with.
     key: Ability
     scores: dict[Ability, int] = field(default_factory=dict)
+
+    @property
+    def armour_bonus(self) -> int:
+        return ARMOUR.get(self.armour, 0)
+
+    @property
+    def weapon(self) -> Weapon | None:
+        return self.weapons[0] if self.weapons else None
 
 
 LONGSWORD = Weapon(ref="w:longsword", damage="1d8", proficiency=3, group="heavy blade")
 MACE = Weapon(ref="w:mace", damage="1d8", proficiency=2, group="mace")
 DAGGER = Weapon(ref="w:dagger", damage="1d4", proficiency=3, group="light blade",
                 properties=frozenset({"light blade", "off-hand"}))
+SHORTSWORD = Weapon(ref="w:short-sword", damage="1d6", proficiency=3, group="light blade",
+                    properties=frozenset({"light blade", "off-hand"}))
+LONGBOW = Weapon(ref="w:longbow", damage="1d10", proficiency=2, group="bow",
+                 ranged=(20, 40), properties=frozenset({"two-handed"}))
+CROSSBOW = Weapon(ref="w:crossbow", damage="1d8", proficiency=2, group="crossbow",
+                  ranged=(15, 30), properties=frozenset({"two-handed"}))
+ROD = Weapon(ref="w:rod", damage="1d4", proficiency=0, group="implement")
 
+#: The eight Player's Handbook classes. Numbers off the class pages.
 CLASSES: dict[str, ClassLine] = {
     "fighter": ClassLine(
-        "fighter", 15, 6, 9, "fort", "scale", 7, True, LONGSWORD, STR,
+        "fighter", 15, 6, 9, {"fort": 2}, "scale", 2, (LONGSWORD,), STR,
         {STR: 18, CON: 14, DEX: 13, INT: 10, WIS: 12, CHA: 8},
     ),
     "cleric": ClassLine(
-        "cleric", 12, 5, 7, "will", "chain", 6, False, MACE, WIS,
+        "cleric", 12, 5, 7, {"will": 2}, "chain", 0, (MACE,), WIS,
         {STR: 14, CON: 13, DEX: 10, INT: 8, WIS: 18, CHA: 12},
     ),
     "rogue": ClassLine(
-        "rogue", 12, 5, 6, "ref", "leather", 2, False, DAGGER, DEX,
+        "rogue", 12, 5, 6, {"ref": 2}, "leather", 0, (DAGGER, CROSSBOW), DEX,
         {STR: 12, CON: 13, DEX: 18, INT: 10, WIS: 8, CHA: 14},
     ),
     "wizard": ClassLine(
-        "wizard", 10, 4, 6, "will", "cloth", 0, False, None, INT,
+        "wizard", 10, 4, 6, {"will": 2}, "cloth", 0, (), INT,
         {STR: 10, CON: 13, DEX: 14, INT: 18, WIS: 12, CHA: 8},
     ),
+    "paladin": ClassLine(
+        "paladin", 15, 6, 10, {"fort": 1, "ref": 1, "will": 1}, "plate", 2,
+        (LONGSWORD,), STR,
+        {STR: 16, CON: 13, DEX: 10, INT: 8, WIS: 12, CHA: 16},
+    ),
+    "ranger": ClassLine(
+        "ranger", 12, 5, 6, {"fort": 1, "ref": 1}, "leather", 0,
+        (SHORTSWORD, LONGBOW), DEX,
+        {STR: 14, CON: 13, DEX: 18, INT: 8, WIS: 12, CHA: 10},
+    ),
+    "warlock": ClassLine(
+        "warlock", 12, 5, 6, {"ref": 1, "will": 1}, "leather", 0, (ROD,), CHA,
+        {STR: 10, CON: 14, DEX: 13, INT: 12, WIS: 8, CHA: 18},
+    ),
+    "warlord": ClassLine(
+        "warlord", 12, 5, 7, {"fort": 1, "will": 1}, "chain", 1, (LONGSWORD,), STR,
+        {STR: 18, CON: 12, DEX: 10, INT: 14, WIS: 8, CHA: 13},
+    ),
 }
-
-#: Armour that lets you add a modifier to AC. Heavy armour does not.
-LIGHT = {"cloth", "leather", "hide"}
 
 
 @dataclass
@@ -123,15 +166,15 @@ def defences(line: ClassLine, scores: dict[Ability, int], level: int) -> dict:
     def mod(a: Ability) -> int:
         return modifier(scores.get(a, 10))
 
-    shield = 2 if line.shield else 0
+    shield = line.shield
     ac = 10 + line.armour_bonus + shield
     if line.armour in LIGHT:
         ac += max(mod(DEX), mod(INT))
     return {
         AC: ac,
-        FORT: 10 + max(mod(STR), mod(CON)) + (2 if line.defence == "fort" else 0),
-        REF: 10 + max(mod(DEX), mod(INT)) + shield + (2 if line.defence == "ref" else 0),
-        WILL: 10 + max(mod(WIS), mod(CHA)) + (2 if line.defence == "will" else 0),
+        FORT: 10 + max(mod(STR), mod(CON)) + line.defences.get("fort", 0),
+        REF: 10 + max(mod(DEX), mod(INT)) + shield + line.defences.get("ref", 0),
+        WILL: 10 + max(mod(WIS), mod(CHA)) + line.defences.get("will", 0),
     }
 
 
@@ -167,8 +210,8 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         Budget(),
         Powers(known=list(who.powers)),
         Gear(
-            weapons=[line.weapon] if line.weapon else [],
-            shield=line.shield,
+            weapons=list(line.weapons),
+            shield=bool(line.shield),
             armour=line.armour,
         ),
     )
@@ -195,7 +238,8 @@ def sheet(who: Character) -> str:
             f"  AC {d[AC] + step}  Fort {d[FORT] + step}  "
             f"Ref {d[REF] + step}  Will {d[WILL] + step}"
             + (f"   (level adds {step:+d}, off under bounded scaling)" if step else ""),
-            f"  {line.armour}" + ("  shield" if line.shield else "")
+            f"  {line.armour}"
+            + ("  heavy shield" if line.shield == 2 else "  light shield" if line.shield else "")
             + (f"  {line.weapon.damage} weapon (+{line.weapon.proficiency} prof)"
                if line.weapon else "  implement"),
             f"  powers: {', '.join(who.powers) or '-'}",

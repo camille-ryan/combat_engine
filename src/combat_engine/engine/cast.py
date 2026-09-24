@@ -178,13 +178,14 @@ class Cast:
         runs two points hot for the life of the project.
         """
         bonus = self.world.scaling.pc(self.stats.level) + self.stats.mod(a)
-        from .dsl import get
-
-        p = get(self.ref)
+        p = self._declared()
         weapon_power = p is None or Keyword.WEAPON in p.keywords
         gear = self.world.get(self.me, Gear)
-        if weapon_power and gear is not None and gear.main is not None:
-            bonus += gear.main.proficiency
+        if weapon_power and gear is not None:
+            ranged = p is not None and Keyword.RANGED in p.keywords
+            weapon = (gear.ranged if ranged and gear.ranged else gear.main)
+            if weapon is not None:
+                bonus += weapon.proficiency
         return bonus
 
     @property
@@ -240,13 +241,28 @@ class Cast:
         return self.stats.level
 
     def w(self, count: int = 1) -> str:
-        """`count`[W]: the wielded weapon's damage dice, that many times."""
+        """`count`[W]: the wielded weapon's damage dice, that many times.
+
+        A ranged power rolls the ranged weapon, where the creature has one.
+        A ranger carries a blade and a bow, and firing the bow while rolling
+        the blade's dice is wrong in a way nothing would ever report.
+        """
         gear = self.world.get(self.me, Gear)
-        weapon = gear.main if gear else None
+        if gear is None:
+            return f"{count}d4"
+        weapon = gear.main
+        p = self._declared()
+        if p is not None and Keyword.RANGED in p.keywords and gear.ranged is not None:
+            weapon = gear.ranged
         if weapon is None:
             return f"{count}d4"
         n, _, faces = weapon.damage.partition("d")
         return f"{int(n or 1) * count}d{faces}"
+
+    def _declared(self):  # noqa: ANN202
+        from .dsl import get
+
+        return get(self.ref)
 
     def wielding(self, prop: str) -> bool:
         gear = self.world.get(self.me, Gear)

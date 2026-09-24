@@ -31,10 +31,15 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("refs", nargs="*", help="power or monster ids, e.g. p289 m145")
-    ap.add_argument("--class", dest="cls", help="fighter, cleric, rogue or wizard")
+    ap.add_argument("--class", dest="cls", help="any of the eight PHB1 classes")
     ap.add_argument("--level", type=int, help="power level")
     ap.add_argument("--monsters", type=int, help="every monster at this level")
     ap.add_argument("--role", help="narrow --monsters to one role")
+    ap.add_argument(
+        "--book",
+        default="Player's Handbook",
+        help="only powers printed in this book; empty string for any",
+    )
     ap.add_argument("--all", action="store_true", help="include rows already declared")
     ap.add_argument("--limit", type=int, default=0, help="stop after this many rows")
     args = ap.parse_args()
@@ -44,7 +49,7 @@ def main() -> int:
 
     refs: list[str] = list(args.refs)
     if args.cls or args.level is not None:
-        refs += _powers(db, args.cls, args.level)
+        refs += _powers(db, args.cls, args.level, args.book)
     if args.monsters is not None:
         refs += _monsters(db, args.monsters, args.role)
     if not refs:
@@ -77,7 +82,15 @@ def _declared() -> set[str]:
     return set(REGISTRY)
 
 
-def _powers(db, cls: str | None, level: int | None) -> list[str]:  # noqa: ANN001
+def _powers(db, cls: str | None, level: int | None, book: str = "") -> list[str]:  # noqa: ANN001
+    """Powers matching the filters, in a stable order.
+
+    `book` is a membership test rather than a LIKE: `Source` is a
+    comma-separated list and a row often names five books, so matching by
+    substring picks up everything.
+    """
+    import json
+
     where, params = [], []
     if cls:
         where.append("lower(class) = ?")
@@ -85,16 +98,23 @@ def _powers(db, cls: str | None, level: int | None) -> list[str]:  # noqa: ANN00
     if level is not None:
         where.append("level = ?")
         params.append(level)
-    sql = "SELECT ref FROM power"
+    sql = "SELECT ref, books FROM power"
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY class, level, ref"
-    return [r["ref"] for r in db.execute(sql, params)]
+    return [
+        r["ref"]
+        for r in db.execute(sql, params)
+        if not book or book in json.loads(r["books"] or "[]")
+    ]
 
 
-def _monsters(db, level: int, role: str | None) -> list[str]:  # noqa: ANN001
+def _monsters(db, level: int, role: str | None, book: bool = True) -> list[str]:  # noqa: ANN001
+    """Monsters at a level. Monster Manual 1 to 3 only, which is the scope."""
     sql = "SELECT ref FROM monster WHERE level = ?"
     params: list = [level]
+    if book:
+        sql += " AND book != ''"
     if role:
         sql += " AND role = ?"
         params.append(role)

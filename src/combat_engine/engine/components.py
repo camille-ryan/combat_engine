@@ -300,7 +300,17 @@ class Gear:
 
     @property
     def main(self) -> Weapon | None:
+        """What is in hand. The first weapon listed is the one being swung."""
         return self.weapons[0] if self.weapons else None
+
+    @property
+    def ranged(self) -> Weapon | None:
+        """The first weapon that can be fired, if the creature carries one.
+
+        A ranger with a short sword and a longbow has both, and a ranged
+        power should be rolling the bow's dice rather than the sword's.
+        """
+        return next((w for w in self.weapons if w.ranged), None)
 
 
 @dataclass

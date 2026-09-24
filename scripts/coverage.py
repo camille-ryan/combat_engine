@@ -18,6 +18,7 @@ plain count of what is left needs no maintenance and cannot go stale.
 from __future__ import annotations
 
 import argparse
+import json
 from collections import defaultdict
 
 from combat_engine.etl.build import game
@@ -30,6 +31,11 @@ def main() -> int:
     ap.add_argument("--class", dest="cls", help="only this class")
     ap.add_argument("--monsters", action="store_true", help="monsters instead of powers")
     ap.add_argument("--max-level", type=int, help="stop at this level")
+    ap.add_argument(
+        "--book",
+        default="Player's Handbook",
+        help="only powers printed in this book; empty string for any",
+    )
     ap.add_argument("--list", action="store_true", help="print the undeclared refs")
     args = ap.parse_args()
 
@@ -40,16 +46,23 @@ def main() -> int:
     db = game()
 
     if args.monsters:
+        # MM1-3 only. Everything else in the compendium is out of scope and
+        # counting it would make the work look endless.
+        where = ["m.book != ''"]
+        params: list = []
+        if args.max_level:
+            where.append("m.level <= ?")
+            params.append(args.max_level)
         rows = db.execute(
             "SELECT a.ref, m.level, m.role FROM monster_power a "
-            "JOIN monster m ON m.ref = a.monster_ref "
-            + ("WHERE m.level <= ? " if args.max_level else "")
-            + "ORDER BY m.level, m.role, a.ref",
-            (args.max_level,) if args.max_level else (),
+            "JOIN monster m ON m.ref = a.monster_ref WHERE "
+            + " AND ".join(where)
+            + " ORDER BY m.level, m.role, a.ref",
+            params,
         ).fetchall()
         _report(rows, declared, "level", "role", args.list)
     else:
-        sql = "SELECT ref, class, level FROM power"
+        sql = "SELECT ref, class, level, books FROM power"
         where, params = [], []
         if args.cls:
             where.append("lower(class) = ?")
@@ -59,7 +72,11 @@ def main() -> int:
             params.append(args.max_level)
         if where:
             sql += " WHERE " + " AND ".join(where)
-        rows = db.execute(sql + " ORDER BY class, level, ref", params).fetchall()
+        rows = [
+            r
+            for r in db.execute(sql + " ORDER BY class, level, ref", params)
+            if not args.book or args.book in json.loads(r["books"] or "[]")
+        ]
         _report(rows, declared, "class", "level", args.list)
     return 0
 

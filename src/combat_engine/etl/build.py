@@ -38,7 +38,14 @@ NAMES = ROOT / "localization" / "names.json"
 #: The project's scope, from the README: characters to 10, monsters to 13.
 MAX_POWER_LEVEL = 10
 MAX_MONSTER_LEVEL = 13
-CLASSES = ("Fighter", "Cleric", "Rogue", "Wizard")
+#: The eight Player's Handbook classes. Powers from later books are
+#: still ingested for these classes -- the `source` column says which
+#: book a row came from, so narrowing to PHB1 is a query and not a
+#: rebuild.
+CLASSES = (
+    "Cleric", "Fighter", "Paladin", "Ranger",
+    "Rogue", "Warlock", "Warlord", "Wizard",
+)  # fmt: skip
 
 SCHEMA = """
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
@@ -69,7 +76,7 @@ CREATE TABLE common_word (
 CREATE TABLE power (
   ref TEXT PRIMARY KEY, id INTEGER, class TEXT, level INTEGER,
   usage TEXT, action TEXT, kind TEXT, reach TEXT, keywords TEXT,
-  spec TEXT, score REAL
+  books TEXT, spec TEXT, score REAL
 );
 CREATE INDEX power_class ON power(class, level);
 """
@@ -205,10 +212,11 @@ def _powers(
         scores.append(p.score)
         report.powers += 1
         out.execute(
-            "INSERT INTO power VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO power VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 p.ref, p.id, p.cls, p.level, p.usage, p.action, p.kind,
-                p.reach, json.dumps(p.keywords), p.spec, p.score,
+                p.reach, json.dumps(p.keywords), json.dumps(p.books),
+                p.spec, p.score,
             ),
         )
         names[p.ref] = {"name": p.name, "flavour": p.flavour}

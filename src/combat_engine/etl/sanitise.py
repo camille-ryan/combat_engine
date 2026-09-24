@@ -52,6 +52,18 @@ RULES_TERMS = {
     "target", "trigger", "effect", "attack", "damage", "heal", "push",
     "pull", "slide", "teleport", "prone", "move", "turn", "split", "level",
     "speed", "range", "hit", "miss", "special", "requirement", "sustain",
+    # Equipment. A sword is a sword; several monsters have an ability named
+    # after the one they are holding, which does not make the word theirs.
+    "short sword", "shortsword", "long sword", "longsword", "greatsword",
+    "bastard sword", "scimitar", "rapier", "dagger", "mace", "club",
+    "greatclub", "quarterstaff", "staff", "spear", "longspear", "javelin",
+    "halberd", "glaive", "battleaxe", "handaxe", "greataxe", "warhammer",
+    "maul", "flail", "pick", "sickle", "longbow", "shortbow", "crossbow",
+    "hand crossbow", "sling", "shuriken", "dart", "net", "whip", "trident",
+    "morningstar", "falchion", "waraxe", "khopesh", "katar", "garrote",
+    "holy symbol", "orb", "rod", "wand", "tome", "totem",
+    "leather armor", "hide armor", "chainmail", "scale armor", "plate armor",
+    "light shield", "heavy shield", "bow", "sword", "axe",
 }  # fmt: skip
 
 

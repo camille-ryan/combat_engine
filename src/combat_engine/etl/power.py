@@ -26,6 +26,10 @@ class Power:
     kind: str = ""
     reach: str = ""
     keywords: tuple[str, ...] = field(default_factory=tuple)
+    #: Every book this power appears in. `Source` is a comma-separated list
+    #: and a row often names several, so selecting "the Player's Handbook
+    #: ones" is a membership test and not a LIKE.
+    books: tuple[str, ...] = field(default_factory=tuple)
     spec: str = ""
     #: For the localisation table only. Never stored in game.db.
     name: str = ""
@@ -64,6 +68,9 @@ def parse(row: dict, document: str) -> Power:
         action=(row.get("Action") or "standard").strip().lower(),
         kind=(row.get("Kind") or "").strip(),
         name=(row.get("Name") or "").strip(),
+        books=tuple(
+            b.strip() for b in (row.get("Source") or "").split(",") if b.strip()
+        ),
     )
     body = detail(document)
     p.spec = power_spec(document, p.ref, p.name)
