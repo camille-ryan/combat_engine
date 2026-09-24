@@ -1,0 +1,29 @@
+[project]
+name = "combat-engine"
+version = "0.1.0"
+description = "A deterministic grid combat engine for a 4e-style tactical ruleset."
+requires-python = ">=3.13"
+dependencies = [
+    "lxml>=5.3",
+]
+
+[project.optional-dependencies]
+api = ["fastapi>=0.115", "uvicorn[standard]>=0.34"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/combat_engine"]
+
+[dependency-groups]
+dev = ["ruff>=0.9"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ANN", "TID"]
+ignore = ["ANN401"]

@@ -1,0 +1,26 @@
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+
+# ~140MB source data. Copyrighted, not redistributable — supply your own.
+compendium.sqlite
+
+# Derived from the compendium by the ETL. Anchored: an unanchored `data/`
+# would also match `src/combat_engine/data/`.
+/data/
+
+# Printed names and flavour text, generated from your own compendium.
+# The engine never reads these; the API applies them at the boundary.
+/localization/
+
+# Combat transcripts. Regenerate any of them from its seed.
+/logs/
+
+# NOTE: scripts/fixtures/ is deliberately NOT ignored. Combat contains no
+# randomness beyond a seeded RNG, so a divergence from a recorded log is
+# always a code change. Ignoring the fixtures would leave a fresh clone with
+# nothing to verify against.
+
+.claude/
+.DS_Store
