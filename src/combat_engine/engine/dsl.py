@@ -295,19 +295,26 @@ def declared() -> list[str]:
 
 
 def area_of(world: World, actor: int, p: Power, origin: Square | None = None) -> frozenset[Square]:
-    """The squares a power covers, given where its origin was placed."""
+    """The squares a power covers, given where its origin was placed.
+
+    Clipped to the board. A ranged 20 power on a board sixteen squares wide
+    otherwise reports a reach that runs off the edge, and an interface that
+    highlights what it is given lights up squares that are not there.
+    """
     mine = squares(world, actor)
     r = p.reach
     if r.kind == "close_burst":
-        return spread(mine, r.size)
-    if r.kind == "close_blast":
+        out = spread(mine, r.size)
+    elif r.kind == "close_blast":
         aim = origin or next(iter(sorted(spread(mine, 1) - mine)))
-        return blast(mine, r.size, aim)
-    if r.kind == "area_burst":
-        return area_burst(origin or next(iter(sorted(mine))), r.size)
-    if r.kind in ("melee", "ranged"):
-        return spread(mine, r.size)
-    return frozenset(mine)
+        out = blast(mine, r.size, aim)
+    elif r.kind == "area_burst":
+        out = area_burst(origin or next(iter(sorted(mine))), r.size)
+    elif r.kind in ("melee", "ranged"):
+        out = spread(mine, r.size)
+    else:
+        out = frozenset(mine)
+    return frozenset(sq for sq in out if world.grid.inside(sq))
 
 
 def aim_points(world: World, actor: int, p: Power) -> list[Square]:

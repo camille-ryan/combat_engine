@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from combat_engine.engine import Ident, Side, Team, World
 from combat_engine.engine.zones import Zone
@@ -100,6 +101,27 @@ class Wire:
             return ""
         return (localisation().get(ref) or {}).get("flavour") or ""
 
+    def printed(self, ref: str) -> dict[str, str]:
+        """The power's own mechanical lines, by label: Hit, Miss, Effect.
+
+        What the card shows when somebody hovers a power. It has to be the
+        printed rule -- an earlier version put the *flavour* here, so hovering
+        a power described the mood it was cast in and never what it did.
+
+        These are the publisher's sentences, so they go through the same door
+        as a name: absent with `CE_NAMES=off`, rather than blanked. A hosted
+        deployment serving "Hit: " with nothing after it has still decided to
+        serve the field.
+        """
+        if not self.show_names:
+            return {}
+        if ref in OWN_RULES:
+            # The engine's own rows have no compendium page to quote. These
+            # are core rules rather than a publisher's prose, but they still
+            # go through this door so there is one place a card gets its text.
+            return dict(OWN_RULES[ref])
+        return _spec_lines(ref)
+
     def refresh(self, world: World) -> None:
         """Pick up anything that arrived mid-fight, such as a conjuration."""
         counts = {"pc": 0, "npc": 0}
@@ -118,6 +140,35 @@ class Wire:
             self.to_wire[eid] = wid
             self.to_eid[wid] = eid
             self.labels[wid] = self._label(ident, table, counts)
+
+
+@lru_cache(maxsize=4096)
+def _spec_lines(ref: str) -> dict[str, str]:
+    """Split one row's stored spec into its labelled lines.
+
+    The spec is the mechanical text the row was written from, and it lives in
+    `game.db` -- which is therefore built from your own compendium and is not
+    redistributable, for the same reason the name table is not.
+    """
+    from combat_engine.etl.build import game
+
+    table = "monster_power" if (ref.startswith("m") and "a" in ref[1:]) else "power"
+    try:
+        row = game().execute(
+            f"SELECT spec FROM {table} WHERE ref = ?",
+            (ref,),
+        ).fetchone()
+    except Exception:
+        return {}
+    if row is None:
+        return {}
+    out: dict[str, str] = {}
+    for line in (row["spec"] or "").split("\n"):
+        label, sep, rest = line.partition(":")
+        if sep and len(label) < 32:
+            key = label.strip().lower()
+            out[key] = f"{out[key]} {rest.strip()}" if key in out else rest.strip()
+    return out
 
 
 def _creatures(world: World) -> list[tuple[int, Ident]]:
@@ -140,6 +191,25 @@ def _creatures(world: World) -> list[tuple[int, Ident]]:
 #: are rules terms rather than a publisher's prose, so they are safe to spell
 #: out even with names turned off -- but they go through the same door as
 #: everything else, so there is only one place that turns an id into words.
+OWN_RULES = {
+    "mba": {
+        "target": "One creature",
+        "attack": "Strength vs. AC",
+        "hit": "1[W] + Strength modifier damage.",
+    },
+    "rba": {
+        "target": "One creature",
+        "attack": "Dexterity vs. AC",
+        "hit": "1[W] + Dexterity modifier damage.",
+    },
+    "second-wind": {
+        "effect": (
+            "Spend a healing surge and regain that many hit points, "
+            "and gain a +2 bonus to all defences until the start of your next turn."
+        ),
+    },
+}
+
 OWN_NAMES = {
     "mba": "Melee Basic Attack",
     "rba": "Ranged Basic Attack",

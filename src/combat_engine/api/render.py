@@ -382,6 +382,7 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
             continue
         ok, why = usable(world, actor, p)
         indices = by_ref.get(ref, [])
+        printed = session.wire.printed(ref)
         affordable = session.encounter.can_spend(actor, p.action)
         if not affordable and ok:
             ok, why = False, "no action left"
@@ -393,9 +394,12 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
                 usage=p.usage.value + (f" {p.recharge}+" if p.recharge else ""),
                 range_text=str(p.reach),
                 keywords=[k.value for k in p.keywords],
-                attack_text=str(p.attack) if p.attack else None,
-                requirement_text=p.requires_text or None,
-                effect_text=session.wire.flavour(ref) or None,
+                attack_text=printed.get("attack") or (str(p.attack) if p.attack else None),
+                damage=printed.get("damage") or None,
+                requirement_text=printed.get("requirement") or p.requires_text or None,
+                hit_text=printed.get("hit") or None,
+                miss_text=printed.get("miss") or None,
+                effect_text=printed.get("effect") or None,
                 targets=str(p.target),
                 available=bool(indices),
                 reason=None if indices else (why or "cannot be used here"),

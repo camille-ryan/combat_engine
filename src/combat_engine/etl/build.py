@@ -3,11 +3,19 @@
 Destructive and idempotent: the database is recreated from scratch every
 run, so the only way to change what is in it is to change a parser.
 
-Two files come out, and the split is the whole point:
+Two files come out, and **neither is redistributable**. Both are built from
+your own copy of the compendium and both are gitignored:
 
-* `data/game.db` -- mechanics and ids. Distributable.
-* `localization/names.json` -- ids to printed names and flavour. Built from
-  your own copy of the compendium, gitignored, and never read by the engine.
+* `data/game.db` -- every row's numbers, plus the mechanical text each was
+  written from. The numbers are facts about a game system and not protectable;
+  the text is the publisher's sentences, which is why this file does not ship.
+  An earlier version of this docstring called it distributable, which was
+  wrong the moment the specs went into it.
+* `localization/names.json` -- ids to printed names and flavour.
+
+What *is* distributable is `src/` -- the engine and the hand-written content,
+which hold ids and mechanics and no prose at all. `scripts/leaks.py` is what
+holds them to it.
 """
 
 from __future__ import annotations

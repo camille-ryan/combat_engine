@@ -120,6 +120,18 @@ def features(
     return dict(f)
 
 
+def _allies_of(world: World, eid: int) -> list[int]:
+    """Whose side the *target of a push* is on -- that is, the pusher's foes.
+
+    A push is aimed at an enemy, so the creatures it should be driven away
+    from are that enemy's own allies.
+    """
+    from .query import allies, enemies
+
+    foes = enemies(world, eid)
+    return allies(world, foes[0]) if foes else []
+
+
 def _square(world: World, eid: int) -> tuple[int, int]:
     from .components import Position
 
@@ -233,6 +245,30 @@ class LinearPolicy:
         else takes the first option, which is sorted, so it is stable rather
         than arbitrary.
         """
+        if kind in ("push", "pull", "slide") and options and _is_square(options[0]):
+            # Where to shove somebody. Away from its friends, which is the
+            # point of a push -- it is worth more than the square of damage
+            # it came with. Ties break in sorted order, so a seed replays.
+            mates = [
+                a
+                for a in _allies_of(world, actor)
+                if alive(world, a)
+            ]
+            if not mates:
+                return options[0]
+
+            def isolation(sq: Any) -> tuple[int, Any]:
+                return (
+                    min(
+                        max(abs(sq[0] - x), abs(sq[1] - y))
+                        for m in mates
+                        for (x, y) in [_square(world, m)]
+                    ),
+                    sq,
+                )
+
+            return max(options, key=isolation)
+
         if kind in ("shift", "move", "teleport") and options and _is_square(options[0]):
             health = world.get(actor, Health)
             retreat = health is not None and health.hp < health.max_hp * 0.35

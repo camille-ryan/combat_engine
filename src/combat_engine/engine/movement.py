@@ -262,27 +262,31 @@ def forced(
     world.bus.emit(ForcedMove(source=source, target=target, how=how, squares=amount))
     moved = 0
     for _ in range(amount):
-        nxt = _forced_square(world, target, anchor, how)
+        nxt = _forced_square(world, source, target, anchor, how)
         if nxt is None or not step(world, target, nxt, kind=how.value):
             break
         moved += 1
     return moved
 
 
-def _forced_square(world: World, target: int, anchor: Square, how: Forced) -> Square | None:
-    """The next square a forced move goes to.
+def forced_squares(
+    world: World, target: int, anchor: Square, how: Forced
+) -> list[Square]:
+    """Every square this step of a forced move could legally go to.
 
     Push must end further from the anchor, pull must end nearer, and a slide
-    may go anywhere. When several squares qualify the one that keeps the
-    creature closest to where it started is taken, so a push travels in a
-    straight line instead of drifting.
+    may go anywhere. Directly away from the anchor there are normally
+    **three** of them -- the straight step and the two diagonals either side
+    -- and which one is taken is the pusher's choice, not a detail. Driving
+    somebody into a wall, off a ledge, or out of their ally's reach is the
+    whole reason to take a power that pushes.
     """
     pos = world.get(target, Position)
     if pos is None:
-        return None
+        return []
     here = pos.square
     now = distance(here, anchor)
-    options: list[Square] = []
+    out: list[Square] = []
     for dx in (-1, 0, 1):
         for dy in (-1, 0, 1):
             if dx == dy == 0:
@@ -295,18 +299,26 @@ def _forced_square(world: World, target: int, anchor: Square, how: Forced) -> Sq
                 Forced.SLIDE: True,
             }[how]
             if ok and _clear(world, target, footprint(cand, pos.size)):
-                options.append(cand)
+                out.append(cand)
+    return sorted(out)
+
+
+def _forced_square(
+    world: World, source: int, target: int, anchor: Square, how: Forced
+) -> Square | None:
+    """Where this step of a forced move goes, asking whoever is pushing.
+
+    The choice belongs to the creature applying the movement, so it goes
+    through `world.decide` like any other. The first version picked the
+    straightest square and never asked, which quietly turned every push in
+    the game into a single fixed line.
+    """
+    options = forced_squares(world, target, anchor, how)
     if not options:
         return None
-    # Straightest first: keep the same heading away from (or toward) the anchor.
-    dx = (here[0] > anchor[0]) - (here[0] < anchor[0])
-    dy = (here[1] > anchor[1]) - (here[1] < anchor[1])
-    if how is Forced.PULL:
-        dx, dy = -dx, -dy
-    preferred = (here[0] + dx, here[1] + dy)
-    if preferred in options:
-        return preferred
-    return sorted(options)[0]
+    if len(options) == 1:
+        return options[0]
+    return world.decide(source, how.value, options, f"{how.value} to which square")
 
 
 # -- reachability -----------------------------------------------------------

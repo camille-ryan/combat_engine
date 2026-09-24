@@ -227,6 +227,30 @@ def check_no_engine_ids(check: Checks, state: dict, events: list[dict]) -> None:
 def check_roster(check: Checks, state: dict) -> None:
     roster = state["roster"]
     check.that(bool(roster), "the roster is not empty")
+
+    # What a power *does*, which is the printed rule and not the flavour.
+    told = [p for p in roster if p["hit_text"] or p["effect_text"]]
+    check.that(
+        len(told) >= len(roster) - 1,
+        f"{len(told)} of {len(roster)} powers say what they do",
+        str([p["name"] for p in roster if not (p["hit_text"] or p["effect_text"])]),
+    )
+    attacks = [p for p in roster if p["attack_text"]]
+    check.that(bool(attacks), "an attack power shows its attack line")
+    if told:
+        line = told[0]["hit_text"] or told[0]["effect_text"]
+        print(f"        e.g. {told[0]['name']}: {line[:52]}")
+
+    # Reach must be on the board. A ranged 20 power on a board sixteen wide
+    # otherwise lights up squares that do not exist.
+    width, height = state["board"]["width"], state["board"]["height"]
+    off = [
+        (p["name"], sq)
+        for p in roster
+        for sq in p["squares"]
+        if not (0 <= sq[0] < width and 0 <= sq[1] < height)
+    ]
+    check.that(not off, "no power reaches off the edge of the board", str(off[:3]))
     greyed = [p for p in roster if not p["available"]]
     check.that(
         all(p["reason"] for p in greyed),
@@ -255,6 +279,14 @@ def check_hosted(check: Checks) -> None:
             "with names off, every power is its id",
             str(names),
         )
+        # The printed rule is the publisher's sentences too, so it is absent
+        # rather than blanked -- serving an empty "Hit:" is still serving it.
+        prose = [
+            p["name"]
+            for p in state["roster"]
+            if p["hit_text"] is not None or p["effect_text"] is not None
+        ]
+        check.that(not prose, "with names off, no printed rule text is served", str(prose[:3]))
 
 
 def main() -> int:

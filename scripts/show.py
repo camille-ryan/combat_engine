@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 
 from combat_engine.content import chargen, loader
+from combat_engine.content.loader import SIZES
 from combat_engine.engine import (
     Bus,
     Conditions,
@@ -26,6 +27,7 @@ from combat_engine.engine import (
     Grid,
     Health,
     Ident,
+    Position,
     Rng,
     Team,
     World,
@@ -37,6 +39,10 @@ from combat_engine.etl.build import game
 
 #: Which class carries a given power, for building the caster.
 OWNER = {"fighter": "fighter", "cleric": "cleric", "rogue": "rogue", "wizard": "wizard"}
+
+#: What to stand in front of the caster. Medium, so a push has somewhere to
+#: go and a burst catches a sensible number of them.
+DUMMY = "m145"
 
 
 def main() -> int:
@@ -87,7 +93,9 @@ def main() -> int:
         note = " <- the caster" if eid == caster else ""
         conds = world.get(eid, Conditions)
         tail = f"  [{', '.join(c.value for c in conds.active)}]" if conds and conds.active else ""
-        print(f"  {ident!s:<12} {health.hp:>4}/{health.max_hp}{tail}{note}")
+        pos = world.get(eid, Position)
+        where = f" at {pos.square}" if pos else ""
+        print(f"  {ident!s:<12} {health.hp:>4}/{health.max_hp}{where}{tail}{note}")
     return 0
 
 
@@ -117,9 +125,16 @@ def _board(
         foe_team = Team.ENEMY
 
     # Targets in a line just past the caster, so a melee power reaches the
-    # first and a burst or blast catches several.
+    # first and a burst or blast catches several. Spaced by footprint and
+    # not by one: a Large creature is two squares on a side, and packing
+    # them a square apart stacked them on top of each other -- which made a
+    # push look broken when there was simply nowhere on the board to go.
+    from combat_engine.engine.types import Size
+
+    stock = loader.load(DUMMY)
+    step = SIZES.get(stock.row["size"], Size.MEDIUM).squares
     for i in range(targets):
-        loader.spawn(world, "m280", (5 + i, 6 + (i % 2)), team=foe_team)
+        loader.spawn(world, DUMMY, (5 + i * step, 6 + (i % 2) * step), team=foe_team)
 
     # An ally too, for the powers that help one.
     if not ref.startswith("m"):
