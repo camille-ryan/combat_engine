@@ -30,8 +30,7 @@ from combat_engine.engine.actions import legal
 from combat_engine.engine.dsl import aim_points, area_of, candidates
 from combat_engine.engine.durations import When
 from combat_engine.engine.events import Event
-from combat_engine.engine.grid import distance
-from combat_engine.engine.movement import OVERHEAD, costs, mode_of, reachable
+from combat_engine.engine.movement import OVERHEAD, mode_of, reachable, risk_along
 from combat_engine.engine.query import (
     alive,
     creatures,
@@ -519,18 +518,25 @@ def economy(session: Session) -> dto.EconomyDTO:
 def movement(session: Session) -> dto.MovementDTO | None:
     """Where the acting creature can walk this turn, and what it costs there.
 
-    Both lists are inside the creature's **speed** -- this is one move action,
-    not two. `costly` is the squares that cost more to reach than their
-    distance suggests, because the way there crosses difficult ground or
-    bends round a wall; `free` is the rest.
+    Both lists are inside the creature's **speed** -- this is one move
+    action, not two -- and they split by **risk**, not by cost. `risky` is
+    the squares whose route provokes an opportunity attack or walks through
+    an enemy's zone; `free` is the rest. A square two moves' worth of
+    difficult ground away is still green if nothing can hit you on the way,
+    which is the question a player is actually asking.
 
-    An earlier version had `costly` mean "reachable by spending the standard
-    action as a second move", which doubled the highlighted range and told a
-    player they could walk twice as far as they could.
+    It used to split by cost, while the page's own legend said "move,
+    provokes" -- so the colour meant one thing and the key beside it
+    promised another.
 
-    Not the same thing as the move options in `options`, which each carry a
-    path. This is the shape of the turn, which is what a player looks at
-    before weighing any single square.
+    An earlier version had the second list mean "reachable by spending the
+    standard action as a second move", which doubled the highlighted range
+    and told a player they could walk twice as far as they could.
+
+    Every route comes too. The page draws one when the player points at a
+    square, and it must be the same route the move would take -- working it
+    out a second time in JavaScript is how the drawn path and the walked
+    path come to disagree.
     """
     world = session.world
     actor = session.current
@@ -543,15 +549,25 @@ def movement(session: Session) -> dto.MovementDTO | None:
         return dto.MovementDTO()
 
     pace = speed(world, actor)
-    here = world.need(actor, Position).square
-    priced = costs(world, actor, pace)
-    free, costly = [], []
-    for square, cost in sorted(priced.items()):
-        (costly if cost > distance(here, square) else free).append(square)
+    routes = reachable(world, actor, pace)
+    free, risky = [], []
+    paths: dict[str, list] = {}
+    warnings: dict[str, str] = {}
+    for square, path in sorted(routes.items()):
+        key = f"{square[0]},{square[1]}"
+        paths[key] = list(path)
+        why = risk_along(world, actor, list(path))
+        if why:
+            warnings[key] = why
+            risky.append(square)
+        else:
+            free.append(square)
 
     mode = mode_of(world, actor, None)
     step = reachable(world, actor, 1, mode="walk" if mode in OVERHEAD else None)
-    return dto.MovementDTO(free=free, costly=costly, shift=sorted(step))
+    return dto.MovementDTO(
+        free=free, risky=risky, shift=sorted(step), paths=paths, warnings=warnings
+    )
 
 
 def pending(session: Session) -> dto.PendingDTO | None:

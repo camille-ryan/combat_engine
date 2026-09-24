@@ -243,26 +243,59 @@ function renderBoard(s) {
   renderPendingSquares(s.pending);
 }
 
-// The shape of this turn: where the acting creature can go for nothing, and
-// where it can only go by paying (#336).
+// Where the acting creature may walk — drawn only while the player is asking.
 //
-// Two lists of squares, coloured. **No rule is read here** — what provokes an
-// opportunity attack, what a zone does to whoever walks through it, and which
-// squares a reach weapon threatens are all questions `engine/actions.py`
-// answers before this ever sees them. `free` is green and `costly` is yellow
-// and that is the whole of this function's knowledge.
+// It used to be painted on every render, so the board carried a wash of
+// forty highlighted squares from the moment a turn began, whether or not
+// anybody was thinking about moving. Now `Move` is a thing you press, and
+// the squares are the answer to having pressed it.
+//
+// Green is clear, yellow is "something happens on the way". **No rule is read
+// here** — what provokes an opportunity attack and what a zone does to
+// whoever walks through it are questions `engine/movement.risk_along` answers
+// before this ever sees them. Which of the two lists a square is in is the
+// whole of this function's knowledge.
 function renderMovement(movement) {
   if (!movement) return;
-  for (const [tone, squares] of [
-    ["costly", movement.costly],
-    ["free", movement.free],
-  ]) {
+  if (aiming !== "walk" && aiming !== "shift") return;
+  const lists =
+    aiming === "shift"
+      ? [["free", movement.shift]]
+      : [["risky", movement.risky], ["free", movement.free]];
+  for (const [tone, squares] of lists) {
     for (const sq of squares || []) {
       const h = div(`mv mv-${tone}`);
       place(h, squareRect(sq[0], sq[1]));
       el.movement.appendChild(h);
     }
   }
+}
+
+// The route to the square under the pointer, drawn a step at a time.
+//
+// The server sends every route with the squares, because the line drawn has
+// to be the line walked: working the path out again in JavaScript is how the
+// two come to disagree, and the one a player can see is the one they trust.
+let shownPath = null;
+
+function previewPath(at) {
+  if (aiming !== "walk" && aiming !== "shift") {
+    shownPath = null;
+    return;
+  }
+  const move = (state && state.movement) || {};
+  const path = at ? (move.paths || {})[at] : null;
+  if (at === shownPath) return;
+  shownPath = at;
+  clear(el.highlights);
+  if (!path) return;
+  for (const sq of path) {
+    const h = div("hl hl-path");
+    place(h, squareRect(sq[0], sq[1]));
+    el.highlights.appendChild(h);
+  }
+  const why = (move.warnings || {})[at];
+  if (why) say(why, "warn");
 }
 
 // Whether to show a creature as out of the fight.
@@ -603,9 +636,17 @@ function renderFreeform(s) {
 
   // Movement rides in its own section rather than in a bucket, because "move"
   // is both a cost and a thing you do, and the two would print the same word.
-  const move = s.movement || { free: [], costly: [], shift: [] };
-  const walkable = [...(move.free || []), ...(move.costly || [])];
-  put("move", { movement: ["Move", "walk", walkable, "anywhere you can reach"] });
+  const move = s.movement || { free: [], risky: [], shift: [] };
+  const walkable = [...(move.free || []), ...(move.risky || [])];
+  const risky = (move.risky || []).length;
+  put("move", {
+    movement: [
+      "Move",
+      "walk",
+      walkable,
+      risky ? `${risky} of them provoke` : "anywhere you can reach",
+    ],
+  });
   if ((move.shift || []).length) {
     put("move", { movement: ["Shift", "shift", move.shift, "one square, provokes nothing"] });
   }
@@ -733,12 +774,18 @@ function movementButton(name, mode, squares, note, s) {
   );
   b.appendChild(foot);
 
+  // Hovering the row is a preview of pressing it: the squares appear, and
+  // go again when the pointer leaves unless the row is the one being aimed.
   const light = () => {
-    clear(el.highlights);
-    for (const sq of squares) {
-      const h = div("hl hl-path");
-      place(h, squareRect(sq[0], sq[1]));
-      el.highlights.appendChild(h);
+    clear(el.movement);
+    for (const [tone, list] of [["risky", s.movement?.risky], ["free", s.movement?.free]]) {
+      if (mode === "shift" && tone === "risky") continue;
+      for (const sq of mode === "shift" ? squares : list || []) {
+        const h = div(`mv mv-${tone}`);
+        place(h, squareRect(sq[0], sq[1]));
+        el.movement.appendChild(h);
+      }
+      if (mode === "shift") break;
     }
   };
   b.addEventListener("mouseenter", light);
@@ -1611,7 +1658,7 @@ anim.init({
 // to use the power you picked, or — with nothing picked — to walk there.
 //
 // No rules here. Which squares are legal came from the server (a power's
-// `squares`, and `movement.free` / `movement.costly`), and what a click means
+// `squares`, and `movement.free` / `movement.risky`), and what a click means
 // is decided by the server too; this only refuses to send one the server has
 // already said is not on.
 el.board.addEventListener("click", (ev) => {
@@ -1632,13 +1679,13 @@ el.board.addEventListener("click", (ev) => {
   if (!freeform || !state.awaiting_input) return;
   const { x, y } = pointerSquare(el.board, ev);
   const square = [x, y];
-  const move = state.movement || { free: [], costly: [], shift: [] };
+  const move = state.movement || { free: [], risky: [], shift: [] };
   const here = (list) => (list || []).some((s) => s[0] === x && s[1] === y);
 
   if (aiming === "walk" || aiming === null) {
     // Bare board with nothing picked still walks, because it is the gesture
     // anybody tries first.
-    if (here(move.free) || here(move.costly)) aimAt(square, null, "walk");
+    if (here(move.free) || here(move.risky)) aimAt(square, null, "walk");
     else if (aiming === "walk") say("You cannot reach that square.", "warn");
     return;
   }
@@ -1660,10 +1707,12 @@ el.board.addEventListener("mousemove", (ev) => {
   // action list and the aim point is a square, so there is nothing else to
   // hover.
   previewFootprint(`${x},${y}`);
+  previewPath(`${x},${y}`);
 });
 el.board.addEventListener("mouseleave", () => {
   el.hover.textContent = "";
   previewFootprint(null);
+  previewPath(null);
 });
 
 const rawToggle = document.getElementById("show-raw");

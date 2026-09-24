@@ -160,10 +160,25 @@ def _play(page, check: Checks, problems: list[str], served: list[dict]) -> None:
     for i in range(min(4, read.count())):
         print(f"        {read.nth(i).inner_text()[:78]}")
 
-    # The action list, and a move by clicking the board.
+    # The action list, and a move by clicking the board. The range is no
+    # longer painted on every render -- `Move` is a thing you press and the
+    # squares are the answer to having pressed it -- so the check presses it.
     before = _positions(page)
+    check.that(
+        page.locator("#movement .mv").count() == 0,
+        "the movement range is not drawn until it is asked for",
+    )
+    check.that(_press_move(page), "the action list offers Move")
     highlights = page.locator("#movement .mv")
-    check.that(highlights.count() > 0, f"movement is highlighted ({highlights.count()} squares)")
+    check.that(highlights.count() > 0,
+               f"pressing Move highlights where you can go ({highlights.count()} squares)")
+
+    # Pointing at one of those squares draws the route the walk would take.
+    box = _hover_a_move_square(page)
+    check.that(box is not None, "a movement square accepted a hover")
+    route = page.locator("#highlights .hl-path")
+    check.that(route.count() > 0, f"hovering a square draws its route ({route.count()} steps)",
+               "the server sends every route with the squares; nothing drew one")
 
     moved = _click_a_move_square(page)
     check.that(moved is not None, "a highlighted square accepted a click")
@@ -339,6 +354,30 @@ def _positions(page) -> dict:  # noqa: ANN001
         "() => Object.fromEntries([...document.querySelectorAll('#board .token')]"
         ".map(t => [t.dataset.actor, t.style.left + ',' + t.style.top]))"
     )
+
+
+def _press_move(page) -> bool:  # noqa: ANN001
+    """Press the Move row in the action list, the way a player would."""
+    for b in page.query_selector_all("#actions button"):
+        label = (b.inner_text() or "").strip().lower()
+        if label.startswith("move") and "move to" not in label:
+            b.click(force=True)
+            page.wait_for_timeout(200)
+            return True
+    return False
+
+
+def _hover_a_move_square(page):  # noqa: ANN001, ANN202
+    """Point at a highlighted square. The route is drawn on `mousemove`."""
+    squares = page.locator("#movement .mv")
+    if not squares.count():
+        return None
+    box = squares.nth(min(5, squares.count() - 1)).bounding_box()
+    if not box:
+        return None
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.wait_for_timeout(200)
+    return box
 
 
 def _click_a_move_square(page):  # noqa: ANN001, ANN202

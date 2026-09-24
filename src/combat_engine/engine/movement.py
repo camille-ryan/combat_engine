@@ -42,7 +42,7 @@ from .events import (
     OpportunityWindow,
 )
 from .grid import Square, distance, footprint, neighbours, spread
-from .query import adjacent, can_move, creatures, enemies, squares
+from .query import adjacent, alive, can_move, creatures, enemies, squares
 from .types import Forced
 
 if TYPE_CHECKING:
@@ -182,6 +182,43 @@ def walk(
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0)))
     return spent
+
+
+def risk_along(world: World, eid: int, path: list[Square]) -> str:
+    """What walking this path would cost you that is not movement.
+
+    Answered here because it is a rule, and the page is not allowed to know
+    any. It asks the same two questions `step` asks while it is moving --
+    who am I leaving, and what am I walking into -- without moving anybody.
+
+    Returns a short reason, or "" when the way is clear. A reason rather
+    than a flag because the interface shows it: "provokes" and "crosses a
+    zone" are different warnings and a player weighs them differently.
+    """
+    pos = world.get(eid, Position)
+    if pos is None or not path:
+        return ""
+
+    foes = [o for o in enemies(world, eid) if alive(world, o)]
+    where = {o: squares(world, o) for o in foes}
+    at = pos.square
+    hostile: set[Square] = set()
+    for _zid, zone in world.zones.all():
+        if zone.owner in where:
+            hostile |= zone.squares
+
+    for nxt in path:
+        here_reach = spread(footprint(at, pos.size), 1)
+        next_space = footprint(nxt, pos.size)
+        # Leaving a square somebody threatens, and not staying in their
+        # reach, is what opens the window -- the same test `step` makes.
+        for foe in foes:
+            if (here_reach & where[foe]) and not (spread(next_space, 1) & where[foe]):
+                return "provokes an opportunity attack"
+        if next_space & hostile:
+            return "walks into an enemy zone"
+        at = nxt
+    return ""
 
 
 def settle(world: World, eid: int) -> bool:

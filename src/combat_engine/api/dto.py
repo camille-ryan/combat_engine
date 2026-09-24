@@ -174,9 +174,22 @@ class EventDTO(BaseModel):
 
 
 class MovementDTO(BaseModel):
+    """Where this creature may walk, and what it would cost it to.
+
+    `free` and `risky` split the same set of reachable squares by whether
+    the way there provokes -- not by how much movement it spends. The
+    legend on the page has said "move, provokes" since it was written while
+    the server was sorting by cost, and the two had never agreed.
+    """
+
     free: list[Square] = Field(default_factory=list)
-    costly: list[Square] = Field(default_factory=list)
+    risky: list[Square] = Field(default_factory=list)
     shift: list[Square] = Field(default_factory=list)
+    #: The route to each reachable square, keyed "x,y". What the page draws
+    #: when the player points at one.
+    paths: dict[str, list[Square]] = Field(default_factory=dict)
+    #: Why a risky square is risky, keyed "x,y".
+    warnings: dict[str, str] = Field(default_factory=dict)
 
 
 class EconomyDTO(BaseModel):
