@@ -260,7 +260,12 @@ def walk(
     if not can_move(world, eid):
         return 0
     mode = mode_of(world, eid, mode)
-    world.bus.emit(MoveStart(actor=eid, kind_=kind))
+    # The return is read. "You can cancel that movement as an immediate
+    # interrupt" is a printed line on several rows, and the event was
+    # emitted and thrown away -- the fourth time this session that a
+    # cancellable event had no reader.
+    if world.bus.emit(MoveStart(actor=eid, kind_=kind)).cancelled:
+        return 0
     spent = 0
     for sq in path:
         if not step(world, eid, sq, kind=kind, mode=mode):
@@ -347,7 +352,8 @@ def shift(
 
     if not can_shift(world, eid):
         return False
-    world.bus.emit(MoveStart(actor=eid, kind_="shift"))
+    if world.bus.emit(MoveStart(actor=eid, kind_="shift")).cancelled:
+        return False
     moved = step(world, eid, to, kind="shift", mode=mode_of(world, eid, mode), through=share)
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0)))
@@ -355,7 +361,11 @@ def shift(
 
 
 def teleport(world: World, eid: int, to: Square) -> bool:
-    world.bus.emit(MoveStart(actor=eid, kind_="teleport"))
+    # Reads the answer, like `walk` and `shift`. A row that stops movement
+    # can then decide for itself whether a teleport counts, by looking at
+    # `ev.kind_` -- which is a choice it cannot make if this is ignored.
+    if world.bus.emit(MoveStart(actor=eid, kind_="teleport")).cancelled:
+        return False
     moved = step(world, eid, to, kind="teleport", mode="walk")
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0)))

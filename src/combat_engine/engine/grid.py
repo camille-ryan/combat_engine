@@ -207,8 +207,22 @@ class Grid:
         return self.occupants.get(sq)
 
     def place(self, eid: int, squares: frozenset[Square]) -> None:
+        """Index a creature's squares. **Never overwrites somebody else.**
+
+        The index holds one occupant per square, and `lift` only deletes
+        squares mapping to the entity being lifted. So overwriting did not
+        replace the old occupant, it *unindexed* it: `squares_of` went empty
+        while `Position` still named the square, and cover, blocking and
+        occupancy all read the wrong answer until that creature next moved.
+
+        Two things legitimately share a square -- a flyer directly above
+        somebody, and a creature melded with its target -- and both already
+        rely on the second one staying out of the index until it settles.
+        Refusing the write here makes that the rule rather than a habit.
+        """
         for sq in squares:
-            self.occupants[sq] = eid
+            if self.occupants.get(sq, eid) == eid:
+                self.occupants[sq] = eid
 
     def lift(self, eid: int) -> None:
         for sq in [s for s, who in self.occupants.items() if who == eid]:

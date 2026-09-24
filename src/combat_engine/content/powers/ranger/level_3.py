@@ -173,5 +173,5 @@ def p978(c: Cast) -> None:
         hand = "off" if (swing and c.branch == 0) else "main"
         if c.strike():
             c.damage(c.w(1, hand=hand), c.attack_mod)
-    if c.last and c.may("shift"):
+    if c.last and c.may("shift", who=c.me):
         c.shift(1 + c.wis_mod)

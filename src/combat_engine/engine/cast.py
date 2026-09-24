@@ -458,9 +458,17 @@ class Cast:
         )
 
     def speed_of(self, who: int | None = None) -> int:
+        """How fast somebody is. **Defaults to the caster**, not the target.
+
+        "You can move your speed" is what every row saying this means, and
+        it is written beside `c.move`/`c.shift`/`c.teleport`, which all
+        default to the caster too. Routing this through `_who` made the bare
+        call mean *the target's* speed -- so eight rows silently moved the
+        caster the wrong distance, and a log cannot show it.
+        """
         from .query import speed
 
-        return speed(self.world, self._who(who) or self.me)
+        return speed(self.world, self.me if who is None else who)
 
     # -- the attacker's numbers ---------------------------------------------
 
@@ -1465,7 +1473,12 @@ class Cast:
         """
         from .events import OpportunityWindow
 
-        who = self._who(from_)
+        # `from_` untouched by `_who`: None means **anybody**, which the
+        # veto below already handles and which "you can move your speed
+        # without provoking opportunity attacks" needs. Routing it through
+        # `_who` narrowed the bare call to the power's target -- the
+        # opposite of what leaving the argument out reads as.
+        who = from_
         me = self.me
 
         def veto(ev: OpportunityWindow) -> None:
@@ -1968,6 +1981,7 @@ class Cast:
         label: str = "",
         until: When = When.SUSTAIN,
         difficult: bool = False,
+        blocks_sight: bool = False,
         sustain: ActionType | None = ActionType.MINOR,
     ) -> int:
         """A zone that hurts whoever is standing in it.
@@ -1981,6 +1995,7 @@ class Cast:
 
         zone = self.zone(
             area, label=label, until=until, difficult=difficult,
+            blocks_sight=blocks_sight,
             sustain=sustain if until is When.SUSTAIN else None,
         )
         self.burns(zone, amount, dtype)

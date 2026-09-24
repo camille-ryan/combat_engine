@@ -424,6 +424,27 @@ class Sub:
 
 
 class Bus:
+    """The event bus.
+
+    **Two kinds of cancellation, and the difference has cost four bugs.**
+
+    For some events, cancelling works by itself: `_run` stops the rest of
+    the window, so an earlier listener refusing the thing prevents the later
+    listeners that would have done it. `OpportunityWindow` is the example --
+    nothing happens unless a responder acts, so silencing the responders is
+    the whole of it, and the emitter is right to ignore the return.
+
+    For the rest, the *emitter* does the work after announcing it, and
+    cancelling means nothing unless the emitter reads the answer back.
+    `ForcedMove`, `AttackDeclared`, `AttackRolled` and `MoveStart` were all
+    of this second kind and all four ignored it, so each looked like a hook
+    and was decoration. If you emit an event and then act on it yourself,
+    read the return.
+
+    The same applies to fields a listener is invited to change: read them
+    back off the event rather than from the local you passed in.
+    """
+
     def __init__(self) -> None:
         self.log: list[Event] = []
         self._subs: list[Sub] = []
