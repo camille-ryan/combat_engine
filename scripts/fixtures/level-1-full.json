@@ -643,7 +643,7 @@
   "DamageRolled(source=3, target=6, amount=11, dtype=<DamageType.UNTYPED: 'untyped'>, detail='p1495')",
   "DamageApplied(source=3, target=6, amount=11, dtype=<DamageType.UNTYPED: 'untyped'>, absorbed=0, hp=17)",
   "Bloodied(actor=6)",
-  "ForcedMove(source=3, target=6, how=<Forced.SLIDE: 'slide'>, squares=1)",
+  "ForcedMove(source=3, target=6, how=<Forced.SLIDE: 'slide'>, squares=1, power='p1495')",
   "LeaveSquare(actor=6, square=(5, 9))",
   "LeaveSquare(actor=6, square=(5, 10))",
   "LeaveSquare(actor=6, square=(6, 9))",

@@ -36,11 +36,13 @@ from pathlib import Path
 from combat_engine.content import chargen, loader
 from combat_engine.engine import (
     Bus,
+    DamageType,
     Encounter,
     Grid,
     Powers,
     Rng,
     Team,
+    When,
     World,
     get,
     usable,
@@ -147,6 +149,23 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     health.hp = max(1, health.max_hp // 2)
     caster_health = world.need(caster, Health)
     caster_health.hp = max(1, caster_health.max_hp - 5)
+
+    # A wall, so a row that needs cover or concealment has some. The board
+    # was bare grid, so "one creature it is hidden from" could never be
+    # satisfied and every such row reported itself unusable.
+    world.grid.blocking.add((9, 8))
+    # And one dummy already burning, because several rows target "a creature
+    # taking ongoing damage" and nothing on the board ever was.
+    from combat_engine.engine import Cast
+    from combat_engine.engine.query import enemies as _foes
+
+    burning = next(iter(_foes(world, caster)), None)
+    if burning is not None:
+        Cast(world=world, me=caster, ref="audit:setup", target=burning).ongoing(
+            5, DamageType.FIRE, on=burning, until=When.ENCOUNTER
+        )
+    # Bloodied, so a row gated on it can fire.
+    caster_health.hp = max(1, caster_health.max_hp // 2 - 1)
 
     mark = len(world.bus.log)
     Encounter(world).start()
@@ -418,7 +437,14 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("refs", nargs="*", help="rows to fire; default is all of them")
-    ap.add_argument("--class", dest="cls", help="only this class")
+    ap.add_argument(
+        "--class",
+        dest="cls",
+        action="append",
+        help="only this class; repeatable. Without `append` a second one "
+        "silently replaced the first, so `--class rogue --class ranger` "
+        "quietly audited ranger alone and reported success.",
+    )
     ap.add_argument("--level", type=int, help="only this level")
     ap.add_argument("--monsters", action="store_true", help="monster abilities only")
     ap.add_argument("--verbose", action="store_true", help="say what each row did")
@@ -438,7 +464,7 @@ def main() -> int:
         if p is None:
             print(f"  {ref}: not declared")
             continue
-        if args.cls and p.cls.lower() != args.cls.lower():
+        if args.cls and p.cls.lower() not in {c.lower() for c in args.cls}:
             continue
         if args.level is not None and p.level != args.level:
             continue

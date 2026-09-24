@@ -122,6 +122,23 @@ class Cast:
         p = self._declared()
         return bool(p and p.reach_of(self.branch).kind in ("ranged", "area_burst"))
 
+    def redirect(self, *, to: int | None = None, by: int | None = None) -> bool:
+        """Point the attack you are interrupting at somebody else.
+
+        "The triggering attack targets a creature adjacent to you instead"
+        is an interrupt that moves the blow rather than stopping it. Only
+        works before the roll -- on `AttackDeclared` -- because after that
+        there is a result and moving it would mean re-rolling.
+        """
+        ev = self.trigger
+        if ev is None or not hasattr(ev, "target"):
+            return False
+        if to is not None:
+            ev.target = to
+        if by is not None:
+            ev.attacker = by
+        return True
+
     def cancel(self) -> None:
         """Stop the thing that triggered this.
 
@@ -589,6 +606,7 @@ class Cast:
         advantage: bool | None = None,
         plus: int = 0,
         from_: int | None = None,
+        ignore_cover: bool = False,
     ) -> AttackResult:
         """Roll the attack the header declared.
 
@@ -608,6 +626,7 @@ class Cast:
             on=on,
             advantage=advantage,
             from_=from_,
+            ignore_cover=ignore_cover,
         )
 
     def grant_attack(
@@ -739,6 +758,7 @@ class Cast:
         on: int | None = None,
         advantage: bool | None = None,
         from_: int | None = None,
+        ignore_cover: bool = False,
     ) -> AttackResult:
         who = self._who(on)
         if who is None:
@@ -750,6 +770,7 @@ class Cast:
             self.world, from_ or self.me, who, bonus, vs, self.ref,
             advantage=advantage, opportunity=self.opportunity,
             among=tuple(self.targets) or (who,), branch=self.branch,
+            ignore_cover=ignore_cover,
         )
         return self.result
 
@@ -904,7 +925,7 @@ class Cast:
         who = self._who(on)
         return 0 if who is None else forced(
             self.world, by if by is not None else self.me, who,
-            Forced.PUSH, squares_, anchor=anchor, to=to,
+            Forced.PUSH, squares_, anchor=anchor, to=to, power=self.ref,
         )
 
     def pull(
@@ -921,14 +942,31 @@ class Cast:
         who = self._who(on)
         return 0 if who is None else forced(
             self.world, by if by is not None else self.me, who,
-            Forced.PULL, squares_, anchor=anchor, to=to,
+            Forced.PULL, squares_, anchor=anchor, to=to, power=self.ref,
         )
 
-    def slide(self, squares_: int, *, on: int | None = None,
-              anchor: Square | None = None) -> int:
+    def slide(
+        self,
+        squares_: int,
+        *,
+        on: int | None = None,
+        anchor: Square | None = None,
+        to: Square | None = None,
+        by: int | None = None,
+    ) -> int:
+        """`to` names the destination outright, for a row that does.
+        `by` names who is doing the moving, when it is not the caster.
+
+        A slide's destination is otherwise the decider's free choice, which
+        is right for "slide it 3 squares" and wrong for "slide it into a
+        square adjacent to you" -- that one was duly sliding enemies three
+        squares *away*. `push` and `pull` have had `to` all along; this is
+        the one that did not.
+        """
         who = self._who(on)
         return 0 if who is None else forced(
-            self.world, self.me, who, Forced.SLIDE, squares_, anchor=anchor
+            self.world, by if by is not None else self.me, who,
+            Forced.SLIDE, squares_, anchor=anchor, to=to, power=self.ref,
         )
 
     def shift(

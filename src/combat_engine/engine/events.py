@@ -153,10 +153,18 @@ class AdjacencyLost(Event):
 
 @dataclass
 class ForcedMove(Event):
+    """Somebody is being pushed, pulled or slid.
+
+    Cancellable: a creature that cannot be moved refuses it here. `power` is
+    the row doing the shoving, so "cannot be pushed by a melee or ranged
+    attack" can tell one from a burst.
+    """
+
     source: int
     target: int
     how: Forced
     squares: int
+    power: str = ""
 
 
 @dataclass
@@ -234,6 +242,13 @@ class DamageRolled(Event):
 
 @dataclass
 class DamageApplied(Event):
+    """Damage that actually came off hit points.
+
+    `detail` is what dealt it -- a power ref where one did, or a short note
+    like "coup de grace". A trigger reading "when an enemy damages you with
+    a melee attack" needs it to find the reach, and had nothing to read.
+    """
+
     source: int
     target: int
     amount: int

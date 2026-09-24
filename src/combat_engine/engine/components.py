@@ -328,6 +328,14 @@ class Powers:
         self.used.pop(ref, None)
         self.last_round.pop(ref, None)
 
+    def note_round(self, ref: str, round_: int) -> None:
+        """Remember this was used this round, without spending a use.
+
+        What a "1/round" at-will needs: it has no uses to count down, only a
+        round to remember, and `note_use` would have started expending one.
+        """
+        self.last_round[ref] = round_
+
     def unuse(self, ref: str) -> None:
         """Give back one use. What a reliable power does when it misses.
 

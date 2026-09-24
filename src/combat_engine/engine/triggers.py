@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any
 from .components import Powers
 from .events import Event
 from .query import alive, can_act
-from .types import ActionType, Window
+from .types import ActionType, Keyword, Window
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -268,6 +268,18 @@ def enemy_within(squares: int) -> Callable[[World, int, Event], bool]:
     return check
 
 
+def _power_of(ev: Event):  # noqa: ANN202
+    """Which row caused this, whichever field the event keeps it in.
+
+    An attack event spells it `power`; a damage event spells it `detail`.
+    A trigger reading "damages you with a *melee* attack" watches the
+    damage and so found nothing to look the reach up from.
+    """
+    from .dsl import get
+
+    return get(getattr(ev, "power", "") or getattr(ev, "detail", "") or "")
+
+
 def by_melee(world: World, me: int, ev: Event) -> bool:
     """Was the attack that caused this a melee one?
 
@@ -275,9 +287,8 @@ def by_melee(world: World, me: int, ev: Event) -> bool:
     rather than the event. `resolve._is_ranged` already does this lookup for
     cover; this is the other half of the same question.
     """
-    from .dsl import get
 
-    p = get(getattr(ev, "power", "") or "")
+    p = _power_of(ev)
     if p is None:
         return False
     return p.reach_of(getattr(ev, "branch", 0)).kind in (
@@ -286,9 +297,8 @@ def by_melee(world: World, me: int, ev: Event) -> bool:
 
 
 def by_ranged(world: World, me: int, ev: Event) -> bool:
-    from .dsl import get
 
-    p = get(getattr(ev, "power", "") or "")
+    p = _power_of(ev)
     if p is None:
         return False
     return p.reach_of(getattr(ev, "branch", 0)).kind in ("ranged", "area_burst")
@@ -325,6 +335,51 @@ def enemy_target_within(squares: int) -> Callable[[World, int, Event], bool]:
         return distance_between(world, me, who) <= squares
 
     return check
+
+
+def would_hit_me(world: World, me: int, ev: Event) -> bool:
+    """This attack is aimed at me and, as things stand, lands.
+
+    For an interrupt on `AttackRolled`: the die is down and the total is
+    known, but the defence is read again once this window closes, so a row
+    that raises one can still turn the blow aside. Reading `Hit` instead is
+    too late -- by then the comparison has been made and the only thing left
+    to change is the damage.
+    """
+    result = getattr(ev, "result", None)
+    return getattr(ev, "target", None) == me and bool(result and result.hit)
+
+
+def by_keyword(word: Keyword) -> Callable[[World, int, Event], bool]:
+    """Was the attack that caused this of a given kind -- cold, fire, radiant?
+
+    Read off the power in the registry, the same way `by_melee` reads its
+    reach. "Whenever it takes cold damage" is a shape several monsters have
+    and each was writing its own version of this.
+    """
+
+    def check(world: World, me: int, ev: Event) -> bool:
+
+        p = _power_of(ev)
+        return p is not None and word in p.keywords
+
+    return check
+
+
+def hits_me(world: World, me: int, ev: Event) -> bool:
+    """An enemy hit me, at whatever range.
+
+    `enemy_within(n)` forces a distance the printed line does not name, and
+    "an enemy hits it" names none.
+    """
+    from .query import team
+
+    who = getattr(ev, "attacker", None)
+    return (
+        getattr(ev, "target", None) == me
+        and who is not None
+        and team(world, who) is not team(world, me)
+    )
 
 
 def cursed_by_me(world: World, me: int, ev: Event) -> bool:

@@ -28,6 +28,7 @@ from .components import (
     Weapon,
 )
 from .dsl import (
+    ANY_CREATURE,
     EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
@@ -35,6 +36,7 @@ from .dsl import (
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
+    ONE_OTHER_ALLY,
     PERSONAL,
     REGISTRY,
     SELF,
@@ -90,15 +92,18 @@ from .triggers import (
     about_me,
     ally_within,
     both,
+    by_keyword,
     by_me,
     by_melee,
     by_ranged,
     cursed_by_me,
     enemy_target_within,
     enemy_within,
+    hits_me,
     leaves_me_out,
     not_me,
     targets_me,
+    would_hit_me,
 )
 from .turns import Encounter
 from .types import (

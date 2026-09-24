@@ -28,7 +28,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("--class", dest="cls", help="only this class")
+    ap.add_argument("--class", dest="cls", action="append", help="only this class; repeatable")
     ap.add_argument("--monsters", action="store_true", help="monsters instead of powers")
     ap.add_argument("--max-level", type=int, help="stop at this level")
     ap.add_argument(
@@ -65,8 +65,8 @@ def main() -> int:
         sql = "SELECT ref, class, level, books FROM power"
         where, params = [], []
         if args.cls:
-            where.append("lower(class) = ?")
-            params.append(args.cls.lower())
+            where.append("lower(class) IN (" + ",".join("?" * len(args.cls)) + ")")
+            params.extend(c.lower() for c in args.cls)
         if args.max_level:
             where.append("level <= ?")
             params.append(args.max_level)

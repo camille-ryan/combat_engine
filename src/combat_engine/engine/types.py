@@ -68,6 +68,8 @@ class Keyword(StrEnum):
     RELIABLE = "reliable"
     STANCE = "stance"
     CONJURATION = "conjuration"
+    ILLUSION = "illusion"
+    TELEPORTATION = "teleportation"
     ZONE = "zone"
     # A power's damage type is also a keyword, because resistances and
     # immunities key off the keyword rather than off the damage roll.

@@ -134,9 +134,10 @@ class Target:
             return self.label
         if self.side == "self":
             return "You"
-        who = {"enemy": "creature", "ally": "ally", "any": "creature", "other": "creature"}[
-            self.side
-        ]
+        who = {
+            "enemy": "creature", "ally": "ally", "any": "creature",
+            "other": "creature", "other_ally": "ally",
+        }[self.side]
         if self.everyone:
             return f"Each {who} in the area"
         return f"One {who}" if self.count == 1 else f"Up to {self.count} {who}s"
@@ -148,6 +149,10 @@ ONE_CREATURE = Target("enemy", 1)
 #: meant for.
 ANY_CREATURE = Target("any", 1)
 ONE_ALLY = Target("ally", 1)
+#: "One ally" where the printed line excludes you. `ONE_ALLY`'s pool
+#: includes the caster, which reads as "you or one ally" -- right for most
+#: rows and wrong for the ones that say otherwise.
+ONE_OTHER_ALLY = Target("other_ally", 1)
 SELF = Target("self", 1)
 EACH_ENEMY = Target("enemy", 99, everyone=True)
 EACH_CREATURE = Target("any", 99, everyone=True)
@@ -577,6 +582,7 @@ def candidates(
         "ally": [*allies(world, actor), actor],
         "any": creatures(world),
         "other": [c for c in creatures(world) if c != actor],
+        "other_ally": allies(world, actor),
     }[p.target.side]
 
     reach = p.reach_of(branch)
@@ -617,12 +623,15 @@ def usable(world: World, actor: int, p: Power) -> tuple[bool, str]:
     if powers is not None:
         if p.ref not in powers.all:
             return False, "not known"
+        # Checked for every usage, because **every printed "1/round" rider
+        # is on an at-will** -- and this lived inside the not-at-will branch,
+        # so the guard was unreachable and the header field was decoration.
+        if p.once_per_round and powers.last_round.get(p.ref) == world.round:
+            return False, "already used this round"
         if p.usage is not Usage.AT_WILL:
             used = powers.times(p.ref)
             if used >= p.uses:
                 return False, "expended" if p.uses == 1 else f"used {used} of {p.uses}"
-            if p.once_per_round and powers.last_round.get(p.ref) == world.round:
-                return False, "already used this round"
             if p.group and _group_spent(world, actor, p):
                 return False, f"one {p.group} power per encounter"
     open_branches = [b for b in p.branches if p.can_branch(world, actor, b)]
@@ -742,10 +751,16 @@ def use(
         # The power is *not* spent: the action was lost, not used.
         return False
 
-    if spend and p.usage is not Usage.AT_WILL:
+    if spend:
         powers = world.get(actor, Powers)
         if powers is not None:
-            powers.note_use(ref, world.round)
+            if p.usage is not Usage.AT_WILL:
+                powers.note_use(ref, world.round)
+            elif p.once_per_round:
+                # An at-will has no uses to count down, only a round to
+                # remember -- and nothing remembered it, so a "1/round"
+                # at-will could be used all turn.
+                powers.note_round(ref, world.round)
 
     if not chosen:
         p.body(cast)

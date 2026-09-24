@@ -281,6 +281,7 @@ def forced(
     *,
     anchor: Square | None = None,
     to: Square | None = None,
+    power: str = "",
 ) -> int:
     """Push, pull or slide `target` up to `amount` squares.
 
@@ -299,7 +300,14 @@ def forced(
         src = world.get(source, Position)
         anchor = src.square if src else pos.square
 
-    world.bus.emit(ForcedMove(source=source, target=target, how=how, squares=amount))
+    shove = ForcedMove(source=source, target=target, how=how, squares=amount)
+    shove.power = power
+    # The returned event is read, so a listener may refuse the shove. It was
+    # emitted and dropped, which made "cannot be pushed, pulled or slid" --
+    # a whole class of monster trait -- unsayable, and made any `BEFORE`
+    # listener that cancelled it fail without a sound.
+    if world.bus.emit(shove).cancelled:
+        return 0
     if to is not None:
         # A row that names the square it wants. Still one step at a time, so
         # everything that watches a move still sees each of them.

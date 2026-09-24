@@ -82,7 +82,13 @@ def attack(
     everything the *situation* brings is added here."""
     result = AttackResult()
 
-    def roll(_: AttackDeclared) -> None:
+    def roll(declared: AttackDeclared) -> None:
+        # Read back off the event, because an interrupt may have moved the
+        # attack. The module docstring has promised since it was written
+        # that "an immediate interrupt can cancel the attack or change its
+        # target" -- and the closure captured the parameters instead, so
+        # assigning `ev.target` did nothing at all and failed silently.
+        attacker, target = declared.attacker, declared.target
         if not can_act(world, attacker) or not alive(world, target):
             result.cancelled = True
             return
@@ -119,6 +125,8 @@ def attack(
         result.total = total
         result.target_defence = against
         result.advantage = ca
+        # Provisional, so an interrupt watching the roll can ask whether it
+        # is about to be hit -- which is exactly when a shield gets raised.
         result.critical = natural == 20
         result.hit = natural == 20 or (natural != 1 and total >= against)
 
@@ -151,6 +159,17 @@ def attack(
         # creature react as though it had been swung at.
         rolled.branch = branch
         world.bus.emit(rolled)
+
+        # The defence is read **again**, after the roll has been announced.
+        # An immediate interrupt fires in that window, and the whole point
+        # of the commonest one is to raise your defence and turn a hit into
+        # a miss -- which it could not do while the comparison had already
+        # been made. The number on the event is what it was when the die
+        # landed; this is what it is when the blow arrives.
+        against = defence(world, target, vs, ctx)
+        result.target_defence = against
+        result.critical = natural == 20
+        result.hit = natural == 20 or (natural != 1 and total >= against)
 
         landed = (
             Hit(attacker=attacker, target=target, power=power, critical=result.critical)
