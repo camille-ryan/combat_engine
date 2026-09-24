@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Ruff, plus the one thing ruff misses here: a method defined twice.
+"""Ruff, plus two structural faults it cannot see.
 
     uv run scripts/lint.py
 
@@ -13,8 +13,14 @@ existing `_free_square_near(square)`, and every conjuration in the game
 stopped appearing. Nothing failed loudly; the replay fixtures diverged a
 hundred events later and the cause was three edits back.
 
-Folded in here rather than added as an eighth instrument, because it is an
-AST walk over the tree and costs a fraction of a second.
+The second is a declared trigger whose predicate reads a field its event
+does not have. `about_me` reads `ev.actor`; `ConditionApplied` names its
+subject `target`. Put them together and the predicate is silently false
+forever -- indistinguishable from a trigger that simply never happens, and
+the row looks finished. That cost twenty minutes to diagnose once already.
+
+Folded in here rather than added as an eighth instrument, because both are
+static walks and cost a fraction of a second between them.
 """
 
 from __future__ import annotations
@@ -30,13 +36,60 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def main() -> int:
     done = subprocess.run(["uv", "run", "ruff", "check", "."], cwd=ROOT)
+    faults = 0
+
     dupes = _duplicate_methods()
     for where, name, n in dupes:
         print(f"{where}: {name} is defined {n} times -- the last one wins")
-    if dupes:
-        print(f"\n{len(dupes)} shadowed definition(s).")
+    faults += len(dupes)
+
+    for ref, pred, event, has in _dead_triggers():
+        print(
+            f"{ref}: `{pred}` reads a field {event} does not have"
+            f" -- it will never be true. {event} has {has}."
+        )
+        faults += 1
+
+    if faults:
+        print(f"\n{faults} structural fault(s).")
         return 1
     return done.returncode
+
+
+#: What each ready-made predicate reads off the event it is handed. Only the
+#: ones that look at a single field; the combinators are not checkable this
+#: way and are not listed.
+PREDICATE_FIELD = {
+    "about_me": "actor",
+    "not_me": "actor",
+    "by_me": "attacker",
+    "targets_me": "target",
+    "hits_me": "target",
+}
+
+
+def _dead_triggers() -> list[tuple[str, str, str, str]]:
+    """Declared triggers that can never be true."""
+    import dataclasses
+    import sys
+
+    sys.argv = sys.argv[:1]
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.dsl import REGISTRY
+
+    out = []
+    for p in REGISTRY.values():
+        for trig in p.triggers:
+            name = getattr(trig.when, "__name__", "")
+            want = PREDICATE_FIELD.get(name)
+            if want is None:
+                continue
+            fields = {f.name for f in dataclasses.fields(trig.event)}
+            if want not in fields:
+                out.append(
+                    (p.ref, name, trig.event.__name__, ", ".join(sorted(fields)))
+                )
+    return out
 
 
 def _duplicate_methods() -> list[tuple[str, str, int]]:
