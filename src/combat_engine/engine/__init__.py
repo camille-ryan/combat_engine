@@ -44,6 +44,7 @@ from .dsl import (
     CloseBurst,
     Damage,
     Melee,
+    MeleeOrRanged,
     Power,
     Ranged,
     Target,

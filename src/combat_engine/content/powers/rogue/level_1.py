@@ -2,10 +2,10 @@
 
 One note applies to several rows. A good half of the rogue's list prints
 "Melee or Ranged weapon" over a Requirement of "a crossbow, a light blade,
-or a sling", and the header holds one range. Every such row here is written
-as its **melee** branch -- `Melee(1)`, the light blade's dice -- which is
-what the class's gear in `chargen.py` has in hand. The attack line is
-Dexterity either way, so only the range is lost.
+or a sling", and those are declared `MeleeOrRanged` -- both branches, each
+offered as its own option. Dexterity attacks either way, so unlike the
+ranger these rows need no second attack line; what differs is the range,
+the weapon rolled, and whether firing provokes.
 
 Two rows carry a build rider (a bonus for one of the rogue's two tactics).
 Nothing in the model records which build a rogue took, so those rows are the
@@ -29,6 +29,7 @@ from combat_engine.engine import (
     Gear,
     Keyword,
     Melee,
+    MeleeOrRanged,
     When,
     World,
     power,
@@ -75,7 +76,7 @@ def p704(c: Cast) -> None:
     cls="rogue",
     usage=AT_WILL,
     action=STANDARD,
-    reach=Melee(1),
+    reach=MeleeOrRanged(1, 20),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=AC),
@@ -131,7 +132,7 @@ def p653(c: Cast) -> None:
     cls="rogue",
     usage=AT_WILL,
     action=STANDARD,
-    reach=Melee(1),
+    reach=MeleeOrRanged(1, 20),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=AC),
@@ -171,7 +172,7 @@ def p1385(c: Cast) -> None:
     cls="rogue",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Melee(1),
+    reach=MeleeOrRanged(1, 20),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=REF),
@@ -221,7 +222,7 @@ def p1483(c: Cast) -> None:
     cls="rogue",
     usage=DAILY,
     action=STANDARD,
-    reach=Melee(1),
+    reach=MeleeOrRanged(1, 20),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=AC),
@@ -249,7 +250,7 @@ def p1422(c: Cast) -> None:
     cls="rogue",
     usage=DAILY,
     action=STANDARD,
-    reach=Melee(1),
+    reach=MeleeOrRanged(1, 20),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=AC),
