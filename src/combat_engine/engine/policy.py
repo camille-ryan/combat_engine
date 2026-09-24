@@ -89,6 +89,12 @@ def features(
         f["costs_standard"] = float(p.action is ActionType.STANDARD)
         f["range"] = float(p.reach.size)
         f["declares_attack"] = float(p.attack is not None)
+        # Using a ranged or area power with somebody in your face hands them
+        # a free attack. Without this a wizard happily stands in melee and
+        # fires across the room all fight.
+        f["provokes_now"] = float(
+            p.provokes and any(_adjacent(world, actor, e) for e in enemies(world, actor))
+        )
 
         chances = [p.hit_chance(world, actor, t) for t in action.targets]
         if chances:
@@ -97,14 +103,24 @@ def features(
 
     hurt = 0.0
     nearly = 0.0
+    friendly = 0.0
+    mine = world.get(actor, Side)
     for t in action.targets:
         health = world.get(t, Health)
         if health is None:
             continue
         hurt += 1.0 - health.hp / max(1, health.max_hp)
         nearly += float(health.bloodied)
+        theirs = world.get(t, Side)
+        # A burst says "each creature", and that includes your own side.
+        # Counting them as targets is how the wizard came to be aiming a
+        # close blast at the fighter and scoring it well.
+        if t == actor or (mine and theirs and mine.team is theirs.team):
+            friendly += 1.0
     f["target_damage_taken"] = hurt
     f["targets_bloodied"] = nearly
+    f["allies_caught"] = friendly
+    f["enemies_caught"] = float(len(action.targets)) - friendly
 
     foes = [e for e in enemies(world, actor) if alive(world, e)]
     if foes:
@@ -118,6 +134,12 @@ def features(
         )
         f["closes_distance"] = f.get("nearest_enemy", 0.0) - after
     return dict(f)
+
+
+def _adjacent(world: World, a: int, b: int) -> bool:
+    from .query import adjacent
+
+    return adjacent(world, a, b)
 
 
 def _allies_of(world: World, eid: int) -> list[int]:
@@ -193,13 +215,19 @@ WEIGHTS: dict[str, float] = {
     "is_second_wind": 0.0,
     "expected_hits": 4.0,
     "hit_chance": 3.0,
-    "targets": 1.5,
+    "targets": 0.0,      # counted by side instead; see below
+    "enemies_caught": 2.0,
+    # Worth more than an enemy is worth catching, so a burst that would clip
+    # one ally to catch one enemy is not worth taking.
+    "allies_caught": -7.0,
     "targets_bloodied": 3.0,
     "target_damage_taken": 1.0,
     "usage_daily": -3.0,
     "usage_encounter": -0.5,
     "closes_distance": 2.0,
     "nearest_enemy": -0.1,
+    # Worth about one attack, which is what it hands over.
+    "provokes_now": -5.0,
 }
 
 

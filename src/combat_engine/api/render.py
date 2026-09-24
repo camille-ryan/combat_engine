@@ -266,7 +266,7 @@ def option_dto(session: Session, index: int, action: Action) -> dto.OptionDTO:
         affected=affected,
         path=list(action.path),
         forecast=_forecast(session, action, p),
-        notes=[],
+        notes=_notes(session, action, p),
         pays=_pays(session, action).value,
         affordable=session.encounter.can_spend(actor, action.cost) if actor else False,
         cost_note=_cost_note(session, action),
@@ -274,6 +274,33 @@ def option_dto(session: Session, index: int, action: Action) -> dto.OptionDTO:
         if actor
         else 0.0,
     )
+
+
+def _notes(session: Session, action: Action, p) -> list[str]:  # noqa: ANN001
+    """What the option costs beyond its action, in words.
+
+    Right now that is one thing: a ranged or area power used with somebody
+    adjacent hands them a free attack, and a player who cannot see that
+    coming will take it every time.
+    """
+    from combat_engine.engine.query import adjacent, alive
+
+    if p is None or not p.provokes:
+        return []
+    actor = session.current
+    close = [
+        e
+        for e in session.world.entities
+        if e != actor
+        and alive(session.world, e)
+        and adjacent(session.world, actor, e)
+        and session.world.get(e, Side)
+        and session.world.get(e, Side).team is not Team.PC
+    ]
+    if not close:
+        return []
+    who = ", ".join(session.wire.label(e) for e in close)
+    return [f"provokes an opportunity attack from {who}"]
 
 
 def _option_label(session: Session, action: Action, p) -> str:  # noqa: ANN001

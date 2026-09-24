@@ -200,10 +200,29 @@ class Power:
     uses: int = 1
     #: True when those uses may not be spent on the same round.
     once_per_round: bool = False
+    #: Set on the few rows whose printed text says they do not provoke,
+    #: despite being ranged or area.
+    no_provoke: bool = False
 
     @property
     def is_attack(self) -> bool:
         return self.target.side != "self" or self.target.count > 0
+
+    @property
+    def provokes(self) -> bool:
+        """Does using this leave an opening for anyone standing next to you?
+
+        Ranged and area powers do; melee and close powers do not. Taking aim
+        at something across the room is what turns your back on the creature
+        already in your face, and a wizard who can stand next to a brute and
+        fire into the far rank with impunity is a different game.
+
+        Derived from the range line rather than declared per row, so nothing
+        has to remember it. A power that says otherwise sets `no_provoke`.
+        """
+        if self.no_provoke:
+            return False
+        return self.reach.kind in ("ranged", "area_burst")
 
     def hit_chance(self, world: World, actor: int, target: int) -> float:
         """Probability this power hits, from the declared attack line.
@@ -247,6 +266,7 @@ def power(
     recharge: int = 0,
     uses: int = 1,
     once_per_round: bool = False,
+    no_provoke: bool = False,
 ) -> Callable[[Body], Body]:
     """Declare one power or one monster ability.
 
@@ -275,6 +295,7 @@ def power(
             recharge=recharge,
             uses=uses,
             once_per_round=once_per_round,
+            no_provoke=no_provoke,
         )
         return body
 
@@ -461,6 +482,11 @@ def use(
     cast = Cast(world=world, me=actor, ref=ref, targets=list(chosen), origin=origin)
     cast.used()
 
+    if p.provokes and not _survive_provoking(world, actor, ref):
+        # Stopped before it went off -- stunned by an interrupt, or killed.
+        # The power is *not* spent: the action was lost, not used.
+        return False
+
     if spend and p.usage is not Usage.AT_WILL:
         powers = world.get(actor, Powers)
         if powers is not None:
@@ -477,6 +503,29 @@ def use(
         cast.result = None
         p.body(cast)
     return True
+
+
+def _survive_provoking(world: World, actor: int, ref: str) -> bool:
+    """Open an opportunity window for everyone standing next to the caster.
+
+    Returns False if the caster cannot finish what it started -- an
+    opportunity attack interrupts, so one that stuns or drops the caster
+    stops the power rather than merely hurting them on the way.
+    """
+    from .components import Position
+    from .events import OpportunityWindow
+    from .grid import spread
+    from .query import can_act
+    from .query import squares as occupies
+
+    reach = spread(occupies(world, actor), 1)
+    for foe in sorted(enemies(world, actor)):
+        pos = world.get(foe, Position)
+        if pos is not None and pos.squares & reach:
+            world.bus.emit(
+                OpportunityWindow(actor=foe, provoker=actor, why=f"{ref} is a ranged power")
+            )
+    return can_act(world, actor)
 
 
 def _auto_targets(world: World, actor: int, p: Power, origin: Square | None) -> list[int]:
