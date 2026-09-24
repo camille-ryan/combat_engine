@@ -186,9 +186,17 @@ def history() -> int:
     caught = sum(1 for r in rows if not r["ok"])
     print(f"\n  {total:.0f}s spent over {len(rows)} instrument-runs, "
           f"{caught} of them caught something")
-    idle = [n for n in order if all(r["ok"] for r in by[n]) and len(by[n]) >= 20]
+    # Fruitless *and* expensive. An instrument that has never caught
+    # anything but has cost fourteen seconds in total is not the one to cut,
+    # and flagging it on catches alone invited exactly that mistake.
+    idle = [
+        n for n in order
+        if all(r["ok"] for r in by[n])
+        and len(by[n]) >= 20
+        and sum(r["seconds"] for r in by[n]) >= 60
+    ]
     if idle:
-        print(f"  never caught anything in 20+ runs: {', '.join(idle)}"
+        print(f"  never caught anything in 20+ runs, and not cheap: {', '.join(idle)}"
               f"\n  -- worth asking whether they still earn their seconds")
     return 0
 
