@@ -22,9 +22,20 @@ The major paradigm should be "how much of the enemy team's threat can I remove w
 ## Healing surge usage
 Healing surges can saturate. Using a healing surge to heal 1hp, for example, is a waste. 
 
-# Doctrines
+## Doctrines
 Defenders and soldiers are good at locking down high threat enemies. 
 Artillery, brutes, and some strikers are good at dealing consistent damage.
 Lurkers, skirmishers, and some strikers are good at dealing conditional damage.
 Controllers are good at limiting enemy actions and at AoE.
 Leaders are good at improving the abilities of their allies and sometimes at healing. 
+
+## Goals
+When adjusting scores, consider the following goals:
+All characters should be penalized for damage taken.
+All characters should get points for dealing damage and for killing enemies.
+Defenders and soldiers should be penalized for damage taken by allies. 
+Strikers, Artillery, Brutes, Lurkers, and Skirmishers should get extra points for dealing damage, and for killing nonminion enemies.
+Controllers should get extra points for neutralizing an enemy for a turn, and for killing minions.
+Leaders should get extra points for healing allies, especially for reviving downed allies (note that NPCs cannot be revived typically - they do not enter the dying state). 
+Leaders, if possible, should also get extra points if buffs they apply make an attack hit when it otherwise would not, and for making an enemy miss when they otherwise would not.
+Leaders should also get points for damage caused by allies when they grant an ally attack. 
