@@ -41,7 +41,7 @@ from .events import (
     MoveStart,
     OpportunityWindow,
 )
-from .grid import Square, distance, footprint, spread
+from .grid import Square, distance, footprint, neighbours, spread
 from .query import adjacent, can_move, creatures, enemies, squares
 from .types import Forced
 
@@ -287,19 +287,15 @@ def forced_squares(
     here = pos.square
     now = distance(here, anchor)
     out: list[Square] = []
-    for dx in (-1, 0, 1):
-        for dy in (-1, 0, 1):
-            if dx == dy == 0:
-                continue
-            cand = (here[0] + dx, here[1] + dy)
-            then = distance(cand, anchor)
-            ok = {
-                Forced.PUSH: then > now,
-                Forced.PULL: then < now,
-                Forced.SLIDE: True,
-            }[how]
-            if ok and _clear(world, target, footprint(cand, pos.size)):
-                out.append(cand)
+    for cand in neighbours(here):
+        then = distance(cand, anchor)
+        ok = {
+            Forced.PUSH: then > now,
+            Forced.PULL: then < now,
+            Forced.SLIDE: True,
+        }[how]
+        if ok and _clear(world, target, footprint(cand, pos.size)):
+            out.append(cand)
     return sorted(out)
 
 
@@ -347,19 +343,18 @@ def reachable(
     while frontier:
         frontier.sort(key=lambda s: best[s])
         here = frontier.pop(0)
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                if dx == dy == 0:
-                    continue
-                nxt = (here[0] + dx, here[1] + dy)
-                if not _clear(world, eid, footprint(nxt, pos.size), overhead=overhead):
-                    continue
-                cost = best[here] + (2 if nxt in rough else 1)
-                if cost > budget or cost >= best.get(nxt, 1 << 30):
-                    continue
-                best[nxt] = cost
-                paths[nxt] = [*paths[here], nxt]
-                frontier.append(nxt)
+        # Sorted, so which of two equal-cost routes wins is a property of
+        # the squares and not of the order the direction table happens to be
+        # written in. Reordering that table should not move anybody.
+        for nxt in sorted(neighbours(here)):
+            if not _clear(world, eid, footprint(nxt, pos.size), overhead=overhead):
+                continue
+            cost = best[here] + (2 if nxt in rough else 1)
+            if cost > budget or cost >= best.get(nxt, 1 << 30):
+                continue
+            best[nxt] = cost
+            paths[nxt] = [*paths[here], nxt]
+            frontier.append(nxt)
     paths.pop(start, None)
     if overhead:
         paths = {

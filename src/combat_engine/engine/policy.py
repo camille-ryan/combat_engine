@@ -31,6 +31,7 @@ from .actions import Action, legal, perform
 from .components import Health, Side
 from .dsl import get
 from .events import DamageApplied, Event, OpportunityWindow, PowerUsed
+from .grid import distance
 from .query import alive, distance_between, enemies, is_
 from .types import ActionType, Condition, Team, Usage
 
@@ -127,11 +128,7 @@ def features(
         f["nearest_enemy"] = float(min(distance_between(world, actor, e) for e in foes))
         f["enemies_left"] = float(len(foes))
     if action.kind == "move" and action.dest is not None and foes:
-        after = min(
-            max(abs(action.dest[0] - x), abs(action.dest[1] - y))
-            for e in foes
-            for (x, y) in [_square(world, e)]
-        )
+        after = min(distance(action.dest, _square(world, e)) for e in foes)
         f["closes_distance"] = f.get("nearest_enemy", 0.0) - after
     return dict(f)
 
@@ -286,14 +283,7 @@ class LinearPolicy:
                 return options[0]
 
             def isolation(sq: Any) -> tuple[int, Any]:
-                return (
-                    min(
-                        max(abs(sq[0] - x), abs(sq[1] - y))
-                        for m in mates
-                        for (x, y) in [_square(world, m)]
-                    ),
-                    sq,
-                )
+                return (min(distance(sq, _square(world, m)) for m in mates), sq)
 
             return max(options, key=isolation)
 
@@ -305,11 +295,7 @@ class LinearPolicy:
                 return options[0]
 
             def reach(sq: Any) -> int:
-                return min(
-                    max(abs(sq[0] - x), abs(sq[1] - y))
-                    for e in foes
-                    for (x, y) in [_square(world, e)]
-                )
+                return min(distance(sq, _square(world, e)) for e in foes)
 
             return max(options, key=reach) if retreat else min(options, key=reach)
         return options[0]

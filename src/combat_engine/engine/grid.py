@@ -7,6 +7,33 @@ and answered back in squares, which is the only way the corner-to-corner
 rules come out right.
 
 Diagonals cost one square, so distance is Chebyshev.
+
+**This file is the shape of the board, and it is meant to be the only one.**
+Nothing else in the engine measures a distance, enumerates a step, or does
+arithmetic on a coordinate -- `distance` and `neighbours` exist so that the
+pathfinder, the forced-movement rules and the scorer can all ask instead.
+
+A board of a different shape -- hexes, most obviously -- replaces what is
+here and nothing above it. What it would have to answer:
+
+* `distance` and `neighbours`: six steps rather than eight, and no diagonal.
+* `spread`, `burst`, `area_burst`: rings, which come out simpler on hexes.
+* `line_of_effect` and `cover`: the `_trace` machinery below walks a segment
+  through unit squares and is the most square-specific thing here. A hex
+  board needs its own, and it is the real work.
+* `flanks`: "opposite sides" is *easier* on hexes -- three opposing pairs,
+  no corner cases.
+* `footprint`: the genuine modelling question rather than a port. A Large
+  creature is two squares on a side here; hexes have no such tiling, so what
+  Large means has to be decided rather than translated.
+* `blast_placements`: a blast is a square block adjacent to the caster. The
+  hex equivalent is a cone, which is a different shape and not a port.
+
+What does **not** change is worth saying too. No hand-written power names a
+coordinate -- bodies reach the board through `c.within`, `c.area`, `c.push`
+and the like, all of which are shape-agnostic -- so the content carries over
+untouched. The interface has its own copy of this seam in `web/coords.js`,
+which says the same thing about itself.
 """
 
 from __future__ import annotations
@@ -27,8 +54,25 @@ STEPS: tuple[Square, ...] = (
 
 
 def distance(a: Square, b: Square) -> int:
-    """Chebyshev: a diagonal step costs the same as a straight one."""
+    """Chebyshev: a diagonal step costs the same as a straight one.
+
+    The **only** place the engine measures a distance. Anything that wants to
+    know how far apart two squares are calls this rather than doing the
+    arithmetic, which is what keeps the shape of the board in one file.
+    """
     return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+
+
+def neighbours(sq: Square) -> tuple[Square, ...]:
+    """The squares one step from this one.
+
+    Eight here, because diagonals are steps. The **only** place the engine
+    enumerates a step, so a board with a different number of sides changes
+    this and not the pathfinder, the forced-movement rules or anything else
+    that walks.
+    """
+    x, y = sq
+    return tuple((x + dx, y + dy) for dx, dy in STEPS)
 
 
 def footprint(origin: Square, size: Size) -> frozenset[Square]:

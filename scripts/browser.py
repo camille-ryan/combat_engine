@@ -26,6 +26,8 @@ import sys
 import time
 from pathlib import Path
 
+from combat_engine.engine.grid import distance
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -176,9 +178,13 @@ def _play(page, check: Checks, problems: list[str], served: list[dict]) -> None:
 
     # Play on, so attacks happen and the log has a fight in it rather than a
     # first turn. Clicking real buttons, because that is what is being tested.
+    before_lines = page.locator("#log .narration").count()
     _play_on(page, rounds=args_turns())
     read = page.locator("#log .narration")
-    check.that(read.count() > 3, f"the fight reads back ({read.count()} lines)")
+    check.that(
+        read.count() > before_lines + 3,
+        f"playing on wrote more log ({before_lines} -> {read.count()} lines)",
+    )
     print("        ...")
     for i in range(max(0, read.count() - 4), read.count()):
         print(f"        {read.nth(i).inner_text()[:78]}")
@@ -197,10 +203,15 @@ def args_turns() -> int:
 
 
 def _play_on(page, rounds: int) -> None:  # noqa: ANN001
-    """Take some turns by clicking whatever the action list is offering.
+    """Take some turns by clicking what the action list offers.
 
-    Not a policy -- the first affordable thing, every time. The point is that
-    the buttons do what they say, not that the choices are good.
+    Barely a policy: attack if anything is in reach, otherwise close, and end
+    the turn if neither. It only has to make a fight happen -- what is being
+    tested is that the buttons do what they say.
+
+    The first version preferred "anything that is not a move", which meant it
+    found `second wind` and pressed it every single turn. Four rounds of a
+    party healing itself and nothing else looked exactly like a stalled loop.
     """
     for _ in range(rounds):
         page.wait_for_timeout(120)
@@ -211,14 +222,15 @@ def _play_on(page, rounds: int) -> None:  # noqa: ANN001
         buttons = page.locator("#actions button:not([disabled])")
         if not buttons.count():
             return
-        # Prefer something that is not "end turn", so the fight advances.
-        picked = None
-        for i in range(buttons.count()):
-            text = buttons.nth(i).inner_text().lower()
-            if "end turn" not in text and "move" not in text and "shift" not in text:
-                picked = buttons.nth(i)
-                break
-        (picked or buttons.last).click()
+        labels = [buttons.nth(i).inner_text().lower() for i in range(buttons.count())]
+        pick = _first(labels, lambda t: "->" in t and "second wind" not in t)
+        if pick is None:
+            pick = _first(labels, lambda t: t.startswith("move to"))
+        buttons.nth(pick if pick is not None else len(labels) - 1).click()
+
+
+def _first(labels: list[str], want) -> int | None:  # noqa: ANN001
+    return next((i for i, t in enumerate(labels) if want(t)), None)
 
 
 #: The three event kinds `anim.js` will actually play. Everything else is
@@ -300,7 +312,7 @@ def _check_area_aiming(check: Checks, state: dict | None) -> None:
         if not p["squares"]:
             check.that(False, f"{p['name']} offers nowhere to aim")
             continue
-        far = max(max(abs(x - here[0]), abs(y - here[1])) for x, y in p["squares"])
+        far = max(distance(tuple(sq), tuple(here)) for sq in p["squares"])
         check.that(
             len(p["squares"]) > 1,
             f"{p['name']} offers {len(p['squares'])} squares to aim at, furthest {far} away",
