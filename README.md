@@ -81,3 +81,8 @@ Game systems are not able to be trademarked, but prose is. All potentially trade
  - Level bonuses are stored separately so that we can "mod" the game to remove or attenuate them (likely +1 per 5 levels). Related: Option to gift players expertise, improved defenses. Additional option to gift "melee training" to relevant classes. 
  - Default mounts in 4e are creatures that die easily to AoE. Optionally, treat mounts as magic items which alter the rider's movement modes and space, and allow the mount's actions (attacks, etc.) to be used in place of the rider's. For example, use a standard action to use one of that mount's standard action abilities.
  - hex map mode
+ - Compound monsters. Pseudo solos and elites made by having two monster statblocks share the same space, hp pool, initiative, etc. They should act on multiple initiatives. 3 paradigms.
+  - HP damage makes the monster more dangerous. Sequential monsters in the entity become active at hp thresholds.
+  - HP damage makes the monster less dangerous. Sequential monsters die off at hp thresholds.
+  - HP damage has no effect on the monster. It has all abilities until its full hp pool is depleted.
+  - In all of these, control effects with single targets only disable one part of the monster.
