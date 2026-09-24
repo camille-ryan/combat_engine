@@ -94,7 +94,13 @@ def attack(
         # that "an immediate interrupt can cancel the attack or change its
         # target" -- and the closure captured the parameters instead, so
         # assigning `ev.target` did nothing at all and failed silently.
+        # The defence too, not just who is swinging at whom. `vs` is on the
+        # event and mutable and was read from the enclosing parameter both
+        # times -- so a row printing "its attacks target Reflex instead of
+        # AC" set the field, changed nothing, and logged nothing. Sixth of
+        # this shape today; the module docstring warns about it directly.
         attacker, target = declared.attacker, declared.target
+        vs = declared.vs
         result.target = target
         # `dying` is a death throe swinging on its way down. The killing
         # blow usually overshoots `dying_at` -- and always does for a minion

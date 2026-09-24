@@ -1142,12 +1142,26 @@ class Cast:
         """
         mover = self.me if who is None else who
         origin = squares(self.world, mover)
-        options = [
-            sq
-            for sq in spread(origin, squares_)
-            if self.world.grid.passable(sq)
-            and (share or self.world.grid.occupant(sq) in (None, mover))
-        ]
+        # Filtered by the mover's whole footprint, not by the one square.
+        # `movement.step` requires every square a Large creature covers to
+        # be clear, so offering it a destination that only checks the
+        # corner handed it squares it cannot stand in -- and a Large
+        # creature's blink then failed silently, every seed.
+        from .components import Position
+        from .grid import footprint
+
+        here = self.world.get(mover, Position)
+        size = here.size if here is not None else None
+
+        def fits(sq: Square) -> bool:
+            covered = footprint(sq, size) if size is not None else {sq}
+            return all(
+                self.world.grid.passable(s)
+                and (share or self.world.grid.occupant(s) in (None, mover))
+                for s in covered
+            )
+
+        options = [sq for sq in spread(origin, squares_) if fits(sq)]
         if to is not None:
             # `share` arrives into an occupied square, which a row landing
             # somebody in a dying creature's space needs: `resolve._die`
