@@ -174,18 +174,62 @@ async def _stream(session: Session, cursor: int, request: Request) -> AsyncItera
 
     Replaying from the start is what a reconnect does, so every event has to
     arrive exactly once whether the client has been listening or not.
+
+    The frame is named `encounter_event` because that is the name the page
+    listens for. Calling it anything else does not error anywhere -- the
+    events simply arrive and are dropped on the floor, and the log stays
+    empty with nothing to say why.
+
+    `id:` carries the seq so a browser's own `Last-Event-ID` reconnect
+    resumes where it left off rather than replaying the fight.
     """
+    span: list = []
+
+    def sentence() -> str | None:
+        """Close the open span and turn it into one readable line."""
+        if not span:
+            return None
+        text = render.narrate_span(session, span)
+        last = span[-1]
+        span.clear()
+        if not text:
+            return None
+        payload = {
+            "round": getattr(last, "round", session.world.round),
+            "seq": last.seq + 1,
+            "text": text,
+        }
+        return f"event: narration\ndata: {json.dumps(payload)}\n\n"
+
     while True:
         if await request.is_disconnected():
             return
         log = session.world.bus.log
+        if cursor >= len(log):
+            # Caught up. Close whatever sentence is open, so the last thing
+            # that happened is on screen rather than waiting for the next.
+            frame = sentence()
+            if frame:
+                yield frame
+            yield ": keep-alive\n\n"
+            # Short: this is how long the board lags a click, and a quarter
+            # of a second of it is plainly visible.
+            await asyncio.sleep(0.02)
+            continue
         while cursor < len(log):
             event = log[cursor]
             cursor += 1
+            if span and render.starts_span(event):
+                frame = sentence()
+                if frame:
+                    yield frame
+            span.append(event)
             payload = render.event_dto(session, event).model_dump()
-            yield f"event: log\ndata: {json.dumps(payload)}\n\n"
-        yield ": keep-alive\n\n"
-        await asyncio.sleep(0.25)
+            yield (
+                f"id: {payload['seq']}\n"
+                f"event: encounter_event\n"
+                f"data: {json.dumps(payload)}\n\n"
+            )
 
 
 @app.get("/api/day")

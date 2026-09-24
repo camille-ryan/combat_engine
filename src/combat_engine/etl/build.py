@@ -16,6 +16,7 @@ import json
 import sqlite3
 from collections import Counter
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 from . import monster as monster_parser
@@ -127,6 +128,7 @@ def build() -> Report:
     out.close()
 
     NAMES.write_text(json.dumps(names, indent=1, sort_keys=True))
+    localisation.cache_clear()
     report.names = len(names)
     return report
 
@@ -261,8 +263,14 @@ def game() -> sqlite3.Connection:
     return db
 
 
+@lru_cache(maxsize=1)
 def localisation() -> dict[str, dict[str, str]]:
-    """Printed names, if this machine has them. The engine never calls this."""
+    """Printed names, if this machine has them. The engine never calls this.
+
+    Cached: it is seventeen thousand entries, it is read once per name looked
+    up, and re-parsing it each time was a quarter of the time taken to draw
+    the board. Call `localisation.cache_clear()` after a rebuild.
+    """
     if not NAMES.exists():
         return {}
     return json.loads(NAMES.read_text())

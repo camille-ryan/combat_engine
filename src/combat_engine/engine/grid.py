@@ -12,6 +12,7 @@ Diagonals cost one square, so distance is Chebyshev.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from itertools import pairwise, product
 
 from .types import Cover, Size
@@ -65,8 +66,13 @@ def between(a: frozenset[Square] | set[Square], b: frozenset[Square] | set[Squar
 # --------------------------------------------------------------------------
 
 
+@lru_cache(maxsize=1 << 16)
 def _trace(p0: Point, p1: Point) -> list[frozenset[Square]]:
     """What the segment `p0`-`p1` would have to get past, as square groups.
+
+    Cached, because it is pure geometry -- two points in, the same answer
+    every time, whatever is standing where. Cover and line of effect between
+    them ask for this tens of thousands of times when a board is drawn.
 
     Collect every parameter where the segment crosses a grid line, then walk
     the midpoints of consecutive pairs. Each midpoint yields one group, and

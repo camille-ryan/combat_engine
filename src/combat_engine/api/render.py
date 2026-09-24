@@ -277,13 +277,26 @@ def option_dto(session: Session, index: int, action: Action) -> dto.OptionDTO:
 
 
 def _option_label(session: Session, action: Action, p) -> str:  # noqa: ANN001
+    """What this option says on its button.
+
+    An area power gets one option per square it may be centred on, and they
+    are genuinely different choices -- so the label has to say which. Without
+    the origin, a burst with thirty placements is thirty buttons reading the
+    same words, and a player cannot tell them apart or see that the list is
+    ordered by what each one catches.
+    """
     wire = session.wire
     if action.kind == "power":
         name = wire.power(action.ref)
         who = ", ".join(wire.label(t) for t in action.targets)
+        if action.origin is not None:
+            spot = f"at {tuple(action.origin)}"
+            return f"{name} {spot} -> {who}" if who else f"{name} {spot}"
         return f"{name} -> {who}" if who else name
     if action.kind == "move":
-        return f"move to {action.dest}"
+        return f"move to {tuple(action.dest)}"
+    if action.kind == "shift":
+        return f"shift to {tuple(action.dest)}"
     return {"stand": "stand up", "second_wind": "second wind", "end": "end turn"}.get(
         action.kind, action.kind
     )
@@ -386,7 +399,7 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
                 targets=str(p.target),
                 available=bool(indices),
                 reason=None if indices else (why or "cannot be used here"),
-                squares=sorted(area_of(world, actor, p)) if p.is_attack else [],
+                squares=_clickable(world, actor, p),
                 aimed=[],
                 option_index=indices[0] if indices else None,
                 option_indices=indices,
@@ -397,6 +410,25 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
             )
         )
     return out
+
+
+def _clickable(world, actor: int, p) -> list:  # noqa: ANN001
+    """The squares a player may click to use this power.
+
+    Two different questions wear the same name. For a melee or ranged power
+    it is *where a target may be standing* -- the reach. For a burst or a
+    blast it is *where the power may be centred*, which for an area burst 1
+    within 10 is everywhere within ten and for a blast 3 is the ring two out.
+
+    Handing back the covered area for an area power is why one could not be
+    aimed: the page highlighted the squares the burst would fill if cast on
+    the caster's own head, and a click anywhere else did nothing.
+    """
+    if not p.is_attack:
+        return []
+    if p.reach.kind in ("area_burst", "close_blast"):
+        return aim_points(world, actor, p)
+    return sorted(area_of(world, actor, p))
 
 
 def economy(session: Session) -> dto.EconomyDTO:
@@ -489,18 +521,73 @@ def pending(session: Session) -> dto.PendingDTO | None:
 # --------------------------------------------------------------------------
 
 
+#: Engine event names, in the vocabulary the page speaks.
+#:
+#: The page was written against the first attempt's event names and came over
+#: unchanged, so this is where the two meet. Three of these are load-bearing
+#: -- `anim.js` plays exactly `moved`, `attack_rolled` and `attack_hit`, and
+#: an event under any other name is logged and not shown. The rest are here so
+#: the whole stream reads in one idiom rather than two.
+WIRE_KIND = {
+    "Moved": "moved",
+    "MoveStart": "move_start",
+    "MoveEnd": "move_end",
+    "AttackDeclared": "attack_declared",
+    "AttackRolled": "attack_rolled",
+    "Hit": "attack_hit",
+    "Miss": "attack_miss",
+    "DamageApplied": "damage_taken",
+    "DamageRolled": "damage_rolled",
+    "Healed": "healed",
+    "TempHP": "temp_hp",
+    "Bloodied": "bloodied",
+    "Dropped": "dropped",
+    "Died": "died",
+    "ConditionApplied": "condition_applied",
+    "ConditionEnded": "condition_ended",
+    "RelationSet": "relation_set",
+    "RelationCleared": "relation_cleared",
+    "SavingThrow": "saving_throw",
+    "EffectExpired": "effect_expired",
+    "PowerUsed": "power_used",
+    "TurnStart": "turn_start",
+    "TurnEnd": "turn_end",
+    "RoundStart": "round_start",
+    "RoundEnd": "round_end",
+    "ZoneCreated": "zone_created",
+    "ZoneEnded": "zone_ended",
+    "ZoneEntered": "zone_entered",
+    "ZoneExited": "zone_exited",
+    "ForcedMove": "forced_move",
+    "OpportunityWindow": "opportunity",
+    "EnterSquare": "entered_square",
+    "LeaveSquare": "left_square",
+    "AdjacencyGained": "adjacent_gained",
+    "AdjacencyLost": "adjacent_lost",
+    "Note": "note",
+}
+
+
 def event_dto(session: Session, event: Event) -> dto.EventDTO:
     wire = session.wire
     data = event.wire()
     actor = data.get("actor") or data.get("attacker") or data.get("source")
     target = data.get("target")
+    payload = {k: _wire_value(wire, k, v) for k, v in data.items()}
+    # `Moved` spells its fields `from_` and `to` because `from` is a keyword
+    # in Python and is not one in JavaScript.
+    if "from_" in payload:
+        payload["from"] = payload.pop("from_")
     return dto.EventDTO(
-        seq=event.seq,
-        kind=event.kind,
+        # One-based on the wire. The page treats `from` as exclusive and only
+        # animates events newer than its cursor, which starts at zero -- so a
+        # zero-based first event is never shown.
+        seq=event.seq + 1,
+        kind=WIRE_KIND.get(event.kind, event.kind),
         actor=wire.id(actor) if isinstance(actor, int) else None,
         target=wire.id(target) if isinstance(target, int) else None,
         text=narrate(session, event),
-        data={k: _wire_value(wire, k, v) for k, v in data.items()},
+        data=payload,
     )
 
 
@@ -514,6 +601,87 @@ def _wire_value(wire: Wire, key: str, value):  # noqa: ANN001, ANN202
     if key == "power" and isinstance(value, str):
         return wire.power(value)
     return value
+
+
+#: Events that begin a new sentence. Everything after one, up to the next,
+#: is part of the same thing happening.
+SPAN_STARTS = {
+    "RoundStart", "TurnStart", "PowerUsed", "MoveStart", "OpportunityWindow",
+}  # fmt: skip
+
+
+def starts_span(event: Event) -> bool:
+    return event.kind in SPAN_STARTS
+
+
+def narrate_span(session: Session, events: list[Event]) -> str:
+    """One sentence for one thing that happened.
+
+    The page shows these and hides the raw event lines behind a checkbox, so
+    this is the log a player actually reads. Composed from a span rather than
+    per event because "rolled 19", "hit" and "took 5 damage" are three events
+    and one sentence, and reading them as three is reading a transcript
+    instead of a fight.
+    """
+    wire = session.wire
+    if not events:
+        return ""
+
+    lines: list[str] = []
+    damage: dict[int, int] = {}
+    for event in events:
+        d = event.wire()
+        kind = event.kind
+        if kind == "PowerUsed":
+            lines.append(f"{wire.label(d['actor'])} uses {wire.power(d['power'])}")
+        elif kind == "AttackRolled":
+            lines.append(
+                f"{wire.label(d['target'])}: {d['natural']}{d['bonus']:+d} "
+                f"vs {d['vs'].upper()} {d['defence']}"
+                + (" with combat advantage" if d.get("advantage") else "")
+            )
+        elif kind == "Hit":
+            lines.append("critical hit!" if d.get("critical") else "hit")
+        elif kind == "Miss":
+            lines.append("miss")
+        elif kind == "DamageApplied" and d["amount"]:
+            damage[d["target"]] = damage.get(d["target"], 0) + d["amount"]
+        elif kind in ("Healed", "TempHP") and d["amount"]:
+            verb = "heals" if kind == "Healed" else "gains"
+            what = "" if kind == "Healed" else " temporary hit points"
+            lines.append(f"{wire.label(d['target'])} {verb} {d['amount']}{what}")
+        elif kind == "ConditionApplied":
+            lines.append(f"{wire.label(d['target'])} is {d['condition']}")
+        elif kind == "ForcedMove":
+            lines.append(f"{wire.label(d['target'])} is {d['how']}ed {d['squares']}")
+        elif kind == "Bloodied":
+            lines.append(f"{wire.label(d['actor'])} is bloodied")
+        elif kind == "Dropped":
+            lines.append(f"{wire.label(d['actor'])} goes down")
+        elif kind == "Died":
+            lines.append(f"{wire.label(d['actor'])} dies")
+        elif kind == "SavingThrow":
+            lines.append(
+                f"{wire.label(d['actor'])} "
+                + ("saves" if d["saved"] else f"fails a save ({d['natural']})")
+            )
+        elif kind == "ZoneCreated":
+            lines.append(f"{wire.power(d['label'])} covers {len(d['squares'])} squares")
+        elif kind == "MoveEnd":
+            lines.append(f"{wire.label(d['actor'])} moves to {tuple(d['at'])}")
+        elif kind == "TurnStart" and not d.get("ghost"):
+            lines.append(f"{wire.label(d['actor'])}'s turn")
+        elif kind == "OpportunityWindow":
+            lines.append(
+                f"{wire.label(d['actor'])} gets an opportunity attack on "
+                f"{wire.label(d['provoker'])}"
+            )
+        elif kind == "EffectExpired":
+            lines.append(f"{d['why']}: {d['what']}")
+
+    for who, amount in damage.items():
+        lines.append(f"{wire.label(who)} takes {amount}")
+    return ", ".join(lines)
 
 
 def narrate(session: Session, event: Event) -> str:

@@ -116,6 +116,20 @@ class EnterSquare(Event):
 
 
 @dataclass
+class Moved(Event):
+    """One step, with both ends of it.
+
+    `EnterSquare` and `LeaveSquare` are per square of a *footprint* -- a Large
+    creature emits four of each for one step -- so neither answers "what did
+    this creature just do". This does, and it is what an animation plays.
+    """
+
+    actor: int
+    from_: Square
+    to: Square
+
+
+@dataclass
 class MoveEnd(Event):
     actor: int
     at: Square

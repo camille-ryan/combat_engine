@@ -36,6 +36,7 @@ from .events import (
     EnterSquare,
     ForcedMove,
     LeaveSquare,
+    Moved,
     MoveEnd,
     MoveStart,
     OpportunityWindow,
@@ -105,6 +106,8 @@ def step(world: World, eid: int, to: Square, *, kind: str = "walk", mode: str = 
 
     for sq in sorted(target):
         world.bus.emit(EnterSquare(actor=eid, square=sq))
+
+    world.bus.emit(Moved(actor=eid, from_=from_, to=to))
 
     after = _neighbours(world, eid)
     for other in sorted(after - before):

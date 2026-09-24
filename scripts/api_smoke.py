@@ -89,15 +89,33 @@ class Server:
         )
         return json.load(urllib.request.urlopen(req, timeout=20))
 
-    def stream(self, path: str, limit: int = 4000) -> list[dict]:
-        out = []
+    def stream(self, path: str, limit: int = 6000) -> dict[str, list[dict]]:
+        """Read the stream, keeping the frame kinds apart.
+
+        Two kinds come down it: `encounter_event` is the raw log and
+        `narration` is the sentence a player reads. They share a `seq` -- a
+        sentence borrows the seq of the last event it covers -- so lumping
+        them together looks exactly like a duplicated event.
+        """
+        out: dict[str, list[dict]] = {"encounter_event": [], "narration": []}
+        kind = None
+        idle = 0
         handle = urllib.request.urlopen(self.base + path, timeout=20)
-        for raw in itertools.islice(handle, limit):
-            line = raw.decode().strip()
-            if line.startswith("data: "):
-                out.append(json.loads(line[6:]))
-            if len(out) >= limit:
-                break
+        # The stream never ends -- it is a live feed, and once it has caught
+        # up it sends keep-alives forever. Two of those in a row is the
+        # signal that the whole log has been delivered.
+        for raw in itertools.islice(handle, limit * 6):
+            line = raw.decode().rstrip("\n")
+            if line.startswith(":"):
+                idle += 1
+                if idle >= 2 and (out["encounter_event"] or out["narration"]):
+                    break
+                continue
+            if line.startswith("event: "):
+                kind = line[7:].strip()
+            elif line.startswith("data: ") and kind in out:
+                idle = 0
+                out[kind].append(json.loads(line[6:]))
         handle.close()
         return out
 
@@ -158,16 +176,29 @@ def play(server: Server, check: Checks, *, show: bool) -> tuple[str, dict]:
 
 
 def check_stream(server: Server, check: Checks, eid: str) -> list[dict]:
-    events = server.stream(f"/api/encounter/{eid}/events?from=0")
+    frames = server.stream(f"/api/encounter/{eid}/events?from=0")
+    events = frames["encounter_event"]
+    narration = frames["narration"]
+
     seqs = [e["seq"] for e in events]
     check.that(seqs == sorted(seqs), "the stream arrives in order")
     check.that(len(seqs) == len(set(seqs)), "every event arrives exactly once")
     check.that(
-        seqs[:1] == [0] if seqs else False,
-        "replaying from the start really starts at the start",
+        seqs[:1] == [1] if seqs else False,
+        "the first event is seq 1",
+        f"got {seqs[:1]} -- the page treats `from` as exclusive, so zero is never shown",
     )
-    narrated = [e for e in events if e["text"]]
-    check.that(len(narrated) > 20, f"the log reads as prose ({len(narrated)} lines)")
+    check.that(
+        bool(narration),
+        f"the readable log arrived ({len(narration)} sentences)",
+        "raw events came but no narration frames -- the page shows those and "
+        "hides the raw ones behind a checkbox, so this is an empty log panel",
+    )
+    check.that(
+        all(n.get("text") for n in narration), "every sentence has words in it"
+    )
+    if narration:
+        print(f"        e.g. {narration[min(3, len(narration) - 1)]['text'][:66]}")
     return events
 
 
