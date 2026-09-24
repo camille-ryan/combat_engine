@@ -1,0 +1,1276 @@
+/* style.css — legible over pretty. Dark, because it is a combat grid. */
+
+:root {
+  --bg: #14161b;
+  --panel: #1b1f27;
+  --panel-2: #222734;
+  --line: #333a48;
+  --ink: #e6e9ef;
+  --ink-dim: #9aa3b2;
+  --pc: #5ea9ff;
+  --npc: #ff7a6b;
+  --good: #6bd08a;
+  --warn: #e8c46a;
+  --bad: #ff7a6b;
+  --affected: #ff6b6b;
+  --path: #5ea9ff;
+  font-size: 15px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.45 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+header {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.turn {
+  font-weight: 700;
+}
+.turn.yours {
+  color: var(--good);
+}
+.turn.over {
+  color: var(--warn);
+}
+
+.meta {
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
+header button {
+  margin-left: auto;
+  background: var(--panel-2);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+header button:hover {
+  border-color: var(--pc);
+}
+
+/* The config form (#338). Level, difficulty, and whether this is a day —
+   three numbers and a checkbox, sized to read as a toolbar rather than as a
+   settings page. `margin-left: auto` moves from the button to the form, which
+   is now the last thing in the header. */
+.config {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+}
+
+.config .field {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
+.config .field.check {
+  cursor: pointer;
+}
+
+.config input[type="number"] {
+  width: 3.6rem;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.15rem 0.3rem;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.config input[type="number"]:focus {
+  outline: none;
+  border-color: var(--pc);
+}
+
+.field.wide input {
+  width: 13rem;
+}
+
+.day-scales {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.day-scales input[type="number"] {
+  width: 3.2rem;
+}
+
+header button {
+  margin-left: 0;
+}
+
+/* ------------------------------------------------------------- settings */
+
+.gear {
+  background: var(--panel-2);
+  color: var(--ink-dim);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.25rem 0.5rem;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.gear:hover {
+  color: var(--ink);
+  border-color: var(--pc);
+}
+
+/* Anchored to the header, which is `position: relative` for this. */
+.settings {
+  position: absolute;
+  right: 1rem;
+  top: 100%;
+  z-index: 60;
+  margin-top: 0.3rem;
+  width: 17rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+.settings[hidden] {
+  display: none;
+}
+.settings .field {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.settings select {
+  margin-left: auto;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.15rem 0.3rem;
+  font: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.settings-note {
+  margin: 0.45rem 0 0;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--ink-dim);
+}
+
+.status {
+  padding: 0 1rem;
+  color: var(--ink-dim);
+  font-size: 0.85rem;
+  min-height: 1.2rem;
+}
+.status.bad {
+  color: var(--bad);
+}
+.status.warn {
+  color: var(--warn);
+}
+.status.ok {
+  color: var(--good);
+}
+
+/* ───────────────────────────── the day (#338) ─────────────────────────────
+   The surge curve, which is the thing an adventuring day exists to reveal. A
+   short rest heals to full for as long as there are surges to pay for it, so
+   the hit point column is flat and the whole of the attrition is in the surge
+   column — and the per-character pips are there because surges are personal
+   and do not pool. A party holding five can be a party that cannot spend one. */
+
+.day {
+  margin: 0 1rem 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.day-legs {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.leg {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel-2);
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+}
+.leg.current {
+  border-color: var(--pc);
+  color: var(--ink);
+}
+.leg-won {
+  border-left: 3px solid var(--good);
+}
+.leg-lost,
+.leg-abandoned {
+  border-left: 3px solid var(--bad);
+}
+.leg-n {
+  font-weight: 700;
+  color: var(--ink);
+}
+.leg-scale {
+  font-variant-numeric: tabular-nums;
+}
+
+.day-curve {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.curve-row {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  gap: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line);
+}
+.curve-n {
+  color: var(--ink-dim);
+}
+.curve-line {
+  font-variant-numeric: tabular-nums;
+}
+.curve-who,
+.curve-rest,
+.curve-warn {
+  grid-column: 2;
+}
+.curve-rest {
+  color: var(--ink-dim);
+}
+.curve-warn {
+  color: var(--warn);
+}
+
+.curve-who {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.surge-pips {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--ink-dim);
+}
+.surge-pips.dry .pip-name,
+.surge-pips.dry .pip-count {
+  color: var(--bad);
+}
+.pip-track {
+  display: flex;
+  gap: 2px;
+}
+.pip {
+  width: 6px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--good);
+}
+.pip.spent {
+  background: var(--line);
+}
+.pip-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.day-foot {
+  margin-top: 0.5rem;
+}
+.day-outcome {
+  color: var(--warn);
+  font-weight: 700;
+}
+.day-next {
+  background: var(--panel-2);
+  color: var(--ink);
+  border: 1px solid var(--good);
+  border-radius: 5px;
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+  font: inherit;
+}
+.day-next:hover {
+  background: var(--good);
+  color: var(--bg);
+}
+
+main {
+  display: grid;
+  /* max-content, not auto: `auto` hands the board column all the leftover
+     width and leaves the grid floating in the middle of it. */
+  grid-template-columns: max-content 22rem 20rem;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 1.5rem;
+  align-items: start;
+}
+
+.pane {
+  min-width: 0;
+}
+
+.pane h2 {
+  margin: 0.6rem 0 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+/* ------------------------------------------------------------------ board */
+
+.board-wrap {
+  position: relative;
+  display: inline-block;
+  background: #0f1115;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.board {
+  position: relative;
+}
+
+/* Overlay for hover highlights, so rebuilding it never disturbs the board. */
+.highlights {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+/* The movement range (#336), on its own layer for the same reason: it is
+   rebuilt when the turn changes and the hover highlights are rebuilt on every
+   mouse move, and neither may disturb the other or the board. */
+.movement {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+/* Outlines and not fills. The range covers most of the board on an open turn,
+   and a tinted square that size drowns the terrain it is drawn over. */
+.mv {
+  position: absolute;
+  pointer-events: none;
+}
+.mv-free {
+  box-shadow: inset 0 0 0 1px rgba(110, 220, 150, 0.55);
+}
+.mv-costly {
+  box-shadow: inset 0 0 0 1px rgba(232, 196, 106, 0.5);
+}
+/* A square an answer sits on. Filled rather than outlined, unlike the movement
+   range: there are a handful of these and every one of them is a thing to
+   press, where the range is most of the board and is only information. */
+.mv-answer {
+  background: rgba(126, 178, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(126, 178, 255, 0.75);
+}
+
+.tile {
+  position: absolute;
+  border-right: 1px solid #262b35;
+  border-bottom: 1px solid #262b35;
+  background: #171b22;
+}
+
+.t-blocking {
+  background:
+    repeating-linear-gradient(45deg, #3a4150 0 6px, #2c313c 6px 12px);
+}
+
+.t-difficult {
+  background: #2a2418;
+  box-shadow: inset 0 0 0 2px rgba(232, 196, 106, 0.35);
+}
+
+.t-obscuring {
+  background: #1b2430;
+}
+.t-obscuring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(150, 175, 200, 0.22);
+  backdrop-filter: blur(1px);
+}
+
+.zone {
+  position: absolute;
+  /* Hoverable on purpose — see `renderBoard`. `mousemove` still bubbles to
+     `#board`, so the coordinate readout is unaffected. */
+  background: rgba(150, 90, 220, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(170, 120, 240, 0.55);
+}
+.zone-1 {
+  background: rgba(90, 200, 180, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(110, 220, 200, 0.55);
+}
+.zone-2 {
+  background: rgba(220, 150, 60, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(240, 180, 90, 0.55);
+}
+.zone-3 {
+  background: rgba(220, 90, 140, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(240, 120, 170, 0.55);
+}
+
+.zone-label {
+  position: absolute;
+  font-size: 0.6rem;
+  padding: 0 3px;
+  color: #d9c8ff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 2px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.token {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 2px;
+  border-radius: 6px;
+  border: 2px solid var(--npc);
+  background: rgba(255, 122, 107, 0.16);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: default;
+}
+
+/* Sliding is driven from anim.js, which writes `transform` and sets its own
+   duration. No transition is declared here: a token that is *re-rendered*
+   must land at its true square instantly, and a blanket transition would make
+   every redraw a slow drift. */
+
+.token.side-pc {
+  border-color: var(--pc);
+  background: rgba(94, 169, 255, 0.16);
+}
+
+.token.current {
+  box-shadow:
+    0 0 0 2px #0f1115,
+    0 0 0 4px var(--good);
+}
+
+.token.peek {
+  box-shadow:
+    0 0 0 2px #0f1115,
+    0 0 0 4px var(--warn);
+}
+
+.token.bloodied {
+  background: rgba(255, 60, 60, 0.28);
+}
+
+.token.dead {
+  opacity: 0.4;
+  filter: grayscale(0.7);
+}
+.token.dead .token-name {
+  text-decoration: line-through;
+}
+
+.token-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  text-shadow: 0 1px 2px #000;
+}
+
+.token-hp {
+  width: 100%;
+  height: 4px;
+  background: #3a2020;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.token-hp-fill {
+  height: 100%;
+  background: var(--good);
+}
+
+.hl {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 3px;
+}
+.hl-affected {
+  background: rgba(255, 107, 107, 0.34);
+  box-shadow: inset 0 0 0 2px var(--affected);
+}
+.hl-path {
+  background: rgba(94, 169, 255, 0.22);
+  box-shadow: inset 0 0 0 1px var(--path);
+}
+.hl-origin {
+  box-shadow: inset 0 0 0 2px var(--warn);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+}
+.key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.sw {
+  width: 13px;
+  height: 13px;
+  display: inline-block;
+  /* Positioned so the `.t-obscuring::after` haze resolves against the swatch
+     rather than escaping to the page. */
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+.sw-zone {
+  background: rgba(170, 120, 240, 0.5);
+}
+.sw-affected {
+  background: rgba(255, 107, 107, 0.6);
+}
+.sw-path {
+  background: rgba(94, 169, 255, 0.6);
+}
+.sw-free {
+  box-shadow: inset 0 0 0 2px rgba(110, 220, 150, 0.8);
+}
+.sw-costly {
+  box-shadow: inset 0 0 0 2px rgba(232, 196, 106, 0.8);
+}
+.hover {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ turn order */
+
+/* Unit icons in the order they act, the way a table tracks it. Scrolls
+   sideways rather than wrapping, so the order stays a line. */
+.order {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.5rem 1rem 0;
+  align-items: flex-start;
+}
+
+.unit {
+  flex: 0 0 auto;
+  width: 4.6rem;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--npc);
+  border-radius: 4px;
+  background: var(--panel);
+  padding: 0.3rem 0.25rem 0.25rem;
+  text-align: center;
+  cursor: default;
+}
+.unit.side-pc {
+  border-top-color: var(--pc);
+}
+.unit.current {
+  background: var(--panel-2);
+  box-shadow: 0 0 0 2px var(--good);
+}
+.unit.dead {
+  opacity: 0.45;
+}
+.unit.dead .unit-name {
+  text-decoration: line-through;
+}
+
+.unit-face {
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+.unit-hp {
+  height: 4px;
+  margin: 0.25rem 0 0.2rem;
+  background: #3a2020;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.unit-hp-fill {
+  height: 100%;
+  background: var(--good);
+}
+.unit-hp-fill.bloodied {
+  background: var(--warn);
+}
+.unit-hp-fill.gone {
+  background: #555;
+}
+.unit-name {
+  font-size: 0.6rem;
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* "Something is on this creature", at icon size. What it is, is on the card. */
+.unit-dots {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 2px;
+}
+.unit-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+/* Still used by the hover card's hit point bar. */
+.hpbar {
+  position: relative;
+  height: 7px;
+  margin-top: 0.3rem;
+  background: #3a2020;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.hpbar-fill {
+  height: 100%;
+  background: var(--good);
+}
+.hpbar-fill.bloodied {
+  background: var(--warn);
+}
+.hpbar-fill.gone {
+  background: #555;
+}
+
+.conds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.3rem;
+}
+.cond {
+  font-size: 0.68rem;
+  padding: 0 0.3rem;
+  border-radius: 8px;
+  background: #3a3320;
+  color: var(--warn);
+  border: 1px solid #574a24;
+}
+
+/* ---------------------------------------------------------------- actions */
+
+/* Its own scroll box. The kit is long — nine powers plus the movement options
+   — and scrolling to the bottom of it used to take the board off the screen
+   with it, which is the one thing a player needs to keep looking at. */
+.actions {
+  max-height: 78vh;
+  overflow-y: auto;
+  padding-right: 0.3rem;
+}
+
+.cost-head {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  border-bottom: 1px solid var(--line);
+}
+.cost-head.spent {
+  color: #6a7180;
+  text-decoration: line-through;
+}
+/* Which action would still pay for a spent one (PHB p.267). Beside the
+   struck-through heading rather than under it, because it is the exception to
+   what the strike-through just said.
+
+   `inline-block` and not `inline`, because a strike-through propagates into
+   every inline descendant and cannot be turned off there — an atomic
+   inline-level box is the one thing it does not cross. */
+.cost-buys {
+  display: inline-block;
+  margin-left: 0.4rem;
+  color: var(--warn);
+}
+
+.option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 0.3rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+.option:hover:not(:disabled),
+.option:focus-visible:not(:disabled) {
+  border-color: var(--pc);
+  background: var(--panel-2);
+  outline: none;
+}
+.option:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.option.unaffordable .option-label {
+  text-decoration: line-through;
+}
+
+/* A power that produced no option at all: in its section, greyed, with why.
+   Dimmer than `unaffordable`, because "you cannot reach it" and "your
+   standard action is gone" are different sentences and only the second one is
+   about this turn. */
+.option-shell {
+  display: contents;
+}
+.option.unavailable {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The power waiting for a square. */
+.option.aiming {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 1px var(--warn);
+}
+
+.freeform-hint {
+  margin: 0.4rem 0 0.5rem;
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+/* In freeform the board is a control, so say so. The same goes while a
+   question is open, in either mode: the answers are squares. */
+.board.aiming,
+.board.freeform,
+.board.deciding {
+  cursor: crosshair;
+}
+
+/* The question, and the answers to it. It is the only thing in the pane while
+   it is up, so it gets to be loud. */
+.pending-prompt {
+  margin: 0.2rem 0 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-left: 3px solid var(--warn);
+  background: rgba(232, 196, 106, 0.08);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+.option.pending-answer.suggested {
+  border-color: var(--warn);
+}
+.turn.deciding {
+  color: var(--warn);
+}
+
+.option-usage {
+  margin-left: auto;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.power-range {
+  color: var(--ink-dim);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.power-why {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--warn);
+  text-align: right;
+}
+
+/* The sourcebook's coloured band under a power's name: green at-will, red
+   encounter, grey daily. It is the fastest read on a printed page and costs
+   two pixels here. */
+.usage-bar {
+  height: 2px;
+  margin: 0.25rem 0;
+  border-radius: 1px;
+  background: var(--line);
+}
+.usage-at-will {
+  background: #3f9c53;
+}
+.usage-encounter {
+  background: #9c3b32;
+}
+.usage-daily {
+  background: #7d848f;
+}
+
+.option-line {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+.option-label {
+  font-weight: 600;
+}
+.option-targets {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.option-summary {
+  font-size: 0.78rem;
+  color: var(--good);
+  font-variant-numeric: tabular-nums;
+}
+.option-note {
+  font-size: 0.72rem;
+  color: var(--warn);
+}
+/* What the action really costs, when that is not the section it is under. */
+.option-cost {
+  font-size: 0.72rem;
+  color: var(--warn);
+}
+
+.empty {
+  color: var(--ink-dim);
+  font-style: italic;
+  padding: 0.4rem 0;
+}
+
+/* ----------------------------------------------------------------- roster */
+
+/* The whole kit. An unavailable power is dimmed and keeps its reason — a
+   shorter list is not information, and the reason is the point (#332). */
+.power {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 0.25rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+.power:hover:not(:disabled),
+.power:focus-visible:not(:disabled) {
+  border-color: var(--pc);
+  background: var(--panel-2);
+  outline: none;
+}
+/* Not `:disabled`, which would also dim a power that is merely unaffordable.
+   "You cannot reach it" and "your standard action is gone" are different
+   sentences and the second one is still worth reading at full contrast. */
+.power.unavailable {
+  opacity: 0.55;
+  cursor: default;
+}
+.power.unaffordable .power-name {
+  text-decoration: line-through;
+}
+
+.power-line {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+.power-name {
+  font-weight: 600;
+}
+.power-usage {
+  margin-left: auto;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.power-foot {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.72rem;
+}
+.power-range {
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.power-why {
+  margin-left: auto;
+  color: var(--warn);
+  text-align: right;
+}
+.power-link {
+  margin-left: auto;
+  color: var(--good);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- hover card */
+
+/* Fixed, so no pane's overflow can clip it; `pointer-events: none`, so moving
+   onto the card cannot fire the mouseleave that hides it and make it flicker.
+   Placement is card.js — this only says what it looks like. */
+.card {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  max-width: 22rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  font-size: 0.82rem;
+}
+.card[hidden] {
+  display: none;
+}
+
+.card-head {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+.card-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.card-name.side-pc {
+  color: var(--pc);
+}
+.card-name.side-npc {
+  color: var(--npc);
+}
+.card-id {
+  margin-left: auto;
+  font-size: 0.68rem;
+  color: var(--ink-dim);
+}
+.card-lead {
+  color: var(--warn);
+  font-size: 0.78rem;
+}
+.card-kind {
+  color: var(--ink-dim);
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+.card-hp {
+  margin: 0.4rem 0 0.35rem;
+}
+.card-hp-line {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+}
+
+.card-defs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
+}
+.card-def {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.15rem 0.2rem;
+  text-align: center;
+}
+.card-def-name {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.card-def-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-row {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.76rem;
+}
+.card-key {
+  color: var(--ink-dim);
+  min-width: 4.5rem;
+}
+.card-val {
+  flex: 1;
+}
+
+.card-prose {
+  margin-top: 0.3rem;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+.card-prose-key {
+  color: var(--ink-dim);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+/* Traits and auras: always true, never chosen. An aura is called out because
+   it reaches past the creature's own square and the board only shows where. */
+.card-traits {
+  margin-top: 0.35rem;
+}
+.trait {
+  border-top: 1px solid var(--line);
+  padding: 0.25rem 0 0.1rem;
+  font-size: 0.74rem;
+}
+.trait-head {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+.trait-name {
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+.trait.aura .trait-name {
+  color: #c9a6ff;
+}
+.trait-range {
+  margin-left: auto;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c9a6ff;
+}
+.trait-text {
+  color: var(--ink-dim);
+  line-height: 1.35;
+}
+
+/* What is on the creature, and when it ends (#333). */
+.card-effects {
+  margin-top: 0.4rem;
+}
+.effect {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.74rem;
+  padding: 0.12rem 0.3rem;
+  border-left: 2px solid var(--line);
+  margin-bottom: 0.15rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+.effect.ongoing {
+  border-left-color: var(--bad);
+}
+.effect.save-ends .effect-duration {
+  color: var(--warn);
+}
+.effect-text {
+  flex: 1;
+}
+.effect.ongoing .effect-text {
+  color: #ffb4a8;
+  font-weight: 600;
+}
+.effect-duration {
+  color: var(--ink-dim);
+  white-space: nowrap;
+  font-size: 0.68rem;
+}
+
+.card-note {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--good);
+}
+.card-bad {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--warn);
+}
+
+/* -------------------------------------------------------------------- log */
+
+.log {
+  height: 70vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.82rem;
+}
+
+/* The fight, in sentences. This is the log's content; everything else in the
+   panel is scaffolding around it (#329). */
+.narration {
+  padding: 0.3rem 0.1rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* Round headings come off the narration frame's `round`, because the raw
+   `round_started` line is hidden with the rest of them and it was the only
+   structure the panel had. No `:first-child` exception: the hidden raw lines
+   are still children, so it would never match anyway. */
+.log-round {
+  margin: 0.7rem 0 0.35rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+  color: var(--warn);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.raw-toggle {
+  float: right;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+.raw-toggle input {
+  margin: 0;
+  accent-color: var(--pc);
+}
+
+/* Out of the way, not gone. Unticking the box leaves the rows in the DOM so
+   the panel never has to re-fetch the stream to show them. */
+.logline {
+  display: none;
+  gap: 0.5rem;
+  padding: 0.1rem 0;
+}
+.log.with-raw .logline {
+  display: flex;
+}
+.log.with-raw .narration {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 0.25rem;
+}
+.log-seq {
+  color: #5c6473;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.2rem;
+  text-align: right;
+}
+.log-text {
+  flex: 1;
+  color: var(--ink-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+}
+
+.logline.kind-damage .log-text {
+  color: #ffb4a8;
+}
+.logline.kind-miss .log-text {
+  color: var(--ink-dim);
+}
+.logline.kind-death .log-text,
+.logline.kind-defeat .log-text {
+  color: var(--bad);
+  font-weight: 600;
+}
+.logline.kind-round_start .log-text,
+.logline.kind-turn_start .log-text {
+  color: var(--warn);
+}
+
+@media (max-width: 1200px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+  .log {
+    height: 30vh;
+  }
+}

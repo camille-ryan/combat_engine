@@ -15,8 +15,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .components import Health, Position, Powers
-from .dsl import aim_points, area_of, candidates, get, usable
+from .components import Health, Powers
+from .dsl import aim_points, candidates, get, usable
 from .grid import Square
 from .query import alive, can_act, is_
 from .types import ActionType, Condition, Usage
@@ -139,23 +139,23 @@ def _aimings(world: World, actor: int, ref: str) -> list[Action]:
 def _burst_origins(world: World, actor: int, p) -> list[Square]:  # noqa: ANN001
     """Candidate origin squares for an area burst, capped to ones that land.
 
-    Only squares that already hold a creature are offered. An area burst
-    aimed at empty ground is legal and occasionally right, but enumerating
-    every square within range would swamp both the interface and any policy,
-    and this keeps the list to the ones that do something.
+    `aim_points` is the authority on where the power may be centred -- it
+    knows the range off the printed line -- and this keeps only the squares
+    a creature is standing in. An area burst aimed at empty ground is legal
+    and occasionally right, but offering every square within ten would swamp
+    the interface and any policy alike.
+
+    Narrowing without asking `aim_points` first is how an "area burst 1
+    within 10" came to be offered twenty-one squares away.
     """
     from .query import creatures, squares
 
+    legal_aims = set(aim_points(world, actor, p))
     out: set[Square] = set()
-    reach = area_of(world, actor, p)
     for other in creatures(world):
         if not alive(world, other):
             continue
-        for sq in squares(world, other):
-            if sq in reach or world.grid.line_of_effect(
-                world.need(actor, Position).square, sq
-            ):
-                out.add(sq)
+        out |= squares(world, other) & legal_aims
     return sorted(out)
 
 

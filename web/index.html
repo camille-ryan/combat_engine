@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>dnd4e — encounter</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>dnd4e</h1>
+      <span id="turn" class="turn">Loading…</span>
+      <span id="meta" class="meta"></span>
+
+      <!-- The numbers that used to be constants in the source (#338). A small
+           form and deliberately not a settings panel: how strong the party is,
+           how hard the fight is, and whether this is one fight or a day. The
+           four per-encounter multipliers appear only when it is a day, because
+           on their own they are four boxes that mean nothing. -->
+      <form id="config" class="config">
+        <label class="field">
+          level
+          <input id="level" type="number" min="1" max="10" step="1" value="1" />
+        </label>
+        <!-- The three the server has always taken and the page never asked
+             for. All three are blank-means-default, which is what keeps the
+             names of the default fight out of this file (#325): the server
+             owns them, and an empty box sends no key at all. -->
+        <label class="field wide">
+          party
+          <input id="party" type="text" placeholder="Race Class, Race Class" />
+        </label>
+        <label class="field wide" id="enemies-field">
+          enemies
+          <input id="enemies" type="text" placeholder="blank builds a fight worth the party" />
+        </label>
+        <label class="field">
+          seed
+          <input id="seed" type="number" step="1" placeholder="drawn" />
+        </label>
+        <label class="field" id="scale-field">
+          budget ×
+          <input id="scale" type="number" min="0.25" max="5" step="0.25" value="1.25" />
+        </label>
+        <label class="field check">
+          <input id="day-on" type="checkbox" />
+          adventuring day
+        </label>
+        <span id="day-scales" class="day-scales" hidden>
+          <input class="leg-scale" type="number" min="0.25" max="5" step="0.25" value="0.75" aria-label="encounter 1 budget multiplier" />
+          <input class="leg-scale" type="number" min="0.25" max="5" step="0.25" value="1" aria-label="encounter 2 budget multiplier" />
+          <input class="leg-scale" type="number" min="0.25" max="5" step="0.25" value="1" aria-label="encounter 3 budget multiplier" />
+          <input class="leg-scale" type="number" min="0.25" max="5" step="0.25" value="1.25" aria-label="encounter 4 budget multiplier" />
+        </span>
+        <button id="restart" type="submit">Start</button>
+      </form>
+
+      <!-- Settings, behind a gear, because they are about how the page
+           behaves rather than about what fight to build — the form beside it
+           is the fight. One control so far: how fast the board plays a turn
+           back. -->
+      <button id="settings-btn" type="button" class="gear" title="Settings" aria-label="Settings">
+        &#9881;
+      </button>
+      <div id="settings" class="settings" hidden>
+        <label class="field">
+          board speed
+          <select id="speed"></select>
+        </label>
+        <label class="field check">
+          <input id="freeform" type="checkbox" />
+          freeform targeting
+        </label>
+        <p class="settings-note">
+          Freeform shows your powers instead of every worked-out target: pick
+          a power, then click a square. Clicking a square with nothing picked
+          walks you there — anywhere you can reach, not only the handful the
+          engine suggests.
+        </p>
+        <p class="settings-note">
+          The engine plays a whole turn at once. This is how fast the board
+          replays it; <em>instant</em> is the old behaviour.
+        </p>
+      </div>
+    </header>
+
+    <div id="status" class="status"></div>
+
+    <!-- The day, and why it is worth showing (#338). A single fight is one the
+         party can win by spending everything it has; what 4E asks a player to
+         manage is the day, and the whole of that pressure sits in the surge
+         column — a short rest heals to full for exactly as long as there are
+         surges to pay for it. So this is the curve, per fight and per
+         character, because surges are **personal** and do not pool: a party
+         holding thirteen can be a party that cannot spend one. -->
+    <section id="day" class="day" hidden>
+      <div id="day-legs" class="day-legs"></div>
+      <div id="day-curve" class="day-curve"></div>
+      <div id="day-foot" class="day-foot"></div>
+    </section>
+
+    <!-- Turn order, as the icons themselves in the order they act. The
+         initiative *bonus* decided this once and says nothing afterwards, and
+         two creatures that tied on it are indistinguishable by it — so the
+         order is shown rather than the number that produced it. -->
+    <div id="order" class="order"></div>
+
+    <!-- Three columns, matching `main`'s `auto 22rem 20rem` in style.css:
+         the board sizes itself, initiative and actions share the middle
+         because they are the two halves of taking a turn, and the log gets
+         its own column to read down. -->
+    <main>
+      <section class="pane pane-board">
+        <h2>Board</h2>
+        <!-- #movement and #highlights are absolutely positioned and #board is
+             not, so .board-wrap is the containing block all three resolve
+             against. They must stay siblings inside it: coords.js `place()`
+             writes the same pixel offsets into tiles, into the movement range
+             and into highlights, and those offsets only line up if the layers
+             share an origin.
+
+             #movement is after #board because a tile has an opaque background
+             — an outline drawn underneath one would simply not be there — and
+             before #highlights because a hovered path is the more specific
+             answer and should draw over the range it sits inside. -->
+        <div class="board-wrap">
+          <div id="board" class="board"></div>
+          <div id="movement" class="movement"></div>
+          <div id="highlights" class="highlights"></div>
+        </div>
+        <div class="legend">
+          <span class="key"><span class="sw t-blocking"></span>blocking</span>
+          <span class="key"><span class="sw t-difficult"></span>difficult</span>
+          <span class="key"><span class="sw t-obscuring"></span>obscuring</span>
+          <span class="key"><span class="sw sw-zone"></span>zone</span>
+          <span class="key"><span class="sw sw-affected"></span>affected</span>
+          <span class="key"><span class="sw sw-path"></span>path</span>
+          <!-- Two colours, one question: can I stand there for nothing? The
+               server decides which is which — see plans/20260921-api-contract.md
+               on `movement`. -->
+          <span class="key"><span class="sw sw-free"></span>move, free</span>
+          <span class="key"><span class="sw sw-costly"></span>move, provokes</span>
+          <span id="hover" class="hover"></span>
+        </div>
+      </section>
+
+      <!-- One pane, scrolling on its own, so reading to the bottom of a long
+           power list never scrolls the board off the screen. The whole kit is
+           here, not only what is legal from this square (#332): each power
+           sits in the section of the action economy it belongs to, greyed
+           when it cannot be used and carrying the reason — and where the
+           reason is distance it is the number, "2 squares closer", because
+           that is what the decision to move turns on. -->
+      <section class="pane pane-side">
+        <h2>Actions</h2>
+        <div id="actions" class="actions"></div>
+      </section>
+
+      <!-- The log reads as a fight, not as a trace (#329). The narration
+           lines are the content; the raw engine events are still sent and
+           still in the DOM, but folded away behind this one checkbox because
+           they are for chasing a rules bug, not for playing. -->
+      <section class="pane pane-log">
+        <h2>
+          Log
+          <label class="raw-toggle">
+            <input id="show-raw" type="checkbox" />
+            raw events
+          </label>
+        </h2>
+        <div id="log" class="log"></div>
+      </section>
+    </main>
+
+    <!-- The hover card (#333, #335). Outside `main` and positioned fixed, so
+         it is never clipped by a pane's scroll box; `pointer-events: none` in
+         the stylesheet keeps it from stealing the mouseleave that hides it. -->
+    <div id="card" class="card" hidden></div>
+
+    <script type="module" src="./app.js"></script>
+    <script type="module">
+      // `app.js` sets this once it has resolved. If it has not, say so in the
+      // page rather than only in the console: a blank board with a silent
+      // module error looks exactly like a server that is not answering.
+      setTimeout(() => {
+        if (!window.__dnd4e_app_loaded) {
+          const status = document.getElementById("status");
+          status.className = "status bad";
+          status.textContent =
+            "app.js did not load — check the browser console.";
+        }
+      }, 1500);
+    </script>
+  </body>
+</html>

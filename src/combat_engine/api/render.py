@@ -1,0 +1,605 @@
+"""Turning the engine's state into what the page reads.
+
+One direction only. Nothing here decides anything or touches the world; it
+reads and formats. The action list in particular comes straight from
+`actions.legal` -- the page and any policy are shown the same options in the
+same order, so a click cannot do something a policy could not have chosen.
+"""
+
+from __future__ import annotations
+
+from combat_engine.engine import (
+    Action,
+    Budget,
+    Conditions,
+    Defences,
+    Defenses,
+    Gear,
+    Health,
+    Ident,
+    Initiative,
+    Position,
+    Powers,
+    Side,
+    Stats,
+    Team,
+    get,
+    usable,
+)
+from combat_engine.engine.actions import legal
+from combat_engine.engine.dsl import aim_points, area_of, candidates
+from combat_engine.engine.durations import When
+from combat_engine.engine.events import Event
+from combat_engine.engine.movement import OVERHEAD, mode_of, reachable
+from combat_engine.engine.query import (
+    alive,
+    creatures,
+    defence,
+    is_,
+    speed,
+    squares,
+)
+from combat_engine.engine.types import ActionType, Condition, Defense
+from combat_engine.engine.zones import Zone
+
+from . import dto
+from .session import Session
+from .wire import Wire
+
+RANK = {"minion": "minion", "elite": "elite", "solo": "solo"}
+
+
+def state(session: Session, seq: int = 0) -> dto.EncounterStateDTO:
+    session.wire.refresh(session.world)
+    world, wire = session.world, session.wire
+    actor = session.current
+    options = session.options()
+
+    return dto.EncounterStateDTO(
+        id=session.id,
+        round=world.round,
+        seed=session.seed,
+        status=session.status,
+        current=wire.id(actor),
+        awaiting_input=session.awaiting,
+        winner=session.encounter.winner.value if session.encounter.winner else None,
+        rounds=world.round if session.encounter.finished else None,
+        board=board(session),
+        actors=[actor_dto(session, eid) for eid in creatures(world)],
+        options=[option_dto(session, i, o) for i, o in enumerate(options)],
+        roster=roster(session, options),
+        economy=economy(session),
+        movement=movement(session),
+        pending=pending(session),
+        seq=len(world.bus.log),
+        scaling=world.scaling.describe(),
+    )
+
+
+# --------------------------------------------------------------------------
+# The board
+# --------------------------------------------------------------------------
+
+
+def board(session: Session) -> dto.BoardDTO:
+    world, wire = session.world, session.wire
+    return dto.BoardDTO(
+        width=world.grid.width,
+        height=world.grid.height,
+        blocking=sorted(world.grid.blocking),
+        difficult=sorted(world.difficult()),
+        obscuring=[],
+        zones=[
+            dto.ZoneDTO(
+                id=wire.zone(eid),
+                owner=wire.id(zone.owner),
+                squares=sorted(zone.squares),
+                label=wire.power(zone.label),
+            )
+            for eid, zone in world.each(Zone)
+        ],
+    )
+
+
+def actor_dto(session: Session, eid: int) -> dto.ActorDTO:
+    world, wire = session.world, session.wire
+    health = world.need(eid, Health)
+    pos = world.need(eid, Position)
+    stats = world.get(eid, Stats)
+    side = world.get(eid, Side)
+    conds = world.get(eid, Conditions)
+    res = world.get(eid, Defences)
+    ident = world.need(eid, Ident)
+
+    return dto.ActorDTO(
+        id=wire.id(eid) or str(eid),
+        label=wire.label(eid),
+        side="pc" if side and side.team is Team.PC else "npc",
+        square=pos.square,
+        squares=sorted(pos.squares),
+        hp=health.hp,
+        hp_max=health.max_hp,
+        temp_hp=health.temp,
+        surges=health.surges,
+        surges_max=health.surges,
+        bloodied=health.bloodied,
+        bloodied_value=health.max_hp // 2,
+        dead=not alive(world, eid),
+        ac=defence(world, eid, Defense.AC),
+        fort=defence(world, eid, Defense.FORT),
+        ref=defence(world, eid, Defense.REF),
+        will=defence(world, eid, Defense.WILL),
+        conditions=[c.value for c in (conds.active if conds else [])],
+        effects=[condition_dto(session, e) for e in world.effects.of(eid)],
+        traits=[],
+        is_current=eid == session.current,
+        level=stats.level if stats else 1,
+        role=_monster_field(ident.ref, "role"),
+        rank=_rank(ident.ref),
+        size=pos.size.name.lower(),
+        speed=speed(world, eid),
+        initiative_mod=(init.bonus if (init := world.get(eid, Initiative)) else 0),
+        senses=_monster_field(ident.ref, "senses"),
+        mtype=_monster_field(ident.ref, "kind"),
+        origin=_monster_field(ident.ref, "origin"),
+        resist=_damage_line(res.resist if res else {}),
+        vulnerable=_damage_line(res.vulnerable if res else {}),
+        immune=", ".join(sorted(d.value for d in res.immune)) if res and res.immune else None,
+        threat=_threat(session, eid),
+        subtypes=None,
+    )
+
+
+def condition_dto(session: Session, effect) -> dto.ConditionDTO:  # noqa: ANN001
+    wire = session.wire
+    bits = [c.value for c in effect.conditions]
+    if effect.ongoing:
+        bits.append(f"ongoing {effect.ongoing[0]} {effect.ongoing[1].value}")
+    for _eid, mod in effect.mods:
+        bits.append(f"{mod.value:+d} {mod.what}")
+    for kind, source, _target in effect.relations:
+        bits.append(f"{kind.value.replace('_', ' ')} {wire.label(source)}")
+    return dto.ConditionDTO(
+        name=wire.power(effect.label) if effect.label else "effect",
+        text=", ".join(bits) or "-",
+        duration=_duration_text(session, effect),
+        source=wire.id(effect.source),
+        ongoing=effect.ongoing[0] if effect.ongoing else 0,
+        ongoing_type=effect.ongoing[1].value if effect.ongoing else None,
+        save_ends=effect.when is When.SAVE_ENDS,
+    )
+
+
+def _duration_text(session: Session, effect) -> str:  # noqa: ANN001
+    """Say whose clock it is on, not just what kind of clock it is."""
+    who = session.wire.label(effect.clock)
+    return {
+        When.EONT: f"end of {who}'s next turn",
+        When.SONT: f"start of {who}'s next turn",
+        When.EOTNT: f"end of {who}'s next turn",
+        When.SOTNT: f"start of {who}'s next turn",
+        When.SAVE_ENDS: "save ends",
+        When.ENCOUNTER: "end of the fight",
+        When.STANCE: "stance",
+        When.SUSTAIN: "while sustained",
+        When.INSTANT: "instant",
+    }[effect.when]
+
+
+def _damage_line(values: dict) -> str | None:
+    return ", ".join(f"{n} {d.value}" for d, n in sorted(values.items())) or None
+
+
+def _monster_field(ref: str, column: str) -> str | None:
+    if not ref.startswith("m"):
+        return None
+    from combat_engine.content.loader import load
+
+    try:
+        return load(ref).row.get(column) or None
+    except KeyError:
+        return None
+
+
+def _rank(ref: str) -> str:
+    if not ref.startswith("m"):
+        return "standard"
+    from combat_engine.content.loader import load
+
+    try:
+        row = load(ref).row
+    except KeyError:
+        return "standard"
+    for flag, name in RANK.items():
+        if row.get(flag):
+            return name
+    return "standard"
+
+
+def _threat(session: Session, eid: int) -> float:
+    """How dangerous this creature is, as a share of one character's health.
+
+    Deliberately the scorer's kind of number rather than raw damage: a flat
+    figure quietly changes meaning as the party levels, and two creatures on
+    one board are being compared here.
+    """
+    world = session.world
+    known = world.get(eid, Powers)
+    if known is None:
+        return 0.0
+    best = 0.0
+    foes = [f for f in creatures(world) if alive(world, f)]
+    for ref in known.all:
+        p = get(ref)
+        if p is None or p.attack is None:
+            continue
+        for foe in foes:
+            mine, theirs = world.get(eid, Side), world.get(foe, Side)
+            if mine and theirs and mine.team is theirs.team:
+                continue
+            best = max(best, p.hit_chance(world, eid, foe))
+    return round(best, 3)
+
+
+# --------------------------------------------------------------------------
+# Options and the roster
+# --------------------------------------------------------------------------
+
+
+def option_dto(session: Session, index: int, action: Action) -> dto.OptionDTO:
+    world, wire = session.world, session.wire
+    actor = session.current
+    p = get(action.ref) if action.ref else None
+
+    affected: list = []
+    if p is not None and p.reach.kind in ("close_burst", "close_blast", "area_burst"):
+        affected = sorted(area_of(world, actor, p, action.origin))
+
+    return dto.OptionDTO(
+        index=index,
+        kind=action.kind,
+        label=_option_label(session, action, p),
+        cost=action.cost.value,
+        targets=[wire.id(t) or str(t) for t in action.targets],
+        origin=action.origin,
+        affected=affected,
+        path=list(action.path),
+        forecast=_forecast(session, action, p),
+        notes=[],
+        pays=_pays(session, action).value,
+        affordable=session.encounter.can_spend(actor, action.cost) if actor else False,
+        cost_note=_cost_note(session, action),
+        score=round(session.policy.score(world, session.encounter, actor, action), 2)
+        if actor
+        else 0.0,
+    )
+
+
+def _option_label(session: Session, action: Action, p) -> str:  # noqa: ANN001
+    wire = session.wire
+    if action.kind == "power":
+        name = wire.power(action.ref)
+        who = ", ".join(wire.label(t) for t in action.targets)
+        return f"{name} -> {who}" if who else name
+    if action.kind == "move":
+        return f"move to {action.dest}"
+    return {"stand": "stand up", "second_wind": "second wind", "end": "end turn"}.get(
+        action.kind, action.kind
+    )
+
+
+def _pays(session: Session, action: Action) -> ActionType:
+    """Which action slot this really costs.
+
+    A move made with the move action already gone is paid out of the standard
+    action. The page offered it as free and the server charged the attack,
+    until that was said on the wire.
+    """
+    from combat_engine.engine.types import DOWNGRADES
+
+    actor = session.current
+    budget = session.world.get(actor, Budget) if actor else None
+    if budget is None or action.cost not in DOWNGRADES:
+        return action.cost
+    for slot in DOWNGRADES[action.cost]:
+        if getattr(budget, slot.value) > 0:
+            return slot
+    return action.cost
+
+
+def _cost_note(session: Session, action: Action) -> str | None:
+    paid = _pays(session, action)
+    if paid is action.cost:
+        return None
+    return f"spends your {paid.value} action"
+
+
+def _forecast(session: Session, action: Action, p) -> dto.ForecastDTO | None:  # noqa: ANN001
+    if p is None or p.attack is None or not action.targets:
+        return None
+    world = session.world
+    actor = session.current
+    chances = [p.hit_chance(world, actor, t) for t in action.targets]
+    mean = sum(chances) / len(chances)
+    # Damage is not knowable without running the power -- a body is code --
+    # so this is what the policy has learned from watching, defaulting to a
+    # neutral figure rather than a confident wrong one.
+    per_hit = session.policy.memory.worth(action.ref, 6.0) if session.policy.memory else 6.0
+    expected = sum(chances) * per_hit
+    kills = sum(
+        1
+        for t, c in zip(action.targets, chances, strict=False)
+        if c > 0.5 and (h := world.get(t, Health)) and h.hp <= per_hit
+    )
+    return dto.ForecastDTO(
+        hit_chance=round(mean, 3),
+        expected_damage=round(expected, 1),
+        kills_likely=kills,
+        summary=f"{mean:.0%} to hit, about {expected:.0f} damage",
+    )
+
+
+def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
+    """The acting creature's whole kit, usable or not.
+
+    Everything it carries, with a reason on the ones it cannot use, because
+    "the attack you would get by closing two squares" is exactly what a
+    player needs to see and the legal-action list cannot show it.
+    """
+    world = session.world
+    actor = session.current
+    if actor is None:
+        return []
+    known = world.get(actor, Powers)
+    if known is None:
+        return []
+
+    by_ref: dict[str, list[int]] = {}
+    for i, action in enumerate(options):
+        if action.ref:
+            by_ref.setdefault(action.ref, []).append(i)
+
+    out: list[dto.PowerDTO] = []
+    for ref in known.all:
+        p = get(ref)
+        if p is None:
+            continue
+        ok, why = usable(world, actor, p)
+        indices = by_ref.get(ref, [])
+        affordable = session.encounter.can_spend(actor, p.action)
+        if not affordable and ok:
+            ok, why = False, "no action left"
+        out.append(
+            dto.PowerDTO(
+                name=session.wire.power(ref),
+                action=p.action.value,
+                cost=p.action.value,
+                usage=p.usage.value + (f" {p.recharge}+" if p.recharge else ""),
+                range_text=str(p.reach),
+                keywords=[k.value for k in p.keywords],
+                attack_text=str(p.attack) if p.attack else None,
+                requirement_text=p.requires_text or None,
+                effect_text=session.wire.flavour(ref) or None,
+                targets=str(p.target),
+                available=bool(indices),
+                reason=None if indices else (why or "cannot be used here"),
+                squares=sorted(area_of(world, actor, p)) if p.is_attack else [],
+                aimed=[],
+                option_index=indices[0] if indices else None,
+                option_indices=indices,
+                option_label=None,
+                affordable=affordable,
+                pays=_pays(session, options[indices[0]]).value if indices else None,
+                cost_note=_cost_note(session, options[indices[0]]) if indices else None,
+            )
+        )
+    return out
+
+
+def economy(session: Session) -> dto.EconomyDTO:
+    actor = session.current
+    budget = session.world.get(actor, Budget) if actor else None
+    if budget is None:
+        return dto.EconomyDTO()
+    spent = [
+        name
+        for name, left in (("standard", budget.standard), ("move", budget.move),
+                           ("minor", budget.minor))
+        if left <= 0
+    ]
+    buys = {}
+    if budget.standard > 0:
+        buys["standard"] = "standard, move or minor"
+    if budget.move > 0:
+        buys["move"] = "move or minor"
+    if budget.minor > 0:
+        buys["minor"] = "minor"
+    return dto.EconomyDTO(spent=spent, buys=buys)
+
+
+def movement(session: Session) -> dto.MovementDTO | None:
+    """Where the acting creature could go, split by what it costs.
+
+    `free` is what the printed speed reaches; `costly` is what needs the
+    standard action spent as a second move. A flyer's reachable set already
+    excludes squares it could not land in.
+    """
+    world = session.world
+    actor = session.current
+    if actor is None or session.encounter.finished:
+        return None
+    budget = world.get(actor, Budget)
+    if budget is None:
+        return None
+    pace = speed(world, actor)
+    free = reachable(world, actor, pace) if budget.move > 0 else {}
+    far = reachable(world, actor, pace * 2) if budget.standard > 0 else {}
+    mode = mode_of(world, actor, None)
+    shift_reach = reachable(world, actor, 1, mode="walk" if mode in OVERHEAD else None)
+    return dto.MovementDTO(
+        free=sorted(free),
+        costly=sorted(set(far) - set(free)),
+        shift=sorted(shift_reach),
+    )
+
+
+def pending(session: Session) -> dto.PendingDTO | None:
+    q = session.gate.question
+    if q is None:
+        return None
+    wire = session.wire
+    answers = []
+    for i, option in enumerate(q.options):
+        if isinstance(option, int):
+            answers.append(
+                dto.PendingAnswerDTO(index=i, label=wire.label(option), actor=wire.id(option))
+            )
+        elif isinstance(option, tuple) and len(option) == 2:
+            answers.append(
+                dto.PendingAnswerDTO(index=i, label=f"{option}", squares=[option])
+            )
+        else:
+            answers.append(dto.PendingAnswerDTO(index=i, label=str(option)))
+    return dto.PendingDTO(
+        kind=q.kind,
+        chooser=wire.id(q.chooser) or str(q.chooser),
+        prompt=q.prompt,
+        answers=answers,
+        default=0,
+    )
+
+
+# --------------------------------------------------------------------------
+# Events
+# --------------------------------------------------------------------------
+
+
+def event_dto(session: Session, event: Event) -> dto.EventDTO:
+    wire = session.wire
+    data = event.wire()
+    actor = data.get("actor") or data.get("attacker") or data.get("source")
+    target = data.get("target")
+    return dto.EventDTO(
+        seq=event.seq,
+        kind=event.kind,
+        actor=wire.id(actor) if isinstance(actor, int) else None,
+        target=wire.id(target) if isinstance(target, int) else None,
+        text=narrate(session, event),
+        data={k: _wire_value(wire, k, v) for k, v in data.items()},
+    )
+
+
+def _wire_value(wire: Wire, key: str, value):  # noqa: ANN001, ANN202
+    """Translate the payload keys that hold a creature id."""
+    holders = ("actor", "attacker", "source", "target", "other", "provoker", "owner")
+    if key in holders and isinstance(value, int):
+        return wire.id(value) or value
+    if key == "targets" and isinstance(value, list):
+        return [wire.id(v) or v for v in value]
+    if key == "power" and isinstance(value, str):
+        return wire.power(value)
+    return value
+
+
+def narrate(session: Session, event: Event) -> str:
+    """One readable line. Names, not ids; no rules meaning of its own."""
+    wire = session.wire
+    d = event.wire()
+
+    def who(key: str) -> str:
+        v = d.get(key)
+        return wire.label(v) if isinstance(v, int) else "?"
+
+    kind = event.kind
+    if kind == "RoundStart":
+        return f"Round {d['round']}"
+    if kind == "TurnStart":
+        return f"{who('actor')}'s turn" + (" (dead)" if d.get("ghost") else "")
+    if kind == "TurnEnd":
+        return ""
+    if kind == "PowerUsed":
+        return f"{who('actor')} uses {wire.power(d['power'])}"
+    if kind == "AttackRolled":
+        return (
+            f"{who('attacker')} rolls {d['natural']}{d['bonus']:+d} = {d['total']} "
+            f"vs {d['vs'].upper()} {d['defence']}"
+            + (" (combat advantage)" if d.get("advantage") else "")
+        )
+    if kind == "Hit":
+        return f"hit{' -- critical!' if d.get('critical') else ''}"
+    if kind == "Miss":
+        return "miss"
+    if kind == "DamageApplied":
+        tail = f" ({d['absorbed']} absorbed)" if d.get("absorbed") else ""
+        return f"{who('target')} takes {d['amount']} damage{tail}, now on {d['hp']}"
+    if kind == "Healed":
+        return f"{who('target')} heals {d['amount']}, now on {d['hp']}"
+    if kind == "TempHP":
+        return f"{who('target')} gains {d['amount']} temporary hit points"
+    if kind == "Bloodied":
+        return f"{who('actor')} is bloodied"
+    if kind == "Dropped":
+        return f"{who('actor')} drops"
+    if kind == "Died":
+        return f"{who('actor')} dies"
+    if kind == "ConditionApplied":
+        return f"{who('target')} is {d['condition']} ({d['duration']})"
+    if kind == "ConditionEnded":
+        return f"{who('target')} is no longer {d['condition']} ({d['why']})"
+    if kind == "SavingThrow":
+        return (
+            f"{who('actor')} saves: {d['natural']}{d['bonus']:+d} -- "
+            + ("saved" if d["saved"] else "failed")
+        )
+    if kind == "MoveEnd":
+        return f"{who('actor')} moves to {tuple(d['at'])}"
+    if kind == "ForcedMove":
+        return f"{who('source')} {d['how']}s {who('target')} {d['squares']}"
+    if kind == "OpportunityWindow":
+        return f"{who('actor')} gets an opportunity attack on {who('provoker')}"
+    if kind == "ZoneCreated":
+        return f"{wire.power(d['label'])} covers {len(d['squares'])} squares"
+    if kind == "EffectExpired":
+        return f"{who('actor')}: {d['what']} ends ({d['why']})"
+    if kind == "Note":
+        return d.get("text", "")
+    return ""
+
+
+def legal_for(session: Session) -> list[Action]:
+    actor = session.current
+    if actor is None:
+        return []
+    return legal(session.world, session.encounter, actor)
+
+
+def is_down(session: Session, eid: int) -> bool:
+    return is_(session.world, eid, Condition.DYING)
+
+
+def has_gear(session: Session, eid: int) -> bool:
+    return session.world.get(eid, Gear) is not None
+
+
+def defences_of(session: Session, eid: int) -> Defenses:
+    return session.world.need(eid, Defenses)
+
+
+def all_candidates(session: Session, ref: str) -> list[int]:
+    p = get(ref)
+    actor = session.current
+    if p is None or actor is None:
+        return []
+    return candidates(session.world, actor, p)
+
+
+def aims(session: Session, ref: str) -> list:
+    p = get(ref)
+    actor = session.current
+    if p is None or actor is None:
+        return []
+    return aim_points(session.world, actor, p)
+
+
+def squares_of(session: Session, eid: int):  # noqa: ANN201
+    return sorted(squares(session.world, eid))

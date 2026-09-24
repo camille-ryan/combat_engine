@@ -323,7 +323,18 @@ def aim_points(world: World, actor: int, p: Power) -> list[Square]:
 
 
 def candidates(world: World, actor: int, p: Power, origin: Square | None = None) -> list[int]:
-    """Everyone this power could legally be aimed at right now."""
+    """Everyone this power could legally be aimed at right now.
+
+    An area power is checked at both ends. The **origin** has to be somewhere
+    the power could be put: within its range, on the board, and with line of
+    effect from the caster. Then each target needs line of effect **from the
+    origin square**, not from the caster -- a burst thrown round a corner
+    catches what is round the corner with it, not what the caster can see.
+
+    Leaving the origin unchecked meant an "area burst 1 within 10" could be
+    centred twenty squares away and still hit, which is a rule the printed
+    range line states outright.
+    """
     if p.target.side == "self" and p.target.count == 0:
         return []
     if p.target.side == "self":
@@ -334,7 +345,20 @@ def candidates(world: World, actor: int, p: Power, origin: Square | None = None)
         "any": creatures(world),
         "other": [c for c in creatures(world) if c != actor],
     }[p.target.side]
+
+    aimed = origin is not None and p.reach.kind in ("area_burst", "close_blast")
+    if aimed and origin not in aim_points(world, actor, p):
+        return []
+
     area = area_of(world, actor, p, origin)
+    if p.reach.kind == "area_burst" and origin is not None:
+        return [
+            c
+            for c in pool
+            if alive(world, c)
+            and squares(world, c) & area
+            and any(world.grid.line_of_effect(origin, sq) for sq in squares(world, c))
+        ]
     return [
         c
         for c in pool
