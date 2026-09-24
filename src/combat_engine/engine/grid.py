@@ -296,19 +296,50 @@ def area_burst(centre: Square, radius: int) -> frozenset[Square]:
     return spread({centre}, radius)
 
 
-def blast(origin: frozenset[Square] | set[Square], size: int, facing: Square) -> frozenset[Square]:
-    """A close blast: a `size`x`size` square adjacent to the origin.
+def blast_placements(
+    origin: frozenset[Square] | set[Square], size: int
+) -> dict[Square, frozenset[Square]]:
+    """Every way a close blast `size` can be laid down, keyed by its centre.
 
-    `facing` is one of the eight steps. The blast is laid out from the origin
-    corner nearest that direction, which is what lets a diagonal blast catch
-    the corner the printed rule says it does.
+    A close blast is a `size`x`size` block that touches the caster's space
+    without covering any of it. Enumerating the placements directly, rather
+    than picking one of eight compass directions, is both the printed rule
+    and the thing that makes aiming easy: **the key is the square you point
+    at**, so a player clicks a square and the interface has the area.
+
+    For a Medium caster and a blast 3 the keys come out as exactly the ring
+    of squares two away -- which is the shape worth knowing, and it falls out
+    of the general rule rather than being special-cased. Even sizes have no
+    true centre square, so the key is the lower-left of the middle four; it
+    is still one square per placement, which is all a caller needs.
     """
-    fx, fy = facing
     xs = [s[0] for s in origin]
     ys = [s[1] for s in origin]
-    x0 = (max(xs) + 1) if fx > 0 else (min(xs) - size) if fx < 0 else min(xs)
-    y0 = (max(ys) + 1) if fy > 0 else (min(ys) - size) if fy < 0 else min(ys)
-    return frozenset((x0 + dx, y0 + dy) for dx, dy in product(range(size), range(size)))
+    reach = spread(origin, 1)
+    off = (size - 1) // 2
+    out: dict[Square, frozenset[Square]] = {}
+    for x0 in range(min(xs) - size, max(xs) + 2):
+        for y0 in range(min(ys) - size, max(ys) + 2):
+            area = frozenset(
+                (x0 + dx, y0 + dy) for dx, dy in product(range(size), range(size))
+            )
+            if area & set(origin):
+                continue  # a blast never covers the creature it comes from
+            if not (area & reach):
+                continue  # and it has to touch it
+            out[(x0 + off, y0 + off)] = area
+    return out
+
+
+def blast(origin: frozenset[Square] | set[Square], size: int, aim: Square) -> frozenset[Square]:
+    """The close blast `size` aimed at `aim`, or the nearest legal placement."""
+    places = blast_placements(origin, size)
+    if not places:
+        return frozenset()
+    if aim in places:
+        return places[aim]
+    nearest = min(places, key=lambda c: (distance(c, aim), c))
+    return places[nearest]
 
 
 def wall(squares: list[Square]) -> frozenset[Square]:

@@ -16,8 +16,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .components import Health, Position, Powers
-from .dsl import area_of, candidates, get, usable
-from .grid import STEPS, Square
+from .dsl import aim_points, area_of, candidates, get, usable
+from .grid import Square
 from .query import alive, can_act, is_
 from .types import ActionType, Condition, Usage
 
@@ -105,14 +105,14 @@ def _aimings(world: World, actor: int, ref: str) -> list[Action]:
         return [Action(kind="power", cost=cost, ref=ref)]
 
     if p.reach.kind == "close_blast":
+        # One option per place the blast can be laid down, keyed by the square
+        # it is aimed at -- for a blast 3 that is the ring two squares out.
         out = []
-        for facing in STEPS:
-            here = world.need(actor, Position).square
-            origin = (here[0] + facing[0], here[1] + facing[1])
-            hit = candidates(world, actor, p, origin)
+        for aim in aim_points(world, actor, p):
+            hit = candidates(world, actor, p, aim)
             if hit:
                 out.append(
-                    Action(kind="power", cost=cost, ref=ref, targets=tuple(hit), origin=origin)
+                    Action(kind="power", cost=cost, ref=ref, targets=tuple(hit), origin=aim)
                 )
         return out
 

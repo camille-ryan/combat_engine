@@ -74,4 +74,5 @@ Game systems are not able to be trademarked, but prose is. All potentially trade
  ## Combat AI
  - To start, we use preprogrammed policies to determine monster actions. Open questions:
    - How do we handle compound actions like "attack dealing x damage, then move up to 2 squares". Is this treated as 25 separate options for a singal target?
+   - How do we handle different ordering? (Action first, then move or vice versa)
  - Ideally at some point we can use RLHF to determine policies based on watching how the player plays.

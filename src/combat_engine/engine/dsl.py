@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .cast import Cast
-from .grid import Square, area_burst, blast, spread
+from .grid import Square, area_burst, blast, blast_placements, spread
 from .query import alive, allies, creatures, enemies, line_of_effect, squares
 from .types import Ability, ActionType, Defense, Keyword, Usage
 
@@ -267,8 +267,8 @@ def area_of(world: World, actor: int, p: Power, origin: Square | None = None) ->
     if r.kind == "close_burst":
         return spread(mine, r.size)
     if r.kind == "close_blast":
-        facing = _facing(world, actor, origin)
-        return blast(mine, r.size, facing)
+        aim = origin or next(iter(sorted(spread(mine, 1) - mine)))
+        return blast(mine, r.size, aim)
     if r.kind == "area_burst":
         return area_burst(origin or next(iter(sorted(mine))), r.size)
     if r.kind in ("melee", "ranged"):
@@ -276,14 +276,25 @@ def area_of(world: World, actor: int, p: Power, origin: Square | None = None) ->
     return frozenset(mine)
 
 
-def _facing(world: World, actor: int, origin: Square | None) -> Square:
-    """Which of the eight directions a blast points, from where it was aimed."""
-    if origin is None:
-        return (1, 0)
-    here = next(iter(sorted(squares(world, actor))))
-    dx = (origin[0] > here[0]) - (origin[0] < here[0])
-    dy = (origin[1] > here[1]) - (origin[1] < here[1])
-    return (dx, dy) if (dx or dy) else (1, 0)
+def aim_points(world: World, actor: int, p: Power) -> list[Square]:
+    """Every square this power can be pointed at.
+
+    For a close blast these are the placement centres -- a blast 3 from a
+    Medium creature gives the ring two squares out. For an area burst it is
+    every square in range. Everything else aims at a creature rather than a
+    square and gets an empty list.
+    """
+    mine = squares(world, actor)
+    if p.reach.kind == "close_blast":
+        return sorted(blast_placements(mine, p.reach.size))
+    if p.reach.kind == "area_burst":
+        return sorted(
+            sq
+            for sq in spread(mine, p.reach.within)
+            if world.grid.inside(sq)
+            and any(world.grid.line_of_effect(src, sq) for src in mine)
+        )
+    return []
 
 
 def candidates(world: World, actor: int, p: Power, origin: Square | None = None) -> list[int]:

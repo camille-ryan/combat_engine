@@ -27,9 +27,16 @@ def detail(document: str) -> str:
 
 
 def text(fragment: str) -> str:
-    """Tags out, entities decoded, runs of space collapsed."""
+    """Tags out, entities decoded, runs of space collapsed.
+
+    A tag becomes a **space**, not nothing. Deleting them outright runs the
+    last word of one cell into the first of the next -- `Initiative +2` then
+    `<b>AC</b> 13` reads as `+2AC 13`, and every regex looking for a word
+    boundary before `AC` quietly finds nothing. That cost every defence in
+    half the corpus until it was noticed.
+    """
     out = re.sub(r"<br\s*/?>", "\n", fragment, flags=re.I)
-    out = _TAGS.sub("", out)
+    out = _TAGS.sub(" ", out)
     out = unescape(out)
     out = _SPACE.sub(" ", out)
     return "\n".join(line.strip() for line in out.split("\n")).strip()
