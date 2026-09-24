@@ -35,6 +35,15 @@ to everything the moment anything under `engine/` is touched — an engine
 change moves every row at once, so a narrowed run there would not be narrow,
 it would be wrong.
 
+## Writing content
+
+`docs/AUTHORING.md` is the brief every content author works from — the name
+rule, the `Cast` surface, what to do when a row cannot be written, and a
+list of the things that are *silently false* and have each cost somebody an
+hour. It is kept in the repo rather than handed out ad hoc, because it
+drifted behind the engine twice and the second time an agent wrote around a
+method that had existed for a day.
+
 ## Git
 
 Work is tracked in **GitHub Issues**. Open one before starting unplanned
