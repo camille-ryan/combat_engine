@@ -71,8 +71,18 @@ class Server:
         raise SystemExit("the server did not come up")
 
     def __exit__(self, *_: object) -> None:
-        if self.proc:
-            self.proc.terminate()
+        if not self.proc:
+            return
+        # Killed rather than asked politely if it dawdles. A uvicorn holding
+        # an event stream open can take longer than ten seconds to drain,
+        # and the wait raising turned a clean run into a failure *after*
+        # every check had already passed -- the instrument reporting on its
+        # own teardown rather than on the page.
+        self.proc.terminate()
+        try:
+            self.proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
             self.proc.wait(timeout=10)
 
     @property

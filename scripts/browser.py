@@ -62,7 +62,16 @@ class Server:
     def __exit__(self, *_: object) -> None:
         if self.proc:
             self.proc.terminate()
-            self.proc.wait(timeout=10)
+            try:
+                self.proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                # Killed rather than asked twice. A uvicorn holding an event
+                # stream open can outlast a polite terminate, and the wait
+                # raising turned a clean run into a failure *after* every
+                # check had passed -- the instrument reporting on its own
+                # teardown rather than on the page.
+                self.proc.kill()
+                self.proc.wait(timeout=10)
 
     @property
     def base(self) -> str:
@@ -359,7 +368,11 @@ def _check_enemies_animate(page, check: Checks) -> None:  # noqa: ANN001
     # A fresh page rather than the restart button: `_restart` leaves the
     # board mid-settle often enough that the action list is empty when this
     # starts clicking, and an empty list measures nothing.
-    page.reload(wait_until="networkidle")
+    # `load` and then the board, rather than `networkidle`. Idle means "no
+    # request for 500ms", which a page holding an event stream open reaches
+    # only by luck -- and waiting for the token is the thing actually being
+    # waited for.
+    page.reload(wait_until="load")
     page.wait_for_selector("#board .token", timeout=15000)
     _set_speed(page, "normal")
     page.wait_for_timeout(600)

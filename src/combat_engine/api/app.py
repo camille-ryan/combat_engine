@@ -217,6 +217,15 @@ async def _stream(session: Session, cursor: int, request: Request) -> AsyncItera
             await asyncio.sleep(0.02)
             continue
         while cursor < len(log):
+            # Asked here as well as at the top. A fast fight -- the page at
+            # "instant" plays five hundred events in a few seconds -- keeps
+            # this inner loop busy, and the outer check is not reached until
+            # the log runs dry. So a reader that has gone away is noticed
+            # only when the fight pauses, and until then the connection is
+            # held open: two live streams at once, and a page reload that
+            # never reaches network idle.
+            if await request.is_disconnected():
+                return
             event = log[cursor]
             cursor += 1
             if span and render.starts_span(event):
