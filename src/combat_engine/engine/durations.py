@@ -377,8 +377,8 @@ class Effects:
     def _warn_sustainless(self, eff: Effect) -> None:
         """A `When.SUSTAIN` effect nobody can sustain lapses after a round.
 
-        `c.zone`, `c.aura`, `c.hazard` and `c.conjure` all pass a
-        `sustain_cost`; `c.watch` and `c.bonus` have no way to, so an
+        `c.zone`, `c.aura`, `c.hazard`, `c.conjure` and `c.effect` all pass
+        a `sustain_cost`; `c.watch` and `c.bonus` have no way to, so an
         effect they create with `When.SUSTAIN` gets none -- and
         `_sustain_by_default` refuses it, so it ends after one round
         looking exactly like a duration that was written wrong. Said out

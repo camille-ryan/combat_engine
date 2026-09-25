@@ -415,6 +415,54 @@
     "wants": "the defender-aura class feature, plus c.in_my_aura(who)",
     "why": "its printed Target is one enemy subject to your defender aura, and half its Effect pays out on an attack granted by a class feature that is not modelled. Same hold as p14420: the row could never be aimed at anything"
   },
+  "p14447": {
+    "wants": "c.my_aura(label='') -- the caster's own live aura id",
+    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists"
+  },
+  "p14448": {
+    "wants": "c.my_aura(label='') -- the caster's own live aura id",
+    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists"
+  },
+  "p14449": {
+    "wants": "c.my_aura(label='') -- the caster's own live aura id",
+    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists"
+  },
+  "p14450": {
+    "wants": "c.my_aura(label='') -- the caster's own live aura id",
+    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists"
+  },
+  "p14454": {
+    "wants": "c.my_aura(label='') -- the caster's own live aura id",
+    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists"
+  },
+  "p14455": {
+    "wants": "c.my_aura(label='') -- the caster's own live aura id",
+    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists"
+  },
+  "p14456": {
+    "wants": "c.my_aura(label='') -- the caster's own live aura id",
+    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists"
+  },
+  "p14461": {
+    "wants": "c.my_aura(label='') -- the caster's own live aura id",
+    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists"
+  },
+  "p14462": {
+    "wants": "c.my_aura(label='') -- the caster's own live aura id",
+    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists"
+  },
+  "p14463": {
+    "wants": "c.my_aura(label='') -- the caster's own live aura id",
+    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists"
+  },
+  "p14469": {
+    "wants": "c.my_aura(label='') -- the caster's own live aura id",
+    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists"
+  },
+  "p14470": {
+    "wants": "c.my_aura(label='') -- the caster's own live aura id",
+    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists"
+  },
   "p14508": {
     "wants": "c.merge(into=) -- a state with no line of effect in either direction",
     "why": "you shift into an adjacent square occupied by a stone or earth object your size or larger, and nothing has line of effect to you or you to it. There are no objects, and c.hide and c.invisible are about being seen rather than about line of effect -- an attacker that knows where you are still reaches you"
@@ -459,9 +507,17 @@
     "wants": "c.see_unseen(on=) -- suppress HIDDEN_FROM towards one creature",
     "why": "the printed line is a trade: you see the invisible, and everything else goes invisible to you. The second half is writable with c.invisible(to=c.me, on=...); the first is not, because nothing overrides another effect's relation. Writing only the half that works would ship the penalty without the benefit"
   },
+  "p2374": {
+    "wants": "c.transfer(effect, to=)",
+    "why": "moves a live save-ends effect from one creature to another. Effects can apply and end, not move; ending and re-applying loses the effect's conditions and mods"
+  },
   "p2389": {
     "wants": "Keyword.RATTLING, and c.rattled(on=) to read it back",
     "why": "its whole Effect is selecting an enemy that is taking the attack penalty from one of your rattling attacks; with no rattling there is nothing to select"
+  },
+  "p3121": {
+    "wants": "c.initiative(n, on=) -- same gap as p11392",
+    "why": "trigger is 'you roll initiative'. InitiativeRolled *is* emitted (turns.py:128) -- the block is that its `rolled` is an int copied onto the event, so a listener changing it is discarded, and no Cast method writes the component. Issue #168"
   },
   "p32": {
     "wants": "c.hover",
@@ -634,6 +690,10 @@
   "p5377": {
     "wants": "c.summon / c.conjure taking an inline stat line plus a commanded action",
     "why": "a summoning row: the printed Effect is a creature with its own speed and hit points that the summoner commands with a standard action, rolling the summoner's Wisdom. c.summon(ref) wants a content ref for the creature and the spec gives none, and nothing offers a commanded action on a creature the caster does not own. Same shape as p11840"
+  },
+  "p5690": {
+    "wants": "c.grant_action(ActionType.MINOR, 'shift')",
+    "why": "'each target can shift as a minor action'. Nothing grants a bare action; c.grant_row grants a declared row and there is no shift row to name"
   },
   "p5845": {
     "wants": "c.treat_roll_as(\"odd\"|\"even\")",

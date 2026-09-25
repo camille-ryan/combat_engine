@@ -456,6 +456,8 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     if not foes:
         return False
 
+    _grip_for(world, caster, ref)
+
     # Put the caster in the state its own class puts it in first. A
     # warlock's pact boon triggers on a *cursed* enemy dropping, and a
     # harness that only swings and walks can never curse anybody -- so
@@ -464,7 +466,21 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     if _fired(world, ref, cursor):
         return True
 
-    for attacker, target in ((foes[0], caster), (caster, foes[0])):
+    # Somebody swings at the caster, the caster swings back, and -- the one
+    # this harness could never arrange -- an enemy swings at an *ally*. A
+    # leader's whole job is answering that, and "an enemy attacks an ally"
+    # is the printed trigger on nine bard rows alone. Without it they report
+    # UNUSED, which reads as "this row cannot work" rather than "the board
+    # never asked it to".
+    pairs = [(foes[0], caster), (caster, foes[0])]
+    for mate in _allies_of(world, caster)[:2]:
+        # Both directions: "an enemy attacks an ally" and "an ally misses
+        # with a melee attack" are both printed triggers, and whether the
+        # swing hits or misses is what the seed sweep in `_attempts` is for.
+        pairs += [(foes[0], mate), (mate, foes[0])]
+    for attacker, target in pairs:
+        if not alive(world, target):
+            continue
         use(world, attacker, basic(attacker), targets=[target], spend=False)
         if _fired(world, ref, cursor):
             return True
@@ -557,6 +573,31 @@ def _revive_everyone(world, except_: int) -> None:  # noqa: ANN001
         if conds is not None:
             for cond in (Condition.DYING, Condition.UNCONSCIOUS, Condition.PRONE):
                 conds.counts.pop(cond, None)
+
+
+def _grip_for(world, caster: int, ref: str) -> None:  # noqa: ANN001
+    """Draw a weapon this row can actually be used with, before provoking it.
+
+    `_use_with_any_grip` does this for rows the harness uses directly, and
+    the triggered path had no equivalent: it went straight to the dispatcher,
+    which refuses a ranged weapon row while the blades are out. The board's
+    bard holds a mace, so **every triggered ranged-weapon row in the tree**
+    reported UNUSED -- indistinguishable from a row that cannot fire at all,
+    which is what this instrument exists to tell apart.
+    """
+    from combat_engine.engine import Gear
+    from combat_engine.engine.dsl import REGISTRY
+
+    power = REGISTRY.get(ref)
+    gear = world.get(caster, Gear)
+    if power is None or gear is None or len(gear.weapons) < 2:
+        return
+    if power.can_branch(world, caster):
+        return
+    for weapon in gear.weapons:
+        gear.wield(weapon)
+        if power.can_branch(world, caster):
+            return
 
 
 def _use_with_any_grip(world, caster: int, ref: str) -> bool:  # noqa: ANN001

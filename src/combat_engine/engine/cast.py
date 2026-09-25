@@ -407,18 +407,32 @@ class Cast:
         return self.world.turn
 
     def effect(
-        self, label: str, *, until: When = When.SAVE_ENDS, on: int | None = None
+        self,
+        label: str,
+        *,
+        until: When = When.SAVE_ENDS,
+        on: int | None = None,
+        sustain: ActionType | None = None,
     ) -> Effect | None:
         """A named hold with no mechanical content of its own.
 
         For the rows that say "the target is subjected to <something> (save
         ends)" and then describe what that lets *you* do. The effect exists
         so it can be seen, saved against, and hung things on.
+
+        `sustain=` is what a printed "Sustain Minor" costs. Without it a
+        `When.SUSTAIN` hold has no cost for anyone to pay, and `durations`
+        lapses it after a round -- so the obvious way to write a sustained
+        effect quietly lasted one round and looked like it worked.
+        `c.aura` and `c.zone` both took `sustain=` already; this was the
+        odd one out.
         """
         who = self._who(on)
         if who is None:
             return None
-        return self.world.effects.apply(who, self.me, until, label=label)
+        return self.world.effects.apply(
+            who, self.me, until, label=label, sustain_cost=sustain
+        )
 
     def invisible(
         self,
@@ -1599,13 +1613,24 @@ class Cast:
     def unconscious(self, *, until: When = When.SAVE_ENDS, on: int | None = None) -> Effect | None:
         return self.condition(Condition.UNCONSCIOUS, until=until, on=on)
 
-    def mark(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
+    def mark(
+        self, *, until: When = When.EONT, on: int | None = None, by: int | None = None
+    ) -> Effect | None:
+        """Mark the target -- for you, or for somebody else.
+
+        `by=` is the bard's whole conceit: "the target is marked by an ally
+        within 5 squares of you". `c.marked` has always been able to *ask*
+        about a mark somebody else laid; until now nothing could lay one.
+        """
         who = self._who(on)
         if who is None:
             return None
+        marker = self.me if by is None else by
+        if marker == who:
+            return None          # nothing is marked by itself
         return self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} mark",
-            relations=[(Relation.MARKED_BY, self.me, who)],
+            who, marker, until, label=f"{self.ref} mark",
+            relations=[(Relation.MARKED_BY, marker, who)],
         )
 
     def curse(self, *, on: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
