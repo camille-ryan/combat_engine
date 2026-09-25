@@ -80,14 +80,10 @@ def main() -> int:
             shown.add(name)
             print(_render(name, member, brief=args.brief))
 
-    rest = [
-        n
-        for n in dir(Cast)
-        if not n.startswith("_") and n not in shown and n not in ("world", "me", "ref",
-                                                                  "targets", "target",
-                                                                  "index", "origin", "result",
-                                                                  "stats", "mod", "used")
-    ]
+    _context()
+    shown |= set(CONTEXT) | {"stats", "mod", "used"}
+
+    rest = [n for n in dir(Cast) if not n.startswith("_") and n not in shown]
     if rest:
         print("\n## everything else\n")
         for name in sorted(rest):
@@ -147,6 +143,45 @@ SHAPES = [
     ("an entry requirement the board has to meet",
      lambda p, s: p.requires is not None),
 ]
+
+
+#: The context's own fields. They are plain dataclass attributes, so they
+#: have no signature and no docstring and the generated page used to drop
+#: them silently -- `c.targets` among them, which is the only way to say "if
+#: you hit two creatures, both are affected". A runepriest wave had to open
+#: `cast.py` to find it, which is exactly the reading this page exists to
+#: prevent. Hand-written, and `_context` fails loudly if a field appears or
+#: disappears, so the drift it costs is bounded.
+CONTEXT = {
+    "me": "the caster's eid. `on=c.me` aims a target-defaulting method back at you.",
+    "target": "the target this call is for, or None. Everything defaults here.",
+    "targets": "**every** target of this one use, as a list -- what "
+               '"if you hit two creatures" needs. `c.target` is one of them.',
+    "index": "which target this is, counting from 0. `c.first` is `index == 0`.",
+    "ref": "this row's own id.",
+    "result": "the last `AttackResult`, or None. `.advantage` is whether the "
+              "attack had combat advantage; asking again is too late.",
+    "trigger": "the event being answered, on an interrupt or reaction.",
+    "origin": "the square an area was aimed at.",
+    "charge": "is this use a charge?",
+    "opportunity": "is this use an opportunity attack?",
+    "branch": "which half of a melee-or-ranged row is being used.",
+    "world": "the world itself. Prefer the methods above; reach for this last.",
+}
+
+
+def _context() -> None:
+    """What the `c` handed to a body already knows, before it calls anything."""
+    import dataclasses
+
+    fields = {f.name for f in dataclasses.fields(Cast)}
+    if missing := fields - set(CONTEXT):
+        raise SystemExit(f"vocab.py: Cast grew {sorted(missing)}; add to CONTEXT")
+
+    print("\n## what `c` already knows\n")
+    for name, note in CONTEXT.items():
+        if name in fields:
+            print(f"  c.{name}\n      {note}")
 
 
 def _dangling(src: str) -> int:

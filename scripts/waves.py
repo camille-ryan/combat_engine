@@ -9,10 +9,9 @@ the instruments cost. Nothing measured the agents, which turned out to be
 almost all of the spend -- 120 of them, 25.7M tokens, and the only way to
 learn that was to mine a session transcript after the fact.
 
-The number that matters is **tokens per row**, because it is the one that
-compares a class written by one agent against a class split across four.
-When that comparison was finally made it said the opposite of what everyone
-assumed:
+Tokens per row is what compares a class written by one agent against a class
+split across four. When that comparison was finally made it said the opposite
+of what everyone assumed:
 
     sorcerer   115 rows  1 agent    308k   2,679/row
     druid      140 rows  1 agent    413k   2,952/row
@@ -25,6 +24,12 @@ paid the moment it starts and again for every agent you add. Fitting the 118
 agents with usage data:
 
     tokens = 110,153 fixed + 1,243 per tool call
+
+Which is why the column to watch is **marginal** -- tokens above that floor,
+per row. Raw tokens-per-row punishes a small class for being small: the floor
+is the same whether 42 rows spread it or 140. Marginal is the part a brief can
+actually move, and it is what runepriest was run to test (854, against druid's
+2,165, on the same instrument).
 
 Rows are counted from the registry, so the denominator cannot be fudged; the
 tokens and call counts come off the agent's completion notification and have
@@ -43,7 +48,15 @@ LEDGER = ROOT / "logs" / "waves.jsonl"
 
 #: Where the floor sat when it was last measured, so a new reading can be
 #: told apart from the old regime without re-deriving it.
-BASELINE = {"fixed": 110_153, "per_call": 1_243, "split": 7_100, "whole": 2_800}
+#: `marginal` is what the old whole-class waves spent per row *above* the
+#: floor -- druid 2,165, sorcerer 1,721. A wave beating it is a brief doing
+#: its job; a wave over it is reading or poking more than it needs to.
+BASELINE = {
+    "fixed": 110_153,
+    "per_call": 1_243,
+    "split": 7_100,
+    "marginal": 1_800,
+}
 
 
 def main() -> int:
@@ -99,17 +112,21 @@ def _report() -> None:
     if not LEDGER.exists():
         print("# no waves recorded yet")
         print(f"#   the regime this replaces: {BASELINE['split']:,}/row split,")
-        print(f"#   {BASELINE['whole']:,}/row whole-class")
+        print(f"#   {BASELINE['marginal']:,}/row above the floor")
         return
 
     rows = [json.loads(ln) for ln in LEDGER.read_text().splitlines() if ln.strip()]
-    print("  what           agents   rows     tokens   tok/row  tok/agent  calls/row")
+    # Raw tokens-per-row punishes a small class for nothing it did: the floor
+    # is the same 110k whether there are 42 rows to spread it over or 140.
+    # What a brief can actually move is the marginal cost above the floor.
+    print("  what           agents   rows     tokens   tok/row  marginal  calls/row")
     for r in rows:
-        per_row = r["tokens"] / r["rows"]
-        flag = "" if per_row <= BASELINE["whole"] * 1.15 else "  <-- over"
+        floor = BASELINE["fixed"] * r["agents"]
+        marginal = max(r["tokens"] - floor, 0) / r["rows"]
+        flag = "" if marginal <= BASELINE["marginal"] else "  <-- over"
         print(
             f"  {r['what']:<14} {r['agents']:6d} {r['rows']:6d} {r['tokens']:10,}"
-            f" {per_row:9,.0f} {r['tokens'] / r['agents']:10,.0f}"
+            f" {r['tokens'] / r['rows']:9,.0f} {marginal:9,.0f}"
             f" {r['calls'] / r['rows']:10.1f}{flag}"
         )
 

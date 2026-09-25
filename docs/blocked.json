@@ -243,6 +243,14 @@
     "wants": "c.no_advantage(against=)",
     "why": "combat advantage is computed inside resolve.roll after the interrupt window, so the body has nothing to say"
   },
+  "p11392": {
+    "wants": "c.initiative(n, on=) -- change an initiative result",
+    "why": "'+10 to your initiative check'. InitiativeRolled.rolled is an int copied onto the event, so a listener setting ev.rolled is discarded; the sort re-reads the Initiative component and no Cast method writes it. init.bonus is read before the emit, so a bonus cannot reach it either. Issue #168"
+  },
+  "p11405": {
+    "wants": "c.denies_advantage(on=, until=)",
+    "why": "'the targets do not grant combat advantage'. c.cannot_be_flanked covers flanking only; nothing suppresses granting advantage in general, so the row would silently do half of what it prints"
+  },
   "p11573": {
     "wants": "c.companion() -- a beast companion entity with its own attack bonus, Strength modifier and [B] damage die, addressable from a row",
     "why": "the whole Effect is combat advantage shared with the companion against anything the two are both adjacent to"
@@ -426,6 +434,10 @@
   "p1543": {
     "wants": "c.portal(a, b, *, until=)",
     "why": "a rift making two distant squares adjacent for movement only. Grid has no notion of a link between two squares, and neither c.teleport nor a zone can say it -- it changes what movement costs and where a creature may go, so it is not narrative"
+  },
+  "p15993": {
+    "wants": "c.charm(ref, on=, uses=1) -- a one-shot row handed to a creature to spend later",
+    "why": "creates a carried object another creature expends later for healing plus a defence bonus. Nothing puts a usable object in somebody's hands; c.grant_row needs a ref that already exists and has no charges"
   },
   "p16238": {
     "wants": "Wall(n, within) as a Range, or c.wall(squares, ...)",
