@@ -1006,16 +1006,9 @@ class Cast:
         who = self._who(on)
         if who is None:
             return None
-        standing = [
-            e
-            for e in self.world.effects.of(who)
-            if e.ongoing is not None and e.ongoing[1] is dtype
-        ]
-        worst = max((e.ongoing[0] for e in standing), default=0)
-        if worst >= amount:
-            return next((e for e in standing if e.ongoing[0] == worst), None)
-        for e in standing:
-            self.world.effects.end(e, "superseded by worse of the same type")
+        # The rule itself lives in `Effects.apply`, because this is not the
+        # only door: a "save ends both" hold carrying a burn and a condition
+        # goes straight there.
         return self.world.effects.apply(
             who, self.me, until, label=f"ongoing {amount}", ongoing=(amount, dtype)
         )
@@ -2278,7 +2271,14 @@ class Cast:
             # roll, so spending it on `AttackRolled` removes it before the
             # comparison it exists for, and the owner is the defender
             # rather than the attacker, so the old filter never matched.
-            if isinstance(what, Defense):
+            # `crit_range` is read when the outcome is recomputed, which is
+            # *after* `AttackRolled` -- so spending it there ended it before
+            # the one comparison it exists for, exactly as the damage and
+            # defence cases did. Three branches of this method have now been
+            # wrong in the same way; the moment a modifier is spent has to
+            # be the moment it is read, and nothing in the signature says
+            # when that is.
+            if key == "crit_range" or isinstance(what, Defense):
                 from .events import Miss
 
                 def spend_defence(ev: Hit | Miss) -> None:

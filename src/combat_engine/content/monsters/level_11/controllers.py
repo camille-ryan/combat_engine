@@ -66,6 +66,7 @@ from combat_engine.content.monsters.level_07.soldiers import _recharge_on
 from combat_engine.content.monsters.level_08.lurkers import _sweep
 from combat_engine.content.monsters.level_08.skirmishers import _adjacent_foe
 from combat_engine.content.monsters.level_09.brutes import _regenerates, _volley
+from combat_engine.content.monsters.level_09.lurkers import _M419_BORROWED
 from combat_engine.content.monsters.level_10.brutes import _same_stock
 from combat_engine.engine import (
     AC,
@@ -76,10 +77,12 @@ from combat_engine.engine import (
     FORT,
     FREE,
     MINOR,
+    MOVE,
     NO_TARGET,
     ONE_CREATURE,
     PERSONAL,
     REF,
+    SELF,
     STANDARD,
     WILL,
     ActionType,
@@ -614,6 +617,48 @@ def m420a2(c: Cast) -> None:
     """No damage line: the hold is the whole of the hit."""
     if c.strike():
         c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS)
+
+
+_M420_SHAPE = "m420a3 shape"
+
+
+@power(
+    "m420a3",
+    level=11,
+    usage=AT_WILL,
+    action=MOVE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.POLYMORPH],
+)
+def m420a3(c: Cast) -> None:
+    """Wearing another creature's shape, as far as the engine can hold it.
+
+    The card spells the creature changing as another stat block's id; the one
+    every sentence plainly means is the one whose card this is. The m122 it
+    turns into is printed and is what the borrowed rows come from.
+
+    What the engine can hold is the other stat block's *rows*, which is
+    `c.grant_row`. What it cannot hold is the rest: defences, speed and
+    ability scores are components on the entity and nothing swaps one
+    creature's for another's. That half is noted, the same reading m419a2
+    settled two levels down on the identical printed line.
+
+    `revert=MINOR` is the printed way back, and a shape is not a stance, so
+    an earlier one is ended by hand before a new one is taken.
+    """
+    me = c.me
+    for eff in list(c.world.effects.of(me)):
+        if eff.label == _M420_SHAPE:
+            c.world.effects.end(eff, "it changed shape again")
+    shape = c.form(until=When.ENCOUNTER, revert=MINOR, label=_M420_SHAPE)
+    for ref in _M419_BORROWED:
+        borrowed = c.grant_row(ref, on=me, until=When.ENCOUNTER)
+        if borrowed is not None:
+            shape.on_end.append(
+                lambda g=borrowed: c.world.effects.end(g, "it changed back")
+            )
+    c.note("m420a3: it keeps its own hit points and borrows the m122's rows")
 
 
 # ==========================================================================

@@ -114,6 +114,11 @@ KNOWN_SILENT = {
     # spawns a second m4967 rather than a mossling. Driven by hand: with an
     # m4971 beside it the minion moves its full speed as a free action.
     "m4967a5": "moves a mossling minion; the board has none to move",
+    # Sends a *bloodied* ally back in. The board's only creature on the
+    # caster's own side is the second of its kind, spawned at full health --
+    # the four wounded ones are all on the other team. Driven by hand: with
+    # that ally at half hit points it is granted a melee attack and swings.
+    "m350a2": "grants a bloodied ally an attack; the board's only ally is unhurt",
 }
 
 
@@ -684,7 +689,18 @@ def audit(ref: str) -> Result:
                 # `EffectExpired` from the provocation credited to the row
                 # -- so a row whose body could not act on this board still
                 # passed, carrying the consequences of being attacked.
-                out.events |= _after_its_own_use(world, ref, cursor) - PROVOKE_NOISE
+                # Damage the row itself dealt is credited even though the
+                # provocation's damage is not: `PROVOKE_NOISE` drops both
+                # kinds wholesale, so a triggered row whose *whole content*
+                # is damage reported silent however well it worked.
+                mine = _after_its_own_use(world, ref, cursor)
+                if any(
+                    getattr(e, "detail", None) == ref
+                    for e in world.bus.log[cursor:]
+                    if e.kind in ("DamageRolled", "DamageApplied")
+                ):
+                    mine |= {"DamageApplied"}
+                out.events |= mine - PROVOKE_NOISE | (mine & {"DamageApplied"})
                 out.events |= _own_movement(world, ref, cursor, caster)
                 if set(world.effects.live) - had:
                     out.events.add("ConditionApplied")

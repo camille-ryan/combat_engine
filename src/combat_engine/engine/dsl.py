@@ -294,6 +294,11 @@ class Power:
     #: be caught -- measuring the melee reach before the run refused every
     #: such row in exactly the situation it exists for.
     charges: bool = False
+    #: This row reaches at range but is not *fired*: it hurls something off
+    #: the weapon in hand. The ranged gate below asks for a bow, which is
+    #: right for an arrow and wrong for a paladin throwing radiance five
+    #: squares with a longsword -- that row could never be used at all.
+    thrown_by_hand: bool = False
     #: The second branch's Requirement. A dual row's printed one is usually
     #: the two joined by "or" -- "two melee weapons **or** a ranged weapon"
     #: is the melee branch's requirement and the ranged branch's, and
@@ -393,7 +398,9 @@ class Power:
             return True
         kind = self.reach_of(branch).kind
         if kind == "ranged":
-            return gear.ranged is not None
+            # Unless it is thrown by hand, in which case a melee weapon is
+            # exactly what it wants.
+            return bool(gear.melee) if self.thrown_by_hand else gear.ranged is not None
         if kind == "melee":
             return bool(gear.melee)
         return True
@@ -471,6 +478,7 @@ def power(
     requires: Callable[[World, int], bool] | None = None,
     requires_text: str = "",
     charges: bool = False,
+    thrown_by_hand: bool = False,
     requires_alt: Callable[[World, int], bool] | None = None,
     trigger: str = "",
     on: Trigger | Sequence[Trigger] | None = None,
@@ -508,6 +516,7 @@ def power(
             requires=requires,
             requires_text=requires_text,
         charges=charges,
+        thrown_by_hand=thrown_by_hand,
             requires_alt=requires_alt,
             trigger=trigger,
             on=on,

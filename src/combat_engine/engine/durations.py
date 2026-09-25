@@ -140,6 +140,27 @@ class Effects:
         sustain_cost: ActionType | None = None,
         drop_cost: ActionType | None = None,
     ) -> Effect:
+        # Ongoing damage of one type does not stack -- the highest applies.
+        # The rule lived in `Cast.ongoing` alone, and this is the door a
+        # "save ends both" hold goes through when it carries a burn *and* a
+        # condition on one saving throw, which is the commonest shape at
+        # paragon. So the same blade swung twice laid two burns here while
+        # `c.ongoing` correctly refused the second.
+        if ongoing is not None:
+            amount, dtype = ongoing
+            standing = [
+                e for e in self.of(owner) if e.ongoing is not None and e.ongoing[1] is dtype
+            ]
+            worst = max((e.ongoing[0] for e in standing), default=0)
+            if worst >= amount:
+                # Nothing to add. The caller still gets an effect back, so a
+                # row that applies a condition alongside its burn is not
+                # silently dropped -- only the burn is.
+                ongoing = None
+            else:
+                for e in standing:
+                    self.end(e, "superseded by worse of the same type")
+
         self._next += 1
         clock = owner if when in _TARGET_CLOCKED else source
         eff = Effect(

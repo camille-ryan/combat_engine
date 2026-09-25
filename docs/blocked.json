@@ -1,19 +1,23 @@
 {
-  "m221a1": {
-    "wants": "c.cannot_be_flanked",
-    "why": "enemies cannot gain combat advantage by flanking it"
-  },
-  "m2817a0": {
-    "wants": "c.cannot_be_flanked",
-    "why": "enemies cannot gain combat advantage by flanking it"
-  },
   "m2904a0": {
     "wants": "",
     "why": "SPEC: prints no attack bonus at all, so the header cannot be filled without inventing one"
   },
+  "m2905a0": {
+    "wants": "",
+    "why": "SPEC: prints no attack bonus at all, so the header cannot be filled without inventing one. Same shape as m2904a0"
+  },
   "m2947a5": {
     "wants": "c.jump",
     "why": "it does not provoke opportunity attacks while jumping; a jump is an ordinary move in the engine, so c.no_provoke would exempt all of its movement rather than the jump. Same sentence as m2988a3"
+  },
+  "m2948a5": {
+    "wants": "c.jump",
+    "why": "it does not provoke opportunity attacks while jumping; a jump is an ordinary move in the engine, so c.no_provoke would exempt all of its movement rather than the jump. Same sentence as m2947a5 and m2988a3"
+  },
+  "m2963a4": {
+    "wants": "c.check(skill, dc, *, who=)",
+    "why": "its whole content is 'any character can make a DC 25 History check as a minor action', and on a success the m2963 gains vulnerable 10 to that character's next attack. The engine rolls no skill checks and holds no DCs, and the row is spent by a creature that does not own it, which `use` has no door for -- so both halves of the sentence are unsayable, not just the number"
   },
   "m2975a2": {
     "wants": "c.no_reactions(on=)",
@@ -48,12 +52,12 @@
     "why": "its whole Effect is reducing the enhancement bonus of the weapon or implement that hit it, to a minimum of 0, until the end of the encounter; Weapon has no enhancement bonus and Gear has no armour object, so there is no number to reduce"
   },
   "m4716a4": {
-    "wants": "c.maximise",
-    "why": "the attack deals maximum damage"
+    "wants": "c.maximise(ref=) -- or maximise reading DamageRolled.detail",
+    "why": "free action on another row's hit: the attack deals maximum damage. c.maximise exists but its listener does get(self.ref).damage_of(...), the damage line of the row that armed it; a free-action row has none, so it is a silent no-op. Cast.damage already puts the rolling power's ref on DamageRolled.detail"
   },
   "m4774a4": {
-    "wants": "c.maximise",
-    "why": "free action on its own implement hit: the attack deals maximum damage"
+    "wants": "c.maximise(ref=) -- or maximise reading DamageRolled.detail",
+    "why": "same sentence as m4716a4: free action on its own implement hit, and c.maximise reads the arming row's own damage line rather than the rolling row's"
   },
   "m4795a3": {
     "wants": "c.wall",
@@ -71,13 +75,41 @@
     "wants": "a vehicle",
     "why": "its whole Effect is 'uses m4928a2 twice and m4928a3 once', and m4928a3 is blocked for want of a vehicle; writing the two tentacle attacks alone would be half the printed line"
   },
+  "m4968a1": {
+    "wants": "c.acts_after(other)",
+    "why": "a creature created by another one acts immediately after its creator's turn; Encounter can splice an extra slot (c.extra_turn) or reroll a creature's own initiative, but nothing moves a creature's single slot to just behind another's"
+  },
+  "m4968a3": {
+    "wants": "c.as_though_hit_by(ref)",
+    "why": "it rolls its own +17 vs AC and the target then takes the damage and is subject to the effects of a chosen enemy at-will melee power, off that creature's ability modifier and none of its bonuses. c.grant_row lends the whole row -- its own attack line and its own numbers -- and use() re-rolls it, so neither says this. Same sentence as m4971a3"
+  },
+  "m4969a1": {
+    "wants": "c.acts_after(other)",
+    "why": "acts immediately after its creator's turn. Same sentence as m4968a1"
+  },
+  "m4969a3": {
+    "wants": "c.as_though_hit_by(ref)",
+    "why": "the same borrowed at-will melee power as m4968a3, applied to a blow this row rolled. Same sentence as m4971a3"
+  },
+  "m4970a0": {
+    "wants": "c.acts_after(other)",
+    "why": "if it was created by an m4967 it acts immediately after its creator's turn; Encounter exposes join, reroll_initiative and extra_turn(self) only, and none of them places a creature at a named count in the order. Same sentence as m4968a1, and the last clause of m2552a5"
+  },
+  "m4970a2": {
+    "wants": "c.as_though_hit_by(ref)",
+    "why": "it rolls its own +19 vs AC and the target then takes the damage and is subject to the effects of a chosen enemy at-will ranged power, off that creature's ability modifier and none of its bonuses. c.grant_row lends the whole row and use() re-rolls its attack, so neither says this. Same sentence as m4968a3 and m4971a3"
+  },
+  "m4971a3": {
+    "wants": "c.as_though_hit_by(ref)",
+    "why": "it chooses an at-will melee attack power belonging to an enemy it can see and, on its own attack roll, the target 'takes damage and is subject to effects as though it were hit by the chosen attack', with the damage rolled off that creature's ability modifier and none of its bonuses. c.grant_row hands over the whole row -- its own attack line, its own bonuses -- and use() re-rolls the attack, so neither says it. Nothing applies one row's Hit entry to another row's roll"
+  },
+  "m4972a3": {
+    "wants": "c.as_though_hit_by(ref)",
+    "why": "the same sentence as m4971a3 for an at-will ranged attack power"
+  },
   "m498a2": {
     "wants": "c.rise",
     "why": "rises on its next turn with 44 hit points; _die lifts the body, so a deferred heal revives an entity with no square"
-  },
-  "m5019a5": {
-    "wants": "c.charge_at(who=)",
-    "why": "three of its allies can charge one creature of its choice"
   },
   "m5050a0": {
     "wants": "c.extra_target(ev, who)",
@@ -87,9 +119,29 @@
     "wants": "c.fall",
     "why": "reduce the distance it falls; there is no falling and no height"
   },
+  "m678a4": {
+    "wants": "c.disarm(on=)",
+    "why": "its whole Hit is 'the weapon used for the triggering attack drops in the target's space'; Gear holds what a creature is wielding and nothing takes it away or puts it on the floor"
+  },
+  "m709a1": {
+    "wants": "c.pass_on(ev, to=)",
+    "why": "an immediate interrupt whose whole Effect is that the conditions the triggering attack would apply land on another creature within 5 instead. c.absorb does this for damage because DamageRolled is a Decision with a mutable target; ConditionApplied and EffectApplied are notifications, so a hold can neither be refused nor re-aimed, and c.redirect moves the whole attack -- which rolls against the substitute's defence and deals it the damage too, a different sentence"
+  },
   "m881a2": {
     "wants": "c.resize",
     "why": "becomes Large and gains reach 2; Size.reach_bonus was dead code encoding a rule the game does not have, and is gone"
+  },
+  "p10740": {
+    "wants": "Keyword.RATTLING",
+    "why": "the whole Effect is 'until the end of the encounter your melee attacks have the rattling keyword'; the enum has no such member and nothing implements the keyword"
+  },
+  "p10744": {
+    "wants": "c.range_bonus(mult=) or a Range the body can widen",
+    "why": "a stance that doubles the normal and long range of thrown and sling attacks; Range is frozen data on the header and nothing reads a per-creature range modifier"
+  },
+  "p11049": {
+    "wants": "a SkillCheck event to declare Trigger on",
+    "why": "its whole printed trigger is 'you would make an Athletics or an Endurance check'; there are no skill checks in the engine and no event announcing one, so the row could only be declared with prose nothing reads"
   },
   "p1122": {
     "wants": "c.no_advantage(against=)",
@@ -103,9 +155,25 @@
     "wants": "InitiativeRolled",
     "why": "re-rolls initiative; Encounter._roll_initiative announces nothing"
   },
+  "p2389": {
+    "wants": "Keyword.RATTLING, and c.rattled(on=) to read it back",
+    "why": "its whole Effect is selecting an enemy that is taking the attack penalty from one of your rattling attacks; with no rattling there is nothing to select"
+  },
   "p32": {
     "wants": "c.hover",
     "why": "there is no falling and no vertical position"
+  },
+  "p4476": {
+    "wants": "c.sneak_attack() -- the class feature's dice",
+    "why": "its whole Effect is 'the next ally who hits deals extra damage equal to your Sneak Attack damage'; there is no sneak attack in the model, so the row grants nothing"
+  },
+  "p4499": {
+    "wants": "Keyword.RATTLING",
+    "why": "its whole Effect is 'until the stance ends, all your attacks gain the rattling keyword'"
+  },
+  "p7399": {
+    "wants": "a way to say an attack is made with the off-hand weapon",
+    "why": "'combat advantage for the next attack you make with an off-hand weapon'; c.w(hand='off') picks the dice but nothing marks an attack as an off-hand one, so the grant cannot be gated"
   },
   "p924": {
     "wants": "c.unsurprise",
