@@ -119,6 +119,31 @@ KNOWN_SILENT = {
     # the four wounded ones are all on the other team. Driven by hand: with
     # that ally at half hit points it is granted a melee attack and swings.
     "m350a2": "grants a bloodied ally an attack; the board's only ally is unhurt",
+    # Both hand an ally a free attack against something the board does not
+    # have: a *bloodied* enemy adjacent to that ally, and an encounter power
+    # that ally has already spent. Arranging either would mean the harness
+    # deciding what an ally has done this fight, which is the fight's
+    # business rather than the instrument's.
+    # Rerolls an ally's missed attack. It emits nothing of its own -- the
+    # consequence is that the *attacking* row's Hit is announced instead of
+    # its Miss, which is credited to that row and not to this one. Driven by
+    # hand: the reroll lands and the Hit follows.
+    "m4839a4": "rerolls somebody else's attack; the resulting Hit belongs to their row",
+    "p2530": "an ally must have a bloodied enemy beside it",
+    "p4572": "an ally must have already spent an encounter attack power",
+    # Its printed Target *is* the avenger's oath target, and nothing on this
+    # board has sworn one: `_use_class_features` runs inside `_provoke`, so
+    # only a row with a declared trigger ever sees its class features. A
+    # standard-action avenger row is fielded with nobody sworn. Driven by
+    # hand with the oath on a distant enemy: it flies six squares without
+    # provoking, lands adjacent and swings.
+    "p6990": "targets the avenger's oath target; nothing swears one before a standard action",
+    # An escape attempt or a saving throw, on a board that holds the caster
+    # with neither. The same reason as `p1515` above, and the same answer:
+    # holding the caster in `board()` would break every movement row on
+    # every other creature. Driven by hand both ways -- immobilised (save
+    # ends) it rolls and shakes it off, grabbed it clears the relation.
+    "p4911": "needs to be held or slowed; holding the caster would break every movement row",
 }
 
 
@@ -219,6 +244,14 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     ally = chargen.spawn(world, chargen.Character("cleric", 1, []), (5, 8))
     health = world.need(ally, Health)
     health.hp = max(1, health.max_hp // 2)
+    # A second ally, standing apart from the first. A leader row reading
+    # "each ally in the burst" or "another ally" could never show what it
+    # does with exactly one friend on the board -- three warlord rows
+    # reported silent while being correct, and the class is half made of
+    # this shape.
+    second = chargen.spawn(world, chargen.Character("fighter", 1, []), (4, 9))
+    world.need(second, Health).hp = max(1, world.need(second, Health).max_hp - 8)
+
     caster_health = world.need(caster, Health)
     caster_health.hp = max(1, caster_health.max_hp - 5)
 
@@ -779,7 +812,7 @@ def main() -> int:
         elif r.silent:
             known_quiet.append(r)
         elif args.verbose:
-            print(f"  ok      {ref:<10} {', '.join(sorted(r.events & DID_SOMETHING))}")
+            print(f"  ok      {r.ref:<10} {', '.join(sorted(r.events & DID_SOMETHING))}")
 
     for r in broken:
         print(f"\n  RAISED  {r.ref}")

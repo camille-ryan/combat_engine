@@ -116,6 +116,11 @@ def ranger_quarry(c: Cast) -> None:
     quarry = c.target
     if quarry is None:
         return
+    # Named in the relation as well as in the closure. Without this
+    # `c.is_quarry()` was false for a creature the ranger had just made its
+    # quarry -- the sibling curse below does it and this did not -- so every
+    # printed "against your quarry" rider was silently dead.
+    c.quarry(on=quarry)
     extra_damage(
         c, "1d6", applies=lambda target: target == quarry, label="cf:ranger-quarry"
     )

@@ -87,7 +87,7 @@ async def health() -> dict[str, bool | str]:
 
 
 @app.post("/api/encounter")
-async def create_encounter(body: NewEncounter | None = None) -> dto.EncounterStateDTO:
+def create_encounter(body: NewEncounter | None = None) -> dto.EncounterStateDTO:
     body = body or NewEncounter()
     seed = body.seed if body.seed is not None else _draw()
     try:
@@ -109,8 +109,14 @@ async def read_encounter(encounter_id: str) -> dto.EncounterStateDTO:
     return render.state(_session(encounter_id))
 
 
+# Declared `def`, not `async def`, and deliberately. Everything below this
+# line runs a slice of the fight, which is ordinary blocking Python --
+# `async def` would run it *on* the event loop, and while it ran the event
+# stream could not drain. A fight at speed then wedged the page: the POST
+# never answered, the stream never advanced, and a reload waited for both.
+# FastAPI gives a plain `def` a worker thread, which is what this wants.
 @app.post("/api/encounter/{encounter_id}/act")
-async def act(encounter_id: str, body: ActRequest) -> dto.EncounterStateDTO:
+def act(encounter_id: str, body: ActRequest) -> dto.EncounterStateDTO:
     session = _session(encounter_id)
     if not session.awaiting:
         raise HTTPException(409, "not waiting for a decision")
@@ -122,7 +128,7 @@ async def act(encounter_id: str, body: ActRequest) -> dto.EncounterStateDTO:
 
 
 @app.post("/api/encounter/{encounter_id}/decide")
-async def decide(encounter_id: str, body: DecideRequest) -> dto.EncounterStateDTO:
+def decide(encounter_id: str, body: DecideRequest) -> dto.EncounterStateDTO:
     """Answer a question a power asked while it was resolving."""
     session = _session(encounter_id)
     if session.gate.question is None:
@@ -132,7 +138,7 @@ async def decide(encounter_id: str, body: DecideRequest) -> dto.EncounterStateDT
 
 
 @app.post("/api/encounter/{encounter_id}/aim")
-async def aim(encounter_id: str, body: AimRequest) -> dto.EncounterStateDTO:
+def aim(encounter_id: str, body: AimRequest) -> dto.EncounterStateDTO:
     """Point at a square and do the thing that means.
 
     This **acts**. It is how the board is played -- clicking a square is the
@@ -156,7 +162,7 @@ async def aim(encounter_id: str, body: AimRequest) -> dto.EncounterStateDTO:
 
 
 @app.post("/api/encounter/{encounter_id}/end")
-async def end_turn(encounter_id: str) -> dto.EncounterStateDTO:
+def end_turn(encounter_id: str) -> dto.EncounterStateDTO:
     session = _session(encounter_id)
     session.end_turn()
     return render.state(session)

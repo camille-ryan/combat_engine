@@ -52,8 +52,12 @@ class Encounter:
     # -- the clock -----------------------------------------------------------
 
     def start(self) -> None:
-        self.order = self._roll_initiative()
+        # Armed *before* the rolls, so a row triggered on `InitiativeRolled`
+        # can hear the opening ones. Arming after meant the only initiative
+        # rolls a row could ever answer were rerolls, which is not what any
+        # printed line says.
         self.triggers.arm()
+        self.order = self._roll_initiative()
         self._arm_traits()
         self.started = True
         self.world.round = 1
@@ -101,7 +105,11 @@ class Encounter:
             return
         for ref in known.all:
             p = get(ref)
-            if p is not None and p.action is ActionType.NONE:
+            # A trait is simply *true*: no action and nothing to wait for.
+            # A no-action row that declares a trigger is a different thing
+            # -- it happens when its trigger does -- and arming it at the
+            # start would fire it once, out of nowhere, and never again.
+            if p is not None and p.action is ActionType.NONE and not p.triggers:
                 use(self.world, eid, ref, spend=True)
 
     def _roll_initiative(self) -> list[int]:

@@ -59,12 +59,18 @@ def main() -> int:
 #: What each ready-made predicate reads off the event it is handed. Only the
 #: ones that look at a single field; the combinators are not checkable this
 #: way and are not listed.
-PREDICATE_FIELD = {
-    "about_me": "actor",
-    "not_me": "actor",
-    "by_me": "attacker",
-    "targets_me": "target",
-    "hits_me": "target",
+#: Every field a predicate reads, not one of them. `hits_me` and `by_me`
+#: each look at two, and recording only the second let a trigger that can
+#: never fire pass this check -- `hits_me` on `DamageRolled` reads
+#: `ev.attacker`, which that event spells `source`, and the walk approved it
+#: because `target` was present. The check existed and was itself too
+#: forgiving, which is worse than not having it.
+PREDICATE_FIELDS = {
+    "about_me": ("actor",),
+    "not_me": ("actor",),
+    "by_me": ("attacker", "source"),
+    "targets_me": ("target",),
+    "hits_me": ("attacker", "target"),
 }
 
 
@@ -81,11 +87,20 @@ def _dead_triggers() -> list[tuple[str, str, str, str]]:
     for p in REGISTRY.values():
         for trig in p.triggers:
             name = getattr(trig.when, "__name__", "")
-            want = PREDICATE_FIELD.get(name)
+            want = PREDICATE_FIELDS.get(name)
             if want is None:
                 continue
             fields = {f.name for f in dataclasses.fields(trig.event)}
-            if want not in fields:
+            # A predicate that reads several fields is satisfied by any one
+            # of a pair it treats as alternatives, and refused when it needs
+            # both. `hits_me` wants an attacker *and* a target; `by_me`
+            # takes an attacker or a source.
+            if name == "hits_me":
+                ok = "target" in fields and bool({"attacker"} & fields)
+            else:
+                ok = bool(set(want) & fields)
+            if not ok:
+                want = "/".join(want)
                 out.append(
                     (p.ref, name, trig.event.__name__, ", ".join(sorted(fields)))
                 )

@@ -245,19 +245,36 @@ def attack(
             if result.hit != isinstance(ev, Hit):
                 ev.cancel("undone by an interrupt")
 
-        world.bus.emit(landed, confirm)
-        if landed.cancelled:
-            landed = (
+        def announce() -> Hit | Miss:
+            ev = (
                 Hit(attacker=attacker, target=target, power=power,
                     critical=result.critical)
                 if result.hit
                 else Miss(attacker=attacker, target=target, power=power)
             )
-            landed.result = result
-            landed.among = among or (target,)
-            landed.branch = branch
-            landed.opportunity = opportunity
-            landed.charge = charge
+            ev.result = result
+            ev.among = among or (target,)
+            ev.branch = branch
+            ev.opportunity = opportunity
+            ev.charge = charge
+            return ev
+
+        # Until the outcome stops changing. An *interrupt* answers before
+        # the callback and is caught by `confirm`; a **free action or a
+        # reaction** answers in the AFTER window, after the callback has
+        # already passed -- so a reroll of that shape turned a miss into a
+        # hit that was never announced, and every rider watching `Hit` was
+        # skipped for a blow that landed.
+        #
+        # Twice is the practical bound: a second answer to the corrected
+        # announcement is refused by the in-flight guard.
+        for _ in range(3):
+            was = result.hit
+            world.bus.emit(landed, confirm)
+            if not landed.cancelled and result.hit == was:
+                break
+            landed = announce()
+        else:
             world.bus.emit(landed)
 
         # Attacking gives you away. Nothing broke hidden before, so a
@@ -392,7 +409,13 @@ def deal_damage(
         amount = amount // 2
 
     defences = world.get(target, Defences)
-    if defences is not None and dtype is not DamageType.UNTYPED:
+    if defences is not None:
+        # Untyped damage is included. `c.resist(5)` with no type writes an
+        # entry for every member *including* untyped, and this used to skip
+        # the whole block for untyped -- so "resist 5 to all damage" was
+        # read for fire and ignored for a sword, which is most of the
+        # damage in a fight. The entry existed and was never consulted,
+        # which reads exactly like a working defence.
         if dtype in defences.immune:
             amount = 0
         else:

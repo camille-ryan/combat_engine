@@ -65,6 +65,13 @@ class Trigger:
     event: type[Event]
     when: Callable[[World, int, Any], bool] = _always
     text: str = ""
+    #: Which side of the event to answer on, when the action's own window is
+    #: the wrong one. A free action is a reaction almost always -- "when you
+    #: hit, free action: ..." -- so `WINDOW_OF` puts it after. A handful of
+    #: printed lines read "**before** the ally makes his first attack roll",
+    #: and those cannot be said any other way: the roll, the hit and the
+    #: damage all happen inside the `AttackDeclared` emit.
+    window: Window | None = None
 
 
 #: Refs currently resolving, keyed by responder. A reaction that emits the
@@ -79,6 +86,11 @@ WINDOW_OF = {
     ActionType.IMMEDIATE_REACTION: Window.AFTER,
     ActionType.OPPORTUNITY: Window.BEFORE,
     ActionType.FREE: Window.AFTER,
+    # "No Action" with a printed Trigger. Not a trait -- a trait is simply
+    # true and is armed once at the start -- but a thing that happens when
+    # its trigger does and costs nothing. Without an entry here no such row
+    # was ever offered to anybody, and four print it.
+    ActionType.NONE: Window.AFTER,
 }
 
 
@@ -106,7 +118,7 @@ class Triggers:
             if window is None:
                 continue
             for trig in p.triggers:
-                watched.setdefault(trig.event, set()).add(window)
+                watched.setdefault(trig.event, set()).add(trig.window or window)
 
         for etype, windows in watched.items():
             for window in sorted(windows, key=lambda w: w.name):
@@ -163,12 +175,16 @@ class Triggers:
             p = get(ref)
             if p is None or not p.triggers:
                 continue
-            if WINDOW_OF.get(p.action) is not window:
+            if not any(
+                (t.window or WINDOW_OF.get(p.action)) is window for t in p.triggers
+            ):
                 continue
             # Any of them. A row naming several printed triggers answers
             # whichever one actually happened.
             if not any(
-                isinstance(ev, t.event) and t.when(self.world, eid, ev)
+                isinstance(ev, t.event)
+                and (t.window or WINDOW_OF.get(p.action)) is window
+                and t.when(self.world, eid, ev)
                 for t in p.triggers
             ):
                 continue

@@ -350,7 +350,11 @@ class Cast:
         label fragment. Without it this takes whichever save-ends effect it
         finds first, which may well be a daze when the row means the burn.
 
-        Falls back to the caster when there is no target. A row declared
+        **Follows `c.target`, and falls back to the caster.** "The target
+        makes a saving throw" is how this is printed almost every time, so
+        unlike `c.resist` and `c.stance` -- which are yours -- this one
+        belongs to whoever the row is aimed at. A row that means the caster
+        on a board where somebody else is targeted says `on=c.me`. A row declared
         `target=NO_TARGET` that answers its own trigger has `c.target` as
         None, and this used to return False without rolling or logging
         anything -- so the row looked finished and did nothing.
@@ -389,7 +393,7 @@ class Cast:
         """
         from .resolve import spend_surge
 
-        return spend_surge(self.world, self._who(on) or self.me)
+        return spend_surge(self.world, on if on is not None else self.me)
 
     def size_of(self, on: int | None = None):  # noqa: ANN201
         from .components import Position
@@ -486,7 +490,7 @@ class Cast:
         """
         from .components import Movement
 
-        who = self._who(on) or self.me
+        who = on if on is not None else self.me
         moves = self.world.get(who, Movement)
         if moves is None:
             return None
@@ -1352,7 +1356,7 @@ class Cast:
         """
         from .components import Defences
 
-        who = self._who(on) or self.me
+        who = on if on is not None else self.me
         kinds = [dtype] if dtype is not None else list(DamageType)
         defences = self.world.get(who, Defences) or self.world.add(who, Defences())
         for kind in kinds:
@@ -1383,7 +1387,7 @@ class Cast:
         """
         from .components import Powers
 
-        who = self._who(on) or self.me
+        who = on if on is not None else self.me
         known = self.world.get(who, Powers)
         if known is None or ref in known.known:
             return None
@@ -1500,7 +1504,7 @@ class Cast:
         """
         from .components import Movement
 
-        who = self._who(on) or self.me
+        who = on if on is not None else self.me
         moves = self.world.get(who, Movement)
         if moves is None:
             return None
@@ -1562,7 +1566,7 @@ class Cast:
 
         Returns the effect so a body can hang mods on it the usual way.
         """
-        who = self._who(on) or self.me
+        who = on if on is not None else self.me
         previous = self.world.effects.stance_of(who)
         if previous is not None:
             self.world.effects.end(previous, "took another stance")
@@ -1669,7 +1673,7 @@ class Cast:
         """
         from .events import ForcedMove
 
-        who = self._who(on) or self.me
+        who = on if on is not None else self.me
 
         def refuse(ev: ForcedMove) -> None:
             if ev.target == who:
@@ -2338,12 +2342,17 @@ class Cast:
     ) -> Effect:
         """"Whenever that creature attacks..." -- the commonest trigger in 4e.
 
+        `by` is whose attacks to watch. **It has no default target**: left
+        out, it watches everybody, which is what "whenever a creature
+        attacks" means. It used to fall through to `c.target`, so on a
+        `target=SELF` row a bare call silently watched the caster alone.
+
         Written out by hand it is a `watch` plus a filter plus a latch, three
         times per class. Here once.
         """
         from .events import AttackDeclared
 
-        who = self._who(by)
+        who = by
         seen: dict[int, int] = {}
 
         def guard(ev: AttackDeclared) -> None:
@@ -2376,7 +2385,7 @@ class Cast:
         in `fn`. The subscription is owned by the effect, so when the duration
         runs out the trigger goes with it and nothing has to remember.
         """
-        who = self._who(on) or self.me
+        who = on if on is not None else self.me
         holder: list[Effect] = []
 
         def fire(ev: Any) -> None:
@@ -2571,7 +2580,7 @@ class Cast:
     # -- reading modifiers back ---------------------------------------------
 
     def total(self, what: str, on: int | None = None) -> int:
-        who = self._who(on) or self.me
+        who = on if on is not None else self.me
         mods = self.world.get(who, Mods)
         return mods.total(what) if mods else 0
 

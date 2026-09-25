@@ -92,14 +92,23 @@ that never applies.
   The damage context has `target`, `power`, `opportunity`, `charge` -- and
   **no `attacker`, no `ranged`**. "Melee attacks deal N extra" has to gate
   on `get(ctx["power"]).reach.kind`.
-* **Defaults differ, and not always on purpose.** `c.may(...)` asks
-  **`c.target`** deliberately -- a heal asks whose surge is being spent.
-  `c.speed_of()`, `c.save()`, `c.resist()` and `c.surge_value()` default to
-  the **caster**. `c.bonus`, `c.penalty` and `c.forbid` still fall to
-  `c.target`, so on a `target=NO_TARGET` self-buff they apply to nobody and
-  return `None` while the row still audits as having done something. For a
-  caster-side "you can", write `who=c.me`; for a caster-side modifier,
-  `on=c.me`.
+* **Defaults differ, and the split is about whose thing it is.**
+
+  **Yours, so they default to the caster:** `c.resist`, `c.stance`,
+  `c.mode`, `c.watch`, `c.immovable`, `c.spend_surge`, `c.grant_row`,
+  `c.ignores_difficult`, `c.speed_of`, `c.surge_value`.
+
+  **Theirs, so they follow `c.target`:** `c.may` (a heal asks whose surge
+  is being spent), `c.save` ("*the target* makes a saving throw"),
+  `c.bonus`, `c.penalty`, `c.forbid`, `c.condition`.
+
+  For the wrong side of either, name it: `on=c.me`, or `on=<who>`.
+
+  This list is worth trusting only because it has been wrong twice. It
+  described a caster default for `c.resist` and `c.save` while the code did
+  neither, and a rage consequently installed itself on the creature being
+  hit. If a default surprises you, check the code and fix whichever is
+  wrong -- the note is not authority.
 * **"Did this attack have combat advantage?" is `ev.result.advantage`**,
   read off the `Hit`. Asking `has_combat_advantage` again is too late: a
   one-shot grant has already been spent. The live `AttackResult` rides on

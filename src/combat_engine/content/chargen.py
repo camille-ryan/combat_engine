@@ -319,17 +319,26 @@ BUILDS: dict[str, tuple[Build, ...]] = {
 #: outright.
 CLASSES.update(_from_the_book())
 
-#: One build each, from the class's own first two named abilities. The real
-#: forks are a judgement off each class's page and are not invented here;
-#: this is enough for a character to exist and for `c.build(...)` to have
-#: something to answer. A row gated on a build this does not name is a real
-#: gap and belongs in `docs/blocked.json`.
+#: A build per secondary, from the class's own ability line.
+#:
+#: Every class page names three abilities -- a primary and two seconds --
+#: and the fork *is* the choice between those two: a Primal Predator druid
+#: against a Primal Guardian, a dragon sorcerer against a wild one. The
+#: names here are `second-<ability>` rather than the printed ones, because
+#: the printed ones are prose and this file may not carry it.
+#:
+#: One build was not enough: three classes in a row reported rows whose
+#: whole extra sentence is a fork rider, with no leg for `c.build(...)` to
+#: answer about. A row gated on something finer than which secondary was
+#: taken is still a real gap and belongs in `docs/blocked.json`.
 for _name, _line in CLASSES.items():
-    if _name not in BUILDS:
-        _order = [a for a, _ in sorted(_line.scores.items(), key=lambda kv: -kv[1])]
-        BUILDS[_name] = (
-            Build("standard", _order[0], _order[1] if len(_order) > 1 else CON),
-        )
+    if _name in BUILDS:
+        continue
+    _order = [a for a, _ in sorted(_line.scores.items(), key=lambda kv: -kv[1])]
+    _seconds = _order[1:3] or [CON]
+    BUILDS[_name] = tuple(
+        Build(f"second-{second.value}", _order[0], second) for second in _seconds
+    )
 
 
 def build_of(cls: str, name: str = "") -> Build:
@@ -446,6 +455,22 @@ def _fits(p, build: Build) -> bool:  # noqa: ANN001
     return p.attack.ability is build.primary
 
 
+def _leans_on(declared, build: Build) -> int:  # noqa: ANN001
+    """Does this row name the ability this build is good at?
+
+    Read off the row's own source, which is the only place the dependency
+    is written down -- a body saying `c.int_mod` needs Intelligence and no
+    header field says so.
+    """
+    import inspect
+
+    try:
+        body = inspect.getsource(declared.body)
+    except (OSError, TypeError):
+        return 0
+    return sum(f"c.{a.value}_mod" in body for a in (build.primary, build.secondary))
+
+
 def build_for(cls: str, ref: str) -> str:
     """The build whose gear can actually hold this row.
 
@@ -461,7 +486,17 @@ def build_for(cls: str, ref: str) -> str:
     declared = get(ref)
     if declared is None:
         return ""
-    for build in BUILDS.get(cls, ()):
+    # The build whose *secondary* ability the row leans on, first. Several
+    # rows read "a number of squares equal to your Intelligence modifier",
+    # and a warlord who took the other leg has Intelligence 10 -- so the row
+    # does nothing, correctly, and reads as broken. The fork is exactly the
+    # choice of which secondary is good; picking the wrong leg to test on
+    # says nothing about the row.
+    options = sorted(
+        BUILDS.get(cls, ()),
+        key=lambda b: -_leans_on(declared, b),
+    )
+    for build in options:
         probe = World(Grid(8, 8), Rng(1), Bus())
         who = spawn(
             probe, Character(cls, max(1, declared.level), [ref], build=build.name), (1, 1)

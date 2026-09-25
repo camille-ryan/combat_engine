@@ -20,6 +20,7 @@ from combat_engine.engine import (
     CON,
     DAILY,
     EACH_CREATURE,
+    EACH_ENEMY,
     FORT,
     MINOR,
     NO_TARGET,
@@ -29,12 +30,16 @@ from combat_engine.engine import (
     WILL,
     AreaBurst,
     Attack,
+    AttackDeclared,
     Cast,
+    CloseBurst,
     DamageType,
     Keyword,
     Ranged,
+    TurnStart,
     When,
     power,
+    spread,
 )
 from combat_engine.engine.zones import Zone
 
@@ -184,3 +189,168 @@ def p62(c: Cast) -> None:
 
     zone = c.world.get(dark, Zone)
     c.on_sustain(zone.effect if zone else None, secondary)
+
+
+@power(
+    "p16263",
+    level=5,
+    cls="warlock",
+    usage=DAILY,
+    action=STANDARD,
+    reach=CloseBurst(10),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.CONJURATION],
+)
+def p16263(c: Cast) -> None:
+    """Two conjurations, each with a one-square aura that bites.
+
+    `burn` is the cold; the slow that goes with it has to be hung off turn
+    starts by hand, because a burn deals damage and nothing else. Sustaining
+    rolls a d6 to add or remove a tentacle -- a conjuration cannot be made
+    from inside a sustain handler, so sustaining simply keeps the pair.
+
+    The secondary attack printed beneath has no id of its own in the spec,
+    so there is no row to declare and it is not written.
+    """
+    room = sorted(
+        sq
+        for sq in spread({c.here}, 5)
+        if c.world.grid.passable(sq) and c.world.grid.occupant(sq) is None
+    )
+    if not room:
+        return
+    arms = [
+        c.conjure(
+            at=where,
+            label=f"{c.ref} {n}",
+            until=When.SUSTAIN,
+            sustain=MINOR,
+            aura=1,
+            burn=(5, DamageType.COLD),
+        )
+        for n, where in enumerate(room[:2])
+    ]
+
+    def chill(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor == c.me:
+            return
+        if any(c.adjacent_to(arm, ev.actor) for arm in arms):
+            c.slowed(on=ev.actor, until=When.EOTNT)
+
+    c.watch(TurnStart, chill, until=When.ENCOUNTER)
+
+
+@power(
+    "p4076",
+    level=5,
+    cls="warlock",
+    usage=DAILY,
+    action=STANDARD,
+    reach=CloseBurst(3),
+    target=EACH_ENEMY,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC, Keyword.FEAR],
+    attack=Attack(CON, vs=WILL),
+)
+def p4076(c: Cast) -> None:
+    if c.target is not None:
+        if c.strike():
+            c.damage("1d10", c.con_mod, dtype=DamageType.PSYCHIC)
+            c.curse()
+        else:
+            c.half_damage("1d10", c.con_mod, dtype=DamageType.PSYCHIC)
+    if not c.last:
+        return
+
+    def spite(ev: AttackDeclared) -> None:
+        if ev.target == c.me and c.cursed(ev.attacker):
+            c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=ev.attacker)
+
+    c.watch(AttackDeclared, spite, until=When.ENCOUNTER)
+
+
+@power(
+    "p6858",
+    level=5,
+    cls="warlock",
+    usage=DAILY,
+    action=STANDARD,
+    reach=AreaBurst(2, within=10),
+    target=EACH_CREATURE,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.ZONE],
+    attack=Attack(CON, vs=REF),
+)
+def p6858(c: Cast) -> None:
+    """`c.burns` is the once-a-turn bite the printed line asks for, and it
+    rolls its dice per bite rather than once when the zone was made.
+    Concealment is not denied -- nothing suppresses it -- and the Ugar pact
+    boon has no leg to ask for."""
+    if c.target is not None and c.strike():
+        c.damage("1d10", c.con_mod, dtype=DamageType.FIRE)
+    if not c.last:
+        return
+    area = c.area()
+    if area:
+        light = c.zone(area, label=c.ref, until=When.ENCOUNTER)
+        c.burns(light, "1d10", DamageType.FIRE)
+
+
+@power(
+    "p6859",
+    level=5,
+    cls="warlock",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(10),
+    target=ONE_CREATURE,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC],
+    attack=Attack(CON, vs=WILL),
+)
+def p6859(c: Cast) -> None:
+    """The choice at the start of each turn is the target's, which is what
+    `c.may` asks by default -- it puts the question to `c.target`."""
+    victim = c.target
+    if c.strike():
+        c.damage("2d6", c.con_mod, dtype=DamageType.PSYCHIC)
+        hold = c.effect(f"{c.ref}: whispering")
+        if victim is None or hold is None:
+            return
+
+        def whisper(ev: TurnStart) -> None:
+            if ev.ghost or ev.actor != victim:
+                return
+            if c.may("go quiet rather than hurt", who=victim):
+                c.dazed(on=victim, until=When.SOTNT)
+            else:
+                c.flat(2 * c.con_mod, dtype=DamageType.PSYCHIC, on=victim)
+
+        hold.subs.append(c.world.bus.on(TurnStart, whisper))
+        return
+    # The miss deals the same dice, which is unusual and is what it prints.
+    c.damage("2d6", c.con_mod, dtype=DamageType.PSYCHIC)
+    c.dazed()
+
+
+@power(
+    "p6954",
+    level=5,
+    cls="warlock",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(10),
+    target=ONE_CREATURE,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.NECROTIC],
+    attack=Attack(CHA, vs=WILL),
+)
+def p6954(c: Cast) -> None:
+    """The ally pays and the target bleeds for it, so the offer is put to the
+    ally -- `c.may` asks whoever `who=` names -- and the surge is spent
+    without healing anybody, which is what "loses a healing surge" means."""
+    if c.strike():
+        c.damage("2d8", c.cha_mod, dtype=DamageType.NECROTIC)
+    else:
+        c.half_damage("2d8", c.cha_mod, dtype=DamageType.NECROTIC)
+    near = sorted(f for f in c.allies() if c.distance(f) <= 5)
+    for friend in near:
+        if c.may("spend a surge for more of it", who=friend) and c.spend_surge(on=friend):
+            c.damage("2d8", dtype=DamageType.NECROTIC)
+            return
