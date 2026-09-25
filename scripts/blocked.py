@@ -66,16 +66,26 @@ def main() -> int:
     return 0
 
 
-def _surface() -> set[str]:
-    """Everything a row can call, by name."""
+def _surface() -> dict[str, object]:
+    """Everything a row can call, by name, with the thing itself.
+
+    The object and not just the name, because a wanted *parameter* can only
+    be checked against a real signature -- see `_exists`.
+    """
     sys.argv = sys.argv[:1]
     from combat_engine.engine import cast as cast_mod
     from combat_engine.engine import events, query, triggers
 
-    names = {f"c.{n}" for n in dir(cast_mod.Cast) if not n.startswith("_")}
+    have: dict[str, object] = {
+        f"c.{n}": getattr(cast_mod.Cast, n)
+        for n in dir(cast_mod.Cast)
+        if not n.startswith("_")
+    }
     for mod, prefix in ((query, "query."), (triggers, ""), (events, "")):
-        names |= {f"{prefix}{n}" for n in dir(mod) if not n.startswith("_")}
-    return names
+        for n in dir(mod):
+            if not n.startswith("_"):
+                have.setdefault(f"{prefix}{n}", getattr(mod, n))
+    return have
 
 
 def _declared() -> set[str]:
@@ -86,13 +96,20 @@ def _declared() -> set[str]:
     return set(REGISTRY)
 
 
-def _exists(wants: str, have: set[str]) -> bool:
+def _exists(wants: str, have: dict[str, object]) -> bool:
     """Is the named thing on the surface, *with* the parameter asked for?
 
     `c.no_provoke(mode=)` is not satisfied by `c.no_provoke` existing -- the
     row wanted the argument, and reporting it ready would send somebody to
     write a line that does not work. Checking the head alone called two
     rows ready that were not.
+
+    That guard was written for `c.` methods and exempted everything else,
+    which let the same mistake straight back in by the side door:
+    `query.speed(world, eid, ctx)` was reported ready while `query.speed`
+    still took two arguments, because the name matched and the parameters
+    were never looked at. Anything with a signature is now checked; only a
+    bare field on an event, which has none, is taken on its name.
     """
     import inspect
 
@@ -103,17 +120,10 @@ def _exists(wants: str, have: set[str]) -> bool:
     wanted = [p.strip().rstrip("=") for p in rest.rstrip(")").split(",") if p.strip()]
     if not wanted:
         return True
-    if not head.startswith("c."):
-        return True          # a field on an event; the name is all we can check
-    from combat_engine.engine.cast import Cast
-
-    fn = getattr(Cast, head[2:], None)
-    if fn is None:
-        return False
     try:
-        params = inspect.signature(fn).parameters
+        params = inspect.signature(have[head]).parameters  # type: ignore[arg-type]
     except (TypeError, ValueError):
-        return False
+        return True          # not callable: a field on an event, name is all we have
     return all(p in params for p in wanted)
 
 

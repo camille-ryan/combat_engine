@@ -239,10 +239,6 @@
     "wants": "a SkillCheck event to declare Trigger on",
     "why": "its whole printed trigger is 'you would make an Athletics or an Endurance check'; there are no skill checks in the engine and no event announcing one, so the row could only be declared with prose nothing reads"
   },
-  "p1122": {
-    "wants": "c.no_advantage(against=)",
-    "why": "combat advantage is computed inside resolve.roll after the interrupt window, so the body has nothing to say"
-  },
   "p11392": {
     "wants": "c.initiative(n, on=) -- change an initiative result",
     "why": "'+10 to your initiative check'. InitiativeRolled.rolled is an int copied onto the event, so a listener setting ev.rolled is discarded; the sort re-reads the Initiative component and no Cast method writes it. init.bonus is read before the emit, so a bonus cannot reach it either. Issue #168"
