@@ -242,6 +242,55 @@ def m5019a4(c: Cast) -> None:
             c.grant_attack(chosen, on=victim)
 
 
+@power(
+    "m5019a5",
+    level=11,
+    usage=ENCOUNTER,
+    action=STANDARD,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m5019a5(c: Cast) -> None:
+    """It points, and three of its friends run in.
+
+    Declared with no target: the printed line puts no distance between the
+    m5019 and the creature charged -- the 5 squares measure where its
+    allies are standing, not how far it can point -- so a `reach` would be
+    inventing a range the card does not print. The victim is picked in the
+    body instead, once and before anybody sets off, because the choice is
+    the m5019's and there is one of it; nearest first, since the chargers
+    start within 5 squares of the m5019 and the near foe is the one they
+    can actually get to.
+
+    "Three" is not "up to three": the only reason for fewer is that fewer
+    allies are in range, so the pick is not offered as declinable the way a
+    printed "up to two" is.
+
+    Each run is the ally's own free action -- `who=` moves that ally and
+    swings with its own row, and `c.charge_at` spends nothing for it, while
+    the m5019 pays the standard action. A charger that cannot reach comes
+    back False and simply does not arrive.
+    """
+    me = c.me
+    foes = sorted(c.enemies(), key=lambda foe: (c.distance(foe), foe))
+    victim = c.choose(foes, f"{c.ref}: who they all run at") if foes else None
+    if victim is None:
+        return
+    pool = sorted(
+        friend
+        for friend in c.within(5, side="ally")
+        if friend != me and alive(c.world, friend)
+    )
+    for _ in range(3):
+        if not pool:
+            return
+        friend = c.choose(pool, f"{c.ref}: which ally charges")
+        if friend is None:
+            return
+        pool.remove(friend)
+        c.charge_at(victim, who=friend)
+
+
 # ==========================================================================
 # m660
 # ==========================================================================

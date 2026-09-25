@@ -43,9 +43,17 @@ MAX_MONSTER_LEVEL = 13
 #: still ingested for these classes -- the `source` column says which
 #: book a row came from, so narrowing to PHB1 is a query and not a
 #: rebuild.
+#:
+#: Every class except the hybrids. The eight Player's Handbook ones came
+#: first and were the whole list for a long while; the rest are here so
+#: their powers are in the database at all -- a class still needs a
+#: `chargen.ClassLine` before any of its rows mean anything.
 CLASSES = (
     "Cleric", "Fighter", "Paladin", "Ranger",
     "Rogue", "Warlock", "Warlord", "Wizard",
+    "Ardent", "Artificer", "Assassin", "Avenger", "Barbarian", "Bard",
+    "Battlemind", "Druid", "Invoker", "Monk", "Psion", "Runepriest",
+    "Seeker", "Shaman", "Sorcerer", "Swordmage", "Warden",
 )  # fmt: skip
 
 SCHEMA = """
@@ -80,6 +88,13 @@ CREATE TABLE power (
   books TEXT, spec TEXT, score REAL
 );
 CREATE INDEX power_class ON power(class, level);
+
+CREATE TABLE class (
+  name TEXT PRIMARY KEY, role TEXT, source TEXT,
+  hp_first INTEGER, hp_per_level INTEGER, surges INTEGER,
+  defences TEXT, armour TEXT, weapons TEXT, implements TEXT,
+  abilities TEXT
+);
 """
 
 
@@ -88,6 +103,7 @@ class Report:
     monsters: int = 0
     abilities: int = 0
     powers: int = 0
+    classes: int = 0
     names: int = 0
     common: int = 0
     scores: dict[str, float] = field(default_factory=dict)
@@ -98,6 +114,7 @@ class Report:
             f"monsters      {self.monsters:6d}",
             f"  abilities   {self.abilities:6d}",
             f"powers        {self.powers:6d}",
+            f"classes       {self.classes:6d}",
             f"names         {self.names:6d}  (localization/names.json, gitignored)",
             f"common words  {self.common:6d}  (what leaks.py treats as English)",
             "",
@@ -136,6 +153,7 @@ def build() -> Report:
 
     _monsters(source, out, report, names)
     _powers(source, out, report, names)
+    report.classes = _classes(source, out)
     _common_words(source, out, report)
 
     out.execute(
@@ -231,6 +249,77 @@ def _creature_names(rows: list) -> dict[str, str]:
             if worth_swapping(nm):
                 out.setdefault(nm, f"{m.ref_id}a{a.index}")
     return out
+
+
+#: The chassis lines every class page prints, in the order they appear.
+#: Read out of the compendium rather than transcribed: seventeen classes
+#: are too many to copy by hand without a mistake, and a number nobody can
+#: trace back to a page is a number nobody can check.
+_CHASSIS = {
+    "hp_first": r"Hit Points at 1st Level\s*:?\s*(\d+)",
+    "hp_per_level": r"Hit Points per Level Gained\s*:?\s*(\d+)",
+    "surges": r"Healing Surges(?: per Day)?\s*:?\s*(\d+)",
+    "armour": r"Armor Proficiencies\s*:?\s*([^.]+)",
+    "weapons": r"Weapon Proficiencies\s*:?\s*([^.]+)",
+    "implements": r"Implements?\s*:?\s*([^.]+)",
+    "defences": r"Bonus to Defenses?\s*:?\s*([^.]+)",
+}
+
+
+def _classes(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
+    """Every non-hybrid class's chassis, off its own page.
+
+    `chargen` needs hit points, surges, defence bonuses and proficiencies
+    before a class's powers mean anything, and the eight that exist were
+    hand-written. Seventeen more by hand is seventeen chances to mistype a
+    number that nothing would catch -- the powers would all work and the
+    character would quietly be wrong.
+    """
+    # Matched on the bare name, because the compendium files a class under
+    # its *build*: "Cleric (Templar)", "Fighter (Weaponmaster)", and six
+    # separate wizards. Asking for exact names found the twenty classes
+    # that have only one build and missed the five that were here first.
+    #
+    # Hybrids are excluded by name -- they are a way of combining two
+    # classes rather than a class, and the goal says so.
+    written = 0
+    wanted = {c.lower() for c in CLASSES}
+    rows = [
+        r
+        for r in source.execute(
+            "SELECT Name, Role, Source, Abilities, PlainTxt, Txt FROM Class"
+        )
+        if not r["Name"].lower().startswith("hybrid")
+        and r["Name"].split("(")[0].strip().lower() in wanted
+    ]
+    # One row per class: the earliest printing, which is the one the other
+    # books amend rather than replace.
+    seen: set[str] = set()
+    for row in rows:
+        bare = row["Name"].split("(")[0].strip()
+        if bare in seen:
+            continue
+        seen.add(bare)
+        plain = row["PlainTxt"] or re.sub(r"<[^>]+>", " ", row["Txt"] or "")
+        found: dict[str, str] = {}
+        for field_, pattern in _CHASSIS.items():
+            m = re.search(pattern, plain, re.I)
+            if m:
+                found[field_] = m.group(1).strip()
+        out.execute(
+            "INSERT OR REPLACE INTO class VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                bare, row["Role"] or "", row["Source"] or "",
+                int(found.get("hp_first", 0) or 0),
+                int(found.get("hp_per_level", 0) or 0),
+                int(found.get("surges", 0) or 0),
+                found.get("defences", ""), found.get("armour", ""),
+                found.get("weapons", ""), found.get("implements", ""),
+                row["Abilities"] or "",
+            ),
+        )
+        written += 1
+    return written
 
 
 def _powers(
