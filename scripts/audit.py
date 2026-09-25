@@ -105,6 +105,15 @@ KNOWN_SILENT = {
     # firing the sibling first would need the harness to know which rows
     # feed which -- which is the content's business, not its own.
     "m4869a4": "slides creatures burning from a named sibling row; the board's burn is its own",
+    # Drains every creature the m467 is holding, and the board holds nobody
+    # -- the grabs come from its own minor action, which the harness does
+    # not take first. Driven by hand: two limbs on one creature deal 10
+    # necrotic and the m467 is healed by the same amount.
+    "m467a2": "drains what it is grabbing; the harness never makes it grab",
+    # Sends one of the m4967's own mossling minions running, and the board
+    # spawns a second m4967 rather than a mossling. Driven by hand: with an
+    # m4971 beside it the minion moves its full speed as a free action.
+    "m4967a5": "moves a mossling minion; the board has none to move",
 }
 
 

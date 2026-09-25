@@ -75,18 +75,34 @@ class Encounter:
         separate watchers, each with its own once-a-round latch, each paying
         out. Arming once, here, is both the rule and the fix.
         """
+
+        # A copy of the order: a trait may splice into it -- `c.extra_turn`
+        # during arming is how several solos work -- and inserting at or
+        # before the cursor made the loop revisit a creature. Harmless only
+        # because an encounter-usage trait is refused the second time.
+        for eid in list(self.order):
+            self.arm_traits_of(eid)
+
+    def arm_traits_of(self, eid: int) -> None:
+        """Turn on one creature's traits.
+
+        Split out because `join` needs it: a creature that arrives mid-fight
+        went into the order with every `action=NONE` row silently unarmed,
+        so a summoned monster had no aura, no regeneration and none of the
+        things that are simply true of it. Every summon in the tree was
+        quietly weaker than its stat block.
+        """
         from .components import Powers
         from .dsl import get, use
         from .types import ActionType
 
-        for eid in self.order:
-            known = self.world.get(eid, Powers)
-            if known is None:
-                continue
-            for ref in known.all:
-                p = get(ref)
-                if p is not None and p.action is ActionType.NONE:
-                    use(self.world, eid, ref, spend=True)
+        known = self.world.get(eid, Powers)
+        if known is None:
+            return
+        for ref in known.all:
+            p = get(ref)
+            if p is not None and p.action is ActionType.NONE:
+                use(self.world, eid, ref, spend=True)
 
     def _roll_initiative(self) -> list[int]:
         rolls: list[tuple[int, int, int, int]] = []
@@ -149,7 +165,9 @@ class Encounter:
             + init.bonus
             + level_term(self.world, eid, init.scale)
         )
-        return self._splice(eid, init.rolled)
+        where = self._splice(eid, init.rolled)
+        self.arm_traits_of(eid)
+        return where
 
     def extra_turn(self, eid: int, at: int) -> int:
         """Give a creature a *second* slot, at that initiative count.

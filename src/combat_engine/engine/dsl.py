@@ -289,6 +289,11 @@ class Power:
     #: A printed Requirement line, as a predicate on the caster.
     requires: Callable[[World, int], bool] | None = None
     requires_text: str = ""
+    #: This row *is* a charge: it runs at somebody and then swings. Its
+    #: reach is therefore reach plus speed when asking whether anybody can
+    #: be caught -- measuring the melee reach before the run refused every
+    #: such row in exactly the situation it exists for.
+    charges: bool = False
     #: The second branch's Requirement. A dual row's printed one is usually
     #: the two joined by "or" -- "two melee weapons **or** a ranged weapon"
     #: is the melee branch's requirement and the ranged branch's, and
@@ -465,6 +470,7 @@ def power(
     damage_alt: Damage | None = None,
     requires: Callable[[World, int], bool] | None = None,
     requires_text: str = "",
+    charges: bool = False,
     requires_alt: Callable[[World, int], bool] | None = None,
     trigger: str = "",
     on: Trigger | Sequence[Trigger] | None = None,
@@ -501,6 +507,7 @@ def power(
             damage_alt=damage_alt,
             requires=requires,
             requires_text=requires_text,
+        charges=charges,
             requires_alt=requires_alt,
             trigger=trigger,
             on=on,
@@ -689,6 +696,17 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0) -> bool:
     if p.reach_of(branch).kind in ("area_burst", "close_blast"):
         return any(
             candidates(world, actor, p, aim, branch) for aim in aim_points(world, actor, p)
+        )
+    if p.charges:
+        # A charge covers ground first, so the question is whether anybody
+        # is within reach *after* the run. Asking about the printed melee
+        # reach refused the row whenever the target was further off than a
+        # sword -- which is every time a charge is the right thing to do.
+        from .query import distance_between, enemies, speed
+
+        far = p.reach_of(branch).size + speed(world, actor)
+        return any(
+            distance_between(world, actor, foe) <= far for foe in enemies(world, actor)
         )
     return bool(candidates(world, actor, p, None, branch))
 

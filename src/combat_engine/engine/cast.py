@@ -416,18 +416,29 @@ class Cast:
             return None
         return self.world.effects.apply(who, self.me, until, label=label)
 
-    def invisible(self, *, to: int | None = None, until: When = When.SONT) -> Effect | None:
-        """You cannot be seen -- by one creature, or by everybody.
+    def invisible(
+        self,
+        *,
+        to: int | None = None,
+        on: int | None = None,
+        until: When = When.SONT,
+    ) -> Effect | None:
+        """Cannot be seen -- by one creature, or by everybody.
 
         Held as `HIDDEN_FROM`, which `query.has_combat_advantage` already
         reads, so being unseen grants the advantage it should.
+
+        `on` is *who* is unseen, and defaults to the caster. It hid the
+        caster and nobody else, so "the creature **or one of its allies** is
+        invisible to the target" had to set the relation by hand.
         """
+        who = on or self.me
         watchers = [to] if to is not None else self.enemies()
-        pairs = [(Relation.HIDDEN_FROM, self.me, w) for w in watchers if w is not None]
+        pairs = [(Relation.HIDDEN_FROM, who, w) for w in watchers if w is not None]
         if not pairs:
             return None
         return self.world.effects.apply(
-            self.me, self.me, until, label=f"{self.ref} unseen", relations=pairs
+            who, self.me, until, label=f"{self.ref} unseen", relations=pairs
         )
 
     def hide(self, *, from_: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
@@ -1756,7 +1767,12 @@ class Cast:
         )
 
     def maximise(
-        self, *, on: int | None = None, until: When = When.EONT
+        self,
+        *,
+        on: int | None = None,
+        ref: str = "",
+        until: When = When.EONT,
+        critical: bool = False,
     ) -> Effect | None:
         """The next damage this creature rolls comes out maximum.
 
@@ -1774,15 +1790,38 @@ class Cast:
         def top_up(ev: DamageRolled) -> None:
             if ev.source != who:
                 return
-            p = get(self.ref)
-            d = p.damage_of(self.branch) if p is not None else None
+            # The row that *rolled*, off the event -- not the row that armed
+            # this. Both rows wanting it are free actions with no damage
+            # line of their own ("Trigger: it hits with an implement
+            # attack. Effect: the attack deals maximum damage"), so reading
+            # `self.ref` found nothing and the listener did nothing at all.
+            # `Cast.damage` already sets `detail` to whoever is rolling.
+            # The row that rolled, unless one is named. "The attack deals
+            # maximum damage" is about whatever swung; `ref` is for the rare
+            # line that names a row instead.
+            p = get(ref or ev.detail)
+            d = p.damage_of(0) if p is not None else None
             if d is not None:
                 ev.amount = max(ev.amount, _max_of(d.dice) + self._bonus_of(d.bonus))
 
-        return self.watch(
+        held = self.watch(
             DamageRolled, top_up, until=until, window=Window.BEFORE, on=who,
             label=f"{self.ref} maximum damage",
         )
+        if critical and held is not None:
+            # "Treated as a critical hit" is more than maximum damage -- it
+            # pays every crit rider too -- so it is set on the live result
+            # rather than faked by topping the number up.
+            from .events import Hit
+
+            def crit(ev: Hit) -> None:
+                if ev.attacker == who and ev.result is not None:
+                    ev.result.critical = True
+
+            held.subs.append(
+                self.world.bus.on(Hit, crit, window=Window.BEFORE, owner=who)
+            )
+        return held
 
     def threatens(
         self, squares_: int = 2, *, on: int | None = None, until: When = When.ENCOUNTER
@@ -2342,6 +2381,7 @@ class Cast:
 
         def fire(ev: Any) -> None:
             before = len(self.world.bus.log)
+            held = len(self.world.effects.live)
             fn(ev)
             # `once` means "fire once", not "live for one event", and those
             # differ for every trigger with a guard -- which is most of them.
@@ -2349,7 +2389,12 @@ class Cast:
             # the right *class*, so "the first time you hit a bloodied enemy"
             # was spent by the first attack that missed a healthy one.
             # Whether the body did anything is read off the log.
-            if once and holder and len(self.world.bus.log) > before:
+            # Anything the handler *did*, not only what it announced.
+            # `c.summon` puts a creature on the board and in the order and
+            # emits nothing at all, so a once-only row whose whole effect is
+            # a summon never spent its hold and fired every round.
+            did = len(self.world.bus.log) > before or len(self.world.effects.live) != held
+            if once and holder and did:
                 self.world.effects.end(holder[0], "used")
 
         sub = self.world.bus.on(event, fire, window=window, owner=self.me)

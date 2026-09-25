@@ -108,6 +108,10 @@ that never applies.
   on a `Dropped` is false every time. Compare `team()` directly.
 * **`c.suffering(label)`** matches by substring and leaves the caster out
   unless you pass `include_self=True`.
+* **A row whose printed Effect *is* a charge declares `charges=True`.**
+  Without it the engine measures the weapon's reach before the run and
+  refuses the row whenever the target is further off than a sword -- which
+  is every situation a charge is for.
 * **Ongoing damage of one type does not stack — the highest applies.**
   `c.ongoing` enforces it: a weaker burn of the same type is refused and
   the standing one is returned, a stronger one supersedes it. Different

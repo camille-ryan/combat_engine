@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from .components import Budget, Conditions, Mod, Mods
+from .components import Budget, Conditions, Health, Mod, Mods
 from .events import (
     ConditionApplied,
     ConditionEnded,
@@ -258,6 +258,14 @@ class Effects:
         for eff in list(self.live.values()):
             on_the_corpse = eff.owner == eid
             nothing_will_end_it = eff.source == eid and eff.when in _UNREACHABLE
+            # A zone is *somewhere*, not something the dead creature is
+            # still doing, so its own effect outlives whoever lit it. A
+            # death throe that sets a fire "until the end of the encounter"
+            # had it lit and swept away in the same breath -- `Dropped`
+            # fires the throe and `_die` calls this immediately after -- and
+            # the row read as finished. `end_encounter` is what ends these.
+            if nothing_will_end_it and self.world.get(eff.owner, Health) is None:
+                continue
             if on_the_corpse or nothing_will_end_it:
                 self.end(eff, why)
 
