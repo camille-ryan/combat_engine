@@ -9,6 +9,7 @@ All eight Player's Handbook classes, to level 10.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from random import Random
 
@@ -139,6 +140,131 @@ CLASSES: dict[str, ClassLine] = {
 }
 
 
+#: A few more weapons, for the classes that arrived with phase C.
+GREATAXE = Weapon(ref="w:greataxe", damage="1d12", proficiency=2, group="axe",
+                  properties=frozenset({"two-handed"}))
+QUARTERSTAFF = Weapon(ref="w:quarterstaff", damage="1d8", proficiency=2, group="staff",
+                      properties=frozenset({"two-handed"}))
+LONGSPEAR = Weapon(ref="w:longspear", damage="1d10", proficiency=2, group="spear",
+                   properties=frozenset({"two-handed", "reach"}))
+UNARMED = Weapon(ref="w:unarmed", damage="1d8", proficiency=3, group="unarmed")
+STAFF = Weapon(ref="w:staff", damage="1d8", proficiency=0, group="implement")
+TOTEM = Weapon(ref="w:totem", damage="1d4", proficiency=0, group="implement")
+
+
+def _from_the_book() -> dict[str, ClassLine]:
+    """The classes phase C brought in, read off the `class` table.
+
+    The eight above were transcribed by hand and are left alone -- they
+    carry judgement the table cannot hold, like the ranger's two blades
+    *and* a bow, which several of its rows require outright.
+
+    These seventeen are derived instead. Seventeen chassis by hand is
+    seventeen chances to mistype a number that nothing would catch: every
+    power would work and the character would quietly be wrong. The
+    derivation was checked against all eight hand-written lines first --
+    hit points, per level and surges agree exactly -- which is the only
+    reason to trust it for the rest.
+    """
+    from combat_engine.etl.build import game
+
+    picks = {
+        "cloth": (), "leather": (), "hide": (),
+    }
+    del picks
+    out: dict[str, ClassLine] = {}
+    try:
+        rows = list(game().execute("SELECT * FROM class ORDER BY name"))
+    except Exception:            # no database yet; the eight still work
+        return out
+
+    for row in rows:
+        name = row["name"].lower()
+        if name in CLASSES or not row["hp_first"]:
+            continue
+        out[name] = ClassLine(
+            name,
+            row["hp_first"],
+            row["hp_per_level"],
+            row["surges"],
+            _defences(row["defences"] or ""),
+            _heaviest(row["armour"] or ""),
+            0,                   # a shield is a build choice, not a chassis
+            _arms(row["weapons"] or "", row["implements"] or ""),
+            _abilities(row["abilities"] or "")[0],
+            _spread(_abilities(row["abilities"] or "")),
+        )
+    return out
+
+
+def _defences(printed: str) -> dict[str, int]:
+    """"+1 Reflex, +1 Will" -> {"ref": 1, "will": 1}."""
+    short = {"fortitude": "fort", "reflex": "ref", "will": "will"}
+    out: dict[str, int] = {}
+    for m in re.finditer(r"\+(\d)\s*(Fortitude|Reflex|Will)", printed, re.I):
+        out[short[m.group(2).lower()]] = int(m.group(1))
+    return out
+
+
+def _heaviest(printed: str) -> str:
+    """The best armour the class is trained in, which is what it wears."""
+    for kind in ("plate", "scale", "chain", "hide", "leather", "cloth"):
+        if kind in printed.lower():
+            return kind
+    return "cloth"
+
+
+def _arms(weapons: str, implements: str) -> tuple[Weapon, ...]:
+    """Something to fight with, and something to cast through.
+
+    One representative weapon per proficiency line rather than the whole
+    list: a character holds one thing, and `chargen.loadout` picks from
+    what it is given.
+    """
+    text = weapons.lower()
+    held: list[Weapon] = []
+    if "monk unarmed" in text:
+        held.append(UNARMED)
+    elif "longspear" in text:
+        held.append(LONGSPEAR)
+    elif "military melee" in text:
+        held.append(LONGSWORD)
+    elif "simple melee" in text:
+        held.append(MACE)
+    if "military ranged" in text or "simple ranged" in text:
+        held.append(CROSSBOW)
+    if "staff" in implements.lower():
+        held.append(STAFF)
+    elif "totem" in implements.lower():
+        held.append(TOTEM)
+    elif implements.strip():
+        held.append(ROD)
+    return tuple(held)
+
+
+def _abilities(printed: str) -> list[Ability]:
+    """"Wisdom, Dexterity, Constitution" -> [WIS, DEX, CON], in that order.
+
+    Matched on the first three letters: the enum's values are `str`, `con`,
+    `dex` and the book prints the words in full, so an exact comparison
+    found nothing at all and every class silently came out a Strength class.
+    """
+    by_name = {a.value.lower()[:3]: a for a in Ability}
+    found = []
+    for word in re.split(r"[,;]", printed):
+        got = by_name.get(word.strip().lower()[:3])
+        if got is not None and got not in found:
+            found.append(got)
+    return found or [STR]
+
+
+def _spread(order: list[Ability]) -> dict[Ability, int]:
+    """The standard array, best score to the class's first-named ability."""
+    array = [18, 14, 13, 12, 10, 8]
+    rest = [a for a in Ability if a not in order]
+    return dict(zip([*order, *rest], array, strict=False))
+
+
 #: A class's fork, as its own page draws it.
 #:
 #: Every PHB1 class arranges three ability scores in an **A** or a **V** and
@@ -183,6 +309,27 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # A -- Strength either way.
     "warlord": (Build("inspiring", STR, CHA), Build("tactical", STR, INT)),
 }
+
+
+#: The classes phase C brought in, folded in beneath the eight.
+#:
+#: A derived line never overwrites a hand-written one: the eight above hold
+#: judgement the table cannot, and a ranger carrying two blades *and* a bow
+#: is the clearest case -- several of its level 1 rows require the pair
+#: outright.
+CLASSES.update(_from_the_book())
+
+#: One build each, from the class's own first two named abilities. The real
+#: forks are a judgement off each class's page and are not invented here;
+#: this is enough for a character to exist and for `c.build(...)` to have
+#: something to answer. A row gated on a build this does not name is a real
+#: gap and belongs in `docs/blocked.json`.
+for _name, _line in CLASSES.items():
+    if _name not in BUILDS:
+        _order = [a for a, _ in sorted(_line.scores.items(), key=lambda kv: -kv[1])]
+        BUILDS[_name] = (
+            Build("standard", _order[0], _order[1] if len(_order) > 1 else CON),
+        )
 
 
 def build_of(cls: str, name: str = "") -> Build:
