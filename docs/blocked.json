@@ -1,4 +1,52 @@
 {
+  "cf:fighter-opening-stop": {
+    "wants": "c.halt(on=) -- stop a move that is in progress",
+    "why": "the second sentence of the fighter's opportunity-attack feature is that an enemy hit by one stops moving if a move provoked it. movement.walk asks can_move once, before the first step, and never again, so immobilising the mover inside the opportunity window leaves it walking the rest of its path. Verified: a creature immobilised on its first step still covered all five squares. cf:fighter-opening writes the attack bonus half"
+  },
+  "cf:fighter-talent-rest": {
+    "wants": "legs in chargen.BUILDS[\"fighter\"] for the talents the two it has do not mean, plus c.proficiency and a free-hand / off-hand grip on Gear",
+    "why": "the class page prints six talents and chargen.BUILDS[\"fighter\"] carries two legs. cf:fighter-grip writes the two that are the legs -- the one-handed and two-handed weapon talents. The other four have no leg: one turns unproficient weapons into improvised ones and adds an AC bonus out of heavy armour, one pays temporary hit points on every melee or close hit, one wants a weapon in one hand and the other hand empty or grabbing, and one keys off a second weapon with the off-hand property. Gear records what is held but not what a hand is free for, and nothing models proficiency as a thing a feature can grant"
+  },
+  "cf:ranger-style": {
+    "wants": "a feat model -- feats on a character and c.feat(...) to read one -- plus legs in chargen.BUILDS[\"ranger\"] for the styles that carry mechanics",
+    "why": "the class page prints five styles and chargen.BUILDS[\"ranger\"] carries two legs. The two legs that do match are the two whose entire printed content is a granted feat, and nothing in the engine is a feat -- the remaining clause of one of them is an off-hand rule Gear.two_weapon already makes true. The three styles that do carry mechanics (a speed bonus while unencumbered, an AC bonus against openings a ranged attack provokes, a companion) have no leg to be gated on, and the companion one is blocked twice over -- see p10594"
+  },
+  "cf:rogue-tactic-club": {
+    "wants": "chargen.BUILDS[\"rogue\"] to carry a third leg, plus Keyword.RATTLING",
+    "why": "one of the four printed tactics grants proficiency with two weapon groups, lets those groups stand in for the light blade cf:rogue-bonus requires, and adds a Strength rider to attacks carrying a keyword the enum does not have. cf:rogue-tactic writes the two legs the class's two builds can carry; this one has no leg to ask about and its payload is blocked on the same keyword as p10740 and p4499"
+  },
+  "cf:rogue-tactic-stealth": {
+    "wants": "chargen.BUILDS[\"rogue\"] to carry a fourth leg, plus c.check(skill, dc)",
+    "why": "one of the four printed tactics is entirely penalties to Stealth checks for moving and running, and a check to go unseen after moving 3 squares. The engine rolls no skill checks -- the same hold as m2963a4 -- and the class has two builds, so there is neither a leg to gate it on nor a check to modify"
+  },
+  "cf:warlock-shadow": {
+    "wants": "c.conceal(*, until=, on=)",
+    "why": "its whole printed content is gaining concealment after moving at least 3 squares on your turn. Concealment is not a state the engine holds -- c.invisible is the HIDDEN_FROM relation and is being unseen outright -- so the row would carry nothing. Same missing thing as p12295 and p13954"
+  },
+  "cf:warlord-archer": {
+    "wants": "c.attacks_with(ability, ...) -- name which ability a basic attack uses",
+    "why": "it grants proficiency with a weapon group and lets a ranged basic attack with a bow use Strength for the attack and damage rolls instead of Dexterity. basic.RANGED declares its ability in the header and nothing can rewrite it for one creature. Neither warlord leg in chargen.BUILDS carries a bow either, so there would be nothing to shoot with"
+  },
+  "cf:warlord-initiative": {
+    "wants": "c.initiative_bonus(n, on=), applied before Encounter._roll_initiative",
+    "why": "its whole printed content is a +2 power bonus to initiative for the warlord and every ally within 10 squares who can see and hear it. Initiative.bonus is read once, inside _roll_initiative, and Encounter.start rolls initiative *before* _arm_traits -- so a trait cannot reach the only roll it exists to change, and there is no modifier key for it either"
+  },
+  "cf:warlord-presence": {
+    "wants": "action points -- a pool on the character, spending one as an action, and an event announcing it",
+    "why": "every one of its six printed options fires when an ally spends an action point for an extra action. Nothing in the engine has an action point, which is the same wall p2593, p7448 and the level 6 and 7 warlord rows hit. Two of the six -- the Charisma one and the Intelligence one -- would map cleanly onto the two warlord legs once there is an event to hang them from"
+  },
+  "cf:warlord-shield": {
+    "wants": "p10887 in the tree, plus a leg in chargen.BUILDS[\"warlord\"] for it",
+    "why": "one of three mutually exclusive leader features. Its content is proficiency with a shield -- not a thing a feature can grant -- and gaining one named power, which c.grant_row could hand over except that the power is not declared anywhere. cf:warlord-senses writes the one of the three whose content is purely narrative"
+  },
+  "cf:wizard-implement-rest": {
+    "wants": "legs in chargen.BUILDS[\"wizard\"] for the masteries the two it has do not mean, plus Keyword.SUMMONING and a spellbook for the stored-power one",
+    "why": "five forms of implement mastery are printed and chargen.BUILDS[\"wizard\"] carries two legs. cf:wizard-implement writes the two that are the legs. Of the other three, one stores an unknown encounter power for later and is blocked on the same thing as cf:wizard-spellbook, one pays a damage bonus to creatures summoned by a summoning power and nothing marks a power as one, and one repeats a missed attack from an illusion power against a second target and nothing marks that either"
+  },
+  "cf:wizard-spellbook": {
+    "wants": "a spellbook -- powers a character owns but has not prepared",
+    "why": "the whole feature is holding two dailies and two utilities per slot and preparing one of each after a rest. Powers holds only what is known, so owning an unprepared power cannot be said and neither can preparing one. Same missing thing as p7377"
+  },
   "m2904a0": {
     "wants": "",
     "why": "SPEC: prints no attack bonus at all, so the header cannot be filled without inventing one"

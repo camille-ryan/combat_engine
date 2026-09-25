@@ -310,6 +310,11 @@ class Powers:
     basic: str = "mba"
     #: A power that replaces the basic attack when opportunity knocks.
     opportunity: str = ""
+    #: The ranged basic attack, for a creature that has one. Separate from
+    #: `basic`, which is the melee one: pointing `basic` at a ranged row
+    #: would hand it to the opportunity window too. Empty for a monster,
+    #: whose ranged attacks are its own printed rows.
+    ranged: str = ""
     #: Rows taken away for a while. Not the same as spent: a forbidden row
     #: is one the creature still has and cannot currently reach.
     forbidden: set[str] = field(default_factory=set)
@@ -318,7 +323,7 @@ class Powers:
     def all(self) -> list[str]:
         """Everything usable, with the basic attack included exactly once."""
         out = list(self.known)
-        for extra in (self.basic, self.opportunity):
+        for extra in (self.basic, self.opportunity, self.ranged):
             if extra and extra not in out:
                 out.append(extra)
         return out

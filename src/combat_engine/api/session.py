@@ -323,18 +323,27 @@ class Session:
         known = self.world.get(actor, Powers)
         if known is None:
             return []
-        return [ref for ref in known.all if get(ref) is not None]
+        # Traits are left out. A trait is not something a player picks --
+        # it is armed when the fight starts and is simply true -- so putting
+        # it in the list of things you can use offered five rogue class
+        # features as choices, each showing a raw ref because a feature has
+        # no printed name to look up. They belong in `ActorDTO.traits`.
+        from combat_engine.engine.types import ActionType
+
+        return [
+            ref
+            for ref in known.all
+            if (p := get(ref)) is not None and p.action is not ActionType.NONE
+        ]
 
     def _after_action(self, choice: Action | None) -> None:
         """Advance past anything the player does not control."""
-        if choice is not None and choice.kind == "end":
-            self.encounter.advance()
-        self._run_monsters()
-        # Flushed when the board comes back to the player, which is the
-        # moment a transcript is worth having on disk: whatever just looked
-        # wrong is in the file before they can ask about it.
-        if self.transcript is not None:
-            self.transcript.flush()
+        try:
+            if choice is not None and choice.kind == "end":
+                self.encounter.advance()
+            self._run_monsters()
+        finally:
+            self._write_log()
 
     def _run_monsters(self) -> None:
         """Play every non-character turn until it is a character's move again."""
@@ -354,8 +363,27 @@ class Session:
             self.encounter.advance()
 
     def end_turn(self) -> None:
-        self.encounter.advance()
-        self._run_monsters()
+        try:
+            self.encounter.advance()
+            self._run_monsters()
+        finally:
+            self._write_log()
+
+    def _write_log(self) -> None:
+        """Put the transcript on disk, whatever just happened.
+
+        Flushed when the board comes back to the player, which is the moment
+        it is worth having: whatever looked wrong is in the file before they
+        can ask about it.
+
+        In a `finally`, and on this path too. `end_turn` did not flush at
+        all, so a monster turn that raised left every event of that turn --
+        the ones that would say what went wrong -- unwritten in memory. A
+        fight wedged mid-monster-turn and the log stopped at the player's
+        last action, which is exactly the shape that is hardest to diagnose.
+        """
+        if self.transcript is not None:
+            self.transcript.flush()
 
     # -- reading ------------------------------------------------------------
 

@@ -591,7 +591,12 @@ def _use_class_features(world, caster: int, foe: int) -> None:  # noqa: ANN001
         return
     for ref in list(known.all):
         p = get(ref)
-        if p is None or p.level != 0 or p.action is ActionType.NONE:
+        # Not a trait, and not a row that waits for a trigger either: a
+        # triggered feature called directly gets no event to answer, returns
+        # at its first line, and is then counted as having fired -- which
+        # short-circuits the provocation that would have exercised it
+        # properly. `_area_rows` already makes the same exclusion.
+        if p is None or p.level != 0 or p.action is ActionType.NONE or p.triggers:
             continue
         with contextlib.suppress(Exception):
             use(world, caster, ref, targets=[foe] if p.is_attack else None, spend=False)
@@ -676,6 +681,15 @@ def _run_all(refs: list[str], jobs: int = 0) -> list[Result]:
         return list(pool.map(audit, refs, chunksize=8))
 
 
+def _attempts(out: Result):  # noqa: ANN202
+    """`(seed, face)` pairs, giving up on a face once the row has shown itself."""
+    for face in LOADED:
+        for seed in range(1, TRIES + 1):
+            if out.fired and (out.events & DID_SOMETHING):
+                break
+            yield seed, face
+
+
 def audit(ref: str) -> Result:
     out = Result(ref=ref)
     declared = get(ref)
@@ -690,7 +704,17 @@ def audit(ref: str) -> Result:
     # was the way it was fired. These are played instead: the dispatcher is
     # allowed to offer them, in the situation the trigger names.
     triggered = declared is not None and bool(declared.triggers)
-    for seed, face in ((s, f) for f in LOADED for s in range(1, TRIES + 1)):
+    # Seeds and faces do different jobs, so they stop for different reasons.
+    #
+    # A **face** is a branch of the row -- what it does on a critical, what
+    # it does on a fumble -- and all three are always tried.
+    #
+    # A **seed** is another arrangement of the board, and seeds exist only to
+    # find one where the row can fire at all. Once it has fired *and* done
+    # something on this face, the rest re-prove the same thing. Eight of them
+    # meant twenty-four boards for every row, and the audit builds a hundred
+    # thousand boards.
+    for seed, face in _attempts(out):
         try:
             world, caster, armed = board(ref, seed)
             world.rng.loaded = face

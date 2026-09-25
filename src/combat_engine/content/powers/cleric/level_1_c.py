@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -174,6 +175,7 @@ def p13942(c: Cast) -> None:
     reach=CloseBurst(2),
     target=ONE_ALLY,
     keywords=DIVINE,
+    group=CHANNEL_DIVINITY,
 )
 def p13943(c: Cast) -> None:
     """"You or one ally", and the target must be bloodied -- a restriction the
@@ -195,6 +197,7 @@ def p13943(c: Cast) -> None:
     reach=CloseBurst(1),
     target=ONE_OTHER_ALLY,
     keywords=[Keyword.DIVINE, Keyword.TELEPORTATION],
+    group=CHANNEL_DIVINITY,
 )
 def p14231(c: Cast) -> None:
     """Both blink. The ally's destination is chosen from the caster's *new*
@@ -298,6 +301,7 @@ def p14236(c: Cast) -> None:
     target=NO_TARGET,
     keywords=DIVINE,
     out_of_combat=True,
+    group=CHANNEL_DIVINITY,
 )
 def p14245(c: Cast) -> None:
     c.note(f"{c.ref}: +2 power bonus to each ally's next skill check in the burst")
@@ -495,6 +499,7 @@ def p14261(c: Cast) -> None:
     reach=CloseBurst(5),
     target=NO_TARGET,
     keywords=DIVINE,
+    group=CHANNEL_DIVINITY,
 )
 def p14262(c: Cast) -> None:
     for friend in c.within(5, side="ally"):
@@ -650,6 +655,7 @@ def _both_flank(c: Cast, foe: int, me: int, friend: int) -> Any:
     keywords=[Keyword.DIVINE, Keyword.TELEPORTATION],
     requires=_next_to_an_enemy,
     requires_text="you must be adjacent to an enemy",
+    group=CHANNEL_DIVINITY,
 )
 def p14275(c: Cast) -> None:
     """The landing square is not a choice: the printed line says where the

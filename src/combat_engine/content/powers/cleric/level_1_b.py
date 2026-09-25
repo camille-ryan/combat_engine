@@ -36,6 +36,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -84,10 +85,7 @@ DIVINE = [Keyword.DIVINE]
 DIVINE_WEAPON = [Keyword.DIVINE, Keyword.WEAPON]
 DIVINE_IMPLEMENT = [Keyword.DIVINE, Keyword.IMPLEMENT]
 
-#: "You can use only one channel divinity power per encounter" is the
-#: `group` header field: rows sharing one share a budget, which `uses`
-#: alone cannot say. Nothing in the tree had claimed the field yet.
-CHANNEL_DIVINITY = "channel divinity"
+
 
 
 def _str_or_wis(c: Cast) -> tuple[int, int]:

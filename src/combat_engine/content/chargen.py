@@ -593,7 +593,11 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         Conditions(),
         Mods(),
         Budget(),
-        Powers(known=list(powers)),
+        # Every character can make a ranged basic attack if it is holding
+        # something to make it with; `can_branch` refuses the row to anyone
+        # who is not. A monster leaves this empty -- its ranged attacks are
+        # its own printed rows.
+        Powers(known=list(powers), ranged="rba"),
         BuildState(choices=set(who.choices)),
         Gear(
             weapons=list(build.weapons or line.weapons),

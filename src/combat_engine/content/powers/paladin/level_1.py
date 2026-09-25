@@ -7,6 +7,7 @@ ref may only be declared once, so they are not repeated here.
 
 from __future__ import annotations
 
+from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -303,6 +304,7 @@ def p1273(c: Cast) -> None:
     # would make the power unusable for the only thing it is ever for.
     target=Target("any", 1),
     keywords=[Keyword.DIVINE],
+    group=CHANNEL_DIVINITY,
 )
 def p1746(c: Cast) -> None:
     """A saving throw, out of turn, with the paladin's presence behind it.

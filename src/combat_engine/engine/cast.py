@@ -823,7 +823,15 @@ class Cast:
         known = self.world.get(attacker, Powers)
         ref = (known.basic if known else MELEE) or MELEE
         if ranged:
-            ref = RANGED if known is None or not known.known else ref
+            # The engine's ranged basic, unless the creature has one of its
+            # own. `known.known` is non-empty for every character, so the
+            # old test handed a PC its *melee* basic and every "an ally
+            # makes a ranged basic attack" row was inert -- an archer with a
+            # bow three squares off simply did nothing.
+            own = next(
+                (r for r in (known.known if known else ()) if r == RANGED), ""
+            )
+            ref = own or RANGED
         return use(self.world, attacker, ref, targets=[target], spend=False)
 
     def attack(

@@ -401,13 +401,25 @@ def _digest(path: Path) -> str:
     return h.hexdigest()
 
 
-def game() -> sqlite3.Connection:
-    """Open the built database. The engine reads this, never the compendium."""
+@lru_cache(maxsize=1)
+def _open_game() -> sqlite3.Connection:
     if not GAME.exists():
         raise SystemExit(f"{GAME} is missing. Run: uv run scripts/build.py")
-    db = sqlite3.connect(f"file:{GAME}?mode=ro", uri=True)
+    db = sqlite3.connect(f"file:{GAME}?mode=ro", uri=True, check_same_thread=False)
     db.row_factory = sqlite3.Row
     return db
+
+
+def game() -> sqlite3.Connection:
+    """The built database. The engine reads this, never the compendium.
+
+    One connection per process. It used to open a fresh one on every call,
+    and `loader.spawn` calls it several times per creature -- so building an
+    audit board opened six connections, and an audit builds a hundred
+    thousand boards. Read-only, so sharing it is safe; `check_same_thread`
+    is off because the API serves its blocking handlers from a threadpool.
+    """
+    return _open_game()
 
 
 @lru_cache(maxsize=1)

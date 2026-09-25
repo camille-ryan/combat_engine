@@ -2,35 +2,55 @@
 
 A defender's whole job is that leaving it alone costs you, and these are the
 rows that make that true. Without them a fighter is a creature with a sword.
+
+The fighter's half is four rows because the book prints four things. `p7419`
+is the riposte and has a compendium id of its own; the mark that makes it
+mean anything, the bonus to punishing an opening, the chase that replaces
+that bonus, and the fork in how the weapon is held are described only on the
+class's page and carry `cf:` refs.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.engine import (
+    AC,
     AT_WILL,
     ENCOUNTER,
     MINOR,
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
+    OPPORTUNITY,
     PERSONAL,
     SELF,
+    STR,
     ActionType,
+    Attack,
     Cast,
     CloseBurst,
     DamageType,
+    Gear,
     Health,
     Keyword,
     Melee,
+    OpportunityWindow,
     Relation,
+    Trigger,
     When,
+    World,
+    distance,
     leaves_me_out,
     power,
 )
 from combat_engine.engine.basic import MELEE
-from combat_engine.engine.dsl import use
-from combat_engine.engine.events import AttackDeclared, Moved
-from combat_engine.engine.query import alive
+from combat_engine.engine.dsl import get, use
+from combat_engine.engine.events import AttackDeclared, AttackRolled, Moved
+from combat_engine.engine.query import alive, enemies
+from combat_engine.engine.query import squares as squares_of
+
+from . import CHANNEL_DIVINITY
 
 
 @power(
@@ -82,6 +102,184 @@ def p7419(c: Cast) -> None:
 
     c.watch(AttackDeclared, on_attack, until=When.ENCOUNTER, on=me, label="fighter mark")
     c.watch(Moved, on_shift, until=When.ENCOUNTER, on=me, label="fighter mark")
+
+
+@power(
+    "cf:fighter-mark",
+    level=0,
+    cls="fighter",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.MARTIAL],
+)
+def fighter_mark(c: Cast) -> None:
+    """The other half of the arrangement `p7419` punishes: laying the mark.
+
+    `p7419` was written as the riposte alone, so the fighter had a standing
+    threat against creatures nothing ever marked -- and the -2 the printed
+    text hangs on the mark went with it. Only the laying is here; the penalty
+    itself is `resolve._mark_penalty`, which already charges a marked
+    creature for leaving its marker out of the attack.
+
+    Announced off the roll rather than the declaration, because the printed
+    line is "whether the attack hits or misses" -- an attack that an
+    interrupt cancelled never happened and marks nobody. One mark per
+    creature is the relation's own rule, so a second attack on the same
+    target simply refreshes it.
+    """
+    me, world = c.me, c.world
+
+    def on_roll(ev: AttackRolled) -> None:
+        if ev.attacker != me or ev.target not in enemies(world, me):
+            return
+        if c.marked(on=ev.target):
+            return  # already carrying this fighter's mark; nothing to ask
+        if c.may("mark it", who=me):
+            c.mark(on=ev.target, until=When.EONT)
+
+    c.watch(AttackRolled, on_roll, until=When.ENCOUNTER, on=me, label="cf:fighter-mark")
+
+
+@power(
+    "cf:fighter-opening",
+    level=0,
+    cls="fighter",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.MARTIAL],
+)
+def fighter_opening(c: Cast) -> None:
+    """The fighter is better at punishing an opening than anyone else.
+
+    `opportunity` is a key the attack context already carries, so the whole
+    of the first printed sentence is one gated modifier. Untyped, because the
+    printed line names no bonus type and a typed one would refuse to stack
+    with the weapon's.
+
+    The second sentence -- an enemy hit this way stops moving -- is **not
+    here**; see `docs/blocked.json`. `movement.walk` never asks again whether
+    the creature may still move once the walk has begun, so immobilising it
+    inside the opportunity window leaves it walking the rest of its path.
+    """
+    c.bonus(
+        "attack",
+        c.wis_mod,
+        until=When.ENCOUNTER,
+        on=c.me,
+        kind="untyped",
+        when=lambda ctx: bool(ctx.get("opportunity")),
+    )
+
+
+_AN_OPENING = "an enemy takes an action that gives you an opening"
+
+
+def _my_opening(world: World, me: int, ev: OpportunityWindow) -> bool:
+    """The window is only ever opened for somebody who threatens the provoker.
+
+    `movement.step`, `Cast.provoke` and the ranged-in-melee check all name
+    the responder as `actor`, so "an enemy adjacent to you" is already
+    decided by the time this is asked -- the engine does not open a window
+    for anyone out of reach.
+    """
+    return ev.actor == me and alive(world, ev.provoker)
+
+
+@power(
+    "cf:fighter-chase",
+    level=0,
+    cls="fighter",
+    usage=AT_WILL,
+    action=OPPORTUNITY,
+    reach=Melee(1),
+    target=NO_TARGET,
+    keywords=[Keyword.MARTIAL, Keyword.WEAPON],
+    attack=Attack(STR, vs=AC),
+    trigger=_AN_OPENING,
+    on=Trigger(OpportunityWindow, _my_opening, _AN_OPENING),
+)
+def fighter_chase(c: Cast) -> None:
+    """Chase the opening down before swinging at it.
+
+    The window names the provoker; the dispatcher would aim a targeted row at
+    `actor`, which is the fighter itself, so the victim is read off the
+    trigger and the header takes no target.
+
+    "You must end the shift closer to the target" is a filter on the
+    destination rather than a distance to cover, so the squares are picked
+    here and named outright -- handed to the mover the fighter would happily
+    shift the wrong way.
+
+    **This and `cf:fighter-opening` replace each other**, and both are
+    declared because the class page lists both. Nothing enforces the choice:
+    neither leg of `chargen.BUILDS["fighter"]` is this fork, so a dealt
+    fighter carries both and is a little stronger at an opening than any
+    printed one. A leg for it would settle it.
+    """
+    foe = getattr(c.trigger, "provoker", None)
+    if foe is None:
+        return
+    steps = max(0, c.dex_mod)
+    anchor = min(squares_of(c.world, foe))
+    was = min(distance(sq, anchor) for sq in squares_of(c.world, c.me))
+    if steps:
+        options = sorted(
+            sq
+            for sq in c.world.reachable_squares(c.me, steps)
+            if distance(sq, anchor) < was
+        )
+        where = c.choose(options, "cf:fighter-chase: where to end up") if options else None
+        if where is not None:
+            c.shift(steps, to=where)
+    if c.strike(on=foe):
+        c.damage(c.w(), c.str_mod, on=foe)
+        c.prone(on=foe)
+
+
+@power(
+    "cf:fighter-grip",
+    level=0,
+    cls="fighter",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.MARTIAL],
+)
+def fighter_grip(c: Cast) -> None:
+    """The fork in how the fighter holds its weapon, worth +1 to hit with it.
+
+    Six talents are printed and `chargen.BUILDS["fighter"]` carries two legs,
+    so only the two that *are* the legs are written: the one-handed talent and
+    the two-handed one. The other four fork on things no `Build` records --
+    an open off hand, temporary hit points, a second weapon -- and are in
+    `docs/blocked.json` rather than folded into a leg that does not mean them.
+
+    Both halves check what is actually in hand, which is the printed
+    Requirement and not a restatement of the build: a great-weapon fighter
+    who has swapped to one hand is not getting this.
+
+    **The two-handed half is presently unreachable.** Neither fighter leg in
+    `chargen.BUILDS` names a weapon, so both fall back to the class line's
+    one-hander and `held.two_handed` is never true. The gate is the printed
+    one and is left alone; the leg is what wants fixing.
+    """
+    me, world = c.me, c.world
+    two_handed = c.build("great-weapon")
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        declared = get(str(ctx.get("power", "")))
+        if declared is None or Keyword.WEAPON not in declared.keywords:
+            return False
+        gear = world.get(me, Gear)
+        held = gear.main if gear is not None else None
+        return held is not None and held.two_handed == two_handed
+
+    c.bonus("attack", 1, until=When.ENCOUNTER, on=me, kind="untyped", when=gate)
 
 
 @power(
@@ -160,6 +358,7 @@ def p1566(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.DIVINE],
+    group=CHANNEL_DIVINITY,
 )
 def p1747(c: Cast) -> None:
     """Extra damage on the paladin's next attack this turn."""

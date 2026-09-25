@@ -151,7 +151,7 @@ def actor_dto(session: Session, eid: int) -> dto.ActorDTO:
             condition_dto(session, e)
             for e in [*world.effects.of(eid), *world.effects.sustaining(eid)]
         ],
-        traits=[],
+        traits=_traits(session, eid),
         is_current=eid == session.current,
         level=stats.level if stats else 1,
         role=_monster_field(ident.ref, "role"),
@@ -401,6 +401,54 @@ def _forecast(session: Session, action: Action, p) -> dto.ForecastDTO | None:  #
         kills_likely=kills,
         summary=f"{mean:.0%} to hit, about {expected:.0f} damage",
     )
+
+
+def _traits(session: Session, eid: int) -> list[dto.PowerDTO]:
+    """What is simply true of this creature, as opposed to what it can do.
+
+    A trait is armed when the fight starts and is never chosen, so it has no
+    place among the things a player picks -- offering them there put five
+    rogue class features in the action list, each showing a raw ref because
+    a feature has no printed name to look up. Shown here instead, where the
+    card can say "this is how you work".
+    """
+    from combat_engine.engine.types import ActionType
+
+    known = session.world.get(eid, Powers)
+    if known is None:
+        return []
+    out: list[dto.PowerDTO] = []
+    for ref in known.all:
+        p = get(ref)
+        if p is None or p.action is not ActionType.NONE:
+            continue
+        printed = session.wire.printed(ref)
+        out.append(
+            dto.PowerDTO(
+                name=session.wire.power(ref),
+                action=p.action.value,
+                cost=p.action.value,
+                usage="always on",
+                range_text=str(p.reach),
+                keywords=[k.value for k in p.keywords],
+                attack_text=None,
+                damage=printed.get("damage") or None,
+                requirement_text=printed.get("requirement") or p.requires_text or None,
+                hit_text=printed.get("hit") or None,
+                miss_text=None,
+                effect_text=printed.get("effect") or None,
+                targets=str(p.target),
+                available=False,
+                reason=None,
+                squares=[],
+                footprints={},
+                aimed=[],
+                option_index=None,
+                option_indices=[],
+                option_label=None,
+            )
+        )
+    return out
 
 
 def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
