@@ -170,6 +170,18 @@ def m221a0(c: Cast) -> None:
 
 
 @power(
+    "m221a1",
+    level=10,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m221a1(c: Cast) -> None:
+    c.cannot_be_flanked()
+
+
+@power(
     "m221a2",
     level=10,
     usage=AT_WILL,

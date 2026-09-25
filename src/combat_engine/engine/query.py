@@ -294,6 +294,13 @@ def has_combat_advantage(world: World, attacker: int, target: int) -> bool:
         return True
     if world.relations.holds(Relation.HIDDEN_FROM, attacker, target):
         return True
+    # "Enemies cannot gain combat advantage by flanking it" is a printed
+    # trait and there was no way to suppress this one branch -- the whole
+    # question was answered from the board with nothing on the creature
+    # able to speak to it.
+    mods = world.get(target, Mods)
+    if mods is not None and mods.items and mods.total("unflankable", {}) > 0:
+        return False
     return flanked_by(world, target, attacker)
 
 

@@ -199,6 +199,18 @@ def m232a2(c: Cast) -> None:
 
 
 @power(
+    "m2817a0",
+    level=5,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m2817a0(c: Cast) -> None:
+    c.cannot_be_flanked()
+
+
+@power(
     "m2817a1",
     level=5,
     usage=AT_WILL,

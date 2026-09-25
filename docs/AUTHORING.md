@@ -108,6 +108,11 @@ that never applies.
   on a `Dropped` is false every time. Compare `team()` directly.
 * **`c.suffering(label)`** matches by substring and leaves the caster out
   unless you pass `include_self=True`.
+* **Ongoing damage of one type does not stack — the highest applies.**
+  `c.ongoing` enforces it: a weaker burn of the same type is refused and
+  the standing one is returned, a stronger one supersedes it. Different
+  types stack normally. A row reading "if the target is already taking
+  ongoing fire damage, increase it" therefore has exactly one hold to find.
 * **A monster does not spend a healing surge unless its row says so.** It
   carries one per tier so that a leader line -- "an adjacent ally can spend
   a healing surge" -- has something to spend, and takes no second wind of

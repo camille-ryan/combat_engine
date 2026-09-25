@@ -1,15 +1,19 @@
 {
   "m221a1": {
     "wants": "c.cannot_be_flanked",
-    "why": "enemies cannot gain combat advantage by flanking it; query.flanked_by has no hook and nothing can suppress the flanking branch of has_combat_advantage. Same sentence as m2817a0"
+    "why": "enemies cannot gain combat advantage by flanking it"
   },
   "m2817a0": {
     "wants": "c.cannot_be_flanked",
-    "why": "query.flanked_by has no hook; nothing can suppress the flanking branch of has_combat_advantage"
+    "why": "enemies cannot gain combat advantage by flanking it"
   },
   "m2904a0": {
     "wants": "",
     "why": "SPEC: prints no attack bonus at all, so the header cannot be filled without inventing one"
+  },
+  "m2947a5": {
+    "wants": "c.jump",
+    "why": "it does not provoke opportunity attacks while jumping; a jump is an ordinary move in the engine, so c.no_provoke would exempt all of its movement rather than the jump. Same sentence as m2988a3"
   },
   "m2975a2": {
     "wants": "c.no_reactions(on=)",
@@ -35,13 +39,21 @@
     "wants": "c.wielding(prop, who=)",
     "why": "an attack with a metal weapon; Weapon has no material, so Keyword.WEAPON would rust a quarterstaff. Same sentence as m3062a0"
   },
+  "m3064a2": {
+    "wants": "c.destroy",
+    "why": "its whole Hit is 'the decaying magic item is destroyed', and it can only target a creature carrying one; nothing removes gear from a creature and Gear records no enhancement bonus to have been decayed. Same sentence as m3062a2"
+  },
+  "m3064a3": {
+    "wants": "c.decay(on=)",
+    "why": "its whole Effect is reducing the enhancement bonus of the weapon or implement that hit it, to a minimum of 0, until the end of the encounter; Weapon has no enhancement bonus and Gear has no armour object, so there is no number to reduce"
+  },
   "m4716a4": {
     "wants": "c.maximise",
-    "why": "the attack deals maximum damage; cast._max_of computes it and is private"
+    "why": "the attack deals maximum damage"
   },
   "m4774a4": {
     "wants": "c.maximise",
-    "why": "a free action on its own hit makes the attack deal maximum damage; cast._max_of computes it and is private, and the damage has not been rolled when the Hit is announced. Same sentence as m4716a4"
+    "why": "free action on its own implement hit: the attack deals maximum damage"
   },
   "m4795a3": {
     "wants": "c.wall",
@@ -62,6 +74,10 @@
   "m498a2": {
     "wants": "c.rise",
     "why": "rises on its next turn with 44 hit points; _die lifts the body, so a deferred heal revives an entity with no square"
+  },
+  "m5019a5": {
+    "wants": "c.charge_at(who=)",
+    "why": "three of its allies can charge one creature of its choice"
   },
   "m5050a0": {
     "wants": "c.extra_target(ev, who)",

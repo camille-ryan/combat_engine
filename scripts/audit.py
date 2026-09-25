@@ -100,6 +100,11 @@ KNOWN_SILENT = {
     # creature report wrongly. Driven by hand: the grab ends and the
     # relation clears.
     "p1515": "needs to be grabbed; grabbing the caster would break every movement row",
+    # Slides everyone carrying ongoing damage *from one named sibling row*.
+    # The board's burn comes from the harness, not from that row, and
+    # firing the sibling first would need the harness to know which rows
+    # feed which -- which is the content's business, not its own.
+    "m4869a4": "slides creatures burning from a named sibling row; the board's burn is its own",
 }
 
 
@@ -230,13 +235,18 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     lined_up = list(_foes(world, caster))
     if lined_up:
         setup.target = lined_up[0]
-        setup.ongoing(5, DamageType.FIRE, on=lined_up[0], until=When.ENCOUNTER)
+        # Deliberately small. Ongoing damage of one type does not stack --
+        # the highest applies -- so a board burning for 5 made every row
+        # that applies ongoing 5 fire look silent: its effect was correctly
+        # refused as no worse than what was already there. Three rows
+        # reported that way the moment the rule went in.
+        setup.ongoing(2, DamageType.FIRE, on=lined_up[0], until=When.ENCOUNTER)
     # And a second one on poison rather than fire. Several rows name the
     # damage type -- "one creature taking ongoing poison damage" -- and a
     # board where every burn is fire could not satisfy any of them.
     if len(lined_up) > 1:
         setup.target = lined_up[1]
-        setup.ongoing(5, DamageType.POISON, on=lined_up[1], until=When.ENCOUNTER)
+        setup.ongoing(2, DamageType.POISON, on=lined_up[1], until=When.ENCOUNTER)
 
     # A save-ends effect on the ally, because "the target makes a saving
     # throw" is a whole shape of utility power and a board where nobody had

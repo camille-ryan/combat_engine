@@ -982,9 +982,29 @@ class Cast:
         on: int | None = None,
         until: When = When.SAVE_ENDS,
     ) -> Effect | None:
+        """Ongoing damage. **Of one type, only the highest applies.**
+
+        That is the printed rule and the engine stacked them: four burns of
+        the same type left four separate holds and four saving throws to
+        shake them off. Every burn in the tree was wrong by however many
+        landed.
+
+        A weaker one is refused outright; a stronger one replaces what is
+        there, so the save still comes.
+        """
         who = self._who(on)
         if who is None:
             return None
+        standing = [
+            e
+            for e in self.world.effects.of(who)
+            if e.ongoing is not None and e.ongoing[1] is dtype
+        ]
+        worst = max((e.ongoing[0] for e in standing), default=0)
+        if worst >= amount:
+            return next((e for e in standing if e.ongoing[0] == worst), None)
+        for e in standing:
+            self.world.effects.end(e, "superseded by worse of the same type")
         return self.world.effects.apply(
             who, self.me, until, label=f"ongoing {amount}", ongoing=(amount, dtype)
         )
@@ -1723,6 +1743,47 @@ class Cast:
             label=f"{self.ref} half healing",
         )
 
+    def cannot_be_flanked(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """"Enemies can't gain combat advantage by flanking it."
+
+        Only the flanking branch: being dazed, hidden from, or granted the
+        opening outright still works, which is what the printed line says.
+        """
+        return self.bonus(
+            "unflankable", 1, on=on or self.me, until=until, kind="untyped"
+        )
+
+    def maximise(
+        self, *, on: int | None = None, until: When = When.EONT
+    ) -> Effect | None:
+        """The next damage this creature rolls comes out maximum.
+
+        "The attack deals maximum damage" is a printed line that could only
+        be faked before: `_max_of` computes the number and is private, and
+        `DamageRolled` carries the rolled total rather than the dice.
+        Setting `critical` instead would pay out every crit rider, which is
+        not what the line says.
+        """
+        from .dsl import get
+        from .events import DamageRolled
+
+        who = on or self.me
+
+        def top_up(ev: DamageRolled) -> None:
+            if ev.source != who:
+                return
+            p = get(self.ref)
+            d = p.damage_of(self.branch) if p is not None else None
+            if d is not None:
+                ev.amount = max(ev.amount, _max_of(d.dice) + self._bonus_of(d.bonus))
+
+        return self.watch(
+            DamageRolled, top_up, until=until, window=Window.BEFORE, on=who,
+            label=f"{self.ref} maximum damage",
+        )
+
     def threatens(
         self, squares_: int = 2, *, on: int | None = None, until: When = When.ENCOUNTER
     ) -> Effect | None:
@@ -1809,7 +1870,7 @@ class Cast:
             from_attack=False,
         )
 
-    def run_at(self, victim: int) -> bool:
+    def run_at(self, victim: int, *, who: int | None = None) -> bool:
         """Walk into reach of a named creature, the way a charge's move does.
 
         `c.move` picks its own destination through the decider, which is
@@ -1820,8 +1881,9 @@ class Cast:
         from .movement import walk
         from .query import squares
 
+        runner = who if who is not None else self.me
         beside = spread(squares(self.world, victim), 1)
-        paths = self.world.reachable_paths(self.me, self.speed_of())
+        paths = self.world.reachable_paths(runner, self.speed_of(runner))
         best = min(
             (
                 (len(path), dest, path)
@@ -1831,10 +1893,10 @@ class Cast:
             default=None,
         )
         if best is not None:
-            walk(self.world, self.me, list(best[2]))
-        return self.adjacent(victim)
+            walk(self.world, runner, list(best[2]))
+        return adjacent(self.world, runner, victim)
 
-    def charge_at(self, victim: int, ref: str = "") -> bool:
+    def charge_at(self, victim: int, ref: str = "", *, who: int | None = None) -> bool:
         """Run at somebody and swing, with the swing marked as a charge.
 
         `actions.perform` builds a charge out of a walk plus
@@ -1848,13 +1910,18 @@ class Cast:
         from .components import Powers
         from .dsl import use
 
-        if not self.run_at(victim):
+        # `who` charges instead of the caster -- "three of its allies can
+        # charge one creature of its choice". `c.grant_attack` hands over
+        # the swing without the move or the flag, which is the half of that
+        # line that matters.
+        runner = who if who is not None else self.me
+        if not self.run_at(victim, who=runner):
             return False
         if not ref:
-            known = self.world.get(self.me, Powers)
+            known = self.world.get(runner, Powers)
             ref = (known.basic if known else "") or "mba"
         return use(
-            self.world, self.me, ref, targets=[victim], spend=False, charge=True
+            self.world, runner, ref, targets=[victim], spend=False, charge=True
         )
 
     def overrun(self, to: Square | None = None) -> list[int]:
