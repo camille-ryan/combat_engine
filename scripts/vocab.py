@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import re
 
 from combat_engine.engine import types as T
 from combat_engine.engine.cast import Cast
@@ -53,10 +54,14 @@ def main() -> int:
     )
     ap.add_argument("--brief", action="store_true", help="signatures only")
     ap.add_argument("--header", action="store_true", help="the @power arguments")
+    ap.add_argument("--examples", action="store_true", help="only the worked rows")
     args = ap.parse_args()
 
     if args.header:
         _header()
+        return 0
+    if args.examples:
+        _examples()
         return 0
 
     print("# What a power body can say\n")
@@ -90,6 +95,8 @@ def main() -> int:
 
     _vocab()
     _header()
+    if not args.brief:
+        _examples()
     return 0
 
 
@@ -106,6 +113,94 @@ def _render(name: str, member: object, *, brief: bool) -> str:
         return line
     doc = (member.__doc__ or "").strip().split("\n")[0]
     return line + (f"\n      {doc}" if doc else "")
+
+
+#: One worked row per shape, chosen by what the row *is* rather than by ref,
+#: so the section cannot rot when a row is rewritten or removed. The shapes
+#: are the ones that have cost somebody time -- a signature says what
+#: `on=Trigger(...)` takes and still leaves you guessing what a declared
+#: trigger looks like next to its printed `trigger=` prose.
+#:
+#: This exists because agents were being handed a 2,226-line monster file to
+#: "copy the shape of", at four times the cost of the whole vocabulary.
+SHAPES = [
+    ("the plainest row: attack, damage, rider",
+     lambda p, s: p.cls and p.attack and "c.strike()" in s and "c.prone()" in s),
+    ("a declared trigger -- `trigger=` is prose, `on=` is what fires",
+     lambda p, s: p.on and p.trigger),
+    ("a save-ends rider",
+     lambda p, s: "SAVE_ENDS" in s and p.cls),
+    ("a burst, with `c.first` for the once-per-power line",
+     lambda p, s: "c.first" in s and p.reach.__class__.__name__ != "Melee"),
+    ("a charge -- `charges=True` or the engine refuses it out of reach",
+     lambda p, s: p.charges),
+    ("healing, and whose surge is spent",
+     lambda p, s: "c.surge(" in s or "c.spend_surge(" in s),
+    ("a zone or an aura",
+     lambda p, s: "c.zone(" in s or "c.aura(" in s),
+    ("a monster: numbers load from the database, the attack line is printed",
+     lambda p, s: p.ref.startswith("m") and p.attack and p.damage),
+    ("a monster recharge -- two header fields, not a callable",
+     lambda p, s: p.ref.startswith("m") and p.recharge),
+    ("deliberately inert: the printed effect is not a combat effect",
+     lambda p, s: p.out_of_combat),
+    ("an entry requirement the board has to meet",
+     lambda p, s: p.requires is not None),
+]
+
+
+def _dangling(src: str) -> int:
+    """Names the row borrows from its own file, and so cannot carry with it.
+
+    A body that is one call to `_steps_either_side(c, 1)` shows nothing at
+    all once lifted out. Counted rather than rejected, because the same habit
+    in a *header* -- `requires=_is_bloodied` -- is the idiom worth showing,
+    and for some shapes every candidate has one.
+    """
+    return len(set(re.findall(r"(?<![\w.])_\w+", src)) - {"_"})
+
+
+def _examples() -> None:
+    """A real row per shape, shortest match wins, so the page stays small."""
+    import inspect
+    import sys
+
+    sys.argv = sys.argv[:1]
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.dsl import REGISTRY
+
+    sources = {}
+    for ref, p in REGISTRY.items():
+        try:
+            sources[ref] = inspect.getsource(p.body)
+        except (OSError, TypeError):
+            continue
+
+    print("\n## worked rows\n")
+    print("Real rows from the tree, picked by shape rather than by name, so")
+    print("they are current. Copy the shape, not the content.\n")
+
+    shown: set[str] = set()
+    for label, matches in SHAPES:
+        best, best_score = None, None
+        for ref, src in sources.items():
+            if ref in shown or len(src) > 900:
+                continue
+            try:
+                ok = matches(REGISTRY[ref], src)
+            except AttributeError:
+                continue
+            if not ok:
+                continue
+            score = (_dangling(src), len(src))
+            if best_score is None or score < best_score:
+                best, best_score = ref, score
+        if best is None:
+            continue
+        shown.add(best)
+        print(f"### {label}\n")
+        print("\n".join("  " + ln for ln in sources[best].rstrip().splitlines()))
+        print()
 
 
 def _vocab() -> None:

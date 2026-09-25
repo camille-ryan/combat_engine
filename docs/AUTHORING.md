@@ -183,6 +183,12 @@ Run `uv run scripts/vocab.py`. It is generated from
 the code, so it is current and complete. **If a method is not in it, it does
 not exist.**
 
+It ends with a **worked row per shape** — a declared trigger, a save-ends
+rider, a charge, a monster header, a deliberately inert row. Those are real
+rows picked out of the tree by what they are, so they are current too. They
+are there so you do not go looking for a file to copy: **do not open a large
+content file for style**. The examples are the style.
+
 ### Monsters specifically
 
 * Numbers — hp, AC, Fort/Ref/Will, speed, ability scores, resistances —
@@ -263,6 +269,25 @@ a wrong power looks like. **That check only started working recently**: the
 board leaves effects live for its own setup, so every row counted as having
 done something, and no row in the tree had ever actually been checked for
 it. If yours reports SILENT, it is telling you something real. Get your rows to fire cleanly before you report.
+
+### What checking should cost
+
+Every tool call re-sends everything you have read and written so far, so the
+call count is most of the bill. The last session ran 120 agents at a median
+of 88 calls, and **no brief anywhere set a limit**. So:
+
+* **Write a file in one `Write`.** Not a row at a time. A file built by
+  twenty `Edit`s costs twenty passes over the whole context.
+* **Read the spec, the vocabulary and this page. That is the reading.**
+  Do not open a large content file to copy its style — `vocab.py` ends with
+  worked rows for exactly that. Do not grep the tree for a row like yours.
+* **Drive a row by hand only where a correct row and a broken one would look
+  the same** — a trigger that may never fire, a default that may aim at the
+  wrong creature. Not for every SILENT, and not for every UNUSED: a row the
+  board simply cannot set up is fine, and saying so costs nothing.
+* **About 150 tool calls for a class-sized batch.** If you pass it, stop and
+  report what is left rather than pushing on. An unfinished batch is cheap to
+  finish; an agent that ran twice as long as it needed to is not.
 
 ## Style (the repo owner's, and it is enforced)
 
