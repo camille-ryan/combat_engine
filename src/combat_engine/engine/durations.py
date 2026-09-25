@@ -408,6 +408,13 @@ class Effects:
                 saved=saved,
             )
         )
+        # Refusing it is not the same as failing it. A cancelled save never
+        # happened: the effect stays and nothing escalates, where a failed
+        # one worsens. Making this a `Decision` and reading only `saved`
+        # promised a cancel that did nothing -- the exact shape the `Bus`
+        # docstring warns about, in the fix for it.
+        if rolled.cancelled:
+            return
         saved = rolled.saved
         if saved:
             self.end(eff, "saved")

@@ -96,6 +96,13 @@ def step(
         return False
 
     before = _neighbours(world, eid)
+    # Everyone who *threatens* the mover, which is not the same as everyone
+    # adjacent to it. Extending reach only in the second half of the test
+    # meant a watcher was consulted solely on steps where it had been
+    # adjacent beforehand -- and one step cannot carry a mover from
+    # adjacent to more than two squares off, so `c.threatens(2)` turned
+    # opportunity attacks off entirely instead of extending them.
+    watchers = before | _reachers(world, eid)
     from_ = pos.square
 
     for sq in sorted(pos.squares):
@@ -113,7 +120,7 @@ def step(
         # takes thousands of steps.
         after_reach = spread(target, 1)
         foes = enemies(world, eid)
-        for other in sorted(before):
+        for other in sorted(watchers):
             if other not in foes:
                 continue
             reach = _threat(world, other)
@@ -232,6 +239,30 @@ def _clear(
         if who is not None and who != eid and not (overhead or ghost):
             return False
     return True
+
+
+def _reachers(world: World, eid: int) -> set[int]:
+    """Creatures with extended reach that covers `eid`.
+
+    Only creatures carrying a modifier are considered, because the ordinary
+    ring is already in `_neighbours` and walking every creature on the board
+    per step is what took a full audit from 84 seconds to 331 the first time
+    reach became a modifier.
+    """
+    from .components import Mods
+
+    mine = squares(world, eid)
+    out: set[int] = set()
+    for other in creatures(world):
+        if other == eid:
+            continue
+        mods = world.get(other, Mods)
+        if mods is None or not mods.items:
+            continue
+        reach = _threat(world, other)
+        if reach > 1 and spread(squares(world, other), reach) & mine:
+            out.add(other)
+    return out
 
 
 def _threat(world: World, eid: int) -> int:

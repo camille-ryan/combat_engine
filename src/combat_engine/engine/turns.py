@@ -14,7 +14,16 @@ from typing import TYPE_CHECKING
 
 from .components import Budget, Health, Initiative, Powers
 from .conditions import rules
-from .events import ActionSpent, Died, RoundEnd, RoundStart, SavingThrow, TurnEnd, TurnStart
+from .events import (
+    ActionSpent,
+    Died,
+    InitiativeRolled,
+    RoundEnd,
+    RoundStart,
+    SavingThrow,
+    TurnEnd,
+    TurnStart,
+)
 from .query import active, alive, can_act, can_react, creatures, team
 from .types import DOWNGRADES, ActionType, Condition, Team, Usage
 
@@ -92,8 +101,33 @@ class Encounter:
             )
             # Ties go to the higher modifier, then to spawn order, so two runs
             # of the same seed produce the same order.
+            self.world.bus.emit(InitiativeRolled(actor=eid, rolled=init.rolled))
             rolls.append((-init.rolled, -init.bonus, eid, eid))
         return [eid for _, _, eid, _ in sorted(rolls)]
+
+    def reroll_initiative(self, eid: int) -> int:
+        """Roll again and move the creature to its new place.
+
+        The turn in progress keeps its slot: `_splice` shifts the cursor
+        when it inserts at or before it, and the creature is lifted out
+        first so it does not end up in the order twice.
+        """
+        from .query import level_term
+
+        init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
+        was = self.order.index(eid) if eid in self.order else None
+        if was is not None:
+            self.order.pop(was)
+            if was < self.index:
+                self.index -= 1
+        init.rolled = (
+            self.world.rng.d20().total
+            + init.bonus
+            + level_term(self.world, eid, init.scale)
+        )
+        self.world.bus.emit(InitiativeRolled(actor=eid, rolled=init.rolled))
+        self._splice(eid, init.rolled)
+        return init.rolled
 
     def join(self, eid: int) -> int:
         """Put a creature that was not here at the start into the order.

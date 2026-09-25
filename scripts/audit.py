@@ -68,6 +68,23 @@ ROOT = Path(__file__).resolve().parents[1]
 #: could not fire was none of those things.
 KNOWN_SILENT = {
     "m135a3": "targets a destroyed undead ally; the board has none",
+    "m417a2": (
+        "the same sentence as m135a3 -- it restores a destroyed undead minion, "
+        "and the board has no dead ally. Verified by hand: with a felled m812 "
+        "beside it the minion is healed to full and re-indexed in the square "
+        "it fell in."
+    ),
+    "m3042a3": (
+        "hands its allies a saving throw, and the only ally on the board "
+        "carries nothing a save can end. Verified by hand: with a save-ends "
+        "daze on that ally it rolls one at +5."
+    ),
+    "m3014a2": (
+        "its whole content is opening opportunity windows, and the engine "
+        "never decides what goes in one -- a controller answers. This board "
+        "installs no policy, so the windows open and nobody swings. Verified "
+        "by hand with policy.install: two windows, two opportunity attacks."
+    ),
     "m297a2": "unverified",
     "m3027a3": "unverified",
     "m4902a4": "unverified",
@@ -77,6 +94,12 @@ KNOWN_SILENT = {
     "m3030a1": "unverified",
     "m676a1": "unverified",
     "m719a4": "unverified",
+    # Escaping a grab, on a board where nothing is holding the caster.
+    # Grabbing it in `board()` is not the answer -- `Condition.GRABBED`
+    # cannot move, which would make every movement row on every other
+    # creature report wrongly. Driven by hand: the grab ends and the
+    # relation clears.
+    "p1515": "needs to be grabbed; grabbing the caster would break every movement row",
 }
 
 

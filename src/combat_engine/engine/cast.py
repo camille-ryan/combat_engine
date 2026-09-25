@@ -1919,6 +1919,26 @@ class Cast:
         self.world.encounter.extra_turn(self.me, at)
         return True
 
+    def reroll_initiative(self, *, on: int | None = None) -> int:
+        """Take a new initiative check and move in the order. Returns the roll."""
+        who = on or self.me
+        enc = self.world.encounter
+        return enc.reroll_initiative(who) if enc is not None else 0
+
+    def autohit(self, ev: Any = None) -> bool:
+        """Make the attack being answered simply hit. It cannot be rolled away.
+
+        The outcome is recomputed from the die once the interrupt window
+        closes, so setting `hit` on the result is thrown away and rigging
+        the total would be faking a number the log then shows.
+        """
+        ev = ev if ev is not None else self.trigger
+        result = getattr(ev, "result", None) if ev is not None else None
+        if result is None:
+            return False
+        result.forced = True
+        return True
+
     def unsave(self, ev: Any = None) -> bool:
         """Make the saving throw being rolled fail. "It automatically fails."
 

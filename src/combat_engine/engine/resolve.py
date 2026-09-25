@@ -59,6 +59,11 @@ class AttackResult:
     target_defence: int = 0
     advantage: bool = False
     cancelled: bool = False
+    #: Set by a row that says an attack simply hits -- "a close or area
+    #: attack targeting you automatically hits". The outcome is recomputed
+    #: from the die after the interrupt window, so a listener setting `hit`
+    #: had it thrown away, and rigging `total` would be faking.
+    forced: bool = False
     #: Who the blow finally landed on. Usually the creature it was aimed at
     #: -- but an interrupt may move it, and then the body that rolled this
     #: has to be told, or it deals its damage to the one that was missed.
@@ -209,7 +214,7 @@ def attack(
         # reroll row in the tree was inert.
         floor = 20 - _mods(world, attacker, "crit_range", ctx)
         result.critical = result.natural >= floor
-        result.hit = result.critical or (
+        result.hit = result.forced or result.critical or (
             result.natural != 1 and result.total >= against
         )
 

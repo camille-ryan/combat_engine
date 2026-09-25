@@ -382,6 +382,19 @@ class RelationCleared(Event):
 
 
 @dataclass
+class InitiativeRolled(Event):
+    """A creature's place in the order was decided.
+
+    Announced so a row can answer it -- "make a new initiative check" is a
+    printed line and `_roll_initiative` said nothing at all, so there was
+    no event to hang it from.
+    """
+
+    actor: int
+    rolled: int
+
+
+@dataclass
 class EffectApplied(Event):
     """An effect landed on somebody, whatever it carries.
 

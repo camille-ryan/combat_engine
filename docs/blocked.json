@@ -1,4 +1,8 @@
 {
+  "m221a1": {
+    "wants": "c.cannot_be_flanked",
+    "why": "enemies cannot gain combat advantage by flanking it; query.flanked_by has no hook and nothing can suppress the flanking branch of has_combat_advantage. Same sentence as m2817a0"
+  },
   "m2817a0": {
     "wants": "c.cannot_be_flanked",
     "why": "query.flanked_by has no hook; nothing can suppress the flanking branch of has_combat_advantage"
@@ -35,6 +39,10 @@
     "wants": "c.maximise",
     "why": "the attack deals maximum damage; cast._max_of computes it and is private"
   },
+  "m4774a4": {
+    "wants": "c.maximise",
+    "why": "a free action on its own hit makes the attack deal maximum damage; cast._max_of computes it and is private, and the damage has not been rolled when the Hit is announced. Same sentence as m4716a4"
+  },
   "m4795a3": {
     "wants": "c.wall",
     "why": "blocking terrain with hit points per square that can be attacked and dies square by square"
@@ -42,6 +50,14 @@
   "m4853a1": {
     "wants": "c.origin_for",
     "why": "its master's implement attacks originate from its square"
+  },
+  "m4928a3": {
+    "wants": "a vehicle",
+    "why": "targets 'one vehicle' and restrains it, and its pilot spends a standard action to give it a saving throw; nothing in the engine is a vehicle and nothing pilots one"
+  },
+  "m4928a4": {
+    "wants": "a vehicle",
+    "why": "its whole Effect is 'uses m4928a2 twice and m4928a3 once', and m4928a3 is blocked for want of a vehicle; writing the two tentacle attacks alone would be half the printed line"
   },
   "m498a2": {
     "wants": "c.rise",
