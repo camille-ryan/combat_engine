@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .components import Budget, Health, Powers
+from .components import Budget, Build, Health, Powers
 from .dsl import aim_points, candidates, get, usable
 from .grid import Square, spread
 from .query import alive, can_act, is_
@@ -362,8 +362,6 @@ def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # healing surge"), not so that every monster can heal itself for a
     # quarter of its hit points once a fight. Granting the surges without
     # this had them taking second wind the moment they were bloodied.
-    from .components import Build
-
     if (
         world.get(actor, Build) is not None
         and health is not None
@@ -468,6 +466,13 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         return True
 
     if action.kind == "second_wind":
+        # Characters only, the same rule `legal` applies. A monster carries
+        # surges so that a leader row can spend one; it does not spend them
+        # itself unless a printed line says so. Checked here as well because
+        # `perform` is reachable from the API and the policy without going
+        # through `legal`.
+        if world.get(actor, Build) is None:
+            return False
         health = world.need(actor, Health)
         known = world.get(actor, Powers)
         if known is not None:

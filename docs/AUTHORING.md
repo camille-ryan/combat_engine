@@ -108,6 +108,10 @@ that never applies.
   on a `Dropped` is false every time. Compare `team()` directly.
 * **`c.suffering(label)`** matches by substring and leaves the caster out
   unless you pass `include_self=True`.
+* **A monster does not spend a healing surge unless its row says so.** It
+  carries one per tier so that a leader line -- "an adjacent ally can spend
+  a healing surge" -- has something to spend, and takes no second wind of
+  its own. `c.spend_surge` and `c.surge` are the printed line saying so.
 * **Two bonuses of the same `kind` do not add — the larger wins.** That is
   the printed stacking rule, and it makes "+1, or +2 while bloodied"
   written as a +1 plus a gated +1 come to **+1 forever**, which looks
