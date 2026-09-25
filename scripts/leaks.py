@@ -240,8 +240,10 @@ def _identifies(name: str, refs: list[str], rules: set[str]) -> bool:
 
 
 def _stem(word: str) -> str:
-    """Crudely singular. The dictionary has "narrow" and not "narrows"."""
-    for suffix in ("es", "s"):
+    """Crudely singular. The dictionary has "narrow", not "narrows", and
+    "hunter", not "hunter's" -- and a possessive inside an ordinary phrase
+    is what "another hunter's quarry" is."""
+    for suffix in ("'s", "s'", "es", "s"):
         if word.endswith(suffix) and len(word) > len(suffix) + 2:
             return word[: -len(suffix)]
     return word
