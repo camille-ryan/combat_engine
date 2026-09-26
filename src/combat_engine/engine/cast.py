@@ -784,8 +784,8 @@ class Cast:
     def wielding(self, prop: str) -> bool:
         """Does the caster meet a printed Requirement line?
 
-        `"shield"`, `"two-weapon"`, a weapon group like `"light blade"`, or
-        a weapon property like `"two-handed"`.
+        `"shield"`, `"two-weapon"`, a weapon group like `"light blade"`, a
+        category like `"simple"`, or a property like `"two-handed"`.
         """
         gear = self.world.get(self.me, Gear)
         if gear is None:
@@ -795,7 +795,11 @@ class Cast:
         if prop in ("two-weapon", "two melee weapons"):
             return gear.two_weapon
         weapon = gear.main
-        return weapon is not None and (prop in weapon.properties or weapon.group == prop)
+        return weapon is not None and (
+            prop in weapon.properties
+            or weapon.group == prop
+            or weapon.category == prop
+        )
 
     # -- attacking -----------------------------------------------------------
 
@@ -855,6 +859,7 @@ class Cast:
         damage_bonus: int = 0,
         attack_bonus: int = 0,
         trigger: Any = None,
+        reentrant: bool = False,
     ) -> bool:
         """Let somebody else make an attack, now, out of turn.
 
@@ -864,6 +869,12 @@ class Cast:
 
         `ref` defaults to that creature's own basic attack, so a monster
         whose basic has been replaced attacks with the right thing.
+
+        `reentrant` is "the target repeats the attack": the swing being
+        granted is the very row and the very use this one is answering, so
+        the in-flight guard and the usage limit both have to stand aside for
+        it. Nothing else should pass it -- it is what stops two rows handing
+        a swing back and forth forever.
         """
         from .components import Powers
         from .dsl import use
@@ -901,11 +912,105 @@ class Cast:
             return use(
                 self.world, who, chosen, targets=[target], spend=False,
                 trigger=trigger if trigger is not None else self.trigger,
+                reentrant=reentrant,
             )
         finally:
             for effect in granted:
                 if effect is not None:
                     self.world.effects.end(effect, "the granted attack is over")
+
+    def add_target(self, who: int) -> bool:
+        """"The ally also becomes a target of the power."
+
+        Adds a creature to the use this one is nested **inside**. An
+        immediate interrupt runs while the power it answers is still walking
+        its target list, so an appended creature is one that power's body is
+        then called for -- attack roll, damage and all. Refused where nothing
+        is running underneath, because there is then no power to be a target
+        of, and refused for a creature already in the list.
+        """
+        from .dsl import running_below
+
+        outer = running_below(self)
+        if outer is None or outer is self or who in outer.targets:
+            return False
+        outer.targets.append(who)
+        return True
+
+    def ignores_long_range(
+        self, *, on: int | None = None, until: When = When.EONT
+    ) -> Effect | None:
+        """"You take no penalty to attack rolls for attacking at long range."
+
+        The penalty is 2 and `resolve.attack` charges 2 less whatever
+        `"long_range"` comes to, so waiving it is an ordinary modifier -- and
+        a card that waives it only sometimes gates it the ordinary way.
+        """
+        return self.bonus(
+            "long_range", 2, until=until, on=on if on is not None else self.me,
+            stacks=False,
+        )
+
+    def as_ranged(
+        self, squares_: int = 10, *, on: int | None = None, until: When = When.EONT
+    ) -> Effect | None:
+        """"The next melee attack you make becomes a ranged attack with a
+        range of N."
+
+        Rendered as the distance and nothing else. `_is_ranged` reads the
+        row's printed range line, so the swing still takes no cover from
+        bodies and still leaves no opening -- the reach is what the sentence
+        is for and the rest of it is not sayable per creature. Spent on the
+        next attack roll rather than on the next melee one, because the gate
+        is also asked where no range line is in the question.
+        """
+        return self.bonus(
+            "reach", max(0, squares_ - 1), until=until,
+            on=on if on is not None else self.me,
+            when=lambda ctx: ctx.get("kind", "melee") == "melee",
+            once=True, stacks=False,
+        )
+
+    def shroud(self, *, on: int | None = None, cap: int = 4) -> int:
+        """Lay an assassin's shroud, and say how many that creature now has.
+
+        Shrouds follow one victim at a time: naming a new one drops whatever
+        the last was carrying, which is the printed rule and also the reason
+        this is a count rather than a stack of effects.
+        """
+        from .components import Shrouds
+
+        who = self._who(on)
+        if who is None:
+            return 0
+        held = self.world.get(self.me, Shrouds)
+        if held is None:
+            held = self.world.add(self.me, Shrouds())
+        if held.on != who:
+            held.on, held.count = who, 0
+        held.count = min(cap, held.count + 1)
+        return held.count
+
+    def shrouds(self, on: int | None = None, *, of: int | None = None) -> int:
+        """How many of my shrouds that creature is carrying. 0 for anybody
+        else, since only one creature carries them at a time."""
+        from .components import Shrouds
+
+        who = self._who(on)
+        held = self.world.get(self.me if of is None else of, Shrouds)
+        if held is None or who is None or held.on != who:
+            return 0
+        return held.count
+
+    def spend_shrouds(self) -> int:
+        """Invoke them: the count goes, and what it was is returned."""
+        from .components import Shrouds
+
+        held = self.world.get(self.me, Shrouds)
+        if held is None:
+            return 0
+        was, held.count = held.count, 0
+        return was
 
     def provoke(self, attacker: int, *, on: int | None = None, why: str = "") -> None:
         """Open an opportunity window for a named creature against a target.
@@ -1322,6 +1427,33 @@ class Cast:
             until=until, kind=self.ref,
         )
 
+    def recast(
+        self,
+        ref: str,
+        *,
+        action: ActionType = ActionType.MINOR,
+        per_turn: int = 1,
+        until: When = When.ENCOUNTER,
+        on: int | None = None,
+    ) -> Effect | None:
+        """"You can use a power you already know for a cheaper action."
+
+        Not `c.grant_row`: that lends a row to a creature that does not have
+        it and says nothing about what using it costs, and here the cost is
+        the entire printed Effect. It rides the same "<what> as <cost>"
+        carrier `c.shift_as` uses, with the ref as the what, and
+        `actions._recasts` is the reader -- the row keeps its own entry in
+        the menu and gains a second one at this price.
+
+        The value is how many times a turn, because that is the unit every
+        printed line of this shape uses. Defaults to the caster.
+        """
+        who = on if on is not None else self.me
+        return self.bonus(
+            f"{ref} as {action.value}", max(1, per_turn), on=who,
+            until=until, kind=self.ref,
+        )
+
     def restore_use(self, ref: str, *, on: int | None = None) -> bool:
         """"You regain the use of your second wind."
 
@@ -1345,6 +1477,30 @@ class Cast:
         self.world.bus.emit(Note(text=f"{who} regains the use of {ref}"))
         return True
 
+    def expended(self, *, group: str = "", on: int | None = None) -> list[str]:
+        """The rows this creature has used up, for one that hands a use back.
+
+        `c.restore_use` needs a ref and "an expended channel divinity power"
+        prints none, so the choice has to be made on the board. `group`
+        narrows it to the printed allowance the row belongs to, which is the
+        same `group=` the header declares.
+
+        Defaults to the **caster**, like `c.restore_use` beside it.
+        """
+        from .components import Powers as _Powers
+        from .dsl import get as _get
+
+        who = on if on is not None else self.me
+        powers = self.world.get(who, _Powers)
+        if powers is None:
+            return []
+        return [
+            ref
+            for ref in powers.all
+            if powers.times(ref) > 0
+            and (not group or ((p := _get(ref)) is not None and p.group == group))
+        ]
+
     def initiative(self, amount: int, *, on: int | None = None) -> int:
         """"Each target gains a +10 bonus to his or her initiative check."
 
@@ -1365,6 +1521,33 @@ class Cast:
         if who is None or encounter is None:
             return 0
         return encounter.adjust_initiative(who, amount)
+
+    def swap_initiative(self, other: int) -> bool:
+        """"You and one ally switch places in the initiative order."
+
+        The slot being played changes hands with the count, so a swap made
+        on your own turn hands the rest of that slot to the other creature
+        -- see `Encounter.swap_initiative`, which is where that lives.
+        """
+        encounter = getattr(self.world, "encounter", None)
+        if encounter is None or other == self.me:
+            return False
+        return encounter.swap_initiative(self.me, other)
+
+    def end_turn(self) -> bool:
+        """"Your turn ends when you use this power."
+
+        Only the creature acting can end its own turn, and only once: the
+        driver's `advance` finds `world.turn` already cleared and does not
+        announce a second `TurnEnd`. What is left after this is free actions
+        and nothing else, because `Encounter.can_spend` refuses every other
+        cost once the turn is nobody's.
+        """
+        encounter = getattr(self.world, "encounter", None)
+        if encounter is None or self.world.turn != self.me:
+            return False
+        encounter.end_turn()
+        return True
 
     def move(
         self, squares_: int, *, who: int | None = None, at: str = ""
@@ -2337,6 +2520,44 @@ class Cast:
             "see_invisible", 1, on=on if on is not None else self.me,
             until=until, kind=self.ref,
         )
+
+    def see_unseen(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        revert: ActionType | None = ActionType.MINOR,
+    ) -> Effect | None:
+        """Trade one sight for the other: the unseen are seen and the rest
+        are not.
+
+        Both halves already existed and neither said the swap.
+        `c.see_invisible` turns the seer's own blindness off; the second
+        sentence is aimed *at* the seer, so it is one `HIDDEN_FROM` per
+        creature that was visible when this was cast -- which is where the
+        honest limit is: nothing announces a creature arriving, so one that
+        walks in afterwards stays seen.
+
+        A sense of yours, so it defaults to the caster. `revert` is the
+        printed way out, held the way `c.form`'s is.
+        """
+        from .query import hidden_from
+
+        who = on or self.me
+        worn = self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} swapped sight", drop_cost=revert
+        )
+        holds = [self.see_invisible(on=who, until=until)]
+        for other in creatures(self.world):
+            if other == who or who in hidden_from(self.world, other):
+                continue
+            holds.append(self.invisible(on=other, to=who, until=until))
+        for hold in holds:
+            if hold is not None:
+                worn.on_end.append(
+                    lambda h=hold: self.world.effects.end(h, "sight came back")
+                )
+        return worn
 
     def ignore_cover(
         self,
@@ -3463,6 +3684,7 @@ class Cast:
         when: Callable[[dict[str, Any]], bool] | None = None,
         once: bool = False,
         stacks: bool = True,
+        dice: str = "",
     ) -> Effect | None:
         """A numeric modifier with a duration.
 
@@ -3490,6 +3712,11 @@ class Cast:
         also called when a policy is only *considering* an attack, and a
         bonus that evaporated on being thought about would be a hard thing to
         ever notice.
+
+        `dice` is a **rolled** modifier -- "roll a d6 and add it as a power
+        bonus to the roll" -- and it is rolled afresh every time the modifier
+        is read, which is once per roll, because that is what the sentence
+        says. `value` still adds on top, for a card printing both.
         """
         who = self._who(on)
         if who is None:
@@ -3503,9 +3730,14 @@ class Cast:
         if not stacks:
             kind = self.ref
         key = what.value if isinstance(what, Defense) else what
-        mod = Mod(what=key, value=value, kind=kind, when=when, label=self.ref)
+        rng = self.world.rng
+        mod = Mod(
+            what=key, value=value, kind=kind, when=when, label=self.ref,
+            roll=(lambda: rng.roll(dice).total) if dice else None,
+        )
+        shown = f"+{dice}" if dice else f"{value:+d}"
         effect = self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} {key}{value:+d}", mods=[(who, mod)]
+            who, self.me, until, label=f"{self.ref} {key}{shown}", mods=[(who, mod)]
         )
         if once and effect is not None:
             from .events import AttackRolled, DamageRolled, Hit
@@ -3546,9 +3778,13 @@ class Cast:
             elif key == "damage":
 
                 def spend_damage(ev: DamageRolled) -> None:
-                    if ev.source == who and mod.applies(
-                        {"target": ev.target, "power": ev.detail}
-                    ):
+                    # The real context, as above: the two-key rebuild made
+                    # a one-shot damage rider gated on `opportunity` or
+                    # `charge` impossible to spend.
+                    ctx = getattr(ev, "ctx", None) or {
+                        "target": ev.target, "power": ev.detail,
+                    }
+                    if ev.source == who and mod.applies(ctx):
                         self.world.effects.end(effect, "used")
 
                 effect.subs.append(
@@ -3559,8 +3795,19 @@ class Cast:
                 def spend(ev: AttackRolled) -> None:
                     if ev.attacker != who:
                         return
-                    if mod.applies({"attacker": ev.attacker, "target": ev.target,
-                                    "power": ev.power, "advantage": ev.advantage}):
+                    # **The context the roll actually used**, which
+                    # `resolve.attack` stamps on the event. This used to
+                    # rebuild a four-key one, so a `when=` gate reading
+                    # anything else -- `ranged`, `opportunity`, `charge`,
+                    # `branch`, `action_point` -- was False here and the
+                    # effect was never ended. Forty-six gated one-shots in
+                    # the tree were therefore permanent bonuses, each
+                    # looking exactly like a correctly written row.
+                    ctx = getattr(ev, "ctx", None) or {
+                        "attacker": ev.attacker, "target": ev.target,
+                        "power": ev.power, "advantage": ev.advantage,
+                    }
+                    if mod.applies(ctx):
                         self.world.effects.end(effect, "used")
 
                 effect.subs.append(self.world.bus.on(AttackRolled, spend, owner=who))
@@ -4318,6 +4565,61 @@ class Cast:
 
     # -- a hold changing hands -----------------------------------------------
 
+    def pass_on(self, ev: Any = None, *, to: int | None = None) -> Effect | None:
+        """Whatever conditions the attack being answered would apply, land
+        on somebody else instead.
+
+        An interrupt resolves **before** the blow, so at the moment this
+        runs there is nothing to `c.transfer` -- the conditions do not exist
+        yet. So it arms rather than moves: every condition the triggering
+        power puts on this creature while it is still resolving is picked
+        up and passed along intact, saving throw and all.
+
+        Bounded by the log and by `ev` rather than by a clock. "Applied by
+        the triggering attack" is one power's resolution by one creature,
+        and `When.EOT` would have caught the whole of the attacker's turn;
+        the watch takes only what the creature that swung applies, and
+        stands down as soon as another power is used.
+
+        It inherits `c.transfer`'s one refusal: a hold carrying a relation
+        -- a mark, a grab -- is left where it landed rather than half moved.
+        """
+        from .events import ConditionApplied
+
+        victim = self._who(to)
+        mine = self.me
+        if victim is None or victim == mine:
+            return None
+        blow = ev if ev is not None else self.trigger
+        swinger = getattr(blow, "attacker", None)
+        start = len(self.world.bus.log)
+        armed: list[Effect] = []
+
+        def caught(applied: ConditionApplied) -> None:
+            if any(isinstance(e, PowerUsed) for e in self.world.bus.log[start:]):
+                if armed:
+                    self.world.effects.end(armed[0], "the blow is over")
+                return
+            if applied.target != mine:
+                return
+            if swinger is not None and applied.source != swinger:
+                return
+            for eff in sorted(self.world.effects.of(mine), key=lambda e: -e.id):
+                if applied.condition in eff.conditions:
+                    self.transfer(eff, to=victim)
+                    return
+
+        armed.append(
+            self.watch(
+                ConditionApplied,
+                caught,
+                until=When.EOT,
+                on=mine,
+                label=f"{self.ref} passed on",
+            )
+        )
+        return armed[0]
+
     def transfer(
         self, effect: Effect | None, *, to: int, save_mod: int = 0
     ) -> Effect | None:
@@ -4540,6 +4842,49 @@ class Cast:
 
         return sorted(
             eid for eid, zone in self.world.each(_Zone) if zone.owner == self.me
+        )
+
+    def line(self, a: Square, b: Square) -> list[Square]:
+        """The squares a straight run from one square to another covers.
+
+        The board's own answer, so a row that spans two points does not do
+        arithmetic on coordinates -- diagonals count as one step here as
+        they do everywhere else.
+        """
+        from .movement import _line
+
+        return _line(a, b)
+
+    def floor(
+        self,
+        area: Iterable[Square],
+        *,
+        until: When = When.SUSTAIN,
+        sustain: ActionType | None = ActionType.MINOR,
+    ) -> Effect | None:
+        """Lay ground where the ground is against you: a bridge, a plank.
+
+        Not a zone. A zone can only *add* difficult going, and the printed
+        sentence is a removal -- "as though it were normal terrain, even if
+        it normally contains no terrain, difficult terrain or hindering
+        terrain" takes away the hole, the rough going and the drop at once.
+        `Grid.bridged` is the single overlay all three are answered
+        through, so the map underneath is untouched and comes back when
+        this lapses.
+
+        The squares are the caster's to place, so this does not take `on=`.
+        """
+        laid = {sq for sq in area if sq not in self.world.grid.bridged}
+        if not laid:
+            return None
+        self.world.grid.bridged |= laid
+        return self.world.effects.apply(
+            self.me,
+            self.me,
+            until,
+            label=f"{self.ref} floor",
+            sustain_cost=sustain if until is When.SUSTAIN else None,
+            on_end=[lambda: self.world.grid.bridged.difference_update(laid)],
         )
 
     def move_zone(self, zone: int, squares_: int, *, to: Square | None = None) -> bool:
@@ -5006,6 +5351,46 @@ class Cast:
 
     # -- a wall -----------------------------------------------------------
 
+    def link(
+        self,
+        a: Square,
+        b: Square,
+        *,
+        until: When = When.EONT,
+        sustain: ActionType | None = None,
+    ) -> Effect | None:
+        """Two squares a mover crosses between in one step.
+
+        **Movement only.** `Grid.links` is read by `movement.reachable` and
+        by nothing else, so a creature can walk from one end to the other
+        and nothing measures a melee reach, a burst or a line of effect
+        through it -- which is exactly what the one printed rift that says
+        "for movement only" asks for, and only half of what a row saying
+        "and for making melee attacks" would need.
+        """
+        links = self.world.grid.links
+        if a == b:
+            return None
+        links[a] = links.get(a, frozenset()) | {b}
+        links[b] = links.get(b, frozenset()) | {a}
+
+        def close() -> None:
+            for here, there in ((a, b), (b, a)):
+                rest = links.get(here, frozenset()) - {there}
+                if rest:
+                    links[here] = rest
+                else:
+                    links.pop(here, None)
+
+        return self.world.effects.apply(
+            self.me,
+            self.me,
+            until,
+            label=f"{self.ref} link",
+            sustain_cost=sustain if until is When.SUSTAIN else None,
+            on_end=[close],
+        )
+
     def wall(
         self,
         size: int = 0,
@@ -5208,6 +5593,83 @@ class Cast:
         else:
             ev.soften += 10 * max(1, ev.squares)
             ev.prone = False
+        return True
+
+    def made_by(self, thing: int) -> int | None:
+        """Whoever put that zone or conjuration on the board."""
+        from .components import Conjuration
+        from .zones import Zone
+
+        zone = self.world.get(thing, Zone)
+        if zone is not None:
+            return zone.owner
+        conj = self.world.get(thing, Conjuration)
+        return conj.by if conj is not None else None
+
+    def conjurations(self, *, within: int = 0, side: str = "any") -> list[int]:
+        """The zones, auras and conjurations standing on the board.
+
+        What `c.scenery` is for the things the room came with. `c.my_zones`
+        asks the same question about your own; this is the pool a target
+        line reading "one conjuration or zone" picks from, and it can see
+        everybody's. `within` measures from the caster's space to the
+        nearest square of the thing, 0 being anywhere.
+        """
+        from .components import Conjuration
+        from .grid import between
+        from .query import team
+        from .zones import Zone
+
+        mine = team(self.world, self.me)
+        here = squares(self.world, self.me) or frozenset({self.here})
+        out: list[int] = []
+        for eid in list(self.world.having(Zone)) + list(self.world.having(Conjuration)):
+            if eid in out:
+                continue
+            zone = self.world.get(eid, Zone)
+            area = zone.squares if zone is not None else squares(self.world, eid)
+            if within and between(here, area) > within:
+                continue
+            owner = self.made_by(eid)
+            theirs = team(self.world, owner) if owner is not None else None
+            if side == "enemy" and (theirs is None or theirs is mine):
+                continue
+            if side == "ally" and theirs is not mine:
+                continue
+            if side == "other" and owner == self.me:
+                continue
+            out.append(eid)
+        return out
+
+    def dispel(self, thing: int) -> bool:
+        """Destroy a zone or a conjuration, and unwind what it was holding.
+
+        "All its effects end, including those a save can end" is the half
+        `Zones.end` does not do: a hold a zone laid on a creature lives on
+        that creature and outlives the zone. Nothing records which effect
+        came from which zone, so they are found by the label their maker
+        stamped them with -- a zone's label is the ref of the row that made
+        it, and every hold that row applied wears the same ref.
+        """
+        from .components import Conjuration
+        from .zones import Zone
+
+        zone = self.world.get(thing, Zone)
+        conj = self.world.get(thing, Conjuration)
+        if zone is None and conj is None:
+            return False
+        name = zone.label if zone is not None else conj.ref
+        maker = self.made_by(thing)
+        why = f"{self.ref} dispelled it"
+        for eff in list(self.world.effects.live.values()):
+            if eff.ended or eff.source != maker:
+                continue
+            if eff.label in (name, f"zone {name}") or eff.label.startswith(f"{name} "):
+                self.world.effects.end(eff, why)
+        if self.world.get(thing, Zone) is not None:
+            self.world.zones.end(thing, why)
+        elif self.world.get(thing, Position) is not None:
+            self.world.despawn(thing)
         return True
 
     def terraform(

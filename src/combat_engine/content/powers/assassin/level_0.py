@@ -66,8 +66,9 @@ MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 
 SHROUD_MAX = 4
 
-#: (world, assassin) -> [victim, shrouds, watch armed]. Keyed on the world so
-#: a second encounter arms its own watch rather than finding the flag set.
+#: (world, assassin) -> [watch armed]. The count lives on the creature as a
+#: `Shrouds` component; this is only the once-per-fight arming flag, keyed on
+#: the world so a second encounter arms its own watch.
 _SHROUDS: dict[tuple[int, int], list[int]] = {}
 
 
@@ -134,26 +135,29 @@ def p9400(c: Cast) -> None:
     """Invoking is armed once as a watch on my own attacks against whoever
     currently carries the shrouds: hit or miss the dice land, one die fewer
     on a miss, and the count clears. The printed "all or none" choice is
-    always taken -- declining wins nothing and costs the shrouds nothing."""
+    always taken -- declining wins nothing and costs the shrouds nothing.
+
+    The count itself is `c.shroud`/`c.shrouds`, so a later row reading "for
+    each shroud on that enemy" has something to ask; it is cleared **after**
+    the damage rather than before, so that question is still answerable from
+    inside the blow the shrouds paid for."""
     victim = c.target
     if victim is None:
         return
-    held = _SHROUDS.setdefault((id(c.world), c.me), [0, 0, 0])
-    if held[0] != victim:
-        held[0], held[1] = victim, 0
-    held[1] = min(SHROUD_MAX, held[1] + 1)
-    if held[2]:
+    c.shroud(on=victim, cap=SHROUD_MAX)
+    armed = _SHROUDS.setdefault((id(c.world), c.me), [0])
+    if armed[0]:
         return
-    held[2] = 1
+    armed[0] = 1
     per = 0 if c.level < 11 else (3 if c.level < 21 else 6)
 
     def invoke(ev: Any) -> None:
-        if ev.attacker != c.me or ev.target != held[0] or held[1] <= 0:
+        if ev.attacker != c.me or c.shrouds(ev.target) <= 0:
             return
-        count = held[1] - (1 if isinstance(ev, Miss) else 0)
-        held[1] = 0
+        count = c.shrouds(ev.target) - (1 if isinstance(ev, Miss) else 0)
         if count > 0:
             c.flat(c.roll(f"{count}d6") + count * per, on=ev.target)
+        c.spend_shrouds()
 
     c.watch(Hit, invoke, until=When.ENCOUNTER, on=c.me, label=f"{c.ref} shrouds")
     c.watch(Miss, invoke, until=When.ENCOUNTER, on=c.me, label=f"{c.ref} shrouds")

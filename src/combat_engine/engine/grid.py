@@ -211,15 +211,26 @@ class Grid:
     #: Read by `engine/falling.py` and by nothing else: stepping into a
     #: square whose floor is lower than the one you left is a fall.
     elevation: dict[Square, int] = field(default_factory=dict)
+    #: Squares something has laid a floor over. Crossed as ordinary ground
+    #: whatever is underneath -- a hole, rough going, a drop -- which is the
+    #: one sentence a bridge prints. It is an overlay rather than an edit of
+    #: the three maps below it, so the ground comes back when it is lifted.
+    bridged: set[Square] = field(default_factory=set)
+    #: Pairs of squares a power has made one step apart, each direction
+    #: recorded separately. **Movement only**: `movement.reachable` is the
+    #: only reader, so nothing measures a reach or an area through one.
+    links: dict[Square, frozenset[Square]] = field(default_factory=dict)
 
     def floor(self, sq: Square) -> int:
+        if sq in self.bridged:
+            return 0
         return self.elevation.get(sq, 0)
 
     def inside(self, sq: Square) -> bool:
         return 0 <= sq[0] < self.width and 0 <= sq[1] < self.height
 
     def passable(self, sq: Square) -> bool:
-        return self.inside(sq) and sq not in self.blocking
+        return self.inside(sq) and (sq in self.bridged or sq not in self.blocking)
 
     def occupant(self, sq: Square) -> int | None:
         return self.occupants.get(sq)

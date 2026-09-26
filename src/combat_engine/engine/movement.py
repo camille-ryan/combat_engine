@@ -637,7 +637,10 @@ def reachable(
         frontier.sort(key=lambda s: best[s])
         here = frontier.pop(0)
         spent, risked = best[here]
-        for nxt in sorted(neighbours(here)):
+        # A linked square is one step away like any neighbour. `step` never
+        # asked whether a destination was adjacent to where the mover stood,
+        # so the search is the only place a rift has to be known about.
+        for nxt in sorted(set(neighbours(here)) | world.grid.links.get(here, frozenset())):
             if not _clear(world, eid, footprint(nxt, pos.size), overhead=overhead):
                 continue
             step_cost = 2 if nxt in rough else 1

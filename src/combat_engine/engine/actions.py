@@ -81,6 +81,7 @@ def legal(
         return [Action(kind="end", cost=ActionType.NONE)]
 
     out.extend(_powers(world, encounter, actor, include_blocked))
+    out.extend(_recasts(world, encounter, actor))
     out.extend(_movement(world, encounter, actor))
     out.extend(_charges(world, encounter, actor))
     out.extend(_recovery(world, encounter, actor))
@@ -120,7 +121,46 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
     return out
 
 
-def _aimings(world: World, actor: int, ref: str) -> list[Action]:
+def _recast_key(ref: str, cost: ActionType) -> str:
+    return f"{ref} as {cost.value}"
+
+
+def _recast_used(world: World, known: Powers, key: str) -> int:
+    """How many of this turn's granted casts have already gone."""
+    return known.times(key) if known.last_round.get(key) == world.round else 0
+
+
+def _recasts(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Rows a standing effect lets this creature use for a cheaper action.
+
+    `c.recast` is the writer, on the same "<what> as <cost>" carrier
+    `c.shift_as` uses, with a ref as the what and how many times a turn as
+    the value. Offered *on top of* the row's own entry rather than instead
+    of it: the printed line adds a way to use the power and takes none away.
+
+    Anything whose what is not a ref belongs to somebody else's reader --
+    `shift` to `_movement` -- and falls out on the `get`.
+    """
+    known = world.get(actor, Powers)
+    if known is None:
+        return []
+    out: list[Action] = []
+    for (ref, cost), per_turn in sorted(
+        _granted(world, actor).items(), key=lambda kv: (kv[0][0], kv[0][1].value)
+    ):
+        p = get(ref)
+        if p is None or cost is p.action or ref not in known.all:
+            continue
+        if _recast_used(world, known, _recast_key(ref, cost)) >= per_turn:
+            continue
+        ok, _why = usable(world, actor, p)
+        if not ok or not encounter.can_spend(actor, cost):
+            continue
+        out.extend(_aimings(world, actor, ref, cost=cost))
+    return out
+
+
+def _aimings(world: World, actor: int, ref: str, *, cost: ActionType | None = None) -> list[Action]:
     """One action per distinct way of aiming this power.
 
     A row printing "Melee or Ranged weapon" is two ways of using it that
@@ -134,12 +174,18 @@ def _aimings(world: World, actor: int, ref: str) -> list[Action]:
         return []
     open_branches = [b for b in p.branches if p.can_branch(world, actor, b)]
     if len(open_branches) > 1:
-        return [a for b in open_branches for a in _aiming_branch(world, actor, ref, p, b)]
-    return _aiming_branch(world, actor, ref, p, open_branches[0] if open_branches else 0)
+        return [
+            a
+            for b in open_branches
+            for a in _aiming_branch(world, actor, ref, p, b, cost)
+        ]
+    return _aiming_branch(
+        world, actor, ref, p, open_branches[0] if open_branches else 0, cost
+    )
 
 
-def _aiming_branch(world: World, actor: int, ref: str, p, branch: int) -> list[Action]:  # noqa: ANN001
-    cost = p.action
+def _aiming_branch(world: World, actor: int, ref: str, p, branch: int, cost: ActionType | None = None) -> list[Action]:  # noqa: ANN001, E501
+    cost = cost or p.action
     reach = p.reach_of(branch)
 
     def act(**kw) -> Action:  # noqa: ANN003
@@ -447,6 +493,20 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
     if action.kind == "power":
         from .dsl import use
 
+        p = get(action.ref)
+        known = world.get(actor, Powers)
+        if (
+            p is not None
+            and known is not None
+            and action.cost is not p.action
+            and (action.ref, action.cost) in _granted(world, actor)
+        ):
+            # A cheaper cast granted by `c.recast`, counted on a key of its
+            # own: the row it re-prices is usually an at-will with no uses to
+            # spend, and the limit printed is per turn rather than per day.
+            key = _recast_key(action.ref, action.cost)
+            known.used[key] = _recast_used(world, known, key) + 1
+            known.last_round[key] = world.round
         return use(
             world,
             actor,

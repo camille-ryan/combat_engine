@@ -125,7 +125,10 @@ def holding(world: World, eid: int, what: str = "") -> list[Any]:
     if what == "magic":
         return [w for w in out if w.enhancement > 0]
     if what:
-        return [w for w in out if what in w.properties or w.group == what]
+        return [
+            w for w in out
+            if what in w.properties or w.group == what or w.category == what
+        ]
     return out
 
 

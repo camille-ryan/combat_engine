@@ -53,7 +53,7 @@ from combat_engine.engine.grid import Square
 from combat_engine.engine.movement import place
 from combat_engine.engine.query import alive
 from combat_engine.engine.query import enemies as _foes
-from combat_engine.engine.types import ActionType
+from combat_engine.engine.types import ActionType, Usage
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -491,6 +491,16 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     setup.target = None
     setup.zone(spread({(3, 10)}, 1), label="audit:setup zone", until=When.ENCOUNTER)
 
+    # And one belonging to an **enemy**, because "one conjuration or zone
+    # created by an enemy" is a different target line -- a row that dispels
+    # one had only the caster's own to look at, which it correctly refused,
+    # and so reported itself silent while being right.
+    if lined_up:
+        foe_zone = Cast(world=world, me=lined_up[0], ref="audit:setup foe zone")
+        foe_zone.zone(
+            spread({(9, 6)}, 1), label="audit:setup foe zone", until=When.ENCOUNTER
+        )
+
     # Something in the room that is not a creature: a loose Medium object
     # and a campfire beside the caster. "One Medium or smaller object" and
     # "you must be adjacent to a fire of campfire size or larger" are
@@ -518,6 +528,25 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
 
     # Bloodied, so a row gated on it can fire.
     caster_health.hp = max(1, caster_health.max_hp // 2 - 1)
+
+    # One of the caster's own rows already spent, because "an expended
+    # encounter power" and "an expended channel divinity power" are printed
+    # target lines with nothing to name on a board where nobody has done
+    # anything yet.
+    #
+    # **Only for the rows that ask.** Spending one unconditionally fixed
+    # two rows and broke four -- a sibling this caster needed was the one
+    # that got spent. The board cannot know which row matters, so it does
+    # not guess: it looks at whether this row reads the expended list at
+    # all, the way `_aims_at` reads a body to pick a blast origin.
+    if _wants_expended(ref):
+        mine = world.get(caster, Powers)
+        for other in (mine.known if mine else []):
+            spec = get(other)
+            if other in (ref, mine.basic) or spec is None or spec.usage is Usage.AT_WILL:
+                continue
+            mine.used[other] = mine.used.get(other, 0) + 1
+            break
 
     mark = len(world.bus.log)
     # Effects the board set up for itself -- a dummy already burning, a
@@ -793,6 +822,19 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
             return True
     return _fired(world, ref, cursor)
 
+
+
+def _wants_expended(ref: str) -> bool:
+    """Does this row read what the caster has already used up?"""
+    import inspect
+
+    declared = REGISTRY.get(ref)
+    if declared is None:
+        return False
+    with contextlib.suppress(OSError, TypeError):
+        body = inspect.getsource(declared.body)
+        return "expended" in body or "restore_use" in body
+    return False
 
 def _area_rows(world, caster: int, exclude: str) -> list[str]:  # noqa: ANN001
     """This creature's own close and area attacks, cheapest first."""

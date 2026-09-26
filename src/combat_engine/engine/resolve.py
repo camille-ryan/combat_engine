@@ -171,6 +171,7 @@ def attack(
             if blocked <= cover_waived(world, attacker, target, ctx):
                 blocked = 0
             situational -= blocked
+        situational -= _long_range(world, attacker, target, power, branch, ctx)
         situational += _mark_penalty(world, attacker, among or (target,))
 
         d20 = world.rng.d20()
@@ -234,6 +235,13 @@ def attack(
         rolled.opportunity = opportunity
         rolled.charge = charge
         rolled.action_point = bought
+        # The context the modifiers were actually read with. `c.bonus(
+        # once=True)` has to decide whether the bonus it is watching for
+        # *applied*, and it was rebuilding a four-key context of its own --
+        # so any `when=` gate reading `ranged`, `opportunity`, `charge` or
+        # `branch` answered False there and the one-shot was never spent.
+        # Forty-six gated one-shots in the tree were permanent bonuses.
+        rolled.ctx = ctx
         world.bus.emit(rolled)
 
         # The defence is read **again**, after the roll has been announced.
@@ -268,6 +276,12 @@ def attack(
         landed.opportunity = opportunity
         landed.charge = charge
         landed.action_point = bought
+        # Which defence was attacked. `AttackDeclared` and `AttackRolled`
+        # carry it as a field; the outcome did not, so "an attack against
+        # your AC or Reflex misses you" had nothing to read on the one event
+        # that says it missed. A plain attribute, like `result` above, so it
+        # stays off the wire and out of a replay fixture.
+        landed.vs = vs
 
         # An immediate interrupt answering a hit may undo it -- a reroll on
         # "when you are hit" is the printed shape, and by the rules the hit
@@ -296,6 +310,7 @@ def attack(
             ev.opportunity = opportunity
             ev.charge = charge
             ev.action_point = bought
+            ev.vs = vs
             return ev
 
         # Until the outcome stops changing. An *interrupt* answers before
@@ -370,6 +385,42 @@ def _is_ranged(ref: str, branch: int = 0) -> bool:
     return p is not None and p.reach_of(branch).kind == "ranged"
 
 
+def _long_range(
+    world: World, attacker: int, target: int, power: str, branch: int, ctx: dict
+) -> int:
+    """-2 for shooting past a ranged weapon's normal range.
+
+    Only a **weapon** prints two numbers. A power whose range line reads
+    "Ranged 10" has one, and no penalty anywhere in it, so this asks the
+    weapon in hand rather than the row. Beyond the long range the shot is
+    simply impossible, and nothing here enforces that -- the board is
+    smaller than any long range in the table, so the cap has never had a
+    situation to be wrong in, and charging a penalty for a distance that
+    cannot happen would be worse than leaving it.
+
+    A row that waives the penalty offsets it: `"long_range"` is a modifier
+    like any other, so "you take no penalty at long range" is a +2 gated
+    however its card gates it.
+    """
+    from .components import Gear
+    from .dsl import get
+    from .query import distance_between
+    from .types import Keyword
+
+    p = get(power)
+    if p is None or Keyword.WEAPON not in p.keywords:
+        return 0
+    if p.reach_of(branch).kind != "ranged":
+        return 0
+    gear = world.get(attacker, Gear)
+    weapon = gear.ranged if gear is not None else None
+    if weapon is None or weapon.ranged is None:
+        return 0
+    if distance_between(world, attacker, target) <= weapon.ranged[0]:
+        return 0
+    return max(0, 2 - _mods(world, attacker, "long_range", ctx))
+
+
 def _mods(world: World, eid: int, what: str, ctx: dict) -> int:
     from .components import Mods
 
@@ -418,30 +469,33 @@ def deal_damage(
     if health is None or not alive(world, target):
         return 0
 
+    # `opportunity` and `charge` too: a flat rider on either could not be
+    # gated without them, since the ctx named only the first two. A gate on
+    # a key the ctx does not carry is silently false, which is the worst
+    # way for a rider to be wrong.
+    dmg_ctx = {
+        "target": target,
+        "power": detail,
+        "opportunity": opportunity,
+        "charge": charge,
+    }
     if from_attack:
         # A bonus to damage is a thing powers grant constantly -- "+4 damage
         # against the target until the end of the encounter" -- and for a
         # while this line was missing, so every one of them was stored and
         # never read. Nothing failed; the damage was simply never larger.
-        amount += _mods(
-            world, source, "damage",
-            # `opportunity` and `charge` too: a flat rider on either could
-            # not be gated without them, since the ctx named only the first
-            # two. A gate on a key the ctx does not carry is silently false,
-            # which is the worst way for a rider to be wrong.
-            {
-                "target": target,
-                "power": detail,
-                "opportunity": opportunity,
-                "charge": charge,
-            },
-        )
+        amount += _mods(world, source, "damage", dmg_ctx)
     if from_attack and deals_half(world, source):
         amount = amount // 2
 
-    rolled = world.bus.emit(
-        DamageRolled(source=source, target=target, amount=amount, dtype=dtype, detail=detail)
+    announce = DamageRolled(
+        source=source, target=target, amount=amount, dtype=dtype, detail=detail
     )
+    # The context these mods were read with, for the same reason the attack
+    # roll carries its own: `c.bonus(once=True)` decides whether the bonus
+    # it is watching applied, and it was rebuilding a two-key context here.
+    announce.ctx = dmg_ctx
+    rolled = world.bus.emit(announce)
     if rolled.cancelled:
         return 0
     amount = max(0, rolled.amount)

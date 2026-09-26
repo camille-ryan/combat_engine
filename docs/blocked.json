@@ -1,7 +1,7 @@
 {
   "cf:fighter-opening-stop": {
-    "wants": "c.halt(on=)",
-    "why": "the second sentence of the fighter's opportunity-attack feature is that an enemy hit by one stops moving if a move provoked it. movement.walk asks can_move once, before the first step, and never again, so immobilising the mover inside the opportunity window leaves it walking the rest of its path. Verified: a creature immobilised on its first step still covered all five squares. cf:fighter-opening writes the attack bonus half (stop a move that is in progress)"
+    "wants": "nothing -- there is no printed text for this ref",
+    "why": "spec.py returns no such row; the note's c.halt(on=) does describe a real gap (movement.walk asks can_move once, before the first step) but the card cannot be guessed"
   },
   "cf:fighter-talent-rest": {
     "wants": "Gear to record a free/empty off hand, and proficiency as a thing a feature can grant",
@@ -12,148 +12,68 @@
     "why": "no spec text exists for the three, and one of them is the companion, blocked twice over (see p10594)"
   },
   "cf:warlord-archer": {
-    "wants": "c.attacks_with(ability, ...)",
-    "why": "it grants proficiency with a weapon group and lets a ranged basic attack with a bow use Strength for the attack and damage rolls instead of Dexterity. basic.RANGED declares its ability in the header and nothing can rewrite it for one creature. Neither warlord leg in chargen.BUILDS carries a bow either, so there would be nothing to shoot with (name which ability a basic attack uses)"
-  },
-  "m709a1": {
-    "wants": "c.pass_on(ev, to=)",
-    "why": "an immediate interrupt whose whole Effect is that the conditions the triggering attack would apply land on another creature within 5 instead. c.absorb does this for damage because DamageRolled is a Decision with a mutable target; ConditionApplied and EffectApplied are notifications, so a hold can neither be refused nor re-aimed, and c.redirect moves the whole attack -- which rolls against the substitute's defence and deals it the damage too, a different sentence"
+    "wants": "nothing -- there is no printed text for this ref",
+    "why": "spec.py returns no such row"
   },
   "p10354": {
-    "wants": "c.reroll_attack(all=True)",
-    "why": "it rerolls every attack roll of one power use that missed. c.reroll_attack reaches only the one attack on c.trigger, and the earlier misses have already resolved and their bodies have already branched on them, so writing it would reroll one of several (or an event announcing a power use's finished set of attack rolls)"
-  },
-  "p10424": {
-    "wants": "c.form(like=)",
-    "why": "take your familiar's shape -- copying another creature's speed, modes and senses. Needs c.familiar() as well"
+    "wants": "an event announcing a power use's finished set of attack rolls, plus c.reroll_attack(all=True) over it",
+    "why": "the earlier misses have already resolved and their bodies have already branched on them, so there is nothing left to reroll when the free action answers"
   },
   "p10744": {
-    "wants": "c.range_bonus(mult=)",
-    "why": "a stance that doubles the normal and long range of thrown and sling attacks; Range is frozen data on the header and nothing reads a per-creature range modifier (or a Range the body can widen)"
+    "wants": "a thrown weapon or a sling in chargen, before c.range_bonus(mult=) is worth adding",
+    "why": "every weapon in the table is a mace, bow or crossbow, so a thrown-or-sling gate would be false for every character in the tree"
   },
   "p11215": {
-    "wants": "c.use_row(ref)",
-    "why": "'use your Flurry of Blows power again'. Flurry is a class feature with no id in the spec, and nothing can re-fire a row (fire a known row now, out of turn, without spending it; plus the Flurry of Blows ref)"
-  },
-  "p11291": {
-    "wants": "c.regain_use(ref, on=)",
-    "why": "regain an expended Channel Divinity power. c.grant_row grants a row you do not know; this restores a spent use"
-  },
-  "p11480": {
-    "wants": "a long-range penalty in resolve.attack, plus c.ignores_long_range(until=)",
-    "why": "'no penalty to attack rolls for attacking at long range'. Long range is not modelled: resolve.attack never consults a weapon's ranged=(normal, long) tuple, so there is no penalty to remove and the row would be inert indistinguishably from a bug"
+    "wants": "a compendium ref for the monk class feature its Trigger and Effect both name, plus c.use_row(ref)",
+    "why": "no monk class feature is declared anywhere, so both halves would name a ref that does not exist; the trigger is writable the moment the ref is"
   },
   "p11603": {
-    "wants": "a compendium ref for the second, granted row (then c.grant_row(ref))",
-    "why": "its whole Effect is 'the target can use <a second row>' -- a free-action Str-or-Dex vs Reflex 3[W] attack with its own Requirement, which the spec names only as 'p11603 Attack'. c.grant_row needs a ref and there is none; resolving the attack immediately loses the point of a daily the ally holds for later, and c.grant_attack cannot carry 3[W] vs Reflex"
-  },
-  "p11725": {
-    "wants": "c.grant_attack(..., again=True)",
-    "why": "'the target repeats the attack as a free action against a creature you choose'. The reaction resolves inside the Miss window of the very use it repeats, so (actor, ref) is already in dsl._IN_FLIGHT and use refuses it. The row is otherwise complete and works when the trigger event is synthesised outside the attack's own resolution; it needs a flag exempting the granted swing from the _IN_FLIGHT guard for that one call"
-  },
-  "p12198": {
-    "wants": "c.grant_attack(..., reentrant=True)",
-    "why": "'the attacker repeats the attack against that creature' has to fire the row that is triggering this one, and dsl._IN_FLIGHT refuses a second entry into (actor, ref) -- correctly, in general. c.redirect only works on AttackDeclared, and this triggers on a miss. Wants a way to re-run the triggering row at a new target"
+    "wants": "a compendium ref for the second printed stanza",
+    "why": "spec.py folds both stanzas into one entry and the compendium carries no separate id, so c.grant_row has nothing to name"
   },
   "p12792": {
-    "wants": "the class feature's id, plus c.regain(ref, *, on=)",
-    "why": "'you miss with the ranged basic attack granted by <a class feature>; you regain that power and use it immediately'. The feature has no id in the spec and nothing gives a use back"
-  },
-  "p13050": {
-    "wants": "c.cure(Condition.SURPRISED)",
-    "why": "'you are no longer surprised'. Nothing announces surprise, so the printed Trigger has nothing to name either. See #141 (and an event announcing surprise)"
-  },
-  "p13697": {
-    "wants": "c.unhindered(condition, on=, until=)",
-    "why": "'squeezing does not cause you or your beast companion to take a -5 penalty, grant combat advantage, or move at half speed'. Condition.SQUEEZING exists but nothing suppresses what a condition costs while keeping the condition"
+    "wants": "a compendium ref for the seeker class feature, plus c.use_row(ref)",
+    "why": "no seeker class feature content is declared; c.restore_use already covers the regain half"
   },
   "p13887": {
-    "wants": "c.link(a, b, *, until=)",
-    "why": "its whole Effect is making two named squares adjacent to each other, with the step between them counting as teleportation. Adjacency is computed from the grid in engine/grid.py and nothing can add an edge to it (two squares treated as adjacent for movement and melee reach)"
+    "wants": "c.link plus link-aware query.distance_between / query.adjacent and a teleport-flavoured step",
+    "why": "the card makes the two squares adjacent for movement OR melee attacks and calls the crossing teleportation; c.link as built is movement-only, so the row would silently drop the melee half"
   },
   "p13984": {
     "wants": "a stat block for the creature it summons",
     "why": "blocked on content rather than on the engine -- the spec prints no creature, so summon=/c.summon_inline have nothing to carry"
   },
-  "p14299": {
-    "wants": "a weapon category -- 'simple' in Weapon.properties, or a Weapon.category field",
-    "why": "Requirement is 'you must use this power with a simple weapon' and Gear/Weapon record no category, so c.wielding('simple') is false for every character in the tree: requires= would make the row permanently unusable and no requires= would let it be used with anything. Everything else on the row is sayable. Same gap makes p14301/p14302's Weapon riders inert and is why p14295/p14297 audit UNUSED"
-  },
   "p14510": {
-    "wants": "c.restore(ref)",
-    "why": "its Requirement and its Effect both name another druid power, which this spec gives no id for, and nothing un-spends a row: Powers.used only ever counts up (hand back a spent use)"
-  },
-  "p1543": {
-    "wants": "c.portal(a, b, *, until=)",
-    "why": "a rift making two distant squares adjacent for movement only. Grid has no notion of a link between two squares, and neither c.teleport nor a zone can say it -- it changes what movement costs and where a creature may go, so it is not narrative"
-  },
-  "p1926": {
-    "wants": "c.see_unseen(on=)",
-    "why": "the printed line is a trade: you see the invisible, and everything else goes invisible to you. The second half is writable with c.invisible(to=c.me, on=...); the first is not, because nothing overrides another effect's relation. Writing only the half that works would ship the penalty without the benefit (suppress HIDDEN_FROM towards one creature)"
-  },
-  "p2633": {
-    "wants": "c.as_ranged(10, until=)",
-    "why": "'the next melee attack you make with that weapon becomes a ranged attack with a range of 10'. Nothing re-ranges a row (or a reach override on an effect)"
+    "wants": "a compendium ref for the other druid power its Requirement and Effect both name",
+    "why": "no id in the spec and it cannot be identified from this card's mechanics; c.restore_use and c.recast both exist now"
   },
   "p3369": {
-    "wants": "c.feature_bonus(what)",
-    "why": "'your warding provides its bonus to all your defenses, not just AC'. The row has to read the size of a standing class-feature bonus and mirror it onto Fort/Ref/Will (or c.total(what, kind=) filtered by kind)"
-  },
-  "p3782": {
-    "wants": "c.dispel(zone_or_conjuration)",
-    "why": "its whole target line is one conjuration or zone and its whole Hit is destroying it. A zone is not an entity a target line can name, a conjuration has no Will to attack, and nothing ends somebody else's zone. Same missing half as the attack line of p3056 (and a way to target one)"
+    "wants": "the swordmage warding class feature to exist at all, before c.feature_bonus(what) has a number to mirror",
+    "why": "no warding anywhere in the engine, chargen or the swordmage tree, so the row would copy a bonus that is never laid"
   },
   "p3839": {
     "wants": "a plural companion API: dsl.measured_from and dsl.roller each return one eid and must let the shaman pick which spirit an attack is measured and rolled from; c.call_companion must stop relocating when a second is allowed",
     "why": "its second and third sentences change how ~60 existing shaman rows read \"your spirit companion\", so it cannot be honoured by adding a method"
   },
-  "p4143": {
-    "wants": "c.floor(area, until=)",
-    "why": "a bridge whose squares are crossed as normal terrain (a zone that makes its squares ordinary passable ground)"
-  },
   "p4396": {
-    "wants": "a run action -- c.run(n)",
-    "why": "the whole Effect is running speed + 4 instead of speed + 2, and not granting combat advantage from running; there is no run action, so neither clause has a subject (or actions.legal offering one)"
-  },
-  "p4562": {
-    "wants": "c.swap_initiative(other) and c.end_turn()",
-    "why": "'you and one ally switch places in the initiative order; your turn ends; the ally takes its next turn immediately; you then act when your ally would have acted'. Nothing on Cast reaches Encounter.order, and c.extra_turn(at=) inserts a slot for the caster only and removes none, so half the row would be a second turn for somebody who has already had theirs"
+    "wants": "a run action in the engine -- actions._movement offering it, movement walking speed + 2, and the combat-advantage grant",
+    "why": "the engine builds no run action, so neither printed clause has a subject; c.run(n) alone would not be enough"
   },
   "p4807": {
-    "wants": "c.expend(ref, on=)",
-    "why": "'you expend an unused barbarian rage power', with the damage keyed to the expended power's level. c.forbid removes a row, which the Powers docstring says is not the same as spent. Also needs group='rage' on the rage rows: the group= header field exists and is set on nothing in the tree, so there is no queryable marker separating a rage from any other barbarian daily"
-  },
-  "p5527": {
-    "wants": "c.bonus('attack', dice='1d6')",
-    "why": "'roll a d6 and add it as a power bonus to every weapon attack and damage roll'. c.bonus takes a fixed int (a modifier rolled per roll)"
-  },
-  "p5590": {
-    "wants": "c.add_target(who)",
-    "why": "'the ally also becomes a target of the power'. c.redirect moves the single target and cannot add one, and leaves_me_out only asks about me (on the interrupted event, plus a predicate over the attacker's own presence in ev.among)"
+    "wants": "Keyword.RAGE declared on the 41 rage rows (the compendium prints it in their type line), plus c.expend(ref)",
+    "why": "nothing at runtime tells a rage daily from any other barbarian daily; group= is the wrong field, the engine reads it as one-per-encounter"
   },
   "p5591": {
     "wants": "a separate compendium ref for a guardian form's attack",
     "why": "the forms (p5106, p9825, p9859) bundle their attack under the same ref, so there is no second id for c.restore_use and inventing one would be inventing an id"
   },
   "p5845": {
-    "wants": "c.treat_roll_as(\"odd\"|\"even\")",
-    "why": "its whole Effect is overriding the parity another row will read off its own attack roll; nothing lets one row dictate what another reads from AttackResult.natural, and the rows that read parity are the fork-gated ones"
+    "wants": "AttackResult.parity plus c.treat_roll_as(\"odd\"|\"even\"), and the two rows reading result.natural % 2 moved onto it",
+    "why": "nothing can dictate what another row reads off natural, and there is no event for \"you are about to use a parity power\" to trigger on"
   },
   "p7399": {
-    "wants": "a way to say an attack is made with the off-hand weapon",
-    "why": "'combat advantage for the next attack you make with an off-hand weapon'; c.w(hand='off') picks the dice but nothing marks an attack as an off-hand one, so the grant cannot be gated"
-  },
-  "p7429": {
-    "wants": "c.recast(ref, *, action=MINOR, once_per_round=True)",
-    "why": "its whole Effect is that until the end of the encounter you can cast a named at-will you already know as a minor action once per turn. c.grant_row lends a row to somebody who does not know it and changes nothing about what using it costs, and the reduced action cost is the entire row"
-  },
-  "p924": {
-    "wants": "c.unsurprise",
-    "why": "Condition.SURPRISED is in the enum and nothing ever applies it"
-  },
-  "p9442": {
-    "wants": "c.shrouds(on=)",
-    "why": "entirely 'damage from your assassin's shroud', per shroud. Shrouds have no representation anywhere; shroud riders were also dropped from six written rows (> int, c.shroud(on=, n=1), and a shroud-damage event)"
+    "wants": "a hand key in the attack context, set from a header field or c.strike(hand=\"off\")",
+    "why": "c.w(hand=\"off\") picks the dice only, so a grant gated on an off-hand attack would read a key the context does not carry"
   },
   "p9665": {
     "wants": "Summon.instinctive on the header block, plus c.instinctive(who) and a repeatable once-per-round minor-action grant",

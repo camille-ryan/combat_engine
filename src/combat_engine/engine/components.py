@@ -403,9 +403,17 @@ class Mod:
     kind: str = "untyped"
     when: Callable[[dict[str, Any]], bool] | None = None
     label: str = ""
+    #: A modifier that is **rolled** rather than fixed -- "roll a d6 and add
+    #: it as a power bonus to the roll". The body closes over its own rng,
+    #: the way `when` closes over its own question, and it is called once per
+    #: time the modifier is read, which is once per roll.
+    roll: Callable[[], int] | None = None
 
     def applies(self, ctx: dict[str, Any]) -> bool:
         return self.when is None or self.when(ctx)
+
+    def amount(self) -> int:
+        return self.value + (self.roll() if self.roll is not None else 0)
 
 
 @dataclass
@@ -433,12 +441,13 @@ class Mods:
         for m in self.items:
             if m.what != what or not m.applies(ctx):
                 continue
-            if m.value < 0:
-                worst[m.label] = min(worst.get(m.label, 0), m.value)
+            value = m.amount()
+            if value < 0:
+                worst[m.label] = min(worst.get(m.label, 0), value)
             elif m.kind == "untyped":
-                out += m.value
+                out += value
             else:
-                best[m.kind] = max(best.get(m.kind, 0), m.value)
+                best[m.kind] = max(best.get(m.kind, 0), value)
         return out + sum(best.values()) + sum(worst.values())
 
 
@@ -627,6 +636,19 @@ class PowerPoints:
 
 
 @dataclass
+class Shrouds:
+    """The assassin's shrouds: who is carrying them and how many.
+
+    A count rather than a stack of effects. The count is the only thing
+    anything reads, only one creature carries them at a time, and clearing
+    them when they are invoked is then one assignment rather than a search.
+    """
+
+    on: int = 0
+    count: int = 0
+
+
+@dataclass
 class Gear:
     """What the creature is holding and wearing, as mechanical facts only.
 
@@ -728,6 +750,10 @@ class Weapon:
     reach: int = 1
     ranged: tuple[int, int] | None = None
     group: str = ""
+    #: Simple, military or superior -- the proficiency band the table prints
+    #: beside the group. A handful of rows carry "you must use this power
+    #: with a simple weapon" as their Requirement and had nothing to ask.
+    category: str = ""
     properties: frozenset[str] = frozenset()
     #: A magic weapon's enhancement bonus, which adds to its attack and its
     #: damage. Zero is a plain weapon, and everything `chargen` hands out is

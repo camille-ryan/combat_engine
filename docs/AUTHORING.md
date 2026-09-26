@@ -157,6 +157,17 @@ that never applies.
   `Moved` now carries `kind_` as well, and it is the only one of the three
   that also carries `from_` -- so "an ally adjacent to you **before** the
   teleport" is asked there and nowhere else.
+* **`PowerUsed` is announced *before* the body runs, and it is the same
+  trap.** `dsl.use` calls `cast.used()` above `p.body(cast)`, so a row
+  watching `PowerUsed` sees a world in which the power has not happened
+  yet -- two wild-shape rows watched it and found the *previous* form
+  still on. Targets are chosen before the body, so `ev.targets` is
+  trustworthy there; anything the body *does* is not. If the row turns on
+  the consequence rather than the declaration, watch what the body emits
+  (`Hit`, `EffectApplied`, `Moved`) instead.
+* **`Hit` does not declare `opportunity`.** `resolve.attack` sets it as a
+  plain attribute afterwards, so a row must ask
+  `getattr(ev, "opportunity", False)`. Same shape as `charge`.
 
 ### The vocabulary, beyond the basics
 

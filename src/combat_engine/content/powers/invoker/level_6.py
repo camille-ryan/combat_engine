@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     ANY_CREATURE,
     DAILY,
@@ -329,3 +330,26 @@ def p7180(c: Cast) -> None:
         difficult=True,
         blocks_sight=True,
     )
+
+
+@power(
+    "p11291",
+    level=6,
+    cls="invoker",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.DIVINE],
+)
+def p11291(c: Cast) -> None:
+    """Both printed sentences are the one restore. A channel divinity row is
+    held down by `group=CHANNEL_DIVINITY`, which refuses a second one while
+    any sibling counts as used -- so handing the use back is also what lets
+    the allowance be spent again, and there is nothing else to say."""
+    spent = c.expended(group=CHANNEL_DIVINITY)
+    if not spent:
+        return
+    pick = c.choose(spent, "p11291: which expended row comes back")
+    if pick is not None:
+        c.restore_use(pick)

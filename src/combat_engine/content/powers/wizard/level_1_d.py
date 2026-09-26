@@ -35,7 +35,9 @@ from combat_engine.engine import (
     MINOR,
     NO_TARGET,
     ONE_CREATURE,
+    PERSONAL,
     REF,
+    SELF,
     STANDARD,
     WILL,
     AreaBurst,
@@ -55,12 +57,13 @@ from combat_engine.engine import (
     UpTo,
     When,
     Window,
+    World,
     distance,
     get,
     power,
     spread,
 )
-from combat_engine.engine.components import Conjuration, Position
+from combat_engine.engine.components import Conjuration, Position, Powers
 from combat_engine.engine.events import LeaveSquare, MoveStart
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
@@ -668,3 +671,34 @@ def p4016(c: Cast) -> None:
     made = c.summon_inline(get(c.ref).summon, at=c.origin)
     if made:
         _commands_on_opportunity(c, made)
+
+
+#: The at-will `p7429`'s Prerequisite names. Identified by mechanics, which
+#: are unique in the class: the only wizard at-will at Ranged 20 carrying the
+#: force keyword and rolling no attack.
+_PREREQUISITE = "p463"
+
+
+def _knows_the_at_will(world: World, eid: int) -> bool:
+    """"Prerequisite: you must know the at-will wizard power named."""
+    known = world.get(eid, Powers)
+    return known is not None and _PREREQUISITE in known.all
+
+
+@power(
+    "p7429",
+    level=1,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE],
+    requires=_knows_the_at_will,
+    requires_text=f"must know {_PREREQUISITE}",
+)
+def p7429(c: Cast) -> None:
+    """The printed Effect is the cheaper action and nothing else, so the row
+    is one `c.recast`: the at-will keeps its standard-action entry in the
+    menu and gains a minor-action one, once a turn, until the fight ends."""
+    c.recast(_PREREQUISITE, action=MINOR, until=When.ENCOUNTER)

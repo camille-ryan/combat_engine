@@ -97,16 +97,19 @@ class ClassLine:
         return self.weapons[0] if self.weapons else None
 
 
-LONGSWORD = Weapon(ref="w:longsword", damage="1d8", proficiency=3, group="heavy blade")
-MACE = Weapon(ref="w:mace", damage="1d8", proficiency=2, group="mace")
-DAGGER = Weapon(ref="w:dagger", damage="1d4", proficiency=3, group="light blade",
+LONGSWORD = Weapon(ref="w:longsword", category="military", damage="1d8", proficiency=3,
+                   group="heavy blade")
+MACE = Weapon(ref="w:mace", category="simple", damage="1d8", proficiency=2, group="mace")
+DAGGER = Weapon(ref="w:dagger", category="simple", damage="1d4", proficiency=3, group="light blade",
                 properties=frozenset({"light blade", "off-hand"}))
-SHORTSWORD = Weapon(ref="w:short-sword", damage="1d6", proficiency=3, group="light blade",
+SHORTSWORD = Weapon(ref="w:short-sword", category="military", damage="1d6", proficiency=3,
+                    group="light blade",
                     properties=frozenset({"light blade", "off-hand"}))
-LONGBOW = Weapon(ref="w:longbow", damage="1d10", proficiency=2, group="bow",
+LONGBOW = Weapon(ref="w:longbow", category="military", damage="1d10", proficiency=2, group="bow",
                  ranged=(20, 40), properties=frozenset({"two-handed"}))
-CROSSBOW = Weapon(ref="w:crossbow", damage="1d8", proficiency=2, group="crossbow",
-                  ranged=(15, 30), properties=frozenset({"two-handed"}))
+CROSSBOW = Weapon(ref="w:crossbow", category="simple", damage="1d8", proficiency=2,
+                  group="crossbow", ranged=(15, 30),
+                  properties=frozenset({"two-handed"}))
 ROD = Weapon(ref="w:rod", damage="1d4", proficiency=0, group="implement")
 
 #: The eight Player's Handbook classes. Numbers off the class pages.
@@ -152,13 +155,13 @@ CLASSES: dict[str, ClassLine] = {
 
 
 #: A few more weapons, for the classes that arrived with phase C.
-GREATAXE = Weapon(ref="w:greataxe", damage="1d12", proficiency=2, group="axe",
-                  properties=frozenset({"two-handed"}))
-QUARTERSTAFF = Weapon(ref="w:quarterstaff", damage="1d8", proficiency=2, group="staff",
-                      properties=frozenset({"two-handed"}))
-LONGSPEAR = Weapon(ref="w:longspear", damage="1d10", proficiency=2, group="spear",
-                   properties=frozenset({"two-handed", "reach"}))
-UNARMED = Weapon(ref="w:unarmed", damage="1d8", proficiency=3, group="unarmed")
+GREATAXE = Weapon(ref="w:greataxe", category="military", damage="1d12", proficiency=2,
+                  group="axe", properties=frozenset({"two-handed"}))
+QUARTERSTAFF = Weapon(ref="w:quarterstaff", category="simple", damage="1d8", proficiency=2,
+                      group="staff", properties=frozenset({"two-handed"}))
+LONGSPEAR = Weapon(ref="w:longspear", category="military", damage="1d10", proficiency=2,
+                   group="spear", properties=frozenset({"two-handed", "reach"}))
+UNARMED = Weapon(ref="w:unarmed", category="simple", damage="1d8", proficiency=3, group="unarmed")
 STAFF = Weapon(ref="w:staff", damage="1d8", proficiency=0, group="implement")
 TOTEM = Weapon(ref="w:totem", damage="1d4", proficiency=0, group="implement")
 

@@ -884,11 +884,18 @@ def unmet_requirement(world: World, actor: int, p: Power) -> bool:
     return not any(p.can_branch(world, actor, b) for b in p.branches)
 
 
-def usable(world: World, actor: int, p: Power, *, dying: bool = False) -> tuple[bool, str]:
+def usable(
+    world: World, actor: int, p: Power, *, dying: bool = False, spent_ok: bool = False
+) -> tuple[bool, str]:
     """Can this power be used, and if not, why not?
 
     The reason is returned rather than logged, because the interface shows it
     on the greyed-out card and a player who cannot see why is playing blind.
+
+    `spent_ok` waives the usage limits alone. "The target repeats the attack"
+    is not the target using the power again -- it is one use happening twice
+    -- so an encounter attack that has just been spent would otherwise refuse
+    the very repeat the card is printed to cause.
     """
     from .components import Powers
     from .query import can_act
@@ -915,14 +922,17 @@ def usable(world: World, actor: int, p: Power, *, dying: bool = False) -> tuple[
         # Checked for every usage, because **every printed "1/round" rider
         # is on an at-will** -- and this lived inside the not-at-will branch,
         # so the guard was unreachable and the header field was decoration.
-        if p.once_per_round and powers.last_round.get(p.ref) == world.round:
-            return False, "already used this round"
-        if p.usage is not Usage.AT_WILL:
-            used = powers.times(p.ref)
-            if used >= p.uses:
-                return False, "expended" if p.uses == 1 else f"used {used} of {p.uses}"
-            if p.group and _group_spent(world, actor, p):
-                return False, f"one {p.group} power per encounter"
+        if not spent_ok:
+            if p.once_per_round and powers.last_round.get(p.ref) == world.round:
+                return False, "already used this round"
+            if p.usage is not Usage.AT_WILL:
+                used = powers.times(p.ref)
+                if used >= p.uses:
+                    return False, (
+                        "expended" if p.uses == 1 else f"used {used} of {p.uses}"
+                    )
+                if p.group and _group_spent(world, actor, p):
+                    return False, f"one {p.group} power per encounter"
     open_branches = [b for b in p.branches if p.can_branch(world, actor, b)]
     if not open_branches:
         # The printed sentence when there is one, because it is what the
@@ -1008,6 +1018,20 @@ def _no_targets(world: World, actor: int, p: Power) -> str:
 #: had none, so the guard lives here now and `triggers` shares it.
 _IN_FLIGHT: set[tuple[int, str]] = set()
 
+#: The uses that are running right now, innermost last. An immediate
+#: interrupt is a use nested inside the one it answers, and "the ally also
+#: becomes a target of the power" has to reach that outer one while its
+#: target list is still being walked. `Cast.add_target` is the only reader.
+_RUNNING: list[Any] = []
+
+
+def running_below(cast: Any) -> Any:
+    """The use this one is nested inside, if any."""
+    for i in range(len(_RUNNING) - 1, -1, -1):
+        if _RUNNING[i] is cast:
+            return _RUNNING[i - 1] if i else None
+    return _RUNNING[-1] if _RUNNING else None
+
 
 def use(
     world: World,
@@ -1021,6 +1045,7 @@ def use(
     opportunity: bool = False,
     charge: bool = False,
     branch: int = 0,
+    reentrant: bool = False,
 ) -> bool:
     """Use a power. Returns False if it could not be used.
 
@@ -1048,21 +1073,28 @@ def use(
         and getattr(trigger, "actor", None) == actor
         and not alive(world, actor)
     )
-    ok, _why = usable(world, actor, p, dying=dying)
+    ok, _why = usable(world, actor, p, dying=dying, spent_ok=reentrant)
     if not ok:
         return False
-    if (actor, ref) in _IN_FLIGHT:
+    # `reentrant` is "the attacker repeats the attack": the row has to run a
+    # second time inside itself, which is the one case the guard below is
+    # wrong about. It is never the default -- the guard exists because two
+    # rows can otherwise hand a swing back and forth until the stack dies.
+    if not reentrant and (actor, ref) in _IN_FLIGHT:
         return False
 
     if targets is not None:
-        chosen = targets
+        chosen = list(targets)
     else:
         chosen, origin = _auto_targets(world, actor, p, origin, branch)
+        chosen = list(chosen)
     cast = Cast(
         world=world,
         me=actor,
         ref=ref,
-        targets=list(chosen),
+        # The **same** list the loop below walks, not a copy, so a target
+        # added mid-run is one the body is then called for.
+        targets=chosen,
         origin=origin,
         trigger=trigger,
         opportunity=opportunity,
@@ -1087,22 +1119,33 @@ def use(
                 # at-will could be used all turn.
                 powers.note_round(ref, world.round)
 
+    # A reentrant run finds its own row already marked; leaving the mark
+    # standing on the way out is what keeps the guard true for the outer one.
+    fresh = (actor, ref) not in _IN_FLIGHT
     _IN_FLIGHT.add((actor, ref))
+    _RUNNING.append(cast)
     try:
         if not chosen:
             p.body(cast)
             return True
         landed = False
-        for i, t in enumerate(chosen):
+        # By index rather than by iterator: `chosen` is `cast.targets`, and a
+        # row answering this one may lengthen it while it is being walked.
+        i = 0
+        while i < len(chosen):
+            t = chosen[i]
+            cast.index = i
+            i += 1
             if not targetable(world, t):
                 continue
-            cast.index = i
             cast.target = t
             cast.result = None
             p.body(cast)
             landed = landed or bool(cast.result and cast.result.hit)
     finally:
-        _IN_FLIGHT.discard((actor, ref))
+        _RUNNING.pop()
+        if fresh:
+            _IN_FLIGHT.discard((actor, ref))
 
     # Reliable: a daily that misses everything is not spent. The keyword was
     # declared and nothing read it, so the two fighter dailies that carry it

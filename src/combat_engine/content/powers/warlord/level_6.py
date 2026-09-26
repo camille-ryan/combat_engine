@@ -15,11 +15,15 @@ from combat_engine.engine import (
     DAILY,
     EACH_ALLY,
     ENCOUNTER,
+    FREE,
     INTERRUPT,
     MINOR,
     ONE_ALLY,
+    PERSONAL,
     REACTION,
+    SELF,
     AttackDeclared,
+    Budget,
     Cast,
     CloseBurst,
     DamageApplied,
@@ -173,3 +177,43 @@ def p3244(c: Cast) -> None:
     who = getattr(c.trigger, "target", None) or c.target
     if who is not None and c.may("spend a healing surge", who=who):
         c.surge(on=who, bonus=c.cha_mod)
+
+
+def _turn_untouched(world: World, eid: int) -> bool:
+    """"During your turn, before you take any other actions."
+
+    A full budget is the only reading of "before any other action" the
+    engine can check: nothing records what has been done, only what is left.
+    """
+    budget = world.get(eid, Budget)
+    return (
+        world.turn == eid
+        and budget is not None
+        and budget.standard > 0
+        and budget.move > 0
+        and budget.minor > 0
+    )
+
+
+@power(
+    "p4562",
+    level=6,
+    cls="warlord",
+    usage=ENCOUNTER,
+    action=FREE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=MARTIAL,
+    requires=_turn_untouched,
+    requires_text="must be your turn, before any other action",
+)
+def p4562(c: Cast) -> None:
+    """Three printed sentences, one operation. The ally takes over the slot
+    being played, so ending the turn here hands it straight across, and the
+    caster is left standing at the count the ally gave up."""
+    friends = [a for a in c.allies() if a != c.me and c.can_see(a)]
+    if not friends:
+        return
+    friend = c.choose(friends, "p4562: who to trade places with in the order")
+    if friend is not None and c.swap_initiative(friend):
+        c.end_turn()

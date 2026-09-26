@@ -84,9 +84,11 @@ class World:
 
     def rough(self) -> dict[Any, str]:
         """Every square that costs extra, and what sort of going it is."""
-        out = dict(self.grid.difficult)
+        laid = self.grid.bridged
+        out = {sq: kind for sq, kind in self.grid.difficult.items() if sq not in laid}
         for sq, kind in self.zones.difficult_squares().items():
-            out.setdefault(sq, kind)
+            if sq not in laid:
+                out.setdefault(sq, kind)
         return out
 
     def difficult(self, for_: int | None = None) -> set[Any]:

@@ -198,6 +198,30 @@ class Encounter:
                 self._splice(eid, init.rolled)
         return init.rolled
 
+    def swap_initiative(self, a: int, b: int) -> bool:
+        """Two creatures change places in the initiative order.
+
+        The counts go with the slots, so anything spliced in later still
+        sorts against the number each creature is now acting on.
+
+        When one of them is the creature whose turn it is, the slot being
+        played has changed owner, and the cursor steps back so that
+        `advance` plays that slot again for its new occupant. That is the
+        printed "the ally takes his or her next turn immediately, even if he
+        or she has already acted during this round"; the creature swapped
+        out then acts where the ally would have.
+        """
+        if a == b or a not in self.order or b not in self.order:
+            return False
+        i, j = self.order.index(a), self.order.index(b)
+        self.order[i], self.order[j] = self.order[j], self.order[i]
+        first = self.world.get(a, Initiative) or self.world.add(a, Initiative())
+        second = self.world.get(b, Initiative) or self.world.add(b, Initiative())
+        first.rolled, second.rolled = second.rolled, first.rolled
+        if self.started and self.index in (i, j):
+            self.index -= 1
+        return True
+
     def reroll_initiative(self, eid: int) -> int:
         """Roll again and move the creature to its new place.
 
