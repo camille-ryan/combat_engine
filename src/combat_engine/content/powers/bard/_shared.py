@@ -40,6 +40,48 @@ def free_near(c: Cast, spot: Square | None, skip: frozenset[Square] = frozenset(
     return None
 
 
+def in_aura(c: Cast, who: int | None, zone: int = 0) -> bool:
+    """Is that creature standing in the caster's own live aura right now?"""
+    zid = zone or c.my_aura()
+    return bool(zid) and who is not None and who in c.world.zones.occupants(zid)
+
+
+def aura_allies(c: Cast, zone: int = 0) -> list[int]:
+    """The caster's allies standing in the aura; empty when there is no aura.
+
+    "One of your allies" is the printed word, so the caster is not in it.
+    """
+    zid = zone or c.my_aura()
+    if not zid:
+        return []
+    inside = set(c.world.zones.occupants(zid))
+    return [w for w in c.allies() if w in inside]
+
+
+def by_basic(c: Cast, ev: Any) -> bool:
+    """Was that attack a basic attack, for a monster as well as a character?
+
+    A monster points `Powers.basic` at one of its own rows, so comparing
+    against the engine's two refs alone would answer no for every monster.
+    """
+    refs = {MELEE, RANGED}
+    known = c.world.get(getattr(ev, "attacker", None), Powers)
+    if known is not None:
+        refs |= {known.basic, known.ranged} - {""}
+    return getattr(ev, "power", "") in refs
+
+
+def while_in(c: Cast, zone: int, give: Any, side: str = "ally") -> None:
+    """`c.grants_in` for what is not a modifier -- a relation, or a bar.
+
+    The engine already does the enter/exit bookkeeping in
+    `Cast._while_inside`, which is private; going through it here keeps one
+    copy of it rather than one per row. A public `c.while_in` would retire
+    this helper.
+    """
+    c._while_inside(zone, give, side)
+
+
 def use_roll(ev: Any, face: int) -> bool:
     """Put a number of your own on an attack that has been announced.
 

@@ -209,8 +209,17 @@ def _play(page, check: Checks, problems: list[str], served: list[dict]) -> None:
     moved = _click_a_move_square(page)
     check.that(moved is not None, "a highlighted square accepted a click")
     if moved:
-        page.wait_for_timeout(900)
-        after = _positions(page)
+        # Wait for the board to change, not for a fixed 900ms. The token
+        # animates and the server has to answer, and under `check.py` --
+        # where this runs after seven other instruments -- 900ms was about
+        # even odds. A flaky instrument is worse than a slow one: it
+        # teaches you to re-run rather than to read.
+        after = before
+        for _ in range(40):
+            after = _positions(page)
+            if after != before:
+                break
+            page.wait_for_timeout(100)
         check.that(after != before, "the board moved somebody",
                    f"{before} vs {after}")
 

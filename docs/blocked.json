@@ -128,7 +128,7 @@
     "why": "its whole printed Effect is 'the reach of your next melee weapon attack increases by 1'. The `reach` modifier exists but is read only by movement._threat, which is opportunity attacks; dsl.area_of takes the printed Range size and nothing else, so the row would extend what the fighter threatens and not what it can hit. Wants a reach modifier area_of consults"
   },
   "p10594": {
-    "wants": "Attack(by='companion')",
+    "wants": "c.companion",
     "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
   },
   "p10622": {
@@ -136,7 +136,7 @@
     "why": "the target regains hit points equal to half a Heal check result; the engine rolls no skill checks, so there is no number to halve"
   },
   "p10630": {
-    "wants": "Attack(by='companion')",
+    "wants": "c.companion",
     "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
   },
   "p10702": {
@@ -236,11 +236,11 @@
     "why": "'shift 2 squares as a move action'. Same gap as p9430"
   },
   "p12500": {
-    "wants": "Attack(by='companion')",
+    "wants": "c.companion",
     "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
   },
   "p12503": {
-    "wants": "Attack(by='companion')",
+    "wants": "c.companion",
     "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
   },
   "p12792": {
@@ -304,8 +304,8 @@
     "why": "its entire content is 'you and your allies ignore hindering and difficult terrain in the zone', plus pits inside it becoming passable. c.ignores_difficult is per-creature and board-wide, so writing it would exempt the party everywhere; without it the zone has no mechanical content at all (a zone whose squares stop counting as difficult or hindering for a named side)"
   },
   "p13604": {
-    "wants": "c.zone(..., obscured=True)",
-    "why": "'enemies treat the zone as lightly obscured terrain', distinct from blocks_sight which is total"
+    "wants": "c.grants_in",
+    "why": "'enemies treat the zone as lightly obscured terrain', distinct from blocks_sight which is total (the cluster pass found this writable as it stands)"
   },
   "p13697": {
     "wants": "c.unhindered(condition, on=, until=)",
@@ -320,12 +320,12 @@
     "why": "knowing an enemy's exact location and ignoring its cover/concealment for the encounter. Nothing mechanical is left over once that is gone"
   },
   "p13802": {
-    "wants": "c.zone(..., obscured=True)",
-    "why": "a zone of lightly obscured squares -- concealment for anyone inside, not blocks_sight which is total"
+    "wants": "c.grants_in",
+    "why": "a zone of lightly obscured squares -- concealment for anyone inside, not blocks_sight which is total (the cluster pass found this writable as it stands)"
   },
   "p13804": {
-    "wants": "c.zone(..., blocks_sight=True, except_=c.me)",
-    "why": "the zone blocks line of sight for creatures other than you; the current flag blinds the caster too"
+    "wants": "c.zone",
+    "why": "the zone blocks line of sight for creatures other than you; the current flag blinds the caster too (the cluster pass found this writable as it stands)"
   },
   "p13807": {
     "wants": "c.always_seen_by(on=, to=)",
@@ -358,54 +358,6 @@
   "p14428": {
     "wants": "the defender-aura class feature, plus c.in_my_aura(who)",
     "why": "its printed Target is one enemy subject to your defender aura, and half its Effect pays out on an attack granted by a class feature that is not modelled. Same hold as p14420: the row could never be aimed at anything"
-  },
-  "p14447": {
-    "wants": "c.my_aura(label='')",
-    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists (the caster's own live aura id)"
-  },
-  "p14448": {
-    "wants": "c.my_aura(label='')",
-    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists (the caster's own live aura id)"
-  },
-  "p14449": {
-    "wants": "c.my_aura(label='')",
-    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists (the caster's own live aura id)"
-  },
-  "p14450": {
-    "wants": "c.my_aura(label='')",
-    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists (the caster's own live aura id)"
-  },
-  "p14454": {
-    "wants": "c.my_aura(label='')",
-    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists (the caster's own live aura id)"
-  },
-  "p14455": {
-    "wants": "c.my_aura(label='')",
-    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists (the caster's own live aura id)"
-  },
-  "p14456": {
-    "wants": "c.my_aura(label='')",
-    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists (the caster's own live aura id)"
-  },
-  "p14461": {
-    "wants": "c.my_aura(label='')",
-    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists (the caster's own live aura id)"
-  },
-  "p14462": {
-    "wants": "c.my_aura(label='')",
-    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists (the caster's own live aura id)"
-  },
-  "p14463": {
-    "wants": "c.my_aura(label='')",
-    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists (the caster's own live aura id)"
-  },
-  "p14469": {
-    "wants": "c.my_aura(label='')",
-    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists (the caster's own live aura id)"
-  },
-  "p14470": {
-    "wants": "c.my_aura(label='')",
-    "why": "the whole printed Effect is 'your skald's aura gains the following effect'. The bard chassis installs no such aura, and c.aura can only make a *new* one at a radius the spec never states, so writing it would mean inventing the radius. Needs the bard class feature (issue #154 pattern) plus a way to name the aura that already exists (the caster's own live aura id)"
   },
   "p14508": {
     "wants": "c.merge(into=)",
@@ -492,7 +444,7 @@
     "why": "its whole Effect is rolling damage twice and keeping the higher whenever you use an arcane power with a chosen keyword. c.maximise is a different operation and there is no reroll for damage at all"
   },
   "p3331": {
-    "wants": "an 'initiative' key c.bonus can write, and c.extra_action(ActionType.MOVE)",
+    "wants": "c.initiative",
     "why": "'+5 power bonus to your initiative roll' and 'an extra move action during the first round'. Nothing reads an initiative modifier (issue #168); c.extra_turn grants a whole turn, which is a different thing"
   },
   "p3369": {
@@ -536,15 +488,15 @@
     "why": "Prerequisite: Dark Pact. The whole row is a tally raised each time a cursed enemy drops and spent as an interrupt for 1d6 per point; nothing on a character holds a number across uses, and there is no leg to gate the prerequisite on"
   },
   "p4369": {
-    "wants": "Attack(by='companion')",
+    "wants": "c.companion",
     "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
   },
   "p4373": {
-    "wants": "Attack(by='companion')",
+    "wants": "c.companion",
     "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
   },
   "p4378": {
-    "wants": "Attack(by='companion')",
+    "wants": "c.companion",
     "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
   },
   "p4382": {
@@ -552,7 +504,7 @@
     "why": "'add 3 to the extra damage you deal with Hunter's Quarry'. cf:ranger-quarry closes over the literal 1d6, so there is no number to raise; a plain +3 against the quarry is strictly more than printed, since it would pay on every attack rather than the once-a-round rider (or features.extra_damage reading a modifier rather than closing over a fixed dice string)"
   },
   "p4391": {
-    "wants": "Attack(by='companion')",
+    "wants": "c.companion",
     "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
   },
   "p4396": {
@@ -560,11 +512,11 @@
     "why": "the whole Effect is running speed + 4 instead of speed + 2, and not granting combat advantage from running; there is no run action, so neither clause has a subject (or actions.legal offering one)"
   },
   "p4401": {
-    "wants": "Attack(by='companion')",
+    "wants": "c.companion",
     "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
   },
   "p4408": {
-    "wants": "Attack(by='companion')",
+    "wants": "c.companion",
     "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
   },
   "p4412": {
@@ -720,8 +672,8 @@
     "why": "four berries, each consumed as a minor action for 10 hit points, a saving throw, or 10 temporary hit points. Same missing thing as p13516"
   },
   "p9746": {
-    "wants": "c.bonus('shift', n) and c.cheaper(action, cost, on=)",
-    "why": "'allies can stand up as a minor action' and 'an ally who shifts shifts 1 extra square'. The Mod keys are attack/damage/save/speed/defence and speed is walking, not shifting; nothing overrides what an action costs"
+    "wants": "c.grant_action",
+    "why": "'allies can stand up as a minor action' and 'an ally who shifts shifts 1 extra square'. The Mod keys are attack/damage/save/speed/defence and speed is walking, not shifting; nothing overrides what an action costs (the cluster pass found this writable as it stands)"
   },
   "p9818": {
     "wants": "keep= on c.strike/c.attack, and both results readable off AttackResult",

@@ -180,6 +180,12 @@ KNOWN_SILENT = {
     # beside the caster have to stay smooth so a one-square shift has
     # somewhere to go. The board's rough ground is further out.
     "p15856": "clears difficult terrain within 1; the caster's neighbours must stay smooth",
+    # Reaches its own companion in a burst. The board places one, but the
+    # druid's level-0 rows now fire during setup and one of them calls a
+    # companion of its own -- which relocates the standing one out of the
+    # burst, by design. Excused rather than unwound: firing class features
+    # up front took 23 other rows from unusable to exercised.
+    "p13541": "a companion in a burst; the druid's own setup relocates it out of reach",
     "p2530": "an ally must have a bloodied enemy beside it",
     "p4572": "an ally must have already spent an encounter attack power",
     # Its printed Target *is* the avenger's oath target, and nothing on this
@@ -339,6 +345,21 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
         # row, and a companion with nothing save-ends on it rolls no dice.
         if companion:
             pet.effect("audit:setup pet hold", until=When.SAVE_ENDS, on=companion)
+
+    # Its class features, up front. They only ever fired inside `_provoke`,
+    # so a *triggered* row saw them and a standard-action row did not --
+    # and a bard's aura, a warlock's curse and an avenger's oath are all
+    # level-0 rows that later rows read. Three bard rows reported SILENT
+    # because the aura their card hangs an effect on had never been raised.
+    if declared.cls:
+        foes_now = sorted(_foes(world, caster))
+        if foes_now:
+            _use_class_features(world, caster, foes_now[0], skip=ref)
+        # And wound the ally again afterwards. A healing class feature --
+        # a cleric's, a shaman's -- puts it back on its feet, and "one
+        # bloodied ally" is a targeting restriction several rows carry.
+        hurt_again = world.need(ally, Health)
+        hurt_again.hp = max(1, hurt_again.max_hp // 2)
 
     # The caster is unseen by one enemy. A whole family of rows -- the
     # assassin's, and every lurker that only strikes what cannot see it --
@@ -788,7 +809,7 @@ def _use_with_any_grip(world, caster: int, ref: str) -> bool:  # noqa: ANN001
     return False
 
 
-def _use_class_features(world, caster: int, foe: int) -> None:  # noqa: ANN001
+def _use_class_features(world, caster: int, foe: int, skip: str = "") -> None:  # noqa: ANN001
     """Fire the caster's own level-0 rows -- its curse, its quarry, its mark."""
     from combat_engine.engine.components import Position, Powers
     from combat_engine.engine.movement import place
@@ -805,6 +826,12 @@ def _use_class_features(world, caster: int, foe: int) -> None:  # noqa: ANN001
         # at its first line, and is then counted as having fired -- which
         # short-circuits the provocation that would have exercised it
         # properly. `_area_rows` already makes the same exclusion.
+        # Never the row under test. A level-0 row fired during setup has
+        # already spent whatever it arms -- the assassin's shrouds, the
+        # druid's companion call -- so firing it again measures the
+        # leftovers and reports the row silent.
+        if ref == skip:
+            continue
         if p is None or p.level != 0 or p.action is ActionType.NONE or p.triggers:
             continue
         with contextlib.suppress(Exception):
