@@ -17,6 +17,17 @@ from . import has_shield
 PRIMAL = [Keyword.PRIMAL]
 
 
+def _took_second_wind(world: World, eid: int) -> bool:
+    """"Requirement: you must have used your second wind."
+
+    `c.second_wind` counts the use in `Powers` under `"second-wind"`, and
+    that tally is the only record of it -- which is also what
+    `c.restore_use` undoes.
+    """
+    known = world.get(eid, Powers)
+    return known is not None and known.times("second-wind") > 0
+
+
 def _ally_hurt_nearby(world: World, me: int, ev: DamageRolled) -> bool:
     who = ev.target
     return (
@@ -257,3 +268,22 @@ def p5133(c: Cast) -> None:
         give(who)
     c.watch(ZoneEntered, on_enter, until=When.ENCOUNTER, on=me)
     c.watch(ZoneExited, on_exit, until=When.ENCOUNTER, on=me)
+
+
+@power(
+    "p9870",
+    level=10,
+    cls="warden",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.PRIMAL, Keyword.HEALING],
+    requires=_took_second_wind,
+    requires_text="must have used your second wind during this encounter",
+)
+def p9870(c: Cast) -> None:
+    """The whole row is the Requirement and its undoing. `"second-wind"` is
+    the ref `actions.perform` and `c.second_wind` spend the use under, so it
+    is the one to hand back."""
+    c.restore_use("second-wind", on=c.me)

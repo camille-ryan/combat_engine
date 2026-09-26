@@ -18,10 +18,12 @@ from combat_engine.engine import (
     FREE,
     INTERRUPT,
     MINOR,
+    MOVE,
     NO_TARGET,
     PERSONAL,
     REF,
     SELF,
+    ActionType,
     AttackRolled,
     Cast,
     CloseBurst,
@@ -347,3 +349,30 @@ def p5741(c: Cast) -> None:
             c.blinded(on=foe, until=When.EONT)
 
     c.watch(Hit, anyway, until=When.EOT, on=me, once=True, label=c.ref)
+
+
+@power(
+    "p3331",
+    level=2,
+    cls="swordmage",
+    usage=DAILY,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.ARCANE],
+)
+def p3331(c: Cast) -> None:
+    """"Before rolling initiative": `c.initiative` moves the creature in the
+    order and `Encounter._roll_initiative` reads the component back after
+    every announcement, so the +5 lands whenever this is used. It takes no
+    bonus type, so the printed "power bonus" is carried by nothing -- there
+    is only ever one initiative modifier to stack with.
+
+    The extra move action is `c.extra_action`, which drops one action into
+    the budget the coming round is about to spend -- `c.extra_turn` was the
+    nearest thing and hands out a whole second slot in the order, which is a
+    solo's line rather than this one. A trait is armed before the first
+    round begins, so "during the first round" is when it is there to spend.
+    """
+    c.initiative(5, on=c.me)
+    c.extra_action(MOVE)

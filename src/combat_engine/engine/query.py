@@ -358,7 +358,7 @@ def hidden_from(world: World, eid: int) -> set[int]:
     return {
         w
         for w in world.relations.targets(Relation.HIDDEN_FROM, eid)
-        if not sees_invisible(world, w)
+        if not sees_through(world, w, eid)
     }
 
 
@@ -410,6 +410,39 @@ def sees_invisible(world: World, eid: int) -> bool:
     return mods is not None and bool(mods.items) and mods.total("see_invisible", {}) > 0
 
 
+def sees_through(world: World, watcher: int, who: int) -> bool:
+    """Can this watcher see that creature whatever it is hiding behind?
+
+    `sees_invisible` is the unlimited answer and was the only one, so
+    "truesight 5" and "that creature cannot become invisible to you" -- a
+    radius and a named creature -- had nothing to be written as. Both are
+    modifiers rather than conditions for the same reason `see_invisible` is.
+    """
+    if sees_invisible(world, watcher):
+        return True
+    mods = world.get(watcher, Mods)
+    if mods is None or not mods.items:
+        return False
+    if mods.total(f"truesight:{who}", {}) > 0:
+        return True
+    reach = mods.total("truesight", {})
+    return reach > 0 and distance_between(world, watcher, who) <= reach
+
+
+def sight_capped(world: World, watcher: int, who: int) -> bool:
+    """Is that creature simply too far off for this watcher to see?
+
+    "The target does not have line of sight to any creature more than 3
+    squares away from it" is a cap on sight rather than the loss of it, so
+    `Condition.BLINDED` says something else and nothing else came close.
+    """
+    mods = world.get(watcher, Mods)
+    if mods is None or not mods.items:
+        return False
+    cap = mods.total("sight_range", {})
+    return cap > 0 and distance_between(world, watcher, who) > cap
+
+
 def unseen_by(world: World, watcher: int, who: int) -> bool:
     """Is `who` invisible to `watcher`?
 
@@ -419,8 +452,10 @@ def unseen_by(world: World, watcher: int, who: int) -> bool:
     each of the two places that read `HIDDEN_FROM`, so the sight and the
     combat advantage can never disagree.
     """
-    return world.relations.holds(Relation.HIDDEN_FROM, who, watcher) and not sees_invisible(
-        world, watcher
+    if sight_capped(world, watcher, who):
+        return True
+    return world.relations.holds(Relation.HIDDEN_FROM, who, watcher) and not sees_through(
+        world, watcher, who
     )
 
 

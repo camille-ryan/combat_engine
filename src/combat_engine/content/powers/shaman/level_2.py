@@ -10,6 +10,7 @@ from combat_engine.engine import (
     ENCOUNTER,
     INTERRUPT,
     MINOR,
+    MOVE,
     NO_TARGET,
     ONE_ALLY,
     PERSONAL,
@@ -276,6 +277,36 @@ def p9745(c: Cast) -> None:
         c.resist(c.con_mod, on=mate, until=When.ENCOUNTER)
     if c.first and c.me not in c.targets:
         c.resist(c.con_mod, on=c.me, until=When.ENCOUNTER)
+
+
+@power(
+    "p9746",
+    level=2,
+    cls="shaman",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=PRIMAL,
+)
+def p9746(c: Cast) -> None:
+    """Both halves change what an action costs, which is why neither could
+    be said before: standing is a move action written into `actions.legal`
+    as a constant, and a shift is one square for a move action.
+
+    "Shift 1 extra square" is written as a two-square shift for a move
+    action, which is what the extra square comes to; an ally shifting on
+    somebody else's grant does not get it.
+
+    "Allies within 3 squares of you" is a standing question and nothing
+    watches a radius, so the grant goes to the allies who are within 3 when
+    the power is used and does not follow them out or pick up latecomers.
+    """
+    for mate in c.within(3, side="ally"):
+        if mate == c.me:
+            continue
+        c.grant_action("stand", MINOR, on=mate, until=When.ENCOUNTER)
+        c.shift_as(MOVE, 2, on=mate, until=When.ENCOUNTER)
 
 
 @power(

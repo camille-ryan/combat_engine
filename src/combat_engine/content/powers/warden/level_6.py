@@ -172,3 +172,26 @@ def p9849(c: Cast) -> None:
             MoveStart, refuse, until=When.ENCOUNTER, window=Window.BEFORE
         ),
     )
+
+
+@power(
+    "p13604",
+    level=6,
+    cls="warden",
+    usage=DAILY,
+    action=MINOR,
+    reach=CloseBurst(1),
+    target=NO_TARGET,
+    keywords=[*PRIMAL, Keyword.ZONE],
+)
+def p13604(c: Cast) -> None:
+    """"Treated as lightly obscured" is concealment for whoever stands in
+    the zone, not `blocks_sight`, which is total and cuts line of sight for
+    everybody including the warden.
+
+    The printed line gives it against enemies only; a modifier on the
+    creature has no side, so it reads as concealment against all comers --
+    the same number, since nobody else is swinging at them.
+    """
+    murk = c.zone(c.area(), label=c.ref, until=When.EONT, sustain=MINOR)
+    c.grants_in(murk, "concealment", 2, kind="concealment")

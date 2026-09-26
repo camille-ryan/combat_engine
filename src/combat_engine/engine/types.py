@@ -167,6 +167,10 @@ class Relation(StrEnum):
     MASTER_OF = "master_of"
     RIDDEN_BY = "ridden_by"
     GUARDED_BY = "guarded_by"
+    #: Whose square the source measures its ranged and area attacks from.
+    #: Read in `dsl.measured_from`, so it decides what can be aimed at as
+    #: well as where line of effect is traced from.
+    CASTS_FROM = "casts_from"
 
 
 class Size(StrEnum):

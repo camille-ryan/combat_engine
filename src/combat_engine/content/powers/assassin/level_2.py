@@ -4,8 +4,9 @@ Most of this tier is concealment. `c.conceal` now says it -- a -2 on
 attacks against you that `resolve.attack` weighs against cover and takes
 the larger of -- so a row whose Effect is "you gain concealment" is
 written. What is still absent is *obscured terrain*: "the burst is lightly
-obscured" is a property of the ground and `c.zone(..., blocks_sight=True)`
-is the wrong shape for it, because it blinds the caster too.
+obscured" is a zone that carries concealment for whoever stands in it,
+which `c.grants_in` now says; `c.zone(..., blocks_sight=True)` is the
+*totally* obscured one and is a different printed word.
 """
 
 from __future__ import annotations
@@ -113,8 +114,11 @@ def p13801(c: Cast) -> None:
     ),
 )
 def p15914(c: Cast) -> None:
-    """The lightly obscured burst cannot be said -- no concealment verb -- so
-    only the escape is written."""
+    """Lightly obscured is concealment for whoever stands in it, which
+    `c.grants_in` now says; the note here used to claim it could not be
+    written, and that stopped being true when `c.conceal` landed."""
+    patch = c.zone(c.area(), label=c.ref, until=When.EONT)
+    c.grants_in(patch, "concealment", 2, side="any", kind="concealment")
     c.shift(c.speed_of())
 
 
@@ -211,3 +215,21 @@ def p12563(c: Cast) -> None:
             c.hide(from_=foe)
 
     c.watch(Miss, went_wide, until=When.EOT, once=True)
+
+
+@power(
+    "p13802",
+    level=2,
+    cls="assassin",
+    usage=DAILY,
+    action=MINOR,
+    reach=CloseBurst(5),
+    target=NO_TARGET,
+    keywords=[Keyword.SHADOW, Keyword.ZONE],
+)
+def p13802(c: Cast) -> None:
+    """Lightly obscured, so concealment rather than `blocks_sight`, and
+    `side="any"` because the printed line makes no distinction: the murk
+    covers whoever is standing in it."""
+    murk = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER)
+    c.grants_in(murk, "concealment", 2, side="any", kind="concealment")

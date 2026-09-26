@@ -13,7 +13,7 @@ being only one kind of thing to share.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from .cast import Cast
@@ -634,6 +634,9 @@ def area_of(
     """
     r = p.reach_of(branch)
     mine = squares(world, measured_from(world, actor, r))
+    stretch = _stretched(world, actor, r.kind)
+    if stretch:
+        r = replace(r, size=r.size + stretch)
     if r.kind == "close_burst":
         out = spread(mine, r.size)
     elif r.kind == "close_blast":
@@ -648,6 +651,32 @@ def area_of(
     return frozenset(sq for sq in out if world.grid.inside(sq))
 
 
+def _stretched(world: World, actor: int, kind: str) -> int:
+    """How much longer than printed this creature's reach or range is.
+
+    `Mods.total` was read for attack, damage, save, speed, forced, crit
+    range and the defences, and for nothing about distance -- so "the
+    target's reach increases by 1" and "add your Wisdom modifier to the
+    range of your ranged powers" were stored and never consulted. Applied
+    where the area is worked out, so the extra square decides what may be
+    aimed at and not merely what a body may reach.
+
+    Melee reads `"reach"` and a ranged line reads `"range"`. A burst is
+    neither: its size is the blast, and the distance it may be *placed* at
+    is `within`, which no printed line of this shape lengthens.
+    """
+    from .components import Mods
+
+    mods = world.get(actor, Mods)
+    if mods is None or not mods.items:
+        return 0
+    if kind == "melee":
+        return max(0, mods.total("reach", {}))
+    if kind == "ranged":
+        return max(0, mods.total("range", {}))
+    return 0
+
+
 def measured_from(world: World, actor: int, r: Range) -> int:
     """Whose square this range is taken from -- the caster, unless it says.
 
@@ -658,6 +687,16 @@ def measured_from(world: World, actor: int, r: Range) -> int:
     throwing from inside `legal()`.
     """
     if r.from_ != "companion":
+        # A square lent by another creature -- `c.cast_from`. Only a ranged
+        # or area line borrows one, and only while the lender is on the
+        # board and in sight, which is the proviso both printed lines carry.
+        if r.kind in ("ranged", "area_burst"):
+            from .components import Position as _Position
+            from .types import Relation
+
+            for lender in world.relations.targets(Relation.CASTS_FROM, actor):
+                if world.get(lender, _Position) and line_of_effect(world, actor, lender):
+                    return lender
         return actor
     from .components import Companion, Position
 

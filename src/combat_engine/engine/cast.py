@@ -235,8 +235,24 @@ class Cast:
         return adjacent(self.world, thing, who)
 
     def can_see(self, to: int | None = None) -> bool:
+        """Line of effect **and** actually visible.
+
+        This was line of effect and nothing else, so it answered True for a
+        creature invisible to the asker -- and `if c.can_see(foe)` is what
+        a row naturally writes. `query.unseen_by` is the question that
+        consults `HIDDEN_FROM` and `sees_invisible` together, and its own
+        docstring says it exists "so the sight and the combat advantage can
+        never disagree"; the verb a body reaches for was walking straight
+        past it.
+        """
+        from .query import unseen_by
+
         other = self._who(to)
-        return other is not None and line_of_effect(self.world, self.me, other)
+        return (
+            other is not None
+            and line_of_effect(self.world, self.me, other)
+            and not unseen_by(self.world, self.me, other)
+        )
 
     def is_(self, condition: Condition, on: int | None = None) -> bool:
         who = self._who(on)
@@ -968,7 +984,7 @@ class Cast:
         if self.crit:
             amount = _max_of(dice) + bonus
         else:
-            amount = self.world.rng.roll(dice).total + bonus if dice else bonus
+            amount = self._roll_damage(dice) + bonus if dice else bonus
         return deal_damage(
             self.world, self.me, who, amount, dtype, detail or self.ref,
             opportunity=self.opportunity, charge=self.charge,
@@ -986,7 +1002,7 @@ class Cast:
         who = self._who(on)
         if who is None:
             return 0
-        amount = (self.world.rng.roll(dice).total + bonus) // 2 if dice else bonus // 2
+        amount = (self._roll_damage(dice) + bonus) // 2 if dice else bonus // 2
         return deal_damage(
             self.world, self.me, who, amount, dtype, f"{self.ref} (half)",
             opportunity=self.opportunity, charge=self.charge,
@@ -1860,7 +1876,8 @@ class Cast:
         )
 
     def no_provoke(
-        self, *, from_: int | None = None, until: When = When.EOTNT
+        self, *, from_: int | None = None, on: int | None = None,
+        until: When = When.EOTNT
     ) -> Effect | None:
         """Walking away from that creature does not give it an opening.
 
@@ -1868,6 +1885,12 @@ class Cast:
         opportunity window rather than as a flag movement would have to
         consult, so it applies wherever the window opens and needs nothing
         added to the movement rules.
+
+        `on=` is who gets the immunity, and it defaults to the **caster**
+        because nearly every printed line is about yourself. Without it the
+        other printed shape -- "the target cannot make opportunity attacks
+        against any creature other than you" -- could not be said at all,
+        since that one hands the immunity to everybody else on the board.
         """
         from .events import OpportunityWindow
 
@@ -1877,7 +1900,7 @@ class Cast:
         # `_who` narrowed the bare call to the power's target -- the
         # opposite of what leaving the argument out reads as.
         who = from_
-        me = self.me
+        me = on if on is not None else self.me
 
         def veto(ev: OpportunityWindow) -> None:
             if ev.provoker == me and (who is None or ev.actor == who):
@@ -3410,6 +3433,190 @@ class Cast:
         who = on if on is not None else self.me
         mods = self.world.get(who, Mods)
         return mods.total(what) if mods else 0
+
+    # -- senses, one printed line each ---------------------------------------
+
+    def truesight(
+        self,
+        radius: int = 0,
+        *,
+        of: int | None = None,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Truesight 5", and "the target cannot become invisible to you".
+
+        `c.see_invisible` is the same sense with no range on it, so every
+        printed line that names one had to be granted as the unlimited
+        version or left out. `of=` is the other printed shape -- one named
+        creature, at any distance -- and both are read in `query.unseen_by`,
+        so a creature seen this way stops getting combat advantage for being
+        unseen, which is what the sentence is bought for.
+
+        A sense of yours, so it defaults to the **caster** like
+        `c.see_invisible`. `radius` is ignored when `of` is given.
+        """
+        who = on if on is not None else self.me
+        what = f"truesight:{of}" if of is not None else "truesight"
+        return self.bonus(
+            what, max(1, radius), on=who, until=until, kind=self.ref,
+        )
+
+    def sight_range(
+        self, squares_: int, *, on: int | None = None, until: When = When.EONT
+    ) -> Effect | None:
+        """"The target has no line of sight to any creature more than 3
+        squares away from it."
+
+        `c.blinded` is the whole sense at once and this is a cap on it, so
+        the half-dozen rows printing a distance had nothing to say. Read by
+        `query.unseen_by`: everything past the cap is unseen, and therefore
+        has combat advantage against the target.
+
+        Done *to* a creature, so it follows `c.target`. Two caps bucket
+        under one kind, so the more generous of them applies rather than the
+        pair of them adding into no cap at all.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        return self.bonus(
+            "sight_range", max(1, squares_), on=who, until=until, kind="sight_range",
+        )
+
+    # -- the damage roll somebody else makes ---------------------------------
+
+    def damage_disadvantage(
+        self, *, on: int | None = None, until: When = When.EONT
+    ) -> Effect | None:
+        """"The target rolls twice when it makes a damage roll and must use
+        the lower roll."
+
+        The damage-side twin of `c.reroll_attack(keep="worst")`, which
+        reaches an attack roll and nothing else. Held on the creature that
+        *rolls*, and read in `c.damage` as the dice come up, so it catches
+        the header's line and any rider rolled beside it.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        return self.bonus(
+            "damage_twice_lower", 1, on=who, until=until, kind=self.ref,
+        )
+
+    def _roll_damage(self, dice: str | int) -> int:
+        """The dice of a damage roll, honouring "rolls twice and uses the
+        lower roll" -- which is a property of the roller, not of the blow."""
+        first = self.world.rng.roll(dice).total
+        if self.total("damage_twice_lower") <= 0:
+            return first
+        return min(first, self.world.rng.roll(dice).total)
+
+    # -- the action economy --------------------------------------------------
+
+    def extra_action(
+        self, cost: ActionType = ActionType.MOVE, *, on: int | None = None
+    ) -> bool:
+        """"You can take an extra move action."
+
+        `c.extra_turn` was the nearest thing and hands out a whole second
+        slot in the initiative order, which is a solo's line rather than
+        this one. This drops one action into the budget the turn is already
+        spending, which `Encounter.can` reads back.
+
+        Yours, so it defaults to the **caster**.
+        """
+        from .components import Budget
+
+        who = on if on is not None else self.me
+        budget = self.world.get(who, Budget) or self.world.add(who, Budget())
+        if not hasattr(budget, cost.value):
+            return False
+        setattr(budget, cost.value, getattr(budget, cost.value) + 1)
+        return True
+
+    # -- borrowing somebody else's square ------------------------------------
+
+    def cast_from(
+        self, who: int, *, on: int | None = None, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """"Determine line of sight and effect for your ranged and area
+        attacks from the target rather than from yourself."
+
+        `c.strike(from_=)` is one swing and nothing held it, so the standing
+        version of the line -- and the stat block trait that says the same
+        thing about a servant -- had no way to be written. Read in
+        `dsl.measured_from`, so the borrowed square decides what may be
+        aimed at as well as where the line is traced from.
+
+        Falls back to the borrower's own square whenever the lender has left
+        the board or is out of sight, which is the proviso both printed
+        lines carry rather than an approximation of them.
+
+        Yours, so it defaults to the **caster** borrowing.
+        """
+        borrower = on if on is not None else self.me
+        self.world.relations.set(Relation.CASTS_FROM, borrower, who)
+
+        def undo() -> None:
+            self.world.relations.clear(Relation.CASTS_FROM, borrower, who)
+
+        return self.world.effects.apply(
+            borrower, self.me, until, label=f"{self.ref} origin", on_end=[undo]
+        )
+
+    # -- a condition held in abeyance ----------------------------------------
+
+    def ignore_condition(
+        self,
+        *conditions: Condition,
+        on: int | None = None,
+        until: When = When.EOT,
+    ) -> Effect | None:
+        """"You take your turn as though you were not stunned, dazed or
+        unconscious. At the end of your turn, the effect continues."
+
+        Not `c.cure`: curing ends the effect, and the printed line is that
+        the condition is still standing afterwards -- a cured save-ends daze
+        would never be saved against, and one that came from an aura would
+        come straight back. So the condition is *suppressed*: `Conditions`
+        stops reporting it until this expires and the counts are untouched,
+        which is also what one fighter row had already written out by hand
+        against `conds.counts`.
+
+        Done to a creature's conditions, so it follows `c.target` the way
+        `c.cure` does.
+        """
+        from .components import Conditions as _Conditions
+
+        who = self._who(on)
+        if who is None or not conditions:
+            return None
+        conds = self.world.get(who, _Conditions)
+        if conds is None:
+            return None
+        hushed = [x for x in conditions if x not in conds.suppressed]
+        conds.suppressed.update(hushed)
+
+        def undo() -> None:
+            conds.suppressed.difference_update(hushed)
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} ignored", on_end=[undo]
+        )
+
+    # -- a number that lived in a closure ------------------------------------
+
+    def quarry_damage(self) -> str:
+        """The dice the ranger's quarry rider pays out, as an expression.
+
+        It lives in a closure inside `cf:ranger-quarry` and nothing could
+        read it back, so "extra damage equal to your Hunter's Quarry damage"
+        -- a line two rows hand to somebody else -- had no number to name.
+        Kept as one expression beside that feature's rather than derived
+        from the printed per-tier table, so the two cannot disagree.
+        """
+        return "1d6"
 
 
 def _max_of(dice: str | int) -> int:

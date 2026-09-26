@@ -251,9 +251,14 @@ class Conditions:
     """
 
     counts: dict[Condition, int] = field(default_factory=dict)
+    #: Conditions held in abeyance -- "you act as though you were not
+    #: stunned, and at the end of your turn the effect continues". Separate
+    #: from the counts so that whatever imposed the condition is untouched:
+    #: a save-ends daze still has its save to make when this lapses.
+    suppressed: set[Condition] = field(default_factory=set)
 
     def has(self, c: Condition) -> bool:
-        return self.counts.get(c, 0) > 0
+        return self.counts.get(c, 0) > 0 and c not in self.suppressed
 
     def add(self, c: Condition) -> bool:
         """True when this is the condition's first source."""
@@ -272,7 +277,9 @@ class Conditions:
 
     @property
     def active(self) -> list[Condition]:
-        return sorted(c for c, n in self.counts.items() if n > 0)
+        return sorted(
+            c for c, n in self.counts.items() if n > 0 and c not in self.suppressed
+        )
 
 
 @dataclass

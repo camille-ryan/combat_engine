@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     AT_WILL,
+    DAILY,
     ENCOUNTER,
     INTERRUPT,
     MINOR,
@@ -145,10 +146,12 @@ def p9427(c: Cast) -> None:
     keywords=[Keyword.ILLUSION, Keyword.SHADOW, Keyword.ZONE],
 )
 def p9428(c: Cast) -> None:
-    """The concealment inside the zone cannot be said. The zone is still laid
-    down, because the other half of the printed line -- going unseen the
-    moment you step out of it -- needs something to step out of."""
+    """The concealment inside is `c.grants_in`, which did not exist when
+    this was written -- the note said it could not be said and has been
+    true only up to today. The zone also carries the other half of the
+    printed line: going unseen the moment you step out of it."""
     patch = c.zone(c.area(), label=c.ref, until=When.EONT)
+    c.grants_in(patch, "concealment", 2, side="any", kind="concealment")
 
     def slipped_out(ev: ZoneExited) -> None:
         if ev.zone == patch and ev.actor == c.me:
@@ -172,3 +175,27 @@ def p9428(c: Cast) -> None:
 def p9429(c: Cast) -> None:
     c.teleport(5)
     c.invisible(on=c.me, until=When.SONT)
+
+
+@power(
+    "p13804",
+    level=6,
+    cls="assassin",
+    usage=DAILY,
+    action=MINOR,
+    reach=CloseBurst(2),
+    target=NO_TARGET,
+    keywords=[Keyword.SHADOW, Keyword.ZONE],
+)
+def p13804(c: Cast) -> None:
+    """Totally obscured, so `blocks_sight` rather than the concealment
+    `p13802` lays -- `cover_between` reads the flag.
+
+    "To creatures other than you" is dropped: the flag is a property of the
+    ground and has no side, so the assassin is blinded by his own dark. The
+    Sustain's "you must be in the zone" is dropped too -- sustaining asks
+    for an action and never asks where the sustainer is standing.
+    """
+    c.zone(
+        c.area(), label=c.ref, until=When.EONT, blocks_sight=True, sustain=MINOR
+    )

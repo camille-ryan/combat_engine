@@ -441,3 +441,23 @@ def p13954(c: Cast) -> None:
     measure that distance against, so the row fires on the turn ending and
     the lighting half is dropped."""
     c.conceal(on=c.me, until=When.SONT)
+
+
+@power(
+    "p5908",
+    level=2,
+    cls="warlock",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=ARCANE,
+)
+def p5908(c: Cast) -> None:
+    """Darkvision is dropped for the same reason as `p13954`'s trigger: the
+    board has no light for it to answer.
+
+    `c.see_invisible` takes no radius, so "adjacent to you" is dropped and
+    the sight is the whole of what the caster can see. That is the generous
+    reading, and the narrow one would be no row at all."""
+    c.see_invisible(on=c.me, until=When.ENCOUNTER)

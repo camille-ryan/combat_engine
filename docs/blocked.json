@@ -128,16 +128,16 @@
     "why": "its whole printed Effect is 'the reach of your next melee weapon attack increases by 1'. The `reach` modifier exists but is read only by movement._threat, which is opportunity attacks; dsl.area_of takes the printed Range size and nothing else, so the row would extend what the fighter threatens and not what it can hit. Wants a reach modifier area_of consults"
   },
   "p10594": {
-    "wants": "c.companion",
-    "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
+    "wants": "Attack(by=)",
+    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
   },
   "p10622": {
     "wants": "c.check(skill, *, who=)",
     "why": "the target regains hit points equal to half a Heal check result; the engine rolls no skill checks, so there is no number to halve"
   },
   "p10630": {
-    "wants": "c.companion",
-    "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
+    "wants": "Attack(by=)",
+    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
   },
   "p10702": {
     "wants": "a Falling event, or c.falling(who)",
@@ -236,12 +236,12 @@
     "why": "'shift 2 squares as a move action'. Same gap as p9430"
   },
   "p12500": {
-    "wants": "c.companion",
-    "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
+    "wants": "Attack(by=)",
+    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
   },
   "p12503": {
-    "wants": "c.companion",
-    "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
+    "wants": "Attack(by=)",
+    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
   },
   "p12792": {
     "wants": "the class feature's id, plus c.regain(ref, *, on=)",
@@ -303,10 +303,6 @@
     "wants": "c.zone(..., clears_difficult=True)",
     "why": "its entire content is 'you and your allies ignore hindering and difficult terrain in the zone', plus pits inside it becoming passable. c.ignores_difficult is per-creature and board-wide, so writing it would exempt the party everywhere; without it the zone has no mechanical content at all (a zone whose squares stop counting as difficult or hindering for a named side)"
   },
-  "p13604": {
-    "wants": "c.grants_in",
-    "why": "'enemies treat the zone as lightly obscured terrain', distinct from blocks_sight which is total (the cluster pass found this writable as it stands)"
-  },
   "p13697": {
     "wants": "c.unhindered(condition, on=, until=)",
     "why": "'squeezing does not cause you or your beast companion to take a -5 penalty, grant combat advantage, or move at half speed'. Condition.SQUEEZING exists but nothing suppresses what a condition costs while keeping the condition"
@@ -318,14 +314,6 @@
   "p13784": {
     "wants": "c.no_cover(*, on=, until=, by=)",
     "why": "knowing an enemy's exact location and ignoring its cover/concealment for the encounter. Nothing mechanical is left over once that is gone"
-  },
-  "p13802": {
-    "wants": "c.grants_in",
-    "why": "a zone of lightly obscured squares -- concealment for anyone inside, not blocks_sight which is total (the cluster pass found this writable as it stands)"
-  },
-  "p13804": {
-    "wants": "c.zone",
-    "why": "the zone blocks line of sight for creatures other than you; the current flag blinds the caster too (the cluster pass found this writable as it stands)"
   },
   "p13807": {
     "wants": "c.always_seen_by(on=, to=)",
@@ -443,10 +431,6 @@
     "wants": "c.reroll_damage(keep=\"best\", *, keyword=)",
     "why": "its whole Effect is rolling damage twice and keeping the higher whenever you use an arcane power with a chosen keyword. c.maximise is a different operation and there is no reroll for damage at all"
   },
-  "p3331": {
-    "wants": "c.initiative",
-    "why": "'+5 power bonus to your initiative roll' and 'an extra move action during the first round'. Nothing reads an initiative modifier (issue #168); c.extra_turn grants a whole turn, which is a different thing"
-  },
   "p3369": {
     "wants": "c.feature_bonus(what)",
     "why": "'your warding provides its bonus to all your defenses, not just AC'. The row has to read the size of a standing class-feature bonus and mirror it onto Fort/Ref/Will (or c.total(what, kind=) filtered by kind)"
@@ -488,36 +472,36 @@
     "why": "Prerequisite: Dark Pact. The whole row is a tally raised each time a cursed enemy drops and spent as an interrupt for 1d6 per point; nothing on a character holds a number across uses, and there is no leg to gate the prerequisite on"
   },
   "p4369": {
-    "wants": "c.companion",
-    "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
+    "wants": "Attack(by=)",
+    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
   },
   "p4373": {
-    "wants": "c.companion",
-    "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
+    "wants": "Attack(by=)",
+    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
   },
   "p4378": {
-    "wants": "c.companion",
-    "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
+    "wants": "Attack(by=)",
+    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
   },
   "p4382": {
     "wants": "c.bonus(\"quarry_damage\", 3)",
     "why": "'add 3 to the extra damage you deal with Hunter's Quarry'. cf:ranger-quarry closes over the literal 1d6, so there is no number to raise; a plain +3 against the quarry is strictly more than printed, since it would pay on every attack rather than the once-a-round rider (or features.extra_damage reading a modifier rather than closing over a fixed dice string)"
   },
   "p4391": {
-    "wants": "c.companion",
-    "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
+    "wants": "Attack(by=)",
+    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
   },
   "p4396": {
     "wants": "a run action -- c.run(n)",
     "why": "the whole Effect is running speed + 4 instead of speed + 2, and not granting combat advantage from running; there is no run action, so neither clause has a subject (or actions.legal offering one)"
   },
   "p4401": {
-    "wants": "c.companion",
-    "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
+    "wants": "Attack(by=)",
+    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
   },
   "p4408": {
-    "wants": "c.companion",
-    "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
+    "wants": "Attack(by=)",
+    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
   },
   "p4412": {
     "wants": "c.quarry_damage()",
@@ -584,8 +568,8 @@
     "why": "'the ally also becomes a target of the power'. c.redirect moves the single target and cannot add one, and leaves_me_out only asks about me (on the interrupted event, plus a predicate over the attacker's own presence in ev.among)"
   },
   "p5591": {
-    "wants": "c.restore_use(ref)",
-    "why": "'regain the use of the guardian form's attack'. The attack has no ref in the spec (plus an id for the guardian form's attack)"
+    "wants": "ids for the guardian form attack rows",
+    "why": "c.restore_use(ref) exists but there is no ref to hand it: the guardian forms' own attacks have no ids in the spec and are not in the tree. warden/__init__.py says so and its in_form gate has no callers. Upstream of any Cast method"
   },
   "p5690": {
     "wants": "c.grant_action(ActionType.MINOR, 'shift')",
@@ -598,10 +582,6 @@
   "p5852": {
     "wants": "action points -- a pool, a way to spend one, and an event saying so",
     "why": "the trigger is spending an action point to attack and missing. Action points are not modelled, so the trigger can never be true; warlord/level_7_b and level_9_b record the same gap"
-  },
-  "p5908": {
-    "wants": "c.see_invisible(on=)",
-    "why": "its whole Effect is darkvision and seeing invisible creatures adjacent to you. Being unseen is the HIDDEN_FROM relation and nothing suppresses it from the looker's side, and there is no light for darkvision to answer"
   },
   "p7100": {
     "wants": "c.truesight(radius, *, on=None, until=When.ENCOUNTER)",
@@ -671,16 +651,8 @@
     "wants": "a carried consumable -- an object a creature holds and spends an action on",
     "why": "four berries, each consumed as a minor action for 10 hit points, a saving throw, or 10 temporary hit points. Same missing thing as p13516"
   },
-  "p9746": {
-    "wants": "c.grant_action",
-    "why": "'allies can stand up as a minor action' and 'an ally who shifts shifts 1 extra square'. The Mod keys are attack/damage/save/speed/defence and speed is walking, not shifting; nothing overrides what an action costs (the cluster pass found this writable as it stands)"
-  },
   "p9818": {
     "wants": "keep= on c.strike/c.attack, and both results readable off AttackResult",
     "why": "'make the attack roll twice and use either result', with a deeper penalty if both would hit. c.reroll_attack has keep=; the first roll does not"
-  },
-  "p9870": {
-    "wants": "c.restore_use(ref)",
-    "why": "'regain the use of your second wind'. Second wind is a chassis row whose ref the spec does not give, and nothing undoes a use"
   }
 }
