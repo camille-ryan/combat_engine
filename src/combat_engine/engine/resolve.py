@@ -38,6 +38,7 @@ from .query import (
     alive,
     attack_penalty,
     can_act,
+    concealment_of,
     cover_between,
     deals_half,
     defence,
@@ -141,8 +142,13 @@ def attack(
         if charge:
             situational += 1   # the printed charge bonus
         if not ignore_cover:
-            situational -= int(
-                cover_between(world, attacker, target, ranged=_is_ranged(power, branch))
+            # Cover and concealment do not add -- only the larger applies,
+            # which is the printed rule and also stops a creature in a fog
+            # bank behind a pillar being unhittable.
+            situational -= max(
+                int(cover_between(world, attacker, target,
+                                  ranged=_is_ranged(power, branch))),
+                int(concealment_of(world, target)),
             )
         situational += _mark_penalty(world, attacker, among or (target,))
 

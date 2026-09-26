@@ -1819,6 +1819,31 @@ class Cast:
             "unflankable", 1, on=on or self.me, until=until, kind="untyped"
         )
 
+    def conceal(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.EONT,
+        total: bool = False,
+    ) -> Effect | None:
+        """"You gain concealment." -2 to attacks against you, -5 if total.
+
+        Defaults to the **caster**: every printed line that grants this says
+        "you" or "you and your allies", and the handful aimed elsewhere say
+        so. Cover and concealment do not add -- `resolve.attack` takes the
+        larger.
+
+        Seven classes print this and every such row was left out of the tree
+        for want of it, because `query.cover_between` computes cover from
+        two positions and reads no modifier at all. Do not reach for
+        `c.zone(blocks_sight=True)` instead: that is terrain, and it blinds
+        both sides.
+        """
+        return self.bonus(
+            "concealment", 5 if total else 2,
+            on=on if on is not None else self.me, until=until, kind="untyped",
+        )
+
     def no_advantage(
         self, *, on: int | None = None, until: When = When.EONT
     ) -> Effect | None:
@@ -2734,6 +2759,85 @@ class Cast:
         ]
         if held is not None and held.effect is not None:
             held.effect.subs.extend(subs)
+
+    def grants_in(
+        self,
+        zone: int,
+        what: str | Defense,
+        value: int,
+        *,
+        side: str = "ally",
+        kind: str = "power",
+    ) -> None:
+        """A zone that carries a modifier for as long as you stand in it.
+
+        The counterpart of `c.burns`, and the same shape: hung on the
+        zone's own effect so it dies with the zone. "While within the zone
+        you and your allies gain a +1 power bonus to AC" is printed all
+        over warden, shaman and artificer, and every such row was written
+        without its bonus or left out -- a zone could bite you but never
+        help you.
+
+        **It ends when you leave**, which is the half a plain
+        `c.bonus(until=...)` cannot say: a duration runs on the clock and
+        this runs on the geometry. Whoever is already standing inside when
+        the zone is made gets it too, since the printed line is about being
+        there rather than about arriving.
+
+        `side` is whose: `"ally"` counts the caster, `"enemy"` the other
+        side, `"any"` everybody.
+        """
+        from .events import ZoneEntered, ZoneExited
+        from .query import team as side_of
+
+        held: dict[int, Effect] = {}
+
+        def wanted(who: int) -> bool:
+            theirs = side_of(self.world, who)
+            mine = side_of(self.world, self.me)
+            if side == "any":
+                return True
+            return theirs is mine if side == "ally" else theirs is not mine
+
+        def give(who: int) -> None:
+            if who in held or not wanted(who):
+                return
+            got = self.bonus(
+                what, value, on=who, until=When.ENCOUNTER, kind=kind
+            )
+            if got is not None:
+                held[who] = got
+
+        def take(who: int) -> None:
+            got = held.pop(who, None)
+            if got is not None:
+                self.world.effects.end(got, "left the zone")
+
+        def on_enter(ev: ZoneEntered) -> None:
+            if ev.zone == zone:
+                give(ev.actor)
+
+        def on_exit(ev: ZoneExited) -> None:
+            if ev.zone == zone:
+                take(ev.actor)
+
+        for who in self.world.zones.occupants(zone):
+            give(who)
+
+        standing = dict(self.world.zones.all()).get(zone)
+        subs = [
+            self.world.bus.on(ZoneEntered, on_enter),
+            self.world.bus.on(ZoneExited, on_exit),
+        ]
+        if standing is not None and standing.effect is not None:
+            standing.effect.subs.extend(subs)
+            # And take the bonus back off everybody when the zone itself
+            # goes: leaving is not the only way it can end.
+            def clear_all() -> None:
+                for w in list(held):
+                    take(w)
+
+            standing.effect.on_end.append(clear_all)
 
     def choose[T](
         self, options: list[T], prompt: str = "", *, optional: bool = False,

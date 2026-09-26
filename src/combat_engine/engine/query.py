@@ -358,6 +358,27 @@ def hidden_from(world: World, eid: int) -> set[int]:
     return set(world.relations.targets(Relation.HIDDEN_FROM, eid))
 
 
+def concealment_of(world: World, target: int) -> Cover:
+    """How hard this creature is to see, as an attack penalty.
+
+    Cover is a fact about two positions and is traced. Concealment is a
+    fact about the creature -- dim light, a blur, a cloak of shadow -- so
+    it is a modifier it carries, and nothing read one until now. Seven
+    classes print "you gain concealment" and every one of those rows was
+    left out of the tree for want of this.
+
+    `PARTIAL` is the ordinary case at -2; `SUPERIOR` is total concealment
+    at -5, which is what `c.conceal(total=True)` sets.
+    """
+    mods = world.get(target, Mods)
+    if mods is None or not mods.items:
+        return Cover.NONE
+    n = mods.total("concealment", {})
+    if n >= int(Cover.SUPERIOR):
+        return Cover.SUPERIOR
+    return Cover.PARTIAL if n > 0 else Cover.NONE
+
+
 def cover_between(
     world: World, attacker: int, target: int, *, ranged: bool = False
 ) -> Cover:
