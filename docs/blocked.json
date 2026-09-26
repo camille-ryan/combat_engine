@@ -315,6 +315,10 @@
     "wants": "c.initiative(n, on=) -- change an initiative result",
     "why": "'+10 to your initiative check'. InitiativeRolled.rolled is an int copied onto the event, so a listener setting ev.rolled is discarded; the sort re-reads the Initiative component and no Cast method writes it. init.bonus is read before the emit, so a bonus cannot reach it either. Issue #168"
   },
+  "p11480": {
+    "wants": "a long-range penalty in resolve.attack, plus c.ignores_long_range(until=)",
+    "why": "'no penalty to attack rolls for attacking at long range'. Long range is not modelled: resolve.attack never consults a weapon's ranged=(normal, long) tuple, so there is no penalty to remove and the row would be inert indistinguishably from a bug"
+  },
   "p11573": {
     "wants": "c.companion() -- a beast companion entity with its own attack bonus, Strength modifier and [B] damage die, addressable from a row",
     "why": "the whole Effect is combat advantage shared with the companion against anything the two are both adjacent to"
@@ -379,6 +383,10 @@
     "wants": "power points (#170)",
     "why": "temporary hit points equal to the power points spent"
   },
+  "p12452": {
+    "wants": "c.shift_as(ActionType.MOVE, 2)",
+    "why": "'shift 2 squares as a move action'. Same gap as p9430"
+  },
   "p12468": {
     "wants": "a familiar entity, or c.familiar() returning one",
     "why": "its whole Requirement and its whole Effect are the familiar -- a bonus to attacks against anything adjacent to it. Nothing in the engine is a familiar; same missing thing as p10418"
@@ -430,6 +438,14 @@
   "p12534": {
     "wants": "c.companion() -- a standing owned entity, plus reach=Melee(n, from_='companion')",
     "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
+  },
+  "p12563": {
+    "wants": "c.conceal(*, from_=None, until=) and a concealment term query.cover_between honours",
+    "why": "concealment does not exist: cover_between computes Cover from two positions at the moment of the attack and reads no modifier, and c.hide/c.invisible say a much stronger sentence. Asked for by shaman, assassin, artificer, seeker, warden, psion and battlemind rows"
+  },
+  "p12792": {
+    "wants": "the class feature's id, plus c.regain(ref, *, on=)",
+    "why": "'you miss with the ranged basic attack granted by <a class feature>; you regain that power and use it immediately'. The feature has no id in the spec and nothing gives a use back"
   },
   "p12866": {
     "wants": "c.companion() -- a standing owned entity, plus reach=Melee(n, from_='companion')",
@@ -531,6 +547,10 @@
     "wants": "kind_ on Moved",
     "why": "'teleport the same number of squares'. Same one-field gap as p13315"
   },
+  "p13442": {
+    "wants": "c.summon taking an inline stat line -- see #169",
+    "why": "prints a creature with its own speed, defences and attack lines and no ref to name"
+  },
   "p13516": {
     "wants": "a carried consumable -- an object a creature holds and spends an action on",
     "why": "its whole Effect is spending a healing surge to make a seed, which lasts past the fight and which whoever carries it eats as a minor action to regain 10 + your healing surge value. Nothing here is an object a creature carries, and the heal is spent by a creature that does not own the row"
@@ -599,6 +619,18 @@
     "wants": "c.no_cover(*, on=, until=, by=)",
     "why": "knowing an enemy's exact location and ignoring its cover/concealment for the encounter. Nothing mechanical is left over once that is gone"
   },
+  "p13802": {
+    "wants": "c.zone(..., obscured=True)",
+    "why": "a zone of lightly obscured squares -- concealment for anyone inside, not blocks_sight which is total"
+  },
+  "p13804": {
+    "wants": "c.zone(..., blocks_sight=True, except_=c.me)",
+    "why": "the zone blocks line of sight for creatures other than you; the current flag blinds the caster too"
+  },
+  "p13807": {
+    "wants": "c.always_seen_by(on=, to=) -- the inverse of c.invisible",
+    "why": "'the target cannot become invisible to you'. Nothing can bar the HIDDEN_FROM relation being set"
+  },
   "p13887": {
     "wants": "c.link(a, b, *, until=) -- two squares treated as adjacent for movement and melee reach",
     "why": "its whole Effect is making two named squares adjacent to each other, with the step between them counting as teleportation. Adjacency is computed from the grid in engine/grid.py and nothing can add an edge to it"
@@ -622,6 +654,10 @@
   "p1440": {
     "wants": "trigger dispatch during Encounter._roll_initiative",
     "why": "'you roll initiative and dislike the result' can only be answered while initiative is being rolled, and Triggers.arm() runs *after* _roll_initiative, with encounter.order still empty -- Triggers._offer walks that order, so no creature is ever asked. Wants either arming before the roll or a Cast method that adds a flat bonus to an initiative check and re-splices"
+  },
+  "p14401": {
+    "wants": "c.conceal(*, from_=None, until=) and a concealment term query.cover_between honours",
+    "why": "concealment does not exist: cover_between computes Cover from two positions at the moment of the attack and reads no modifier, and c.hide/c.invisible say a much stronger sentence. Asked for by shaman, assassin, artificer, seeker, warden, psion and battlemind rows"
   },
   "p14420": {
     "wants": "the defender-aura class feature, plus c.in_my_aura(who)",
@@ -874,6 +910,22 @@
   "p4117": {
     "wants": "c.summon / c.conjure taking an inline stat line plus a commanded action",
     "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Its one command also targets an object, which nothing on the board is"
+  },
+  "p4137": {
+    "wants": "c.jump(squares, on=)",
+    "why": "the whole Effect is a jump of Wis squares"
+  },
+  "p4141": {
+    "wants": "c.summon taking an inline stat line -- see #169",
+    "why": "prints a creature with its own speed, defences and attack lines and no ref to name"
+  },
+  "p4143": {
+    "wants": "c.floor(area, until=) -- a zone that makes its squares ordinary passable ground",
+    "why": "a bridge whose squares are crossed as normal terrain"
+  },
+  "p4148": {
+    "wants": "c.summon taking an inline stat line -- see #169",
+    "why": "prints a creature with its own speed, defences and attack lines and no ref to name"
   },
   "p4311": {
     "wants": "chargen.BUILDS[\"warlock\"] to carry a \"dark\" leg, and a per-character counter that survives between uses of a row",
@@ -1167,9 +1219,53 @@
     "wants": "c.recast(ref, *, action=MINOR, once_per_round=True)",
     "why": "its whole Effect is that until the end of the encounter you can cast a named at-will you already know as a minor action once per turn. c.grant_row lends a row to somebody who does not know it and changes nothing about what using it costs, and the reduced action cost is the entire row"
   },
+  "p7639": {
+    "wants": "Target(side='item') plus c.give(ref, on=ally) -- a one-use row the holder spends",
+    "why": "'Target: one weapon or implement', augmented for the encounter, and the wielder ends the effect on a hit as a free action. Same gap as runepriest p15993 and p9667"
+  },
+  "p7641": {
+    "wants": "c.summon taking an inline stat line -- see #169",
+    "why": "prints a creature with its own speed, defences and attack lines and no ref to name"
+  },
+  "p7649": {
+    "wants": "Target(side='item') plus c.give(ref, on=ally) -- a one-use row the holder spends",
+    "why": "'Target: one weapon or implement', augmented for the encounter, and the wielder ends the effect on a hit as a free action. Same gap as runepriest p15993 and p9667"
+  },
+  "p7650": {
+    "wants": "c.summon taking an inline stat line -- see #169",
+    "why": "prints a creature with its own speed, defences and attack lines and no ref to name"
+  },
+  "p7656": {
+    "wants": "Target(side='item') plus c.give(ref, on=ally) -- a one-use row the holder spends",
+    "why": "'Target: one weapon or implement', augmented for the encounter, and the wielder ends the effect on a hit as a free action. Same gap as runepriest p15993 and p9667"
+  },
+  "p7657": {
+    "wants": "c.summon taking an inline stat line -- see #169",
+    "why": "prints a creature with its own speed, defences and attack lines and no ref to name"
+  },
+  "p7659": {
+    "wants": "Target(side='item') plus c.give(ref, on=ally) -- a one-use row the holder spends",
+    "why": "'Target: one weapon or implement', augmented for the encounter, and the wielder ends the effect on a hit as a free action. Same gap as runepriest p15993 and p9667"
+  },
   "p924": {
     "wants": "c.unsurprise",
     "why": "Condition.SURPRISED is in the enum and nothing ever applies it"
+  },
+  "p9430": {
+    "wants": "c.shift_as(ActionType.MINOR, n), or a 'shift' key honoured by actions.legal",
+    "why": "'until the stance ends you can shift 1 square as a minor action'. actions.legal hardcodes a one-square shift at move cost and nothing reads a shift-cost modifier"
+  },
+  "p9438": {
+    "wants": "a Wall(size, within) header range plus except_= on blocks_sight -- same wall gap as p2860, p13344",
+    "why": "Area wall 5 within 10, blocking sight for everyone but the caster"
+  },
+  "p9442": {
+    "wants": "c.shrouds(on=) -> int, c.shroud(on=, n=1), and a shroud-damage event",
+    "why": "entirely 'damage from your assassin's shroud', per shroud. Shrouds have no representation anywhere; shroud riders were also dropped from six written rows"
+  },
+  "p9517": {
+    "wants": "c.conceal(*, from_=None, until=) and a concealment term query.cover_between honours",
+    "why": "concealment does not exist: cover_between computes Cover from two positions at the moment of the attack and reads no modifier, and c.hide/c.invisible say a much stronger sentence. Asked for by shaman, assassin, artificer, seeker, warden, psion and battlemind rows"
   },
   "p9655": {
     "wants": "c.summon / c.conjure taking an inline stat line plus a commanded action",

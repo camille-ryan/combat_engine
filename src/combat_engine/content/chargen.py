@@ -231,7 +231,14 @@ def _arms(weapons: str, implements: str) -> tuple[Weapon, ...]:
         held.append(LONGSWORD)
     elif "simple melee" in text:
         held.append(MACE)
-    if "military ranged" in text or "simple ranged" in text:
+    # A longbow is *military* ranged and a crossbow is simple, so a class
+    # printed with military ranged proficiency gets the bow. Handing every
+    # ranged class a crossbow left the seeker -- a bow controller whose rows
+    # say "Requirement: you must be wielding a bow" -- unable to use five of
+    # its own powers, and the audit could only report them unusable.
+    if "military ranged" in text:
+        held.append(LONGBOW)
+    elif "simple ranged" in text:
         held.append(CROSSBOW)
     if "staff" in implements.lower():
         held.append(STAFF)

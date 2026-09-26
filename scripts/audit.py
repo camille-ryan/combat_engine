@@ -50,6 +50,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.dsl import REGISTRY
 from combat_engine.engine.query import alive
+from combat_engine.engine.query import enemies as _foes
 from combat_engine.engine.types import ActionType
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -139,6 +140,14 @@ KNOWN_SILENT = {
         "forbids standard attacks other than basic; every dummy's only "
         "standard row is its basic"
     ),
+    # "You miss with a melee attack: attack again." The sweep loads the die
+    # to 1 and to 20; a 1 is the only way to produce the triggering miss,
+    # and it then makes the answering strike miss as well, while a 20 never
+    # misses in the first place. So the row cannot show itself on a loaded
+    # die however many seeds it gets. Driven by hand with the answer free to
+    # land: the target goes from 31 hit points to 11. Any "on a miss, swing
+    # again" row will read this way.
+    "p4479": "triggers on a miss and answers with an attack; the loaded 1 misses twice",
     "p2530": "an ally must have a bloodied enemy beside it",
     "p4572": "an ally must have already spent an encounter attack power",
     # Its printed Target *is* the avenger's oath target, and nothing on this
@@ -243,8 +252,15 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     # without one makes them look silent when they are simply particular.
     # All four inside a close burst 2, which is the smallest area any row
     # here uses -- a creature one square outside it is no test at all.
+    # And a fifth standing well back. All four of the above are inside a
+    # close burst 2, which is right for testing an area and wrong for every
+    # row that distinguishes near from far -- "enemies more than 5 squares
+    # away", a ranged attacker, a row measuring the distance it closes. On
+    # a board where every enemy is adjacent, those are silent while being
+    # perfectly correct.
     for square, what in (
-        ((7, 8), DUMMY), ((7, 9), UNDEAD), ((6, 9), DUMMY), ((5, 7), DUMMY)
+        ((7, 8), DUMMY), ((7, 9), UNDEAD), ((6, 9), DUMMY), ((5, 7), DUMMY),
+        ((14, 8), DUMMY),
     ):
         hurt = loader.spawn(world, what, square, team=foe_team)
         world.need(hurt, Health).hp -= 5
@@ -277,6 +293,15 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     world.relations.set(Relation.RIDDEN_BY, caster, ally)
     world.relations.set(Relation.GUARDED_BY, caster, ally)
 
+    # The caster is unseen by one enemy. A whole family of rows -- the
+    # assassin's, and every lurker that only strikes what cannot see it --
+    # gates on `HIDDEN_FROM`, and nothing on this board ever set it, so they
+    # were refused outright. One creature rather than all of them, because
+    # rows that need to *be* seen are just as real.
+    unseen_by = sorted(_foes(world, caster))
+    if unseen_by:
+        world.relations.set(Relation.HIDDEN_FROM, caster, unseen_by[0])
+
     # A wall, so a row that needs cover or concealment has some. The board
     # was bare grid, so "one creature it is hidden from" could never be
     # satisfied and every such row reported itself unusable.
@@ -285,7 +310,6 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     # taking ongoing damage" and nothing on the board ever was.
     from combat_engine.engine import Cast
     from combat_engine.engine.grid import spread
-    from combat_engine.engine.query import enemies as _foes
     from combat_engine.engine.types import Condition
 
     setup = Cast(world=world, me=caster, ref="audit:setup")

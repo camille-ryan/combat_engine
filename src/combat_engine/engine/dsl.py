@@ -372,7 +372,22 @@ class Power:
         return self.damage_alt or self.damage if branch else self.damage
 
     def requires_of(self, branch: int = 0) -> Callable[[World, int], bool] | None:
-        return self.requires_alt or self.requires if branch else self.requires
+        """The Requirement gating one branch, and **no fallback between them**.
+
+        This used to read `self.requires_alt or self.requires` for the
+        ranged branch, so a dual-range row whose printed Requirement gates
+        only the melee half -- "you must be wielding a light blade" -- also
+        gated the half you throw, which the card does not say. Silently: the
+        branch was simply never offered, indistinguishable from a row that
+        does not have one.
+
+        No row in the tree depended on the fallback. The seeker's six all
+        carried a hand-written always-true predicate to defeat it, which is
+        the tell that it was working against its authors rather than for
+        them. A Requirement that really does gate both branches is written
+        on both.
+        """
+        return self.requires_alt if branch else self.requires
 
     def can_branch(self, world: World, actor: int, branch: int = 0) -> bool:
         """Is this branch open to this creature, given what it is holding?
