@@ -163,3 +163,21 @@ def p5753(c: Cast) -> None:
     for eff in list(c.world.effects.of(c.me)):
         if Condition.PRONE in eff.conditions:
             c.world.effects.end(eff, c.ref)
+
+
+@power(
+    "p3367",
+    level=10,
+    cls="swordmage",
+    usage=ENCOUNTER,
+    action=FREE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.ARCANE],
+)
+def p3367(c: Cast) -> None:
+    """Left out of the first pass: the +2 is worked out inside
+    `query.has_combat_advantage` from the board, so no modifier reached it
+    until that read a key. `c.no_advantage` shuts all four routes, which is
+    what "to any of your enemies" means."""
+    c.no_advantage(until=When.EONT)

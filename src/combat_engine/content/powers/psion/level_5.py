@@ -1,0 +1,219 @@
+"""Psion, level 5: the dailies."""
+
+from __future__ import annotations
+
+from combat_engine.engine import (
+    AC,
+    DAILY,
+    EACH_CREATURE,
+    EACH_ENEMY,
+    FORT,
+    INT,
+    MINOR,
+    ONE_CREATURE,
+    PERSONAL,
+    REF,
+    SELF,
+    STANDARD,
+    WILL,
+    AreaBurst,
+    Attack,
+    Cast,
+    CloseBurst,
+    DamageType,
+    Keyword,
+    Ranged,
+    TurnEnd,
+    When,
+    power,
+)
+
+PSIONIC_FORCE = [Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.FORCE]
+PSIONIC_PSYCHIC = [Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.PSYCHIC]
+
+
+@power(
+    "p11277",
+    level=5,
+    cls="psion",
+    usage=DAILY,
+    action=STANDARD,
+    reach=AreaBurst(1, 10),
+    target=EACH_CREATURE,
+    keywords=[
+        Keyword.PSIONIC,
+        Keyword.IMPLEMENT,
+        Keyword.FORCE,
+        Keyword.ZONE,
+    ],
+    attack=Attack(INT, vs=REF),
+)
+def p11277(c: Cast) -> None:
+    if c.first:
+        c.hazard(
+            c.area(),
+            c.wis_mod,
+            DamageType.FORCE,
+            until=When.SUSTAIN,
+            sustain=MINOR,
+        )
+    if c.strike():
+        c.damage("2d6", c.int_mod, dtype=DamageType.FORCE)
+    else:
+        c.half_damage("2d6", c.int_mod, dtype=DamageType.FORCE)
+
+
+@power(
+    "p11316",
+    level=5,
+    cls="psion",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(10),
+    target=ONE_CREATURE,
+    keywords=PSIONIC_FORCE,
+    attack=Attack(INT, vs=AC),
+)
+def p11316(c: Cast) -> None:
+    """"Pushed into difficult terrain" is read off the live zones, which is
+    where the engine keeps rough ground."""
+    if c.strike():
+        c.damage("3d12", c.int_mod, dtype=DamageType.FORCE)
+        c.push(max(1, c.wis_mod))
+        if c.there in c.world.zones.difficult_squares():
+            c.prone()
+    else:
+        c.half_damage("3d12", c.int_mod, dtype=DamageType.FORCE)
+        c.push(1)
+
+
+@power(
+    "p13322",
+    level=5,
+    cls="psion",
+    usage=DAILY,
+    action=STANDARD,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=PSIONIC_FORCE,
+)
+def p13322(c: Cast) -> None:
+    """The spheres themselves are a hold, because the only thing they do while
+    they last is the +2. The once-per-round attack that expends one is printed
+    as a second block under this same id, so it has no ref to be declared
+    under, and with it goes the expending."""
+    c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
+    for defence in (AC, FORT, REF, WILL):
+        c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER)
+
+
+@power(
+    "p13324",
+    level=5,
+    cls="psion",
+    usage=DAILY,
+    action=STANDARD,
+    reach=AreaBurst(1, 10),
+    target=EACH_ENEMY,
+    keywords=[
+        Keyword.PSIONIC,
+        Keyword.IMPLEMENT,
+        Keyword.PSYCHIC,
+        Keyword.ZONE,
+    ],
+    attack=Attack(INT, vs=REF),
+)
+def p13324(c: Cast) -> None:
+    """The slow is hung off the zone's occupancy rather than off a copy of its
+    squares, so sustaining the zone keeps the slow and letting it lapse stops
+    it -- `c.watch` has no sustain cost of its own to pay."""
+    if c.first:
+        zone = c.zone(c.area(), until=When.SUSTAIN, sustain=MINOR)
+
+        def lingered(ev: TurnEnd) -> None:
+            if ev.actor in c.world.zones.occupants(zone) and ev.actor in c.enemies():
+                c.slowed(on=ev.actor, until=When.EONT)
+
+        c.watch(TurnEnd, lingered, until=When.ENCOUNTER, label=c.ref)
+    if c.strike():
+        c.damage("2d6", c.int_mod, dtype=DamageType.PSYCHIC)
+        c.immobilized(until=When.SAVE_ENDS)
+    else:
+        c.half_damage("2d6", c.int_mod, dtype=DamageType.PSYCHIC)
+        c.slowed(until=When.SAVE_ENDS)
+
+
+@power(
+    "p13326",
+    level=5,
+    cls="psion",
+    usage=DAILY,
+    action=STANDARD,
+    reach=CloseBurst(3),
+    target=EACH_CREATURE,
+    keywords=[
+        Keyword.PSIONIC,
+        Keyword.IMPLEMENT,
+        Keyword.THUNDER,
+        Keyword.TELEPORTATION,
+    ],
+    attack=Attack(INT, vs=FORT),
+)
+def p13326(c: Cast) -> None:
+    if c.strike():
+        c.damage("2d8", c.int_mod, dtype=DamageType.THUNDER)
+    else:
+        c.half_damage("2d8", c.int_mod, dtype=DamageType.THUNDER)
+    if c.last:
+        c.teleport(5)
+
+
+@power(
+    "p8235",
+    level=5,
+    cls="psion",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(10),
+    target=ONE_CREATURE,
+    keywords=[
+        Keyword.PSIONIC,
+        Keyword.IMPLEMENT,
+        Keyword.PSYCHIC,
+        Keyword.CHARM,
+    ],
+    attack=Attack(INT, vs=WILL),
+)
+def p8235(c: Cast) -> None:
+    victim = c.target
+    if not c.strike():
+        c.half_damage("3d6", c.int_mod, dtype=DamageType.PSYCHIC)
+        return
+    c.damage("3d6", c.int_mod, dtype=DamageType.PSYCHIC)
+    near = [x for x in c.within(1, of=victim, side="any") if x not in (victim, c.me)]
+    if not near:
+        return
+    foe = c.choose(near, f"{c.ref}: whom the target strikes")
+    if foe is not None:
+        c.grant_attack(
+            victim, on=foe, attack_bonus=c.cha_mod, damage_bonus=c.cha_mod
+        )
+
+
+@power(
+    "p8236",
+    level=5,
+    cls="psion",
+    usage=DAILY,
+    action=STANDARD,
+    reach=AreaBurst(1, 10),
+    target=EACH_ENEMY,
+    keywords=PSIONIC_PSYCHIC,
+    attack=Attack(INT, vs=WILL),
+)
+def p8236(c: Cast) -> None:
+    if c.strike():
+        c.damage("2d6", c.int_mod, dtype=DamageType.PSYCHIC)
+        c.dazed(until=When.SAVE_ENDS)
+    else:
+        c.dazed(until=When.EONT)

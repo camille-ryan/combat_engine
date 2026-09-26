@@ -92,6 +92,11 @@ that never applies.
   The damage context has `target`, `power`, `opportunity`, `charge` -- and
   **no `attacker`, no `ranged`**. "Melee attacks deal N extra" has to gate
   on `get(ctx["power"]).reach.kind`.
+
+  The *attack* context is richer, and this reads as if it were not:
+  `query.defence` is handed it, so `c.bonus(AC, n, when=...)` gated on
+  `opportunity`, `charge` or `ranged` does work. Gate defences freely;
+  it is the damage side that is thin.
 * **Defaults differ, and the split is about whose thing it is.**
 
   **Yours, so they default to the caster:** `c.resist`, `c.stance`,
@@ -137,9 +142,16 @@ that never applies.
 * **`c.damage` maxes its dice on a critical.** A high-crit line that adds
   an extra *rolled* die inside the crit branch gets the maximum instead of
   a roll; `c.flat(c.roll("1d8"))` is the way to add one.
-* **`MoveStart` fires before the creature has moved.** A reaction declared
-  on it resolves where nothing has happened yet; "an adjacent enemy shifts"
-  wants `MoveEnd`, which carries `kind_`.
+* **`MoveStart` fires before the creature has moved, and that cuts both
+  ways.** A reaction declared on it resolves where nothing has happened yet,
+  so "an enemy shifts *to somewhere*" wants `MoveEnd`, which carries `kind_`.
+  But the defender shape — "an **adjacent** enemy marked by you moves" —
+  wants `MoveStart`, because by `MoveEnd` the enemy has left and
+  `c.adjacent(ev.actor)` is false *precisely when the row should fire*.
+  `MoveStart` carries `kind_` too, and it is the interrupt window an
+  opportunity attack belongs in. Three battlemind rows were silently inert
+  on `MoveEnd` before this sentence had its second half. **Ask where the
+  creature has to be for the row to be true, then pick the event.**
 
 ### The vocabulary, beyond the basics
 

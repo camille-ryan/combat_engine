@@ -8,6 +8,7 @@ from combat_engine.engine import (
     AT_WILL,
     DAILY,
     EACH_ALLY,
+    ENCOUNTER,
     MINOR,
     MOVE,
     ONE_ALLY,
@@ -74,3 +75,21 @@ def p11406(c: Cast) -> None:
 )
 def p11407(c: Cast) -> None:
     c.slide(4)
+
+
+@power(
+    "p11405",
+    level=10,
+    cls="runepriest",
+    usage=ENCOUNTER,
+    action=MINOR,
+    reach=CloseBurst(5),
+    target=EACH_ALLY,
+    keywords=[Keyword.DIVINE],
+)
+def p11405(c: Cast) -> None:
+    """"You and each ally in the burst" -- `EACH_ALLY` leaves the caster out,
+    so the once-per-power line covers the caster itself."""
+    c.no_advantage(on=c.target, until=When.EONT)
+    if c.first:
+        c.no_advantage(on=c.me, until=When.EONT)

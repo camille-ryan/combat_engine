@@ -143,16 +143,26 @@ class Cast:
             ev.attacker = by
         return True
 
-    def cancel(self) -> None:
+    def cancel(self) -> bool:
         """Stop the thing that triggered this.
 
         Only an immediate interrupt can: by the time a reaction runs, its
         window has already closed and the attack has happened. Calling it
         from a reaction does nothing, which is the printed rule rather than
         an oversight.
+
+        Most events cannot be refused at all -- `cancel` lives on `Decision`,
+        and `ConditionApplied`, `Moved` and `DamageApplied` are plain
+        announcements of something that has already happened. Asking anyway
+        used to raise `AttributeError` from inside the row, which reads as a
+        bug in the content; it is a fact about the event. Returns whether
+        anything was actually stopped.
         """
-        if self.trigger is not None:
-            self.trigger.cancel()
+        stop = getattr(self.trigger, "cancel", None)
+        if stop is None:
+            return False
+        stop()
+        return True
 
     # -- who and where -------------------------------------------------------
 
@@ -1796,6 +1806,27 @@ class Cast:
             "unflankable", 1, on=on or self.me, until=until, kind="untyped"
         )
 
+    def no_advantage(
+        self, *, on: int | None = None, until: When = When.EONT
+    ) -> Effect | None:
+        """"You do not grant combat advantage to any of your enemies."
+
+        The wider sentence, and the inverse of `c.grants_advantage`. Where
+        `c.cannot_be_flanked` shuts one branch, this shuts all of them --
+        flanked, dazed, hidden from, or granted outright. Defaults to the
+        **caster**, because the printed line is nearly always about yourself;
+        pass `on=` for the row that says otherwise.
+
+        Four rows were left out for want of it, across three classes, each
+        agent naming it slightly differently -- the +2 is worked out inside
+        `query.has_combat_advantage` from the board, so no modifier could
+        reach it until that read a key.
+        """
+        return self.bonus(
+            "no_advantage", 1, on=on if on is not None else self.me,
+            until=until, kind="untyped",
+        )
+
     def maximise(
         self,
         *,
@@ -1938,6 +1969,32 @@ class Cast:
             getattr(ev, "dtype", DamageType.UNTYPED), f"{self.ref} (absorbed)",
             from_attack=False,
         )
+
+    def reduce(self, amount: int, ev: Any = None) -> int:
+        """Take a number off damage that has been rolled but not yet dealt.
+
+        "Reduce the damage by 5", "the target takes half damage" -- printed
+        on interrupts all over the leader and defender classes. `c.absorb`
+        moves the *whole* blow somewhere else and was the only thing near
+        it, so rows were reaching into `c.trigger.amount` by hand: three
+        ardent rows and two psion ones did, which is the tell that this was
+        missing rather than that content wanted the freedom.
+
+        Returns how much was actually taken off, which is less than asked
+        when the blow was smaller than the reduction.
+        """
+        ev = ev if ev is not None else self.trigger
+        was = max(0, getattr(ev, "amount", 0)) if ev is not None else 0
+        if was <= 0 or amount <= 0:
+            return 0
+        ev.amount = max(0, was - amount)
+        return was - ev.amount
+
+    def halve(self, ev: Any = None) -> int:
+        """"The target takes half damage" from an interrupt answering the blow."""
+        ev = ev if ev is not None else self.trigger
+        was = max(0, getattr(ev, "amount", 0)) if ev is not None else 0
+        return self.reduce(was - was // 2, ev)
 
     def run_at(self, victim: int, *, who: int | None = None) -> bool:
         """Walk into reach of a named creature, the way a charge's move does.

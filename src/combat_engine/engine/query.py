@@ -288,6 +288,15 @@ def flanked_by(world: World, target: int, attacker: int) -> bool:
 
 
 def has_combat_advantage(world: World, attacker: int, target: int) -> bool:
+    # "You do not grant combat advantage to any of your enemies" suppresses
+    # every route at once, so it is asked first -- unlike `unflankable`
+    # below, which is one branch and lets a hidden or granting attacker
+    # through. Four rows across runepriest, swordmage and battlemind print
+    # the wider sentence, and each was left out because the +2 is computed
+    # here from the board and no modifier could reach it.
+    denied = world.get(target, Mods)
+    if denied is not None and denied.items and denied.total("no_advantage", {}) > 0:
+        return False
     if grants_ca(world, target):
         return True
     if world.relations.holds(Relation.GRANTS_CA_TO, target, attacker):
