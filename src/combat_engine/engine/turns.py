@@ -133,6 +133,14 @@ class Encounter:
                 + init.bonus
                 + level_term(self.world, eid, init.scale)
             )
+        # The dispatcher offers an event to `encounter.order` and to nobody
+        # else, and at this point in `start` that list is still empty -- so
+        # arming the triggers before the rolls, which the comment there says
+        # is done so the opening rolls can be answered, put every row of
+        # that shape in front of an empty room. Four were written against
+        # it and none had ever fired. Provisional, in roll order; `start`
+        # overwrites it with the sort a beat later.
+        self.order = list(order)
         for eid in order:
             init = self.world.need(eid, Initiative)
             self.world.bus.emit(InitiativeRolled(actor=eid, rolled=init.rolled))

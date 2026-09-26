@@ -877,7 +877,7 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0) -> bool:
         # sword -- which is every time a charge is the right thing to do.
         from .query import distance_between, enemies, speed
 
-        far = p.reach_of(branch).size + speed(world, actor)
+        far = p.reach_of(branch).size + speed(world, actor, {"charge": True})
         return any(
             distance_between(world, actor, foe) <= far for foe in enemies(world, actor)
         )

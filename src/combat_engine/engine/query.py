@@ -141,14 +141,23 @@ def moving_as(world: World, eid: int, mode: str) -> bool:
     return bool(mv and mv.using == mode)
 
 
-def speed(world: World, eid: int) -> int:
+def speed(world: World, eid: int, ctx: dict[str, Any] | None = None) -> int:
+    """How far this creature moves, for the kind of move it is making.
+
+    `ctx` is the attack context's `{"charge": True}` and nothing else so far.
+    It was `{}` at every call site, so "+4 to speed when charging" -- a gate
+    on a key the context did not carry -- was silently false, and ungating it
+    would have been a bonus to all movement, which is not the printed line.
+    The three places that measure a charge's run pass the word; everything
+    else measures an ordinary move and passes nothing.
+    """
     mv = world.get(eid, Movement)
     if mv is None:
         return 0
     base = mv.speed
     mods = world.get(eid, Mods)
     if mods is not None:
-        base += mods.total("speed")
+        base += mods.total("speed", ctx or {})
     halved = False
     for c in active(world, eid):
         cap = rules(c).speed_cap
@@ -298,6 +307,21 @@ def can_shift(world: World, eid: int) -> bool:
 
 def can_move(world: World, eid: int) -> bool:
     return can_act(world, eid) and not any(rules(c).cannot_move for c in active(world, eid))
+
+
+def can_walk(world: World, eid: int) -> bool:
+    """"It cannot use move actions to walk or run", but it may still shift.
+
+    The exact mirror of `c.rooted`, and neither condition says it:
+    `immobilized` bars the shift as well, which is a stronger card than the
+    rows printing this one. Held as a modifier rather than a condition
+    because nothing else about the creature changes -- it is not slowed, it
+    grants nothing, it is simply not going anywhere on its feet.
+    """
+    if not can_move(world, eid):
+        return False
+    mods = world.get(eid, Mods)
+    return not (mods is not None and mods.items and mods.total("no_walk", {}) > 0)
 
 
 # -- combat advantage -------------------------------------------------------

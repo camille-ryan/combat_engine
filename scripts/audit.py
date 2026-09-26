@@ -50,6 +50,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.dsl import REGISTRY
 from combat_engine.engine.grid import Square
+from combat_engine.engine.movement import place
 from combat_engine.engine.query import alive
 from combat_engine.engine.query import enemies as _foes
 from combat_engine.engine.types import ActionType
@@ -97,6 +98,16 @@ KNOWN_SILENT = {
     "m3030a1": "unverified",
     "m676a1": "unverified",
     "m719a4": "unverified",
+    # Takes one of six conditions off whoever it touches, and the creature
+    # it gets aimed at here is carrying none of them -- the board's one
+    # dazed ally is not in the pool this row is offered. Driven by hand:
+    # aimed at a dazed fighter the daze goes and nothing else does.
+    "p7240": "removes a condition; the creature it is aimed at here has none",
+    # Hands a healing surge back, and its printed target line is allies
+    # with two surges or fewer. Everybody on this board is untouched, so
+    # the row passes over every candidate. Driven by hand: an ally set to
+    # one surge comes out of it with two.
+    "p2861": "its printed target must be down to two surges; nobody here is",
     # Escaping a grab, on a board where nothing is holding the caster.
     # Grabbing it in `board()` is not the answer -- `Condition.GRABBED`
     # cannot move, which would make every movement row on every other
@@ -331,6 +342,21 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     world.relations.set(Relation.RIDDEN_BY, caster, ally)
     world.relations.set(Relation.GUARDED_BY, caster, ally)
 
+    # Where everybody was put, so setup can be undone. Several things
+    # between here and the return move creatures -- the caster's own
+    # class features, an ally's, a companion arriving -- and a board that
+    # has walked its own pieces about measures itself rather than the row.
+    # An ally ended up three squares from where it was placed, which took
+    # "grant an ally a basic attack" from working to impossible.
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.query import creatures as _everyone
+
+    spawned = {
+        e: world.get(e, Position).square
+        for e in _everyone(world)
+        if world.get(e, Position) is not None
+    }
+
     # A companion, because the board had none and roughly sixty rows across
     # shaman and ranger read "your spirit companion" or "your beast". Every
     # one of them reported UNUSED or SILENT while being correct -- the
@@ -450,6 +476,16 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     # credited only with what it installs *after* arming, while a trait's
     # whole content may be the effect arming installed -- and every other
     # creature's traits arm at the same moment.
+    # Back where they were put -- **after** arming, not before. Several
+    # things between the spawns and here move creatures: the caster's own
+    # class features, an ally's, and whatever a trait does as it arms. An
+    # ally ended up three squares out of place, which took "grant an ally a
+    # basic attack" from working to impossible. The companion is left where
+    # it stands; it arrived after the snapshot and is not in it.
+    for e, was in spawned.items():
+        if world.get(e, Position) is not None:
+            place(world, e, was)
+
     world.armed_effects = set(world.effects.live)
     armed = {e.kind for e in world.bus.log[mark:]} - START_NOISE
     world.turn = caster
@@ -817,8 +853,20 @@ def _use_class_features(world, caster: int, foe: int, skip: str = "") -> None:  
     known = world.get(caster, Powers)
     if known is None:
         return
-    pos = world.get(caster, Position)
-    stood = pos.square if pos else None
+    # Everybody's square, not just the caster's. A level-0 row that slides
+    # or teleports an *ally* moves it too, and one did: firing the warlord's
+    # features walked an ally from (5,8) to (2,5), so no ally was adjacent
+    # to an enemy any more and "grant an ally a basic attack" -- a whole
+    # warlord shape -- could not land at all. The caster half of this was
+    # fixed an hour ago and the ally half was not, which is the same bug
+    # twice.
+    from combat_engine.engine.query import creatures
+
+    stood = {
+        e: world.get(e, Position).square
+        for e in creatures(world)
+        if world.get(e, Position) is not None
+    }
     for ref in list(known.all):
         p = get(ref)
         # Not a trait, and not a row that waits for a trigger either: a
@@ -841,8 +889,9 @@ def _use_class_features(world, caster: int, foe: int, skip: str = "") -> None:  
     # (0,1) -- seven squares from the nearest foe -- so the provocation that
     # follows never reached it and every triggered rogue row reported
     # UNUSED. The instrument was measuring its own setup.
-    if stood is not None and world.get(caster, Position) is not None:
-        place(world, caster, stood)
+    for e, was in stood.items():
+        if world.get(e, Position) is not None:
+            place(world, e, was)
 
 
 def _allies_of(world, caster: int) -> list[int]:  # noqa: ANN001

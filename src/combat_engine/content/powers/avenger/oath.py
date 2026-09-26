@@ -105,6 +105,10 @@ def better_of_two(c: Cast, ev: Any) -> None:
     if result is None:
         return
     fresh = c.world.rng.d20().total
+    # Recorded whether or not it is the better face: "you roll the same
+    # number on each die of the attack roll" is asked of both dice, and the
+    # loser is thrown away everywhere else.
+    result.rolls.append(fresh)
     if fresh > result.natural:
         result.total += fresh - result.natural
         result.natural = fresh

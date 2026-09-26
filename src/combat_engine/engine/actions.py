@@ -199,12 +199,12 @@ def _burst_origins(world: World, actor: int, p) -> list[Square]:  # noqa: ANN001
 
 
 def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
-    from .query import speed
+    from .query import can_walk, speed
 
     out: list[Action] = []
     if is_(world, actor, Condition.PRONE):
         return out  # stand up first; see `_recovery`
-    if encounter.can_spend(actor, ActionType.MOVE):
+    if encounter.can_spend(actor, ActionType.MOVE) and can_walk(world, actor):
         for dest, path in sorted(world.reachable_paths(actor, speed(world, actor)).items()):
             out.append(
                 Action(
@@ -279,7 +279,9 @@ def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
     if known is None or not known.basic:
         return []
 
-    reachable = world.reachable_paths(actor, speed(world, actor))
+    # The charge context, so "+4 power bonus to speed when charging" is read
+    # by the one measurement it is about.
+    reachable = world.reachable_paths(actor, speed(world, actor, {"charge": True}))
     out: list[Action] = []
     for foe in sorted(enemies(world, actor)):
         if not alive(world, foe):

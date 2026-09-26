@@ -715,12 +715,20 @@ class Cast:
         plus: int = 0,
         from_: int | None = None,
         ignore_cover: bool = False,
+        keep: str = "",
     ) -> AttackResult:
         """Roll the attack the header declared.
 
         The overwhelmingly common case: the printed `Attack:` line is a plain
         ability against a defence, it went in the header where a policy can
         read it, and the body just says "roll it".
+
+        `keep` is the printed "make the attack roll twice and use either
+        result" -- "best", or "worst" for the rows that say so. It has to be
+        here rather than arranged by the body, because by the time `c.strike`
+        returns the first roll has already been announced and answered. Both
+        faces stay on `c.result.rolls`, which is what "if both of your attack
+        rolls would hit" reads.
         """
         from .dsl import get
 
@@ -735,6 +743,7 @@ class Cast:
             advantage=advantage,
             from_=from_,
             ignore_cover=ignore_cover,
+            keep=keep,
         )
 
     def grant_attack(
@@ -883,6 +892,7 @@ class Cast:
         advantage: bool | None = None,
         from_: int | None = None,
         ignore_cover: bool = False,
+        keep: str = "",
     ) -> AttackResult:
         who = self._who(on)
         if who is None:
@@ -895,6 +905,7 @@ class Cast:
             advantage=advantage, opportunity=self.opportunity,
             among=tuple(self.targets) or (who,), branch=self.branch,
             ignore_cover=ignore_cover, dying=self.dying, charge=self.charge,
+            keep=keep,
         )
         # An interrupt may have moved the blow onto somebody else. The roll
         # and the `Hit` already name the new target; without this the body's
@@ -1313,6 +1324,7 @@ class Cast:
             return False
         fresh = self.world.rng.d20().total
         old = result.natural
+        result.rolls.append(fresh)
         face = {"new": fresh, "best": max(old, fresh), "worst": min(old, fresh)}[keep]
         shift_ = face - old
         result.natural = face
@@ -1566,6 +1578,7 @@ class Cast:
         *,
         until: When = When.ENCOUNTER,
         on: int | None = None,
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """Shrugs off `amount` of every hit, or of one damage type.
 
@@ -1573,10 +1586,24 @@ class Cast:
         printing "gains resist 10 to the triggering damage type" had to
         write `c.vulnerable(-10, ...)`, which comes to the same arithmetic
         and puts "vulnerable -10" on the card.
+
+        `when` is handed the damage context -- `source`, `power`, `dtype`,
+        `opportunity`, `charge` -- for the narrow printed shape, "but only
+        when the damage is from ranged or area attacks". `Defences.resist`
+        is a flat number per type with nowhere to hang a condition, so a
+        gated line written there would shrug off everything and be strictly
+        stronger than print; the gated form is a modifier instead, and
+        `resolve.damage` reads it after the flat one.
         """
         from .components import Defences
 
         who = on if on is not None else self.me
+        if when is not None:
+            what = "resist" if dtype is None else f"resist {dtype.value}"
+            return self.bonus(
+                what, amount, on=who, until=until,
+                kind=f"{self.ref} resist", when=when,
+            )
         kinds = [dtype] if dtype is not None else list(DamageType)
         defences = self.world.get(who, Defences) or self.world.add(who, Defences())
         for kind in kinds:
@@ -2003,15 +2030,26 @@ class Cast:
         )
 
     def cannot_be_flanked(
-        self, *, on: int | None = None, until: When = When.ENCOUNTER
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """"Enemies can't gain combat advantage by flanking it."
 
         Only the flanking branch: being dazed, hidden from, or granted the
         opening outright still works, which is what the printed line says.
+
+        `when` is handed `attacker` and `target`, for the conditional
+        printing -- "unless both of you are flanked", "while within 5
+        squares of each other". `query.has_combat_advantage` used to read
+        this modifier with an empty context, so such a gate was false
+        forever and the row would have suppressed nothing.
         """
         return self.bonus(
-            "unflankable", 1, on=on or self.me, until=until, kind="untyped"
+            "unflankable", 1, on=on or self.me, until=until, kind="untyped",
+            when=when,
         )
 
     def conceal(
@@ -2125,7 +2163,11 @@ class Cast:
         )
 
     def no_advantage(
-        self, *, on: int | None = None, until: When = When.EONT
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.EONT,
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """"You do not grant combat advantage to any of your enemies."
 
@@ -2139,10 +2181,13 @@ class Cast:
         agent naming it slightly differently -- the +2 is worked out inside
         `query.has_combat_advantage` from the board, so no modifier could
         reach it until that read a key.
+
+        `when` is handed `attacker` and `target`, for the narrower printing:
+        "you don't grant combat advantage to *those* creatures".
         """
         return self.bonus(
             "no_advantage", 1, on=on if on is not None else self.me,
-            until=until, kind="untyped",
+            until=until, kind="untyped", when=when,
         )
 
     def maximise(
@@ -2397,11 +2442,14 @@ class Cast:
         chooses one. Returns whether the target is in reach afterwards.
         """
         from .movement import walk
+        from .query import speed as _speed
         from .query import squares
 
         runner = who if who is not None else self.me
         beside = spread(squares(self.world, victim), 1)
-        paths = self.world.reachable_paths(runner, self.speed_of(runner))
+        # Measured as a charge: `c.speed_of` is the ordinary question and a
+        # bonus gated on charging is correctly false for it.
+        paths = self.world.reachable_paths(runner, _speed(self.world, runner, {"charge": True}))
         best = min(
             (
                 (len(path), dest, path)
@@ -3506,11 +3554,15 @@ class Cast:
 
     def _roll_damage(self, dice: str | int) -> int:
         """The dice of a damage roll, honouring "rolls twice and uses the
-        lower roll" -- which is a property of the roller, not of the blow."""
+        lower roll" and its opposite -- both properties of the roller rather
+        than of the blow, which is why they are read here and not passed in.
+        The worse of the two wins when a creature somehow carries both."""
         first = self.world.rng.roll(dice).total
-        if self.total("damage_twice_lower") <= 0:
-            return first
-        return min(first, self.world.rng.roll(dice).total)
+        if self.total("damage_twice_lower") > 0:
+            return min(first, self.world.rng.roll(dice).total)
+        if self._rolls_twice_higher():
+            return max(first, self.world.rng.roll(dice).total)
+        return first
 
     # -- the action economy --------------------------------------------------
 
@@ -3683,41 +3735,41 @@ class Cast:
     ) -> Effect | None:
         """"Roll the damage twice and use the higher result."
 
-        `c.maximise` is the only neighbour and it is a different operation:
-        a maximum is not a second roll, and a row printing both would pay
-        out twice. Shaped like it out of necessity -- `DamageRolled` carries
-        a total and not the expression that made it, so the dice come off
-        the row named by `detail`.
+        The mirror of `c.damage_disadvantage`, and read in the same place
+        for the same reason: a character's damage line lives in the body,
+        not the header, so there is nothing to look up afterwards and
+        `DamageRolled` carries a total with no dice behind it. A watcher on
+        that event can only ever raise a monster's printed line, which is
+        not who prints this sentence.
 
-        `keyword` narrows it to the powers the printed line names; without
-        one, every damage roll this creature makes.
+        `c.maximise` is the neighbour and a different operation -- a maximum
+        is not a second roll, and a row printing both would pay out twice.
+
+        `keyword` narrows it to the powers the printed line names; the row
+        being rolled is what answers, so the key carries the word.
         """
-        from .dsl import get
-        from .events import DamageRolled
-
         who = on if on is not None else self.me
+        what = "damage_twice_higher"
+        if keyword is not None:
+            what = f"{what}:{keyword.value}"
+        return self.bonus(what, 1, on=who, until=until, kind=self.ref)
 
-        def again(ev: DamageRolled) -> None:
-            if ev.source != who:
-                return
-            p = get(ev.detail)
-            d = p.damage_of(0) if p is not None else None
-            if d is None or not d.dice:
-                return
-            if keyword is not None and keyword not in p.keywords:
-                return
-            # `maximise`'s yardstick, and needed for the same reason: a flat
-            # rider rolled by the row carries the row's ref as `detail` too,
-            # and rerolling the header's dice for it invents damage the card
-            # does not print.
-            bonus = self._bonus_of(d.bonus)
-            if ev.amount < _min_of(d.dice) + bonus:
-                return
-            ev.amount = max(ev.amount, self.roll(d.dice) + bonus)
+    def _rolls_twice_higher(self) -> bool:
+        """Does this roller take the better of two, for *this* row?
 
-        return self.watch(
-            DamageRolled, again, until=until, window=Window.BEFORE, on=who,
-            label=f"{self.ref} roll twice",
+        The unqualified key is every damage roll it makes; a qualified one
+        names a keyword, and the row doing the rolling is asked whether it
+        carries the word.
+        """
+        if self.total("damage_twice_higher") > 0:
+            return True
+        from .dsl import get
+
+        p = get(self.ref)
+        if p is None:
+            return False
+        return any(
+            self.total(f"damage_twice_higher:{k.value}") > 0 for k in p.keywords
         )
 
     # -- a hold changing hands -----------------------------------------------
@@ -3753,6 +3805,42 @@ class Cast:
             save_mod=effect.save_mod + save_mod,
             escalate=effect.escalate,
         )
+
+    # -- added for the tail-3 batch ------------------------------------------
+
+    def no_walk(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
+        """"It cannot use move actions to walk or run." It may still shift.
+
+        The mirror of `c.rooted`, which bars the shift and leaves the walk.
+        Neither is `c.immobilized`: that stops both, and a row printing only
+        one half was being written as the stronger card or dropped.
+
+        A modifier rather than a condition, because nothing else about the
+        creature changes -- it grants nothing, it is not slowed, it is only
+        not walking. `query.can_walk` is what reads it, and `actions.legal`
+        stops offering the move so a policy cannot pick one either.
+        """
+        return self.bonus("no_walk", 1, on=on, until=until, kind="untyped")
+
+    def regain_surge(self, count: int = 1, *, on: int | None = None) -> int:
+        """"Each target regains a healing surge." Returns how many it now has.
+
+        The counterpart of `c.spend_surge`, which existed alone -- so a row
+        handing one back had only `Health.surges += 1` to reach for, which
+        announces nothing and audits as a row that did nothing at all.
+
+        Follows `c.target`: it is done *to* somebody, and every printed line
+        of this shape hands them out to a list of allies.
+        """
+        who = self._who(on)
+        health = self.world.get(who, Health) if who is not None else None
+        if who is None or health is None or count <= 0:
+            return 0
+        health.surges += count
+        self.world.bus.emit(
+            Note(text=f"{who} regains {count} healing surge(s): {health.surges} left")
+        )
+        return health.surges
 
 
 def _max_of(dice: str | int) -> int:

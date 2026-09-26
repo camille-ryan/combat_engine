@@ -329,6 +329,12 @@ def walk(
     """
     if not can_move(world, eid):
         return 0
+    # A walk and a shift are barred by different rows, and `step` is shared
+    # with both -- so the bar is checked here, where the kind is known.
+    from .query import can_walk
+
+    if kind == "walk" and not can_walk(world, eid):
+        return 0
     mode = mode_of(world, eid, mode)
     # The return is read. "You can cancel that movement as an immediate
     # interrupt" is a printed line on several rows, and the event was
