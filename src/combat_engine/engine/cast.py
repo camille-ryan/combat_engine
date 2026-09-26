@@ -1134,6 +1134,79 @@ class Cast:
         dest = self.world.decide(mover, "shift", options, f"{self.ref}: shift {squares_}")
         return shift(self.world, mover, dest)
 
+    def shift_as(
+        self,
+        cost: ActionType,
+        squares_: int = 1,
+        *,
+        on: int | None = None,
+        until: When = When.STANCE,
+    ) -> Effect | None:
+        """"You can shift 2 squares as a move action."
+
+        Not `c.shift`: nothing happens now. It is a standing change to what
+        the creature may spend an action on, which `actions.legal` reads
+        back -- a shift was one square for a move action and nothing else,
+        so a stance whose entire content is a better one had no way to say
+        it and read as an empty stance.
+
+        Defaults to the **caster**, like the movement methods beside it.
+        `until=When.STANCE` because that is what nearly all of them are;
+        the effect ends when the next stance begins.
+        """
+        who = on if on is not None else self.me
+        return self.grant_action("shift", cost, squares_=squares_, on=who, until=until)
+
+    def grant_action(
+        self,
+        what: str,
+        cost: ActionType,
+        *,
+        squares_: int = 1,
+        on: int | None = None,
+        until: When = When.STANCE,
+    ) -> Effect | None:
+        """Let a creature do an ordinary thing for a different action.
+
+        "Allies within 3 squares of you can stand up as a minor action" is
+        not a bonus, a condition or a power -- it is a line in the action
+        menu that is normally a constant. `what` is `shift` or `stand`;
+        anything else is carried, costs nothing and does nothing, so add
+        the reader in `actions` at the same time as the word.
+
+        Follows `c.target`, because the printed lines grant it to somebody
+        else -- `on=c.me` for a stance about yourself, which is what
+        `c.shift_as` passes.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        return self.bonus(
+            f"{what} as {cost.value}", max(1, squares_), on=who,
+            until=until, kind=self.ref,
+        )
+
+    def initiative(self, amount: int, *, on: int | None = None) -> int:
+        """"Each target gains a +10 bonus to his or her initiative check."
+
+        Returns the creature's new initiative count. Follows `c.target`,
+        because every row printing this hands the bonus out to a list that
+        includes the caster rather than being about the caster.
+
+        `c.bonus` cannot say it: `Initiative.bonus` is added before the d20
+        is rolled, and a row triggered on `InitiativeRolled` is by
+        definition answering a roll that has happened. Setting
+        `ev.rolled` cannot say it either -- the sort reads the component,
+        not the event. So this moves the creature in the order, and during
+        the opening rolls `Encounter._roll_initiative` reads the component
+        back after every announcement.
+        """
+        who = self._who(on)
+        encounter = getattr(self.world, "encounter", None)
+        if who is None or encounter is None:
+            return 0
+        return encounter.adjust_initiative(who, amount)
+
     def move(
         self, squares_: int, *, who: int | None = None, at: str = ""
     ) -> int:
@@ -1333,6 +1406,55 @@ class Cast:
 
     def blinded(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
         return self.condition(Condition.BLINDED, until=until, on=on)
+
+    def cure(self, *conditions: Condition, on: int | None = None) -> list[Condition]:
+        """Take standing conditions off a creature. Returns what actually went.
+
+        "You remove one condition from the target" and "you are no longer
+        marked or slowed" are the same operation and nothing did it: every
+        route out of a condition was a clock or a saving throw, so a row
+        whose whole Effect is the removal had nothing to say.
+
+        Follows `c.target`, like everything else done *to* somebody --
+        `on=c.me` for the battlemind shape, which is about itself.
+
+        Only the named condition goes. The effect that carried it keeps its
+        modifiers, its ongoing damage and the saving throw it is still owed,
+        because "remove one condition" is not "end the effect".
+        """
+        who = self._who(on)
+        if who is None:
+            return []
+        return self.world.effects.cure(who, conditions)
+
+    def immune(
+        self, *conditions: Condition, until: When = When.EONT, on: int | None = None
+    ) -> Effect | None:
+        """"You cannot be marked or slowed until the end of your next turn."
+
+        The other half of `c.cure`, and a different sentence: curing strips
+        what is there, this refuses what arrives. Both are needed by the one
+        printed line, and writing only the first leaves a row that shakes a
+        mark off and is marked again by the same creature a beat later.
+
+        `durations.Effects.apply` drops the condition on the way in and
+        `relations.set` refuses the mark outright, so the rest of an effect
+        -- its damage, its other conditions -- still lands.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        mods = [
+            (who, Mod(what=f"immune to {c.value}", value=1, kind=self.ref, label=self.ref))
+            for c in conditions
+        ]
+        if not mods:
+            return None
+        return self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} immune to {', '.join(c.value for c in conditions)}",
+            mods=mods,
+        )
 
     def coup_de_grace(self, *, on: int | None = None) -> bool:
         """Finish a helpless creature. Automatic critical, plus a flat 5d6.
@@ -1880,6 +2002,80 @@ class Cast:
             "concealment", 5 if total else 2,
             on=on if on is not None else self.me, until=until,
             kind="concealment", when=when,
+        )
+
+    def see_invisible(
+        self, *, on: int | None = None, until: When = When.EONT
+    ) -> Effect | None:
+        """"You can see invisible creatures and objects."
+
+        Defaults to the **caster**: it is a sense of yours, like `c.mode`
+        and `c.resist`, and every printed line granting it says "you".
+
+        Invisibility is held as `HIDDEN_FROM` and the only rule that reads
+        it is combat advantage, so this is what turns that one branch off
+        for one watcher. It does not make a hidden creature a legal target
+        for anything that needs line of sight -- nothing in the engine asks
+        that question yet -- so a row wanting *only* the targeting half is
+        still not sayable.
+        """
+        return self.bonus(
+            "see_invisible", 1, on=on if on is not None else self.me,
+            until=until, kind=self.ref,
+        )
+
+    def ignore_cover(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.EONT,
+        partial: bool = False,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"You ignore cover and concealment when attacking."
+
+        Defaults to the **caster**, because this is your eyesight rather
+        than something done to the target -- `c.no_cover` is the same
+        sentence written from the other end, and that one follows
+        `c.target`.
+
+        `ignore_cover=` already existed as an argument to one `c.strike`,
+        which cannot say "until the end of your next turn" and cannot be
+        read by an opportunity attack or by an ally. `when` is handed the
+        attack context, so "against any enemy within the zone" is a gate.
+
+        `partial=True` waives the ordinary -2 and leaves superior cover
+        standing, which is the narrower line two rows print.
+        """
+        return self.bonus(
+            "ignore_cover", 2 if partial else 5,
+            on=on if on is not None else self.me,
+            until=until, kind="ignore cover", when=when,
+        )
+
+    def no_cover(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.EONT,
+        partial: bool = False,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"The target does not benefit from cover or concealment."
+
+        `c.ignore_cover` sits on whoever is looking; this sits on whoever is
+        being looked at, and so follows `c.target`. That is the difference
+        between "you ignore cover" and "it gains no cover against anybody",
+        and a row that prints the second cannot be written as the first
+        without also blinding the caster to every other creature's cover.
+
+        `when` is the attack context, which carries `attacker` -- so "on
+        attacks made by you or allies adjacent to you" is a gate rather
+        than an approximation.
+        """
+        return self.bonus(
+            "no_cover", 2 if partial else 5, on=on, until=until,
+            kind="ignore cover", when=when,
         )
 
     def no_advantage(

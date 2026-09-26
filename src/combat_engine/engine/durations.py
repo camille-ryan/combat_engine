@@ -35,6 +35,7 @@ from .events import (
     TurnEnd,
     TurnStart,
 )
+from .query import immune_to
 from .types import ActionType, Condition, DamageType, Relation
 
 if TYPE_CHECKING:
@@ -161,6 +162,21 @@ class Effects:
                 for e in standing:
                     self.end(e, "superseded by worse of the same type")
 
+        # "You cannot be slowed until the end of your next turn" is refused
+        # here rather than by the callers, because every route to a
+        # condition -- `c.condition`, an escalating save-ends rider, a
+        # monster trait -- comes through this one door. The rest of the
+        # effect still lands: a hold that slows *and* burns is only immune
+        # to half of itself.
+        conditions = list(conditions)
+        refused = [c for c in conditions if immune_to(self.world, owner, c)]
+        if refused:
+            conditions = [c for c in conditions if c not in refused]
+            self.world.bus.emit(
+                Note(text=f"{owner} is immune to "
+                          f"{', '.join(c.value for c in refused)}")
+            )
+
         self._next += 1
         clock = owner if when in _TARGET_CLOCKED else source
         eff = Effect(
@@ -250,6 +266,49 @@ class Effects:
             fn()
         if eff.when is not When.INSTANT:
             self.world.bus.emit(EffectExpired(actor=eff.owner, what=str(eff), why=why))
+
+    def cure(self, owner: int, conditions: Iterable[Condition]) -> list[Condition]:
+        """Strip standing conditions off a creature. Returns what went.
+
+        Not `end`: a printed "remove one condition from the target" takes
+        the condition and leaves the rest of the effect that carried it, so
+        a save-ends hold that dazes *and* burns keeps burning. Ending the
+        whole effect would also hand back the saving throw it is still
+        owed.
+
+        The relational ones -- marked, grabbed, dominated -- are held by
+        `relations` and only mirrored into `Conditions`, so clearing the
+        count alone would leave the mark itself standing and the creature
+        marked by somebody with no mark on it.
+        """
+        from .relations import IMPLIES
+
+        wanted = set(conditions)
+        gone: list[Condition] = []
+        conds = self.world.get(owner, Conditions)
+        for kind, cond in IMPLIES.items():
+            if cond not in wanted:
+                continue
+            for source in self.world.relations.sources(kind, owner):
+                self.world.relations.clear(kind, source, owner, "removed")
+                gone.append(cond)
+        for eff in list(self.live.values()):
+            if eff.owner != owner:
+                continue
+            dropped = [c for c in eff.conditions if c in wanted]
+            if not dropped:
+                continue
+            eff.conditions = tuple(c for c in eff.conditions if c not in wanted)
+            for c in dropped:
+                if conds is not None and conds.remove(c):
+                    self.world.bus.emit(
+                        ConditionEnded(target=owner, condition=c, why="removed")
+                    )
+            gone.extend(dropped)
+            if not eff.conditions and not eff.mods and not eff.relations \
+                    and eff.ongoing is None and not eff.subs:
+                self.end(eff, "removed")
+        return gone
 
     def forget(self, eid: int, why: str = "left play") -> None:
         """End everything `eid` is either end of. Total removal only."""

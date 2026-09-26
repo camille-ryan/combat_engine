@@ -101,11 +101,13 @@ that never applies.
 
   **Yours, so they default to the caster:** `c.resist`, `c.stance`,
   `c.mode`, `c.watch`, `c.immovable`, `c.spend_surge`, `c.grant_row`,
-  `c.ignores_difficult`, `c.speed_of`, `c.surge_value`.
+  `c.ignores_difficult`, `c.speed_of`, `c.surge_value`,
+  `c.see_invisible`, `c.ignore_cover`, `c.shift_as`.
 
   **Theirs, so they follow `c.target`:** `c.may` (a heal asks whose surge
   is being spent), `c.save` ("*the target* makes a saving throw"),
-  `c.bonus`, `c.penalty`, `c.forbid`, `c.condition`.
+  `c.bonus`, `c.penalty`, `c.forbid`, `c.condition`, `c.cure`, `c.immune`,
+  `c.no_cover`, `c.grant_action`, `c.initiative`.
 
   For the wrong side of either, name it: `on=c.me`, or `on=<who>`.
 
@@ -152,6 +154,9 @@ that never applies.
   opportunity attack belongs in. Three battlemind rows were silently inert
   on `MoveEnd` before this sentence had its second half. **Ask where the
   creature has to be for the row to be true, then pick the event.**
+  `Moved` now carries `kind_` as well, and it is the only one of the three
+  that also carries `from_` -- so "an ally adjacent to you **before** the
+  teleport" is asked there and nowhere else.
 
 ### The vocabulary, beyond the basics
 

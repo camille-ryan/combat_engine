@@ -341,7 +341,7 @@ def has_combat_advantage(world: World, attacker: int, target: int) -> bool:
         return True
     if world.relations.holds(Relation.GRANTS_CA_TO, target, attacker):
         return True
-    if world.relations.holds(Relation.HIDDEN_FROM, attacker, target):
+    if unseen_by(world, target, attacker):
         return True
     # "Enemies cannot gain combat advantage by flanking it" is a printed
     # trait and there was no way to suppress this one branch -- the whole
@@ -355,7 +355,73 @@ def has_combat_advantage(world: World, attacker: int, target: int) -> bool:
 
 def hidden_from(world: World, eid: int) -> set[int]:
     """Who cannot see this creature."""
-    return set(world.relations.targets(Relation.HIDDEN_FROM, eid))
+    return {
+        w
+        for w in world.relations.targets(Relation.HIDDEN_FROM, eid)
+        if not sees_invisible(world, w)
+    }
+
+
+def granted_actions(world: World, eid: int) -> dict[tuple[str, str], int]:
+    """Things this creature may do for a different action than usual.
+
+    Keyed `(what, cost)` -- `("shift", "minor")` -- with the value being how
+    far, where that means anything. A stance reading "you can shift 2
+    squares as a move action" changes the menu rather than doing anything,
+    and `actions.legal` builds that menu from the rules alone: a shift was
+    one square for a move action, full stop, so the whole family of rows
+    granting a cheaper or longer one had nowhere to be written.
+    """
+    mods = world.get(eid, Mods)
+    if mods is None or not mods.items:
+        return {}
+    out: dict[tuple[str, str], int] = {}
+    for m in mods.items:
+        what, sep, cost = m.what.partition(" as ")
+        if not sep:
+            continue
+        n = mods.total(m.what, {})
+        if n > 0:
+            out[(what, cost)] = max(out.get((what, cost), 0), n)
+    return out
+
+
+def immune_to(world: World, eid: int, cond: Condition) -> bool:
+    """Can this condition not be laid on this creature at all?
+
+    Distinct from curing one: "you cannot be marked or slowed until the end
+    of your next turn" is a window in which the condition never arrives,
+    and stripping it afterwards is a different sentence that leaves every
+    rider hung on `ConditionApplied` already paid out.
+    """
+    mods = world.get(eid, Mods)
+    if mods is None or not mods.items:
+        return False
+    return mods.total(f"immune to {cond.value}", {}) > 0
+
+
+def sees_invisible(world: World, eid: int) -> bool:
+    """Does this creature see what is hidden from everybody else?
+
+    A modifier rather than a condition, because it is granted for a
+    duration by a power and nothing about the creature itself changes.
+    """
+    mods = world.get(eid, Mods)
+    return mods is not None and bool(mods.items) and mods.total("see_invisible", {}) > 0
+
+
+def unseen_by(world: World, watcher: int, who: int) -> bool:
+    """Is `who` invisible to `watcher`?
+
+    The relation alone was the whole answer, so "you can see invisible
+    creatures" -- printed by two classes and every darkvision-adjacent
+    monster trait -- had nothing to switch off. Asked here rather than at
+    each of the two places that read `HIDDEN_FROM`, so the sight and the
+    combat advantage can never disagree.
+    """
+    return world.relations.holds(Relation.HIDDEN_FROM, who, watcher) and not sees_invisible(
+        world, watcher
+    )
 
 
 def concealment_of(
@@ -384,6 +450,31 @@ def concealment_of(
     if n >= int(Cover.SUPERIOR):
         return Cover.SUPERIOR
     return Cover.PARTIAL if n > 0 else Cover.NONE
+
+
+def cover_waived(
+    world: World, attacker: int, target: int, ctx: dict[str, Any] | None = None
+) -> int:
+    """How much cover and concealment this pairing simply does not count.
+
+    Two printed sentences meet here and they are aimed at opposite ends of
+    the attack: "you ignore cover and concealment" sits on the attacker,
+    "the target does not benefit from cover against you" sits on the
+    target. `resolve.attack` took an `ignore_cover` argument and nothing
+    else, so both could only be said for the length of one `c.strike`.
+
+    The larger of the two answers, not their sum, because each is a
+    statement about the same penalty. `Cover.PARTIAL` waives the ordinary
+    -2 and leaves superior cover standing, which is what "partial cover or
+    partial concealment" prints.
+    """
+    ctx = ctx or {}
+    mine = world.get(attacker, Mods)
+    theirs = world.get(target, Mods)
+    return max(
+        mine.total("ignore_cover", ctx) if mine is not None and mine.items else 0,
+        theirs.total("no_cover", ctx) if theirs is not None and theirs.items else 0,
+    )
 
 
 def cover_between(

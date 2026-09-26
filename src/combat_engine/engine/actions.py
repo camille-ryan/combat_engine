@@ -214,17 +214,43 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
                     path=tuple(path),
                 )
             )
-        # A shift is its own action: one square, and it provokes nothing.
-        # Offered separately because walking to the same square and shifting
-        # to it are different decisions with different consequences.
-        from .movement import OVERHEAD, mode_of, reachable
+    # A shift is its own action: one square, and it provokes nothing.
+    # Offered separately because walking to the same square and shifting
+    # to it are different decisions with different consequences.
+    #
+    # One square for a move action is only the default. `c.shift_as` grants
+    # a longer one, or one at a different cost -- a stance printing "you can
+    # shift 2 squares as a move action" is a change to this menu and nothing
+    # else, so it could not be written while the menu was a constant.
+    from .movement import OVERHEAD, mode_of, reachable
 
-        mode = mode_of(world, actor, None)
-        step = reachable(world, actor, 1, mode="walk" if mode in OVERHEAD else None)
+    offers = {ActionType.MOVE: 1}
+    for (what, cost), squares_ in _granted(world, actor).items():
+        if what != "shift":
+            continue
+        offers[cost] = max(offers.get(cost, 0), squares_)
+    mode = mode_of(world, actor, None)
+    for cost in sorted(offers, key=lambda a: a.value):
+        if not encounter.can_spend(actor, cost):
+            continue
+        step = reachable(
+            world, actor, offers[cost], mode="walk" if mode in OVERHEAD else None
+        )
         for dest in sorted(step):
-            out.append(
-                Action(kind="shift", cost=ActionType.MOVE, dest=dest, path=(dest,))
-            )
+            out.append(Action(kind="shift", cost=cost, dest=dest, path=(dest,)))
+    return out
+
+
+def _granted(world: World, actor: int) -> dict[tuple[str, ActionType], int]:
+    """`query.granted_actions`, with the cost as an `ActionType`."""
+    from .query import granted_actions
+
+    out: dict[tuple[str, ActionType], int] = {}
+    for (what, word), n in granted_actions(world, actor).items():
+        try:
+            out[(what, ActionType(word))] = n
+        except ValueError:  # a key that is not an action name is not one
+            continue
     return out
 
 
@@ -349,12 +375,17 @@ def _wielding(world: World, encounter: Encounter, actor: int) -> list[Action]:
 
 def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
     out: list[Action] = []
-    if (
-        is_(world, actor, Condition.PRONE)
-        and not is_(world, actor, Condition.PINNED)
-        and encounter.can_spend(actor, ActionType.MOVE)
-    ):
-        out.append(Action(kind="stand", cost=ActionType.MOVE))
+    if is_(world, actor, Condition.PRONE) and not is_(world, actor, Condition.PINNED):
+        # A move action to stand is the rule; `c.grant_action` is the
+        # printed line that changes it ("allies within 3 squares of you can
+        # stand up as a minor action"), which had nowhere to go while the
+        # cost was written in here as a constant.
+        costs = {ActionType.MOVE} | {
+            cost for (what, cost) in _granted(world, actor) if what == "stand"
+        }
+        for cost in sorted(costs, key=lambda a: a.value):
+            if encounter.can_spend(actor, cost):
+                out.append(Action(kind="stand", cost=cost))
     health = world.get(actor, Health)
     known = world.get(actor, Powers)
     # Second wind is a character's action. Monsters carry surges -- one per

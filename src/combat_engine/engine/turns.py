@@ -113,21 +113,63 @@ class Encounter:
                 use(self.world, eid, ref, spend=True)
 
     def _roll_initiative(self) -> list[int]:
-        rolls: list[tuple[int, int, int, int]] = []
-        for eid in combatants(self.world):
-            init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
-            from .query import level_term
+        """Everybody rolls, then the rolls are announced, then they are read.
 
+        Three beats rather than one, because "you and each ally gain +5 to
+        your initiative check" answers *one* creature's roll and reaches for
+        everybody's. Announcing each roll as it was made meant half the
+        party had not rolled yet, so the bonus landed on a number that was
+        then overwritten -- and the half that had rolled were already in the
+        sort, which was built from a local copy. The row read as working and
+        moved nobody.
+        """
+        from .query import level_term
+
+        order = list(combatants(self.world))
+        for eid in order:
+            init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
             init.rolled = (
                 self.world.rng.d20().total
                 + init.bonus
                 + level_term(self.world, eid, init.scale)
             )
-            # Ties go to the higher modifier, then to spawn order, so two runs
-            # of the same seed produce the same order.
+        for eid in order:
+            init = self.world.need(eid, Initiative)
             self.world.bus.emit(InitiativeRolled(actor=eid, rolled=init.rolled))
+        # Read back off the component, not off what was announced, so
+        # `c.initiative` reaches the order it exists to change. Ties go to
+        # the higher modifier, then to spawn order, so two runs of the same
+        # seed produce the same order.
+        rolls: list[tuple[int, int, int, int]] = []
+        for eid in order:
+            init = self.world.need(eid, Initiative)
             rolls.append((-init.rolled, -init.bonus, eid, eid))
         return [eid for _, _, eid, _ in sorted(rolls)]
+
+    def adjust_initiative(self, eid: int, amount: int) -> int:
+        """Move a creature up or down the order without rolling again.
+
+        "Each target gains a +10 bonus to his or her initiative check" is a
+        modifier to a number that has already been rolled, and there was
+        nowhere to put it: `Initiative.bonus` is read *before* the d20, and
+        setting `InitiativeRolled.rolled` from a listener changes a copy the
+        sort never looks at. So it goes on the component, and during the
+        opening rolls that is enough -- `_roll_initiative` reads the
+        component back. Later, the order already exists, so the creature is
+        lifted out and spliced in again. The turn in progress keeps its
+        slot, because moving the creature that is acting would end its turn
+        somewhere else.
+        """
+        init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
+        init.rolled += amount
+        if self.started and eid in self.order:
+            was = self.order.index(eid)
+            if was != self.index:
+                self.order.pop(was)
+                if was < self.index:
+                    self.index -= 1
+                self._splice(eid, init.rolled)
+        return init.rolled
 
     def reroll_initiative(self, eid: int) -> int:
         """Roll again and move the creature to its new place.

@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .events import RelationCleared, RelationSet
+from .events import Note, RelationCleared, RelationSet
+from .query import immune_to
 from .types import Condition, Relation
 
 if TYPE_CHECKING:
@@ -54,6 +55,14 @@ class Relations:
         the printed rule, and it is the only place a relation behaves this
         way.
         """
+        # "You cannot be marked until the end of your next turn" has to stop
+        # the relation, not just the condition it mirrors: clearing the
+        # count alone would leave the marker holding a mark over somebody
+        # who is not marked, and `resolve` reads the relation for its -2.
+        cond = IMPLIES.get(kind)
+        if cond is not None and immune_to(self.world, target, cond):
+            self.world.bus.emit(Note(text=f"{target} cannot be {cond.value}"))
+            return
         if kind is Relation.MARKED_BY:
             for other in self.sources(kind, target):
                 if other != source:

@@ -40,6 +40,7 @@ from .query import (
     can_act,
     concealment_of,
     cover_between,
+    cover_waived,
     deals_half,
     defence,
     has_combat_advantage,
@@ -145,11 +146,18 @@ def attack(
             # Cover and concealment do not add -- only the larger applies,
             # which is the printed rule and also stops a creature in a fog
             # bank behind a pillar being unhittable.
-            situational -= max(
+            blocked = max(
                 int(cover_between(world, attacker, target,
                                   ranged=_is_ranged(power, branch))),
                 int(concealment_of(world, target, ctx)),
             )
+            # A standing waiver -- `c.ignore_cover` on the attacker or
+            # `c.no_cover` on the target -- reads the same context the
+            # penalty does, so "against enemies in the zone" is a gate
+            # rather than an argument to one `c.strike`.
+            if blocked <= cover_waived(world, attacker, target, ctx):
+                blocked = 0
+            situational -= blocked
         situational += _mark_penalty(world, attacker, among or (target,))
 
         d20 = world.rng.d20()

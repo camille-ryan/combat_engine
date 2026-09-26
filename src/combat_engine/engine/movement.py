@@ -143,7 +143,11 @@ def step(
     for sq in sorted(target):
         world.bus.emit(EnterSquare(actor=eid, square=sq))
 
-    world.bus.emit(Moved(actor=eid, from_=from_, to=to))
+    moved = Moved(actor=eid, from_=from_, to=to)
+    # How the creature got here, as a plain attribute -- see `Moved`. Set on
+    # every emission, so `ev.kind_` is never missing.
+    moved.kind_ = kind
+    world.bus.emit(moved)
 
     # A mount carries its rider. Set after the mount has arrived, so the
     # rider is put down in the square the mount is actually standing in --
@@ -155,7 +159,9 @@ def step(
             world.grid.lift(passenger)
             seat.square = to
             world.grid.place(passenger, footprint(to, seat.size))
-            world.bus.emit(Moved(actor=passenger, from_=from_, to=to))
+            carried = Moved(actor=passenger, from_=from_, to=to)
+            carried.kind_ = kind
+            world.bus.emit(carried)
 
     after = _neighbours(world, eid)
     for other in sorted(after - before):

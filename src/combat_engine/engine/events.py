@@ -146,6 +146,16 @@ class Moved(Event):
     `EnterSquare` and `LeaveSquare` are per square of a *footprint* -- a Large
     creature emits four of each for one step -- so neither answers "what did
     this creature just do". This does, and it is what an animation plays.
+
+    **`kind_` rides as a plain attribute**, set on every emission: walk,
+    shift, teleport, push, pull, slide. `MoveEnd` carries the word and no
+    squares, `Moved` carried the squares and no word, so "one ally adjacent
+    to you *before the teleport*" could be asked of neither -- the only
+    event that knew where the creature came from did not know how it got
+    there. A plain attribute rather than a field for the reason
+    `AttackRolled.result` is one: it would otherwise reach the wire and
+    every replay fixture, none of which is a change in how a fight
+    resolves.
     """
 
     actor: int
