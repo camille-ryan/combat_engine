@@ -118,7 +118,7 @@ def p13160(c: Cast) -> None:
     put on at the start of one and taken off at the end rather than left
     standing, which would halve every blow all fight."""
     posture = c.stance()
-    _ends_with(c, posture, c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER))
+    _ends_with(c, posture, c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER, kind="power"))
     _ends_with(c, posture, c.phasing(until=When.ENCOUNTER))
     ghost: list[Effect] = []
 
@@ -238,7 +238,7 @@ def p16162(c: Cast) -> None:
 def p7463(c: Cast) -> None:
     posture = c.stance()
     for defence in (AC, FORT, REF, WILL):
-        _ends_with(c, posture, c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER))
+        _ends_with(c, posture, c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER, kind="power"))
 
 
 @power(

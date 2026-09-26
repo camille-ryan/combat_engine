@@ -619,7 +619,7 @@ def m265a0(c: Cast) -> None:
         2,
         until=When.ENCOUNTER,
         on=c.me,
-        kind="racial",
+        kind="untyped",
         when=lambda ctx: bool(ctx.get("opportunity")),
     )
 

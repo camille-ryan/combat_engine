@@ -295,7 +295,7 @@ def p12875(c: Cast) -> None:
     c.slowed(on=mate, until=When.EONT)
     c.resist(5, on=mate, until=When.EONT)
     if c.int_mod > 0:
-        c.bonus("damage", c.int_mod, on=mate, until=When.EONT, when=by_hand)
+        c.bonus("damage", c.int_mod, on=mate, until=When.EONT, when=by_hand, kind="power")
     for foe in [f for f in c.enemies() if c.adjacent_to(f, mate)]:
         if c.strike(on=foe):
             c.damage("2d6", c.wis_mod, on=foe)
@@ -375,7 +375,7 @@ def p9765(c: Cast) -> None:
         c.damage("1d10", c.wis_mod, dtype=DamageType.PSYCHIC)
         if victim is not None:
             c.bonus(
-                "attack", 2, on=c.me, until=When.ENCOUNTER,
+                "attack", 2, on=c.me, until=When.ENCOUNTER, kind="power",
                 when=lambda ctx, v=victim: (
                     spirit_power(ctx) and ctx.get("target") == v
                 ),

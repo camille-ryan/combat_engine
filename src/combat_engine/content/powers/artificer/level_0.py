@@ -104,4 +104,4 @@ def p7635(c: Cast) -> None:
     who = c.target
     if who is None:
         return
-    c.bonus(AC, 1, until=When.ENCOUNTER, on=who)
+    c.bonus(AC, 1, until=When.ENCOUNTER, on=who, kind="power")

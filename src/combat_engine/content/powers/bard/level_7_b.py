@@ -229,4 +229,4 @@ def p4998(c: Cast) -> None:
     if spot is not None:
         c.slide(2, on=pick, to=spot)
     if c.build("second-con") and c.con_mod > 0:
-        c.bonus(AC, c.con_mod, on=pick, until=When.EONT)
+        c.bonus(AC, c.con_mod, on=pick, until=When.EONT, kind="power")

@@ -128,8 +128,8 @@ def _concealed(c: Cast, who: int, until: When) -> None:
     """
     for foe in sorted(c.enemies()):
         c.penalty(
-            "attack", 2, until=until, on=foe, kind="untyped",
-            when=lambda ctx: ctx.get("target") == who,
+            "attack", 2, until=until, on=foe,
+            when=lambda ctx: ctx.get("target") == who
         )
 
 
@@ -305,7 +305,7 @@ def m4797a0(c: Cast) -> None:
         return who in c.enemies() and not is_(c.world, who, Condition.DEAFENED)
 
     def cowed(who: int) -> Effect | None:
-        return c.penalty("attack", 2, until=When.ENCOUNTER, on=who, kind="untyped")
+        return c.penalty("attack", 2, until=When.ENCOUNTER, on=who)
 
     _aura(c, 2, nondeafened, cowed)
 
@@ -534,7 +534,7 @@ def _shadowbond(c: Cast, victim: int) -> None:
 
     veils = [
         c.penalty(
-            "attack", 2, until=When.ENCOUNTER, on=foe, kind="untyped", when=shrouded
+            "attack", 2, until=When.ENCOUNTER, on=foe, when=shrouded
         )
         for foe in sorted(c.enemies())
     ]

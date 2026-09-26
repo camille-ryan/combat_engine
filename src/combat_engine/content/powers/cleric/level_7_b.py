@@ -357,7 +357,7 @@ def p14277(c: Cast) -> None:
         return foe is not None and friend in _flankers_from(c, c.here, foe)
 
     for who in (c.me, friend):
-        c.bonus("attack", 2, on=who, until=When.EONT, when=gate)
+        c.bonus("attack", 2, on=who, until=When.EONT, when=gate, kind="power")
 
 
 def _step_into_flank(c: Cast, victim: int) -> None:
@@ -417,8 +417,8 @@ def p14301(c: Cast) -> None:
 
     c.watch(MoveEnd, shifted, until=When.EONT, label=f"{c.ref} watches the shift")
     c.watch(AttackDeclared, swung, until=When.EONT, label=f"{c.ref} watches the swing")
-    c.bonus("attack", 4, on=c.me, until=When.EONT, when=gate)
-    c.bonus("damage", 4, on=c.me, until=When.EONT, when=gate)
+    c.bonus("attack", 4, on=c.me, until=When.EONT, when=gate, kind="power")
+    c.bonus("damage", 4, on=c.me, until=When.EONT, when=gate, kind="power")
 
 
 @power(
@@ -456,7 +456,7 @@ def p14302(c: Cast) -> None:
     held = []
     for who in [c.me, *c.allies()]:
         for what in ("attack", "damage"):
-            effect = c.bonus(what, 1, on=who, until=When.EONT, when=gate)
+            effect = c.bonus(what, 1, on=who, until=When.EONT, when=gate, kind="power")
             if effect is not None:
                 held.extend(mod for _, mod in effect.mods)
 

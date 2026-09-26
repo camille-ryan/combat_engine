@@ -85,8 +85,7 @@ def p12516(c: Cast) -> None:
         return
     c.bonus(
         "attack", 3, on=pick, until=When.EONT, once=True,
-        when=lambda ctx: ctx.get("target") == victim,
-    )
+        when=lambda ctx: ctx.get("target") == victim, kind="power")
 
 
 @power(

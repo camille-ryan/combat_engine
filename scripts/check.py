@@ -46,6 +46,8 @@ CHECKS = (
                "every declared row fires, and does something"),
     Instrument("leaks", ("uv", "run", "scripts/leaks.py"),
                "no printed name reached the tree"),
+    Instrument("bonuses", ("uv", "run", "scripts/bonuses.py", "--quiet"),
+               "every bonus says the type its card prints"),
     Instrument("replay", ("uv", "run", "scripts/replay.py", "verify"),
                "the engine still plays the recorded fights"),
     Instrument("fight", ("uv", "run", "scripts/fight.py", "--quiet"),

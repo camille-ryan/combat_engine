@@ -176,7 +176,7 @@ def p13152(c: Cast) -> None:
             c.damage("2d6", c.dex_mod)
             c.prone()
         armed = c.wielding("mace") or c.wielding("staff")
-        c.bonus(AC, c.con_mod if armed else 2, on=c.me, until=When.EONT)
+        c.bonus(AC, c.con_mod if armed else 2, on=c.me, until=When.EONT, kind="power")
     if c.last:
         c.no_provoke(until=When.EOT)
         c.move(c.speed_of())
@@ -246,8 +246,8 @@ def p16150(c: Cast) -> None:
             c.penalty(defence, 2, until=When.EONT)
     if c.last:
         c.shift(1)
-        c.bonus(AC, 2, on=c.me, until=When.EONT)
-        c.bonus(FORT, 2, on=c.me, until=When.EONT)
+        c.bonus(AC, 2, on=c.me, until=When.EONT, kind="power")
+        c.bonus(FORT, 2, on=c.me, until=When.EONT, kind="power")
 
 
 @power(

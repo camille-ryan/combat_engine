@@ -825,7 +825,7 @@ def m289a2(c: Cast) -> None:
         return
     c.hit()
     for defended in EVERY_DEFENCE:
-        c.penalty(defended, 2, until=When.EONT, kind="untyped")
+        c.penalty(defended, 2, until=When.EONT)
 
 
 @power(

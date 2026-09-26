@@ -62,7 +62,7 @@ def p10287(c: Cast) -> None:
 
     for who in (c.me, ally):
         if who is not None:
-            c.bonus(AC, 2, on=who, until=When.EONT, when=theirs)
+            c.bonus(AC, 2, on=who, until=When.EONT, when=theirs, kind="power")
 
 
 @power(
@@ -112,7 +112,7 @@ def p11104(c: Cast) -> None:
     c.damage(c.w(), c.cha_mod)
     if c.first:
         for ally in _friends(c, 1):
-            c.bonus("attack", 1, on=ally, until=When.SONT)
+            c.bonus("attack", 1, on=ally, until=When.SONT, kind="power")
 
 
 @power(
@@ -232,4 +232,4 @@ def p12959(c: Cast) -> None:
     c.damage(c.w(), c.cha_mod)
     ally = _pick(c, _friends(c, 5), "who quickens")
     if ally is not None:
-        c.bonus("speed", 2, on=ally, until=When.EONT)
+        c.bonus("speed", 2, on=ally, until=When.EONT, kind="power")

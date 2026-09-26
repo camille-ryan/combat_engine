@@ -97,7 +97,7 @@ def p5132(c: Cast) -> None:
     c.slide(5)
     c.resist(5, until=When.EONT, on=c.target)
     for d in (AC, FORT, REF, WILL):
-        c.bonus(d, 2, until=When.EONT)
+        c.bonus(d, 2, until=When.EONT, kind="power")
 
 
 @power(

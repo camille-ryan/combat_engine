@@ -593,7 +593,7 @@ def m288a1(c: Cast) -> None:
         )
 
     for defence in DEFENCES:
-        c.bonus(defence, 2, until=When.ENCOUNTER, on=me, when=a_crowd)
+        c.bonus(defence, 2, until=When.ENCOUNTER, on=me, when=a_crowd, kind="power")
 
 
 # --------------------------------------------------------------------------

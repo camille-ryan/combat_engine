@@ -110,8 +110,7 @@ def p11221(c: Cast) -> None:
         return
     c.bonus(
         "damage", 2, on=c.me, until=When.ENCOUNTER,
-        when=lambda ctx, v=victim: ctx.get("target") == v,
-    )
+        when=lambda ctx, v=victim: ctx.get("target") == v, kind="power")
 
     def herd(ev: Hit) -> None:
         if ev.attacker == c.me and ev.target == victim:
@@ -135,7 +134,7 @@ def p13154(c: Cast) -> None:
     the stance -- has no id of its own in the spec, so only the stance is
     written."""
     posture = c.stance()
-    held = c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=_melee)
+    held = c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=_melee, kind="power")
     if held is not None:
         posture.on_end.append(lambda: c.world.effects.end(held, "stance ended"))
 

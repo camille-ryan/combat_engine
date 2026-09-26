@@ -348,7 +348,7 @@ def p12726(c: Cast) -> None:
         return ctx.get("attacker") == victim
 
     for wall in (AC, FORT, REF, WILL):
-        c.bonus(wall, 2, on=c.me, until=When.EONT, when=theirs)
+        c.bonus(wall, 2, on=c.me, until=When.EONT, when=theirs, kind="power")
 
 
 @power(
@@ -430,8 +430,7 @@ def p4500(c: Cast) -> None:
         return
     c.bonus(
         "attack", 2, on=c.me, until=When.ENCOUNTER,
-        when=lambda ctx: ctx.get("target") == foe,
-    )
+        when=lambda ctx: ctx.get("target") == foe, kind="power")
 
 
 @power(

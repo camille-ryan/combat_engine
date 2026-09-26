@@ -381,7 +381,6 @@ def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
 
 def perform(world: World, encounter: Encounter, actor: int, action: Action) -> bool:
     """Spend the action and carry it out. False if it was not available."""
-    from .durations import When
     from .events import Note
     from .movement import walk
 
@@ -473,20 +472,9 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # through `legal`.
         if world.get(actor, Build) is None:
             return False
-        health = world.need(actor, Health)
-        known = world.get(actor, Powers)
-        if known is not None:
-            known.note_use("second-wind", world.round)
-        from .resolve import spend_surge
-
-        spend_surge(world, actor)
-        world.heal(actor, actor, health.surge_value)
         from .cast import Cast
 
-        Cast(world=world, me=actor, ref="second-wind", target=actor).bonus(
-            "ac", 2, until=When.SONT, on=actor, kind="untyped"
-        )
-        return True
+        return Cast(world=world, me=actor, ref="second-wind").second_wind()
 
     return False
 

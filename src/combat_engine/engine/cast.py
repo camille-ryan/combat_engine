@@ -1134,13 +1134,40 @@ class Cast:
         dest = self.world.decide(mover, "shift", options, f"{self.ref}: shift {squares_}")
         return shift(self.world, mover, dest)
 
-    def move(self, squares_: int, *, who: int | None = None) -> int:
+    def move(
+        self, squares_: int, *, who: int | None = None, at: str = ""
+    ) -> int:
+        """Walk. `at` names a movement mode to travel at instead.
+
+        "It flies up to its fly speed" came up short by the difference
+        between the two, because the pathfinder measures `query.speed` and
+        that is the ground speed. Three monster helpers had each worked
+        around it by lending a speed modifier for the length of the move
+        and taking it back in a `finally` -- the same fifteen lines three
+        times, one of them a byte-for-byte copy of another.
+        """
         mover = self.me if who is None else who
-        paths = self.world.reachable_paths(mover, squares_)
-        if not paths:
-            return 0
-        dest = self.world.decide(mover, "move", sorted(paths), f"{self.ref}: move {squares_}")
-        return walk(self.world, mover, paths[dest])
+        lent = None
+        if at:
+            from .components import Movement
+
+            mv = self.world.get(mover, Movement)
+            extra = max(0, (mv.modes.get(at, 0) if mv else 0) - self.speed_of(mover))
+            if extra:
+                lent = self.bonus(
+                    "speed", extra, until=When.EOT, on=mover, kind="untyped"
+                )
+        try:
+            paths = self.world.reachable_paths(mover, squares_)
+            if not paths:
+                return 0
+            dest = self.world.decide(
+                mover, "move", sorted(paths), f"{self.ref}: move {squares_}"
+            )
+            return walk(self.world, mover, paths[dest])
+        finally:
+            if lent is not None:
+                self.world.effects.end(lent, "the move ended")
 
     def flee(self, squares_: int, *, on: int | None = None) -> int:
         """The target runs, under its own power, as far from you as it can.
@@ -1822,6 +1849,7 @@ class Cast:
     def conceal(
         self,
         *,
+        when: Callable[[dict[str, Any]], bool] | None = None,
         on: int | None = None,
         until: When = When.EONT,
         total: bool = False,
@@ -1838,6 +1866,11 @@ class Cast:
         two positions and reads no modifier at all. Do not reach for
         `c.zone(blocks_sight=True)` instead: that is terrain, and it blinds
         both sides.
+
+        `when` is handed the attack context, so "concealment from creatures
+        more than 3 squares away" is sayable -- a creature printing that had
+        to hand-roll four bonuses to defences instead, which stacked with
+        cover where concealment must take the larger of the two.
         """
         # `kind="concealment"` so two sources do not add. Untyped modifiers
         # stack, so a creature concealed three times over came to 6 and read
@@ -1845,7 +1878,8 @@ class Cast:
         # larger wins, which is the stacking rule.
         return self.bonus(
             "concealment", 5 if total else 2,
-            on=on if on is not None else self.me, until=until, kind="concealment",
+            on=on if on is not None else self.me, until=until,
+            kind="concealment", when=when,
         )
 
     def no_advantage(
@@ -1970,6 +2004,63 @@ class Cast:
         """
         return self.bonus(
             "forced", squares_, on=on or self.me, until=until, kind="untyped"
+        )
+
+    def second_wind(self, *, on: int | None = None) -> bool:
+        """Take a second wind: a surge, and +2 to AC until your next turn.
+
+        The only implementation. `actions.perform` used to own it and there
+        was no door from a power body, so three content helpers had written
+        it out again -- and each of their docstrings says so, which is the
+        tell. A bare `c.surge` is not the same thing: the use has to be
+        counted in `Powers` or the creature can take a second one.
+
+        Returns False if it has already been taken this fight.
+        """
+        from .components import Health, Powers
+        from .resolve import spend_surge
+
+        who = on if on is not None else self.me
+        health = self.world.get(who, Health)
+        if health is None:
+            return False
+        known = self.world.get(who, Powers)
+        if known is not None:
+            if known.times("second-wind"):
+                return False
+            known.note_use("second-wind", self.world.round)
+        spend_surge(self.world, who)
+        self.world.heal(who, who, health.surge_value)
+        self.bonus("ac", 2, until=When.SONT, on=who, kind="untyped")
+        return True
+
+    def forces(
+        self,
+        squares_: int = 1,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """Lengthen every push, pull and slide this creature makes.
+
+        The other side of `c.resist_forced`, and the one that was missing:
+        the shove read a `"forced"` modifier off the creature *being*
+        shoved and nothing at all off the one doing it, so "your pushes
+        move the target 1 extra square" could not be said. It is a feat
+        and a magic-item line rather than a one-off, so it gets a key --
+        `"forcing"` -- rather than being faked as a negative `"forced"` on
+        every possible victim.
+
+        The gate is handed `how` (push, pull or slide) and `power`, so
+        "your *pushes*" and "when you push with <this row>" are both
+        sayable.
+
+        Defaults to the caster: a row printing this is describing itself.
+        """
+        return self.bonus(
+            "forcing", squares_, on=on if on is not None else self.me,
+            until=until, kind="untyped", when=when,
         )
 
     def on_sustain(self, effect: Effect | None, fn: Callable[[], None]) -> bool:
@@ -2580,11 +2671,25 @@ class Cast:
         *,
         until: When = When.EONT,
         on: int | None = None,
-        kind: str = "power",
+        kind: str = "untyped",
         when: Callable[[dict[str, Any]], bool] | None = None,
         once: bool = False,
+        stacks: bool = True,
     ) -> Effect | None:
         """A numeric modifier with a duration.
+
+        **`kind` is the 4e bonus type and it decides whether this stacks.**
+        Two bonuses of the same type do not add -- the larger applies --
+        and untyped ones do add, so writing the wrong type is a number
+        that is silently too big or too small in every fight.
+
+        Unspecified means **untyped**, which is what the absence of a type
+        word on a card means. It used to mean `"power"`, so `Mod` and this
+        gave different answers to the same question and a row printing a
+        plain "+2 to attack" was quietly non-stacking. `scripts/bonuses.py`
+        compares every call against the word in front of "bonus" on its
+        card and wrote the 283 explicit `kind=`s that this change would
+        otherwise have altered.
 
         `what` is `attack`, `damage`, `save`, `speed` or a defence. `when` is
         an optional gate -- "only against the creature you marked", "only
@@ -2601,6 +2706,14 @@ class Cast:
         who = self._who(on)
         if who is None:
             return None
+        # `stacks=False` buckets this row's bonus under its own ref, so a
+        # second one from the same row does not add -- the larger wins, the
+        # way two bonuses of a type do. "This bonus increases to +4" and "a
+        # second hit renews rather than doubles" are both that sentence,
+        # and both used to lean on being `kind="power"` by accident. One
+        # row had already discovered the trick and written `kind=c.ref`.
+        if not stacks:
+            kind = self.ref
         key = what.value if isinstance(what, Defense) else what
         mod = Mod(what=key, value=value, kind=kind, when=when, label=self.ref)
         effect = self.world.effects.apply(
@@ -2665,17 +2778,23 @@ class Cast:
                 effect.subs.append(self.world.bus.on(AttackRolled, spend, owner=who))
         return effect
 
-    def penalty(
-        self, what: str | Defense, value: int, *, kind: str = "untyped", **kw: Any
-    ) -> Effect | None:
-        """A negative modifier. `kind` is real, not hard-coded.
+    def penalty(self, what: str | Defense, value: int, **kw: Any) -> Effect | None:
+        """A negative modifier. **It takes no `kind`, and that is the rule.**
 
-        It used to pass `kind="untyped"` *and* splat `**kw`, so any caller
-        naming a kind got `TypeError: got multiple values for keyword
-        argument 'kind'` -- a crash rather than a rejection, and a printed
-        "-2 power penalty" could not be written at all.
+        Penalties have no type in 4e. They add, except that two from the
+        same source do not -- so what decides their stacking is the row
+        that laid them, which `Mods.total` reads off `Mod.label` and this
+        sets for free. A `kind=` here was silently discarded by
+        `value < 0`, and six rows were passing one; taking the argument
+        away is the difference between a parameter that does nothing and
+        a `TypeError` where it is written.
         """
-        return self.bonus(what, -abs(value), kind=kind, **kw)
+        if "kind" in kw:
+            raise TypeError(
+                "c.penalty takes no kind: penalties have no type in 4e, and "
+                "what stops two of them stacking is coming from the same row"
+            )
+        return self.bonus(what, -abs(value), **kw)
 
     # -- standing arrangements -----------------------------------------------
 

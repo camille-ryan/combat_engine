@@ -179,7 +179,7 @@ def p9441(c: Cast) -> None:
     """The encounter-long veil is ended by hand when the first hit lands: a
     second, shorter effect laid over it would not have shortened it, because
     two holds of the same relation both stand until their own clocks run."""
-    c.bonus("damage", 4, on=c.me, until=When.ENCOUNTER, once=True)
+    c.bonus("damage", 4, on=c.me, until=When.ENCOUNTER, once=True, kind="power")
     veil = c.invisible(on=c.me, until=When.ENCOUNTER)
 
     def struck(ev: Hit) -> None:

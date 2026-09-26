@@ -205,7 +205,7 @@ def p755(c: Cast) -> None:
         # The Effect line lands whether the swing did or not.
         friends = [a for a in c.within(5, side="ally") if a != c.me]
         if friends:
-            c.bonus(AC, c.wis_mod, on=c.choose(friends, "who gets the warding"))
+            c.bonus(AC, c.wis_mod, on=c.choose(friends, "who gets the warding"), kind="power")
 
 
 # -- daily ------------------------------------------------------------------

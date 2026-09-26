@@ -148,7 +148,7 @@ def p1141(c: Cast) -> None:
     keywords=MARTIAL,
 )
 def p1143(c: Cast) -> None:
-    c.bonus("speed", 2, until=When.ENCOUNTER)
+    c.bonus("speed", 2, until=When.ENCOUNTER, kind="power")
 
 
 @power(

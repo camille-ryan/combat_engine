@@ -183,7 +183,7 @@ def p5554(c: Cast) -> None:
         return
     for mate in c.allies():
         c.bonus(
-            "attack", 2, on=mate, until=When.ENCOUNTER,
+            "attack", 2, on=mate, until=When.ENCOUNTER, kind="power",
             when=lambda ctx, v=victim, b=burn: (
                 ctx.get("target") == v and not b.ended
             ),
@@ -244,7 +244,7 @@ def p11357(c: Cast) -> None:
     for mate in friends(c):
         for what in (AC, FORT, REF, WILL):
             c.bonus(
-                what, 2, on=mate, until=When.ENCOUNTER,
+                what, 2, on=mate, until=When.ENCOUNTER, kind="cover",
                 when=lambda ctx, w=mate: at_range(ctx) and beside_spirit(c, w),
             )
 
@@ -391,8 +391,7 @@ def p3780(c: Cast) -> None:
     for mate in friends(c, with_me=True):
         c.bonus(
             AC, 1, on=mate, until=When.EONT,
-            when=lambda ctx, w=mate: beside_spirit(c, w),
-        )
+            when=lambda ctx, w=mate: beside_spirit(c, w), kind="power")
 
 
 @power(
@@ -464,8 +463,7 @@ def p3786(c: Cast) -> None:
         for what in (AC, FORT, REF, WILL):
             c.bonus(
                 what, 2, on=mate, until=When.EONT,
-                when=lambda ctx, w=mate: beside_spirit(c, w),
-            )
+                when=lambda ctx, w=mate: beside_spirit(c, w), kind="power")
 
 
 @power(
@@ -676,8 +674,7 @@ def p5538(c: Cast) -> None:
     for mate in friends(c):
         c.bonus(
             "attack", 1, on=mate, until=When.EONT,
-            when=lambda ctx: catches_spirit(c, ctx),
-        )
+            when=lambda ctx: catches_spirit(c, ctx), kind="power")
 
 
 @power(

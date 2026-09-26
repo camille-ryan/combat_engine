@@ -635,7 +635,7 @@ def p4110(c: Cast) -> None:
         line = p.attack_of(ctx.get("branch", 0)) if p is not None else None
         return line is not None and line.vs is Defense.WILL
 
-    c.bonus("attack", 2, on=c.me, until=When.EONT, when=against_will)
+    c.bonus("attack", 2, on=c.me, until=When.EONT, when=against_will, kind="power")
 
 
 @power(

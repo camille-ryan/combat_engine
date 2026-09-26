@@ -85,10 +85,11 @@ def _friends_within(c: Cast, squares: int) -> list[int]:
 def _take_second_wind(c: Cast, who: int, bonus: int = 0) -> int:
     """Somebody takes a second wind out of turn, at your word.
 
-    `actions.perform` owns the only other copy: a counted use, a surge, and
-    a hold on the defences. Spelling it out is what "the target can use its
-    second wind" means -- `c.surge` alone spends the surge without ever
-    marking the use, so the target could take another one on its own turn.
+    **Not `c.second_wind`**, which looks like the same thing and is not:
+    this card holds +2 on *all four* defences to the start of the target's
+    next turn, where a plain second wind is +2 to AC alone until the start
+    of its own. It also carries a heal bonus. The counted use is the part
+    they share, and `c.surge` alone would leave it unmarked.
     """
     known = c.world.get(who, Powers)
     if known is not None:
@@ -351,9 +352,9 @@ def p4549(c: Cast) -> None:
         return
     pick = c.choose(["damage rolls", "saving throws"], "which bonus")
     if pick == "saving throws":
-        c.bonus("save", c.cha_mod, until=When.EONT)
+        c.bonus("save", c.cha_mod, until=When.EONT, kind="power")
     else:
-        c.bonus("damage", c.int_mod, until=When.EONT)
+        c.bonus("damage", c.int_mod, until=When.EONT, kind="power")
 
 
 def _bloodied(world: World, eid: int) -> bool:
@@ -449,7 +450,7 @@ def p4552(c: Cast) -> None:
     known = c.world.get(who, Powers)
     if known is not None:
         known.restore(SECOND_WIND)
-    c.bonus("attack", c.cha_mod, on=who, until=When.ENCOUNTER, once=True)
+    c.bonus("attack", c.cha_mod, on=who, until=When.ENCOUNTER, once=True, kind="power")
 
 
 @power(

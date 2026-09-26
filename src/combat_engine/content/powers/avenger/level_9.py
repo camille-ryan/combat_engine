@@ -123,7 +123,7 @@ def _extra(c: Cast, dtype: DamageType) -> None:
 def p11682(c: Cast) -> None:
     _swing(c)
     if c.first:
-        c.bonus("speed", 3, until=When.ENCOUNTER, on=c.me)
+        c.bonus("speed", 3, until=When.ENCOUNTER, on=c.me, kind="power")
 
 
 @power(
@@ -141,7 +141,7 @@ def p11685(c: Cast) -> None:
     def shield(ev: Hit) -> None:
         for friend in sorted(a for a in c.allies() if c.can_see(a)):
             for defence in _DEFENCES:
-                c.bonus(defence, 1, until=When.SONT, on=friend)
+                c.bonus(defence, 1, until=When.SONT, on=friend, kind="power")
 
     _swing(c)
     _oath_rider(c, shield)
@@ -190,8 +190,7 @@ def p11691(c: Cast) -> None:
         quarry = ev.target
         c.bonus(
             "attack", 2, until=When.SONT, on=who,
-            when=lambda ctx: ctx.get("target") == quarry,
-        )
+            when=lambda ctx: ctx.get("target") == quarry, kind="power")
 
     _swing(c)
     _oath_rider(c, opening)

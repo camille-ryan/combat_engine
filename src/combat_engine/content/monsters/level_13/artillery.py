@@ -159,8 +159,8 @@ def m161a0(c: Cast) -> None:
             if not c.is_kind("spider", on=friend) or not c.can_see(friend):
                 continue
             c.bonus(
-                "attack", 2, until=When.EONT, on=friend, kind="power",
-                when=at_that_one,
+                "attack", 2, until=When.EONT, on=friend,
+                when=at_that_one, stacks=False,
             )
 
     c.watch(Hit, landed, until=When.ENCOUNTER, on=me, label=ref)
@@ -596,15 +596,12 @@ def m225a3(c: Cast) -> None:
 def m333a0(c: Cast) -> None:
     """Hard to make out from any distance.
 
-    There is no concealment state in the engine: `cover_between` measures
-    two positions and nothing else, and `ignore_cover` is an argument to one
-    roll. Partial concealment *is* a -2 to the attacker's roll, and a +2 to
-    the defence is the same arithmetic from the other side -- so the four
-    modifiers sit on the m333 and read the attacker out of the defence
-    context, which carries it.
-
-    Four separate modifiers, because the engine holds each defence
-    separately and one named "all defenses" would be a bonus to nothing.
+    Concealment proper, not four bonuses to defences. It was written that
+    way when the engine had no concealment state, and the arithmetic looks
+    the same from one side -- but it is not the same rule: cover and
+    concealment take the **larger** of the two rather than adding, and four
+    bonuses to defences stack with cover on top. A creature behind a pillar
+    was two points harder to hit than the card allows.
     """
     me = c.me
 
@@ -612,8 +609,7 @@ def m333a0(c: Cast) -> None:
         shooter = ctx.get("attacker")
         return shooter is not None and distance_between(c.world, me, shooter) > 3
 
-    for defended in EVERY_DEFENCE:
-        c.bonus(defended, 2, until=When.ENCOUNTER, on=me, kind="untyped", when=far_off)
+    c.conceal(on=me, until=When.ENCOUNTER, when=far_off)
 
 
 @power(
@@ -973,7 +969,7 @@ def m2933a0(c: Cast) -> None:
 
     def hold(who: int) -> Effect | None:
         taken = [
-            c.penalty(defended, 2, on=who, until=When.ENCOUNTER, kind="untyped")
+            c.penalty(defended, 2, on=who, until=When.ENCOUNTER)
             for defended in EVERY_DEFENCE
         ]
         first = next((eff for eff in taken if eff is not None), None)

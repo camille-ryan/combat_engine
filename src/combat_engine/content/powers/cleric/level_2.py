@@ -110,7 +110,7 @@ def p91(c: Cast) -> None:
     keywords=[Keyword.DIVINE],
 )
 def p945(c: Cast) -> None:
-    c.bonus(AC, 2, until=When.ENCOUNTER)
+    c.bonus(AC, 2, until=When.ENCOUNTER, kind="power")
 
 
 @power(
@@ -124,4 +124,4 @@ def p945(c: Cast) -> None:
     keywords=[Keyword.DIVINE],
 )
 def p947(c: Cast) -> None:
-    c.bonus("attack", 1, until=When.ENCOUNTER)
+    c.bonus("attack", 1, until=When.ENCOUNTER, kind="power")

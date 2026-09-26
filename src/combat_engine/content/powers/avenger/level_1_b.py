@@ -161,8 +161,7 @@ def p6983(c: Cast) -> None:
             2,
             on=c.me,
             until=When.EONT,
-            when=lambda ctx: ctx.get("attacker") != victim,
-        )
+            when=lambda ctx: ctx.get("attacker") != victim, kind="power")
 
 
 @power(
@@ -408,8 +407,8 @@ def p3592(c: Cast) -> None:
         c.half_damage(c.w(3), c.wis_mod)
     if not c.first:
         return
-    c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER)
-    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=_melee_damage)
+    c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER, kind="power")
+    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=_melee_damage, kind="power")
 
 
 @power(

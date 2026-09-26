@@ -583,6 +583,10 @@
     "wants": "c.swap_initiative(other) and c.end_turn()",
     "why": "'you and one ally switch places in the initiative order; your turn ends; the ally takes its next turn immediately; you then act when your ally would have acted'. Nothing on Cast reaches Encounter.order, and c.extra_turn(at=) inserts a slot for the caster only and removes none, so half the row would be a second turn for somebody who has already had theirs"
   },
+  "p4807": {
+    "wants": "c.expend(ref, on=)",
+    "why": "'you expend an unused barbarian rage power', with the damage keyed to the expended power's level. c.forbid removes a row, which the Powers docstring says is not the same as spent. Also needs group='rage' on the rage rows: the group= header field exists and is set on nothing in the tree, so there is no queryable marker separating a rage from any other barbarian daily"
+  },
   "p4887": {
     "wants": "query.speed(world, eid, ctx)",
     "why": "a +4 power bonus to speed *when charging*. query.speed calls mods.total('speed') with no context, so a when= gate on a speed mod is handed {} and is false forever, and actions._charges measures speed before any charge flag exists. Ungated it would be a bonus to all movement, which is not the printed line (threading a charge key)"
@@ -658,6 +662,10 @@
   "p7192": {
     "wants": "a 'blast_size' mod key read by dsl.area_of, or c.widen_areas(1, until=)",
     "why": "'increase the size of your close blast or close burst attacks by 1'. area_of consults no modifiers"
+  },
+  "p7240": {
+    "wants": "c.cure(*conditions, on=)",
+    "why": "'remove one condition from the target: blinded, dazed, deafened, slowed, stunned, or weakened'. Nothing takes a condition off a creature -- c.save only rolls against a save-ends effect, which is neither guaranteed nor applicable to an end-of-turn condition"
   },
   "p7377": {
     "wants": "a spellbook -- powers a character owns but has not prepared",

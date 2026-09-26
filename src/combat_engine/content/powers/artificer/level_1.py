@@ -229,8 +229,7 @@ def p4131(c: Cast) -> None:
                 on=ev.attacker,
                 until=When.EONT,
                 once=True,
-                when=lambda ctx: ctx["target"] == victim,
-            )
+                when=lambda ctx: ctx["target"] == victim, kind="power")
 
     c.watch(AttackDeclared, helps, until=When.EONT, once=True)
 
@@ -259,8 +258,7 @@ def p4133(c: Cast) -> None:
             1,
             on=ally,
             until=When.EONT,
-            when=lambda ctx, a=ally: c.adjacent_to(victim, a),
-        )
+            when=lambda ctx, a=ally: c.adjacent_to(victim, a), kind="power")
 
 
 @power(
@@ -303,7 +301,7 @@ def p4199(c: Cast) -> None:
     primary = c.target
     if primary is None:
         return
-    c.bonus(AC, 1, on=primary, until=When.EONT)
+    c.bonus(AC, 1, on=primary, until=When.EONT, kind="power")
     beside = [e for e in c.within(10, side="enemy") if c.adjacent_to(primary, e)]
     victim = c.choose(beside, "the enemy beside them") if beside else None
     if victim is None:
@@ -391,9 +389,9 @@ def p5207(c: Cast) -> None:
     for ally in c.within(1, side="ally"):
         if ally == c.me:
             continue
-        c.bonus("attack", 1, on=ally, until=When.EONT)
+        c.bonus("attack", 1, on=ally, until=When.EONT, kind="power")
         if extra > 0:
-            c.bonus("damage", extra, on=ally, until=When.EONT)
+            c.bonus("damage", extra, on=ally, until=When.EONT, kind="power")
 
 
 @power(

@@ -283,7 +283,7 @@ def p2348(c: Cast) -> None:
     c.damage(c.w(2), c.cha_mod)
     for mate in c.within(5, side="ally"):
         if mate != c.me:
-            c.bonus("attack", 1, on=mate, until=When.EONT)
+            c.bonus("attack", 1, on=mate, until=When.EONT, kind="power")
 
 
 @power(

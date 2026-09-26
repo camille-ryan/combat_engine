@@ -391,8 +391,8 @@ def p10770(c: Cast) -> None:
             def shielded(ctx: dict) -> bool:
                 return ctx.get("attacker") != victim and adjacent(c.world, me, victim)
 
-            c.bonus(AC, 5, on=c.me, until=When.EONT, when=shielded)
-            c.bonus(REF, 5, on=c.me, until=When.EONT, when=shielded)
+            c.bonus(AC, 5, on=c.me, until=When.EONT, kind="cover", when=shielded)
+            c.bonus(REF, 5, on=c.me, until=When.EONT, kind="cover", when=shielded)
     if c.first:
         c.hide()
 

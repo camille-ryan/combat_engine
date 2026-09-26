@@ -293,7 +293,7 @@ def p9747(c: Cast) -> None:
     there is no verb for spending one, so the standing bonus is the row."""
     for mate in friends(c, with_me=True):
         c.bonus(
-            "attack", 1, on=mate, until=When.ENCOUNTER,
+            "attack", 1, on=mate, until=When.ENCOUNTER, kind="power",
             when=lambda ctx: (
                 bool(ctx.get("ranged")) and beside_spirit(c, ctx.get("target"))
             ),

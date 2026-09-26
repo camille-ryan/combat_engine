@@ -136,7 +136,14 @@ def _exists(wants: str, have: dict[str, object]) -> bool:
         return thing is not None and hasattr(thing, attr)
     if head not in have:
         return False
-    wanted = [p.strip().rstrip("=") for p in rest.rstrip(")").split(",") if p.strip()]
+    # `label=''` and `label=` both mean "it must take a `label`". Taking
+    # the text before the `=` rather than stripping a trailing one, because
+    # a written-out default parsed as the parameter name `label=''`, which
+    # matched nothing -- so twelve rows whose method had existed for hours
+    # went on reporting themselves blocked.
+    wanted = [
+        p.split("=")[0].strip() for p in rest.rstrip(")").split(",") if p.strip()
+    ]
     if not wanted:
         return True
     try:

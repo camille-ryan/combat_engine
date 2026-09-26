@@ -205,4 +205,4 @@ def p5689(c: Cast) -> None:
 def p5692(c: Cast) -> None:
     """The extra square of shifting is dropped -- a shift's distance is not a
     held modifier, so there is no key to raise."""
-    c.bonus("speed", 4, until=When.EONT)
+    c.bonus("speed", 4, until=When.EONT, kind="power")

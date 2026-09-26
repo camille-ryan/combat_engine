@@ -191,7 +191,7 @@ def p12954(c: Cast) -> None:
     turn, which is the nearest clock the engine keeps."""
     c.slide(3)
     for d in (AC, FORT, REF, WILL):
-        c.bonus(d, 2, until=When.SOTNT)
+        c.bonus(d, 2, until=When.SOTNT, kind="power")
 
 
 @power(

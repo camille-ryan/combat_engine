@@ -36,7 +36,7 @@ PRIMAL_WEAPON = [Keyword.PRIMAL, Keyword.WEAPON]
 def p5095(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(), c.str_mod)
-        c.bonus(AC, 1, on=c.me, until=When.EONT)
+        c.bonus(AC, 1, on=c.me, until=When.EONT, kind="power")
 
 
 @power(
@@ -143,7 +143,7 @@ def p9815(c: Cast) -> None:
 def p13601(c: Cast) -> None:
     """The Effect line is a damage bonus to one named class feature's attack,
     and the warden's chassis carries no ref for that feature to gate on, so
-    only the Hit line is written. `c.bonus("damage", when=...)` would say it
+    only the Hit line is written. `c.bonus("damage", when=..., kind="power")` would say it
     the moment the feature has an id."""
     if c.strike():
         c.damage(c.w(), c.str_mod)

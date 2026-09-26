@@ -43,11 +43,11 @@ def p11378(c: Cast) -> None:
     area = c.area()
     zid = c.zone(area, until=When.EONT, sustain=MINOR)
     for who in [c.me, *c.in_squares(area, side="ally")]:
-        c.bonus("attack", 2, on=who, until=When.EONT)
+        c.bonus("attack", 2, on=who, until=When.EONT, kind="power")
 
     def sharpen(ev: Any, z: int = zid) -> None:
         if ev.zone == z and ev.actor in [c.me, *c.allies()]:
-            c.bonus("attack", 2, on=ev.actor, until=When.EONT)
+            c.bonus("attack", 2, on=ev.actor, until=When.EONT, kind="power")
 
     c.watch(ZoneEntered, sharpen, until=When.EONT)
 
@@ -83,7 +83,7 @@ def p11380(c: Cast) -> None:
     if not c.bloodied():
         return
     for defence in DEFENCES:
-        c.bonus(defence, 5, until=When.EONT)
+        c.bonus(defence, 5, until=When.EONT, kind="power")
 
 
 @power(
@@ -107,5 +107,5 @@ def p11381(c: Cast) -> None:
     hurt = [a for a in near if c.wounded(a)] or near
     for ally in hurt[:2]:
         c.heal(c.surge_value(of=ally), on=ally)
-        c.bonus(AC, 5, on=ally, until=When.EONT)
-    c.bonus(AC, 5, on=who, until=When.EONT)
+        c.bonus(AC, 5, on=ally, until=When.EONT, kind="power")
+    c.bonus(AC, 5, on=who, until=When.EONT, kind="power")

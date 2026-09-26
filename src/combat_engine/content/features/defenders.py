@@ -362,4 +362,4 @@ def p1566(c: Cast) -> None:
 )
 def p1747(c: Cast) -> None:
     """Extra damage on the paladin's next attack this turn."""
-    c.bonus("damage", c.str_mod, until=When.SONT, on=c.me, kind="power")
+    c.bonus("damage", c.str_mod, until=When.SONT, on=c.me, kind="untyped")

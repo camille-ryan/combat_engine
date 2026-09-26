@@ -166,8 +166,7 @@ def p10332(c: Cast) -> None:
     if c.wielding("heavy blade"):
         c.bonus(
             AC, 1, on=c.me, until=When.EONT,
-            when=lambda ctx: ctx.get("attacker") == victim,
-        )
+            when=lambda ctx: ctx.get("attacker") == victim, kind="power")
 
 
 @power(
@@ -251,8 +250,7 @@ def p12189(c: Cast) -> None:
     c.damage(c.w(2 if c.level >= 21 else 1), c.str_mod)
     c.bonus(
         "attack", 3, on=c.me, until=When.EONT, once=True,
-        when=lambda ctx: ctx.get("target") == victim,
-    )
+        when=lambda ctx: ctx.get("target") == victim, kind="power")
 
 
 @power(

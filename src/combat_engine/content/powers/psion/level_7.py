@@ -146,7 +146,7 @@ def p13334(c: Cast) -> None:
         c.damage("1d6", c.int_mod, dtype=DamageType.FORCE)
         c.push(1)
         for defence in (AC, FORT, REF, WILL):
-            c.bonus(defence, 2, on=c.me, until=When.SONT)
+            c.bonus(defence, 2, on=c.me, until=When.SONT, kind="power")
 
 
 @power(

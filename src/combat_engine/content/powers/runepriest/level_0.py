@@ -37,4 +37,4 @@ def p11353(c: Cast) -> None:
             c.heal(c.roll(f"{dice}d6"), on=who)
     step = 2 + 2 * sum(lv <= c.level for lv in (11, 21))
     for friend in dict.fromkeys([c.me, *c.within(5, side="ally")]):
-        c.bonus("damage", step, on=friend, until=When.EONT)
+        c.bonus("damage", step, on=friend, until=When.EONT, kind="power")

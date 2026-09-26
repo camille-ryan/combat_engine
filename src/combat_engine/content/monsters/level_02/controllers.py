@@ -123,7 +123,7 @@ def m287a0(c: Cast) -> None:
         return len([a for a in c.within(1, side="ally") if a != c.me]) >= 2
 
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER, when=in_company)
+        c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER, when=in_company, kind="power")
 
 
 @power(

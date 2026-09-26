@@ -51,7 +51,7 @@ def p5120(c: Cast) -> None:
         c,
         held,
         *[
-            c.bonus(d, 1, on=c.me, until=When.ENCOUNTER)
+            c.bonus(d, 1, on=c.me, until=When.ENCOUNTER, kind="power")
             for d in (AC, FORT, REF, WILL)
         ],
     )

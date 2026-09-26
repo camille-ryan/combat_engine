@@ -114,7 +114,7 @@ def p10276(c: Cast) -> None:
         ally = _pick(c, _friends(c, 5), "who is shielded")
         if ally is not None:
             for d in DEFENCES:
-                c.bonus(d, 1, on=ally, until=When.EONT)
+                c.bonus(d, 1, on=ally, until=When.EONT, kind="power")
 
 
 @power(
@@ -296,13 +296,11 @@ def p11064(c: Cast) -> None:
         for ally in c.allies():
             c.bonus(
                 "attack", 1, on=ally, until=When.EONT,
-                when=lambda _ctx, a=ally: c.adjacent(to=a),
-            )
+                when=lambda _ctx, a=ally: c.adjacent(to=a), kind="power")
             if c.con_mod:
                 c.bonus(
                     "damage", c.con_mod, on=ally, until=When.EONT,
-                    when=lambda _ctx, a=ally: c.adjacent(to=a),
-                )
+                    when=lambda _ctx, a=ally: c.adjacent(to=a), kind="power")
 
     buff()
     hold = c.effect(c.ref, until=When.SUSTAIN, on=c.me, sustain=MINOR)
@@ -395,8 +393,7 @@ def p12934(c: Cast) -> None:
     if ally is not None:
         c.bonus(
             "attack", 2, on=ally, until=When.SONT,
-            when=lambda ctx: ctx.get("target") == victim,
-        )
+            when=lambda ctx: ctx.get("target") == victim, kind="power")
 
 
 @power(
@@ -517,12 +514,10 @@ def p12938(c: Cast) -> None:
     for ally in c.allies():
         c.bonus(
             "attack", 1, on=ally, until=When.ENCOUNTER,
-            when=lambda _ctx, a=ally: live(a),
-        )
+            when=lambda _ctx, a=ally: live(a), kind="power")
         c.bonus(
             "damage", 2, on=ally, until=When.ENCOUNTER,
-            when=lambda _ctx, a=ally: live(a),
-        )
+            when=lambda _ctx, a=ally: live(a), kind="power")
 
 
 @power(

@@ -283,8 +283,7 @@ def p11371(c: Cast) -> None:
             2,
             on=ally,
             until=When.EONT,
-            when=lambda ctx, v=victim: ctx.get("target") == v,
-        )
+            when=lambda ctx, v=victim: ctx.get("target") == v, kind="untyped")
     if not destruction:
         return
     near = c.within(5, side="ally")
@@ -296,8 +295,7 @@ def p11371(c: Cast) -> None:
             on=pick,
             until=When.SONT,
             once=True,
-            when=lambda ctx, v=victim: ctx.get("target") == v,
-        )
+            when=lambda ctx, v=victim: ctx.get("target") == v, kind="power")
 
 
 @power(
@@ -317,7 +315,7 @@ def p11372(c: Cast) -> None:
         c.damage(c.w(), c.str_mod, dtype=DamageType.FIRE)
     if c.first and destruction:
         for ally in c.in_squares(c.area(), side="ally"):
-            c.bonus("damage", 3, on=ally, until=When.EONT)
+            c.bonus("damage", 3, on=ally, until=When.EONT, kind="power")
 
 
 @power(
@@ -403,13 +401,13 @@ def p11375(c: Cast) -> None:
     zid = c.zone(area, until=When.EONT, sustain=MINOR)
     for who in [c.me, *c.in_squares(area, side="ally")]:
         for defence in DEFENCES:
-            c.bonus(defence, 2, on=who, until=When.EONT)
+            c.bonus(defence, 2, on=who, until=When.EONT, kind="power")
 
     def ward(ev: Any, z: int = zid) -> None:
         if ev.zone != z or ev.actor not in [c.me, *c.allies()]:
             return
         for defence in DEFENCES:
-            c.bonus(defence, 2, on=ev.actor, until=When.EONT)
+            c.bonus(defence, 2, on=ev.actor, until=When.EONT, kind="power")
 
     c.watch(ZoneEntered, ward, until=When.EONT)
 

@@ -477,7 +477,7 @@ def m153a1(c: Cast) -> None:
         return
     c.hit(on=victim)
     for friend in sorted(c.allies()):
-        c.bonus("attack", 2, until=When.EONT, on=friend, kind="power")
+        c.bonus("attack", 2, until=When.EONT, on=friend, kind="untyped")
 
 
 @power(

@@ -257,7 +257,7 @@ def p10922(c: Cast) -> None:
     if friend is None:
         return
     if c.choose(["hit harder", "temporary hit points"], "which") == "hit harder":
-        c.bonus("damage", c.int_mod, on=friend, until=When.EONT)
+        c.bonus("damage", c.int_mod, on=friend, until=When.EONT, kind="power")
     else:
         c.temp_hp(c.cha_mod, on=friend)
 
@@ -461,8 +461,7 @@ def p11722(c: Cast) -> None:
         on=friend,
         until=When.EONT,
         once=True,
-        when=lambda ctx: ctx.get("target") in hidden_from(c.world, friend),
-    )
+        when=lambda ctx: ctx.get("target") in hidden_from(c.world, friend), kind="power")
 
 
 @power(
@@ -487,7 +486,7 @@ def p2327(c: Cast) -> None:
     pool = sorted(_friends_within(c, 10))
     friend = c.choose(pool, "who picks up the pace") if pool else None
     if friend is not None:
-        c.bonus("speed", 2, on=friend, until=When.EONT)
+        c.bonus("speed", 2, on=friend, until=When.EONT, kind="power")
 
 
 @power(

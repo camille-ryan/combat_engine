@@ -91,7 +91,7 @@ def p7642(c: Cast) -> None:
     it is their bonus being spent. Declining is the default: giving up a
     whole encounter's +1 for one attack's +4 is rarely worth it."""
     ally = c.target
-    ward = c.bonus(AC, 1, on=ally, until=When.ENCOUNTER)
+    ward = c.bonus(AC, 1, on=ally, until=When.ENCOUNTER, kind="power")
     if ward is None or ally is None:
         return
 
@@ -102,7 +102,7 @@ def p7642(c: Cast) -> None:
                      default=False):
             return
         c.world.effects.end(ward, "spent")
-        c.bonus(AC, 4, on=ally, until=When.EONT, once=True)
+        c.bonus(AC, 4, on=ally, until=When.EONT, once=True, kind="untyped")
 
     c.watch(AttackDeclared, offer, until=When.ENCOUNTER)
 

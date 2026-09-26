@@ -129,8 +129,7 @@ def p13670(c: Cast) -> None:
         for d in (AC, FORT, REF, WILL):
             c.bonus(
                 d, 2, on=c.me, until=When.EONT,
-                when=lambda ctx, who=victim: ctx.get("attacker") == who,
-            )
+                when=lambda ctx, who=victim: ctx.get("attacker") == who, kind="power")
 
 
 @power(
@@ -198,8 +197,7 @@ def p13680(c: Cast) -> None:
         c.damage(c.w(2 if c.level >= 21 else 1), c.cha_mod, dtype=DamageType.NECROTIC)
         c.bonus(
             "attack", 2, on=c.me, until=When.EONT, once=True,
-            when=lambda ctx, who=victim: ctx.get("target") == who,
-        )
+            when=lambda ctx, who=victim: ctx.get("target") == who, kind="power")
 
 
 @power(
@@ -227,8 +225,7 @@ def p13681(c: Cast) -> None:
     if victim is not None:
         c.bonus(
             "damage", 5, on=c.me, until=When.EONT, once=True,
-            when=lambda ctx, who=victim: ctx.get("target") == who,
-        )
+            when=lambda ctx, who=victim: ctx.get("target") == who, kind="power")
 
 
 @power(

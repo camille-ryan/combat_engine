@@ -43,7 +43,6 @@ from combat_engine.engine import (
     Gear,
     Keyword,
     Melee,
-    Powers,
     Ranged,
     Relation,
     When,
@@ -121,16 +120,10 @@ def _step_clear(c: Cast, squares_: int) -> None:
 def _second_wind(c: Cast) -> None:
     """"You can use your second wind."
 
-    Spelled out to match `actions.perform`, which is where a second wind
-    otherwise happens: the use is counted in `Powers` so it cannot be taken
-    twice, a surge is spent, and the bonus is +2 to AC alone and untyped.
+    `c.second_wind` is the one implementation now; this used to spell it
+    out again to match `actions.perform`, and so did two other helpers.
     """
-    known = c.world.get(c.me, Powers)
-    if known is None or known.times("second-wind"):
-        return
-    known.note_use("second-wind", c.world.round)
-    c.surge(on=c.me)
-    c.bonus(AC, 2, on=c.me, until=When.SONT, kind="untyped")
+    c.second_wind()
 
 
 @power(
@@ -155,7 +148,7 @@ def p749(c: Cast) -> None:
     """
     c.shift(c.wis_mod)
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 2, on=c.me, until=When.EONT)
+        c.bonus(defence, 2, on=c.me, until=When.EONT, kind="power")
 
 
 @power(
@@ -232,8 +225,7 @@ def p10605(c: Cast) -> None:
         2,
         on=c.me,
         until=When.ENCOUNTER,
-        when=lambda ctx: ctx.get("target") == foe,
-    )
+        when=lambda ctx: ctx.get("target") == foe, kind="power")
 
 
 @power(
@@ -272,8 +264,7 @@ def p10607(c: Cast) -> None:
             4,
             on=c.me,
             until=When.EONT,
-            when=lambda ctx: c.here in c.world.difficult(c.me),
-        )
+            when=lambda ctx: c.here in c.world.difficult(c.me), kind="power")
 
 
 @power(
@@ -364,7 +355,7 @@ def p13624(c: Cast) -> None:
     """The speed only. `actions.legal` offers a shift from a ring fixed at
     one square and nothing reads a modifier there, so the extra square has
     no number to raise -- the same gap `level_10.py`'s `p926` reports."""
-    c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER)
+    c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER, kind="power")
 
 
 @power(
@@ -381,7 +372,7 @@ def p13625(c: Cast) -> None:
     """`EACH_ALLY`'s pool includes the caster, which is "you and each ally"
     exactly."""
     c.ignores_difficult(on=c.target, until=When.ENCOUNTER)
-    c.bonus("speed", 2, on=c.target, until=When.ENCOUNTER)
+    c.bonus("speed", 2, on=c.target, until=When.ENCOUNTER, kind="power")
 
 
 @power(
@@ -427,8 +418,7 @@ def p4380(c: Cast) -> None:
             2,
             on=c.me,
             until=When.EONT,
-            when=lambda ctx, f=foe: f is None or ctx.get("attacker") == f,
-        )
+            when=lambda ctx, f=foe: f is None or ctx.get("attacker") == f, kind="power")
 
 
 @power(

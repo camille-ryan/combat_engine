@@ -106,7 +106,7 @@ def p1043(c: Cast) -> None:
     """Raised on the roll, which is the window where the defence is read
     again -- so the +2 applies to the very attack that triggered it. `Hit`
     would be too late: by then the comparison has been made."""
-    c.bonus(WILL, 2, on=c.me, until=When.EONT)
+    c.bonus(WILL, 2, on=c.me, until=When.EONT, kind="power")
 
 
 @power(
@@ -125,7 +125,7 @@ def p365(c: Cast) -> None:
     `c.moving_as` asks what it is doing, where `Movement.modes` only ever
     said what it could do."""
     if c.moving_as("climb"):
-        c.bonus("speed", 4, on=c.me, until=When.EOT)
+        c.bonus("speed", 4, on=c.me, until=When.EOT, kind="power")
     c.move(c.speed_of())
 
 
@@ -406,7 +406,7 @@ def p4484(c: Cast) -> None:
     def watched(ctx: dict) -> bool:
         return ctx.get("attacker") == chosen and c.can_see(chosen)
 
-    c.bonus(AC, 2, on=c.me, until=When.STANCE, when=watched)
+    c.bonus(AC, 2, on=c.me, until=When.STANCE, when=watched, kind="power")
 
 
 @power(
@@ -459,7 +459,7 @@ def p4486(c: Cast) -> None:
     """The way out of the stance is an Athletics check to jump, and the
     model has neither, so what is written is the bonus and the stance."""
     c.stance()
-    c.bonus(REF, 1, on=c.me, until=When.STANCE)
+    c.bonus(REF, 1, on=c.me, until=When.STANCE, kind="power")
 
 
 @power(

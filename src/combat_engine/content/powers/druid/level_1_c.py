@@ -382,4 +382,4 @@ def p9640(c: Cast) -> None:
         return
     c.damage("1d6", c.wis_mod)
     for d in (AC, FORT, REF, WILL):
-        c.penalty(d, 2, until=When.EONT, kind="power")
+        c.penalty(d, 2, until=When.EONT)

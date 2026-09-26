@@ -493,7 +493,16 @@ def forced(
         nonlocal agreed
         from .resolve import _mods
 
-        agreed = max(0, ev.squares - _mods(world, ev.target, "forced", {"how": how.value}))
+        ctx = {"how": how.value, "power": power}
+        # Two sides to a shove, and only the shoved one was read. The
+        # creature resisting shortens it with `"forced"`; the creature
+        # doing it lengthens it with `"forcing"` -- "your pushes move the
+        # target 1 extra square" is a feat and a magic-item line, not a
+        # one-off, so it needs a key of its own rather than a negative
+        # `"forced"` on somebody else.
+        resists = _mods(world, ev.target, "forced", ctx)
+        shoves = _mods(world, ev.source, "forcing", ctx)
+        agreed = max(0, ev.squares + shoves - resists)
 
     if world.bus.emit(shove, settle).cancelled or agreed <= 0:
         return 0

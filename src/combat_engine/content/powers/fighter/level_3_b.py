@@ -438,8 +438,7 @@ def p4320(c: Cast) -> None:
     c.damage(c.w(1), c.str_mod)
     c.bonus(
         "attack", 4, on=c.me, until=When.EONT,
-        when=lambda ctx: ctx.get("target") == victim,
-    )
+        when=lambda ctx: ctx.get("target") == victim, kind="power")
 
 
 @power(

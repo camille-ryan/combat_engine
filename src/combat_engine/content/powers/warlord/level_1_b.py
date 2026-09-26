@@ -227,7 +227,7 @@ def p10889(c: Cast) -> None:
             return
         if not has_combat_advantage(c.world, ev.attacker, foe):
             return
-        c.bonus("attack", 2, on=ev.attacker, until=When.EOT, once=True)
+        c.bonus("attack", 2, on=ev.attacker, until=When.EOT, once=True, kind="power")
 
     c.watch(
         AttackDeclared,
@@ -261,7 +261,7 @@ def p10890(c: Cast) -> None:
         return ctx.get("target") == foe
 
     for friend in c.allies():
-        c.bonus("damage", value, on=friend, until=When.SONT, when=at_it)
+        c.bonus("damage", value, on=friend, until=When.SONT, when=at_it, kind="power")
 
 
 @power(
@@ -375,7 +375,7 @@ def p10892(c: Cast) -> None:
         return ctx.get("target") == foe and bool(ctx.get("ranged"))
 
     for who in (c.me, *c.allies()):
-        c.bonus("attack", value, on=who, until=When.EONT, when=shot_at_it)
+        c.bonus("attack", value, on=who, until=When.EONT, when=shot_at_it, kind="power")
 
 
 @power(
@@ -400,7 +400,7 @@ def p10893(c: Cast) -> None:
     if friend is None:
         return
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 2, on=friend, until=When.EOT, once=True)
+        c.bonus(defence, 2, on=friend, until=When.EOT, once=True, kind="power")
     if attacker is not None:
         c.grant_attack(friend, on=attacker)
 
@@ -485,13 +485,13 @@ def p10900(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(2), c.str_mod)
     me = c.me
-    c.bonus(AC, 2, on=me, until=When.EONT)
+    c.bonus(AC, 2, on=me, until=When.EONT, kind="power")
     for friend in c.allies():
 
         def beside_me(ctx: dict[str, Any], who: int = friend) -> bool:
             return adjacent(c.world, me, who)
 
-        c.bonus(AC, 2, on=friend, until=When.EONT, when=beside_me)
+        c.bonus(AC, 2, on=friend, until=When.EONT, when=beside_me, kind="power")
 
 
 @power(
@@ -619,7 +619,7 @@ def p10903(c: Cast) -> None:
         c.half_damage(c.w(2), c.str_mod)
         until = When.EONT
     for who in (c.me, *_visible_friends(c)):
-        c.bonus("speed", 1, on=who, until=until)
+        c.bonus("speed", 1, on=who, until=until, kind="power")
 
 
 @power(
@@ -692,4 +692,4 @@ def p10915(c: Cast) -> None:
         return ctx.get("target") == foe
 
     for friend in c.allies():
-        c.bonus("damage", value, on=friend, until=When.ENCOUNTER, when=at_it)
+        c.bonus("damage", value, on=friend, until=When.ENCOUNTER, when=at_it, kind="power")

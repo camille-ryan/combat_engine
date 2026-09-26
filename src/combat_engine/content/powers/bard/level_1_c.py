@@ -149,8 +149,7 @@ def p5679(c: Cast) -> None:
     held = c.effect("p5679 tether", on=victim, until=When.SAVE_ENDS)
     c.bonus(
         "attack", 2, on=keeper, until=When.ENCOUNTER,
-        when=lambda ctx: ctx.get("target") == victim,
-    )
+        when=lambda ctx: ctx.get("target") == victim, kind="power")
     if held is None:
         return
 

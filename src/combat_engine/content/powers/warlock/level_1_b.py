@@ -121,7 +121,7 @@ def p10379(c: Cast) -> None:
     if c.build("infernal"):
         caught |= set(c.within(2, side="enemy"))
     for foe in sorted(f for f in caught if f is not None):
-        c.penalty("attack", 2, kind="power", on=foe)
+        c.penalty("attack", 2, on=foe)
 
 
 @power(

@@ -166,7 +166,7 @@ def p13818(c: Cast) -> None:
     c.temp_hp(5, on=c.me)
     c.save(on=c.me)
     for d in (AC, FORT, REF, WILL):
-        c.bonus(d, 2, on=c.me)
+        c.bonus(d, 2, on=c.me, kind="power")
 
 
 _ALLY_STRUCK = "an adjacent ally is hit by a melee or a ranged attack"

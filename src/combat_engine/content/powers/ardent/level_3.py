@@ -132,8 +132,7 @@ def p11069(c: Cast) -> None:
     if ally is not None:
         c.bonus(
             "damage", 2, on=ally, until=When.SONT,
-            when=lambda ctx: ctx.get("target") == victim,
-        )
+            when=lambda ctx: ctx.get("target") == victim, kind="power")
 
 
 @power(

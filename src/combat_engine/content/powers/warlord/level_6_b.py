@@ -347,8 +347,8 @@ def p10931(c: Cast) -> None:
                 other != who and adjacent(c.world, who, other) for other in here
             )
 
-        c.bonus(AC, 1, on=friend, until=When.ENCOUNTER, when=within)
-        c.bonus(AC, 2, on=friend, until=When.ENCOUNTER, when=sheltered)
+        c.bonus(AC, 1, on=friend, until=When.ENCOUNTER, when=within, kind="power")
+        c.bonus(AC, 2, on=friend, until=When.ENCOUNTER, when=sheltered, kind="power")
 
 
 @power(
@@ -650,7 +650,7 @@ def p4563(c: Cast) -> None:
 
     for defence in (AC, REF):
         held.append(
-            c.bonus(defence, 1, on=me, until=When.ENCOUNTER, when=beside_a_shield)
+            c.bonus(defence, 1, on=me, until=When.ENCOUNTER, when=beside_a_shield, kind="power")
         )
     for friend in shielded:
 
@@ -659,7 +659,7 @@ def p4563(c: Cast) -> None:
 
         for defence in (AC, REF):
             held.append(
-                c.bonus(defence, 1, on=friend, until=When.ENCOUNTER, when=beside_me)
+                c.bonus(defence, 1, on=friend, until=When.ENCOUNTER, when=beside_me, kind="power")
             )
     stance.on_end.append(
         lambda: [c.world.effects.end(e, "stance ended") for e in held if e]
@@ -706,7 +706,7 @@ def p4565(c: Cast) -> None:
     """
     ally = getattr(c.trigger, "attacker", None) or c.target
     if ally is not None:
-        c.bonus("attack", c.int_mod, on=ally, until=When.EOT, once=True)
+        c.bonus("attack", c.int_mod, on=ally, until=When.EOT, once=True, kind="power")
 
 
 @power(
@@ -750,4 +750,5 @@ def p7386(c: Cast) -> None:
     who = c.target
     if who is None or (who != c.me and not c.bloodied(who)):
         return
-    c.bonus("attack", 3 if c.is_kind("dragonborn", c.me) else 2, on=who, until=When.EONT)
+    c.bonus("attack", 3 if c.is_kind("dragonborn", c.me) else 2, on=who, until=When.EONT,
+        kind="power")

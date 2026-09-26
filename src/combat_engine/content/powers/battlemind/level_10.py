@@ -187,4 +187,4 @@ def p2640(c: Cast) -> None:
     destruction is dropped -- a conjuration has no hit points to lose."""
     c.conjure(label=c.ref, until=When.ENCOUNTER, sustain=None, speed=5)
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 4, on=c.me, until=When.ENCOUNTER)
+        c.bonus(defence, 4, on=c.me, until=When.ENCOUNTER, kind="power")

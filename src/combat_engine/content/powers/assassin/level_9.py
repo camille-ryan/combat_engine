@@ -48,9 +48,8 @@ def p9435(c: Cast) -> None:
             "attack",
             2,
             on=victim,
-            kind="power",
             until=When.ENCOUNTER,
-            when=lambda ctx: ctx.get("target") == c.me,
+            when=lambda ctx: ctx.get("target") == c.me
         )
 
         def squeeze() -> None:

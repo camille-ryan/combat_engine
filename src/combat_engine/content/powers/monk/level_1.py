@@ -238,7 +238,7 @@ def p13124(c: Cast) -> None:
     if c.last:
         c.shift(1)
         for d in (AC, FORT, REF, WILL):
-            c.bonus(d, 1, on=c.me, until=When.SONT)
+            c.bonus(d, 1, on=c.me, until=When.SONT, kind="power")
 
 
 @power(
@@ -281,7 +281,7 @@ def p13128(c: Cast) -> None:
     if c.strike():
         c.damage("2d8", c.dex_mod)
         if c.str_mod > 0:
-            c.penalty(AC, c.str_mod, until=When.EONT, kind="power")
+            c.penalty(AC, c.str_mod, until=When.EONT)
     if c.last:
         c.mode("fly", c.speed_of(), until=When.EOT)
         c.move(c.speed_of())
@@ -312,7 +312,7 @@ def p13130(c: Cast) -> None:
     if c.last:
         for d in (AC, FORT, REF, WILL):
             c.bonus(
-                d, 2, on=c.me, until=When.SONT,
+                d, 2, on=c.me, until=When.SONT, kind="power",
                 when=lambda ctx: bool(ctx.get("opportunity")),
             )
         c.move(c.speed_of())

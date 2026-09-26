@@ -330,7 +330,7 @@ def p10619(c: Cast) -> None:
     def closing(ctx: dict[str, Any]) -> bool:
         return ctx.get("target") == victim and _melee_row(ctx.get("power") or "")
 
-    c.bonus("damage", c.wis_mod, on=c.me, until=When.ENCOUNTER, when=closing)
+    c.bonus("damage", c.wis_mod, on=c.me, until=When.ENCOUNTER, when=closing, kind="power")
 
 
 @power(

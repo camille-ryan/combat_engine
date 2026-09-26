@@ -162,7 +162,7 @@ def p11050(c: Cast) -> None:
     keywords=DIVINE,
 )
 def p1279(c: Cast) -> None:
-    c.bonus("damage", c.cha_mod, until=When.ENCOUNTER)
+    c.bonus("damage", c.cha_mod, until=When.ENCOUNTER, kind="power")
 
 
 @power(

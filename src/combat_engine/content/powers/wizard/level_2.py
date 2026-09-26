@@ -176,8 +176,8 @@ def p1235(c: Cast) -> None:
     lands as things stand -- and the defence is read again once this window
     closes, so the +4 applies to the very attack that triggered it.
     """
-    c.bonus(AC, 4, on=c.me, until=When.EONT)
-    c.bonus(REF, 4, on=c.me, until=When.EONT)
+    c.bonus(AC, 4, on=c.me, until=When.EONT, kind="power")
+    c.bonus(REF, 4, on=c.me, until=When.EONT, kind="power")
 
 
 @power(
@@ -522,7 +522,7 @@ def p3217(c: Cast) -> None:
         if pos is None or not (pos.squares & area):
             continue
         c.bonus(
-            "attack", c.int_mod, on=eid, until=When.ENCOUNTER, kind="power",
+            "attack", c.int_mod, on=eid, until=When.ENCOUNTER, kind="untyped",
             when=lambda ctx: ctx.get("target") in foes,
         )
     c.note(f"{c.ref}: rough going here should cost 2 extra squares, and it costs 1")

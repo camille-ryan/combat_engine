@@ -190,8 +190,7 @@ def p16147(c: Cast) -> None:
         for defence in (AC, FORT, REF, WILL):
             c.bonus(
                 defence, 2, on=c.me, until=When.EOT,
-                when=lambda ctx, f=foe: ctx.get("attacker") == f,
-            )
+                when=lambda ctx, f=foe: ctx.get("attacker") == f, kind="power")
 
     hold = c.watch(AdjacencyGained, step_off, until=When.ENCOUNTER)
     posture.on_end.append(lambda: c.world.effects.end(hold, "stance ended"))

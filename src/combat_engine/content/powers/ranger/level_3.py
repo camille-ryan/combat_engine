@@ -355,8 +355,7 @@ def p10613(c: Cast) -> None:
             on=c.me,
             until=When.ENCOUNTER,
             once=True,
-            when=lambda ctx: ctx.get("power") == ref,
-        )
+            when=lambda ctx: ctx.get("power") == ref, kind="power")
 
 
 @power(

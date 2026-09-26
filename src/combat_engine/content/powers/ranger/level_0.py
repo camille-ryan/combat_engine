@@ -375,7 +375,7 @@ def p13593(c: Cast) -> None:
     def edge(ev: Hit) -> None:
         result = getattr(ev, "result", None)
         if ev.attacker == c.me and result is not None and result.advantage:
-            c.bonus("damage", 2, on=c.me, until=When.EOT, once=True)
+            c.bonus("damage", 2, on=c.me, until=When.EOT, once=True, kind="power")
 
     held.subs.append(c.world.bus.on(Hit, edge, owner=c.me))
 

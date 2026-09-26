@@ -207,7 +207,7 @@ def p13555(c: Cast) -> None:
     interrupt. "Ignores your immunities and resistances" cannot be told to
     `deal_damage` and is dropped."""
     c.absorb(c.trigger)
-    c.bonus("attack", 2, until=When.EONT, on=c.me)
+    c.bonus("attack", 2, until=When.EONT, on=c.me, kind="power")
 
 
 @power(

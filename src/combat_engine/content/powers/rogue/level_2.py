@@ -211,7 +211,7 @@ def p10745(c: Cast) -> None:
     """The bonus hangs on `When.STANCE` so it goes when another stance is
     taken, which is the whole of what makes a stance a stance."""
     c.stance()
-    c.bonus("speed", c.int_mod // 2, on=c.me, until=When.STANCE)
+    c.bonus("speed", c.int_mod // 2, on=c.me, until=When.STANCE, kind="power")
 
 
 @power(
@@ -263,7 +263,7 @@ def p10747(c: Cast) -> None:
         return shelter is not Cover.NONE
 
     for wall in (AC, FORT, REF, WILL):
-        c.bonus(wall, 2, on=c.me, when=sheltered)
+        c.bonus(wall, 2, on=c.me, when=sheltered, kind="power")
 
 
 @power(

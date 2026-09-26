@@ -439,7 +439,6 @@ def p9575(c: Cast) -> None:
         c.con_mod,
         on=c.me,
         until=When.ENCOUNTER,
-        when=lambda ctx: ctx.get("target") == victim,
-    )
+        when=lambda ctx: ctx.get("target") == victim, kind="power")
     if rider is not None:
         mark.on_end.append(lambda: c.world.effects.end(rider, "the mark ended"))

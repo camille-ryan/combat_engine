@@ -278,10 +278,10 @@ def p14285(c: Cast) -> None:
     """"The effect ends if you stop fulfilling the requirement" is not
     written: a modifier cannot watch what is in a hand, and nothing puts a
     weapon down mid-fight."""
-    c.bonus("attack", 2, on=c.me, until=When.EONT)
-    c.bonus("damage", 5, on=c.me, until=When.EONT)
+    c.bonus("attack", 2, on=c.me, until=When.EONT, kind="power")
+    c.bonus("damage", 5, on=c.me, until=When.EONT, kind="power")
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 2, on=c.me, until=When.EONT)
+        c.bonus(defence, 2, on=c.me, until=When.EONT, kind="power")
 
 
 # -- the bladespells ---------------------------------------------------------

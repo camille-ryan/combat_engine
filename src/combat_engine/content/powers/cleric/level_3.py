@@ -142,7 +142,7 @@ def p895(c: Cast) -> None:
         return ctx.get("target") == foe and _ranged_row(ctx.get("power") or "")
 
     for shooter in (c.me, *c.allies()):
-        c.bonus("attack", 4, on=shooter, when=shooting_it)
+        c.bonus("attack", 4, on=shooter, when=shooting_it, kind="power")
 
 
 @power(

@@ -175,8 +175,7 @@ def p10129(c: Cast) -> None:
                 c.cha_mod,
                 on=friend,
                 until=When.EONT,
-                when=lambda ctx: ctx.get("target") == foe,
-            )
+                when=lambda ctx: ctx.get("target") == foe, kind="power")
 
 
 @power(
@@ -472,11 +471,11 @@ def p11613(c: Cast) -> None:
         )
         if taken == "defences":
             for defence in (AC, FORT, REF, WILL):
-                c.bonus(defence, 2, on=ev.attacker, until=When.EOTNT)
+                c.bonus(defence, 2, on=ev.attacker, until=When.EOTNT, kind="power")
         elif taken == "attack":
-            c.bonus("attack", 1, on=ev.attacker, until=When.EOTNT)
+            c.bonus("attack", 1, on=ev.attacker, until=When.EOTNT, kind="power")
         else:
-            c.bonus("damage", 3, on=ev.attacker, until=When.EOTNT)
+            c.bonus("damage", 3, on=ev.attacker, until=When.EOTNT, kind="power")
         if held:
             c.world.effects.end(held[0], "taken")
 
@@ -527,8 +526,8 @@ def p2332(c: Cast) -> None:
     if not landed and not c.build("resourceful"):
         return
     for friend in _friends_within(c, 1):
-        c.bonus(AC, 2, on=friend, until=When.EONT)
-        c.bonus(REF, 2, on=friend, until=When.EONT)
+        c.bonus(AC, 2, on=friend, until=When.EONT, kind="power")
+        c.bonus(REF, 2, on=friend, until=When.EONT, kind="power")
 
 
 @power(
@@ -639,7 +638,7 @@ def p4568(c: Cast) -> None:
         pool = _friends_within(c, 5)
         friend = c.choose(pool, "who is spurred on") if pool else None
         if friend is not None:
-            c.bonus("attack", c.cha_mod, on=friend, until=When.SONT, once=True)
+            c.bonus("attack", c.cha_mod, on=friend, until=When.SONT, once=True, kind="power")
     c.penalty(AC, 2, on=c.me, until=When.SONT)
 
 
@@ -672,8 +671,8 @@ def p4569(c: Cast) -> None:
     for friend in c.allies():
         if not c.can_see(friend):
             continue
-        c.bonus("attack", 1, on=friend, until=When.SONT, when=_simple_row)
-        c.bonus("damage", hurt, on=friend, until=When.SONT, when=_simple_row)
+        c.bonus("attack", 1, on=friend, until=When.SONT, when=_simple_row, kind="power")
+        c.bonus("damage", hurt, on=friend, until=When.SONT, when=_simple_row, kind="power")
 
 
 @power(

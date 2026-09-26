@@ -93,12 +93,10 @@ def p13789(c: Cast) -> None:
     for mate in c.allies():
         c.bonus(
             "attack", 1, on=mate, until=When.EONT,
-            when=lambda ctx, w=mate: w in c.world.zones.occupants(ring),
-        )
+            when=lambda ctx, w=mate: w in c.world.zones.occupants(ring), kind="power")
         c.bonus(
             "damage", 2, on=mate, until=When.EONT,
-            when=lambda ctx, w=mate: w in c.world.zones.occupants(ring),
-        )
+            when=lambda ctx, w=mate: w in c.world.zones.occupants(ring), kind="power")
 
 
 @power(
@@ -166,7 +164,7 @@ def p14460(c: Cast) -> None:
     mate = c.target
     if mate is None:
         return
-    c.bonus("damage", 2, on=mate, until=When.EONT)
+    c.bonus("damage", 2, on=mate, until=When.EONT, kind="power")
     for foe in c.enemies():
         c.grants_advantage(on=foe, to=mate, until=When.EONT)
 

@@ -74,9 +74,9 @@ def p10434(c: Cast) -> None:
             return False
         return c.is_(Condition.SLOWED, on=who) or c.is_(Condition.IMMOBILIZED, on=who)
 
-    riders = [c.bonus("damage", 2, on=me, until=When.ENCOUNTER, when=hobbled)]
+    riders = [c.bonus("damage", 2, on=me, until=When.ENCOUNTER, when=hobbled, kind="power")]
     if c.build("ensnarement"):
-        riders.append(c.bonus("attack", 1, on=me, until=When.ENCOUNTER, when=hobbled))
+        riders.append(c.bonus("attack", 1, on=me, until=When.ENCOUNTER, when=hobbled, kind="power"))
     for rider in riders:
         if rider is not None:
             stance.on_end.append(lambda r=rider: c.world.effects.end(r, "stance ended"))
@@ -195,8 +195,8 @@ def p3903(c: Cast) -> None:
     me = c.me
     stance = c.stance(label=c.ref)
     for rider in (
-        c.bonus(AC, 2, on=me, until=When.ENCOUNTER),
-        c.bonus(REF, 2, on=me, until=When.ENCOUNTER),
+        c.bonus(AC, 2, on=me, until=When.ENCOUNTER, kind="power"),
+        c.bonus(REF, 2, on=me, until=When.ENCOUNTER, kind="power"),
     ):
         if rider is not None:
             stance.on_end.append(lambda r=rider: c.world.effects.end(r, "stance ended"))
@@ -337,8 +337,8 @@ def p5741(c: Cast) -> None:
     blow aside. `Hit` would be too late to do anything but watch."""
     me = c.me
     foe = getattr(c.trigger, "attacker", None)
-    c.bonus(AC, 4, on=me, until=When.EONT)
-    c.bonus(REF, 4, on=me, until=When.EONT)
+    c.bonus(AC, 4, on=me, until=When.EONT, kind="power")
+    c.bonus(REF, 4, on=me, until=When.EONT, kind="power")
     if foe is None:
         return
 

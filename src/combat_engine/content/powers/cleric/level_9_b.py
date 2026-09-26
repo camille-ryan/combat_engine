@@ -118,8 +118,7 @@ def p12615(c: Cast) -> None:
     """
     if c.first:
         c.bonus(
-            "damage", c.con_mod, on=c.me, until=When.ENCOUNTER, when=_melee_row
-        )
+            "damage", c.con_mod, on=c.me, until=When.ENCOUNTER, when=_melee_row, kind="power")
     if c.strike():
         c.damage(c.w(2), c.wis_mod)
 

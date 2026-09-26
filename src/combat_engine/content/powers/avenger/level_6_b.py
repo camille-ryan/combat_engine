@@ -401,7 +401,7 @@ def p7698(c: Cast) -> None:
     me = c.me
     stance = c.stance(on=me, label=c.ref)
     for d in (AC, FORT):
-        held = c.bonus(d, 1, on=me, until=When.ENCOUNTER, kind="power")
+        held = c.bonus(d, 1, on=me, until=When.ENCOUNTER, stacks=False)
         if held is not None:
             stance.on_end.append(
                 lambda h=held: c.world.effects.end(h, "the stance ended")
@@ -411,7 +411,7 @@ def p7698(c: Cast) -> None:
         if ev.source != me or ev.hp > 0 or not sworn(c.world, me, ev.target):
             return
         for d in (AC, FORT):
-            c.bonus(d, 4, on=me, until=When.EONT, kind="power")
+            c.bonus(d, 4, on=me, until=When.EONT, stacks=False)
 
     watcher = c.watch(
         DamageApplied, surge, until=When.ENCOUNTER, on=me, label=f"{c.ref} exaltation"

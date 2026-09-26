@@ -45,7 +45,7 @@ def p11111(c: Cast) -> None:
     """`Healed` carries no power, so the top-up answers any healing this bard
     is the source of rather than only the class's own rows. The re-entry latch
     is the point: the extra healing is itself a `Healed`."""
-    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=_my_row)
+    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=_my_row, kind="power")
     inside: list[int] = []
 
     def more(ev: Healed) -> None:
@@ -119,8 +119,7 @@ def p2384(c: Cast) -> None:
     for mate in c.allies():
         c.bonus(
             WILL, 2, on=mate, until=When.ENCOUNTER,
-            when=lambda ctx, w=mate: w in c.world.zones.occupants(ring),
-        )
+            when=lambda ctx, w=mate: w in c.world.zones.occupants(ring), kind="power")
 
 
 @power(
@@ -168,7 +167,7 @@ def p2386(c: Cast) -> None:
 def p2388(c: Cast) -> None:
     for mate in c.within(5, side="ally"):
         if mate != c.me:
-            c.bonus("save", 2, on=mate, until=When.EONT)
+            c.bonus("save", 2, on=mate, until=When.EONT, kind="power")
 
 
 @power(
@@ -263,7 +262,7 @@ def p5002(c: Cast) -> None:
     keywords=[Keyword.ARCANE],
 )
 def p5698(c: Cast) -> None:
-    c.bonus("attack", 2, until=When.EONT)
+    c.bonus("attack", 2, until=When.EONT, kind="power")
 
 
 @power(

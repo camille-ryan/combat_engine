@@ -301,7 +301,7 @@ def p13029(c: Cast) -> None:
     else:
         c.half_damage(c.w(2), c.con_mod)
     if c.last:
-        c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER)
+        c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER, kind="power")
 
 
 @power(
@@ -391,9 +391,9 @@ def p13032(c: Cast) -> None:
         c.slowed(until=When.EONT)
     if c.last:
         c.stance()
-        c.bonus(AC, 4, on=c.me, until=When.ENCOUNTER, when=_vs_opportunity)
-        c.bonus(REF, 4, on=c.me, until=When.ENCOUNTER, when=_vs_opportunity)
-        c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER, when=_vs_opportunity)
+        c.bonus(AC, 4, on=c.me, until=When.ENCOUNTER, when=_vs_opportunity, kind="power")
+        c.bonus(REF, 4, on=c.me, until=When.ENCOUNTER, when=_vs_opportunity, kind="power")
+        c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER, when=_vs_opportunity, kind="power")
 
 
 @power(

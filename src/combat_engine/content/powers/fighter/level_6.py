@@ -65,7 +65,7 @@ def _attack_damaged_me(world: World, me: int, ev: Event) -> bool:
 def p1439(c: Cast) -> None:
     stance = c.stance(label=c.ref)
     for defence in (FORT, REF, WILL):
-        guard = c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER)
+        guard = c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER, kind="power")
         if guard is not None:
             stance.on_end.append(
                 lambda g=guard: c.world.effects.end(g, "stance ended")

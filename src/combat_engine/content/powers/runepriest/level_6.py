@@ -87,7 +87,7 @@ def p11393(c: Cast) -> None:
     """"Or until he or she is no longer adjacent to you" is dropped: nothing
     ends an effect on a distance."""
     for defence in DEFENCES:
-        c.bonus(defence, 2, until=When.EONT)
+        c.bonus(defence, 2, until=When.EONT, kind="power")
 
 
 @power(
@@ -106,4 +106,4 @@ def p15991(c: Cast) -> None:
     if who is None:
         return
     c.heal(c.surge_value(of=who), on=who)
-    c.bonus("save", 2, on=who, until=When.EOTNT)
+    c.bonus("save", 2, on=who, until=When.EOTNT, kind="power")

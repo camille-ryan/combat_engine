@@ -8,7 +8,7 @@ nothing stores it; it is recomputed from the board whenever an attack asks.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .components import (
     Companion,
@@ -358,7 +358,9 @@ def hidden_from(world: World, eid: int) -> set[int]:
     return set(world.relations.targets(Relation.HIDDEN_FROM, eid))
 
 
-def concealment_of(world: World, target: int) -> Cover:
+def concealment_of(
+    world: World, target: int, ctx: dict[str, Any] | None = None
+) -> Cover:
     """How hard this creature is to see, as an attack penalty.
 
     Cover is a fact about two positions and is traced. Concealment is a
@@ -373,7 +375,12 @@ def concealment_of(world: World, target: int) -> Cover:
     mods = world.get(target, Mods)
     if mods is None or not mods.items:
         return Cover.NONE
-    n = mods.total("concealment", {})
+    # The attack context, not `{}`. A gate reading a key the context does
+    # not carry is silently false, so "partial concealment from creatures
+    # more than 3 squares away" -- which is how several creatures print it
+    # -- could not be written as concealment at all, and was hand-rolled as
+    # a bare bonus to defences that wrongly stacked with cover.
+    n = mods.total("concealment", ctx or {})
     if n >= int(Cover.SUPERIOR):
         return Cover.SUPERIOR
     return Cover.PARTIAL if n > 0 else Cover.NONE

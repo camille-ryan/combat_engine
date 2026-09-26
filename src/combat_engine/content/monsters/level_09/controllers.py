@@ -838,8 +838,7 @@ def m762a1(c: Cast) -> None:
         return ctx.get("target") == victim
 
     c.bonus(
-        "attack", 2, until=When.ENCOUNTER, on=friend, when=against_it, once=True
-    )
+        "attack", 2, until=When.ENCOUNTER, on=friend, when=against_it, once=True, kind="power")
 
 
 @power(

@@ -143,7 +143,7 @@ def p11832(c: Cast) -> None:
     if face is None:
         return
     inside = face <= 10 if low else face >= 11
-    c.bonus("damage", 5 if inside else 2, on=c.me, until=When.EONT)
+    c.bonus("damage", 5 if inside else 2, on=c.me, until=When.EONT, kind="power")
 
 
 @power(
@@ -334,7 +334,7 @@ def p3741(c: Cast) -> None:
     runs before the roll is judged, which is the only window in which a
     defence bonus can affect the attack that provoked it."""
     for d in (AC, FORT, REF, WILL):
-        c.bonus(d, 1, on=c.me, until=When.EONT)
+        c.bonus(d, 1, on=c.me, until=When.EONT, kind="power")
     me = c.me
 
     def scorch(ev: Hit) -> None:
@@ -386,5 +386,4 @@ def p12468(c: Cast) -> None:
         2,
         on=c.me,
         until=When.EONT,
-        when=lambda ctx: ctx.get("target") in c.within(1, of=fam),
-    )
+        when=lambda ctx: ctx.get("target") in c.within(1, of=fam), kind="power")

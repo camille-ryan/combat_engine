@@ -175,7 +175,7 @@ def p893(c: Cast) -> None:
         # counts the caster as an ally, so it comes back out.
         for friend in c.in_squares(c.area(), side="ally"):
             if friend != c.me:
-                c.bonus("attack", 2, on=friend)
+                c.bonus("attack", 2, on=friend, kind="power")
 
 
 @power(

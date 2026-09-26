@@ -125,7 +125,7 @@ def p10850(c: Cast) -> None:
     """The Stealth half is a check; the speed is real."""
     shape = take_beast_form(c)
     ends_with(
-        c, shape, c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER, kind="power")
+        c, shape, c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER, kind="untyped")
     )
 
 

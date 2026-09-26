@@ -71,8 +71,7 @@ def p5403(c: Cast) -> None:
         for what in (AC, FORT):
             c.bonus(
                 what, 2, on=mate, until=When.ENCOUNTER,
-                when=lambda ctx, w=mate: w in c.world.zones.occupants(rocks),
-            )
+                when=lambda ctx, w=mate: w in c.world.zones.occupants(rocks), kind="power")
 
 
 @power(
@@ -254,8 +253,7 @@ def p9767(c: Cast) -> None:
         for what in (AC, FORT, REF, WILL):
             kept = c.bonus(
                 what, 2, on=mate, until=When.ENCOUNTER,
-                when=lambda ctx, w=mate: near_spirit(c, w, 5),
-            )
+                when=lambda ctx, w=mate: near_spirit(c, w, 5), kind="power")
             if kept is not None:
                 held.append(kept)
     spent = [False]
@@ -271,7 +269,7 @@ def p9767(c: Cast) -> None:
             if not kept.ended:
                 c.world.effects.end(kept, "spent on one blow")
         for what in (AC, FORT, REF, WILL):
-            c.bonus(what, 6, on=mate, until=When.EOT, once=True)
+            c.bonus(what, 6, on=mate, until=When.EOT, once=True, kind="untyped")
 
     c.watch(Hit, cover, until=When.ENCOUNTER, on=c.me)
 

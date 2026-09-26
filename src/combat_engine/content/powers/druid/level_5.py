@@ -392,4 +392,4 @@ def p9655(c: Cast) -> None:
     """
     made = c.summon_inline(get(c.ref).summon)
     if made and c.command(made, on=c.target):
-        c.penalty("attack", 2, on=c.target, until=When.EONT, kind="concealment")
+        c.penalty("attack", 2, on=c.target, until=When.EONT)

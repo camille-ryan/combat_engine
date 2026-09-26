@@ -79,7 +79,7 @@ def p10435(c: Cast) -> None:
             return c.adjacent_to(me, w)
 
         for what in wanted:
-            rider = c.bonus(what, 1, on=mate, until=When.ENCOUNTER, when=near)
+            rider = c.bonus(what, 1, on=mate, until=When.ENCOUNTER, when=near, kind="power")
             if rider is not None:
                 stance.on_end.append(
                     lambda r=rider: c.world.effects.end(r, "stance ended")
@@ -177,8 +177,7 @@ def p3357(c: Cast) -> None:
     if foe is not None:
         c.bonus(
             "attack", 2, on=c.me, until=When.EOT, once=True,
-            when=lambda ctx, f=foe: ctx.get("target") == f,
-        )
+            when=lambda ctx, f=foe: ctx.get("target") == f, kind="power")
 
 
 @power(

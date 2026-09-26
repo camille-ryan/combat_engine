@@ -550,8 +550,8 @@ def p9365(c: Cast) -> None:
             c.basic(on=c.choose(others, "who the off-hand catches"))
             return
         c.shift(1)
-        c.bonus(AC, 2, on=me, until=When.SONT)
-        c.bonus(REF, 2, on=me, until=When.SONT)
+        c.bonus(AC, 2, on=me, until=When.SONT, kind="power")
+        c.bonus(REF, 2, on=me, until=When.SONT, kind="power")
 
     held = c.watch(Hit, payout, until=When.ENCOUNTER, on=me, label=c.ref)
     stance.on_end.append(lambda: c.world.effects.end(held, "stance ended"))

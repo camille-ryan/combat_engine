@@ -158,4 +158,4 @@ def p158(c: Cast) -> None:
 
     c.watch(ForcedMove, hold, until=When.EONT, window=Window.BEFORE, label="p158")
     for friend in c.allies():
-        c.bonus(AC, 2, on=friend, when=lambda ctx, who=friend: c.adjacent(who))
+        c.bonus(AC, 2, on=friend, when=lambda ctx, who=friend: c.adjacent(who), kind="power")

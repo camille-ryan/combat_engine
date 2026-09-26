@@ -169,8 +169,7 @@ def p3789(c: Cast) -> None:
     for mate in friends(c):
         c.bonus(
             "damage", c.wis_mod, on=mate, until=When.EONT,
-            when=lambda ctx, w=mate: by_hand(ctx) and beside_spirit(c, w),
-        )
+            when=lambda ctx, w=mate: by_hand(ctx) and beside_spirit(c, w), kind="power")
 
 
 @power(
@@ -330,7 +329,7 @@ def p9750(c: Cast) -> None:
                     foe is not None and c.bloodied(on=foe) and beside_spirit(c, w)
                 )
 
-            c.bonus(what, amount, on=mate, until=When.EONT, when=keen)
+            c.bonus(what, amount, on=mate, until=When.EONT, when=keen, kind="power")
 
 
 @power(
@@ -352,5 +351,4 @@ def p9751(c: Cast) -> None:
         for what in (AC, FORT, REF, WILL):
             c.bonus(
                 what, 1, on=mate, until=When.EONT,
-                when=lambda ctx, w=mate: beside_spirit(c, w),
-            )
+                when=lambda ctx, w=mate: beside_spirit(c, w), kind="power")

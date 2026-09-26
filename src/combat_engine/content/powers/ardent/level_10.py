@@ -109,8 +109,8 @@ def p10292(c: Cast) -> None:
         p = get(label.split()[0]) if label else None
         return p is not None and Keyword.FEAR in p.keywords
 
-    c.bonus("attack", 2, until=When.EONT)
-    c.bonus("save", 2, until=When.EONT, when=fearful)
+    c.bonus("attack", 2, until=When.EONT, kind="power")
+    c.bonus("save", 2, until=When.EONT, when=fearful, kind="power")
 
 
 @power(
@@ -158,9 +158,9 @@ def p11122(c: Cast) -> None:
     def shelter() -> None:
         for who in c.in_squares(area, side="ally"):
             c.resist(10, DamageType.PSYCHIC, on=who, until=When.EONT)
-            c.bonus(WILL, 4, on=who, until=When.EONT)
+            c.bonus(WILL, 4, on=who, until=When.EONT, kind="power")
             for d in (AC, FORT, REF):
-                c.bonus(d, 2, on=who, until=When.EONT)
+                c.bonus(d, 2, on=who, until=When.EONT, kind="power")
 
     shelter()
     hold = c.effect(c.ref, until=When.SUSTAIN, on=c.me, sustain=MINOR)
@@ -187,7 +187,7 @@ def p11122(c: Cast) -> None:
 )
 def p12964(c: Cast) -> None:
     for d in DEFENCES:
-        c.bonus(d, 2, until=When.EONT)
+        c.bonus(d, 2, until=When.EONT, kind="power")
 
 
 @power(

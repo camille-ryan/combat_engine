@@ -394,7 +394,7 @@ def p3726(c: Cast) -> None:
         return p is not None and Keyword.CHARM in p.keywords
 
     for d in _DEFENCES:
-        c.bonus(d, 5, on=c.me, until=When.ENCOUNTER, when=charming)
+        c.bonus(d, 5, on=c.me, until=When.ENCOUNTER, when=charming, kind="power")
 
 
 @power(

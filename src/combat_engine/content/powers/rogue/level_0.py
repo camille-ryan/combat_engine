@@ -67,7 +67,7 @@ def _basic_on_a_giveaway(world: World, me: int, ev: AttackDeclared) -> bool:
 )
 def p12710(c: Cast) -> None:
     dice = 1 + sum(lv <= c.level for lv in (7, 17, 27))
-    c.bonus("attack", 3, on=c.me, until=When.EOT, once=True)
+    c.bonus("attack", 3, on=c.me, until=When.EOT, once=True, kind="power")
     victim = getattr(c.trigger, "target", None)
 
     def sting(ev: Hit) -> None:
@@ -94,7 +94,7 @@ def p12711(c: Cast) -> None:
     if climbing is not None:
         c.world.effects.end(climbing, "the move ended")
     step = 2 + 2 * sum(lv <= c.level for lv in (11, 21))
-    c.bonus("damage", step, on=c.me, until=When.EOT, once=True, when=_is_basic)
+    c.bonus("damage", step, on=c.me, until=When.EOT, once=True, when=_is_basic, kind="power")
 
 
 @power(
@@ -149,7 +149,8 @@ def p12713(c: Cast) -> None:
 def p12714(c: Cast) -> None:
     c.move(c.speed_of(), who=c.me)
     if c.cha_mod > 0:
-        c.bonus("damage", c.cha_mod, on=c.me, until=When.EOT, once=True, when=_is_basic)
+        c.bonus("damage", c.cha_mod, on=c.me, until=When.EOT, once=True, when=_is_basic,
+            kind="power")
 
 
 @power(

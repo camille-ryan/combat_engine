@@ -137,8 +137,7 @@ def p11834(c: Cast) -> None:
         else:
             c.bonus(
                 "attack", 2, on=me, until=When.EONT, once=True,
-                when=lambda ctx, foe=ev.target: ctx.get("target") == foe,
-            )
+                when=lambda ctx, foe=ev.target: ctx.get("target") == foe, kind="power")
 
     c.watch(Miss, missed, until=When.ENCOUNTER, on=me, label=f"{c.ref} rebounds")
 
@@ -324,8 +323,8 @@ def p5858(c: Cast) -> None:
     def hurt(_ctx: dict) -> bool:
         return c.bloodied(me)
 
-    c.bonus("attack", 1, on=me, until=When.ENCOUNTER, when=hurt)
-    c.bonus("save", c.cha_mod, on=me, until=When.ENCOUNTER, when=hurt)
+    c.bonus("attack", 1, on=me, until=When.ENCOUNTER, when=hurt, kind="power")
+    c.bonus("save", c.cha_mod, on=me, until=When.ENCOUNTER, when=hurt, kind="power")
 
 
 @power(
@@ -388,5 +387,5 @@ def p12474(c: Cast) -> None:
     if fam is None:
         return
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, c.cha_mod, on=fam, until=When.ENCOUNTER)
+        c.bonus(defence, c.cha_mod, on=fam, until=When.ENCOUNTER, kind="power")
     c.resist(10, on=fam, until=When.ENCOUNTER)

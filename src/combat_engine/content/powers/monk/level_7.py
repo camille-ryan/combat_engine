@@ -297,7 +297,7 @@ def p16166(c: Cast) -> None:
                 c.damage("1d8", 0, dtype=DamageType.FIRE, on=unlucky)
     if c.last:
         c.shift(max(1, c.speed_of() // 2))
-        c.bonus("damage", 2, on=c.me, until=When.EONT, when=_fire)
+        c.bonus("damage", 2, on=c.me, until=When.EONT, when=_fire, kind="power")
 
 
 @power(

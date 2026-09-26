@@ -83,8 +83,8 @@ def p2784(c: Cast) -> None:
     else:
         c.half_damage(c.w(2), c.cha_mod)
     for mate in c.within(5, side="ally"):
-        c.bonus("damage", 1, on=mate, until=When.ENCOUNTER)
-        c.bonus("save", 1, on=mate, until=When.ENCOUNTER)
+        c.bonus("damage", 1, on=mate, until=When.ENCOUNTER, kind="power")
+        c.bonus("save", 1, on=mate, until=When.ENCOUNTER, kind="power")
 
     def scatter(ev: Dropped) -> None:
         for mate in c.within(5, of=ev.actor, side="ally"):

@@ -604,9 +604,9 @@ def m2979a0(c: Cast) -> None:
             c.is_kind("drow", on=a) for a in c.within(5, side="ally") if a != me
         )
 
-    c.bonus("attack", 2, until=When.ENCOUNTER, on=me, when=escorted)
+    c.bonus("attack", 2, until=When.ENCOUNTER, on=me, when=escorted, kind="power")
     for which in ALL_DEFENCES:
-        c.bonus(which, 2, until=When.ENCOUNTER, on=me, when=escorted)
+        c.bonus(which, 2, until=When.ENCOUNTER, on=me, when=escorted, kind="power")
 
 
 def _crit_line(c: Cast, dice: str, bonus: int) -> None:

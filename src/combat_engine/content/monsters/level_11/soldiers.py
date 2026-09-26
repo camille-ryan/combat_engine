@@ -668,7 +668,7 @@ def m2870a3(c: Cast) -> None:
             "take -2 to the roll for 4 extra radiant damage", who=me, default=False
         )
         if chosen["press"]:
-            c.penalty("attack", 2, on=me, until=When.EOT, kind="untyped", once=True)
+            c.penalty("attack", 2, on=me, until=When.EOT, once=True)
 
     def burn(ev: DamageRolled) -> None:
         if ev.source != me:
@@ -1286,7 +1286,7 @@ def m4863a1(c: Cast) -> None:
             c,
             held,
             lambda: [
-                c.penalty(defended, 2, until=When.EONT, on=me, kind="untyped")
+                c.penalty(defended, 2, until=When.EONT, on=me)
                 for defended in EVERY_DEFENCE
             ],
         )

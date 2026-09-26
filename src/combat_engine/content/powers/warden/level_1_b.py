@@ -74,7 +74,7 @@ def p5103(c: Cast) -> None:
     while_in(
         c,
         form,
-        c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER),
+        c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER, kind="power"),
         c.bonus(
             "attack", 2, on=c.me, until=When.ENCOUNTER, kind="untyped",
             when=lambda ctx: bool(ctx.get("charge")),

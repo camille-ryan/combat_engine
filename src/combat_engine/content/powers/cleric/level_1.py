@@ -70,8 +70,7 @@ def p841(c: Cast) -> None:
                 on=c.choose(friends, "who gets the opening"),
                 until=When.ENCOUNTER,
                 once=True,
-                when=lambda ctx: ctx.get("target") == mark,
-            )
+                when=lambda ctx: ctx.get("target") == mark, kind="power")
 
 
 @power(
@@ -119,10 +118,10 @@ def p1580(c: Cast) -> None:
     """The guard covers you and one neighbour, so it is two separate bonuses."""
     if c.strike():
         c.damage(c.w(1), c.str_mod)
-        c.bonus(AC, 1, on=c.me)
+        c.bonus(AC, 1, on=c.me, kind="power")
         beside = [a for a in c.within(1, side="ally") if a != c.me]
         if beside:
-            c.bonus(AC, 1, on=c.choose(beside, "who shelters with you"))
+            c.bonus(AC, 1, on=c.choose(beside, "who shelters with you"), kind="power")
 
 
 @power(
@@ -145,5 +144,4 @@ def p839(c: Cast) -> None:
                 "attack",
                 3,
                 on=c.choose(friends, "who gets the opening"),
-                when=_melee_at(c.target),
-            )
+                when=_melee_at(c.target), kind="power")

@@ -217,7 +217,7 @@ def p10131(c: Cast) -> None:
             pool = sorted(a for a in c.allies() if c.can_see(a))
             friend = c.choose(pool, f"who is given the {what}") if pool else None
             if friend is not None:
-                c.bonus(what, amount, on=friend, until=When.ENCOUNTER, once=True)
+                c.bonus(what, amount, on=friend, until=When.ENCOUNTER, once=True, kind="power")
 
         return fire
 

@@ -118,8 +118,10 @@ def p315(c: Cast) -> None:
             return
         friend = c.choose(helpers, "who gets the opening")
         against = lambda ctx: ctx.get("target") == foe  # noqa: E731
-        c.bonus("attack", c.cha_mod, on=friend, until=When.EOTNT, when=against, once=True)
-        c.bonus("damage", c.cha_mod, on=friend, until=When.EOTNT, when=against, once=True)
+        c.bonus("attack", c.cha_mod, on=friend, until=When.EOTNT, when=against, once=True,
+            kind="power")
+        c.bonus("damage", c.cha_mod, on=friend, until=When.EOTNT, when=against, once=True,
+            kind="power")
 
 
 @power(
@@ -169,7 +171,7 @@ def p1064(c: Cast) -> None:
         # One build makes this 1 + Charisma; `c.build(...)` can say which
         # now, so the rider is expressible where the printed +2 was all
         # this could say before.
-        c.bonus(AC, 2, on=friend, when=lambda ctx: ctx.get("attacker") == foe)
+        c.bonus(AC, 2, on=friend, when=lambda ctx: ctx.get("attacker") == foe, kind="power")
 
 
 @power(
@@ -192,7 +194,7 @@ def p1066(c: Cast) -> None:
             return
         friend = c.choose(helpers, "who gets the opening")
         # Tactical Presence would make this 1 + Intelligence; no build to read.
-        c.bonus("attack", 2, on=friend, when=lambda ctx: ctx.get("target") == foe)
+        c.bonus("attack", 2, on=friend, when=lambda ctx: ctx.get("target") == foe, kind="power")
 
 
 @power(
@@ -275,7 +277,7 @@ def p154(c: Cast) -> None:
     for friend in [a for a in c.within(5, side="ally") if a != c.me]:
         if landed:
             for defence in (AC, FORT, REF, WILL):
-                c.bonus(defence, 1, on=friend, until=When.ENCOUNTER)
+                c.bonus(defence, 1, on=friend, until=When.ENCOUNTER, kind="power")
         # The Effect line does not care whether the attack landed.
         c.temp_hp(5 + c.cha_mod, on=friend)
 
@@ -303,7 +305,7 @@ def p239(c: Cast) -> None:
     against = lambda ctx: ctx.get("target") == foe  # noqa: E731
     # "you and each ally within 5" is exactly what the ally pool holds.
     for friend in c.within(5, side="ally"):
-        c.bonus("attack", value, on=friend, when=against)
+        c.bonus("attack", value, on=friend, when=against, kind="power")
 
 
 @power(

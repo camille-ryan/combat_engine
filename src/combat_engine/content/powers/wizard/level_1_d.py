@@ -636,10 +636,10 @@ def p11841(c: Cast) -> None:
     which the attack context carries.
     """
     c.summon_inline(get(c.ref).summon, at=c.origin)
-    c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER)
+    c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER, kind="power")
     for defence in (AC, FORT, REF, WILL):
         c.bonus(
-            defence, 4, on=c.me, until=When.ENCOUNTER,
+            defence, 4, on=c.me, until=When.ENCOUNTER, kind="power",
             when=lambda ctx: bool(ctx.get("opportunity")),
         )
 

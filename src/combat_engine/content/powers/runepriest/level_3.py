@@ -134,8 +134,7 @@ def p11384(c: Cast) -> None:
                 len(crowd),
                 on=ally,
                 until=When.EONT,
-                when=lambda ctx, v=victim: ctx.get("target") == v,
-            )
+                when=lambda ctx, v=victim: ctx.get("target") == v, kind="power")
 
 
 @power(

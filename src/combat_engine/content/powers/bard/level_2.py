@@ -97,8 +97,7 @@ def p2358(c: Cast) -> None:
     for mate in c.allies():
         c.bonus(
             AC, 1, on=mate, until=When.ENCOUNTER,
-            when=lambda ctx, w=mate: w in c.world.zones.occupants(ring),
-        )
+            when=lambda ctx, w=mate: w in c.world.zones.occupants(ring), kind="power")
 
 
 @power(
@@ -116,8 +115,7 @@ def p2359(c: Cast) -> None:
     for mate in c.allies():
         c.bonus(
             "attack", 1, on=mate, until=When.ENCOUNTER,
-            when=lambda ctx, w=mate: w in c.world.zones.occupants(ring),
-        )
+            when=lambda ctx, w=mate: w in c.world.zones.occupants(ring), kind="power")
 
 
 @power(
@@ -180,7 +178,7 @@ def p2991(c: Cast) -> None:
     """The escalating half -- "+1 more for each target whose turn has not yet
     started" -- is left off: it needs the initiative order read at the moment
     of a hit, and nothing exposes who has already acted this round."""
-    c.bonus("attack", 1, until=When.EONT)
+    c.bonus("attack", 1, until=When.EONT, kind="power")
 
 
 @power(

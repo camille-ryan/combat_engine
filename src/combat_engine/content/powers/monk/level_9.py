@@ -249,8 +249,7 @@ def p15989(c: Cast) -> None:
         foe = ev.target
         c.bonus(
             "damage", c.str_mod, on=mate, until=When.ENCOUNTER, once=True,
-            when=lambda ctx, f=foe: ctx.get("target") == f,
-        )
+            when=lambda ctx, f=foe: ctx.get("target") == f, kind="power")
 
     c.watch(Hit, point, until=When.ENCOUNTER)
 
@@ -304,7 +303,7 @@ def p16171(c: Cast) -> None:
     finds."""
     shape = c.form(until=When.ENCOUNTER, label=c.ref)
     for defence in (AC, FORT, REF, WILL):
-        held = c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER)
+        held = c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER, kind="power")
         if held is not None:
             shape.on_end.append(lambda h=held: c.world.effects.end(h, "form ended"))
     rough = c.ignores_difficult(until=When.ENCOUNTER)

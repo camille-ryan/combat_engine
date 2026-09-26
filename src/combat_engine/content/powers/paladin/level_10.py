@@ -465,7 +465,7 @@ def _ally_hit_in_sight(world: World, me: int, ev: Event) -> bool:
 )
 def p7265(c: Cast) -> None:
     c.bonus("attack", 2, on=c.me, until=When.EONT, kind="power", once=True)
-    c.bonus("damage", 2 + c.str_mod, on=c.me, until=When.EONT, kind="power", once=True)
+    c.bonus("damage", 2 + c.str_mod, on=c.me, until=When.EONT, kind="untyped", once=True)
 
 
 @power(

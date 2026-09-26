@@ -416,9 +416,11 @@ def p10603(c: Cast) -> None:
     def reward(ev: Any) -> None:
         if ev.actor != mine or distance(origin[0], c.here) < 4:
             return
-        c.bonus(AC, 2, on=mine, until=When.SONT)
-        c.bonus(REF, 2, on=mine, until=When.SONT)
-        c.bonus("damage", c.roll("1d8"), on=mine, until=When.EONT, once=True)
+        c.bonus(AC, 2, on=mine, until=When.SONT, kind="power")
+        c.bonus(REF, 2, on=mine, until=When.SONT, kind="power")
+        c.bonus(
+            "damage", c.roll("1d8"), on=mine, until=When.EONT, once=True, kind="untyped"
+        )
 
     for event, fn in ((TurnStart, remember), (MoveEnd, reward)):
         held = c.watch(event, fn, until=When.ENCOUNTER, on=mine)

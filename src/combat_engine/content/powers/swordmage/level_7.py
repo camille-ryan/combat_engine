@@ -240,7 +240,7 @@ def p3945(c: Cast) -> None:
         c.damage("1d8", c.int_mod, dtype=DamageType.FORCE)
         c.dazed()
         if c.build("shielding"):
-            c.penalty("attack", 2, kind="power", until=When.EONT)
+            c.penalty("attack", 2, until=When.EONT)
 
 
 @power(

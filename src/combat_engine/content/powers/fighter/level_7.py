@@ -62,7 +62,7 @@ def p1018(c: Cast) -> None:
 def p1019(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(2), c.str_mod)
-    c.bonus(AC, 2 if c.wielding("shield") else 1, on=c.me)
+    c.bonus(AC, 2 if c.wielding("shield") else 1, on=c.me, kind="power")
 
 
 @power(

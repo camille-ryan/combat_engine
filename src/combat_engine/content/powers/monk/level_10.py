@@ -204,10 +204,10 @@ def p16174(c: Cast) -> None:
 )
 def p16175(c: Cast) -> None:
     posture = c.stance()
-    _ends_with(c, posture, c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER))
+    _ends_with(c, posture, c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER, kind="power"))
     _ends_with(
         c, posture,
-        c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=_fire),
+        c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=_fire, kind="power"),
     )
 
 

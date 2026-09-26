@@ -112,7 +112,7 @@ def prime_shot(c: Cast) -> None:
             if alive(world, mate)
         )
 
-    c.bonus("attack", 1, until=When.ENCOUNTER, on=me, kind="class feature", when=alone)
+    c.bonus("attack", 1, until=When.ENCOUNTER, on=me, kind="class-option", when=alone)
 
 
 def _light_blade_or_bow(world: World, eid: int) -> bool:
@@ -413,7 +413,10 @@ def ranger_running(c: Cast) -> None:
     It shares a `kind` with `prime_shot` deliberately: the two are
     alternatives on the page, one replacing the other, and `chargen` hands
     a class every level-0 row it has. A shared kind makes the larger win
-    rather than letting one ranger collect both.
+    rather than letting one ranger collect both -- and for a while the
+    comment said so while the code passed `untyped` and let a ranger have
+    both. The bucket is `class-option`, which is not a 4e bonus type and
+    is not meant to be: it exists to make two alternatives exclusive.
     """
     me, world = c.me, c.world
     run: dict[str, Any] = {"from": None, "far": 0}
@@ -437,7 +440,7 @@ def ranger_running(c: Cast) -> None:
         1,
         until=When.ENCOUNTER,
         on=me,
-        kind="class feature",
+        kind="class-option",
         when=lambda ctx: bool(ctx.get("charge")) and run["far"] >= 2,
     )
 

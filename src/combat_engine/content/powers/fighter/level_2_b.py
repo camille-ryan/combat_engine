@@ -207,7 +207,7 @@ def p10333(c: Cast) -> None:
             c.world.effects.end(stance, "a surge was spent")
 
     riders = [
-        c.bonus("damage", step, on=me, until=When.ENCOUNTER, when=_weapon_attack),
+        c.bonus("damage", step, on=me, until=When.ENCOUNTER, when=_weapon_attack, kind="power"),
         c.penalty(AC, 2, on=me, until=When.ENCOUNTER),
         c.watch(SurgeSpent, drop, until=When.ENCOUNTER, on=me, label=c.ref),
     ]
@@ -236,7 +236,7 @@ def p4318(c: Cast) -> None:
             c.shift(1)
 
     riders = [
-        c.bonus(AC, 2, on=me, until=When.ENCOUNTER),
+        c.bonus(AC, 2, on=me, until=When.ENCOUNTER, kind="power"),
         c.watch(Miss, sidestep, until=When.ENCOUNTER, on=me, label=c.ref),
     ]
     for rider in riders:
@@ -379,8 +379,8 @@ def p12695(c: Cast) -> None:
     requires_text="needs a shield",
 )
 def p2012(c: Cast) -> None:
-    c.bonus(AC, 2, on=c.me, until=When.EONT)
-    c.bonus(REF, 2, on=c.me, until=When.EONT)
+    c.bonus(AC, 2, on=c.me, until=When.EONT, kind="power")
+    c.bonus(REF, 2, on=c.me, until=When.EONT, kind="power")
     c.cannot_be_flanked(on=c.me, until=When.EONT)
 
 
@@ -663,8 +663,7 @@ def p12847(c: Cast) -> None:
     close_by_shift(c, 3)
     c.bonus(
         "attack", 2, on=c.me, until=When.EONT, once=True,
-        when=lambda ctx: ctx.get("target") == foe,
-    )
+        when=lambda ctx: ctx.get("target") == foe, kind="power")
 
 
 @power(

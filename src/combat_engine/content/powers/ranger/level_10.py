@@ -204,7 +204,7 @@ def p10636(c: Cast) -> None:
     Trigger is not in the predicate. It is in the report.
     """
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 4, on=c.me, until=When.EONT, once=True)
+        c.bonus(defence, 4, on=c.me, until=When.EONT, once=True, kind="power")
 
 
 @power(

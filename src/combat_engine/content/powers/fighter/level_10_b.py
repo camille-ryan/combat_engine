@@ -330,8 +330,8 @@ def p10000(c: Cast) -> None:
 
     def rally() -> None:
         for guard in (AC, FORT, REF, WILL):
-            c.bonus(guard, 2, on=me, until=When.EONT)
-        c.bonus("attack", 1, on=me, until=When.EONT)
+            c.bonus(guard, 2, on=me, until=When.EONT, kind="power")
+        c.bonus("attack", 1, on=me, until=When.EONT, kind="power")
 
     if c.may("spend a surge", who=me):
         c.surge(on=me)
@@ -420,7 +420,7 @@ def p12678(c: Cast) -> None:
 )
 def p12679(c: Cast) -> None:
     for guard in (AC, FORT, REF, WILL):
-        c.bonus(guard, 2, on=c.me, until=When.EONT)
+        c.bonus(guard, 2, on=c.me, until=When.EONT, kind="power")
     close_by_shift(c, c.speed_of())
 
 
@@ -497,8 +497,7 @@ def p4335(c: Cast) -> None:
     me = c.me
     rider = c.bonus(
         "damage", 4, on=me, until=When.ENCOUNTER,
-        when=lambda ctx: _is_melee(ctx),
-    )
+        when=lambda ctx: _is_melee(ctx), kind="power")
     if rider is None:
         return
 
@@ -548,7 +547,7 @@ def p7391(c: Cast) -> None:
         ],
     )
     c.bonus(
-        "attack", 2, on=me, until=When.EONT,
+        "attack", 2, on=me, until=When.EONT, kind="power",
         when=lambda ctx: _is_melee(ctx)
         and any(a != me for a in c.within(1, of=me, side="ally")),
     )

@@ -282,7 +282,7 @@ def p12662(c: Cast) -> None:
     _ends_with(
         c,
         stance,
-        c.bonus("damage", step, on=c.me, until=When.ENCOUNTER, when=_basic_ctx),
+        c.bonus("damage", step, on=c.me, until=When.ENCOUNTER, when=_basic_ctx, kind="power"),
     )
 
 
@@ -384,7 +384,7 @@ def p12667(c: Cast) -> None:
     _ends_with(
         c,
         stance,
-        c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=_basic_ctx),
+        c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=_basic_ctx, kind="power"),
     )
 
 
@@ -437,7 +437,7 @@ def p12688(c: Cast) -> None:
         c,
         stance,
         c.bonus(
-            "attack", 2, on=c.me, until=When.ENCOUNTER,
+            "attack", 2, on=c.me, until=When.ENCOUNTER, kind="power",
             when=lambda ctx: bool(ctx.get("charge")),
         ),
     )
@@ -469,7 +469,7 @@ def p12689(c: Cast) -> None:
 
     _ends_with(
         c, stance,
-        c.bonus("damage", step, on=me, until=When.ENCOUNTER, when=alone),
+        c.bonus("damage", step, on=me, until=When.ENCOUNTER, when=alone, kind="power"),
     )
 
 
@@ -510,7 +510,7 @@ def p12692(c: Cast) -> None:
         c,
         stance,
         c.penalty("attack", 2, on=c.me, until=When.ENCOUNTER, when=_weapon_power),
-        c.bonus("damage", step, on=c.me, until=When.ENCOUNTER, when=_basic_ctx),
+        c.bonus("damage", step, on=c.me, until=When.ENCOUNTER, when=_basic_ctx, kind="power"),
     )
 
 

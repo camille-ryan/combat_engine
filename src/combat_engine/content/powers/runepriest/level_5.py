@@ -163,8 +163,7 @@ def p11389(c: Cast) -> None:
                 on=who,
                 until=When.ENCOUNTER,
                 when=lambda ctx, t=v: ctx.get("target") == t
-                and t in c.suffering("p11389"),
-            )
+                and t in c.suffering("p11389"), kind="power")
 
     grant(2)
     step = [2]

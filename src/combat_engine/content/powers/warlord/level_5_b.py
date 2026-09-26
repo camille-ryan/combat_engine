@@ -270,13 +270,13 @@ def p10926(c: Cast) -> None:
     def charging(ctx: dict) -> bool:
         return bool(ctx.get("charge"))
 
-    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=charging)
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=charging, kind="power")
     for friend in c.allies():
 
         def in_sight(ctx: dict, who: int = friend) -> bool:
             return bool(ctx.get("charge")) and c.can_see(who)
 
-        c.bonus("attack", 1, on=friend, until=When.ENCOUNTER, when=in_sight)
+        c.bonus("attack", 1, on=friend, until=When.ENCOUNTER, when=in_sight, kind="power")
 
 
 @power(
@@ -389,27 +389,18 @@ def p10929(c: Cast) -> None:
             return c.adjacent(who)
 
         for defence in (AC, REF):
-            c.bonus(defence, 2, on=friend, until=When.ENCOUNTER, when=beside)
+            c.bonus(defence, 2, on=friend, until=When.ENCOUNTER, when=beside, kind="power")
 
 
 def _second_wind(c: Cast, who: int) -> bool:
     """One second wind, taken by somebody else off the warlord's action.
 
-    `actions.perform` owns the only other copy: a use counted in `Powers`, a
-    surge, and +2 to AC until the start of that creature's next turn. There
-    is no `Cast` door to it, and a bare `c.surge` would leave the use
-    uncounted, so a creature could take a second one of its own afterwards.
+    `c.second_wind(on=)` is the one implementation. This used to spell it
+    out, as did the ranger's copy and `actions.perform` itself -- three
+    versions of a rule whose whole difficulty is that a bare `c.surge`
+    leaves the use uncounted, so the creature could take another later.
     """
-    from combat_engine.engine import Powers
-
-    known = c.world.get(who, Powers)
-    if known is None or known.times("second-wind"):
-        return False
-    known.note_use("second-wind", c.world.round)
-    if not c.surge(on=who):
-        return False
-    c.bonus(AC, 2, on=who, until=When.SONT, kind="untyped")
-    return True
+    return c.second_wind(on=who)
 
 
 @power(
@@ -494,7 +485,7 @@ def p16517(c: Cast) -> None:
         return who is not None and bool(squares(c.world, who) & rough)
 
     for friend in [c.me, *c.allies()]:
-        c.bonus("attack", 2, on=friend, until=When.ENCOUNTER, when=on_rough)
+        c.bonus("attack", 2, on=friend, until=When.ENCOUNTER, when=on_rough, kind="power")
 
 
 @power(

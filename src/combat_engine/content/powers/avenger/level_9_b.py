@@ -382,6 +382,7 @@ def p7016(c: Cast) -> None:
             return
         c.bonus(
             "damage", max(0, c.wis_mod), until=When.EONT, on=c.me, once=True,
+            kind="power",
             when=lambda ctx: sworn(c.world, c.me, ctx.get("target")),
         )
 

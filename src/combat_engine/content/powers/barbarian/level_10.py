@@ -256,7 +256,7 @@ def p4889(c: Cast) -> None:
     me = c.me
     stance = c.stance(on=me, label=c.ref)
     held = [c.penalty(d, 2, on=me, until=When.ENCOUNTER) for d in (AC, FORT, REF, WILL)]
-    held.append(c.bonus("attack", 1, on=me, until=When.ENCOUNTER, kind="power"))
+    held.append(c.bonus("attack", 1, on=me, until=When.ENCOUNTER, kind="untyped"))
     held_by(c, stance, *held)
 
 

@@ -115,8 +115,7 @@ def p11833(c: Cast) -> None:
         return
     c.bonus(
         "damage", 5 + c.cha_mod, on=c.me, until=When.EONT,
-        when=lambda ctx: victim is None or ctx.get("target") == victim,
-    )
+        when=lambda ctx: victim is None or ctx.get("target") == victim, kind="power")
 
 
 @power(
@@ -200,7 +199,7 @@ def p3202(c: Cast) -> None:
 
     def guard() -> None:
         for d in (AC, FORT, REF, WILL):
-            c.bonus(d, 2, on=me, until=When.ENCOUNTER)
+            c.bonus(d, 2, on=me, until=When.ENCOUNTER, kind="power")
 
     def thorns() -> None:
         def sting(ev: AttackDeclared) -> None:

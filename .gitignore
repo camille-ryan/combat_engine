@@ -24,3 +24,6 @@ compendium.sqlite
 
 .claude/
 .DS_Store
+
+# A reference sheet of blocked rows, with printed names. Not for the tree.
+docs/blocked.csv

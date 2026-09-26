@@ -71,5 +71,5 @@ def p1429(c: Cast) -> None:
         c.damage(c.w(2), c.str_mod)
     mark = c.target
     against = lambda ctx: ctx.get("target") == mark  # noqa: E731
-    c.bonus("attack", 2 if hit else 1, until=When.ENCOUNTER, on=c.me, when=against)
-    c.bonus("damage", 4 if hit else 2, until=When.ENCOUNTER, on=c.me, when=against)
+    c.bonus("attack", 2 if hit else 1, until=When.ENCOUNTER, on=c.me, when=against, kind="power")
+    c.bonus("damage", 4 if hit else 2, until=When.ENCOUNTER, on=c.me, when=against, kind="power")

@@ -77,8 +77,8 @@ def p4203(c: Cast) -> None:
 def p7658(c: Cast) -> None:
     """Moving the shield to somebody else is a later minor action of the
     caster's and nothing declares one, so the ward simply lasts the fight."""
-    c.bonus(AC, 4, on=c.target, until=When.ENCOUNTER)
-    c.bonus(REF, 4, on=c.target, until=When.ENCOUNTER)
+    c.bonus(AC, 4, on=c.target, until=When.ENCOUNTER, kind="power")
+    c.bonus(REF, 4, on=c.target, until=When.ENCOUNTER, kind="power")
 
 
 @power(

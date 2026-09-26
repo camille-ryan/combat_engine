@@ -640,7 +640,7 @@ def m5027a4(c: Cast) -> None:
     """"One ally within 5 squares" excludes the m5027 itself, which is what
     `ONE_OTHER_ALLY` is for; the duration is the ally's next turn, not the
     leader's."""
-    c.bonus("attack", 2, until=When.EOTNT)
+    c.bonus("attack", 2, until=When.EOTNT, kind="power")
 
 
 def _by_spread(world: Any, me: int, ev: Any) -> bool:

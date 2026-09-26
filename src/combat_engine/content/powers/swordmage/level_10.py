@@ -73,7 +73,7 @@ def p10437(c: Cast) -> None:
         if p is None or Keyword.WEAPON not in p.keywords:
             return
         for what in (AC, FORT, REF, WILL):
-            c.bonus(what, step, on=me, until=When.SONT)
+            c.bonus(what, step, on=me, until=When.SONT, kind="power")
 
     rider = c.watch(Hit, guard, until=When.ENCOUNTER, on=me, label=c.ref)
     stance.on_end.append(lambda: c.world.effects.end(rider, "stance ended"))
@@ -120,7 +120,7 @@ def p3957(c: Cast) -> None:
     me = c.me
     stance = c.stance(label=c.ref)
     for rider in (
-        c.bonus("speed", 2, on=me, until=When.ENCOUNTER),
+        c.bonus("speed", 2, on=me, until=When.ENCOUNTER, kind="power"),
         c.ignores_difficult(on=me, until=When.ENCOUNTER),
     ):
         if rider is not None:

@@ -590,7 +590,7 @@ def m5057a0(c: Cast) -> None:
             return ctx.get("target") == me
 
         return c.penalty(
-            "attack", 2, on=who, until=When.ENCOUNTER, kind="untyped", when=at_me
+            "attack", 2, on=who, until=When.ENCOUNTER, when=at_me
         )
 
     _aura(c, 1, eligible, hold)

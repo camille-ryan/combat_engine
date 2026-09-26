@@ -138,7 +138,7 @@ def p750(c: Cast) -> None:
     # not carry. "All defenses" is the four of them, one bonus each.
     c.teleport(3)
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 2, on=c.me, until=When.EONT)
+        c.bonus(defence, 2, on=c.me, until=When.EONT, kind="power")
 
 
 @power(
@@ -408,7 +408,7 @@ def p5909(c: Cast) -> None:
     """The bonus is spent on the next roll and the debt on the next throw,
     and neither waits for the other -- which is why they carry separate
     latches rather than one."""
-    c.bonus("attack", 2, on=c.me, kind="power", until=When.ENCOUNTER, once=True)
+    c.bonus("attack", 2, on=c.me, kind="untyped", until=When.ENCOUNTER, once=True)
     owed = [True]
 
     def falters(ev: SavingThrow) -> None:

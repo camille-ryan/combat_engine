@@ -493,7 +493,7 @@ def m722a0(c: Cast) -> None:
         return who in c.enemies() and _living(c, who)
 
     def cowed(who: int) -> Effect | None:
-        return c.penalty("attack", 2, until=When.ENCOUNTER, on=who, kind="untyped")
+        return c.penalty("attack", 2, until=When.ENCOUNTER, on=who)
 
     _aura(c, 1, a_living_foe, cowed)
 

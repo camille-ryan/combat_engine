@@ -161,8 +161,7 @@ def p10623(c: Cast) -> None:
         1,
         on=me,
         until=When.ENCOUNTER,
-        when=lambda _ctx: c.wielding("two-weapon"),
-    )
+        when=lambda _ctx: c.wielding("two-weapon"), kind="power")
     if held is not None:
         stance.on_end.append(lambda: c.world.effects.end(held, "stance ended"))
 
@@ -244,7 +243,7 @@ def p13609(c: Cast) -> None:
 def p13626(c: Cast) -> None:
     c.teleport(5)
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 5, on=c.me, until=When.EONT)
+        c.bonus(defence, 5, on=c.me, until=When.EONT, kind="power")
 
 
 @power(
@@ -286,7 +285,7 @@ def p4400(c: Cast) -> None:
     if not touched:
         return
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, len(touched), on=c.me, until=When.EONT)
+        c.bonus(defence, len(touched), on=c.me, until=When.EONT, kind="power")
 
 
 @power(

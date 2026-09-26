@@ -137,7 +137,7 @@ def p12941(c: Cast) -> None:
     if who is None or not c.first:
         return
     ev.amount = max(0, ev.amount - c.wis_mod)
-    c.bonus("save", 2, on=who, until=When.EOTNT)
+    c.bonus("save", 2, on=who, until=When.EOTNT, kind="power")
 
 
 @power(
@@ -180,11 +180,11 @@ def p12943(c: Cast) -> None:
     who = c.target
     if who is None:
         return
-    c.bonus("speed", 2, on=who, until=When.EOTNT)
+    c.bonus("speed", 2, on=who, until=When.EOTNT, kind="power")
     amount = max(c.wis_mod, c.con_mod)
     if amount:
         c.bonus(
-            "damage", amount, on=who, until=When.EOTNT,
+            "damage", amount, on=who, until=When.EOTNT, kind="power",
             when=lambda ctx: bool(ctx.get("charge")),
         )
 
@@ -217,4 +217,4 @@ def p13781(c: Cast) -> None:
 
     for holder in (c.me, who):
         for d in (AC, FORT, REF, WILL):
-            c.bonus(d, 2, on=holder, until=When.EONT, when=close)
+            c.bonus(d, 2, on=holder, until=When.EONT, when=close, kind="power")

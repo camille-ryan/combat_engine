@@ -149,11 +149,11 @@ def p11403(c: Cast) -> None:
     area = c.area()
     zid = c.zone(area, until=When.EONT, sustain=MINOR)
     for who in [c.me, *c.in_squares(area, side="ally")]:
-        c.bonus(AC, 2, on=who, until=When.EONT)
+        c.bonus(AC, 2, on=who, until=When.EONT, kind="power")
 
     def ward(ev: Any, z: int = zid) -> None:
         if ev.zone == z and ev.actor in [c.me, *c.allies()]:
-            c.bonus(AC, 2, on=ev.actor, until=When.EONT)
+            c.bonus(AC, 2, on=ev.actor, until=When.EONT, kind="power")
 
     c.watch(ZoneEntered, ward, until=When.EONT)
 
@@ -210,12 +210,12 @@ def p16499(c: Cast) -> None:
     ring = c.aura(1, until=When.EONT)
     for ally in c.within(1, side="ally"):
         for defence in DEFENCES:
-            c.bonus(defence, 2, on=ally, until=When.EONT)
+            c.bonus(defence, 2, on=ally, until=When.EONT, kind="power")
 
     def ward(ev: Any, z: int = ring) -> None:
         if ev.zone != z or ev.actor not in c.allies():
             return
         for defence in DEFENCES:
-            c.bonus(defence, 2, on=ev.actor, until=When.EONT)
+            c.bonus(defence, 2, on=ev.actor, until=When.EONT, kind="power")
 
     c.watch(ZoneEntered, ward, until=When.EONT)

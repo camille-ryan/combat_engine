@@ -161,8 +161,7 @@ def p9408(c: Cast) -> None:
                 c.cha_mod,
                 on=c.me,
                 until=When.EONT,
-                when=lambda ctx: ctx.get("target") == victim,
-            )
+                when=lambda ctx: ctx.get("target") == victim, kind="power")
 
 
 @power(

@@ -105,7 +105,7 @@ def p11619(c: Cast) -> None:
         c.str_mod,
         on=wielder,
         until=When.ENCOUNTER,
-        kind="power",
+        kind="untyped",
         when=lambda ctx: _weapon_row(ctx.get("power") or ""),
     )
 

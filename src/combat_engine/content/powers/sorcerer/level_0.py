@@ -187,7 +187,7 @@ def p16227(c: Cast) -> None:
 
     _on_each_hit(c, sting)
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 2, until=When.EONT, on=c.me)
+        c.bonus(defence, 2, until=When.EONT, on=c.me, kind="power")
 
 
 # -- the at-wills -----------------------------------------------------------
@@ -222,8 +222,8 @@ def p16222(c: Cast) -> None:
 )
 def p16228(c: Cast) -> None:
     if c.first:
-        c.bonus(AC, 2, until=When.SONT, on=c.me)
-        c.bonus(REF, 2, until=When.SONT, on=c.me)
+        c.bonus(AC, 2, until=When.SONT, on=c.me, kind="power")
+        c.bonus(REF, 2, until=When.SONT, on=c.me, kind="power")
     if c.strike():
         c.damage("1d8" if c.level < 21 else "2d8", c.cha_mod, dtype=DamageType.FIRE)
 

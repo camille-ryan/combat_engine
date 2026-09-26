@@ -304,18 +304,33 @@ class Mods:
     items: list[Mod] = field(default_factory=list)
 
     def total(self, what: str, ctx: dict[str, Any] | None = None) -> int:
-        """Sum the modifiers to `what`, applying 4e's stacking rules."""
+        """Sum the modifiers to `what`, applying 4e's stacking rules.
+
+        Bonuses bucket by **type**: two of a kind do not add, the larger
+        applies, and untyped ones add freely.
+
+        Penalties have no type and generally do add -- **except that two
+        from the same source do not**, and the worse applies. So they
+        bucket by `label`, which is the ref of the row that laid them.
+        Every penalty used to stack unconditionally, so one power landing
+        on a creature twice came to -4 where the rule says -2; the six
+        rows passing `kind=` to `c.penalty` were writing something that
+        `value < 0` short-circuited past before it could mean anything.
+        """
         ctx = ctx or {}
         best: dict[str, int] = {}
+        worst: dict[str, int] = {}
         out = 0
         for m in self.items:
             if m.what != what or not m.applies(ctx):
                 continue
-            if m.value < 0 or m.kind == "untyped":
-                out += m.value  # penalties and untyped bonuses always stack
+            if m.value < 0:
+                worst[m.label] = min(worst.get(m.label, 0), m.value)
+            elif m.kind == "untyped":
+                out += m.value
             else:
                 best[m.kind] = max(best.get(m.kind, 0), m.value)
-        return out + sum(best.values())
+        return out + sum(best.values()) + sum(worst.values())
 
 
 @dataclass

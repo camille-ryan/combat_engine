@@ -141,20 +141,11 @@ EVERY_DEFENCE: tuple[Defense, ...] = (AC, FORT, REF, WILL)
 def _fly(c: Cast, squares_: int) -> int:
     """Cover ground at the fly speed rather than at the walk.
 
-    `c.move` measures `query.speed`, which is the ground speed and nothing
-    else, so a printed "flies up to its fly speed" came up short by the
-    difference. The difference is lent as a speed modifier for the length of
-    the move and taken back afterwards -- the arrangement `_fly_at` uses for
-    a charge, with no target to aim at.
+    `c.move(at="fly")` is the whole of it now. This used to lend a speed
+    modifier for the length of the move and take it back, which is what
+    the engine does inside `move` -- three helpers had written that out.
     """
-    extra = max(0, _fly_speed(c) - c.speed_of())
-    lent = c.bonus("speed", extra, until=When.EOT, on=c.me, kind="untyped") if extra else None
-    try:
-        return c.move(squares_)
-    finally:
-        if lent is not None:
-            c.world.effects.end(lent, "it landed")
-
+    return c.move(squares_, at="fly")
 
 def _in_the_saddle(
     c: Cast, mount_up: Any, label: str, *, level: int = 0

@@ -148,7 +148,7 @@ def attack(
             situational -= max(
                 int(cover_between(world, attacker, target,
                                   ranged=_is_ranged(power, branch))),
-                int(concealment_of(world, target)),
+                int(concealment_of(world, target, ctx)),
             )
         situational += _mark_penalty(world, attacker, among or (target,))
 

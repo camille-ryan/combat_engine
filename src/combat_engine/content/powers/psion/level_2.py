@@ -121,7 +121,7 @@ def p13316(c: Cast) -> None:
 def p8231(c: Cast) -> None:
     chosen = c.choose([AC, FORT, REF, WILL], f"{c.ref}: which defence")
     if chosen is not None:
-        c.bonus(chosen, c.cha_mod, on=c.me, until=When.EONT)
+        c.bonus(chosen, c.cha_mod, on=c.me, until=When.EONT, kind="power")
 
 
 @power(

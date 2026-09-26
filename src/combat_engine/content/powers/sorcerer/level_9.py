@@ -205,7 +205,7 @@ def p3769(c: Cast) -> None:
         c.damage("2d6", c.cha_mod, dtype=DamageType.THUNDER)
     c.ongoing(5, DamageType.THUNDER)
     if c.first:
-        c.bonus(AC, 2, on=c.me, until=When.ENCOUNTER)
+        c.bonus(AC, 2, on=c.me, until=When.ENCOUNTER, kind="power")
 
 
 @power(
@@ -377,7 +377,7 @@ def p12473(c: Cast) -> None:
         return
     if c.first:
         for defence in (AC, FORT, REF, WILL):
-            c.bonus(defence, c.cha_mod, on=fam, until=When.ENCOUNTER)
+            c.bonus(defence, c.cha_mod, on=fam, until=When.ENCOUNTER, kind="power")
         c.move(c.speed_of(fam), who=fam)
     if c.target not in c.within(1, of=fam):
         return

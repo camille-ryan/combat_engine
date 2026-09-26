@@ -503,8 +503,7 @@ def p4545(c: Cast) -> None:
         1 + c.int_mod,
         on=friend,
         until=When.ENCOUNTER,
-        when=lambda ctx: ctx.get("target") == foe,
-    )
+        when=lambda ctx: ctx.get("target") == foe, kind="power")
     # Moving a standing effect onto somebody else, on a later turn and for a
     # named action, is not something a body can arm.
     c.note(

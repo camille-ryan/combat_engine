@@ -175,8 +175,8 @@ def p10509(c: Cast) -> None:
         return wielded is not None and Keyword.WEAPON in wielded.keywords
 
     for guard in (AC, FORT, REF, WILL):
-        c.bonus(guard, 1, on=me, until=When.ENCOUNTER, when=hard_pressed)
-    c.bonus("attack", 1, on=me, until=When.ENCOUNTER, when=alone)
+        c.bonus(guard, 1, on=me, until=When.ENCOUNTER, when=hard_pressed, kind="power")
+    c.bonus("attack", 1, on=me, until=When.ENCOUNTER, when=alone, kind="power")
 
 
 @power(

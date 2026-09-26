@@ -305,8 +305,8 @@ def p4329(c: Cast) -> None:
     aura_ring(
         c, stance, side="ally",
         give=lambda who: [
-            c.bonus(AC, 2, on=who, until=When.ENCOUNTER),
-            c.bonus(REF, 2, on=who, until=When.ENCOUNTER),
+            c.bonus(AC, 2, on=who, until=When.ENCOUNTER, kind="power"),
+            c.bonus(REF, 2, on=who, until=When.ENCOUNTER, kind="power"),
         ],
     )
 
@@ -495,7 +495,7 @@ def p12700(c: Cast) -> None:
     it carries `opportunity` for exactly this."""
     for guard in (AC, FORT, REF, WILL):
         c.bonus(
-            guard, 5, on=c.me, until=When.EOT,
+            guard, 5, on=c.me, until=When.EOT, kind="power",
             when=lambda ctx: bool(ctx.get("opportunity")),
         )
     c.move(c.speed_of())
@@ -647,8 +647,7 @@ def p12701(c: Cast) -> None:
     for guard in (AC, FORT, REF, WILL):
         c.bonus(
             guard, 2, on=c.me, until=When.EOTNT,
-            when=lambda ctx: ctx.get("attacker") == foe,
-        )
+            when=lambda ctx: ctx.get("attacker") == foe, kind="power")
 
 
 @power(
@@ -701,5 +700,4 @@ def p4328(c: Cast) -> None:
     if foe is not None:
         c.bonus(
             "attack", 2, on=c.me, until=When.ENCOUNTER,
-            when=lambda ctx: ctx.get("target") == foe,
-        )
+            when=lambda ctx: ctx.get("target") == foe, kind="power")

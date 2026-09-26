@@ -750,8 +750,8 @@ def p7401(c: Cast) -> None:
     -- the printed line says "makes a melee attack", not "hits with one".
     """
     me = c.me
-    c.bonus(AC, 4, on=me, until=When.EONT)
-    c.bonus(REF, 4, on=me, until=When.EONT)
+    c.bonus(AC, 4, on=me, until=When.EONT, kind="power")
+    c.bonus(REF, 4, on=me, until=When.EONT, kind="power")
 
     def shove(ev: Hit | Miss) -> None:
         if ev.target != me:

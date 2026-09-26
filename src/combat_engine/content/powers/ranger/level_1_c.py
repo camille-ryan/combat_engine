@@ -338,7 +338,7 @@ def p4377(c: Cast) -> None:
     attack event says which power swung and never which fist."""
     if c.strike():
         c.damage(c.w(2), c.str_mod)
-    c.bonus(AC, max(1, c.wis_mod), on=c.me, until=When.EONT)
+    c.bonus(AC, max(1, c.wis_mod), on=c.me, until=When.EONT, kind="power")
 
 
 @power(
@@ -357,7 +357,7 @@ def p4377(c: Cast) -> None:
 def p7390(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(1), c.str_mod)
-        c.bonus(AC, 2, on=c.me, until=When.EONT)
+        c.bonus(AC, 2, on=c.me, until=When.EONT, kind="power")
 
 
 @power(

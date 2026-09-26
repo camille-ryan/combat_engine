@@ -233,8 +233,7 @@ def p13580(c: Cast) -> None:
     else:
         c.bonus(
             "damage", 2, on=c.me, until=When.ENCOUNTER, once=True,
-            when=lambda ctx: ctx.get("target") == victim,
-        )
+            when=lambda ctx: ctx.get("target") == victim, kind="power")
 
 
 @power(

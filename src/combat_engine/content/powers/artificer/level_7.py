@@ -156,7 +156,7 @@ def p4144(c: Cast) -> None:
     if c.first:
         ally = ally_at(c, within=10)
         if ally is not None:
-            c.bonus(AC, 2 + c.con_mod, on=ally, until=When.EONT)
+            c.bonus(AC, 2 + c.con_mod, on=ally, until=When.EONT, kind="power")
     if c.strike():
         c.damage("1d10", c.int_mod)
         c.slide(2)

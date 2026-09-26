@@ -372,7 +372,7 @@ def m279a1(c: Cast) -> None:
     victim = c.target
     if victim is None:
         return
-    worse = c.penalty("attack", 2, on=c.me, until=When.EOT, kind="untyped")
+    worse = c.penalty("attack", 2, on=c.me, until=When.EOT)
     try:
         caught = _volley(c, "m279a0", victim)
     finally:
@@ -530,7 +530,7 @@ def m2876a3(c: Cast) -> None:
     def seizing(ctx: dict[str, Any]) -> bool:
         return bool(ctx.get("opportunity"))
 
-    c.bonus("attack", 3, until=When.ENCOUNTER, on=me, kind="power", when=seizing)
+    c.bonus("attack", 3, until=When.ENCOUNTER, on=me, kind="untyped", when=seizing)
 
     def follow(ev: Hit) -> None:
         if ev.attacker == me and getattr(ev, "opportunity", False):

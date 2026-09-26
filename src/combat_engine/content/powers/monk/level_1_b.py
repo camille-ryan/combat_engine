@@ -392,7 +392,7 @@ def p7453(c: Cast) -> None:
     c.ignores_difficult(until=When.EOT)
     for d in (AC, FORT, REF, WILL):
         c.bonus(
-            d, c.wis_mod, on=c.me, until=When.EOT,
+            d, c.wis_mod, on=c.me, until=When.EOT, kind="power",
             when=lambda ctx: bool(ctx.get("opportunity")),
         )
     c.move(c.speed_of() + 2)

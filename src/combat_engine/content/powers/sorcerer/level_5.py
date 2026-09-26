@@ -163,8 +163,8 @@ def p3185(c: Cast) -> None:
     if not c.first:
         return
     me, bite = c.me, c.cha_mod
-    c.bonus(AC, 2, on=me, until=When.ENCOUNTER)
-    c.bonus(FORT, 2, on=me, until=When.ENCOUNTER)
+    c.bonus(AC, 2, on=me, until=When.ENCOUNTER, kind="power")
+    c.bonus(FORT, 2, on=me, until=When.ENCOUNTER, kind="power")
 
     def chill(ev: AttackRolled) -> None:
         from combat_engine.engine import get

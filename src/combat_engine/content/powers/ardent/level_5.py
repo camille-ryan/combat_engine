@@ -126,8 +126,7 @@ def p11099(c: Cast) -> None:
     for ally in c.allies():
         c.bonus(
             "damage", c.con_mod, on=ally, until=When.EONT,
-            when=lambda _ctx, a=ally: c.distance(to=a) <= 1,
-        )
+            when=lambda _ctx, a=ally: c.distance(to=a) <= 1, kind="power")
 
 
 @power(
@@ -259,12 +258,12 @@ def p12950(c: Cast) -> None:
         if who == c.me or who not in c.allies() or c.distance(to=who) > 5:
             return
         c.bonus(
-            "attack", 2, on=who, until=When.EOT,
+            "attack", 2, on=who, until=When.EOT, kind="power",
             when=lambda ctx: bool(ctx.get("charge")),
         )
         if c.cha_mod:
             c.bonus(
-                "damage", c.cha_mod, on=who, until=When.EOT,
+                "damage", c.cha_mod, on=who, until=When.EOT, kind="power",
                 when=lambda ctx: bool(ctx.get("charge")),
             )
 

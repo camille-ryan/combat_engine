@@ -225,8 +225,8 @@ def p10166(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(2), c.dex_mod)
     if c.first:
-        c.bonus(AC, c.cha_mod, on=c.me)
-        c.bonus(REF, c.cha_mod, on=c.me)
+        c.bonus(AC, c.cha_mod, on=c.me, kind="power")
+        c.bonus(REF, c.cha_mod, on=c.me, kind="power")
 
 
 @power(
@@ -945,5 +945,4 @@ def p7396(c: Cast) -> None:
     if victim is not None:
         c.bonus(
             "attack", 1, on=c.me, until=When.EONT, once=True,
-            when=lambda ctx: ctx.get("target") == victim,
-        )
+            when=lambda ctx: ctx.get("target") == victim, kind="power")

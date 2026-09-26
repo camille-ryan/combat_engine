@@ -194,9 +194,9 @@ def p12530(c: Cast) -> None:
         return
     if c.may("spend a healing surge", who=mate):
         c.surge(on=mate)
-    c.bonus("attack", 1, on=mate, until=When.ENCOUNTER)
+    c.bonus("attack", 1, on=mate, until=When.ENCOUNTER, kind="power")
     for what in (AC, FORT, REF, WILL):
-        c.bonus(what, 2, on=mate, until=When.ENCOUNTER)
+        c.bonus(what, 2, on=mate, until=When.ENCOUNTER, kind="power")
 
 
 @power(
@@ -216,7 +216,7 @@ def p12873(c: Cast) -> None:
     c.dismiss_companion()
     for mate in friends(c):
         c.bonus(
-            "attack", 2, on=mate, until=When.EONT,
+            "attack", 2, on=mate, until=When.EONT, kind="power",
             when=lambda ctx, w=mate: (
                 w in c.world.zones.occupants(ring)
                 and keyed(ctx, Keyword.FIRE, Keyword.RADIANT)

@@ -250,6 +250,7 @@ def m451a2(c: Cast) -> None:
         until=When.ENCOUNTER,
         on=me,
         once=True,
+        kind="power",
         when=lambda ctx: drew_blood(ctx.get("target")),
     )
 

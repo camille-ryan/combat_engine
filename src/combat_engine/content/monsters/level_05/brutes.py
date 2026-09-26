@@ -1024,7 +1024,7 @@ def m4709a3(c: Cast) -> None:
     """Only the beasts among them, which is a type word and so is sayable --
     `c.is_kind` reads the stat block's own type line."""
     if c.target is not None and c.is_kind("beast", c.target):
-        c.bonus("attack", 2, until=When.EONT, on=c.target)
+        c.bonus("attack", 2, until=When.EONT, on=c.target, kind="power")
 
 
 # -- m4791 ------------------------------------------------------------------
