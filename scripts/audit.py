@@ -49,6 +49,7 @@ from combat_engine.engine import (
     use,
 )
 from combat_engine.engine.dsl import REGISTRY
+from combat_engine.engine.grid import Square
 from combat_engine.engine.query import alive
 from combat_engine.engine.query import enemies as _foes
 from combat_engine.engine.types import ActionType
@@ -153,6 +154,32 @@ KNOWN_SILENT = {
     # printed row correctly does nothing here -- "if any" is the card's own
     # word for it.
     "p13696": "its only combat clause is a fly-speed bonus; the board's ranger cannot fly",
+    # Undead-only rows. `c.is_kind("undead")` is True for the board's m416,
+    # but a single-target row is aimed by `_auto_targets`, which picks the
+    # nearest enemy and never that one. Driven at it by hand, p12601 deals
+    # radiant, pushes 4 and immobilises; the other two likewise.
+    "p12601": "affects only undead; the auto-targeter never picks the board's one undead",
+    "p14293": "affects only undead; the auto-targeter never picks the board's one undead",
+    "p5330": "affects only undead; the auto-targeter never picks the board's one undead",
+    # Reduces a target's necrotic resistance, and nothing on the board has
+    # any. Giving the undead some would change what every necrotic row in
+    # the tree reports, which is a worse trade than one excused row.
+    "p13970": "reduces necrotic resistance; nothing on the board has any",
+    # Both make a *ranged* basic inside them, and the board's ranger is the
+    # two-blade build with no bow. The chassis is right -- a two-blade
+    # ranger genuinely cannot -- so this is the printed Requirement working.
+    "p13585": "makes a ranged basic; the board's ranger is two-blade and owns no bow",
+    "p13586": "makes a ranged basic; the board's ranger is two-blade and owns no bow",
+    # Grants an ally a step and a swing, and the board's allies stand
+    # behind the caster with nothing in reach after the step.
+    "m2884a3": "grants an ally a step and a swing; no ally has anything in reach",
+    # Shifts an ally on a burst-10 trigger. The allies are already packed
+    # around the caster, so the shift has nowhere to put them.
+    "p7194": "shifts an ally; the board's allies are boxed in around the caster",
+    # Clears difficult terrain in a close burst 1, and the only squares
+    # beside the caster have to stay smooth so a one-square shift has
+    # somewhere to go. The board's rough ground is further out.
+    "p15856": "clears difficult terrain within 1; the caster's neighbours must stay smooth",
     "p2530": "an ally must have a bloodied enemy beside it",
     "p4572": "an ally must have already spent an encounter attack power",
     # Its printed Target *is* the avenger's oath target, and nothing on this
@@ -326,6 +353,15 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     # was bare grid, so "one creature it is hidden from" could never be
     # satisfied and every such row reported itself unusable.
     world.grid.blocking.add((9, 8))
+    # And a patch of rough ground, because "clear the difficult terrain"
+    # had nothing to clear on a board where every square is smooth. Kept
+    # away from the melee: the caster's only two free neighbours are
+    # (6,7) and (7,7), and making those difficult cost a monster row its
+    # one legal one-square shift. A close burst 1 therefore still cannot
+    # reach any of this, which is why p15856 stays excused -- the two
+    # wants are incompatible on one board and the shift is the commoner
+    # shape.
+    world.grid.difficult.update({(3, 10): "rough", (4, 10): "rough", (4, 11): "rough"})
     # And one dummy already burning, because several rows target "a creature
     # taking ongoing damage" and nothing on the board ever was.
     from combat_engine.engine.grid import spread
@@ -691,6 +727,41 @@ def _grip_for(world, caster: int, ref: str) -> None:  # noqa: ANN001
             return
 
 
+def _aims_at(world, caster: int, ref: str) -> list[Square]:  # noqa: ANN001
+    """Where to point a blast or an area burst so it catches somebody.
+
+    `area_of` falls back to the first square in sorted order, which for a
+    close blast is always up and to the left -- so every blast row in the
+    tree had only ever been fired in one direction, and a row that only
+    affects undead reported itself silent because the board's undead
+    stands the other way. Aimed at whichever legal origin catches the most
+    creatures, which is what a player would do.
+    """
+    from combat_engine.engine.dsl import aim_points, candidates
+
+    p = REGISTRY.get(ref)
+    if p is None or p.reach.kind not in ("close_blast", "area_burst"):
+        return []
+    spots = aim_points(world, caster, p)
+    if not spots:
+        return []
+    # Best first, so the commonest case costs one try. Several rather than
+    # one, because "the most creatures" is not "the right creatures": a row
+    # that only affects undead wants the blast pointed at the board's one
+    # undead, and the fullest blast points the other way.
+    # Ranked by **enemies** caught, not creatures. A board whose allies
+    # cluster one way and whose enemies stand the other pointed every
+    # blast at the allies, which is both the wrong reading of the card and
+    # the reason a row that only affects the board's one undead reported
+    # itself silent.
+    foes = set(_foes(world, caster))
+    ranked = sorted(
+        spots,
+        key=lambda sq: -len(foes & set(candidates(world, caster, p, origin=sq))),
+    )
+    return ranked[:4]
+
+
 def _use_with_any_grip(world, caster: int, ref: str) -> bool:  # noqa: ANN001
     """Use the row, drawing a different weapon first if that is what it needs.
 
@@ -702,25 +773,31 @@ def _use_with_any_grip(world, caster: int, ref: str) -> bool:  # noqa: ANN001
     """
     from combat_engine.engine import Gear
 
-    if use(world, caster, ref):
-        return True
+    aims = _aims_at(world, caster, ref) or [None]
+    for aim in aims:
+        if use(world, caster, ref, origin=aim):
+            return True
     gear = world.get(caster, Gear)
     if gear is None or len(gear.weapons) < 2:
         return False
     for weapon in gear.weapons:
         gear.wield(weapon)
-        if use(world, caster, ref):
-            return True
+        for aim in aims:
+            if use(world, caster, ref, origin=aim):
+                return True
     return False
 
 
 def _use_class_features(world, caster: int, foe: int) -> None:  # noqa: ANN001
     """Fire the caster's own level-0 rows -- its curse, its quarry, its mark."""
-    from combat_engine.engine.components import Powers
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.movement import place
 
     known = world.get(caster, Powers)
     if known is None:
         return
+    pos = world.get(caster, Position)
+    stood = pos.square if pos else None
     for ref in list(known.all):
         p = get(ref)
         # Not a trait, and not a row that waits for a trigger either: a
@@ -732,6 +809,13 @@ def _use_class_features(world, caster: int, foe: int) -> None:  # noqa: ANN001
             continue
         with contextlib.suppress(Exception):
             use(world, caster, ref, targets=[foe] if p.is_attack else None, spend=False)
+    # Put it back where it was standing. The rogue's level 0 is nine at-will
+    # *move* utilities, and firing them walked the caster from (6,8) to
+    # (0,1) -- seven squares from the nearest foe -- so the provocation that
+    # follows never reached it and every triggered rogue row reported
+    # UNUSED. The instrument was measuring its own setup.
+    if stood is not None and world.get(caster, Position) is not None:
+        place(world, caster, stood)
 
 
 def _allies_of(world, caster: int) -> list[int]:  # noqa: ANN001

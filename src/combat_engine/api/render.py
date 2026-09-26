@@ -195,9 +195,18 @@ def condition_dto(session: Session, effect) -> dto.ConditionDTO:  # noqa: ANN001
 
 
 def _duration_text(session: Session, effect) -> str:  # noqa: ANN001
-    """Say whose clock it is on, not just what kind of clock it is."""
+    """Say whose clock it is on, not just what kind of clock it is.
+
+    Falls back to the duration's own words rather than raising. This was a
+    bare dict lookup and `When.EOT` was missing from it, so the first row
+    in the tree to use that duration took down the whole render -- a
+    `KeyError` out of `state`, which is every card, every token and the
+    initiative strip, not just the one effect. A duration nobody has
+    phrased yet should read a little flatly, not blank the screen.
+    """
     who = session.wire.label(effect.clock)
     return {
+        When.EOT: f"end of {who}'s turn",
         When.EONT: f"end of {who}'s next turn",
         When.SONT: f"start of {who}'s next turn",
         When.EOTNT: f"end of {who}'s next turn",
@@ -207,7 +216,7 @@ def _duration_text(session: Session, effect) -> str:  # noqa: ANN001
         When.STANCE: "stance",
         When.SUSTAIN: "while sustained",
         When.INSTANT: "instant",
-    }[effect.when]
+    }.get(effect.when, effect.when.value)
 
 
 def _damage_line(values: dict) -> str | None:

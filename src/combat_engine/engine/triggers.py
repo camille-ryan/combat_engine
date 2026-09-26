@@ -235,14 +235,27 @@ class Triggers:
         whichever enemy happened to be nearest. It shot the wrong one
         whenever two were in reach.
 
-        Only for a row that takes a single enemy. A burst picks its own
+        Only for a row that takes a single creature. A burst picks its own
         targets and a self-buff has none, and neither wants overriding.
+
+        **Which creature depends on the side.** For an enemy row it is
+        whoever swung; for an ally row it is whoever it happened *to* --
+        "an ally is hit: you take the damage instead" means that ally, and
+        this used to handle the enemy case only, so such a row was aimed at
+        the nearest ally rather than the hurt one. Silently, and only
+        wrong when more than one ally was in range.
         """
         from .dsl import candidates
 
-        if p.target.everyone or p.target.count != 1 or p.target.side != "enemy":
+        side = p.target.side
+        if p.target.everyone or p.target.count != 1:
             return None
-        who = getattr(ev, "attacker", None) or getattr(ev, "actor", None)
+        if side == "enemy":
+            who = getattr(ev, "attacker", None) or getattr(ev, "actor", None)
+        elif side in ("ally", "other_ally", "any", "other"):
+            who = getattr(ev, "target", None) or getattr(ev, "actor", None)
+        else:
+            return None
         if who is None or who == eid:
             return None
         return [who] if who in candidates(self.world, eid, p) else None

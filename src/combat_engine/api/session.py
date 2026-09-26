@@ -133,6 +133,10 @@ class Session:
     gate: Turnstile = field(default_factory=Turnstile)
     #: Every event of this fight, written to `logs/<id>.jsonl` as it happens.
     transcript: Transcript | None = None
+    #: True while  is running somebody else's turn, so a
+    #: character's triggered row asks the policy rather than parking a
+    #: question the player has no way to answer.
+    _theirs: bool = False
 
     # -- building -----------------------------------------------------------
 
@@ -200,7 +204,16 @@ class Session:
 
         def decide(actor: int, kind: str, options: list[Any], prompt: str) -> Any:
             side = self.world.get(actor, Side)
-            if side and side.team is Team.PC:
+            # `theirs` is the same rule `on_window` below already states:
+            # a question parked inside somebody else's action cannot be
+            # answered, because the answer arrives on a request that cannot
+            # be made until this one returns. `_run_monsters` runs the
+            # monsters' turns inside the player's `act`, so a character's
+            # triggered row offered during a monster's move deadlocked the
+            # whole session -- the worker blocked on `_answers.get()` and
+            # the HTTP call never came back. The first row in the tree to
+            # be offered that way hung the app at round 3.
+            if side and side.team is Team.PC and not self._theirs:
                 return self.gate.decide(actor, kind, options, prompt)
             return self.policy.decide(self.world, actor, kind, options, prompt)
 
@@ -349,18 +362,28 @@ class Session:
         """Play every non-character turn until it is a character's move again."""
         from combat_engine.engine import Side
 
-        for _ in range(200):
-            if self.encounter.finished:
-                return
-            actor = self.current
-            if actor is None:
+        # The flag covers the whole loop, not just `take_turn`. Advancing
+        # the turn emits `TurnEnd`, a character's watch answers it, and the
+        # first row in the tree to ask a question from there deadlocked the
+        # session exactly as a mid-turn interrupt did -- the guard had to
+        # be around everything that runs while it is not the player's move,
+        # which is the entire body of this method.
+        self._theirs = True
+        try:
+            for _ in range(200):
+                if self.encounter.finished:
+                    return
+                actor = self.current
+                if actor is None:
+                    self.encounter.advance()
+                    continue
+                side = self.world.get(actor, Side)
+                if side and side.team is Team.PC and alive(self.world, actor):
+                    return
+                take_turn(self.world, self.encounter, actor, self.policy)
                 self.encounter.advance()
-                continue
-            side = self.world.get(actor, Side)
-            if side and side.team is Team.PC and alive(self.world, actor):
-                return
-            take_turn(self.world, self.encounter, actor, self.policy)
-            self.encounter.advance()
+        finally:
+            self._theirs = False
 
     def end_turn(self) -> None:
         try:

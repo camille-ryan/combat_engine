@@ -1,8 +1,8 @@
 """Beast form, and the shapes of sentence every file in this package repeats.
 
-The class's own shape-change is not in this batch: no row here *is* wild
-shape. So the only doors into beast form are the nine rows printing "you
-assume the <shape>" and the two at level 2 printing "you use wild shape".
+The class's own shape-change is `p5032` at the foot of this file; the other
+doors into beast form are the nine rows printing "you assume the <shape>"
+and the two at level 2 printing "you use wild shape".
 Everything carrying the printed Beast Form keyword is gated on being in one
 -- that is what the keyword means -- and the gate is `requires=`, so the
 interface refuses the row rather than the body quietly doing nothing.
@@ -24,17 +24,23 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 from combat_engine.engine import (
+    AT_WILL,
+    MINOR,
+    PERSONAL,
+    SELF,
     Cast,
     Condition,
     DamageType,
     Effect,
     Event,
+    Keyword,
     TurnEnd,
     TurnStart,
     When,
     World,
     ZoneEntered,
     get,
+    power,
 )
 from combat_engine.engine.events import Hit, PowerUsed, ZoneExited
 from combat_engine.engine.types import ActionType
@@ -339,3 +345,32 @@ def during_its_next_turn(
         lambda: c.world.effects.end(closing, "window closed") if not closing.ended else None
     )
     return held
+
+
+@power(
+    "p5032",
+    level=0,
+    cls="druid",
+    usage=AT_WILL,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.PRIMAL, Keyword.POLYMORPH],
+    once_per_round=True,
+)
+def p5032(c: Cast) -> None:
+    """The door itself: one row, both directions, which is what the printed
+    "or vice versa" makes it.
+
+    The shape is a bare `take_beast_form` with no conditions and no modes --
+    the printed line says the form "normally doesn't change your game
+    statistics", so the nine rows that name a shape are where the numbers
+    come from. The equipment clauses are inventory bookkeeping and have no
+    combat consequence, so nothing here reads them.
+    """
+    shape = current_form(c)
+    if shape is None:
+        take_beast_form(c)
+        return
+    c.world.effects.end(shape, c.ref)
+    c.shift(1)

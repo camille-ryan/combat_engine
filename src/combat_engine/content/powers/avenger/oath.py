@@ -26,18 +26,29 @@ from typing import Any
 
 from combat_engine.engine import (
     AT_WILL,
+    ENCOUNTER,
+    INTERRUPT,
     MINOR,
+    ONE_ALLY,
     ONE_CREATURE,
+    STANDARD,
+    WILL,
+    WIS,
+    Attack,
     AttackRolled,
     Cast,
+    CloseBurst,
+    DamageType,
+    Dropped,
     Keyword,
     Ranged,
+    Trigger,
     When,
     World,
     get,
     power,
 )
-from combat_engine.engine.query import enemies
+from combat_engine.engine.query import distance_between, enemies, team
 
 #: The label the hold carries. Substring-matched by `c.suffering`.
 OATH = "oath of enmity"
@@ -146,3 +157,113 @@ def avenger_oath(c: Cast) -> None:
             better_of_two(c, ev)
 
     c.watch(AttackRolled, twice, until=When.ENCOUNTER, on=me, label=label)
+
+
+@power(
+    "p3069",
+    level=0,
+    cls="avenger",
+    usage=ENCOUNTER,
+    action=MINOR,
+    reach=CloseBurst(10),
+    target=ONE_CREATURE,
+    keywords=[Keyword.DIVINE],
+)
+def p3069(c: Cast) -> None:
+    """The later printing of the oath: once an encounter, and back again when
+    the sworn enemy falls.
+
+    Written against the same `swear`/`better_of_two` machinery as the at-will
+    printing, so an avenger holding both does not roll three dice. The
+    watcher closes over the creature rather than asking `sworn` each time --
+    this one names a target and keeps it, where the at-will re-swears.
+
+    "You regain the use of this power" has nowhere to go: `Powers.used`
+    counts uses and nothing refunds one. The `Dropped` watcher ends the
+    reroll, which is the half that is sayable. See the report.
+    """
+    victim = c.target
+    if victim is None:
+        return
+    swear(c, victim)
+    me = c.me
+
+    def twice(ev: AttackRolled) -> None:
+        if ev.attacker != me or ev.target != victim or not _melee(ev):
+            return
+        if any(foe != victim and c.adjacent(foe) for foe in enemies(c.world, me)):
+            return
+        better_of_two(c, ev)
+
+    held = c.watch(AttackRolled, twice, until=When.ENCOUNTER, on=me, label=c.ref)
+
+    def released(ev: Dropped) -> None:
+        if ev.actor == victim:
+            c.world.effects.end(held, "the oath is discharged")
+
+    c.watch(Dropped, released, until=When.ENCOUNTER, on=me, label=f"{c.ref} release")
+
+
+@power(
+    "p5330",
+    level=0,
+    cls="avenger",
+    usage=ENCOUNTER,
+    action=STANDARD,
+    reach=CloseBurst(5),
+    target=ONE_CREATURE,
+    keywords=[Keyword.DIVINE, Keyword.IMPLEMENT, Keyword.RADIANT],
+    attack=Attack(WIS, vs=WILL),
+)
+def p5330(c: Cast) -> None:
+    """"One undead creature in the burst" is a filter the targeting layer
+    cannot apply -- it picks by side, not by type -- so the type is asked in
+    the body and a living target is simply not attacked.
+
+    "You can use only one channel divinity power per encounter" is a budget
+    across a set of rows; nothing in the header spans rows, so it is dropped
+    and named in the report.
+    """
+    if not c.is_kind("undead"):
+        return
+    dice = f"{3 + sum(c.level >= n for n in (5, 11, 15, 21, 25))}d10"
+    if c.strike():
+        c.damage(dice, c.wis_mod, dtype=DamageType.RADIANT)
+        c.pull(1 + c.wis_mod)
+        c.immobilized(until=When.EONT)
+    else:
+        c.half_damage(dice, c.wis_mod, dtype=DamageType.RADIANT)
+        c.pull(1)
+
+
+_ALLY_SWINGS = "an ally within 10 squares attacks your oath of enmity target"
+
+
+def _ally_swings_at_oath(world: World, me: int, ev: AttackRolled) -> bool:
+    who = ev.attacker
+    if who == me or team(world, who) is not team(world, me):
+        return False
+    if not sworn(world, me, ev.target):
+        return False
+    return distance_between(world, me, who) <= 10
+
+
+@power(
+    "p5331",
+    level=0,
+    cls="avenger",
+    usage=ENCOUNTER,
+    action=INTERRUPT,
+    reach=CloseBurst(10),
+    target=ONE_ALLY,
+    keywords=[Keyword.DIVINE],
+    trigger=_ALLY_SWINGS,
+    on=Trigger(AttackRolled, _ally_swings_at_oath, _ALLY_SWINGS),
+)
+def p5331(c: Cast) -> None:
+    """`AttackRolled` rather than `AttackDeclared`: the second roll has to
+    beat the first, and only this window has a rolled die to raise.
+    `resolve.attack` re-reads the result after announcing it, so a better
+    number here is a hit.
+    """
+    better_of_two(c, c.trigger)
