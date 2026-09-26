@@ -214,14 +214,35 @@ def _play(page, check: Checks, problems: list[str], served: list[dict]) -> None:
         # where this runs after seven other instruments -- 900ms was about
         # even odds. A flaky instrument is worse than a slow one: it
         # teaches you to re-run rather than to read.
+        # Click, wait for the board to change, and click once more if it
+        # did not. The diagnostic below says the click sometimes simply
+        # does not register -- everyone is still on their starting column
+        # and no question is parked -- and only ever inside `check.py`,
+        # never standalone, never under load, never straight after
+        # `api_smoke`. I could not find the cause, so this is a retry and
+        # not a fix, and it is written down as one.
         after = before
-        for _ in range(40):
-            after = _positions(page)
-            if after != before:
+        for attempt in range(2):
+            for _ in range(40):
+                after = _positions(page)
+                if after != before:
+                    break
+                page.wait_for_timeout(100)
+            if after != before or attempt:
                 break
-            page.wait_for_timeout(100)
-        check.that(after != before, "the board moved somebody",
-                   f"{before} vs {after}")
+            _click_a_move_square(page)
+        # Say *why* when it does not move. This failed intermittently under
+        # load and the message was two position dicts, which cannot tell a
+        # slow animation from a parked question from a click that missed --
+        # so it got read as a regression twice before anyone measured it.
+        pending = page.locator("#question, .pending, [data-pending]").count()
+        acting = page.locator(".actor.current").count()
+        check.that(
+            after != before,
+            "the board moved somebody",
+            f"{before} vs {after}"
+            f" | pending questions: {pending} | current actor drawn: {acting}",
+        )
 
     # An area power must highlight where it can be *centred*, not the
     # footprint it would cover from where the caster stands.

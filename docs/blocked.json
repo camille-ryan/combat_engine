@@ -59,10 +59,6 @@
     "wants": "c.decay(on=)",
     "why": "its whole Effect is reducing the enhancement bonus of the weapon or implement that hit it, to a minimum of 0, until the end of the encounter; Weapon has no enhancement bonus and Gear has no armour object, so there is no number to reduce"
   },
-  "m4853a1": {
-    "wants": "c.origin_for",
-    "why": "its master's implement attacks originate from its square"
-  },
   "m4968a3": {
     "wants": "c.as_though_hit_by(ref)",
     "why": "it rolls its own +17 vs AC and the target then takes the damage and is subject to the effects of a chosen enemy at-will melee power, off that creature's ability modifier and none of its bonuses. c.grant_row lends the whole row -- its own attack line and its own numbers -- and use() re-rolls it, so neither says this. Same sentence as m4971a3"
@@ -95,21 +91,9 @@
     "wants": "c.resize",
     "why": "becomes Large and gains reach 2; Size.reach_bonus was dead code encoding a rule the game does not have, and is gone"
   },
-  "p10145": {
-    "wants": "the \"forced\" modifier context to carry the source of the shove, or c.forced_bonus(n)",
-    "why": "movement.forced reads the \"forced\" mods off the victim with {\"how\": ...} and no mention of who is shoving, so \"increase the distance of any forced movement you cause by 2\" cannot be gated; the row's only other clause is a skill bonus (on the causer)"
-  },
-  "p10265": {
-    "wants": "c.cast_from(ally, until=)",
-    "why": "line of sight and effect for your ranged and area powers computed from an ally. c.strike(from_=) is per-swing; nothing holds it"
-  },
   "p10354": {
     "wants": "c.reroll_attack(all=True)",
     "why": "it rerolls every attack roll of one power use that missed. c.reroll_attack reaches only the one attack on c.trigger, and the earlier misses have already resolved and their bodies have already branched on them, so writing it would reroll one of several (or an event announcing a power use's finished set of attack rolls)"
-  },
-  "p10355": {
-    "wants": "c.ignore_condition(*conditions, until=)",
-    "why": "its whole Effect is taking a normal turn while stunned, dazed or unconscious and then having the condition continue. Conditions can be applied and ended and nothing can suspend one for a turn (act as though not stunned/dazed/unconscious)"
   },
   "p10418": {
     "wants": "c.familiar()",
@@ -143,10 +127,6 @@
     "wants": "a Falling event, or c.falling(who)",
     "why": "its Trigger is a creature in range falling with a wall or floor within 1 square of it; falling is not modelled, so nothing announces one and there is nothing to arrest"
   },
-  "p10705": {
-    "wants": "c.reduce_damage(n, *, on=)",
-    "why": "'you reduce the damage the target takes by your Dexterity modifier plus half your level'. c.absorb moves the whole amount onto the absorber and c.resist leaves a standing reduction; neither is a one-off shaving of somebody else's incoming blow"
-  },
   "p10740": {
     "wants": "Keyword.RATTLING",
     "why": "the whole Effect is 'until the end of the encounter your melee attacks have the rattling keyword'; the enum has no such member and nothing implements the keyword"
@@ -158,10 +138,6 @@
   "p11049": {
     "wants": "a SkillCheck event to declare Trigger on",
     "why": "its whole printed trigger is 'you would make an Athletics or an Endurance check'; there are no skill checks in the engine and no event announcing one, so the row could only be declared with prose nothing reads"
-  },
-  "p11066": {
-    "wants": "'reach' and 'range' read as modifiers by Power.reach_of",
-    "why": "'the target's reach increases by 1, and adds your Wisdom modifier to the range of ranged powers'. Mods.total is read for attack, damage, save, speed, forced, crit_range and defences only; reach_of never consults them"
   },
   "p11067": {
     "wants": "power points (#170), plus c.transfer_points(n, on=)",
@@ -247,17 +223,9 @@
     "wants": "the class feature's id, plus c.regain(ref, *, on=)",
     "why": "'you miss with the ranged basic attack granted by <a class feature>; you regain that power and use it immediately'. The feature has no id in the spec and nothing gives a use back"
   },
-  "p12932": {
-    "wants": "on= on c.no_provoke, i.e. c.no_provoke(on=<ally>, from_=<enemy>)",
-    "why": "'cannot make opportunity attacks against any creature other than you'. The immunity can only be granted to the caster, so the row cannot loop over allies"
-  },
   "p12945": {
     "wants": "c.no_walk(*, on=, until=)",
     "why": "'cannot use move actions to walk or run' but may still shift. c.rooted is the exact opposite and c.immobilized also bars shifting (the mirror of c.rooted)"
-  },
-  "p12958": {
-    "wants": "c.damage_disadvantage(*, on=, until=)",
-    "why": "'rolls twice when it makes a damage roll and must use the lower roll'. The damage-side counterpart of c.reroll_attack(keep='worst'). Without it the row is a 1[W] attack and nothing else"
   },
   "p13026": {
     "wants": "c.cure(*conditions, on=) and c.immune(*conditions, until=, on=)",
@@ -314,10 +282,6 @@
   "p13784": {
     "wants": "c.no_cover(*, on=, until=, by=)",
     "why": "knowing an enemy's exact location and ignoring its cover/concealment for the encounter. Nothing mechanical is left over once that is gone"
-  },
-  "p13807": {
-    "wants": "c.always_seen_by(on=, to=)",
-    "why": "'the target cannot become invisible to you'. Nothing can bar the HIDDEN_FROM relation being set (the inverse of c.invisible)"
   },
   "p13887": {
     "wants": "c.link(a, b, *, until=)",
@@ -411,17 +375,9 @@
     "wants": "c.regain_surge(on=)",
     "why": "'each target regains a healing surge'. Writing Health.surges directly is the only route and it emits nothing, so the row audits SILENT (the counterpart of c.spend_surge)"
   },
-  "p2870": {
-    "wants": "c.sight_range(n, on=, until=)",
-    "why": "'the target does not have line of sight to any creature more than 3 squares away'. c.blinded is a different condition"
-  },
   "p3121": {
     "wants": "c.initiative(n, on=)",
     "why": "trigger is 'you roll initiative'. InitiativeRolled *is* emitted (turns.py:128) -- the block is that its `rolled` is an int copied onto the event, so a listener changing it is discarded, and no Cast method writes the component. Issue #168 (same gap as p11392)"
-  },
-  "p3147": {
-    "wants": "c.senses(radius, *, until=)",
-    "why": "'automatically aware of each creature within 5 squares, including hidden or invisible ones'. The inverse of c.hide/c.invisible -- c.is_hidden can ask, nothing can revoke"
   },
   "p32": {
     "wants": "c.hover",
@@ -503,10 +459,6 @@
     "wants": "Attack(by=)",
     "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
   },
-  "p4412": {
-    "wants": "c.quarry_damage()",
-    "why": "its whole payload is an ally's attack dealing 'extra damage equal to your Hunter's Quarry damage', and that number lives in a closure inside the class feature (the dice cf:ranger-quarry pays out, readable from a row)"
-  },
   "p4476": {
     "wants": "c.sneak_attack()",
     "why": "its whole Effect is 'the next ally who hits deals extra damage equal to your Sneak Attack damage'; there is no sneak attack in the model, so the row grants nothing (the class feature's dice)"
@@ -571,10 +523,6 @@
     "wants": "ids for the guardian form attack rows",
     "why": "c.restore_use(ref) exists but there is no ref to hand it: the guardian forms' own attacks have no ids in the spec and are not in the tree. warden/__init__.py says so and its in_form gate has no callers. Upstream of any Cast method"
   },
-  "p5690": {
-    "wants": "c.grant_action(ActionType.MINOR, 'shift')",
-    "why": "'each target can shift as a minor action'. Nothing grants a bare action; c.grant_row grants a declared row and there is no shift row to name"
-  },
   "p5845": {
     "wants": "c.treat_roll_as(\"odd\"|\"even\")",
     "why": "its whole Effect is overriding the parity another row will read off its own attack roll; nothing lets one row dictate what another reads from AttackResult.natural, and the rows that read parity are the fork-gated ones"
@@ -582,10 +530,6 @@
   "p5852": {
     "wants": "action points -- a pool, a way to spend one, and an event saying so",
     "why": "the trigger is spending an action point to attack and missing. Action points are not modelled, so the trigger can never be true; warlord/level_7_b and level_9_b record the same gap"
-  },
-  "p7100": {
-    "wants": "c.truesight(radius, *, on=None, until=When.ENCOUNTER)",
-    "why": "'the target gains truesight 5'. The only thing the engine has for seeing the unseen is the HIDDEN_FROM relation, read at query time; there is no continuous sense to grant, and clearing the relation on whatever events happened to be watched would be an approximation"
   },
   "p7191": {
     "wants": "c.initiative(n, on=)",

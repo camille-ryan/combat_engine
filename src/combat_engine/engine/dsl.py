@@ -807,7 +807,15 @@ def usable(world: World, actor: int, p: Power, *, dying: bool = False) -> tuple[
     # `dying` is for the one row shape that answers its own downfall: a
     # death throe fires *because* the creature has dropped, so refusing it
     # for not being able to act refuses it for the very reason it exists.
-    if not dying and not can_act(world, actor):
+    # A declared no-action row is the same exemption one step further out. It
+    # is not an action, and at least one of them is printed *specifically* to
+    # be used while stunned -- "Trigger: you start your turn stunned, dazed,
+    # or unconscious" -- so the can-act gate refused it for the only
+    # situation it exists for. A trait with no trigger keeps the gate: that
+    # one is armed at the start of the fight, and nothing should re-arm it on
+    # a creature that cannot move.
+    no_action = p.action is ActionType.NONE and bool(p.triggers)
+    if not dying and not no_action and not can_act(world, actor):
         return False, "cannot act"
     powers = world.get(actor, Powers)
     if powers is not None:
