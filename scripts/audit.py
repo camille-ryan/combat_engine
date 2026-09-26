@@ -197,6 +197,14 @@ KNOWN_SILENT = {
     # burst, by design. Excused rather than unwound: firing class features
     # up front took 23 other rows from unusable to exercised.
     "p13541": "a companion in a burst; the druid's own setup relocates it out of reach",
+    # Steps inside a stone object, which here is any adjacent blocking
+    # square, and the board keeps the caster's neighbours passable so that
+    # a one-square shift always has somewhere to go. Driven by hand with a
+    # blocking square beside the druid: it ends up in that square, line of
+    # effect goes false in both directions, the hold carries the printed
+    # minor action out of it, and ending it puts the druid in the nearest
+    # free square with line of effect back.
+    "p14508": "steps into an adjacent blocking square; the board keeps those clear",
     "p2530": "an ally must have a bloodied enemy beside it",
     "p4572": "an ally must have already spent an encounter attack power",
     # Its printed Target *is* the avenger's oath target, and nothing on this
@@ -483,6 +491,31 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     setup.target = None
     setup.zone(spread({(3, 10)}, 1), label="audit:setup zone", until=When.ENCOUNTER)
 
+    # Something in the room that is not a creature: a loose Medium object
+    # and a campfire beside the caster. "One Medium or smaller object" and
+    # "you must be adjacent to a fire of campfire size or larger" are
+    # printed target and Requirement lines, and a bare board could satisfy
+    # neither -- so the rows that read them reported unusable rather than
+    # unwritten. Deliberately *not* put in the occupancy index: scenery
+    # stands in its square without owning it, the way a conjuration does,
+    # so the caster keeps both of its free neighbours for a one-square
+    # shift. A second fire further off, because "teleport to a square
+    # adjacent to a fire" is a different square from the one you are
+    # standing beside.
+    from combat_engine.engine.components import Ident, Position, Scenery
+    from combat_engine.engine.types import Size
+
+    for square, kind, size in (
+        ((8, 9), "object", Size.MEDIUM),
+        ((6, 7), "fire", Size.MEDIUM),
+        ((12, 10), "fire", Size.LARGE),
+    ):
+        world.spawn(
+            Ident(ref=f"audit:setup {kind}"),
+            Position(square=square, size=size),
+            Scenery(kind=kind),
+        )
+
     # Bloodied, so a row gated on it can fire.
     caster_health.hp = max(1, caster_health.max_hp // 2 - 1)
 
@@ -653,6 +686,33 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     if _fired(world, ref, cursor):
         return True
 
+    from combat_engine.engine import Health
+
+    # Bloodied as a **crossing**, not as a state. The board starts the
+    # caster below half so that a row *gated* on being bloodied can fire --
+    # which means the threshold is already behind it and `Bloodied` is
+    # never announced during the run. Sixty-one rows fire on that event and
+    # not one of them had ever been exercised: each reported UNUSED, which
+    # reads as "this row cannot work" rather than "the board never asked".
+    # The death pass below is no substitute -- it takes a creature from
+    # full to well past 0 in a single blow.
+    # Everybody in turn, not just the caster: "when an ally within 3 is
+    # bloodied" is a printed trigger too, and which creature is close
+    # enough to count is the board's business rather than this loop's.
+    for victim in (caster, *foes[:3], *_allies_of(world, caster)):
+        health = world.get(victim, Health)
+        if health is None or health.max_hp < 4 or not alive(world, victim):
+            continue
+        health.hp = health.max_hp
+        # An enemy does the bloodying where it can. "When an enemy bloodies
+        # you" is a printed trigger, and the caster bloodying itself would
+        # make `source` itself and read false.
+        killer = foes[0] if victim != foes[0] else caster
+        world.damage(killer, victim, health.max_hp // 2 + 1)
+        if _fired(world, ref, cursor):
+            return True
+
+
     # Somebody swings at the caster, the caster swings back, and -- the one
     # this harness could never arrange -- an enemy swings at an *ally*. A
     # leader's whole job is answering that, and "an enemy attacks an ally"
@@ -703,7 +763,6 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     # a leader's rally, the warlock's pact boons -- and attacking and
     # walking about can never produce one, so the harness had no way to
     # reach them and reported every one of them unusable.
-    from combat_engine.engine import Health
 
     # foes[0] included: it is the one the class features were aimed at,
     # so it is the cursed / quarried / marked one, and leaving it out of

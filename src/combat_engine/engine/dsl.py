@@ -19,9 +19,18 @@ from typing import TYPE_CHECKING, Any
 from .cast import Cast
 from .grid import Square, area_burst, blast, blast_placements, spread
 from .monster_math import NORMAL
-from .query import alive, allies, creatures, enemies, line_of_effect, squares
+from .query import (
+    alive,
+    allies,
+    creatures,
+    enemies,
+    line_of_effect,
+    scenery,
+    squares,
+    targetable,
+)
 from .triggers import Trigger
-from .types import Ability, ActionType, DamageType, Defense, Keyword, Usage
+from .types import Ability, ActionType, DamageType, Defense, Keyword, Size, Usage
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -203,6 +212,12 @@ class Target:
     #: else is a weapon group or property. Without it the row is aimed at
     #: creatures that have nothing for it to do anything to.
     holding: str = ""
+    #: The two clauses an object target line prints on top of its side.
+    #: `max_size` is "Medium or smaller"; `loose` is "not fastened in place
+    #: or held by a creature". Fields rather than sides of their own,
+    #: because they are two restrictions on one pool and not two pools.
+    max_size: Size | None = None
+    loose: bool = False
 
     def __str__(self) -> str:
         if self.label:
@@ -211,7 +226,7 @@ class Target:
             return "You"
         who = {
             "enemy": "creature", "ally": "ally", "any": "creature",
-            "other": "creature", "other_ally": "ally",
+            "other": "creature", "other_ally": "ally", "object": "object",
         }[self.side]
         if self.everyone:
             return f"Each {who} in the area"
@@ -814,11 +829,17 @@ def candidates(
         "any": creatures(world),
         "other": [c for c in creatures(world) if c != actor],
         "other_ally": allies(world, actor),
+        # Not a creature at all, and not in any of the pools above: scenery
+        # has no `Side`, so every one of them is empty for it.
+        "object": scenery(world, "object", loose=p.target.loose),
     }[p.target.side]
     if p.target.holding:
         from .query import holding
 
         pool = [c for c in pool if holding(world, c, p.target.holding)]
+    if p.target.max_size is not None:
+        cap = p.target.max_size.order
+        pool = [c for c in pool if _size_of(world, c).order <= cap]
 
     reach = p.reach_of(branch)
     aimed = origin is not None and reach.kind in ("area_burst", "close_blast")
@@ -830,7 +851,7 @@ def candidates(
         return [
             c
             for c in pool
-            if alive(world, c)
+            if targetable(world, c)
             and squares(world, c) & area
             and any(world.grid.line_of_effect(origin, sq) for sq in squares(world, c))
         ]
@@ -841,10 +862,17 @@ def candidates(
     return [
         c
         for c in pool
-        if alive(world, c)
+        if targetable(world, c)
         and squares(world, c) & area
         and line_of_effect(world, eye, c)
     ]
+
+
+def _size_of(world: World, eid: int) -> Size:
+    from .components import Position
+
+    pos = world.get(eid, Position)
+    return pos.size if pos is not None else Size.MEDIUM
 
 
 def unmet_requirement(world: World, actor: int, p: Power) -> bool:
@@ -1066,7 +1094,7 @@ def use(
             return True
         landed = False
         for i, t in enumerate(chosen):
-            if not alive(world, t):
+            if not targetable(world, t):
                 continue
             cast.index = i
             cast.target = t

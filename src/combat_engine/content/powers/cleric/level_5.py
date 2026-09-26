@@ -16,9 +16,11 @@ from combat_engine.engine import (
     AC,
     ANY_CREATURE,
     DAILY,
+    FORT,
     MINOR,
     NO_TARGET,
     ONE_CREATURE,
+    REF,
     STANDARD,
     STR,
     WILL,
@@ -27,6 +29,7 @@ from combat_engine.engine import (
     Cast,
     CloseBurst,
     DamageType,
+    Died,
     Effect,
     Hit,
     Keyword,
@@ -236,3 +239,72 @@ def p915(c: Cast) -> None:
         c.cannot_attack(until=When.SAVE_ENDS)
     else:
         c.cannot_attack(against=c.me, until=When.EONT)
+
+
+@power(
+    "p13925",
+    level=5,
+    cls="cleric",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=ONE_CREATURE,
+    keywords=[Keyword.DIVINE, Keyword.IMPLEMENT, Keyword.NECROTIC, Keyword.SHADOW],
+    attack=Attack(WIS, vs=WILL),
+)
+def p13925(c: Cast) -> None:
+    """Three things about the corpse, and all of them are timing.
+
+    `_die` leaves the body an entity and only lifts it off the grid, so the
+    rise is `c.reanimate` rather than a summon: a summon would leave the
+    corpse lying where it fell and put a second creature beside it.
+
+    "At the start of its next turn" is the ghost slot `Encounter` ticks for
+    the dead, and it ticks only while something is still clocked on the
+    corpse -- which `Effects.bereave` empties the instant after `Died`. So
+    a hold clocked on the dead creature is laid on the *cleric*: owned by
+    somebody alive, measured against the body, and swept away by neither.
+
+    Both watches belong to the cleric for the same reason. One laid on the
+    target would be the first thing bereave took off.
+
+    The parenthetical is the minion rule and it is the whole reason the
+    body comes back at a maximum of one: `dying_at` is half the maximum, so
+    anything that lands kills it outright, and `c.no_miss_damage` is the
+    half no reading of hit points could give.
+    """
+    victim = c.target
+    if victim is None:
+        return
+    if c.strike():
+        c.damage("2d8", c.wis_mod, dtype=DamageType.NECROTIC)
+    else:
+        c.half_damage("2d8", c.wis_mod, dtype=DamageType.NECROTIC)
+
+    spent: list[int] = []
+
+    def rise(ev: TurnStart) -> None:
+        if ev.actor != victim or spent:
+            return
+        spent.append(1)
+        if not c.reanimate(on=victim):
+            return
+        c.world.effects.apply(
+            victim,
+            c.me,
+            When.ENCOUNTER,
+            label=f"{c.ref} dominated",
+            relations=[(Relation.DOMINATED_BY, c.me, victim)],
+        )
+        for defence in (AC, FORT, REF, WILL):
+            c.penalty(defence, 2, on=victim, until=When.ENCOUNTER)
+        c.no_healing(on=victim, until=When.ENCOUNTER)
+        c.no_miss_damage(on=victim, until=When.ENCOUNTER)
+
+    def fell(ev: Died) -> None:
+        if ev.actor != victim or spent:
+            return
+        c.world.effects.apply(c.me, victim, When.EONT, label=f"{c.ref} slot")
+        c.watch(TurnStart, rise, until=When.ENCOUNTER, on=c.me, label=f"{c.ref} rises")
+
+    c.watch(Died, fell, until=When.ENCOUNTER, on=c.me, once=True, label=c.ref)

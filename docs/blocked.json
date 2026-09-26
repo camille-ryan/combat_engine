@@ -4,48 +4,24 @@
     "why": "the second sentence of the fighter's opportunity-attack feature is that an enemy hit by one stops moving if a move provoked it. movement.walk asks can_move once, before the first step, and never again, so immobilising the mover inside the opportunity window leaves it walking the rest of its path. Verified: a creature immobilised on its first step still covered all five squares. cf:fighter-opening writes the attack bonus half (stop a move that is in progress)"
   },
   "cf:fighter-talent-rest": {
-    "wants": "legs in chargen.BUILDS[\"fighter\"] for the talents the two it has do not mean, plus c.proficiency and a free-hand / off-hand grip on Gear",
-    "why": "the class page prints six talents and chargen.BUILDS[\"fighter\"] carries two legs. cf:fighter-grip writes the two that are the legs -- the one-handed and two-handed weapon talents. The other four have no leg: one turns unproficient weapons into improvised ones and adds an AC bonus out of heavy armour, one pays temporary hit points on every melee or close hit, one wants a weapon in one hand and the other hand empty or grabbing, and one keys off a second weapon with the off-hand property. Gear records what is held but not what a hand is free for, and nothing models proficiency as a thing a feature can grant"
+    "wants": "Gear to record a free/empty off hand, and proficiency as a thing a feature can grant",
+    "why": "the four remaining talents have no spec of any kind and three of the four turn on exactly those two unmodelled facts, so writing them would be guessing the card"
   },
   "cf:ranger-style": {
-    "wants": "a feat model -- feats on a character and c.feat(...)",
-    "why": "the class page prints five styles and chargen.BUILDS[\"ranger\"] carries two legs. The two legs that do match are the two whose entire printed content is a granted feat, and nothing in the engine is a feat -- the remaining clause of one of them is an off-hand rule Gear.two_weapon already makes true. The three styles that do carry mechanics (a speed bonus while unencumbered, an AC bonus against openings a ranged attack provokes, a companion) have no leg to be gated on, and the companion one is blocked twice over -- see p10594 (to read one -- plus legs in chargen.BUILDS[\"ranger\"] for the styles that carry mechanics)"
-  },
-  "cf:rogue-tactic-club": {
-    "wants": "chargen.BUILDS[\"rogue\"] to carry a third leg, plus Keyword.RATTLING",
-    "why": "one of the four printed tactics grants proficiency with two weapon groups, lets those groups stand in for the light blade cf:rogue-bonus requires, and adds a Strength rider to attacks carrying a keyword the enum does not have. cf:rogue-tactic writes the two legs the class's two builds can carry; this one has no leg to ask about and its payload is blocked on the same keyword as p10740 and p4499"
+    "wants": "legs in chargen.BUILDS[\"ranger\"] for the three styles that carry mechanics -- NOT a feat model; the two feat-only styles are already the two existing legs",
+    "why": "no spec text exists for the three, and one of them is the companion, blocked twice over (see p10594)"
   },
   "cf:warlord-archer": {
     "wants": "c.attacks_with(ability, ...)",
     "why": "it grants proficiency with a weapon group and lets a ranged basic attack with a bow use Strength for the attack and damage rolls instead of Dexterity. basic.RANGED declares its ability in the header and nothing can rewrite it for one creature. Neither warlord leg in chargen.BUILDS carries a bow either, so there would be nothing to shoot with (name which ability a basic attack uses)"
   },
-  "cf:warlord-shield": {
-    "wants": "p10887 in the tree, plus a leg in chargen.BUILDS[\"warlord\"] for it",
-    "why": "one of three mutually exclusive leader features. Its content is proficiency with a shield -- not a thing a feature can grant -- and gaining one named power, which c.grant_row could hand over except that the power is not declared anywhere. cf:warlord-senses writes the one of the three whose content is purely narrative"
-  },
-  "cf:wizard-implement-rest": {
-    "wants": "c.familiar()",
-    "why": "a wizard class feature about its familiar, which no row creates"
-  },
   "m709a1": {
     "wants": "c.pass_on(ev, to=)",
     "why": "an immediate interrupt whose whole Effect is that the conditions the triggering attack would apply land on another creature within 5 instead. c.absorb does this for damage because DamageRolled is a Decision with a mutable target; ConditionApplied and EffectApplied are notifications, so a hold can neither be refused nor re-aimed, and c.redirect moves the whole attack -- which rolls against the substitute's defence and deals it the damage too, a different sentence"
   },
-  "m881a2": {
-    "wants": "c.resize",
-    "why": "becomes Large and gains reach 2; Size.reach_bonus was dead code encoding a rule the game does not have, and is gone"
-  },
   "p10354": {
     "wants": "c.reroll_attack(all=True)",
     "why": "it rerolls every attack roll of one power use that missed. c.reroll_attack reaches only the one attack on c.trigger, and the earlier misses have already resolved and their bodies have already branched on them, so writing it would reroll one of several (or an event announcing a power use's finished set of attack rolls)"
-  },
-  "p10418": {
-    "wants": "c.familiar()",
-    "why": "entirely about a familiar -- teleport it, teleport to it. A familiar is a standing class feature no row creates, so c.companion() finds nothing and the row is permanently inert. Needs a familiar entity from chargen"
-  },
-  "p10420": {
-    "wants": "c.familiar()",
-    "why": "same shape: entirely about a familiar that no row creates"
   },
   "p10424": {
     "wants": "c.form(like=)",
@@ -58,10 +34,6 @@
   "p11215": {
     "wants": "c.use_row(ref)",
     "why": "'use your Flurry of Blows power again'. Flurry is a class feature with no id in the spec, and nothing can re-fire a row (fire a known row now, out of turn, without spending it; plus the Flurry of Blows ref)"
-  },
-  "p11222": {
-    "wants": "the Flurry of Blows ref, for Trigger(PowerUsed, ...)",
-    "why": "'Trigger: you use your Flurry of Blows power'. The trigger cannot name a power that has no id"
   },
   "p11291": {
     "wants": "c.regain_use(ref, on=)",
@@ -99,53 +71,21 @@
     "wants": "c.link(a, b, *, until=)",
     "why": "its whole Effect is making two named squares adjacent to each other, with the step between them counting as teleportation. Adjacency is computed from the grid in engine/grid.py and nothing can add an edge to it (two squares treated as adjacent for movement and melee reach)"
   },
-  "p13925": {
-    "wants": "c.reanimate(on=, team=, hp=1)",
-    "why": "its Effect raises the creature it killed onto the caster's side, dominated, at 1 hp, unable to heal. Nothing puts a dead creature back on the board or changes a creature's Team; c.summon needs a ref and spawns a fresh entity"
-  },
   "p13984": {
-    "wants": "chargen.BUILDS",
-    "why": "BLOCKED ON CONTENT, not the engine: the creature summoned is chosen by a wizard build that does not exist, and the spec prints no stat block, so there is nothing to put in summon=. Wants chargen.BUILDS['wizard'] and a Summon per creature it can pick"
+    "wants": "a stat block for the creature it summons",
+    "why": "blocked on content rather than on the engine -- the spec prints no creature, so summon=/c.summon_inline have nothing to carry"
   },
   "p14299": {
     "wants": "a weapon category -- 'simple' in Weapon.properties, or a Weapon.category field",
     "why": "Requirement is 'you must use this power with a simple weapon' and Gear/Weapon record no category, so c.wielding('simple') is false for every character in the tree: requires= would make the row permanently unusable and no requires= would let it be used with anything. Everything else on the row is sayable. Same gap makes p14301/p14302's Weapon riders inert and is why p14295/p14297 audit UNUSED"
   },
-  "p14420": {
-    "wants": "the defender-aura class feature, plus c.in_my_aura(who)",
-    "why": "its whole Effect is that enemies grant combat advantage while subject to your defender aura. Nothing in the tree declares that aura and c.aura only creates one; there is no way to ask who is inside it"
-  },
-  "p14428": {
-    "wants": "the defender-aura class feature, plus c.in_my_aura(who)",
-    "why": "its printed Target is one enemy subject to your defender aura, and half its Effect pays out on an attack granted by a class feature that is not modelled. Same hold as p14420: the row could never be aimed at anything"
-  },
-  "p14508": {
-    "wants": "c.merge(into=)",
-    "why": "you shift into an adjacent square occupied by a stone or earth object your size or larger, and nothing has line of effect to you or you to it. There are no objects, and c.hide and c.invisible are about being seen rather than about line of effect -- an attacker that knows where you are still reaches you (a state with no line of effect in either direction)"
-  },
   "p14510": {
     "wants": "c.restore(ref)",
     "why": "its Requirement and its Effect both name another druid power, which this spec gives no id for, and nothing un-spends a row: Powers.used only ever counts up (hand back a spent use)"
   },
-  "p14548": {
-    "wants": "an object entity -- a targetable, movable Position with a size and no Health, reachable as a Target side",
-    "why": "it targets one Medium or smaller unfastened object, animates it and slides it 5 squares a turn. Nothing in the engine is an object; Trap is the only non-creature with a Position and it is a hazard rather than scenery"
-  },
   "p1543": {
     "wants": "c.portal(a, b, *, until=)",
     "why": "a rift making two distant squares adjacent for movement only. Grid has no notion of a link between two squares, and neither c.teleport nor a zone can say it -- it changes what movement costs and where a creature may go, so it is not narrative"
-  },
-  "p16241": {
-    "wants": "a fire as a map feature, and c.terrain-style gate on one",
-    "why": "the Requirement is standing next to a fire of campfire size and the destination is a square next to another one. Nothing on the board is a fire, so neither the gate nor the target can be written"
-  },
-  "p16244": {
-    "wants": "a fire as a map feature, with a size and a square",
-    "why": "its whole Effect is expanding, extinguishing or relocating nonliving fires in a burst. Same missing thing as p16241"
-  },
-  "p16254": {
-    "wants": "chargen.BUILDS[\"warlock\"] to carry an \"elemental\" leg, plus a named elemental affinity on the character",
-    "why": "Prerequisite: Elemental Pact, and the whole row is that pact's boon -- the next enemy cursed gains vulnerable 5 to the type matching your current elemental affinity. The class has two legs, infernal and fey, so c.build cannot ask; and nothing holds an affinity for the vulnerability to name"
   },
   "p1926": {
     "wants": "c.see_unseen(on=)",
@@ -159,25 +99,17 @@
     "wants": "c.feature_bonus(what)",
     "why": "'your warding provides its bonus to all your defenses, not just AC'. The row has to read the size of a standing class-feature bonus and mirror it onto Fort/Ref/Will (or c.total(what, kind=) filtered by kind)"
   },
-  "p3763": {
-    "wants": "the dragon-magic / wild-magic fork in chargen, and c.build(...)",
-    "why": "the whole Effect is changing the resistance your Dragon Soul or Wild Soul grants; chargen derives one build for this class, 'standard', so there is no resistance from a fork to change (to answer it)"
-  },
   "p3782": {
     "wants": "c.dispel(zone_or_conjuration)",
     "why": "its whole target line is one conjuration or zone and its whole Hit is destroying it. A zone is not an entity a target line can name, a conjuration has no Will to attack, and nothing ends somebody else's zone. Same missing half as the attack line of p3056 (and a way to target one)"
   },
   "p3839": {
-    "wants": "c.companions()",
-    "why": "the whole row is a *second* spirit companion. c.call_companion relocates the one you have by design and c.companion() returns one id; this needs a list, plus Range(from_='companion') and every 'adjacent to your spirit companion' reading both"
+    "wants": "a plural companion API: dsl.measured_from and dsl.roller each return one eid and must let the shaman pick which spirit an attack is measured and rolled from; c.call_companion must stop relocating when a second is allowed",
+    "why": "its second and third sentences change how ~60 existing shaman rows read \"your spirit companion\", so it cannot be honoured by adding a method"
   },
   "p4143": {
     "wants": "c.floor(area, until=)",
     "why": "a bridge whose squares are crossed as normal terrain (a zone that makes its squares ordinary passable ground)"
-  },
-  "p4311": {
-    "wants": "chargen.BUILDS[\"warlock\"] to carry a \"dark\" leg, and a per-character counter that survives between uses of a row",
-    "why": "Prerequisite: Dark Pact. The whole row is a tally raised each time a cursed enemy drops and spent as an interrupt for 1d6 per point; nothing on a character holds a number across uses, and there is no leg to gate the prerequisite on"
   },
   "p4396": {
     "wants": "a run action -- c.run(n)",
@@ -191,14 +123,6 @@
     "wants": "c.expend(ref, on=)",
     "why": "'you expend an unused barbarian rage power', with the damage keyed to the expended power's level. c.forbid removes a row, which the Powers docstring says is not the same as spent. Also needs group='rage' on the rage rows: the group= header field exists and is set on nothing in the tree, so there is no queryable marker separating a rage from any other barbarian daily"
   },
-  "p5046": {
-    "wants": "the wild shape class feature as a row, for this one to extend",
-    "why": "its whole Effect is 'until the end of the encounter you can use wild shape to assume the form of a Tiny beast'. Wild shape is not a row in this spec, so there is nothing to add a form to; the form itself is a Stealth bonus and an inability to attack, which is no reason to take it"
-  },
-  "p5051": {
-    "wants": "the wild shape class feature as a row, for this one to extend",
-    "why": "the same sentence as p5046, for a raven with a fly speed, plus 'you can use wild shape to change among this form, another beast form and your humanoid form'. Both halves modify a row that does not exist"
-  },
   "p5527": {
     "wants": "c.bonus('attack', dice='1d6')",
     "why": "'roll a d6 and add it as a power bonus to every weapon attack and damage roll'. c.bonus takes a fixed int (a modifier rolled per roll)"
@@ -208,8 +132,8 @@
     "why": "'the ally also becomes a target of the power'. c.redirect moves the single target and cannot add one, and leaves_me_out only asks about me (on the interrupted event, plus a predicate over the attacker's own presence in ev.among)"
   },
   "p5591": {
-    "wants": "ids for the guardian form attack rows",
-    "why": "c.restore_use(ref) exists but there is no ref to hand it: the guardian forms' own attacks have no ids in the spec and are not in the tree. warden/__init__.py says so and its in_form gate has no callers. Upstream of any Cast method"
+    "wants": "a separate compendium ref for a guardian form's attack",
+    "why": "the forms (p5106, p9825, p9859) bundle their attack under the same ref, so there is no second id for c.restore_use and inventing one would be inventing an id"
   },
   "p5845": {
     "wants": "c.treat_roll_as(\"odd\"|\"even\")",
@@ -223,22 +147,6 @@
     "wants": "c.recast(ref, *, action=MINOR, once_per_round=True)",
     "why": "its whole Effect is that until the end of the encounter you can cast a named at-will you already know as a minor action once per turn. c.grant_row lends a row to somebody who does not know it and changes nothing about what using it costs, and the reduced action cost is the entire row"
   },
-  "p7639": {
-    "wants": "Target(side='item')",
-    "why": "'Target: one weapon or implement', augmented for the encounter, and the wielder ends the effect on a hit as a free action. Same gap as runepriest p15993 and p9667 (plus c.give(ref, on=ally) -- a one-use row the holder spends)"
-  },
-  "p7649": {
-    "wants": "Target(side='item')",
-    "why": "'Target: one weapon or implement', augmented for the encounter, and the wielder ends the effect on a hit as a free action. Same gap as runepriest p15993 and p9667 (plus c.give(ref, on=ally) -- a one-use row the holder spends)"
-  },
-  "p7656": {
-    "wants": "Target(side='item')",
-    "why": "'Target: one weapon or implement', augmented for the encounter, and the wielder ends the effect on a hit as a free action. Same gap as runepriest p15993 and p9667 (plus c.give(ref, on=ally) -- a one-use row the holder spends)"
-  },
-  "p7659": {
-    "wants": "Target(side='item')",
-    "why": "'Target: one weapon or implement', augmented for the encounter, and the wielder ends the effect on a hit as a free action. Same gap as runepriest p15993 and p9667 (plus c.give(ref, on=ally) -- a one-use row the holder spends)"
-  },
   "p924": {
     "wants": "c.unsurprise",
     "why": "Condition.SURPRISED is in the enum and nothing ever applies it"
@@ -248,7 +156,7 @@
     "why": "entirely 'damage from your assassin's shroud', per shroud. Shrouds have no representation anywhere; shroud riders were also dropped from six written rows (> int, c.shroud(on=, n=1), and a shroud-damage event)"
   },
   "p9665": {
-    "wants": "c.instinctive(who)",
-    "why": "commands a summoned creature to use its instinctive effect. Needs Summon.instinctive -- a callable the block carries"
+    "wants": "Summon.instinctive on the header block, plus c.instinctive(who) and a repeatable once-per-round minor-action grant",
+    "why": "no summon block in the tree carries an instinctive effect and the field does not exist, so the method would be silently false on all 40 of them -- the row would look finished and never do anything"
   }
 }

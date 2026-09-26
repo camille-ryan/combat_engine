@@ -58,6 +58,7 @@ from combat_engine.engine import (
     Powers,
     Ranged,
     Relation,
+    Size,
     Stats,
     Usage,
     When,
@@ -1048,6 +1049,33 @@ def m881a1(c: Cast) -> None:
         ongoing=(2, DamageType.POISON),
         mods=[(victim, Mod(what="attack", value=-2, kind="untyped", label=c.ref))],
     )
+
+
+_M881_BLED = "the m881 is first bloodied"
+
+
+@power(
+    "m881a2",
+    level=6,
+    usage=ENCOUNTER,
+    action=FREE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.POLYMORPH],
+    trigger=_M881_BLED,
+    on=Trigger(Bloodied, when=about_me, text=_M881_BLED),
+)
+def m881a2(c: Cast) -> None:
+    """Becoming Large is one call: the footprint, the re-indexing, and
+    shoving whoever was standing in the squares it comes to occupy are all
+    what growing means, and none of them is a separate printed line.
+
+    "Gains reach 2" is `c.threatens`, which is the same `"reach"` modifier
+    the melee rows measure against and the opportunity ring is drawn from --
+    one number, not two."""
+    c.resize(Size.LARGE)
+    c.threatens(2, until=When.ENCOUNTER)
+    c.bonus("damage", 5, until=When.ENCOUNTER, on=c.me, when=_melee_ctx)
 
 
 # ==========================================================================

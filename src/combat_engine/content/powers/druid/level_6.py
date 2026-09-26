@@ -19,6 +19,7 @@ from combat_engine.engine import (
     ENCOUNTER,
     FREE,
     MINOR,
+    MOVE,
     ONE_ALLY,
     PERSONAL,
     REACTION,
@@ -241,3 +242,28 @@ def p2730(c: Cast) -> None:
             c.world.effects.end(hidden, "the target moved")
 
     c.watch(MoveEnd, stirred, until=When.EONT, on=c.me, once=True, label=c.ref)
+
+
+@power(
+    "p14508",
+    level=6,
+    cls="druid",
+    usage=DAILY,
+    action=MOVE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=PRIMAL,
+)
+def p14508(c: Cast) -> None:
+    """The object is an adjacent blocking square. There are no objects in
+    this engine, and a blocking square is what one leaves behind: a wall, a
+    pillar, a boulder are all the same thing to the grid, all of them at
+    least Medium, and no creature can be standing in one.
+
+    The printed clause that cannot arise is "until the object is
+    destroyed": terrain here is not attackable, so there is nothing the
+    condition could ever become true of. The other two ways out are both
+    held -- the encounter, and the minor action `c.merge` hangs on the
+    effect.
+    """
+    c.merge()

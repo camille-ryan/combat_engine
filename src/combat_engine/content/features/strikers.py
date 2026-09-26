@@ -52,6 +52,8 @@ from combat_engine.engine.query import (
     team,
 )
 
+from .builds import on_leg
+
 
 def extra_damage(
     c: Cast, dice: str, *, applies: Callable[[int], bool], label: str
@@ -115,11 +117,22 @@ def prime_shot(c: Cast) -> None:
     c.bonus("attack", 1, until=When.ENCOUNTER, on=me, kind="class-option", when=alone)
 
 
+#: The weapon groups the fourth rogue tactic trains in. `chargen` carries a
+#: weapon for the first of the two and none for the second.
+_RUFFIAN_GROUPS = ("mace", "club")
+_TOOK_THE_TACTIC = on_leg("ruffian")
+
+
 def _light_blade_or_bow(world: World, eid: int) -> bool:
     gear = world.get(eid, Gear)
     if gear is None or gear.main is None:
         return False
-    return gear.main.is_light_blade or bool(gear.main.ranged)
+    if gear.main.is_light_blade or bool(gear.main.ranged):
+        return True
+    # The fourth tactic lets its two groups stand in for the light blade.
+    # It is asked here rather than in `cf:rogue-tactic-club` because this
+    # gate is the one place the requirement is written down.
+    return _TOOK_THE_TACTIC(world, eid) and gear.main.group in _RUFFIAN_GROUPS
 
 
 #: The ids of the arms the rogue's two talents name. Weapons are ids here
@@ -530,18 +543,26 @@ def warlock_pact(c: Cast) -> None:
     slips away. The at-will each pact also grants is a power row of its own
     and belongs to `chargen`, not here.
 
-    The later books print six more pacts and there is no leg to ask about
-    for any of them. Two rows already record that in `docs/blocked.json`,
-    and nothing is invented for them here.
+    A third leg pays here too. Its boon is a tally raised by exactly this
+    trigger and spent by `p4311`, and the raising has to live where the
+    other payouts do -- the row that spends it is an immediate interrupt
+    and cannot also be armed on a creature dropping. The fourth leg's boon
+    *is* a row (`p16254`), triggered on the same drop, so it is not here.
+
+    The later books print four more pacts and there is no leg to ask about
+    for any of them, and nothing is invented for them here.
 
     `Dropped` is announced before `_die` clears anything, so the curse is
     still on the creature when this reads it. Sides are compared directly
     rather than through `query.enemies`, which filters out the dead -- and
     the creature this is about has just died.
     """
+    from combat_engine.content.powers.warlock.pacts import raise_tally
+
     me = c.me
     infernal = c.build("infernal")
-    if not infernal and not c.build("fey"):
+    dark = c.build("dark")
+    if not infernal and not dark and not c.build("fey"):
         return
 
     def on_drop(ev: Dropped) -> None:
@@ -551,6 +572,8 @@ def warlock_pact(c: Cast) -> None:
             return
         if infernal:
             c.temp_hp(c.level, on=me)
+        elif dark:
+            raise_tally(c)
         else:
             c.teleport(3, who=me)
 

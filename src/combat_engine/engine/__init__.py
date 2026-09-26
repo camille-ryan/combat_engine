@@ -26,6 +26,7 @@ from .components import (
     Position,
     PowerPoints,
     Powers,
+    Scenery,
     Side,
     Stats,
     Weapon,

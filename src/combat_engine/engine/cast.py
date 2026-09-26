@@ -49,6 +49,7 @@ from .types import (
     Forced,
     Keyword,
     Relation,
+    Size,
     Team,
     Window,
 )
@@ -324,6 +325,26 @@ class Cast:
         held = self.world.get(who, Build)
         return held is not None and choice.lower() in held.choices
 
+    def element(self, *, on: int | None = None) -> DamageType | None:
+        """The damage type this character's build is bound to, if any.
+
+        "The damage type matching your current elemental affinity" is a
+        whole row's payload and nothing held one. `chargen` records it
+        beside the build's name as `element:<type>`, so the leg and the
+        element stay one choice. Defaults to the caster, as `c.build` does.
+        """
+        from .components import Build
+
+        who = self.me if on is None else on
+        held = self.world.get(who, Build)
+        if held is None:
+            return None
+        by_value = {d.value: d for d in DamageType}
+        for choice in held.choices:
+            if choice.startswith("element:"):
+                return by_value.get(choice.split(":", 1)[1])
+        return None
+
     def suffering(
         self, label: str = "", *, by: int | None = None, include_self: bool = False
     ) -> list[int]:
@@ -453,6 +474,51 @@ class Cast:
 
         pos = self.world.get(self._who(on), Position) if self._who(on) else None
         return pos.size if pos else Size.MEDIUM
+
+    def resize(
+        self,
+        size: Size,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Take up more room, or less, and shove whoever is standing in it.
+
+        "It becomes Large, occupying 4 squares instead of 1. Any creature in
+        the squares it comes to occupy is pushed 1 square" -- the push is
+        the printed consequence of growing rather than a separate line, so
+        it happens here. The footprint is re-indexed in the grid, because
+        everything that asks where a creature is asks that and not the
+        `Size`, and the old one comes back when the hold ends.
+
+        Yours, so it defaults to the caster: every printed line of this
+        shape is a creature changing its own shape.
+        """
+        from .movement import place
+
+        who = on if on is not None else self.me
+        pos = self.world.get(who, Position)
+        if pos is None or pos.size is size:
+            return None
+        was = pos.size
+        from .grid import footprint
+
+        taking = footprint(pos.square, size)
+        for other in creatures(self.world):
+            if other != who and squares(self.world, other) & taking:
+                self.push(1, on=other, anchor=pos.square)
+        pos.size = size
+        place(self.world, who, pos.square)
+
+        def revert() -> None:
+            live = self.world.get(who, Position)
+            if live is not None:
+                live.size = was
+                place(self.world, who, live.square)
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} size", on_end=[revert]
+        )
 
     def turn_of(self) -> int | None:
         """Whose turn it is, for a trigger that cares."""
@@ -1054,7 +1120,7 @@ class Cast:
         amount = (self._roll_damage(dice) + bonus) // 2 if dice else bonus // 2
         dealt = deal_damage(
             self.world, self.me, who, amount, dtype, f"{self.ref} (half)",
-            opportunity=self.opportunity, charge=self.charge,
+            opportunity=self.opportunity, charge=self.charge, miss=True,
         )
         # "Miss: half damage" still deals damage, and the rattling keyword
         # asks nothing about hitting.
@@ -1776,6 +1842,122 @@ class Cast:
             if self.world.grid.passable(sq) and self.world.grid.occupant(sq) is None:
                 return sq
         return None
+
+    def scenery(
+        self,
+        kind: str = "",
+        *,
+        within: int = 0,
+        of: int | None = None,
+        loose: bool = False,
+    ) -> list[int]:
+        """What is standing on the map that is not a creature: a crate, a fire.
+
+        `kind` is the printed word and `""` is all of it. `within` measures
+        from `of`, which is the caster unless named. `loose` drops the ones
+        bolted down or in somebody's hands, which is the clause an object
+        target line prints.
+        """
+        from .query import scenery
+
+        return scenery(
+            self.world,
+            kind,
+            within=within,
+            of=self.me if of is None else of,
+            loose=loose,
+        )
+
+    def control(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.EONT,
+        sustain: ActionType | None = None,
+    ) -> Effect | None:
+        """Take charge of a map feature, and put it back when you let go.
+
+        "You take control of each fire in the burst that is not controlled
+        by a creature ... expanded or relocated flames return to their
+        normal size and location at the end of your next turn." Where it
+        stood and how big it was are part of what taking control holds, so
+        letting go is what restores them -- one hold rather than a separate
+        clock per thing that might be done to it.
+        """
+        from .components import Scenery
+
+        who = self._who(on)
+        thing = self.world.get(who, Scenery) if who is not None else None
+        pos = self.world.get(who, Position) if who is not None else None
+        if thing is None or pos is None or thing.by == self.me:
+            return None
+        was, stood, spread_to, size = thing.by, pos.square, pos.spans, pos.size
+        thing.by = self.me
+
+        def release() -> None:
+            live = self.world.get(who, Position)
+            if live is None:
+                return  # put out rather than let go: it is not coming back
+            thing.by = was
+            live.spans = spread_to
+            live.size = size
+            # Lifted rather than re-placed: scenery stands in its square
+            # without owning it, the way a conjuration does, and moving it
+            # is the only thing that ever put it in the occupancy index.
+            self.world.grid.lift(who)
+            live.square = stood
+
+        return self.world.effects.apply(
+            who,
+            self.me,
+            until,
+            label=f"{self.ref} control",
+            sustain_cost=sustain,
+            on_end=[release],
+        )
+
+    def grow(self, squares_: int = 1, *, on: int | None = None) -> bool:
+        """Spread a map feature into the clear ground beside it.
+
+        A footprint rather than a `Size`: which neighbouring squares a fire
+        takes depends on which of them are free, and no size category
+        describes that shape. `Position.spans` is where a footprint that is
+        not a block already lives.
+
+        No duration of its own. What puts a thing back is whatever is
+        holding it -- `c.control` restores the placement it took charge of
+        -- because "expanded or relocated flames return to normal" is one
+        clock covering both, not a clock per way of disturbing them.
+        """
+        who = self._who(on)
+        pos = self.world.get(who, Position) if who is not None else None
+        if pos is None or squares_ <= 0:
+            return False
+        taking = [
+            sq
+            for sq in sorted(spread(pos.squares, 1) - pos.squares)
+            if self.world.grid.passable(sq) and self.world.grid.occupant(sq) is None
+        ][:squares_]
+        if not taking:
+            return False
+        pos.spans = pos.squares | frozenset(taking)
+        self.world.bus.emit(Note(text=f"{self.ref}: {who} spreads to {sorted(taking)}"))
+        return True
+
+    def douse(self, *, on: int | None = None) -> bool:
+        """Take a map feature off the board. It does not come back.
+
+        The other half of `c.grow`: a fire that is put out is gone, where
+        one that was made bigger is only bigger for a while.
+        """
+        from .components import Scenery
+
+        who = self._who(on)
+        if who is None or self.world.get(who, Scenery) is None:
+            return False
+        self.world.bus.emit(Note(text=f"{self.ref}: {who} is put out"))
+        self.world.despawn(who)
+        return True
 
 
     def moving_as(self, mode: str, *, on: int | None = None) -> bool:
@@ -2593,6 +2775,8 @@ class Cast:
         """
         from combat_engine.content import loader
 
+        from .events import Summoned
+
         where = at or self._free_square_near(self.here)
         if where is None:
             return 0
@@ -2603,6 +2787,12 @@ class Cast:
         )
         if self.world.encounter is not None:
             self.world.encounter.join(made)
+        # `Summoned` was added because a row whose whole Effect is "you
+        # summon X" left no trace in the log -- and then only the two
+        # inline paths emitted it, never this one, which is the path every
+        # row naming a creature by id takes. So the commonest summon in the
+        # game still announced nothing.
+        self.world.bus.emit(Summoned(actor=self.me, summon=made, ref=self.ref))
         return made
 
     # -- a second body you own ----------------------------------------------
@@ -2807,6 +2997,251 @@ class Cast:
         """Walk the companion. It has a speed of its own and no turn to use it."""
         standing = self.companion()
         return self.move(squares_, who=standing) if standing is not None else 0
+
+    def companions(self, *, of: int | None = None) -> list[int]:
+        """**Every** companion this creature owns, in the order they arrived.
+
+        `c.companion` answers with one because one is the printed rule for
+        a spirit and a beast alike. A summon is not so limited -- several
+        stand at once -- and neither is a shaman who has been told he may
+        call a second spirit.
+        """
+        from .components import Companion
+
+        owner = of if of is not None else self.me
+        return [
+            eid
+            for eid in self.world.having(Companion)
+            if self.world.get(eid, Companion).owner == owner
+        ]
+
+    def familiar(self, *, of: int | None = None) -> int | None:
+        """The familiar this creature keeps, whichever mode it is in.
+
+        A familiar is a `Companion` -- the sorcerer rows have read it that
+        way since the first one needed it -- so this is `c.companion` with
+        the kind asked for, falling back to whatever single companion the
+        creature has when nothing named one. The fallback cannot pick the
+        wrong body: a class that keeps a familiar keeps no spirit and no
+        beast.
+        """
+        from .components import Companion
+
+        mine = self.companions(of=of)
+        named = [e for e in mine if self.world.get(e, Companion).kind == "familiar"]
+        if named:
+            return named[0]
+        return mine[0] if mine else None
+
+    def familiar_mode(self, mode: str, *, of: int | None = None) -> bool:
+        """"Your familiar enters passive mode", and the way back out of it.
+
+        Passive is off the board rather than a flag on something standing
+        there: no square, so it cannot be targeted, nothing is adjacent to
+        it and `Range(from_="companion")` measures from its owner instead.
+        `Position` is kept rather than rebuilt because the size has to come
+        back too.
+        """
+        from .components import Companion
+        from .movement import place
+
+        who = self.familiar(of=of)
+        if who is None:
+            return False
+        mine = self.world.get(who, Companion)
+        want = mode == "passive"
+        if mine.passive == want:
+            return False
+        if want:
+            mine.stowed = self.world.get(who, Position)
+            self.world.grid.lift(who)
+            self.world.drop(who, Position)
+            mine.passive = True
+            return True
+        back = mine.stowed or Position(square=self.here)
+        anchor = self.world.get(mine.owner or self.me, Position)
+        if anchor is not None:
+            back.square = self._free_square_near(anchor.square) or back.square
+        self.world.add(who, back)
+        mine.stowed = None
+        mine.passive = False
+        place(self.world, who, back.square)
+        return True
+
+    def can_flank(
+        self, *, on: int | None = None, until: When = When.EONT
+    ) -> Effect | None:
+        """"Your familiar can flank with you or your allies."
+
+        A companion is left out of `query.allies` on purpose, so one
+        standing in the far square is furniture and every row that reads
+        "each ally adjacent to your spirit" stays right. This is the
+        modifier `query.flankers` reads to make an exception of one.
+
+        Yours, so it defaults to the caster; a row granting it to a
+        familiar names it.
+        """
+        return self.bonus("can_flank", 1, on=on or self.me, until=until, kind="untyped")
+
+    # -- bodies raised and bodies put away -----------------------------------
+
+    def reanimate(
+        self,
+        *,
+        on: int | None = None,
+        team: Team | None = None,
+        hp: int = 1,
+        until: When = When.ENCOUNTER,
+    ) -> bool:
+        """Put a dead creature back on the board, on somebody's side.
+
+        `_die` leaves the body an entity and only lifts it off the grid, so
+        raising one is a matter of giving it a square again. `c.summon`
+        could not: it needs a ref, it spawns a *second* creature, and the
+        corpse stays where it fell.
+
+        The hold this leaves ends with the encounter -- or the instant the
+        creature dies again, `Effects.bereave` sweeping what sits on a
+        corpse -- and puts the side and the hit point ceiling back as they
+        were. Without that a creature raised for one fight is quietly left
+        on the wrong team for the next.
+
+        One hit point is the printed number and it is not decoration:
+        `dying_at` is half the maximum, so a body at a maximum of 1 dies
+        outright to anything that touches it, which is the rule the card is
+        describing.
+        """
+        from .components import Side
+        from .events import Summoned
+        from .movement import place
+        from .query import team as side_of
+
+        who = on if on is not None else self.target
+        body = self.world.get(who, Health) if who is not None else None
+        spot = self.world.get(who, Position) if who is not None else None
+        if who is None or body is None or spot is None:
+            return False
+        grave = spot.square
+        if self.world.grid.occupant(grave) not in (None, who):
+            free = self._free_square_near(grave)
+            if free is None:
+                return False
+            grave = free
+        was_max, was_side = body.max_hp, self.world.get(who, Side)
+        old_team = was_side.team if was_side is not None else None
+        body.max_hp = max(1, hp)
+        body.hp = max(1, hp)
+        body.temp = 0
+        body.failures = 0
+        if was_side is not None:
+            was_side.team = team or side_of(self.world, self.me) or was_side.team
+        place(self.world, who, grave)
+
+        def lay_down() -> None:
+            # Only for a creature still standing. When the hold ends
+            # because the body died *again*, `bereave` runs inside the
+            # death and putting the old ceiling back moved `dying_at` down
+            # with it -- so `alive` answered True for a corpse that had
+            # just been announced dead.
+            if alive(self.world, who):
+                body.max_hp = was_max
+            if was_side is not None and old_team is not None:
+                was_side.team = old_team
+
+        hold = self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} risen", on_end=[lay_down]
+        )
+        if hold is None:
+            lay_down()
+            return False
+        self.world.bus.emit(Summoned(actor=self.me, summon=who, ref=self.ref))
+        return True
+
+    def no_healing(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """"The creature cannot heal."
+
+        `Healed` is a `Decision`, so this refuses it outright where
+        `c.half_healing` only shrinks it.
+        """
+        from .events import Healed
+
+        who = self._who(on)
+        if who is None:
+            return None
+
+        def refuse(ev: Healed) -> None:
+            if ev.target == who:
+                ev.cancel("cannot heal")
+
+        return self.watch(
+            Healed, refuse, until=until, window=Window.BEFORE, on=who,
+            label=f"{self.ref} cannot heal",
+        )
+
+    def no_miss_damage(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """"The creature takes no damage from an attack that misses."
+
+        The minion clause. The damage context had no way to ask whether the
+        blow landed, so `deal_damage` is handed a `miss` flag and this is
+        the only thing that reads it.
+        """
+        return self.bonus(
+            "no_miss_damage", 1, on=on, until=until, kind="untyped"
+        )
+
+    def merge(
+        self, into: Square | None = None, *, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """Step inside something solid and stop being reachable.
+
+        The square is the object's, and it is blocking already, so nothing
+        walks into it and nothing walks through it. What the printed line
+        adds is that line of effect stops in **both** directions --
+        `c.hide` and `c.invisible` are about being seen, and an attacker
+        that knows where you are still reaches through those.
+
+        "You can see normally" is left as it reads: a perception line, with
+        nothing on the board it could change while there is no line of
+        effect to anything.
+
+        Ending it puts the caster in the nearest unoccupied square, however
+        it ended.
+        """
+        here = self.here
+        stone = into or next(
+            (
+                sq
+                for sq in sorted(spread({here}, 1) - {here})
+                if self.world.grid.inside(sq)
+                and not self.world.grid.passable(sq)
+                and self.world.grid.occupant(sq) is None
+            ),
+            None,
+        )
+        if stone is None:
+            return None
+        from .movement import place
+
+        hold = self.bonus("sealed", 1, on=self.me, until=until, kind="untyped")
+        if hold is None:
+            return None
+        place(self.world, self.me, stone)
+
+        def step_out() -> None:
+            free = self._free_square_near(stone)
+            if free is not None:
+                place(self.world, self.me, free)
+
+        hold.on_end.append(step_out)
+        # "Until you end this effect as a minor action" is a printed way
+        # out, which is what `drop_cost` is for -- distinct from a sustain,
+        # which keeps a thing alive rather than killing it.
+        hold.drop_cost = ActionType.MINOR
+        return hold
 
     def extra_turn(self, at: int) -> bool:
         """Act again this round, at that initiative count. Solos do this."""
@@ -3299,6 +3734,26 @@ class Cast:
             if z.aura and z.owner == self.me and (not label or label in (z.label or ""))
         ]
         return mine[-1] if mine else 0
+
+    def in_my_aura(self, who: int | None = None, *, label: str = "") -> bool:
+        """Is that creature standing inside an aura of mine?
+
+        The other half of `c.my_aura`, which could hand back the aura's id
+        and never say who was in it -- so "an enemy subject to your defender
+        aura", printed on a row per defender class, had nothing to ask.
+        Theirs, so it follows `c.target`; `label` narrows it to one aura
+        when a creature is carrying more than one.
+        """
+        target = self._who(who)
+        if target is None:
+            return False
+        return any(
+            z.aura
+            and z.owner == self.me
+            and (not label or label in (z.label or ""))
+            and target in self.world.zones.occupants(zid)
+            for zid, z in self.world.zones.all()
+        )
 
     def hazard(
         self,

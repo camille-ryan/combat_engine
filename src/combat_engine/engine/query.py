@@ -129,9 +129,56 @@ def holding(world: World, eid: int, what: str = "") -> list[Any]:
     return out
 
 
+def scenery(
+    world: World,
+    kind: str = "",
+    *,
+    within: int = 0,
+    of: int | None = None,
+    loose: bool = False,
+) -> list[int]:
+    """What is standing on the map that is not a creature.
+
+    `kind` is the printed word -- "fire", "object" -- and `""` is all of it.
+    `within` measures from `of`, which is what a Requirement line reading
+    "you must be adjacent to a fire" asks; `loose` drops the ones bolted
+    down or in somebody's hands.
+
+    A module-level function as well as `c.scenery`, because a `requires=`
+    gate is handed `(world, eid)` and no `Cast` -- the same split
+    `moving_as` has.
+    """
+    from .components import Scenery
+
+    out = []
+    for eid, thing in sorted(world.each(Scenery)):
+        if kind and thing.kind != kind:
+            continue
+        if loose and (thing.fastened or thing.by):
+            continue
+        if within and (of is None or distance_between(world, of, eid) > within):
+            continue
+        out.append(eid)
+    return out
+
+
 def alive(world: World, eid: int) -> bool:
     h = world.get(eid, Health)
     return h is not None and h.hp > h.dying_at
+
+
+def targetable(world: World, eid: int) -> bool:
+    """Can a power be aimed at this, and land on it?
+
+    `alive` was the whole answer for as long as everything on the board had
+    hit points. Scenery has none and is still a legitimate target -- "one
+    Medium or smaller object" is a printed target line -- and `alive` is
+    false for it forever, so a row aimed at a crate was dropped between
+    being chosen and being run without a word.
+    """
+    from .components import Scenery
+
+    return alive(world, eid) or world.get(eid, Scenery) is not None
 
 
 def conscious(world: World, eid: int) -> bool:
@@ -362,6 +409,33 @@ def grants_ca(world: World, eid: int) -> bool:
     return any(rules(c).grants_ca for c in active(world, eid))
 
 
+def can_flank(world: World, eid: int) -> bool:
+    """May this companion stand in the far square and count?
+
+    No, by default, and `allies` leaves companions out for exactly that
+    reason: a spirit standing in the right place is furniture. "Your
+    familiar can flank with you or your allies" is the printed line that
+    turns one on, and `c.can_flank` lays the modifier read here.
+    """
+    mods = world.get(eid, Mods)
+    return mods is not None and bool(mods.items) and mods.total("can_flank") > 0
+
+
+def flankers(world: World, eid: int) -> list[int]:
+    """Who may hold the other side of a creature for `eid`.
+
+    Its allies, plus any companion told it can flank. `allies` excludes
+    companions on purpose -- "each ally adjacent to your spirit companion"
+    must not mean the spirit -- so the exception is made here instead of
+    widening that default.
+    """
+    return [
+        o
+        for o in allies(world, eid, companions=True)
+        if world.get(o, Companion) is None or can_flank(world, o)
+    ]
+
+
 def flanked_by(world: World, target: int, attacker: int) -> bool:
     """Is `target` flanked by `attacker` and one of its allies?
 
@@ -371,7 +445,7 @@ def flanked_by(world: World, target: int, attacker: int) -> bool:
     if not adjacent(world, attacker, target) or not can_act(world, attacker):
         return False
     space = squares(world, target)
-    for mate in allies(world, attacker):
+    for mate in flankers(world, attacker):
         if mate == target or not can_act(world, mate) or not adjacent(world, mate, target):
             continue
         for a in squares(world, attacker):
@@ -652,7 +726,20 @@ def _blinding_squares(world: World, attacker: int, target: int) -> set[Square]:
     return out
 
 
+def sealed(world: World, eid: int) -> bool:
+    """Is this creature inside something, out of reach in both directions?
+
+    A property of the creature rather than of its square: the square it
+    stepped into is solid and already stops everybody else's line. Only
+    `c.merge` sets it.
+    """
+    mods = world.get(eid, Mods)
+    return mods is not None and bool(mods.items) and mods.total("sealed") > 0
+
+
 def line_of_effect(world: World, a: int, b: int) -> bool:
+    if sealed(world, a) or sealed(world, b):
+        return False
     return any(
         world.grid.line_of_effect(src, dst)
         for src in squares(world, a)

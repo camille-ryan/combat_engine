@@ -709,3 +709,27 @@ def p4112(c: Cast) -> None:
         AttackDeclared, step_in, until=When.ENCOUNTER, window=Window.BEFORE,
         label=f"{c.ref} cohort",
     )
+
+
+@power(
+    "p10420",
+    level=6,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=MOVE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.ARCANE, Keyword.TELEPORTATION],
+)
+def p10420(c: Cast) -> None:
+    """The familiar goes passive before the teleport, not after: it is
+    standing in the square being arrived at, and passive mode is precisely
+    what takes it off the board. The square is read first, because a
+    passive familiar no longer has one."""
+    pet = c.familiar()
+    spot = c.world.get(pet, Position) if pet is not None else None
+    if spot is None:
+        return
+    where = spot.square
+    c.familiar_mode("passive")
+    c.teleport(20, to=where)

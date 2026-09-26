@@ -408,6 +408,7 @@ def deal_damage(
     from_attack: bool = True,
     opportunity: bool = False,
     charge: bool = False,
+    miss: bool = False,
 ) -> int:
     """Apply damage, honouring weakened, resistance, vulnerability and temp hp.
 
@@ -508,6 +509,13 @@ def deal_damage(
             },
         )
         amount = max(0, amount - gated)
+
+    # "The creature takes no damage from an attack that misses" -- the
+    # minion clause, printed on anything standing at one hit point. Nothing
+    # in the damage context could say whether the blow landed, so `miss` is
+    # handed in; only a miss pays for the lookup.
+    if miss and amount and _mods(world, target, "no_miss_damage", {"power": detail}):
+        amount = 0
 
     absorbed = min(health.temp, amount)
     health.temp -= absorbed

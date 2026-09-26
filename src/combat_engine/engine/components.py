@@ -165,6 +165,35 @@ class Trap:
 
 
 @dataclass
+class Scenery:
+    """Something standing on the map that no power put there.
+
+    A crate, a statue, a campfire. It has a `Position`, so it has a square,
+    a size and a footprint, and everything that measures to a thing --
+    adjacency, a burst, line of effect -- measures to it for free. It has no
+    `Health` and no `Side`, which is what keeps it out of `query.creatures`:
+    no turn, no initiative slot, no vote on whether the fight is over, and
+    nothing can attack it.
+
+    Not a `Conjuration`, which is a power's own doing and dies with the
+    effect holding it up; not a `Trap`, which attacks. Scenery is what was
+    already in the room, and the rows that want it are the ones whose target
+    line says "object" or whose Requirement says "a fire".
+
+    `kind` is the printed word a row asks for -- "object", "fire". `size`
+    lives on the `Position` with everybody else's. `fastened` is a thing
+    bolted down, which one printed target line excludes. `by` is whoever is
+    holding or controlling it, 0 for a thing nobody has: one field, because
+    "held by a creature" and "controlled by a creature" are the same
+    question asked by two cards.
+    """
+
+    kind: str = "object"
+    fastened: bool = False
+    by: int = 0
+
+
+@dataclass
 class Conjuration:
     """A thing a power put on the board that is not a creature.
 
@@ -221,6 +250,14 @@ class Companion:
     #: Empty for a spirit, which has no attack of its own: every attack it
     #: makes is a row its owner used.
     damage: str = ""
+    #: Active or passive, which only a familiar prints. A passive one
+    #: occupies no square at all -- it cannot be targeted, nothing is
+    #: adjacent to it and no range is measured from it -- so `Position` is
+    #: taken off it and kept in `stowed` until it turns active again. Held
+    #: rather than rebuilt because the square *and the size* have to come
+    #: back unchanged.
+    passive: bool = False
+    stowed: Position | None = None
 
 
 @dataclass

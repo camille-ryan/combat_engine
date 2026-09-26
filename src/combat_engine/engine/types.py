@@ -199,6 +199,16 @@ class Size(StrEnum):
         """How many squares on a side this creature occupies."""
         return _FOOTPRINT[self]
 
+    @property
+    def order(self) -> int:
+        """Where this sits in the sequence, for "Medium or smaller".
+
+        Not `squares`, which is the same number for Tiny, Small and Medium
+        -- so a comparison written against it cannot tell a torch from a
+        campfire, and two printed lines turn on exactly that.
+        """
+        return _ORDER[self]
+
 
 _FOOTPRINT = {
     Size.TINY: 1,
@@ -208,6 +218,8 @@ _FOOTPRINT = {
     Size.HUGE: 3,
     Size.GARGANTUAN: 4,
 }
+
+_ORDER = {size: n for n, size in enumerate(Size)}
 
 
 class Cover(IntEnum):

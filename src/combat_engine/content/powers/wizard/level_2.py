@@ -67,6 +67,7 @@ from combat_engine.engine import (
     Died,
     Dropped,
     Health,
+    Hit,
     Keyword,
     Melee,
     Position,
@@ -86,7 +87,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Trap
 from combat_engine.engine.events import AdjacencyGained
-from combat_engine.engine.query import distance_between, enemies
+from combat_engine.engine.query import distance_between, enemies, flanked_by
 
 
 def _is_charm(ctx: dict[str, Any]) -> bool:
@@ -661,3 +662,37 @@ def p4106(c: Cast) -> None:
         Dropped, surge_lost, until=When.ENCOUNTER, once=True,
         label=f"{c.ref} serpent falls",
     )
+
+
+@power(
+    "p10418",
+    level=2,
+    cls="wizard",
+    usage=AT_WILL,
+    action=MOVE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.ARCANE, Keyword.TELEPORTATION],
+)
+def p10418(c: Cast) -> None:
+    """A companion is deliberately no use for flanking -- `query.allies`
+    leaves one out so that "each ally adjacent to your spirit" never means
+    the spirit -- so the middle clause is a modifier that makes one
+    exception, and `query.flankers` is what reads it.
+
+    The last clause is asked of the familiar rather than of whoever swung:
+    "a creature flanked by the familiar" is true for any attacker at all,
+    including the familiar's own side attacking from elsewhere.
+    """
+    pet = c.familiar()
+    if pet is None:
+        return
+    c.teleport(10, who=pet)
+    c.can_flank(on=pet, until=When.EONT)
+
+    def rooted(ev: Hit) -> None:
+        if ev.target == pet or not flanked_by(c.world, ev.target, pet):
+            return
+        c.rooted(on=ev.target, until=When.EOTNT)
+
+    c.watch(Hit, rooted, until=When.EONT, on=c.me, label=c.ref)

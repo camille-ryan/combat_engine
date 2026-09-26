@@ -28,6 +28,7 @@ from combat_engine.engine import (
     ActionPoints,
     Budget,
     Conditions,
+    DamageType,
     Defenses,
     Gear,
     Health,
@@ -302,6 +303,9 @@ class Build:
     #: What it fights with, when the fork changes that. A two-blade ranger
     #: and an archer are not carrying the same things.
     weapons: tuple[Weapon, ...] = ()
+    #: The damage type a leg is sworn to, for the one fork that is a
+    #: choice of element rather than of ability. `c.element()` reads it.
+    element: DamageType | None = None
 
 
 BUILDS: dict[str, tuple[Build, ...]] = {
@@ -314,10 +318,15 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # Strength and Charisma; the one that is about going unseen leans on
     # Wisdom here, which is the ability its own check keys off -- the
     # printed secondary is not in `game.db` and this is the honest stand-in.
+    # A fourth leg. The last of the four printed tactics trains the rogue in
+    # two heavier weapon groups and leans on Strength like `brawny` does, so
+    # it forks on the weapon rather than on the score; the mace is the one
+    # of the two groups `chargen` has a weapon for.
     "rogue": (
         Build("brawny", DEX, STR),
         Build("trickster", DEX, CHA),
         Build("sneak", DEX, WIS),
+        Build("ruffian", DEX, STR, (MACE, CROSSBOW)),
     ),
     # A -- Intelligence either way.
     "wizard": (Build("control", INT, WIS), Build("war", INT, DEX)),
@@ -329,10 +338,28 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         Build("two-blade", STR, WIS, (SHORTSWORD, SHORTSWORD)),
         Build("archer", DEX, WIS, (LONGBOW, SHORTSWORD)),
     ),
-    # V -- which pact was made.
-    "warlock": (Build("infernal", CON, CHA), Build("fey", CHA, CON)),
-    # A -- Strength either way.
-    "warlord": (Build("inspiring", STR, CHA), Build("tactical", STR, INT)),
+    # V -- which pact was made. Two more pacts arrived with the later books
+    # and each prints a boon row of its own, so each needs a leg for the
+    # row's Prerequisite to be answerable. The elemental one is the only
+    # fork in the game that is a choice of *damage type* rather than of
+    # ability, which is what `Build.element` is for.
+    "warlock": (
+        Build("infernal", CON, CHA),
+        Build("fey", CHA, CON),
+        Build("dark", CON, CHA),
+        Build("elemental", CHA, CON, element=DamageType.FIRE),
+    ),
+    # A -- Strength either way, and a third leg for the leader feature that
+    # is a shield and a granted row rather than a score.
+    "warlord": (
+        Build("inspiring", STR, CHA),
+        Build("tactical", STR, INT),
+        Build("shielding", STR, CHA),
+    ),
+    # V -- which soul. The two share Charisma and differ on the secondary
+    # exactly as the derived `second-<ability>` pair did, so the order here
+    # keeps the first leg the same character it always was.
+    "sorcerer": (Build("wild", CHA, DEX), Build("dragon", CHA, STR)),
 }
 
 
@@ -422,8 +449,17 @@ class Character:
 
     @property
     def choices(self) -> set[str]:
-        """What a power's `c.build(...)` rider asks about."""
-        return {self.chosen.name} - {""}
+        """What a power's `c.build(...)` rider asks about.
+
+        The element goes in beside the name rather than in a component of
+        its own: it is part of the same single choice, and `c.element()`
+        reads it back out.
+        """
+        leg = self.chosen
+        out = {leg.name} - {""}
+        if leg.element is not None:
+            out.add(f"element:{leg.element.value}")
+        return out
 
     @property
     def line(self) -> ClassLine:
