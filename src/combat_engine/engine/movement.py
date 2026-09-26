@@ -163,6 +163,14 @@ def step(
             carried.kind_ = kind
             world.bus.emit(carried)
 
+    # Whatever it stepped into, it now stands on the floor of. A square that
+    # has been sunk has its floor below the rest of the board, so this is
+    # where walking off a ledge becomes a fall -- see `engine/falling.py`.
+    if world.grid.floor(to) != 0 or pos.height != 0:
+        from .falling import ground
+
+        ground(world, eid)
+
     after = _neighbours(world, eid)
     for other in sorted(after - before):
         world.bus.emit(AdjacencyGained(actor=eid, other=other, mover=eid))

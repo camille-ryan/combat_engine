@@ -15,21 +15,9 @@
     "wants": "chargen.BUILDS[\"rogue\"] to carry a third leg, plus Keyword.RATTLING",
     "why": "one of the four printed tactics grants proficiency with two weapon groups, lets those groups stand in for the light blade cf:rogue-bonus requires, and adds a Strength rider to attacks carrying a keyword the enum does not have. cf:rogue-tactic writes the two legs the class's two builds can carry; this one has no leg to ask about and its payload is blocked on the same keyword as p10740 and p4499"
   },
-  "cf:rogue-tactic-stealth": {
-    "wants": "chargen.BUILDS[\"rogue\"] to carry a fourth leg, plus c.check(skill, dc)",
-    "why": "one of the four printed tactics is entirely penalties to Stealth checks for moving and running, and a check to go unseen after moving 3 squares. The engine rolls no skill checks -- the same hold as m2963a4 -- and the class has two builds, so there is neither a leg to gate it on nor a check to modify"
-  },
   "cf:warlord-archer": {
     "wants": "c.attacks_with(ability, ...)",
     "why": "it grants proficiency with a weapon group and lets a ranged basic attack with a bow use Strength for the attack and damage rolls instead of Dexterity. basic.RANGED declares its ability in the header and nothing can rewrite it for one creature. Neither warlord leg in chargen.BUILDS carries a bow either, so there would be nothing to shoot with (name which ability a basic attack uses)"
-  },
-  "cf:warlord-initiative": {
-    "wants": "c.initiative_bonus(n, on=)",
-    "why": "its whole printed content is a +2 power bonus to initiative for the warlord and every ally within 10 squares who can see and hear it. Initiative.bonus is read once, inside _roll_initiative, and Encounter.start rolls initiative *before* _arm_traits -- so a trait cannot reach the only roll it exists to change, and there is no modifier key for it either (applied before Encounter._roll_initiative)"
-  },
-  "cf:warlord-presence": {
-    "wants": "action points -- a pool on the character, spending one as an action, and an event announcing it",
-    "why": "every one of its six printed options fires when an ally spends an action point for an extra action. Nothing in the engine has an action point, which is the same wall p2593, p7448 and the level 6 and 7 warlord rows hit. Two of the six -- the Charisma one and the Intelligence one -- would map cleanly onto the two warlord legs once there is an event to hang them from"
   },
   "cf:warlord-shield": {
     "wants": "p10887 in the tree, plus a leg in chargen.BUILDS[\"warlord\"] for it",
@@ -38,50 +26,6 @@
   "cf:wizard-implement-rest": {
     "wants": "c.familiar()",
     "why": "a wizard class feature about its familiar, which no row creates"
-  },
-  "cf:wizard-spellbook": {
-    "wants": "a spellbook -- powers a character owns but has not prepared",
-    "why": "the whole feature is holding two dailies and two utilities per slot and preparing one of each after a rest. Powers holds only what is known, so owning an unprepared power cannot be said and neither can preparing one. Same missing thing as p7377"
-  },
-  "m2963a4": {
-    "wants": "c.check(skill, dc, *, who=)",
-    "why": "its whole content is 'any character can make a DC 25 History check as a minor action', and on a success the m2963 gains vulnerable 10 to that character's next attack. The engine rolls no skill checks and holds no DCs, and the row is spent by a creature that does not own it, which `use` has no door for -- so both halves of the sentence are unsayable, not just the number"
-  },
-  "m3062a2": {
-    "wants": "c.destroy",
-    "why": "the rusting item is destroyed; nothing removes gear from a creature"
-  },
-  "m3064a2": {
-    "wants": "c.destroy",
-    "why": "its whole Hit is 'the decaying magic item is destroyed', and it can only target a creature carrying one; nothing removes gear from a creature and Gear records no enhancement bonus to have been decayed. Same sentence as m3062a2"
-  },
-  "m3064a3": {
-    "wants": "c.decay(on=)",
-    "why": "its whole Effect is reducing the enhancement bonus of the weapon or implement that hit it, to a minimum of 0, until the end of the encounter; Weapon has no enhancement bonus and Gear has no armour object, so there is no number to reduce"
-  },
-  "m4968a3": {
-    "wants": "c.as_though_hit_by(ref)",
-    "why": "it rolls its own +17 vs AC and the target then takes the damage and is subject to the effects of a chosen enemy at-will melee power, off that creature's ability modifier and none of its bonuses. c.grant_row lends the whole row -- its own attack line and its own numbers -- and use() re-rolls it, so neither says this. Same sentence as m4971a3"
-  },
-  "m4969a3": {
-    "wants": "c.as_though_hit_by(ref)",
-    "why": "the same borrowed at-will melee power as m4968a3, applied to a blow this row rolled. Same sentence as m4971a3"
-  },
-  "m4970a2": {
-    "wants": "c.as_though_hit_by(ref)",
-    "why": "it rolls its own +19 vs AC and the target then takes the damage and is subject to the effects of a chosen enemy at-will ranged power, off that creature's ability modifier and none of its bonuses. c.grant_row lends the whole row and use() re-rolls its attack, so neither says this. Same sentence as m4968a3 and m4971a3"
-  },
-  "m4971a3": {
-    "wants": "c.as_though_hit_by(ref)",
-    "why": "it chooses an at-will melee attack power belonging to an enemy it can see and, on its own attack roll, the target 'takes damage and is subject to effects as though it were hit by the chosen attack', with the damage rolled off that creature's ability modifier and none of its bonuses. c.grant_row hands over the whole row -- its own attack line, its own bonuses -- and use() re-rolls the attack, so neither says it. Nothing applies one row's Hit entry to another row's roll"
-  },
-  "m4972a3": {
-    "wants": "c.as_though_hit_by(ref)",
-    "why": "the same sentence as m4971a3 for an at-will ranged attack power"
-  },
-  "m678a4": {
-    "wants": "c.disarm(on=)",
-    "why": "its whole Hit is 'the weapon used for the triggering attack drops in the target's space'; Gear holds what a creature is wielding and nothing takes it away or puts it on the floor"
   },
   "m709a1": {
     "wants": "c.pass_on(ev, to=)",
@@ -107,37 +51,9 @@
     "wants": "c.form(like=)",
     "why": "take your familiar's shape -- copying another creature's speed, modes and senses. Needs c.familiar() as well"
   },
-  "p10594": {
-    "wants": "Attack(by=)",
-    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
-  },
-  "p10622": {
-    "wants": "c.check(skill, *, who=)",
-    "why": "the target regains hit points equal to half a Heal check result; the engine rolls no skill checks, so there is no number to halve"
-  },
-  "p10630": {
-    "wants": "Attack(by=)",
-    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
-  },
-  "p10702": {
-    "wants": "a Falling event, or c.falling(who)",
-    "why": "its Trigger is a creature in range falling with a wall or floor within 1 square of it; falling is not modelled, so nothing announces one and there is nothing to arrest"
-  },
-  "p10740": {
-    "wants": "Keyword.RATTLING",
-    "why": "the whole Effect is 'until the end of the encounter your melee attacks have the rattling keyword'; the enum has no such member and nothing implements the keyword"
-  },
   "p10744": {
     "wants": "c.range_bonus(mult=)",
     "why": "a stance that doubles the normal and long range of thrown and sling attacks; Range is frozen data on the header and nothing reads a per-creature range modifier (or a Range the body can widen)"
-  },
-  "p11049": {
-    "wants": "a SkillCheck event to declare Trigger on",
-    "why": "its whole printed trigger is 'you would make an Athletics or an Endurance check'; there are no skill checks in the engine and no event announcing one, so the row could only be declared with prose nothing reads"
-  },
-  "p11067": {
-    "wants": "power points (#170), plus c.transfer_points(n, on=)",
-    "why": "the whole effect is transferring 1 or 2 power points"
   },
   "p11215": {
     "wants": "c.use_row(ref)",
@@ -159,37 +75,13 @@
     "wants": "a compendium ref for the second, granted row (then c.grant_row(ref))",
     "why": "its whole Effect is 'the target can use <a second row>' -- a free-action Str-or-Dex vs Reflex 3[W] attack with its own Requirement, which the spec names only as 'p11603 Attack'. c.grant_row needs a ref and there is none; resolving the attack immediately loses the point of a daily the ally holds for later, and c.grant_attack cannot carry 3[W] vs Reflex"
   },
-  "p11605": {
-    "wants": "an action point resource -- a spendable ActionPoint plus ctx['action_point'] on the attack one buys",
-    "why": "its entire printed Effect is a +2 to an attack made with an action point, and nothing in the engine has an action point to spend or an event that announces one. Same gap costs clauses in p11608, p11612, p2593 and p11727"
-  },
   "p11725": {
     "wants": "c.grant_attack(..., again=True)",
     "why": "'the target repeats the attack as a free action against a creature you choose'. The reaction resolves inside the Miss window of the very use it repeats, so (actor, ref) is already in dsl._IN_FLIGHT and use refuses it. The row is otherwise complete and works when the trigger event is synthesised outside the attack's own resolution; it needs a flag exempting the granted swing from the _IN_FLIGHT guard for that one call"
   },
-  "p11727": {
-    "wants": "an action point resource -- c.grant_action_point(on=)",
-    "why": "both halves are action points: the trigger is an ally missing with an action-point attack and the whole Effect is granting one that does not count against the encounter limit. Same gap as p11605"
-  },
-  "p1213": {
-    "wants": "c.fall",
-    "why": "there is no falling and no vertical position"
-  },
   "p12198": {
     "wants": "c.grant_attack(..., reentrant=True)",
     "why": "'the attacker repeats the attack against that creature' has to fire the row that is triggering this one, and dsl._IN_FLIGHT refuses a second entry into (actor, ref) -- correctly, in general. c.redirect only works on AttackDeclared, and this triggers on a miss. Wants a way to re-run the triggering row at a new target"
-  },
-  "p12424": {
-    "wants": "power points (#170)",
-    "why": "temporary hit points equal to the power points spent"
-  },
-  "p12500": {
-    "wants": "Attack(by=)",
-    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
-  },
-  "p12503": {
-    "wants": "Attack(by=)",
-    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
   },
   "p12792": {
     "wants": "the class feature's id, plus c.regain(ref, *, on=)",
@@ -198,22 +90,6 @@
   "p13050": {
     "wants": "c.cure(Condition.SURPRISED)",
     "why": "'you are no longer surprised'. Nothing announces surprise, so the printed Trigger has nothing to name either. See #141 (and an event announcing surprise)"
-  },
-  "p13143": {
-    "wants": "a Fall event, or detail='fall' on the DamageRolled a fall produces",
-    "why": "'Trigger: you fall. Reduce falling damage by 5 + half your level.' Nothing falls -- no event, and no detail on the damage to gate on"
-  },
-  "p13314": {
-    "wants": "c.shrug_off(Condition.PRONE)",
-    "why": "'you are not knocked prone by the triggering attack or fall'. ConditionApplied is a plain Event emitted after the condition is on you, so nothing can refuse it, and nothing models falling (or making ConditionApplied a Decision; plus a Fell event)"
-  },
-  "p13344": {
-    "wants": "a Wall(size, within)",
-    "why": "an Area wall 5. area_of knows melee, ranged, close_burst, close_blast and area_burst only, and nothing raises a multi-square barrier that blocks line of effect and can be attacked (range plus c.wall(squares, hp=, blocks_sight=) -- same as invoker p2860)"
-  },
-  "p13516": {
-    "wants": "a carried consumable -- an object a creature holds and spends an action on",
-    "why": "its whole Effect is spending a healing surge to make a seed, which lasts past the fight and which whoever carries it eats as a minor action to regain 10 + your healing surge value. Nothing here is an object a creature carries, and the heal is spent by a creature that does not own the row"
   },
   "p13697": {
     "wants": "c.unhindered(condition, on=, until=)",
@@ -234,10 +110,6 @@
   "p14299": {
     "wants": "a weapon category -- 'simple' in Weapon.properties, or a Weapon.category field",
     "why": "Requirement is 'you must use this power with a simple weapon' and Gear/Weapon record no category, so c.wielding('simple') is false for every character in the tree: requires= would make the row permanently unusable and no requires= would let it be used with anything. Everything else on the row is sayable. Same gap makes p14301/p14302's Weapon riders inert and is why p14295/p14297 audit UNUSED"
-  },
-  "p1440": {
-    "wants": "trigger dispatch during Encounter._roll_initiative",
-    "why": "'you roll initiative and dislike the result' can only be answered while initiative is being rolled, and Triggers.arm() runs *after* _roll_initiative, with encounter.order still empty -- Triggers._offer walks that order, so no creature is ever asked. Wants either arming before the roll or a Cast method that adds a flat bonus to an initiative check and re-splices"
   },
   "p14420": {
     "wants": "the defender-aura class feature, plus c.in_my_aura(who)",
@@ -263,18 +135,6 @@
     "wants": "c.portal(a, b, *, until=)",
     "why": "a rift making two distant squares adjacent for movement only. Grid has no notion of a link between two squares, and neither c.teleport nor a zone can say it -- it changes what movement costs and where a creature may go, so it is not narrative"
   },
-  "p15993": {
-    "wants": "c.charm(ref, on=, uses=1)",
-    "why": "creates a carried object another creature expends later for healing plus a defence bonus. Nothing puts a usable object in somebody's hands; c.grant_row needs a ref that already exists and has no charges (a one-shot row handed to a creature to spend later)"
-  },
-  "p16238": {
-    "wants": "Wall(n, within) as a Range, or c.wall(squares, ...)",
-    "why": "an area wall 5 that gives superior cover, has to be swum through, and makes whoever passes it vulnerable 5 cold. Range has kinds melee, ranged, close burst, close blast, area burst and personal, and a zone cannot say any of the three clauses"
-  },
-  "p16240": {
-    "wants": "c.terraform(square, *, raise_=/sink=/blocking=)",
-    "why": "its whole Effect is raising or sinking a square and filling what is underneath with blocking terrain. Grid.blocking is a set nothing in Cast can add to, and there is no elevation at all"
-  },
   "p16241": {
     "wants": "a fire as a map feature, and c.terrain-style gate on one",
     "why": "the Requirement is standing next to a fire of campfire size and the destination is a square next to another one. Nothing on the board is a fire, so neither the gate nor the target can be written"
@@ -291,21 +151,9 @@
     "wants": "c.see_unseen(on=)",
     "why": "the printed line is a trade: you see the invisible, and everything else goes invisible to you. The second half is writable with c.invisible(to=c.me, on=...); the first is not, because nothing overrides another effect's relation. Writing only the half that works would ship the penalty without the benefit (suppress HIDDEN_FROM towards one creature)"
   },
-  "p2389": {
-    "wants": "Keyword.RATTLING, and c.rattled(on=)",
-    "why": "its whole Effect is selecting an enemy that is taking the attack penalty from one of your rattling attacks; with no rattling there is nothing to select (to read it back)"
-  },
   "p2633": {
     "wants": "c.as_ranged(10, until=)",
     "why": "'the next melee attack you make with that weapon becomes a ranged attack with a range of 10'. Nothing re-ranges a row (or a reach override on an effect)"
-  },
-  "p2860": {
-    "wants": "a Wall(length, within) header range plus c.wall(...)",
-    "why": "'Area wall 5 within 10'. No wall range and no way to choose a wall's squares"
-  },
-  "p32": {
-    "wants": "c.hover",
-    "why": "there is no falling and no vertical position"
   },
   "p3369": {
     "wants": "c.feature_bonus(what)",
@@ -319,17 +167,9 @@
     "wants": "c.dispel(zone_or_conjuration)",
     "why": "its whole target line is one conjuration or zone and its whole Hit is destroying it. A zone is not an entity a target line can name, a conjuration has no Will to attack, and nothing ends somebody else's zone. Same missing half as the attack line of p3056 (and a way to target one)"
   },
-  "p3838": {
-    "wants": "c.move_zone(zone_id, squares)",
-    "why": "entire Effect is 'move each of your zones and conjurations 5 squares'. Zones has no mover at all. The same gap silently drops the 'as a move action you can move the zone' rider from p3876, p3882, p5403 and p5404, which are written without it"
-  },
   "p3839": {
     "wants": "c.companions()",
     "why": "the whole row is a *second* spirit companion. c.call_companion relocates the one you have by design and c.companion() returns one id; this needs a list, plus Range(from_='companion') and every 'adjacent to your spirit companion' reading both"
-  },
-  "p4137": {
-    "wants": "c.jump(squares, on=)",
-    "why": "the whole Effect is a jump of Wis squares"
   },
   "p4143": {
     "wants": "c.floor(area, until=)",
@@ -339,45 +179,9 @@
     "wants": "chargen.BUILDS[\"warlock\"] to carry a \"dark\" leg, and a per-character counter that survives between uses of a row",
     "why": "Prerequisite: Dark Pact. The whole row is a tally raised each time a cursed enemy drops and spent as an interrupt for 1d6 per point; nothing on a character holds a number across uses, and there is no leg to gate the prerequisite on"
   },
-  "p4369": {
-    "wants": "Attack(by=)",
-    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
-  },
-  "p4373": {
-    "wants": "Attack(by=)",
-    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
-  },
-  "p4378": {
-    "wants": "Attack(by=)",
-    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
-  },
-  "p4382": {
-    "wants": "c.bonus(\"quarry_damage\", 3)",
-    "why": "'add 3 to the extra damage you deal with Hunter's Quarry'. cf:ranger-quarry closes over the literal 1d6, so there is no number to raise; a plain +3 against the quarry is strictly more than printed, since it would pay on every attack rather than the once-a-round rider (or features.extra_damage reading a modifier rather than closing over a fixed dice string)"
-  },
-  "p4391": {
-    "wants": "Attack(by=)",
-    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
-  },
   "p4396": {
     "wants": "a run action -- c.run(n)",
     "why": "the whole Effect is running speed + 4 instead of speed + 2, and not granting combat advantage from running; there is no run action, so neither clause has a subject (or actions.legal offering one)"
-  },
-  "p4401": {
-    "wants": "Attack(by=)",
-    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
-  },
-  "p4408": {
-    "wants": "Attack(by=)",
-    "why": "every one prints \"Beast's attack bonus vs. AC\" and N[B], and neither is sayable. c.companion closes none of it: a ref-less companion's Stats is a copy of its owner's, so rolling it is rolling the ranger. Needs three things -- c.b(n) alongside c.w(n) reading the companion's damage die; Attack(by='companion') rolling the companion's own bonus, since from_= moves the origin square only; and a database ref for the beast so c.call_companion(ref=) gives it numbers at all. Written with the ranger's numbers these would look finished and be wrong"
-  },
-  "p4476": {
-    "wants": "c.sneak_attack()",
-    "why": "its whole Effect is 'the next ally who hits deals extra damage equal to your Sneak Attack damage'; there is no sneak attack in the model, so the row grants nothing (the class feature's dice)"
-  },
-  "p4499": {
-    "wants": "Keyword.RATTLING",
-    "why": "its whole Effect is 'until the stance ends, all your attacks gain the rattling keyword'"
   },
   "p4562": {
     "wants": "c.swap_initiative(other) and c.end_turn()",
@@ -395,14 +199,6 @@
     "wants": "the wild shape class feature as a row, for this one to extend",
     "why": "the same sentence as p5046, for a raven with a fly speed, plus 'you can use wild shape to change among this form, another beast form and your humanoid form'. Both halves modify a row that does not exist"
   },
-  "p5193": {
-    "wants": "c.redirect accepting a resolved Hit, or c.take_hit(ev)",
-    "why": "'the triggering attack hits you instead of the ally', triggered on being hit. c.redirect works only on AttackDeclared, before the roll"
-  },
-  "p5281": {
-    "wants": "c.also_hits(target)",
-    "why": "its whole Effect is 'the triggering attack also hits the target'. c.redirect moves an attack and c.autohit forces the one being answered; neither copies a resolved attack onto somebody else, and re-rolling the row would not be the same attack (apply the triggering attack to a second creature)"
-  },
   "p5527": {
     "wants": "c.bonus('attack', dice='1d6')",
     "why": "'roll a d6 and add it as a power bonus to every weapon attack and damage roll'. c.bonus takes a fixed int (a modifier rolled per roll)"
@@ -418,14 +214,6 @@
   "p5845": {
     "wants": "c.treat_roll_as(\"odd\"|\"even\")",
     "why": "its whole Effect is overriding the parity another row will read off its own attack roll; nothing lets one row dictate what another reads from AttackResult.natural, and the rows that read parity are the fork-gated ones"
-  },
-  "p5852": {
-    "wants": "action points -- a pool, a way to spend one, and an event saying so",
-    "why": "the trigger is spending an action point to attack and missing. Action points are not modelled, so the trigger can never be true; warlord/level_7_b and level_9_b record the same gap"
-  },
-  "p7377": {
-    "wants": "a spellbook -- powers a character owns but has not prepared",
-    "why": "it replaces an unexpended utility or daily with another of the same level from a spellbook. Powers holds only what is known, so there is nothing to swap for and the +1 has no power to attach to"
   },
   "p7399": {
     "wants": "a way to say an attack is made with the off-hand weapon",
@@ -455,10 +243,6 @@
     "wants": "c.unsurprise",
     "why": "Condition.SURPRISED is in the enum and nothing ever applies it"
   },
-  "p9438": {
-    "wants": "a Wall(size, within)",
-    "why": "Area wall 5 within 10, blocking sight for everyone but the caster (header range plus except_= on blocks_sight -- same wall gap as p2860, p13344)"
-  },
   "p9442": {
     "wants": "c.shrouds(on=)",
     "why": "entirely 'damage from your assassin's shroud', per shroud. Shrouds have no representation anywhere; shroud riders were also dropped from six written rows (> int, c.shroud(on=, n=1), and a shroud-damage event)"
@@ -466,9 +250,5 @@
   "p9665": {
     "wants": "c.instinctive(who)",
     "why": "commands a summoned creature to use its instinctive effect. Needs Summon.instinctive -- a callable the block carries"
-  },
-  "p9667": {
-    "wants": "a carried consumable -- an object a creature holds and spends an action on",
-    "why": "four berries, each consumed as a minor action for 10 hit points, a saving throw, or 10 temporary hit points. Same missing thing as p13516"
   }
 }

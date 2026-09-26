@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from .components import (
+    Barrier,
     Companion,
     Conditions,
     Defenses,
@@ -52,7 +53,11 @@ def combatants(world: World) -> list[int]:
     so anything later that is targetable-but-not-a-combatant lands here by
     adding itself to one list.
     """
-    return [e for e in creatures(world) if world.get(e, Companion) is None]
+    return [
+        e
+        for e in creatures(world)
+        if world.get(e, Companion) is None and world.get(e, Barrier) is None
+    ]
 
 
 def squares(world: World, eid: int) -> frozenset[Square]:
@@ -85,6 +90,10 @@ def allies(world: World, eid: int, *, companions: bool = False) -> list[int]:
         if o != eid
         and team(world, o) is mine
         and (companions or world.get(o, Companion) is None)
+        # A wall you raised stands on your side so that your enemies may
+        # attack it. It is not an ally: "each ally in the burst" would heal
+        # the masonry.
+        and world.get(o, Barrier) is None
     ]
 
 
@@ -97,6 +106,27 @@ def enemies(world: World, eid: int) -> list[int]:
         for o in creatures(world)
         if team(world, o) is not None and team(world, o) is not mine and alive(world, o)
     ]
+
+
+def holding(world: World, eid: int, what: str = "") -> list[Any]:
+    """What this creature has in hand, filtered by a printed word.
+
+    `""` is everything held. `"magic"` is anything with an enhancement
+    bonus, which is what "a creature wielding a magic item" means; anything
+    else is matched the way `c.wielding` matches it -- a group, a property,
+    or `"implement"`.
+    """
+    from .components import Gear
+
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return []
+    out = list(gear.held)
+    if what == "magic":
+        return [w for w in out if w.enhancement > 0]
+    if what:
+        return [w for w in out if what in w.properties or w.group == what]
+    return out
 
 
 def alive(world: World, eid: int) -> bool:

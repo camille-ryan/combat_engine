@@ -10,7 +10,7 @@ All eight Player's Handbook classes, to level 10.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from random import Random
 
 from combat_engine.engine import (
@@ -25,6 +25,7 @@ from combat_engine.engine import (
     WILL,
     WIS,
     Ability,
+    ActionPoints,
     Budget,
     Conditions,
     Defenses,
@@ -35,6 +36,7 @@ from combat_engine.engine import (
     Mods,
     Movement,
     Position,
+    PowerPoints,
     Powers,
     Side,
     Size,
@@ -76,6 +78,14 @@ class ClassLine:
     #: The ability most of its powers attack with.
     key: Ability
     scores: dict[Ability, int] = field(default_factory=dict)
+    #: Power points at first level, for a class that augments its powers.
+    #: **Only the first-level number is settled.** `game.db` carries no
+    #: power point column and the by-level table is not in it, so this does
+    #: not grow with level; raising it is one number when the table lands.
+    power_points: int = 0
+    #: How many rows a slot holds in the spellbook -- what a wizard owns
+    #: per prepared power. 0 for a class that prepares nothing.
+    spellbook: int = 0
 
     @property
     def armour_bonus(self) -> int:
@@ -300,7 +310,15 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # V -- the fork is the primary, and the two halves share Wisdom.
     "cleric": (Build("devoted", WIS, CHA), Build("battle", STR, WIS, (MACE,))),
     # A -- Dexterity either way.
-    "rogue": (Build("brawny", DEX, STR), Build("trickster", DEX, CHA)),
+    # A third leg. Four tactics are printed and two of them fork on
+    # Strength and Charisma; the one that is about going unseen leans on
+    # Wisdom here, which is the ability its own check keys off -- the
+    # printed secondary is not in `game.db` and this is the honest stand-in.
+    "rogue": (
+        Build("brawny", DEX, STR),
+        Build("trickster", DEX, CHA),
+        Build("sneak", DEX, WIS),
+    ),
     # A -- Intelligence either way.
     "wizard": (Build("control", INT, WIS), Build("war", INT, DEX)),
     # V -- swinging or shining.
@@ -325,6 +343,19 @@ BUILDS: dict[str, tuple[Build, ...]] = {
 #: is the clearest case -- several of its level 1 rows require the pair
 #: outright.
 CLASSES.update(_from_the_book())
+
+#: The classes that augment their powers with a pool of points. Named
+#: rather than derived, because the psionic *keyword* is on the monk's rows
+#: too and a monk has no points to spend.
+PSIONIC = ("ardent", "battlemind", "psion")
+
+for _psi in PSIONIC:
+    if _psi in CLASSES:
+        CLASSES[_psi] = replace(CLASSES[_psi], power_points=2)
+
+#: The one class that holds more than it prepares. Two per slot, which is
+#: what the printed feature gives.
+CLASSES["wizard"] = replace(CLASSES["wizard"], spellbook=2)
 
 #: A build per secondary, from the class's own ability line.
 #:
@@ -448,6 +479,41 @@ def loadout(
         while len(chosen) < count and spare:
             chosen.append(spare.pop(0))
         out += sorted(chosen)
+    return out
+
+
+def spellbook(cls: str, level: int, prepared: list[str], held: int = 2) -> list[str]:
+    """What a character owns and has not prepared.
+
+    The same pool `loadout` drew from, minus what it dealt. A spellbook
+    holds dailies and utilities -- an at-will is not prepared and a class
+    feature is not a choice -- and `held` is how many per slot the chassis
+    says, so the book is that many levels' worth of the ones left over.
+
+    Drawn from the registry for the same reason the loadout is: a written
+    list of ids goes stale the moment a row lands.
+    """
+    import combat_engine.content  # noqa: F401  (registers the rows)
+    from combat_engine.engine.dsl import REGISTRY
+
+    out: list[str] = []
+    for slot in (Usage.DAILY, Usage.ENCOUNTER):
+        spare = [
+            p
+            for p in REGISTRY.values()
+            if p.cls == cls
+            and 0 < p.level <= level
+            and p.usage is slot
+            and p.ref not in prepared
+            # A utility is a row with nothing to attack with; an encounter
+            # *attack* power is a slot the book has no say over.
+            and (slot is Usage.DAILY or p.attack is None)
+        ]
+        # The character's own level first. A swap is "another power of the
+        # same level", so a book stocked from the bottom of the list has
+        # nothing the top slot can trade for.
+        spare.sort(key=lambda p: (-p.level, p.ref))
+        out += [p.ref for p in spare[: max(0, held - 1)]]
     return out
 
 
@@ -604,7 +670,16 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         # something to make it with; `can_branch` refuses the row to anyone
         # who is not. A monster leaves this empty -- its ranged attacks are
         # its own printed rows.
-        Powers(known=list(powers), ranged="rba"),
+        Powers(
+            known=list(powers),
+            ranged="rba",
+            owned=spellbook(who.cls, who.level, list(powers), line.spellbook)
+            if line.spellbook
+            else [],
+        ),
+        # Everybody has one action point and may spend one a fight. A row
+        # that hands out a second says so; the pool is not a class feature.
+        ActionPoints(points=1),
         BuildState(choices=set(who.choices)),
         Gear(
             weapons=list(build.weapons or line.weapons),
@@ -612,6 +687,8 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
             armour=line.armour,
         ),
     )
+    if line.power_points:
+        world.add(eid, PowerPoints(points=line.power_points, maximum=line.power_points))
     place(world, eid, square)
     return eid
 

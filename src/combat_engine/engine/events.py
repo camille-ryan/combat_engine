@@ -215,6 +215,30 @@ class ForcedMove(Decision):
 
 
 @dataclass
+class Fell(Decision):
+    """A creature is falling, announced **before** it lands.
+
+    Cancellable, because "you can attempt a saving throw to avoid falling
+    farther" is a printed row and catching yourself has to be able to stop
+    the drop. The two fields below are read back after the window closes,
+    the way `Bus` insists: an interrupt that softens a fall does not stop
+    it, it changes what landing costs.
+
+    `squares` is how far, which is what the damage is worked out from.
+    `soften` is how much of that damage a listener has taken off, and
+    `prone` is whether the landing still knocks the creature down -- "takes
+    no damage from the fall, and consequently does not fall prone" is one
+    printed sentence and both halves live here.
+    """
+
+    actor: int
+    squares: int
+    from_: int = 0
+    soften: int = 0
+    prone: bool = True
+
+
+@dataclass
 class OpportunityWindow(Decision):
     """`actor` may take an opportunity action against `provoker`.
 
@@ -473,6 +497,44 @@ class SavingThrow(Decision):
     natural: int
     bonus: int
     saved: bool
+
+
+@dataclass
+class SkillCheck(Decision):
+    """A skill check, announced **before** its modifiers are totalled.
+
+    `bonus` is the fixed part -- the ability modifier and half level -- and
+    is finished inside the resolve callback, which runs after the interrupt
+    window. That ordering is the whole point: "Trigger: you would make an
+    Athletics check" is a *free action taken before the roll counts*, and it
+    answers by laying a modifier the callback then reads. A listener may
+    also add to `bonus` directly.
+
+    `dc` of 0 is a check with no number to beat -- "you make a Heal check
+    and the target regains half the result" -- and always succeeds.
+    """
+
+    actor: int
+    skill: str
+    dc: int
+    natural: int
+    bonus: int
+    total: int
+    success: bool
+
+
+@dataclass
+class ActionPointSpent(Event):
+    """A creature spent an action point and gained an extra action.
+
+    `free` is the point that a row handed out and that does not count
+    against the one-per-encounter limit, because two printed rows turn on
+    exactly that distinction.
+    """
+
+    actor: int
+    cost: ActionType
+    free: bool = False
 
 
 @dataclass

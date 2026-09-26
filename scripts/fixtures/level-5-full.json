@@ -57,6 +57,8 @@
   "EffectApplied(source=1, target=1, duration='end of encounter', label='fighter mark')",
   "EffectApplied(source=1, target=1, duration='end of encounter', label='fighter mark')",
   "PowerUsed(actor=4, power='cf:wizard-rituals', targets=[])",
+  "PowerUsed(actor=4, power='cf:wizard-spellbook', targets=[])",
+  "Note(text='4 prepares p10070')",
   "RoundStart(round=1)",
   "TurnStart(actor=8, round=1)",
   "RelationCleared(kind_=<Relation.GRANTS_CA_TO: 'grants_ca_to'>, source=8, target=3, why='start of turn')",

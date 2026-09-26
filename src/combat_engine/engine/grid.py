@@ -206,6 +206,14 @@ class Grid:
     #: test. An empty label means rough ground of no particular kind.
     difficult: dict[Square, str] = field(default_factory=dict)
     occupants: dict[Square, int] = field(default_factory=dict)
+    #: Where the floor of a square is, in squares above or below the board's
+    #: own level. Absent means 0, which is everywhere until something digs.
+    #: Read by `engine/falling.py` and by nothing else: stepping into a
+    #: square whose floor is lower than the one you left is a fall.
+    elevation: dict[Square, int] = field(default_factory=dict)
+
+    def floor(self, sq: Square) -> int:
+        return self.elevation.get(sq, 0)
 
     def inside(self, sq: Square) -> bool:
         return 0 <= sq[0] < self.width and 0 <= sq[1] < self.height

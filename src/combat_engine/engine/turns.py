@@ -57,6 +57,7 @@ class Encounter:
         # rolls a row could ever answer were rerolls, which is not what any
         # printed line says.
         self.triggers.arm()
+        self._refresh_pools()
         self.order = self._roll_initiative()
         self._arm_traits()
         self.started = True
@@ -64,6 +65,19 @@ class Encounter:
         self.index = 0
         self.world.bus.emit(RoundStart(round=1))
         self._begin(self.order[0])
+
+    def _refresh_pools(self) -> None:
+        """Power points come back and the action-point limit resets.
+
+        Both are per-encounter and both would otherwise only ever be right
+        for the first fight of a session.
+        """
+        from .components import ActionPoints, PowerPoints
+
+        for _, pool in self.world.each(PowerPoints):
+            pool.refresh()
+        for _, points in self.world.each(ActionPoints):
+            points.refresh()
 
     def _arm_traits(self) -> None:
         """Turn on everything that is simply *true* of a creature.
@@ -170,9 +184,14 @@ class Encounter:
         """
         init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
         init.rolled += amount
-        if self.started and eid in self.order:
+        # `self.started` is set *after* `_arm_traits`, so a trait whose whole
+        # content is "you and each ally gain +2 to initiative" bumped the
+        # number and never touched the order -- which is the only thing that
+        # number is for. What the guard is really protecting is the turn in
+        # progress, and during arming there is none.
+        if self.order and eid in self.order:
             was = self.order.index(eid)
-            if was != self.index:
+            if not self.started or was != self.index:
                 self.order.pop(was)
                 if was < self.index:
                     self.index -= 1

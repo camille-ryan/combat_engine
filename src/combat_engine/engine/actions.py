@@ -87,6 +87,7 @@ def legal(
     out.extend(_sustaining(world, encounter, actor))
     out.extend(_dropping(world, encounter, actor))
     out.extend(_wielding(world, encounter, actor))
+    out.extend(_spending(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
     return out
 
@@ -375,6 +376,27 @@ def _wielding(world: World, encounter: Encounter, actor: int) -> list[Action]:
     ]
 
 
+def _spending(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Eating the seed, expending the scroll -- a one-shot in somebody's hand.
+
+    The creature spending it is generally not the creature that made it, and
+    the payout is printed on the maker's row with the maker's numbers, so
+    this cannot be a granted row: it is an `Item`, and the action to spend
+    it is offered here or nowhere.
+    """
+    from .components import Item
+
+    out: list[Action] = []
+    for eid, item in sorted(world.each(Item)):
+        if item.owner != actor or item.uses <= 0 or item.spend is None:
+            continue
+        cost = ActionType(item.cost)
+        if not encounter.can_spend(actor, cost):
+            continue
+        out.append(Action(kind="item", cost=cost, subject=eid, ref=item.ref))
+    return out
+
+
 def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
     out: list[Action] = []
     if is_(world, actor, Condition.PRONE) and not is_(world, actor, Condition.PINNED):
@@ -488,6 +510,20 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             return False
         gear.wield(gear.weapons[action.subject])
         world.bus.emit(Note(text=f"{actor} takes up {gear.weapons[action.subject].ref}"))
+        return True
+
+    if action.kind == "item":
+        from .components import Item
+
+        item = world.get(action.subject or -1, Item)
+        if item is None or item.owner != actor or item.uses <= 0:
+            return False
+        item.uses -= 1
+        if item.spend is not None:
+            item.spend(actor)
+        world.bus.emit(Note(text=f"{actor} spends {item.ref}"))
+        if item.uses <= 0:
+            world.despawn(action.subject)
         return True
 
     if action.kind == "drop":

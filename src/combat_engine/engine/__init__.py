@@ -9,6 +9,7 @@ from .actions import Action, legal, perform
 from .basic import MELEE, RANGED  # registers the basic attacks
 from .cast import Cast
 from .components import (
+    ActionPoints,
     Budget,
     Build,
     Companion,
@@ -23,6 +24,7 @@ from .components import (
     Mods,
     Movement,
     Position,
+    PowerPoints,
     Powers,
     Side,
     Stats,
@@ -53,6 +55,7 @@ from .dsl import (
     Summon,
     Target,
     UpTo,
+    Wall,
     candidates,
     declared,
     get,
@@ -63,6 +66,7 @@ from .dsl import (
 from .durations import Effect, Effects, When
 from .ecs import World
 from .events import (
+    ActionPointSpent,
     ActionSpent,
     AdjacencyGained,
     AdjacencyLost,
@@ -81,6 +85,7 @@ from .events import (
     EffectExpired,
     EnterSquare,
     Event,
+    Fell,
     ForcedMove,
     Healed,
     Hit,
@@ -98,6 +103,7 @@ from .events import (
     RoundEnd,
     RoundStart,
     SavingThrow,
+    SkillCheck,
     Summoned,
     SurgeSpent,
     TempHP,
@@ -118,6 +124,7 @@ from .triggers import (
     about_my_companion,
     ally_within,
     both,
+    by_action_point,
     by_charge,
     by_keyword,
     by_me,

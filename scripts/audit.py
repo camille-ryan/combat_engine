@@ -212,14 +212,25 @@ KNOWN_SILENT = {
     # every other creature. Driven by hand both ways -- immobilised (save
     # ends) it rolls and shakes it off, grabbed it clears the relation.
     "p4911": "needs to be held or slowed; holding the caster would break every movement row",
+    # Swaps an unexpended daily or utility for one of the same level out of
+    # the spellbook. The board deals its caster the row under test and the
+    # class features and nothing else, so the only same-level power it holds
+    # is this one, and using it expends it -- there is correctly nothing to
+    # trade. Driven by hand on a full level 6 wizard: p11035 goes back into
+    # the book, p10145 comes out of it, and the +1 power bonus applies to
+    # p10145 and to nothing else.
+    "p7377": "swaps a prepared power for one in the book; the board deals no second one",
 }
 
 
 DID_SOMETHING = {
     "DamageApplied", "ConditionApplied", "Healed", "TempHP", "Moved",
     "ForcedMove", "RelationSet", "ZoneCreated", "EffectExpired", "Note",
-    "Bloodied", "Dropped", "Died", "SavingThrow", "Summoned",
+    "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
 }  # fmt: skip
+# `SkillCheck` is here for the same reason `SavingThrow` is: a row whose
+# printed content is "make a DC 25 check" has done the whole of what it
+# says by rolling one, and failing is an outcome rather than a no-op.
 
 #: An effect applied is also doing something, but it only shows in the log
 #: when it *ends*, so the live effect table is checked too.
@@ -454,6 +465,18 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     if lined_up:
         setup.target = lined_up[0]
         setup.mark(on=lined_up[0], until=When.ENCOUNTER)
+
+    # And one of them rattled, because three rogue rows target "an enemy
+    # that is rattled" and the keyword only landed today -- so the rows are
+    # correct and had nothing on the board to aim at.
+    if lined_up:
+        # The *penalty*, not the keyword. `c.rattling` makes your attacks
+        # rattling; `c.rattled` asks whether a creature is suffering one,
+        # which `c.suffering` matches by the hold's label.
+        setup.target = lined_up[0]
+        setup.penalty("attack", 2, on=lined_up[0], until=When.ENCOUNTER)
+        rattle = setup.effect("rattled", until=When.ENCOUNTER, on=lined_up[0])
+        del rattle
 
     # A zone, for the rows that target one. "One conjuration or zone" had
     # nothing to aim at.

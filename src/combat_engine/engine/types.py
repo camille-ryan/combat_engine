@@ -72,6 +72,11 @@ class Keyword(StrEnum):
     CHARM = "charm"
     FEAR = "fear"
     RELIABLE = "reliable"
+    # Read in `Cast.damage`: a rattling power that deals damage leaves the
+    # target at -2 to attack rolls until the end of the attacker's next
+    # turn. `c.rattling` hands the word to a creature's attacks and
+    # `c.rattled` asks it back, which is the whole of what the keyword is.
+    RATTLING = "rattling"
     STANCE = "stance"
     CONJURATION = "conjuration"
     SUMMONING = "summoning"

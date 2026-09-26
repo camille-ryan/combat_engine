@@ -25,6 +25,8 @@
   "EffectApplied(source=6, target=6, duration='end of encounter', label='m241a1')",
   "EffectApplied(source=6, target=6, duration='end of encounter', label='m241a1 mended')",
   "PowerUsed(actor=4, power='cf:wizard-rituals', targets=[])",
+  "PowerUsed(actor=4, power='cf:wizard-spellbook', targets=[])",
+  "Note(text='4 prepares p10141')",
   "PowerUsed(actor=3, power='cf:rogue-advantage', targets=[])",
   "RelationSet(kind_=<Relation.GRANTS_CA_TO: 'grants_ca_to'>, source=1, target=3)",
   "EffectApplied(source=3, target=1, duration=\"start of target's next turn\", label='cf:rogue-advantage advantage')",

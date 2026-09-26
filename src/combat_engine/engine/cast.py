@@ -54,6 +54,7 @@ from .types import (
 )
 
 if TYPE_CHECKING:
+    from .components import Weapon
     from .dsl import Damage
     from .ecs import World
 
@@ -130,15 +131,22 @@ class Cast:
         """Point the attack you are interrupting at somebody else.
 
         "The triggering attack targets a creature adjacent to you instead"
-        is an interrupt that moves the blow rather than stopping it. Only
-        works before the roll -- on `AttackDeclared` -- because after that
-        there is a result and moving it would mean re-rolling.
+        is an interrupt that moves the blow rather than stopping it. On an
+        `AttackDeclared` that is all there is to do. On a `Hit` -- "the
+        triggering attack hits you instead of the ally" -- the roll has
+        already happened and is *not* made again: the live result is moved
+        with the event, and `c.attack` reads its target back before the body
+        that rolled deals its damage. Moving the event alone moved the
+        announcement and left the damage on the creature that was spared.
         """
         ev = self.trigger
         if ev is None or not hasattr(ev, "target"):
             return False
         if to is not None:
             ev.target = to
+            result = getattr(ev, "result", None)
+            if result is not None:
+                result.target = to
         if by is not None:
             ev.attacker = by
         return True
@@ -364,7 +372,8 @@ class Cast:
         return self.world.relations.holds(Relation.MARKED_BY, self.me if by is None else by, who)
 
     def save(
-        self, *, on: int | None = None, bonus: int = 0, against: str = ""
+        self, *, on: int | None = None, bonus: int = 0, against: str = "",
+        bare: bool = False,
     ) -> bool:
         """Roll a saving throw now against one save-ends effect.
 
@@ -388,6 +397,23 @@ class Cast:
         who = self._who(on) or self.me
         if who is None:
             return False
+        if bare:
+            # A saving throw against nothing in particular. 4e has a few --
+            # "the creature can attempt a saving throw to avoid falling
+            # farther" is one -- and this used to find no save-ends effect
+            # and return False without rolling, so the row could never
+            # succeed and looked like a rule that never applies.
+            from .events import SavingThrow
+
+            natural = self.world.rng.roll("1d20").total
+            plus = bonus + self.total("save", who)
+            ev = self.world.bus.emit(
+                SavingThrow(
+                    actor=who, against=against or self.ref, natural=natural,
+                    bonus=plus, saved=natural + plus >= 10,
+                )
+            )
+            return ev.saved
         for effect in self.world.effects.of(who):
             if against == "ongoing" and effect.ongoing is None:
                 continue
@@ -600,7 +626,7 @@ class Cast:
                 ranged = p is not None and Keyword.RANGED in p.keywords
             weapon = (gear.ranged if ranged and gear.ranged else gear.main)
             if weapon is not None:
-                bonus += weapon.proficiency
+                bonus += weapon.proficiency + weapon.enhancement
         return bonus
 
     @property
@@ -736,6 +762,14 @@ class Cast:
         line = p.attack_of(self.branch) if p else None
         if line is None:
             raise ValueError(f"{self.ref} declared no attack line; call c.attack(...)")
+        if line.by and from_ is None:
+            # "Beast's attack bonus" is the beast's swing: `bonus_for` already
+            # rolls its numbers, and the blow has to come from where it is
+            # standing too, or reach, cover and flanking are all the owner's.
+            from .dsl import roller
+
+            elsewhere = roller(self.world, self.me, line.by)
+            from_ = elsewhere if elsewhere != self.me else None
         return self.attack(
             line.bonus_for(self.world, self.me, self.ref, self.branch) + plus,
             line.vs,
@@ -996,10 +1030,14 @@ class Cast:
             amount = _max_of(dice) + bonus
         else:
             amount = self._roll_damage(dice) + bonus if dice else bonus
-        return deal_damage(
+        amount += self._enhancement()
+        dealt = deal_damage(
             self.world, self.me, who, amount, dtype, detail or self.ref,
             opportunity=self.opportunity, charge=self.charge,
         )
+        if dealt:
+            self._rattle(who)
+        return dealt
 
     def half_damage(
         self,
@@ -1014,10 +1052,15 @@ class Cast:
         if who is None:
             return 0
         amount = (self._roll_damage(dice) + bonus) // 2 if dice else bonus // 2
-        return deal_damage(
+        dealt = deal_damage(
             self.world, self.me, who, amount, dtype, f"{self.ref} (half)",
             opportunity=self.opportunity, charge=self.charge,
         )
+        # "Miss: half damage" still deals damage, and the rattling keyword
+        # asks nothing about hitting.
+        if dealt:
+            self._rattle(who)
+        return dealt
 
     def flat(self, amount: int, *, dtype: DamageType = DamageType.UNTYPED,
              on: int | None = None) -> int:
@@ -1311,12 +1354,17 @@ class Cast:
         away = max(sorted(paths), key=lambda sq: _distance(sq, self.here))
         return walk(self.world, who, paths[away])
 
-    def reroll_attack(self, *, keep: str = "new") -> bool:
+    def reroll_attack(self, *, keep: str = "new", bonus: int = 0) -> bool:
         """Make the triggering attack roll again. `keep` is new, best or worst.
 
         Reads the attack off `c.trigger`, so it only means anything inside a
         row the dispatcher offered. Rerolling is not cancelling: the attack
         still happens, with a different number.
+
+        `bonus` is for "reroll it with a bonus equal to your Strength
+        modifier" -- the reroll and the bonus are one printed clause, and a
+        `c.bonus` laid afterwards is read by the next attack rather than by
+        this one.
         """
         ev = self.trigger
         result = getattr(ev, "result", None) if ev is not None else None
@@ -1328,7 +1376,7 @@ class Cast:
         face = {"new": fresh, "best": max(old, fresh), "worst": min(old, fresh)}[keep]
         shift_ = face - old
         result.natural = face
-        result.total += shift_
+        result.total += shift_ + bonus
         result.critical = face == 20
         result.hit = face == 20 or (face != 1 and result.total >= result.target_defence)
         return True
@@ -2249,6 +2297,18 @@ class Cast:
             DamageRolled, top_up, until=until, window=Window.BEFORE, on=who,
             label=f"{self.ref} maximum damage",
         )
+        # And the same thing again as a modifier, because the listener above
+        # can only work for a **monster**: it reads the rolling row's header
+        # damage line, and a character's damage is rolled in the body where
+        # the header has no line to read. So every character row printing
+        # "the attack deals maximum damage" was silently inert. The modifier
+        # is read inside `_roll_damage`, which is the one place the dice are
+        # actually in hand, and is spent there.
+        if held is not None:
+            mods = self.world.get(who, Mods) or self.world.add(who, Mods())
+            mod = Mod("maximise", 1, kind="untyped", label=f"{self.ref} maximum damage")
+            mods.items.append(mod)
+            held.mods.append((who, mod))
         if critical and held is not None:
             # "Treated as a critical hit" is more than maximum damage -- it
             # pays every crit rider too -- so it is set on the live result
@@ -2570,6 +2630,7 @@ class Cast:
         *,
         kind: str = "spirit",
         speed: int = 6,
+        damage: str = "",
     ) -> int:
         """Put your companion on the board, moving the one you have if any.
 
@@ -2632,7 +2693,9 @@ class Cast:
                 # `bonus_for` rather than anywhere near the companion.
                 replace(self.world.need(self.me, Stats)),
             )
-        self.world.add(made, Companion(owner=self.me, ref=ref, kind=kind))
+        self.world.add(
+            made, Companion(owner=self.me, ref=ref, kind=kind, damage=damage)
+        )
         return made
 
     def summon_inline(self, spec: Any, at: Square | None = None) -> int:
@@ -3557,12 +3620,38 @@ class Cast:
         lower roll" and its opposite -- both properties of the roller rather
         than of the blow, which is why they are read here and not passed in.
         The worse of the two wins when a creature somehow carries both."""
+        # Maximum comes first, and is read **here** rather than topped up on
+        # `DamageRolled`. The listener version looked the dice up from the
+        # rolling row's *header* damage line -- which only a monster has,
+        # because a character's damage is rolled in the body -- so
+        # "the attack deals maximum damage" was silently inert for every
+        # character row that prints it. Two agents flagged it and neither
+        # fixed it; the dice are in hand at this point and nowhere else.
+        if self._take_maximum():
+            return _max_of(dice)
         first = self.world.rng.roll(dice).total
         if self.total("damage_twice_lower") > 0:
             return min(first, self.world.rng.roll(dice).total)
         if self._rolls_twice_higher():
             return max(first, self.world.rng.roll(dice).total)
         return first
+
+    def _take_maximum(self) -> bool:
+        """Is a "deals maximum damage" hold waiting, and spend it if so.
+
+        One-shot, and removed here rather than left to expire: the printed
+        line is "the *attack* deals maximum damage", so a row whose splash
+        is a flat 3 to everyone beside the victim must come out [23, 3, 3,
+        3] and not [23, 23, 23, 23].
+        """
+        mods = self.world.get(self.me, Mods)
+        if mods is None:
+            return False
+        for m in mods.items:
+            if m.what == "maximise":
+                mods.items.remove(m)
+                return True
+        return False
 
     # -- the action economy --------------------------------------------------
 
@@ -3841,6 +3930,866 @@ class Cast:
             Note(text=f"{who} regains {count} healing surge(s): {health.surges} left")
         )
         return health.surges
+
+    # -- borrowing somebody else's attack ------------------------------------
+
+    def knows(self, ref: str) -> int | None:
+        """Who on the board has that row, if anybody.
+
+        For the rows that choose a power belonging to a creature they can
+        see and then do something with it. `c.grant_row` goes the other way
+        and there was no way to ask the question at all.
+        """
+        from .components import Powers
+
+        for eid in creatures(self.world):
+            known = self.world.get(eid, Powers)
+            if known is not None and ref in known.all:
+                return eid
+        return None
+
+    def borrowed_rows(self, of: int, *, at_will: bool = True, melee: bool = True) -> list[str]:
+        """That creature's attack rows, for a power that copies one.
+
+        Filtered the way the printed lines filter: "one at-will melee attack
+        power belonging to an enemy that it can see". A standard action, so
+        a class feature that happens to carry an attack line -- a trait, an
+        opportunity rider -- is not offered as a power to copy; one of those
+        chosen is a row whose body does nothing outside its own trigger.
+        """
+        from .components import Powers
+        from .dsl import get
+        from .types import Usage
+
+        known = self.world.get(of, Powers)
+        out: list[str] = []
+        for ref in known.all if known else ():
+            p = get(ref)
+            if p is None or p.attack_of(0) is None:
+                continue
+            if p.action is not ActionType.STANDARD:
+                continue
+            if at_will and p.usage is not Usage.AT_WILL:
+                continue
+            kind = p.reach_of(0).kind
+            if melee and kind != "melee":
+                continue
+            if not melee and kind not in ("ranged", "area_burst"):
+                continue
+            out.append(ref)
+        return out
+
+    def as_though_hit_by(
+        self, ref: str, *, on: int | None = None, by: int | None = None
+    ) -> bool:
+        """"The target is subject to effects as though hit by the chosen attack."
+
+        Five rows roll an attack of their own and then pay out a power they
+        have copied off somebody else. `c.grant_row` lends the whole row --
+        its own attack line and its own numbers -- and `use` rolls it again,
+        so neither of them says this sentence.
+
+        The borrowed body runs with its **owner** as the caster, which is
+        how the printed line gets "the ability score modifier of the
+        creature from whom the power was taken", and its attack is forced to
+        land rather than rolled a second time. The cost of that judgement is
+        that the blow is credited to the owner rather than to whoever
+        borrowed it; the alternative loses the owner's weapon and modifier,
+        which is the only number the line names. `by` says who owns it when
+        nobody on the board does.
+        """
+        from .dsl import get
+        from .events import AttackRolled
+
+        who = self._who(on)
+        p = get(ref)
+        owner = by if by is not None else self.knows(ref)
+        if who is None or p is None or owner is None:
+            return False
+        borrowed = Cast(
+            world=self.world, me=owner, ref=ref, targets=[who], target=who
+        )
+
+        def lands(ev: AttackRolled) -> None:
+            result = getattr(ev, "result", None)
+            if result is not None and ev.attacker == owner and ev.power == ref:
+                result.forced = True
+
+        sub = self.world.bus.on(AttackRolled, lands)
+        try:
+            p.body(borrowed)
+        finally:
+            self.world.bus.off(sub)
+        return True
+
+    # -- the rattling keyword ------------------------------------------------
+
+    def _rattle(self, who: int) -> None:
+        """Pay out `Keyword.RATTLING` on a blow that has just dealt damage.
+
+        Here rather than in `resolve` because `c.damage` is where every
+        power's damage goes through and the keyword is a property of the
+        power, which is only known on this side. The whole of the word is
+        -2 to the target's attack rolls until the end of your next turn.
+        """
+        p = self._declared()
+        rattles = bool(p and Keyword.RATTLING in p.keywords)
+        if not rattles:
+            rattles = bool(self.total("rattling")) or (
+                bool(self.total("rattling melee")) and not self.ranged
+            )
+        if not rattles:
+            return
+        self.penalty("attack", 2, on=who, until=When.EONT)
+        self.effect("rattled", on=who, until=When.EONT)
+
+    def rattling(
+        self, *, until: When = When.ENCOUNTER, on: int | None = None, melee: bool = False
+    ) -> Effect | None:
+        """"Your attacks gain the rattling keyword."
+
+        The keyword is a property of a *power*, and these rows hand it to a
+        creature instead, so it is held as a modifier that `c.damage` reads
+        beside the header. `melee` is the narrower printing -- "your melee
+        attacks" -- which is the only difference between the two rows that
+        say it. Defaults to the caster; every printed one is about its owner.
+        """
+        return self.bonus(
+            "rattling melee" if melee else "rattling", 1,
+            on=on if on is not None else self.me, until=until, kind="untyped",
+        )
+
+    def rattled(self, on: int | None = None) -> bool:
+        """Is that creature taking the penalty from one of my rattling attacks?"""
+        who = self._who(on)
+        return who is not None and who in self.suffering("rattled")
+
+    def sneak_damage(self) -> str:
+        """The dice the rogue's once-a-round rider pays out, as an expression.
+
+        The twin of `c.quarry_damage`, and for the same reason: the number
+        lives in a closure inside `cf:rogue-bonus` and nothing could read it
+        back, so "extra damage equal to your Sneak Attack damage" -- a line
+        one row hands to somebody else -- had no number to name. Kept as one
+        expression beside that feature's so the two cannot disagree; the
+        modifier half is `c.total("cf:rogue-bonus damage")`, which is what
+        `extra_damage` adds on top.
+        """
+        return "2d6"
+
+    # -- moving a zone, and jumping ------------------------------------------
+
+    def my_zones(self) -> list[int]:
+        """Every live zone and conjuration this caster owns. Auras included."""
+        from .zones import Zone as _Zone
+
+        return sorted(
+            eid for eid, zone in self.world.each(_Zone) if zone.owner == self.me
+        )
+
+    def move_zone(self, zone: int, squares_: int, *, to: Square | None = None) -> bool:
+        """Move a zone or a conjuration, keeping its shape.
+
+        "As a move action you can move the zone 5 squares" is printed on
+        every second zone in the game, and `Zones` had no mover at all -- so
+        the rider was dropped from five written rows and the one row whose
+        whole Effect is that sentence could not be written. An aura moves
+        with its owner and is refused here, which is the printed rule.
+        """
+        from .zones import Zone as _Zone
+
+        z = self.world.get(zone, _Zone)
+        if z is None or z.aura is not None or not z.squares or squares_ <= 0:
+            return False
+        here = min(z.squares)
+        if to is None:
+            to = self.world.decide(
+                self.me, "move", sorted(spread({here}, squares_)),
+                f"{self.ref}: move a zone {squares_}",
+            )
+        dx, dy = to[0] - here[0], to[1] - here[1]
+        if not dx and not dy:
+            return False
+        z.squares = frozenset((x + dx, y + dy) for x, y in z.squares)
+        spot = self.world.get(zone, Position)
+        if spot is not None:
+            spot.square = (spot.square[0] + dx, spot.square[1] + dy)
+        self.world.zones.refresh()
+        self.note(f"{self.ref}: zone {zone} moves to {min(z.squares)}")
+        return True
+
+    def jump(self, squares_: int, *, on: int | None = None) -> int:
+        """A jump: ground crossed rather than walked over.
+
+        "You can jump a number of squares equal to your Wisdom modifier, and
+        the distance does not count toward your movement." Neither `c.move`
+        nor `c.shift` says it -- a jump clears what is in the way -- so it is
+        a move with the rough going and the bodies ignored for its length,
+        paid for by the power rather than out of the turn.
+
+        Defaults to the caster, like the movement methods beside it.
+        """
+        who = self.me if on is None else on
+        if squares_ <= 0 or self.world.get(who, Position) is None:
+            return 0
+        over = self.phasing(until=When.EOT, on=who)
+        rough = self.ignores_difficult(on=who, until=When.EOT)
+        try:
+            return self.move(squares_, who=who)
+        finally:
+            for held in (over, rough):
+                if held is not None:
+                    self.world.effects.end(held, "the jump ended")
+
+    # -- a blow that lands twice ---------------------------------------------
+
+    def also_hits(self, *, on: int | None = None, ev: Any = None) -> bool:
+        """"The triggering attack also hits the target."
+
+        Not `c.redirect`, which moves the one blow, and not `c.autohit`,
+        which forces the one being answered: this copies a blow that has
+        already landed onto a second creature. The damage has not been
+        rolled when the `Hit` is announced, so the copy is taken off the
+        next roll that attack makes and dealt again, of the same type --
+        re-running the row would be a different attack with a different die.
+        """
+        from .events import DamageRolled
+
+        who = self._who(on)
+        ev = ev if ev is not None else self.trigger
+        attacker = getattr(ev, "attacker", None)
+        power = getattr(ev, "power", "")
+        if who is None or attacker is None:
+            return False
+        done: list[bool] = []
+
+        def echo(rolled: DamageRolled) -> None:
+            if done or rolled.source != attacker or rolled.detail != power:
+                return
+            done.append(True)
+            self.flat(rolled.amount, dtype=rolled.dtype, on=who)
+
+        self.watch(
+            DamageRolled, echo, until=When.EOT, on=self.me,
+            label=f"{self.ref} also hits",
+        )
+        return True
+
+    # -- skill checks, and the three resources a character spends ------------
+
+    def check(self, skill: str, dc: int = 0, *, who: int | None = None, bonus: int = 0):  # noqa: ANN201
+        """Roll a skill check. Truthy when it beat the DC.
+
+        `who` is who rolls, and it defaults to the **caster**: it is your
+        check. One printed line hands the roll to somebody else -- "any
+        character can make a DC 25 History check" -- and that is what `who`
+        is for; it is not `on=`, because nothing is being done *to* anybody.
+
+        The result carries `.total` as well, for the one shape that halves
+        the number instead of comparing it. A `dc` of 0 is a check with
+        nothing to beat and always succeeds.
+
+        Training is not modelled -- see `engine/skills.py` -- so this is the
+        ability modifier plus half level plus whatever modifiers stand.
+        """
+        from .skills import check as _check
+
+        roller = self.me if who is None else who
+        return _check(self.world, roller, skill, dc, bonus=bonus)
+
+    def passive(self, skill: str, *, of: int | None = None) -> int:
+        """10 plus a creature's check modifier -- what it notices unbidden.
+
+        Defaults to the **caster**. A row going unseen needs a number to
+        beat and the alternative was inventing a DC.
+        """
+        from .skills import passive as _passive
+
+        return _passive(self.world, self.me if of is None else of, skill)
+
+    # -- action points -------------------------------------------------------
+
+    def _points(self, who: int) -> Any:
+        from .components import ActionPoints
+
+        return self.world.get(who, ActionPoints) or self.world.add(who, ActionPoints())
+
+    def action_points(self, *, of: int | None = None) -> int:
+        """How many action points this creature could spend right now."""
+        return self._points(self.me if of is None else of).available
+
+    def action_point(
+        self, cost: ActionType = ActionType.STANDARD, *, who: int | None = None
+    ) -> bool:
+        """Spend an action point for an extra action. Yours, so it defaults
+        to the caster.
+
+        A granted point -- one that does not count against the encounter
+        limit -- is spent first, because that is the only order in which
+        both limits can be honoured. The round is stamped so that
+        `resolve.attack` can say an attack was bought with it.
+        """
+        from .events import ActionPointSpent
+
+        spender = self.me if who is None else who
+        pool = self._points(spender)
+        free = pool.free > 0
+        if not free and (pool.points <= 0 or pool.spent >= pool.limit):
+            return False
+        if free:
+            pool.free -= 1
+        else:
+            pool.points -= 1
+            pool.spent += 1
+        pool.spent_round = self.world.round
+        self.extra_action(cost, on=spender)
+        self.world.bus.emit(ActionPointSpent(actor=spender, cost=cost, free=free))
+        return True
+
+    def grant_action_point(self, count: int = 1, *, on: int | None = None) -> int:
+        """"The target gains 1 action point", outside the encounter's limit.
+
+        Theirs, so it follows `c.target`. Granted points are cleared by
+        `ActionPoints.refresh`, which is the printed "if the target does not
+        spend it before the end of the encounter, it is lost".
+        """
+        who = self._who(on)
+        if who is None or count <= 0:
+            return 0
+        pool = self._points(who)
+        pool.free += count
+        self.world.bus.emit(
+            Note(text=f"{who} gains {count} action point(s) outside the limit")
+        )
+        return pool.free
+
+    # -- power points --------------------------------------------------------
+
+    def _pool(self, who: int) -> Any:
+        from .components import PowerPoints
+
+        return self.world.get(who, PowerPoints) or self.world.add(who, PowerPoints())
+
+    def points(self, *, of: int | None = None) -> int:
+        """How many power points this creature has left."""
+        return self._pool(self.me if of is None else of).points
+
+    def spend_points(self, n: int, *, who: int | None = None) -> int:
+        """Spend power points to augment this row. Returns how many went.
+
+        Yours, so it defaults to the caster. The number is recorded against
+        the row's own ref, which is what "temporary hit points equal to the
+        power points you spent to augment that power" reads back: the spend
+        and the hit are separate moments and nothing else joins them.
+        """
+        spender = self.me if who is None else who
+        pool = self._pool(spender)
+        gone = pool.spend(n)
+        if gone:
+            pool.augmented[self.ref] = pool.augmented.get(self.ref, 0) + gone
+            self.world.bus.emit(
+                Note(text=f"{spender} spends {gone} power point(s) on {self.ref}")
+            )
+        return gone
+
+    def points_spent(self, ref: str, *, of: int | None = None) -> int:
+        """How many points augmented that row this encounter."""
+        return self._pool(self.me if of is None else of).augmented.get(ref, 0)
+
+    def transfer_points(self, n: int, *, on: int | None = None) -> int:
+        """"You transfer 1 or 2 power points to the target."
+
+        Theirs, so it follows `c.target`. The receiver gets a pool if it
+        had none: the printed line does not ask whether the ally is psionic,
+        and a transferred point is over the receiver's own maximum, which
+        `refresh` takes back at the end of the fight.
+        """
+        who = self._who(on)
+        if who is None or who == self.me or n <= 0:
+            return 0
+        mine = self._pool(self.me)
+        gone = mine.spend(n)
+        if not gone:
+            return 0
+        theirs = self._pool(who)
+        theirs.points += gone
+        self.world.bus.emit(
+            Note(text=f"{self.me} transfers {gone} power point(s) to {who}")
+        )
+        return gone
+
+    # -- the spellbook -------------------------------------------------------
+
+    def spellbook(self, *, of: int | None = None) -> list[str]:
+        """The rows this creature owns and has not prepared."""
+        from .components import Powers
+
+        known = self.world.get(self.me if of is None else of, Powers)
+        return list(known.owned) if known is not None else []
+
+    def prepare(self, ref: str, *, instead_of: str = "", on: int | None = None) -> bool:
+        """Prepare a row out of the spellbook, putting one back if it swaps.
+
+        Yours, so it defaults to the **caster**: it is your book. Returns
+        False when the row is not in the book, which is what a printed
+        "another power of the same level that is in your spellbook" means
+        when there is not one.
+        """
+        from .components import Powers
+
+        who = self.me if on is None else on
+        known = self.world.get(who, Powers)
+        if known is None or not known.prepare(ref, instead_of=instead_of):
+            return False
+        self.world.bus.emit(
+            Note(text=f"{who} prepares {ref}" + (f" instead of {instead_of}" if instead_of else ""))
+        )
+        return True
+
+    # -- a companion that rolls its own line ---------------------------------
+
+    def b(self, count: int = 1) -> str:
+        """`count`[B]: the **companion's** damage dice, that many times.
+
+        `c.w` for a beast. Read in the order the numbers can actually come
+        from: the die the companion was called with, then a `summon=` block
+        on this row's header, then the same `d4` `c.w` gives a creature with
+        nothing in its hands. The last is the honest answer today -- the
+        printed die belongs to a species the engine does not model, and no
+        card in this batch states one -- and it is a fallback rather than an
+        invention: give the beast a die and every row here rolls it.
+        """
+        from .components import Companion
+
+        pet = self.companion()
+        die = ""
+        if pet is not None:
+            mine = self.world.get(pet, Companion)
+            die = mine.damage if mine is not None else ""
+        if not die:
+            spec = getattr(self._declared(), "summon", None)
+            if spec is not None and spec.damage is not None:
+                die = spec.damage.dice
+        if not die:
+            return f"{count}d4"
+        n, _, faces = die.partition("d")
+        return f"{int(n or 1) * count}d{faces}"
+
+    def b_mod(self, a: Ability) -> int:
+        """"Beast's Strength modifier" -- the companion's own, not its owner's.
+
+        Falls back to the caster's, because a ref-less companion is built
+        with a copy of its owner's scores and the two are then the same
+        number; the point is that the row asks the right creature.
+        """
+        from .components import Stats
+
+        pet = self.companion()
+        stats = self.world.get(pet, Stats) if pet is not None else None
+        return stats.mod(a) if stats is not None else self.stats.mod(a)
+
+    # -- what a creature is holding -------------------------------------------
+
+    def held(self, *, on: int | None = None, what: str = "") -> list[Weapon]:
+        """What that creature has in hand. `what` is `"magic"` or a group."""
+        from .query import holding
+
+        who = self._who(on)
+        return holding(self.world, who, what) if who is not None else []
+
+    def _enhancement(self) -> int:
+        """What a magic weapon adds to the damage it deals.
+
+        Only to a **weapon** power, the same question `_attack_bonus` asks of
+        proficiency. Zero for everything `chargen` hands out, so nothing in
+        the tree moves until something puts an enhancement on a weapon.
+        """
+        p = self._declared()
+        if p is None or Keyword.WEAPON not in p.keywords:
+            return 0
+        gear = self.world.get(self.me, Gear)
+        if gear is None:
+            return 0
+        weapon = gear.ranged if self.ranged and gear.ranged else gear.main
+        return weapon.enhancement if weapon is not None else 0
+
+    def struck_with(self, ev: Any = None) -> Weapon | None:
+        """The weapon or implement the triggering attack was made with."""
+        ev = ev if ev is not None else self.trigger
+        attacker = getattr(ev, "attacker", None) if ev is not None else None
+        if attacker is None:
+            return None
+        magic = self.held(on=attacker, what="magic")
+        if magic:
+            return magic[0]
+        gear = self.world.get(attacker, Gear)
+        return gear.main if gear is not None else None
+
+    def decay(
+        self,
+        *,
+        on: int | None = None,
+        amount: int = 1,
+        until: When = When.ENCOUNTER,
+        weapon: Weapon | None = None,
+    ) -> Effect | None:
+        """Take an item's enhancement bonus down, to a minimum of 0.
+
+        An effect an item carries: the number goes back up when the hold
+        ends, which is the printed "the enhancement bonus returns to normal
+        at the end of the encounter". Hung on the creature holding it, so
+        the item and the hold die together if the creature drops it.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        arm = weapon or next(iter(self.held(on=who, what="magic")), None)
+        if arm is None:
+            return None
+        gone = min(amount, arm.enhancement)
+        if gone <= 0:
+            return None
+        arm.enhancement -= gone
+
+        def restore() -> None:
+            arm.enhancement += gone
+
+        self.world.bus.emit(
+            Note(text=f"{arm.ref} is decaying: enhancement {arm.enhancement}")
+        )
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} decays {arm.ref}", on_end=[restore]
+        )
+
+    def destroy(self, *, on: int | None = None, weapon: Weapon | None = None) -> bool:
+        """Destroy an item a creature is carrying. It does not come back."""
+        who = self._who(on)
+        gear = self.world.get(who, Gear) if who is not None else None
+        if gear is None:
+            return False
+        arm = weapon or next(iter(self.held(on=who, what="magic")), None)
+        if arm is None or arm not in gear.weapons:
+            return False
+        gear.weapons.remove(arm)
+        gear.stowed.discard(arm.ref)
+        self.world.bus.emit(Note(text=f"{arm.ref} is destroyed"))
+        return True
+
+    def disarm(self, *, on: int | None = None, weapon: Weapon | None = None) -> bool:
+        """Knock a weapon out of a hand. It lands in that creature's square.
+
+        Not stowed: a stowed weapon is on the belt and can be drawn again for
+        a minor action, and the printed line puts this one on the floor.
+        """
+        from .components import Item, Position
+
+        who = self._who(on)
+        gear = self.world.get(who, Gear) if who is not None else None
+        if gear is None:
+            return False
+        arm = weapon or gear.main
+        if arm is None or arm not in gear.weapons:
+            return False
+        gear.weapons.remove(arm)
+        gear.stowed.discard(arm.ref)
+        here = self.world.get(who, Position)
+        parts: list[Any] = [Item(ref=arm.ref, owner=0, by=self.me, uses=0, weapon=arm)]
+        if here is not None:
+            parts.append(Position(square=here.square))
+        self.world.spawn(*parts)
+        self.world.bus.emit(Note(text=f"{who} drops {arm.ref}"))
+        return True
+
+    def give(
+        self,
+        ref: str = "",
+        fn: Callable[[int], None] | None = None,
+        *,
+        on: int | None = None,
+        uses: int = 1,
+        cost: ActionType = ActionType.MINOR,
+    ) -> int:
+        """Put a one-shot in somebody's hands for them to spend later.
+
+        The seed, the scroll, the four berries: the creature that spends it
+        is not the creature that made it, and the payout is printed on the
+        maker's row with the maker's numbers. `c.grant_row` cannot say that
+        -- it needs a row that already exists and it has no charges -- so
+        `fn` is the payout, handed whoever spent it, and it closes over this
+        caster. `actions.legal` offers spending it to whoever is carrying it.
+        """
+        from .components import Item
+
+        who = self._who(on)
+        if who is None:
+            return 0
+        label = ref or self.ref
+        if fn is None and ref:
+            def fn(spender: int, _ref: str = ref) -> None:
+                from .dsl import use
+
+                use(self.world, spender, _ref, targets=[spender], spend=False)
+
+        item = self.world.spawn(
+            Item(
+                ref=label, owner=who, by=self.me, uses=uses, spend=fn, cost=cost.value
+            )
+        )
+        self.world.bus.emit(Note(text=f"{who} carries {label} ({uses} left)"))
+        return item
+
+    def carrying(self, ref: str = "", *, on: int | None = None) -> list[int]:
+        """The items that creature is holding, by entity id."""
+        from .components import Item
+
+        who = self._who(on)
+        return [
+            eid
+            for eid, item in sorted(self.world.each(Item))
+            if item.owner == who and item.uses > 0 and (not ref or item.ref == ref)
+        ]
+
+    # -- a wall -----------------------------------------------------------
+
+    def wall(
+        self,
+        size: int = 0,
+        *,
+        at: Square | None = None,
+        hp: int = 0,
+        blocks_sight: bool = False,
+        solid: bool = True,
+        difficult: bool | str = False,
+        until: When = When.EONT,
+        sustain: ActionType | None = None,
+        label: str = "",
+    ) -> int:
+        """Raise a barrier: `size` contiguous squares that stop a creature.
+
+        Three things at once, and a zone is only one of them. The squares go
+        into `Grid.blocking`, which is what stops movement and line of
+        effect; a `Zone` is laid over the same squares, which is what a
+        printed "while within the wall" clause reads; and with `hp` a
+        `Barrier` entity stands there too, so the wall can be attacked. All
+        three come down together, and only the squares this row added are
+        taken back out, so a wall raised across existing rock leaves it.
+
+        Returns the zone, because that is what the rest of `Cast` takes --
+        `c.grants_in`, `c.burns`, `c.cover_in`, `c.resist_in`.
+        """
+        from .components import Barrier, Defenses, Ident, Position, Side
+        from .events import Dropped, ZoneEnded
+        from .query import team as side_of
+
+        p = self._declared()
+        reach = p.reach_of(self.branch) if p is not None else None
+        size = size or (reach.size if reach is not None else 5)
+        within = reach.within if reach is not None else 10
+        grid = self.world.grid
+        # Offered nearest-the-trouble first rather than in raster order: a
+        # decider that takes the head of the list put every wall in the
+        # bottom-left corner of the board, where it blocked nothing.
+        foes = [sq for foe in self.enemies() for sq in squares(self.world, foe)]
+        spots = sorted(
+            (
+                sq
+                for sq in spread({self.here}, within)
+                if grid.passable(sq) and grid.occupant(sq) is None and sq != self.here
+            ),
+            key=lambda sq: (
+                min((_distance(sq, f) for f in foes), default=0),
+                _distance(sq, self.here),
+                sq,
+            ),
+        )
+        anchor = at or (
+            self.choose(spots, f"{self.ref}: where the wall stands") if spots else None
+        )
+        if anchor is None:
+            return 0
+        # Laid across the line of sight to the anchor, which is the way a
+        # wall is meant to be used and the way `p16283` already lays one.
+        across, along = anchor[0] - self.here[0], anchor[1] - self.here[1]
+        step = (1, 0) if abs(along) >= abs(across) else (0, 1)
+        low = -(size // 2)
+        run = [(anchor[0] + step[0] * i, anchor[1] + step[1] * i)
+               for i in range(low, low + size)]
+        laid = [sq for sq in run if grid.passable(sq) and grid.occupant(sq) is None]
+        if not laid:
+            return 0
+        # `solid=False` is the wall you can get through -- one printed wall
+        # is water and says "a creature must swim to move through it". It
+        # still stands between an attacker and a target, which is what
+        # `blocks_sight` gives it.
+        if solid:
+            grid.blocking.update(laid)
+        zone = self.zone(
+            laid, label=label or self.ref, until=until,
+            blocks_sight=blocks_sight, difficult=difficult, sustain=sustain,
+        )
+        standing: list[int] = []
+        if hp:
+            barrier = self.world.spawn(
+                Position(square=min(laid), spans=frozenset(laid)),
+                Side(team=side_of(self.world, self.me) or Team.ALLY),
+                Health(hp=hp, max_hp=hp),
+                # "Attacks against it hit automatically", which is a defence
+                # of nothing rather than a special case in the attack.
+                Defenses(values=dict.fromkeys(Defense, 0), scale="none"),
+                Barrier(by=self.me, squares=frozenset(laid), zone=zone),
+                Ident(ref=f"{self.ref}:wall"),
+            )
+            standing.append(barrier)
+            self.world.bus.on(
+                Dropped,
+                lambda ev: self.world.zones.end(zone, "the wall is broken")
+                if ev.actor == barrier else None,
+                owner=barrier,
+            )
+
+        def demolish(ev: ZoneEnded) -> None:
+            if ev.zone != zone:
+                return
+            if solid:
+                grid.blocking.difference_update(laid)
+            for eid in standing:
+                self.world.despawn(eid)
+
+        # Hung on `ZoneEnded` rather than on the zone's effect: `Zones.end`
+        # clears `effect.on_end` before ending it, so a callback appended
+        # there is dropped whenever a zone is ended early -- and a wall
+        # knocked down by an attack is exactly that. The squares stayed
+        # blocking with nothing standing in them.
+        self.world.bus.on(ZoneEnded, demolish, owner=zone)
+        return zone
+
+    def barrier(self, zone: int) -> int | None:
+        """The attackable body of a wall, given the zone `c.wall` returned."""
+        from .components import Barrier
+
+        for eid, wall in sorted(self.world.each(Barrier)):
+            if wall.zone == zone:
+                return eid
+        return None
+
+    # -- up and down --------------------------------------------------------
+
+    def height(self, *, on: int | None = None) -> int:
+        """How far off the ground that creature is. Defaults to the caster."""
+        from .falling import height
+
+        return height(self.world, on if on is not None else self.me)
+
+    def rise(self, squares_: int, *, on: int | None = None) -> int:
+        """Go up, and stay there. Yours, so it defaults to the caster."""
+        from .falling import lift
+
+        return lift(self.world, on if on is not None else self.me, squares_)
+
+    def hover(
+        self,
+        squares_: int = 0,
+        *,
+        on: int | None = None,
+        until: When = When.EONT,
+        sustain: ActionType | None = None,
+    ) -> Effect | None:
+        """Go up and stay up. Yours, so it defaults to the caster.
+
+        Two things at once, and the second is what makes it work: the
+        creature is lifted, and it is *moving as* something airborne, which
+        is what keeps `falling.ground` from putting it straight back down on
+        its next step. When the hold ends it descends without taking falling
+        damage, which is the printed line on the one row that levitates.
+        """
+        from .components import Movement
+
+        who = on if on is not None else self.me
+        mv = self.world.get(who, Movement)
+        if mv is None:
+            return None
+        was = mv.using
+        if squares_:
+            self.rise(squares_, on=who)
+        mv.using = "hover"
+
+        def land() -> None:
+            mv.using = was
+            self.fall(on=who, safe=True)
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} aloft",
+            on_end=[land], sustain_cost=sustain,
+        )
+
+    def fall(self, squares_: int = 0, *, on: int | None = None, safe: bool = False) -> int:
+        """Come down, with everything that costs. Follows `c.target`.
+
+        `squares_` defaults to however high the creature is. `safe` is the
+        printed "you descend without taking falling damage", which announces
+        no `Fell` because nothing is going wrong.
+        """
+        from .falling import drop
+
+        who = self._who(on)
+        if who is None:
+            return 0
+        return drop(self.world, who, squares_, by=self.me, safe=safe)
+
+    def cushion(self, amount: int = 0) -> bool:
+        """Soften the fall being answered. With no number, all of it.
+
+        "The target takes no damage from the fall, and consequently does not
+        fall prone" is one sentence and both halves are this. A number is
+        the other printing -- "reduce the damage by 5 + half your level".
+        """
+        from .events import Fell
+
+        ev = self.trigger
+        if not isinstance(ev, Fell):
+            return False
+        if amount > 0:
+            ev.soften += amount
+        else:
+            ev.soften += 10 * max(1, ev.squares)
+            ev.prone = False
+        return True
+
+    def terraform(
+        self, square: Square | None = None, *, raise_: int = 0, sink: int = 0
+    ) -> bool:
+        """Push one square of ground up, or pull it down.
+
+        Raised with nobody on it, it is a pillar: blocking terrain, which is
+        the printed "the area below it is filled with solid rock". Raised
+        with somebody standing there, they ride up and are then that far off
+        the ground -- stepping off is a fall. Sunk, its floor is below the
+        rest of the board and walking in is a fall of the same depth.
+        """
+        from .falling import lift
+
+        sq = square or self.there or self.here
+        grid = self.world.grid
+        rider = grid.occupant(sq)
+        if rider is not None and self.may("shift clear of it", who=rider):
+            self.shift(1, who=rider)
+            rider = grid.occupant(sq)
+        if raise_:
+            grid.elevation[sq] = raise_
+            if rider is None:
+                grid.blocking.add(sq)
+            else:
+                lift(self.world, rider, raise_)
+        elif sink:
+            grid.elevation[sq] = -sink
+            if rider is not None:
+                self.fall(sink, on=rider)
+        else:
+            return False
+        self.world.bus.emit(
+            Note(text=f"{sq} is now at {grid.floor(sq)} squares")
+        )
+        return True
 
 
 def _max_of(dice: str | int) -> int:

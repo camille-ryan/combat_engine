@@ -57,6 +57,8 @@
   "EffectApplied(source=1, target=1, duration='end of encounter', label='fighter mark')",
   "EffectApplied(source=1, target=1, duration='end of encounter', label='fighter mark')",
   "PowerUsed(actor=4, power='cf:wizard-rituals', targets=[])",
+  "PowerUsed(actor=4, power='cf:wizard-spellbook', targets=[])",
+  "Note(text='4 prepares p10070')",
   "RoundStart(round=1)",
   "TurnStart(actor=3, round=1)",
   "ActionSpent(actor=3, cost=<ActionType.MOVE: 'move'>)",

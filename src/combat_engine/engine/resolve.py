@@ -101,6 +101,11 @@ def attack(
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
     result = AttackResult()
+    # Was this swing bought with an action point? Rides the same road
+    # `opportunity` and `charge` do -- in the attack context and on all four
+    # attack events -- because two printed rows are about exactly that
+    # attack and neither could be written while nothing said so.
+    bought = spent_action_point(world, attacker)
 
     def roll(declared: AttackDeclared) -> None:
         # Read back off the event, because an interrupt may have moved the
@@ -136,6 +141,7 @@ def attack(
             "advantage": ca,
             "opportunity": opportunity,
             "charge": charge,
+            "action_point": bought,
             # What shape the attack is, so "ranged attacks against this
             # target take +4" is a one-line gate rather than a registry
             # lookup duplicating `_is_ranged`.
@@ -227,6 +233,7 @@ def attack(
         # a creature could not react to being hit by one.
         rolled.opportunity = opportunity
         rolled.charge = charge
+        rolled.action_point = bought
         world.bus.emit(rolled)
 
         # The defence is read **again**, after the roll has been announced.
@@ -260,6 +267,7 @@ def attack(
         landed.branch = branch
         landed.opportunity = opportunity
         landed.charge = charge
+        landed.action_point = bought
 
         # An immediate interrupt answering a hit may undo it -- a reroll on
         # "when you are hit" is the printed shape, and by the rules the hit
@@ -287,6 +295,7 @@ def attack(
             ev.branch = branch
             ev.opportunity = opportunity
             ev.charge = charge
+            ev.action_point = bought
             return ev
 
         # Until the outcome stops changing. An *interrupt* answers before
@@ -319,10 +328,31 @@ def attack(
     announced.branch = branch
     announced.opportunity = opportunity
     announced.charge = charge
+    announced.action_point = bought
     declared = world.bus.emit(announced, roll)
     if declared.cancelled:
         result.cancelled = True
     return result
+
+
+def spent_action_point(world: World, eid: int) -> bool:
+    """Is this creature acting on an action point right now?
+
+    True for the whole of the turn the point was spent on, because the
+    extra action it buys is not distinguishable from the rest of the turn
+    once it is in the budget -- the engine hands out an action, not a
+    labelled one. Wider than the printed sentence by the other actions of
+    that turn, and narrower than nothing at all, which is what the four
+    rows keyed off it had before.
+    """
+    from .components import ActionPoints
+
+    points = world.get(eid, ActionPoints)
+    return (
+        points is not None
+        and points.spent_round == world.round
+        and world.turn == eid
+    )
 
 
 def _is_ranged(ref: str, branch: int = 0) -> bool:

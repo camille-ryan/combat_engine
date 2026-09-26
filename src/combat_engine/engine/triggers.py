@@ -276,6 +276,16 @@ def by_me(world: World, me: int, ev: Event) -> bool:
     return getattr(ev, "attacker", getattr(ev, "source", None)) == me
 
 
+def by_action_point(world: World, me: int, ev: Event) -> bool:
+    """Was the attack this event is about bought with an action point?
+
+    `resolve.attack` rides the flag on all four attack events, the way it
+    does `charge`, so "you spend an action point to make an attack and
+    miss" is one `both(by_me, by_action_point)` on `Miss`.
+    """
+    return bool(getattr(ev, "action_point", False))
+
+
 def about_me(world: World, me: int, ev: Event) -> bool:
     """Reads `ev.actor`, and **only** `ev.actor`.
 

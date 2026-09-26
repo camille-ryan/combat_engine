@@ -61,6 +61,7 @@ class Range:
             "close_burst": f"Close burst {self.size}",
             "close_blast": f"Close blast {self.size}",
             "area_burst": f"Area burst {self.size} within {self.within}",
+            "wall": f"Area wall {self.size} within {self.within}",
             "personal": "Personal",
         }[self.kind]
         return f"{mine} or {self.alt}" if self.alt else mine
@@ -103,6 +104,17 @@ def CloseBlast(n: int, *, from_: str = "") -> Range:
 
 def AreaBurst(n: int, within: int) -> Range:
     return Range("area_burst", n, within)
+
+
+def Wall(n: int, within: int) -> Range:
+    """"Area wall 5 within 10": `n` squares of barrier, laid within `within`.
+
+    Its own kind rather than an area burst, because what it covers is not a
+    template -- the caster picks a run of contiguous squares, which is the
+    printed rule -- and because what it leaves behind stops movement and
+    line of effect where a burst leaves nothing at all. `c.wall` raises it.
+    """
+    return Range("wall", n, within)
 
 
 def MeleeOrRanged(melee: int = 1, ranged: int = 10) -> Range:
@@ -185,6 +197,12 @@ class Target:
     #: True when the area decides, so every legal creature is a target.
     everyone: bool = False
     label: str = ""
+    #: A printed target line naming what the creature must have in hand:
+    #: "one creature wielding a magic weapon or implement". Filtered through
+    #: `query.holding`, so `"magic"` means an enhancement bonus and anything
+    #: else is a weapon group or property. Without it the row is aimed at
+    #: creatures that have nothing for it to do anything to.
+    holding: str = ""
 
     def __str__(self) -> str:
         if self.label:
@@ -257,6 +275,12 @@ class Attack:
     plus: int = 0
     #: A monster's finished attack bonus, level included, as printed.
     printed: int | None = None
+    #: Who rolls it, when it is not the creature using the row. `"companion"`
+    #: is a ranger's beast: the printed line is "Beast's attack bonus vs.
+    #: AC", which is the beast's numbers and not its owner's. `from_=` on
+    #: `c.strike` moves only the square the swing is measured from, so a row
+    #: written with it looked finished and rolled the ranger.
+    by: str = ""
 
     def bonus_for(self, world: World, actor: int, ref: str = "", branch: int = 0) -> int:
         """The bonus to roll with, under whatever scaling is in force.
@@ -268,6 +292,7 @@ class Attack:
         from .cast import Cast
         from .components import Stats
 
+        actor = roller(world, actor, self.by)
         if self.printed is not None:
             stats = world.get(actor, Stats)
             return world.scaling.trim(self.printed, stats.level if stats else 1)
@@ -485,7 +510,7 @@ class Power:
         """Does *this branch* leave an opening? The melee half does not."""
         if self.no_provoke:
             return False
-        return self.reach_of(branch).kind in ("ranged", "area_burst")
+        return self.reach_of(branch).kind in ("ranged", "area_burst", "wall")
 
     def label_of(self, branch: int = 0) -> str:
         """What to call this branch on the card. Empty for a single-branch row."""
@@ -508,7 +533,7 @@ class Power:
         """
         if self.no_provoke:
             return False
-        return self.reach.kind in ("ranged", "area_burst")
+        return self.reach.kind in ("ranged", "area_burst", "wall")
 
     def hit_chance(self, world: World, actor: int, target: int, branch: int = 0) -> float:
         """Probability this power hits, from the declared attack line.
@@ -644,6 +669,10 @@ def area_of(
         out = blast(mine, r.size, aim)
     elif r.kind == "area_burst":
         out = area_burst(origin or next(iter(sorted(mine))), r.size)
+    elif r.kind == "wall":
+        # Everywhere the wall may be put, which is what an interface lights
+        # up and what `c.wall` picks its run of squares out of.
+        out = spread(mine, r.within)
     elif r.kind in ("melee", "ranged"):
         out = spread(mine, r.size)
     else:
@@ -701,7 +730,7 @@ def measured_from(world: World, actor: int, r: Range) -> int:
         # A square lent by another creature -- `c.cast_from`. Only a ranged
         # or area line borrows one, and only while the lender is on the
         # board and in sight, which is the proviso both printed lines carry.
-        if r.kind in ("ranged", "area_burst"):
+        if r.kind in ("ranged", "area_burst", "wall"):
             from .components import Position as _Position
             from .types import Relation
 
@@ -722,6 +751,23 @@ def measured_from(world: World, actor: int, r: Range) -> int:
     return actor
 
 
+def roller(world: World, actor: int, by: str) -> int:
+    """Whose numbers an attack line rolls -- the user's, unless it names one.
+
+    The companion is found the way `measured_from` finds it, and falls back
+    to the caster for the same reason: a ranger whose beast is dead rolls
+    something rather than raising from inside a header.
+    """
+    if by != "companion":
+        return actor
+    from .components import Companion, Position
+
+    for eid in world.having(Companion):
+        if world.get(eid, Companion).owner == actor and world.get(eid, Position):
+            return eid
+    return actor
+
+
 def aim_points(world: World, actor: int, p: Power) -> list[Square]:
     """Every square this power can be pointed at.
 
@@ -733,7 +779,7 @@ def aim_points(world: World, actor: int, p: Power) -> list[Square]:
     mine = squares(world, actor)
     if p.reach.kind == "close_blast":
         return sorted(blast_placements(mine, p.reach.size))
-    if p.reach.kind == "area_burst":
+    if p.reach.kind in ("area_burst", "wall"):
         return sorted(
             sq
             for sq in spread(mine, p.reach.within)
@@ -769,6 +815,10 @@ def candidates(
         "other": [c for c in creatures(world) if c != actor],
         "other_ally": allies(world, actor),
     }[p.target.side]
+    if p.target.holding:
+        from .query import holding
+
+        pool = [c for c in pool if holding(world, c, p.target.holding)]
 
     reach = p.reach_of(branch)
     aimed = origin is not None and reach.kind in ("area_burst", "close_blast")
