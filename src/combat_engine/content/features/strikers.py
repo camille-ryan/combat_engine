@@ -43,7 +43,7 @@ from combat_engine.engine import (
     get,
     power,
 )
-from combat_engine.engine.events import Hit, MoveEnd, MoveStart
+from combat_engine.engine.events import Hit, MoveEnd, MoveStart, TurnStart
 from combat_engine.engine.query import (
     alive,
     allies,
@@ -552,3 +552,50 @@ def warlock_pact(c: Cast) -> None:
             c.teleport(3, who=me)
 
     c.watch(Dropped, on_drop, until=When.ENCOUNTER, on=me, label="cf:warlock-pact")
+
+
+@power(
+    "cf:warlock-shadow",
+    level=0,
+    cls="warlock",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def warlock_shadow(c: Cast) -> None:
+    """Cover the ground and the shadows close over you: three squares in a
+    turn buys concealment.
+
+    No compendium row, so the printed sentence is the whole spec. The turn's
+    total is what it measures, not one move action's, so it accumulates and
+    resets on the caster's own turn start; `MoveStart` fires before the
+    first step, which is where the starting square comes from. Granted once
+    a turn -- `c.conceal` is a modifier, and a second one of the same kind
+    would not add anyway.
+    """
+    me, world = c.me, c.world
+    run: dict[str, Any] = {"from": None, "far": 0, "given": False}
+
+    def on_turn(ev: TurnStart) -> None:
+        if ev.actor == me and not getattr(ev, "ghost", False):
+            run["far"], run["given"] = 0, False
+
+    def on_start(ev: MoveStart) -> None:
+        if ev.actor == me:
+            pos = world.get(me, Position)
+            run["from"] = pos.square if pos else None
+
+    def on_end(ev: MoveEnd) -> None:
+        if ev.actor != me:
+            return
+        began = run["from"]
+        if began is not None:
+            run["far"] += distance(began, ev.at)
+        if run["far"] >= 3 and not run["given"]:
+            run["given"] = True
+            c.conceal(on=me, until=When.EONT)
+
+    for kind, fn in ((TurnStart, on_turn), (MoveStart, on_start), (MoveEnd, on_end)):
+        c.watch(kind, fn, until=When.ENCOUNTER, on=me, label="cf:warlock-shadow")

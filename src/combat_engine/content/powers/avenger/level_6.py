@@ -49,12 +49,17 @@ from combat_engine.engine import (
     Event,
     Hit,
     Keyword,
+    MoveEnd,
+    MoveStart,
+    Position,
     Trigger,
+    TurnStart,
     Usage,
     When,
     World,
     about_me,
     by_melee,
+    distance,
     get,
     power,
 )
@@ -359,3 +364,53 @@ def p11681(c: Cast) -> None:
     this exactly where the printed line does.
     """
     c.invisible(on=c.me, until=When.EONT)
+
+
+@power(
+    "p12295",
+    level=6,
+    cls="avenger",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[*DIVINE, Keyword.STANCE],
+)
+def p12295(c: Cast) -> None:
+    """"More than 2 squares on your turn" is the turn's total rather than one
+    move action's, so the ground covered is accumulated and reset at the
+    start of each of the caster's own turns, and the concealment is granted
+    on the square that passes 2 and not again that turn.
+
+    The watches are clocked on the encounter and taken down from
+    `stance.on_end`, which is this file's shape: a second effect carrying
+    `When.STANCE` confuses `Effects.stance_of`.
+    """
+    me, world = c.me, c.world
+    stance = c.stance(on=me, label=c.ref)
+    run: dict[str, Any] = {"from": None, "far": 0, "given": False}
+
+    def on_turn(ev: TurnStart) -> None:
+        if ev.actor == me and not getattr(ev, "ghost", False):
+            run["far"], run["given"] = 0, False
+
+    def on_start(ev: MoveStart) -> None:
+        if ev.actor == me:
+            pos = world.get(me, Position)
+            run["from"] = pos.square if pos else None
+
+    def on_end(ev: MoveEnd) -> None:
+        if ev.actor != me:
+            return
+        began = run["from"]
+        if began is not None:
+            run["far"] += distance(began, ev.at)
+        if run["far"] > 2 and not run["given"]:
+            run["given"] = True
+            c.conceal(on=me, until=When.SONT)
+
+    for kind, fn in ((TurnStart, on_turn), (MoveStart, on_start), (MoveEnd, on_end)):
+        held = c.watch(kind, fn, until=When.ENCOUNTER, on=me)
+        stance.on_end.append(
+            lambda h=held: world.effects.end(h, "the stance ended")
+        )

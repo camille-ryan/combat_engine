@@ -19,10 +19,6 @@
     "wants": "chargen.BUILDS[\"rogue\"] to carry a fourth leg, plus c.check(skill, dc)",
     "why": "one of the four printed tactics is entirely penalties to Stealth checks for moving and running, and a check to go unseen after moving 3 squares. The engine rolls no skill checks -- the same hold as m2963a4 -- and the class has two builds, so there is neither a leg to gate it on nor a check to modify"
   },
-  "cf:warlock-shadow": {
-    "wants": "c.conceal(on=, until=, total=)",
-    "why": "its whole printed content is gaining concealment after moving at least 3 squares on your turn. Concealment is not a state the engine holds -- c.invisible is the HIDDEN_FROM relation and is being unseen outright -- so the row would carry nothing. Same missing thing as p12295 and p13954"
-  },
   "cf:warlord-archer": {
     "wants": "c.attacks_with(ability, ...)",
     "why": "it grants proficiency with a weapon group and lets a ranged basic attack with a bow use Strength for the attack and damage rolls instead of Dexterity. basic.RANGED declares its ability in the header and nothing can rewrite it for one creature. Neither warlord leg in chargen.BUILDS carries a bow either, so there would be nothing to shoot with (name which ability a basic attack uses)"
@@ -98,14 +94,6 @@
   "m3064a3": {
     "wants": "c.decay(on=)",
     "why": "its whole Effect is reducing the enhancement bonus of the weapon or implement that hit it, to a minimum of 0, until the end of the encounter; Weapon has no enhancement bonus and Gear has no armour object, so there is no number to reduce"
-  },
-  "m4716a4": {
-    "wants": "c.maximise(ref=)",
-    "why": "free action on another row's hit: the attack deals maximum damage. c.maximise exists but its listener does get(self.ref).damage_of(...), the damage line of the row that armed it; a free-action row has none, so it is a silent no-op. Cast.damage already puts the rolling power's ref on DamageRolled.detail (or maximise reading DamageRolled.detail)"
-  },
-  "m4774a4": {
-    "wants": "c.maximise(ref=)",
-    "why": "same sentence as m4716a4: free action on its own implement hit, and c.maximise reads the arming row's own damage line rather than the rolling row's (or maximise reading DamageRolled.detail)"
   },
   "m4795a3": {
     "wants": "c.wall",
@@ -347,10 +335,6 @@
     "wants": "c.grant_attack(..., reentrant=True)",
     "why": "'the attacker repeats the attack against that creature' has to fire the row that is triggering this one, and dsl._IN_FLIGHT refuses a second entry into (actor, ref) -- correctly, in general. c.redirect only works on AttackDeclared, and this triggers on a miss. Wants a way to re-run the triggering row at a new target"
   },
-  "p12295": {
-    "wants": "c.conceal(on=, until=, total=)",
-    "why": "its whole Effect is concealment after moving more than 2 squares. Concealment is not a state the engine holds -- c.invisible is HIDDEN_FROM and is a different rule -- so the stance would carry nothing"
-  },
   "p12424": {
     "wants": "power points (#170)",
     "why": "temporary hit points equal to the power points spent"
@@ -382,10 +366,6 @@
   "p12503": {
     "wants": "Attack(by='companion')",
     "why": "the attack is the beast's own -- 'Beast's attack bonus vs. AC', '1[B] + beast's Strength modifier'. The companion entity exists but the spec gives the beast no ref and no stat block, so there are no numbers to roll. Needs a database ref for the beast, a c.b(n) weapon-die reader alongside c.w(n), and c.strike rolling the companion's bonus rather than the caster's -- from_= moves the origin square only. Same gap as #169's summon half"
-  },
-  "p12563": {
-    "wants": "c.conceal(on=, until=, total=)",
-    "why": "concealment does not exist: cover_between computes Cover from two positions at the moment of the attack and reads no modifier, and c.hide/c.invisible say a much stronger sentence. Asked for by shaman, assassin, artificer, seeker, warden, psion and battlemind rows (and a concealment term query.cover_between honours)"
   },
   "p12792": {
     "wants": "the class feature's id, plus c.regain(ref, *, on=)",
@@ -503,10 +483,6 @@
     "wants": "c.reanimate(on=, team=, hp=1)",
     "why": "its Effect raises the creature it killed onto the caster's side, dominated, at 1 hp, unable to heal. Nothing puts a dead creature back on the board or changes a creature's Team; c.summon needs a ref and spawns a fresh entity"
   },
-  "p13954": {
-    "wants": "c.conceal(on=, until=, total=)",
-    "why": "its Trigger is ending your turn within 2 squares of dim light or darkness and its whole Effect is partial concealment until the start of your next turn. The board has no light and no concealment that is not the HIDDEN_FROM relation, which is being unseen outright (and a light model for the Trigger)"
-  },
   "p13984": {
     "wants": "c.summon_inline(spec, at=)",
     "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Its Prerequisite also names a class feature that does not exist, so which creature arrives cannot be decided either"
@@ -518,10 +494,6 @@
   "p1440": {
     "wants": "trigger dispatch during Encounter._roll_initiative",
     "why": "'you roll initiative and dislike the result' can only be answered while initiative is being rolled, and Triggers.arm() runs *after* _roll_initiative, with encounter.order still empty -- Triggers._offer walks that order, so no creature is ever asked. Wants either arming before the roll or a Cast method that adds a flat bonus to an initiative check and re-splices"
-  },
-  "p14401": {
-    "wants": "c.conceal(on=, until=, total=)",
-    "why": "concealment does not exist: cover_between computes Cover from two positions at the moment of the attack and reads no modifier, and c.hide/c.invisible say a much stronger sentence. Asked for by shaman, assassin, artificer, seeker, warden, psion and battlemind rows (and a concealment term query.cover_between honours)"
   },
   "p14420": {
     "wants": "the defender-aura class feature, plus c.in_my_aura(who)",
@@ -811,10 +783,6 @@
     "wants": "c.zone(..., cover=True)",
     "why": "'you and your allies have cover while within the zone'. blocks_sight is blocking terrain, not cover"
   },
-  "p5133": {
-    "wants": "c.grants_in(zone, what, value, side=, kind=)",
-    "why": "'while within the zone, you and your allies gain resistance equal to your Con modifier'. The same gap cost clauses in p5105, p5106, p11075, p11077 and p9822 (/ c.aura(..., mods=) -- a zone or aura carrying modifiers)"
-  },
   "p5193": {
     "wants": "c.redirect accepting a resolved Hit, or c.take_hit(ev)",
     "why": "'the triggering attack hits you instead of the ally', triggered on being hit. c.redirect works only on AttackDeclared, before the roll"
@@ -866,10 +834,6 @@
   "p5398": {
     "wants": "c.ignore_cover(*, on=, until=, against=)",
     "why": "the whole Effect is ignoring cover, superior cover, concealment and total concealment against enemies in the zone. c.strike(ignore_cover=True) is per-call only"
-  },
-  "p5404": {
-    "wants": "c.conceal(on=, until=, total=)",
-    "why": "the whole Effect is 'you and your allies gain concealment'. No concealment verb exists; c.zone(blocks_sight=True) would blind both sides"
   },
   "p5527": {
     "wants": "c.bonus('attack', dice='1d6')",
@@ -974,10 +938,6 @@
   "p9442": {
     "wants": "c.shrouds(on=)",
     "why": "entirely 'damage from your assassin's shroud', per shroud. Shrouds have no representation anywhere; shroud riders were also dropped from six written rows (> int, c.shroud(on=, n=1), and a shroud-damage event)"
-  },
-  "p9517": {
-    "wants": "c.conceal(on=, until=, total=)",
-    "why": "concealment does not exist: cover_between computes Cover from two positions at the moment of the attack and reads no modifier, and c.hide/c.invisible say a much stronger sentence. Asked for by shaman, assassin, artificer, seeker, warden, psion and battlemind rows (and a concealment term query.cover_between honours)"
   },
   "p9655": {
     "wants": "c.summon_inline(spec, at=)",

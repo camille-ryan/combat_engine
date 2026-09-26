@@ -204,3 +204,56 @@ def p9969(c: Cast) -> None:
         c.watch(MoveEnd, walked_off, until=When.EONT)
 
     c.watch(Miss, turned_aside, until=When.EONT, once=True)
+
+
+@power(
+    "p5133",
+    level=10,
+    cls="warden",
+    usage=DAILY,
+    action=MINOR,
+    reach=CloseBurst(2),
+    target=NO_TARGET,
+    keywords=[*PRIMAL, Keyword.ZONE],
+)
+def p5133(c: Cast) -> None:
+    """`c.grants_in` is the zone-carries-a-modifier verb and cannot be used
+    here: resistance is not a `Mod`, it lives in `Defences.resist`, which
+    nothing reads a modifier into. So the zone's own entering and leaving
+    are watched and `c.resist` is put on and taken off by hand -- the same
+    shape `c.grants_in` has, with the one line that differs.
+
+    Whoever is already standing in the burst when it is laid is covered:
+    `Zones._spawn` refreshes before returning, so the occupants are known.
+    """
+    me, world = c.me, c.world
+    vines = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER)
+    amount = c.con_mod
+    if amount <= 0:
+        return
+    held: dict[int, Effect] = {}
+
+    def give(who: int) -> None:
+        if who in held or team(world, who) is not team(world, me):
+            return
+        got = c.resist(amount, on=who, until=When.ENCOUNTER)
+        if got is not None:
+            held[who] = got
+
+    def take(who: int) -> None:
+        got = held.pop(who, None)
+        if got is not None:
+            world.effects.end(got, "left the zone")
+
+    def on_enter(ev: ZoneEntered) -> None:
+        if ev.zone == vines:
+            give(ev.actor)
+
+    def on_exit(ev: ZoneExited) -> None:
+        if ev.zone == vines:
+            take(ev.actor)
+
+    for who in world.zones.occupants(vines):
+        give(who)
+    c.watch(ZoneEntered, on_enter, until=When.ENCOUNTER, on=me)
+    c.watch(ZoneExited, on_exit, until=When.ENCOUNTER, on=me)

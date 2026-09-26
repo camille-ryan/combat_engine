@@ -1839,9 +1839,13 @@ class Cast:
         `c.zone(blocks_sight=True)` instead: that is terrain, and it blinds
         both sides.
         """
+        # `kind="concealment"` so two sources do not add. Untyped modifiers
+        # stack, so a creature concealed three times over came to 6 and read
+        # as *total* concealment -- a -5 nobody printed. Same kind means the
+        # larger wins, which is the stacking rule.
         return self.bonus(
             "concealment", 5 if total else 2,
-            on=on if on is not None else self.me, until=until, kind="untyped",
+            on=on if on is not None else self.me, until=until, kind="concealment",
         )
 
     def no_advantage(
@@ -1885,9 +1889,17 @@ class Cast:
         from .events import DamageRolled
 
         who = on or self.me
+        spent: list[bool] = []
 
         def top_up(ev: DamageRolled) -> None:
-            if ev.source != who:
+            # **The next roll, not every roll in the window.** It used to
+            # top up anything the creature rolled until the duration ran
+            # out, so a row whose printed splash is a flat 3 to each
+            # creature beside the victim came out [23, 23, 23, 23] instead
+            # of [23, 3, 3, 3] -- and the riders were rewritten to the
+            # header's dice, which is not a number the card mentions
+            # anywhere.
+            if ev.source != who or spent:
                 return
             # The row that *rolled*, off the event -- not the row that armed
             # this. Both rows wanting it are free actions with no damage
@@ -1900,8 +1912,17 @@ class Cast:
             # line that names a row instead.
             p = get(ref or ev.detail)
             d = p.damage_of(0) if p is not None else None
-            if d is not None:
-                ev.amount = max(ev.amount, _max_of(d.dice) + self._bonus_of(d.bonus))
+            if d is None:
+                return
+            topped = _max_of(d.dice) + self._bonus_of(d.bonus)
+            # A rider rolled by the same row carries the same `detail`, so
+            # the header's line is the wrong yardstick for it. Only raise
+            # what is plausibly *this* line: a flat 3 is not a 2d10+3 that
+            # rolled badly.
+            if ev.amount < _min_of(d.dice) + self._bonus_of(d.bonus):
+                return
+            ev.amount = max(ev.amount, topped)
+            spent.append(True)
 
         held = self.watch(
             DamageRolled, top_up, until=until, window=Window.BEFORE, on=who,
@@ -2882,6 +2903,47 @@ class Cast:
         `side` is whose: `"ally"` counts the caster, `"enemy"` the other
         side, `"any"` everybody.
         """
+        # Resistance is not a modifier -- `deal_damage` reads it off
+        # `Defences.resist` and never consults `Mods` -- so asking for it
+        # here used to install a key nothing reads and look like a working
+        # zone. Said out loud rather than swallowed; `c.resist_in` is the
+        # one that works.
+        if str(what) == "resist":
+            raise ValueError(
+                "resistance is not a modifier: use c.resist_in(zone, amount)"
+            )
+        self._while_inside(
+            zone,
+            lambda who: self.bonus(
+                what, value, on=who, until=When.ENCOUNTER, kind=kind
+            ),
+            side,
+        )
+
+    def resist_in(
+        self,
+        zone: int,
+        amount: int,
+        dtype: DamageType | None = None,
+        *,
+        side: str = "ally",
+    ) -> None:
+        """"While within the zone you and your allies gain resist N."
+
+        `c.grants_in` cannot carry this: resistance lives on `Defences`
+        rather than in `Mods`, so a modifier named "resist" is read by
+        nothing. Six rows across warden and shaman print the sentence.
+        """
+        self._while_inside(
+            zone,
+            lambda who: self.resist(amount, dtype, on=who, until=When.ENCOUNTER),
+            side,
+        )
+
+    def _while_inside(
+        self, zone: int, give_one: Any, side: str
+    ) -> None:
+        """Hold something on whoever stands in a zone, and take it back."""
         from .events import ZoneEntered, ZoneExited
         from .query import team as side_of
 
@@ -2897,9 +2959,7 @@ class Cast:
         def give(who: int) -> None:
             if who in held or not wanted(who):
                 return
-            got = self.bonus(
-                what, value, on=who, until=When.ENCOUNTER, kind=kind
-            )
+            got = give_one(who)
             if got is not None:
                 held[who] = got
 
@@ -3014,6 +3074,29 @@ def _max_of(dice: str | int) -> int:
     elif sign == "-":
         top -= int(tail)
     return top
+
+
+def _min_of(dice: str | int) -> int:
+    """Every die showing 1 -- the floor of the same expression.
+
+    The yardstick `maximise` needs to tell the header's damage line from a
+    flat rider the same row rolled. Both carry the row's ref as `detail`,
+    so a printed splash of 3 beside a 2d10+3 was being raised to 23.
+    """
+    if isinstance(dice, int):
+        return dice
+    if not dice:
+        return 0
+    n, _, rest = dice.partition("d")
+    _faces, sign, tail = rest.partition("+")
+    if not sign:
+        _faces, sign, tail = rest.partition("-")
+    low = int(n or 1)
+    if sign == "+":
+        low += int(tail)
+    elif sign == "-":
+        low -= int(tail)
+    return low
 
 
 def expected(dice: str | int, bonus: int = 0) -> float:

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     DAILY,
     ENCOUNTER,
     FORT,
@@ -46,9 +47,11 @@ from combat_engine.engine import (
     Relation,
     SavingThrow,
     Trigger,
+    TurnEnd,
     When,
     World,
     ZoneEntered,
+    about_me,
     get,
     power,
 )
@@ -415,3 +418,26 @@ def p5909(c: Cast) -> None:
         c.unsave(ev)
 
     c.watch(SavingThrow, falters, until=When.ENCOUNTER)
+
+
+_TURN_ENDED = "you end your turn"
+
+
+@power(
+    "p13954",
+    level=2,
+    cls="warlock",
+    usage=AT_WILL,
+    action=FREE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.ARCANE, Keyword.SHADOW],
+    trigger=_TURN_ENDED,
+    on=Trigger(TurnEnd, about_me, _TURN_ENDED),
+)
+def p13954(c: Cast) -> None:
+    """The printed Trigger is ending your turn **within 2 squares of dim
+    light or darkness**, and the board has no light: there is nothing to
+    measure that distance against, so the row fires on the turn ending and
+    the lighting half is dropped."""
+    c.conceal(on=c.me, until=When.SONT)
