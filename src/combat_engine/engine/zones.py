@@ -58,6 +58,12 @@ class Zones:
     def __init__(self, world: World) -> None:
         self.world = world
         self.inside: dict[int, set[int]] = {}
+        #: Zones currently unwinding. `end` runs the effect's `on_end`, and
+        #: one of those callbacks is `end` itself -- so the recursion has to
+        #: be stopped somewhere. It used to be stopped by clearing the whole
+        #: `on_end` list, which also threw away every callback a *row* had
+        #: hung there ("when the zone ends, ..."), silently.
+        self._ending: set[int] = set()
         world.bus.on(MoveEnd, lambda _: self.refresh())
         world.bus.on(EnterSquare, lambda _: self.refresh())
         world.bus.on(LeaveSquare, lambda _: self.refresh())
@@ -119,15 +125,18 @@ class Zones:
 
     def end(self, eid: int, why: str = "ended") -> None:
         zone = self.world.get(eid, Zone)
-        if zone is None:
+        if zone is None or eid in self._ending:
             return
-        for actor in sorted(self.inside.pop(eid, set())):
-            self.world.bus.emit(ZoneExited(zone=eid, actor=actor))
-        self.world.bus.emit(ZoneEnded(zone=eid, why=why))
-        if zone.effect is not None and not zone.effect.ended:
-            zone.effect.on_end.clear()  # already unwinding; do not recurse
-            self.world.effects.end(zone.effect, why)
-        self.world.despawn(eid)
+        self._ending.add(eid)
+        try:
+            for actor in sorted(self.inside.pop(eid, set())):
+                self.world.bus.emit(ZoneExited(zone=eid, actor=actor))
+            self.world.bus.emit(ZoneEnded(zone=eid, why=why))
+            if zone.effect is not None and not zone.effect.ended:
+                self.world.effects.end(zone.effect, why)
+            self.world.despawn(eid)
+        finally:
+            self._ending.discard(eid)
 
     # -- keeping them current ------------------------------------------------
 
