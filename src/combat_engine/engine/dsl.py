@@ -47,6 +47,12 @@ class Range:
     #: and warlord, and a row that can only hold one of them is declared
     #: half-right with nothing to say so.
     alt: Range | None = None
+    #: Whose square the range is measured from, when it is not the caster's.
+    #: `"companion"` is the shaman's whole attack line -- "Melee spirit 1" --
+    #: and 48 of its rows are that and nothing else. `c.strike(from_=)`
+    #: already aimed the roll correctly; what refused the row was this
+    #: measurement, taken before the body ever ran.
+    from_: str = ""
 
     def __str__(self) -> str:
         mine = {
@@ -68,27 +74,31 @@ class Range:
         """
         if which and self.alt:
             return self.alt
-        return Range(self.kind, self.size, self.within) if self.alt else self
+        return (
+            Range(self.kind, self.size, self.within, from_=self.from_)
+            if self.alt
+            else self
+        )
 
     @property
     def branches(self) -> tuple[int, ...]:
         return (0, 1) if self.alt else (0,)
 
 
-def Melee(n: int = 1) -> Range:
-    return Range("melee", n)
+def Melee(n: int = 1, *, from_: str = "") -> Range:
+    return Range("melee", n, from_=from_)
 
 
-def Ranged(n: int) -> Range:
-    return Range("ranged", n)
+def Ranged(n: int, *, from_: str = "") -> Range:
+    return Range("ranged", n, from_=from_)
 
 
-def CloseBurst(n: int) -> Range:
-    return Range("close_burst", n)
+def CloseBurst(n: int, *, from_: str = "") -> Range:
+    return Range("close_burst", n, from_=from_)
 
 
-def CloseBlast(n: int) -> Range:
-    return Range("close_blast", n)
+def CloseBlast(n: int, *, from_: str = "") -> Range:
+    return Range("close_blast", n, from_=from_)
 
 
 def AreaBurst(n: int, within: int) -> Range:
@@ -569,8 +579,8 @@ def area_of(
     otherwise reports a reach that runs off the edge, and an interface that
     highlights what it is given lights up squares that are not there.
     """
-    mine = squares(world, actor)
     r = p.reach_of(branch)
+    mine = squares(world, measured_from(world, actor, r))
     if r.kind == "close_burst":
         out = spread(mine, r.size)
     elif r.kind == "close_blast":
@@ -583,6 +593,25 @@ def area_of(
     else:
         out = frozenset(mine)
     return frozenset(sq for sq in out if world.grid.inside(sq))
+
+
+def measured_from(world: World, actor: int, r: Range) -> int:
+    """Whose square this range is taken from -- the caster, unless it says.
+
+    "Melee spirit 1" is measured from the shaman's companion, and the row is
+    refused or allowed on that distance long before the body runs. Falls
+    back to the caster when the named thing is not on the board, so a shaman
+    whose spirit has been dismissed is simply out of reach rather than
+    throwing from inside `legal()`.
+    """
+    if r.from_ != "companion":
+        return actor
+    from .components import Companion
+
+    for eid in world.having(Companion):
+        if world.get(eid, Companion).owner == actor:
+            return eid
+    return actor
 
 
 def aim_points(world: World, actor: int, p: Power) -> list[Square]:
@@ -647,12 +676,16 @@ def candidates(
             and squares(world, c) & area
             and any(world.grid.line_of_effect(origin, sq) for sq in squares(world, c))
         ]
+    # Line of effect is traced from whatever the range was measured from, so
+    # a spirit round the corner reaches what *it* can see rather than what
+    # its shaman can.
+    eye = measured_from(world, actor, reach)
     return [
         c
         for c in pool
         if alive(world, c)
         and squares(world, c) & area
-        and line_of_effect(world, actor, c)
+        and line_of_effect(world, eye, c)
     ]
 
 

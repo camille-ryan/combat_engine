@@ -492,3 +492,34 @@ def targets_my_side(world: World, me: int, ev: Event) -> bool:
 
     who = getattr(ev, "target", None)
     return who is not None and team(world, who) is team(world, me)
+
+
+def hits_my_companion(world: World, me: int, ev: Event) -> bool:
+    """"An enemy hits your spirit companion."
+
+    The companion is a target like anything else, so the event names *it*
+    and every ready-made predicate asks about the caster -- which made this
+    printed line silently false for every row that carries it.
+    """
+    from .components import Companion
+    from .query import team
+
+    victim = getattr(ev, "target", None)
+    if victim is None:
+        return False
+    mine = world.get(victim, Companion)
+    if mine is None or mine.owner != me:
+        return False
+    who = getattr(ev, "attacker", getattr(ev, "source", None))
+    return who is not None and team(world, who) is not team(world, me)
+
+
+def about_my_companion(world: World, me: int, ev: Event) -> bool:
+    """Anything at all happening to your companion, whoever caused it."""
+    from .components import Companion
+
+    subject = getattr(ev, "target", getattr(ev, "actor", None))
+    if subject is None:
+        return False
+    mine = world.get(subject, Companion)
+    return mine is not None and mine.owner == me

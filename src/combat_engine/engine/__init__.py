@@ -11,6 +11,7 @@ from .cast import Cast
 from .components import (
     Budget,
     Build,
+    Companion,
     Conditions,
     Defences,
     Defenses,
@@ -112,6 +113,7 @@ from .rng import Rng
 from .triggers import (
     Trigger,
     about_me,
+    about_my_companion,
     ally_within,
     both,
     by_charge,
@@ -126,6 +128,7 @@ from .triggers import (
     enemy_target_within,
     enemy_within,
     hits_me,
+    hits_my_companion,
     leaves_me_out,
     not_me,
     targets_me,

@@ -171,17 +171,43 @@ class Conjuration:
     with their numbers -- a conjuration rolls the caster's attack, not one
     of its own.
 
-    Un-attackable, deliberately. Giving it hit points would hand it an
-    initiative slot and a say in the win condition, because
-    `creatures = having(Health, Position)` is simultaneously the roster, the
-    target pool and the end of the fight. Neither printed row that needs
-    this gives the thing hit points, so that split can wait until one does.
+    Un-attackable, deliberately: neither printed row that needs a
+    conjuration gives the thing hit points. A `Companion` is the case that
+    does, and the split this docstring used to defer now lives there.
     """
 
     ref: str = ""
     by: int = 0
     #: The effect it lives on. Ending that despawns it.
     effect: int = 0
+
+
+@dataclass
+class Companion:
+    """A second body a character owns and fights through.
+
+    A shaman's spirit, a ranger's beast, a familiar. Unlike a `Conjuration`
+    it **is** attackable -- "your spirit companion is hit by a melee attack"
+    is a printed trigger -- so it carries `Health`, `Defences` and a `Side`,
+    and it is a legitimate target like anything else.
+
+    What it is not is a combatant. It takes no turn, holds no initiative
+    slot, and its death does not decide the fight. `query.creatures` used to
+    answer all four of those questions at once -- roster, target pool, win
+    condition, render list -- and this is the component that finally forced
+    them apart. `query.combatants` is the narrower one; everything else
+    still counts a companion in, which is what makes it targetable and
+    adjacent and coverable for free.
+
+    `owner` is whose it is. `origin` is why this exists at all: a shaman's
+    ordinary attack range is "Melee spirit 1", measured from here rather
+    than from the shaman, which `Range(from_="companion")` reads.
+    """
+
+    owner: int = 0
+    ref: str = ""
+    #: Dismissed companions leave the board; the owner can call them back.
+    kind: str = "spirit"
 
 
 @dataclass

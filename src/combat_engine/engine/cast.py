@@ -2105,6 +2105,92 @@ class Cast:
             self.world.encounter.join(made)
         return made
 
+    # -- a second body you own ----------------------------------------------
+
+    def companion(self, *, of: int | None = None) -> int | None:
+        """The companion this creature owns, if it has one on the board.
+
+        The question 107 blocked rows were asking. A companion is not a
+        conjuration -- it belongs to the character rather than to the power
+        that made it, it persists, and it can be hit -- and it is not a
+        servant either, because it never takes a turn of its own.
+        """
+        from .components import Companion
+
+        owner = of if of is not None else self.me
+        for eid in self.world.having(Companion):
+            if self.world.get(eid, Companion).owner == owner:
+                return eid
+        return None
+
+    def call_companion(
+        self,
+        ref: str = "",
+        at: Square | None = None,
+        *,
+        kind: str = "spirit",
+        speed: int = 6,
+    ) -> int:
+        """Put your companion on the board, moving the one you have if any.
+
+        "You can call it again" is printed on nearly every row that can
+        dismiss one, and the printed reading is that you only ever have the
+        one -- so calling again relocates rather than accumulating.
+
+        With no `ref` the companion's numbers come off its owner, which is
+        what the printed spirit does: its hit points are the shaman's surge
+        value, its defences are the shaman's, and it has no attack of its
+        own because every attack it makes is a row the shaman used. A
+        database ref is for the ones that really are their own creature --
+        a ranger's beast.
+        """
+        from .components import Companion, Defenses, Health, Movement, Position, Side
+        from .grid import Size
+        from .query import team as side_of
+
+        where = at or self._free_square_near(self.here)
+        if where is None:
+            return 0
+        standing = self.companion()
+        if standing is not None:
+            from .movement import place
+
+            place(self.world, standing, where)
+            return standing
+
+        side = side_of(self.world, self.me) or Team.ALLY
+        if ref:
+            from combat_engine.content import loader
+
+            made = loader.spawn(self.world, ref, where, team=side)
+        else:
+            mine = self.world.need(self.me, Defenses)
+            hp = max(1, self.surge_value())
+            made = self.world.spawn(
+                Position(square=where, size=Size.MEDIUM),
+                Side(team=side),
+                Health(hp=hp, max_hp=hp),
+                # Its own copy, so buffing the spirit does not buff the
+                # shaman and a mark laid on one is not laid on both.
+                Defenses(values=dict(mine.values), scale=mine.scale),
+                Movement(speed=speed),
+            )
+        self.world.add(made, Companion(owner=self.me, ref=ref, kind=kind))
+        return made
+
+    def dismiss_companion(self) -> bool:
+        """"Your spirit companion disappears." An Effect line on ~20 rows."""
+        standing = self.companion()
+        if standing is None:
+            return False
+        self.world.despawn(standing)
+        return True
+
+    def move_companion(self, squares_: int) -> int:
+        """Walk the companion. It has a speed of its own and no turn to use it."""
+        standing = self.companion()
+        return self.move(squares_, who=standing) if standing is not None else 0
+
     def extra_turn(self, at: int) -> bool:
         """Act again this round, at that initiative count. Solos do this."""
         if self.world.encounter is None:

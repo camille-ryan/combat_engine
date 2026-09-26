@@ -122,6 +122,14 @@ def _exists(wants: str, have: dict[str, object]) -> bool:
 
     head, _, rest = wants.partition("(")
     head = head.strip()
+    # `wants` is `name` or `name(param=, param=)`. Prose after the closing
+    # bracket makes the parameter list garbage, every check against it
+    # fails, and the row reports blocked forever -- which is the silence
+    # this file exists to break, so it is said out loud instead. 106 rows
+    # sat ready behind one such string.
+    if rest and not rest.rstrip().endswith(")"):
+        print(f"  MALFORMED wants {wants!r} -- write `name` or `name(param=)`")
+        return False
     if head not in have and "." in head:
         owner, _, attr = head.rpartition(".")
         thing = have.get(owner)

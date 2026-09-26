@@ -24,7 +24,7 @@ from .events import (
     TurnEnd,
     TurnStart,
 )
-from .query import active, alive, can_act, can_react, creatures, team
+from .query import active, alive, can_act, can_react, combatants, team
 from .types import DOWNGRADES, ActionType, Condition, Team, Usage
 
 if TYPE_CHECKING:
@@ -114,7 +114,7 @@ class Encounter:
 
     def _roll_initiative(self) -> list[int]:
         rolls: list[tuple[int, int, int, int]] = []
-        for eid in creatures(self.world):
+        for eid in combatants(self.world):
             init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
             from .query import level_term
 
@@ -264,14 +264,14 @@ class Encounter:
 
     @property
     def over(self) -> bool:
-        sides = {team(self.world, e) for e in creatures(self.world) if alive(self.world, e)}
+        sides = {team(self.world, e) for e in combatants(self.world) if alive(self.world, e)}
         sides.discard(Team.NEUTRAL)
         sides.discard(None)
         return len(sides) < 2
 
     @property
     def winner(self) -> Team | None:
-        sides = {team(self.world, e) for e in creatures(self.world) if alive(self.world, e)}
+        sides = {team(self.world, e) for e in combatants(self.world) if alive(self.world, e)}
         sides.discard(Team.NEUTRAL)
         sides.discard(None)
         return next(iter(sides)) if len(sides) == 1 else None

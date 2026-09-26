@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .components import (
+    Companion,
     Conditions,
     Defenses,
     Health,
@@ -29,7 +30,29 @@ if TYPE_CHECKING:
 
 
 def creatures(world: World) -> list[int]:
+    """Everything that can be targeted, flanked, covered or walked around.
+
+    A companion is one of these. It has hit points and a square and is a
+    legitimate target, which is the whole reason it is not a `Conjuration`.
+    """
     return list(world.having(Health, Position))
+
+
+def combatants(world: World) -> list[int]:
+    """The narrower question: who takes turns and decides the fight.
+
+    `creatures` answered four questions at once -- the initiative roster,
+    the target pool, the win condition and the render list -- and that was
+    fine for as long as everything on the board wanted the same answer to
+    all four. A companion wants to be targeted and wants no turn, so the
+    questions had to come apart. Only three callers need this one, all in
+    `turns.py`: rolling initiative, `over`, and `winner`.
+
+    Kept as a subtraction rather than a component test at every call site,
+    so anything later that is targetable-but-not-a-combatant lands here by
+    adding itself to one list.
+    """
+    return [e for e in creatures(world) if world.get(e, Companion) is None]
 
 
 def squares(world: World, eid: int) -> frozenset[Square]:
