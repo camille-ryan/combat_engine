@@ -33,8 +33,9 @@ keeps the entering and leaving diffs honest.
 and caps the stack at five one-point penalties, read back off the live
 effects rather than counted: the cap is on the item, and a second creature
 of this kind eats the same armour. Its companion sentence, the one about a
-metal weapon, is already on the blocked list under m3062a0 and is left out
-here for the same reason.
+metal weapon, is m3063a1, and it takes the same stack: "metal" is not a fact
+`Gear` holds, so the printed line is read as any attack carrying the weapon
+keyword, and the label carries `_RUST` so that m3063a0 can see it.
 
 **A saving throw against being knocked down.** m4975a5 answers
 `ConditionApplied` -- a condition event names its subject `target`, so
@@ -42,7 +43,12 @@ here for the same reason.
 announces the throw and ends the hold. A bare d20 would not have been a
 saving throw that anything else could see or change.
 
-Three rows are left out: m2988a3, m3063a1 and m5050a0. See the report.
+**A charge that catches two.** m5050a0 hears the charge's own attack off
+the bus, on the `Miss` as well as on the `Hit`. The second target is not a
+second *use*: `dsl.use` refuses a row already in flight, which a charge's
+own basic attack always is, so the row's body is run against the second
+creature directly -- one action, two rolls, which is what "against one or
+two targets" means and what `use` could never have said here.
 """
 
 from __future__ import annotations
@@ -99,6 +105,8 @@ from combat_engine.engine.events import (
     AttackDeclared,
     ConditionApplied,
     ForcedMove,
+    Hit,
+    Miss,
     PowerUsed,
     TurnEnd,
     TurnStart,
@@ -106,7 +114,7 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import distance_between, enemies, is_
-from combat_engine.engine.triggers import Trigger
+from combat_engine.engine.triggers import Trigger, by_charge
 from combat_engine.engine.zones import Zone
 
 #: A rusting item is kept as a stack of one-point penalties under a shared
@@ -282,6 +290,22 @@ def m2988a2(c: Cast) -> None:
     c.resist(5, until=When.EONT)
 
 
+@power(
+    "m2988a3",
+    level=9,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    out_of_combat=True,
+)
+def m2988a3(c: Cast) -> None:
+    """Deliberately inert, for the reason m2947a5 gives: the engine has no
+    jump, so there is no move for the waiver to apply to. See the
+    report."""
+    c.note("m2988a3: it can jump without provoking opportunity attacks")
+
+
 # ==========================================================================
 # m3063
 # ==========================================================================
@@ -316,6 +340,34 @@ def m3063a0(c: Cast) -> None:
             c.slowed(until=When.EOT, on=ev.actor)
 
     c.watch(TurnEnd, gnaw, until=When.ENCOUNTER, on=me, label=c.ref)
+
+
+@power(
+    "m3063a1",
+    level=9,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m3063a1(c: Cast) -> None:
+    """Every weapon that bites it comes away a point worse, five times over.
+
+    "Metal" is not a fact `Gear` holds, so the printed line is read as any
+    weapon attack; a creature's own claws are not one. The label carries
+    `_RUST`, which is what m3063a0 reads to decide whether the creature it
+    gnaws is carrying rust already, and `_worsen` keeps the cap on the
+    weapon rather than on whoever is swinging it.
+    """
+    me = c.me
+
+    def bit(ev: Hit) -> None:
+        row = get(ev.power) if ev.target == me else None
+        if row is None or Keyword.WEAPON not in row.keywords:
+            return
+        _worsen(c, ev.attacker, "attack", f"{c.ref} {_RUST}")
+
+    c.watch(Hit, bit, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -852,6 +904,61 @@ def m4975a5(c: Cast) -> None:
 # ==========================================================================
 # m5050
 # ==========================================================================
+
+
+@power(
+    "m5050a0",
+    level=9,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m5050a0(c: Cast) -> None:
+    """A second victim at the end of a charge, while it is bleeding.
+
+    The charge's own swing is heard off the bus, on the `Miss` as well as
+    on the `Hit`, because the printed line does not care whether the first
+    one landed.
+
+    The second target is **not** a second use of the row. One attack
+    against two targets is one action and two rolls, which is what the
+    printed line says -- and `use` refuses a row already in flight, which
+    the charge's own basic attack always is, so going through it would have
+    been silently inert. The row's body is run against the second creature
+    instead: no attack or damage line is copied, and the header still
+    carries both.
+
+    The replayed swing is not itself a charge, so it cannot set this off
+    again; the guard is kept for the case where the charge swung with
+    something that reaches two creatures of its own.
+    """
+    me = c.me
+    busy: list[int] = []
+
+    def again(ev: Hit | Miss) -> None:
+        if busy or ev.attacker != me or not c.bloodied(me):
+            return
+        if not by_charge(c.world, me, ev):
+            return
+        row = get(ev.power)
+        others = sorted(
+            foe for foe in c.enemies() if foe != ev.target and c.adjacent(foe)
+        )
+        if row is None or not others:
+            return
+        busy.append(1)
+        try:
+            second = c.choose(others, "m5050a0: who else the charge catches")
+            if second is not None:
+                row.body(
+                    Cast(c.world, me, ev.power, targets=[second], target=second)
+                )
+        finally:
+            busy.clear()
+
+    for outcome in (Hit, Miss):
+        c.watch(outcome, again, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(

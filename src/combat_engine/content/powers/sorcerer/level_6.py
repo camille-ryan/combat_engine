@@ -37,17 +37,22 @@ from combat_engine.engine import (
     CloseBurst,
     DamageType,
     Event,
+    Hit,
     Keyword,
     Trigger,
     When,
     Window,
     World,
     ally_within,
+    both,
     get,
     hits_me,
+    not_me,
     power,
+    targets_my_side,
 )
 
+from . import has_familiar
 from .dice import face_of
 
 ARCANE = [Keyword.ARCANE]
@@ -294,3 +299,32 @@ def p5853(c: Cast) -> None:
 )
 def p5854(c: Cast) -> None:
     c.note(f"{c.ref}: +5 to three social skills, none of which anything rolls")
+
+
+@power(
+    "p12471",
+    level=6,
+    cls="sorcerer",
+    usage=DAILY,
+    action=INTERRUPT,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.ARCANE],
+    requires=has_familiar,
+    requires_text="your familiar must be in its active mode",
+    trigger="an attack hits an ally you can see",
+    on=Trigger(Hit, both(targets_my_side, not_me), "an attack hits an ally"),
+)
+def p12471(c: Cast) -> None:
+    """`targets_my_side` takes in the caster too, so `not_me` is the other half
+    of "an ally". The redirect is conditional on where the shift ended, which is
+    the printed rule and not a formality; the damage to the caster is an Effect
+    line and is paid either way."""
+    fam = c.companion()
+    ally = getattr(c.trigger, "target", None)
+    if fam is None or ally is None:
+        return
+    c.shift(c.speed_of(fam), who=fam)
+    if ally in c.within(1, of=fam):
+        c.redirect(to=fam)
+    c.flat(c.level, on=c.me)

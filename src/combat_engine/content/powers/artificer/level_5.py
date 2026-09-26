@@ -12,6 +12,7 @@ from combat_engine.engine import (
     EACH_ENEMY,
     INT,
     MINOR,
+    NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
     REF,
@@ -19,16 +20,21 @@ from combat_engine.engine import (
     AreaBurst,
     Attack,
     Cast,
+    Damage,
     DamageType,
+    Dropped,
     Keyword,
     Melee,
     Ranged,
+    Summon,
     TurnEnd,
+    TurnStart,
     When,
+    get,
     power,
 )
 
-from . import enemies_starting_in, one_ally
+from . import enemies_starting_in, holding_a_melee_weapon, one_ally
 
 
 @power(
@@ -133,3 +139,75 @@ def p4140(c: Cast) -> None:
         c.damage(c.w(2), c.int_mod)
     else:
         c.half_damage(c.w(2), c.int_mod)
+
+
+@power(
+    "p4141",
+    level=5,
+    cls="artificer",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.WEAPON],
+    requires=holding_a_melee_weapon,
+    requires_text="must be holding a melee weapon",
+    thrown_by_hand=True,
+    summon=Summon(speed=0, modes=("fly",), attack=Attack(INT, vs=AC)),
+)
+def p4141(c: Cast) -> None:
+    """The command's damage is `1[W]`, which the header cannot hold: `Damage.dice`
+    is a static string and which weapon was thrown is only known at use. The
+    summon therefore carries the attack line and no damage line -- see the
+    report. "It returns to your hand instead of costing you a surge" needs no
+    saying: nothing charges a surge for a summon dropping.
+
+    `Summon.modes` names a way of moving and carries no speed with it, so the
+    printed "fly 6" is set from the body."""
+    weapon = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if weapon:
+        c.mode("fly", 6, on=weapon, until=When.ENCOUNTER)
+
+
+@power(
+    "p7650",
+    level=5,
+    cls="artificer",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.IMPLEMENT],
+    summon=Summon(
+        speed=6,
+        attack=Attack(INT, vs=AC, plus=2),
+        damage=Damage("2d6", "int", dtype=DamageType.FIRE),
+    ),
+)
+def p7650(c: Cast) -> None:
+    """The enemies are marked *by the servant*, not by the caster, which is what
+    `by=` is for. The death throe rolls its own line from the servant's square
+    -- `Attack.bonus_for` is the same call `c.command` makes -- and is skipped
+    if the servant has already left the board."""
+    servant = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if not servant:
+        return
+
+    def brand(ev: TurnStart) -> None:
+        if ev.actor != c.me:
+            return
+        for foe in c.within(1, of=servant, side="enemy"):
+            c.mark(on=foe, by=servant, until=When.EONT)
+
+    c.watch(TurnStart, brand, until=When.ENCOUNTER)
+
+    def throe(ev: Dropped) -> None:
+        if ev.actor != servant:
+            return
+        line = Attack(INT, vs=REF)
+        bonus = line.bonus_for(c.world, servant, c.ref)
+        for who in c.within(2, of=servant):
+            if c.attack(bonus, REF, on=who, from_=servant):
+                c.damage("1d8", c.wis_mod, dtype=DamageType.FIRE, on=who)
+
+    c.watch(Dropped, throe, until=When.ENCOUNTER)

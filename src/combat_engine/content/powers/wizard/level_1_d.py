@@ -24,6 +24,7 @@ from combat_engine.content.powers.wizard.level_1_c import (
     _on_zone,
 )
 from combat_engine.engine import (
+    AC,
     AT_WILL,
     DAILY,
     EACH_CREATURE,
@@ -41,22 +42,29 @@ from combat_engine.engine import (
     Attack,
     Cast,
     Condition,
+    Damage,
     DamageType,
+    Dropped,
+    Hit,
     Keyword,
     Mod,
     MoveEnd,
     Ranged,
+    Summon,
     TurnEnd,
     UpTo,
     When,
+    Window,
     distance,
+    get,
     power,
     spread,
 )
 from combat_engine.engine.components import Conjuration, Position
-from combat_engine.engine.events import LeaveSquare
+from combat_engine.engine.events import LeaveSquare, MoveStart
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
+
 
 @power(
     "p2351",
@@ -518,3 +526,145 @@ def p7406(c: Cast) -> None:
             until=When.EONT,
             when=lambda _ctx, who=foe: who in c.in_squares(area),
         )
+
+
+def _at_will_or_basic(ref: str) -> bool:
+    """Was that hit made with an at-will or basic attack?
+
+    Both of the engine's basic attacks are declared at-will, so the one test
+    answers the pair -- which is what "a basic or at-will attack" prints.
+    """
+    p = get(ref)
+    return p is not None and p.usage is AT_WILL
+
+
+def _reach_is(ref: str, *kinds: str) -> bool:
+    """Was that row's printed range one of these?
+
+    The damage context carries no reach, so a clause about melee, close or
+    area attacks has to read it off the row that dealt them.
+    """
+    p = get(ref)
+    return p is not None and p.reach is not None and p.reach.kind in kinds
+
+
+def _commands_on_opportunity(c: Cast, made: int, *, mark: bool = False) -> None:
+    """A summon's printed Opportunity Attack command.
+
+    `OpportunityWindow` opens for creatures that threaten the mover, and a
+    companion is not offered one -- so the condition the printed clause
+    actually names is written out instead: an adjacent enemy walks, and the
+    summoner spends its opportunity action having the creature swing with
+    the line in the header's `summon=`. `MoveStart` rather than `MoveEnd`,
+    because by the end the enemy has left and the adjacency is false exactly
+    when the clause should fire. One swing per enemy per round, which is
+    what an opportunity attack costs.
+    """
+    struck: dict[int, int] = {}
+
+    def swing(ev: MoveStart) -> None:
+        if ev.kind_ != "walk" or struck.get(ev.actor) == c.world.round:
+            return
+        if not c.adjacent_to(made, ev.actor) or ev.actor not in c.enemies():
+            return
+        struck[ev.actor] = c.world.round
+        if c.command(made, on=ev.actor) and mark:
+            c.mark(on=ev.actor, by=made, until=When.EONT)
+
+    c.watch(
+        MoveStart, swing, until=When.ENCOUNTER, window=Window.BEFORE,
+        label=f"{c.ref} opportunity command",
+    )
+
+
+@power(
+    "p11840",
+    level=1,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=ARCANE_IMPLEMENT,
+    summon=Summon(speed=5, attack=Attack(INT, vs=REF), damage=Damage("2d6", "int")),
+)
+def p11840(c: Cast) -> None:
+    """The special command is a standard action spent on a later turn and
+    nothing offers one, so the header carries the line `c.command` rolls and
+    nothing spends it; "one or two creatures" has nowhere to go either. The
+    symbiosis is not gated on the summoned creature still standing -- nothing asks
+    whether a companion is still on the board.
+    """
+    made = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if not made:
+        return
+
+    def death_throe(ev: Dropped) -> None:
+        if ev.actor == made:
+            for who in c.within(1, of=made):
+                c.flat(5, dtype=DamageType.POISON, on=who)
+
+    c.watch(Dropped, death_throe, until=When.ENCOUNTER, label=f"{c.ref} death throe")
+
+    def symbiosis(ev: Hit) -> None:
+        if ev.attacker != c.me or not _at_will_or_basic(ev.power):
+            return
+        victim = ev.target
+        c.on_attack(
+            lambda _e: c.flat(5, on=victim),
+            by=victim, until=When.EOTNT, once=True, label=f"{c.ref} symbiosis",
+        )
+
+    c.watch(Hit, symbiosis, until=When.ENCOUNTER, label=f"{c.ref} symbiosis watch")
+
+
+@power(
+    "p11841",
+    level=1,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=ARCANE_IMPLEMENT,
+    summon=Summon(speed=8, attack=Attack(INT, vs=REF), damage=Damage("1d10", "int")),
+)
+def p11841(c: Cast) -> None:
+    """`Summon` carries one attack line and no shape, so the command's close
+    burst and the slide it prints are not held, and the standard action that
+    would spend it has no door. The defence bonus is gated on `opportunity`,
+    which the attack context carries.
+    """
+    c.summon_inline(get(c.ref).summon, at=c.origin)
+    c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER)
+    for defence in (AC, FORT, REF, WILL):
+        c.bonus(
+            defence, 4, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: bool(ctx.get("opportunity")),
+        )
+
+
+@power(
+    "p4016",
+    level=1,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
+    summon=Summon(
+        speed=6, defences=2, modes=("fly",),
+        attack=Attack(INT, vs=REF),
+        damage=Damage("1d8", "int", dtype=DamageType.FIRE),
+    ),
+)
+def p4016(c: Cast) -> None:
+    """`Summon.defences` is one offset for all four and the printed +2 is to
+    AC and Fortitude alone, so Reflex and Will come out 2 too high. Hovering
+    has nowhere to go. The standard-action command has no door; the
+    opportunity one is written, since that is a moment the board reaches.
+    """
+    made = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if made:
+        _commands_on_opportunity(c, made)

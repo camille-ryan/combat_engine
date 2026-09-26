@@ -41,6 +41,7 @@ from combat_engine.engine import (
 from combat_engine.engine.events import MoveEnd
 from combat_engine.engine.query import distance_between
 
+from . import has_familiar
 from .knives import dagger
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
@@ -350,3 +351,35 @@ def p5857(c: Cast) -> None:
     if c.strike():
         c.damage("2d6", c.cha_mod, dtype=DamageType.PSYCHIC)
     c.ongoing(5, DamageType.PSYCHIC)
+
+
+@power(
+    "p12473",
+    level=9,
+    cls="sorcerer",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(20),
+    target=ONE_CREATURE,
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    attack=Attack(CHA, vs=FORT),
+    requires=has_familiar,
+    requires_text="your familiar must be in its active mode",
+)
+def p12473(c: Cast) -> None:
+    """"One creature adjacent to your familiar" has no header spelling -- target
+    lines are sides, not relations -- so it is checked here.
+
+    Dropped: the hit rider and the whole Sustain Minor, both of which are the
+    familiar flanking with you; nothing sets who a creature flanks with."""
+    fam = c.companion()
+    if fam is None:
+        return
+    if c.first:
+        for defence in (AC, FORT, REF, WILL):
+            c.bonus(defence, c.cha_mod, on=fam, until=When.ENCOUNTER)
+        c.move(c.speed_of(fam), who=fam)
+    if c.target not in c.within(1, of=fam):
+        return
+    if c.strike():
+        c.damage("2d10", c.cha_mod)

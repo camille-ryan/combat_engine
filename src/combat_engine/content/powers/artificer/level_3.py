@@ -9,6 +9,7 @@ from combat_engine.engine import (
     FORT,
     INT,
     INTERRUPT,
+    NO_TARGET,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -20,11 +21,15 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     MeleeOrRanged,
+    Miss,
+    Position,
     Ranged,
     Trigger,
     When,
+    ally_within,
     by_melee,
     power,
+    spread,
 )
 
 from . import ally_struck, one_ally
@@ -168,3 +173,40 @@ def p7648(c: Cast) -> None:
                 until=When.EONT,
                 when=lambda ctx: not ctx.get("ranged", False),
             )
+
+
+@power(
+    "p13442",
+    level=3,
+    cls="artificer",
+    usage=ENCOUNTER,
+    action=INTERRUPT,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[
+        Keyword.ARCANE,
+        Keyword.CONJURATION,
+        Keyword.ILLUSION,
+        Keyword.IMPLEMENT,
+        Keyword.PSYCHIC,
+    ],
+    trigger="an ally within 10 squares of you misses an enemy with an attack",
+    on=Trigger(Miss, ally_within(10), "an ally within 10 squares of you misses"),
+)
+def p13442(c: Cast) -> None:
+    """A conjuration, so creatures move through it -- nothing printed says it
+    blocks.
+
+    Its own attack is printed as a second block carrying *this same id*, which
+    the tree cannot hold twice, so that swing is dropped along with the move
+    action that walks the thing and the flanking it grants. What is written is
+    the conjuration arriving beside the enemy that was missed."""
+    victim = getattr(c.trigger, "target", None)
+    spot = c.world.get(victim, Position) if victim is not None else None
+    where = None
+    if spot is not None:
+        for sq in sorted(spread({spot.square}, 1) - {spot.square}):
+            if c.world.grid.passable(sq) and c.world.grid.occupant(sq) is None:
+                where = sq
+                break
+    c.conjure(at=where, until=When.EONT, sustain=None, speed=6)

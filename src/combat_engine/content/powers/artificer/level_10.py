@@ -7,19 +7,24 @@ from combat_engine.engine import (
     DAILY,
     EACH_ALLY,
     ENCOUNTER,
+    FORT,
     FREE,
     MINOR,
+    NO_TARGET,
     ONE_ALLY,
     REF,
+    STANDARD,
     Cast,
     CloseBurst,
     Keyword,
     Ranged,
+    Summon,
     SurgeSpent,
     Target,
     Trigger,
     When,
     ally_within,
+    get,
     power,
 )
 
@@ -74,3 +79,34 @@ def p7658(c: Cast) -> None:
     caster's and nothing declares one, so the ward simply lasts the fight."""
     c.bonus(AC, 4, on=c.target, until=When.ENCOUNTER)
     c.bonus(REF, 4, on=c.target, until=When.ENCOUNTER)
+
+
+@power(
+    "p4148",
+    level=10,
+    cls="artificer",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.HEALING],
+    summon=Summon(speed=5),
+)
+def p4148(c: Cast) -> None:
+    """The printed bonus is to AC and Fortitude only and `Summon.defences` is one
+    offset across all four, so the two are handed out in the body instead.
+
+    Dropped: the three minor-action saves an adjacent ally may take, which
+    nothing grants a limited number of, and the first-aid command, which is a
+    skill check."""
+    figurine = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if not figurine:
+        return
+    c.bonus(AC, 2, on=figurine, until=When.ENCOUNTER)
+    c.bonus(FORT, 2, on=figurine, until=When.ENCOUNTER)
+
+    def top_up(ev: SurgeSpent) -> None:
+        if ev.actor in c.within(1, of=figurine, side="ally"):
+            c.heal(c.wis_mod, on=ev.actor)
+
+    c.watch(SurgeSpent, top_up, until=When.ENCOUNTER)

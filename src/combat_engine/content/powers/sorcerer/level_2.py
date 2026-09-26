@@ -51,6 +51,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.events import DamageApplied, Miss
 
+from . import has_familiar
 from .dice import face_of
 
 ARCANE = [Keyword.ARCANE]
@@ -357,3 +358,33 @@ def p3741(c: Cast) -> None:
 )
 def p5268(c: Cast) -> None:
     c.note(f"{c.ref}: +2 to one skill check this turn, which nothing rolls")
+
+
+@power(
+    "p12468",
+    level=2,
+    cls="sorcerer",
+    usage=ENCOUNTER,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.ARCANE],
+    requires=has_familiar,
+    requires_text="your familiar must be in its active mode",
+)
+def p12468(c: Cast) -> None:
+    """A familiar is a `Companion`. Active and passive modes are not modelled at
+    all, so the Requirement is read as having one on the board.
+
+    "Against any creature adjacent to your familiar" gates on the attack
+    context's `target`, which it carries -- it is the damage side that is thin."""
+    fam = c.companion()
+    if fam is None:
+        return
+    c.bonus(
+        "attack",
+        2,
+        on=c.me,
+        until=When.EONT,
+        when=lambda ctx: ctx.get("target") in c.within(1, of=fam),
+    )

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from combat_engine.engine import (
+    AC,
     DAILY,
     EACH_CREATURE,
     EACH_ENEMY,
     FORT,
     MINOR,
+    NO_TARGET,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -21,13 +23,16 @@ from combat_engine.engine import (
     CloseBlast,
     CloseBurst,
     Condition,
+    Damage,
     DamageType,
     Keyword,
     MeleeOrRanged,
     Ranged,
+    Summon,
     TurnStart,
     UpTo,
     When,
+    get,
     power,
 )
 from combat_engine.engine.events import ZoneExited
@@ -391,3 +396,30 @@ def p7190(c: Cast) -> None:
     only_basic_attacks(c, victim, lasts)
     if c.build("preservation") and c.int_mod > 0:
         c.penalty("attack", c.int_mod, until=When.EONT)
+
+
+@power(
+    "p2880",
+    level=9,
+    cls="invoker",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=DIVINE_IMPLEMENT,
+    summon=Summon(
+        speed=6,
+        modes=("fly",),
+        attack=Attack(WIS, vs=FORT),
+        damage=Damage("1d8", "wis"),
+    ),
+)
+def p2880(c: Cast) -> None:
+    """+4 to AC alone, so it is a body bonus rather than `Summon.defences`,
+    which is one offset across all four.
+
+    Dropped: the opportunity command, which rolls Reflex and slows -- the header
+    carries the minor-action line, the one of the two that deals damage."""
+    angel = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if angel:
+        c.bonus(AC, 4, on=angel, until=When.ENCOUNTER)

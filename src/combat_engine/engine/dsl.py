@@ -144,14 +144,24 @@ class Summon:
     #: commonest printed line by a wide margin.
     hp: int = 0
     speed: int = 6
-    #: Added to each of the summoner's defences.
+    #: Added to each of the summoner's defences. A block printing "+2 to
+    #: AC and Fortitude" is not this -- pass `per_defence` instead, or
+    #: Reflex and Will come out two too high, which happened to five rows.
     defences: int = 0
+    #: One offset per defence, by name: `{"ac": 2, "fort": 2}`. Overrides
+    #: `defences` for the ones it names.
+    per_defence: dict[str, int] | None = None
+    #: Large creatures arrive Large. Two druid blocks print one and both
+    #: were spawned Medium, which is a square of footprint and a reach.
+    size: str = "medium"
     #: Its own attack, for a block that prints one. Without it the summon
     #: rolls whatever row commands it, the way a conjuration does.
     attack: Attack | None = None
     damage: Damage | None = None
-    #: "It can fly", "it can swim".
-    modes: tuple[str, ...] = ()
+    #: Movement modes with their own speeds -- `{"fly": 6, "climb": 3}`.
+    #: A bare tuple of names could not say "speed 0, fly 6", which three
+    #: blocks print, and they had to correct it by hand in the body.
+    modes: dict[str, int] | None = None
     label: str = ""
 
 
@@ -649,10 +659,15 @@ def measured_from(world: World, actor: int, r: Range) -> int:
     """
     if r.from_ != "companion":
         return actor
-    from .components import Companion
+    from .components import Companion, Position
 
     for eid in world.having(Companion):
-        if world.get(eid, Companion).owner == actor:
+        # A companion that has been dismissed or killed keeps its component
+        # for a moment but has no square, and measuring from it gave the
+        # row an **empty area** -- so the page lit nothing up and the power
+        # could not be aimed anywhere at all. Falling back to the caster
+        # makes it merely out of reach, which is the honest answer.
+        if world.get(eid, Companion).owner == actor and world.get(eid, Position):
             return eid
     return actor
 

@@ -938,6 +938,23 @@ def m3009a2(c: Cast) -> None:
 
 
 @power(
+    "m3009a3",
+    level=6,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    out_of_combat=True,
+)
+def m3009a3(c: Cast) -> None:
+    """Deliberately inert: the engine has no run action. Nothing grants
+    combat advantage for having run, so there is nothing for the exemption
+    to refuse -- and `c.no_advantage` is blanket and cannot name a reason.
+    See the report."""
+    c.note("m3009a3: running does not leave it easier to hit")
+
+
+@power(
     "m3009a4",
     level=6,
     usage=ENCOUNTER,
@@ -975,6 +992,43 @@ def m3009a4(c: Cast) -> None:
 # --------------------------------------------------------------------------
 # m3062
 # --------------------------------------------------------------------------
+
+
+#: Where the rust m3062a0 leaves on a weapon is counted, sharing `_worsen`'s
+#: cap with the armour m3062a1 eats.
+_M3062_RUST = "m3062a0 rust"
+
+
+@power(
+    "m3062a0",
+    level=6,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m3062a0(c: Cast) -> None:
+    """Every weapon that bites it comes away a point worse, five times over.
+
+    "Metal" is not a fact `Gear` holds -- a weapon there is its numbers and
+    nothing else -- so the printed line is read as any weapon attack, which
+    is what the sentence is for. A creature's own claws are not one.
+
+    The penalty is `_worsen`, the same stack of one-point holds under a
+    shared label that m3062a1 eats armour with: the cap is on the weapon
+    rather than on whoever is swinging it, so it is counted off the live
+    effects rather than out of a closure, and a second m3062 goes on
+    worsening the same blade.
+    """
+    me = c.me
+
+    def bit(ev: Hit) -> None:
+        row = get(ev.power) if ev.target == me else None
+        if row is None or Keyword.WEAPON not in row.keywords:
+            return
+        _worsen(c, ev.attacker, "attack", _M3062_RUST)
+
+    c.watch(Hit, bit, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -2105,6 +2159,22 @@ def m674a1(c: Cast) -> None:
     if c.strike():
         c.hit()
         _m674_secondary(c)
+
+
+@power(
+    "m674a2",
+    level=6,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    out_of_combat=True,
+)
+def m674a2(c: Cast) -> None:
+    """Deliberately inert: nothing on this board falls. The grid is flat,
+    there is no height to come off and no falling damage to be dealt, so
+    the printed twenty feet has no number to come out of. See the report."""
+    c.note("m674a2: it falls twenty feet further than it is hurt for")
 
 
 @power(

@@ -78,6 +78,7 @@ from combat_engine.engine import (
     Health,
     Keyword,
     Melee,
+    Position,
     Powers,
     Ranged,
     Relation,
@@ -99,6 +100,7 @@ from combat_engine.engine.events import (
     Dropped,
     Hit,
     Miss,
+    TurnStart,
     ZoneEntered,
     ZoneExited,
 )
@@ -1525,6 +1527,69 @@ def m498a1(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.prone()
+
+
+_M498_FELLED = "the m498 drops to 0 hit points"
+
+
+@power(
+    "m498a2",
+    level=8,
+    usage=ENCOUNTER,
+    action=FREE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    trigger=_M498_FELLED,
+    on=Trigger(Dropped, when=about_me, text=_M498_FELLED),
+)
+def m498a2(c: Cast) -> None:
+    """It gets up again on its own next turn, and the corpse can hold
+    nothing that would let it.
+
+    `Effects.bereave` runs the instant after `Dropped` and sweeps both
+    halves of the obvious way to write this: an effect *on* the corpse, and
+    an effect the corpse is the source of that runs to the end of the
+    encounter. So the wait is laid on a marker the dead creature does not
+    own -- a zone, which carries no `Health` and is therefore the one owner
+    bereave steps over -- and the slot the rise is measured against is a
+    hold owned by that marker and clocked on the corpse, which is what
+    keeps `Encounter.advance` ticking the silent turn. The arrangement
+    `_pyre` settled on for a death throe that outlives its maker.
+
+    It comes back as a body rather than as a heal: `_die` lifts the old one
+    off the grid before anything here could raise it, and `c.summon` is
+    both halves of the printed line -- a creature on the board and the new
+    initiative check the card asks for outright. Forty-four is a number the
+    power prints rather than one off the stat block, so it is written, and
+    it is clamped in case the maximum is lower.
+
+    "The first time" is the encounter usage.
+    """
+    me = c.me
+    where = c.world.get(me, Position)
+    grave = where.square if where is not None else c.here
+    c.reroll_initiative(on=me)
+    marker = c.zone({grave}, label=c.ref, until=When.ENCOUNTER)
+    held = dict(c.world.zones.all()).get(marker)
+    if held is not None and held.effect is not None:
+        held.effect.source = marker
+    c.world.effects.apply(marker, me, When.EONT, label=f"{c.ref} slot")
+    spent: list[int] = []
+
+    def rise(ev: TurnStart) -> None:
+        if spent or ev.actor != me:
+            return
+        spent.append(1)
+        free = c.world.grid.occupant(grave) is None
+        risen = c.summon("m498", at=grave if free else None)
+        body = c.world.get(risen, Health) if risen else None
+        if body is not None:
+            body.hp = min(44, body.max_hp)
+
+    watcher = c.watch(
+        TurnStart, rise, until=When.ENCOUNTER, on=marker, label=f"{c.ref} rise"
+    )
+    watcher.source = marker
 
 
 # -- m689 -------------------------------------------------------------------

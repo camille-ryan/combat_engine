@@ -2281,6 +2281,7 @@ class Cast:
             Side,
             Stats,
         )
+        from .events import Summoned
         from .grid import Size
         from .query import team as side_of
 
@@ -2289,19 +2290,36 @@ class Cast:
             return 0
         mine = self.world.need(self.me, Defenses)
         hp = spec.hp or max(1, self.surge_value())
+        # Per-defence first, falling back to the flat offset. Five rows
+        # print "+2 to AC and Fortitude" and one number gave Reflex and
+        # Will the bonus too.
+        each = spec.per_defence or {}
         made = self.world.spawn(
-            Position(square=where, size=Size.MEDIUM),
+            Position(square=where, size=Size(spec.size)),
             Side(team=side_of(self.world, self.me) or Team.ALLY),
             Health(hp=hp, max_hp=hp),
             Defenses(
-                values={k: v + spec.defences for k, v in mine.values.items()},
+                values={
+                    k: v + each.get(str(k), spec.defences)
+                    for k, v in mine.values.items()
+                },
                 scale=mine.scale,
             ),
-            Movement(speed=spec.speed, modes=set(spec.modes)),
+            # `Movement.modes` maps a name to its own speed, so "speed 0,
+            # fly 6" is sayable. Built as a set of names, every later
+            # `c.mode`, `c.phasing` or `c.moving_as` on the summon raised
+            # on `.get`.
+            Movement(speed=spec.speed, modes=_modes_of(spec)),
             replace(self.world.need(self.me, Stats)),
         )
         self.world.add(
             made, Companion(owner=self.me, ref=spec.label or self.ref, kind="summon")
+        )
+        # Announced, because `World.spawn` says nothing and a row whose
+        # whole Effect is "you summon X" left no trace at all -- four
+        # correct rows reported SILENT for it.
+        self.world.bus.emit(
+            Summoned(actor=self.me, summon=made, ref=spec.label or self.ref)
         )
         return made
 
@@ -2324,7 +2342,13 @@ class Cast:
         hit = self.attack(bonus, spec.attack.vs, on=on, from_=who)
         if hit and spec.damage is not None:
             line = spec.damage
-            self.damage(line.dice, line.bonus, dtype=line.dtype, on=on)
+            # Through `_bonus_of`, the way `c.hit` reads a header's damage.
+            # Every printed summon block says "+ Intelligence modifier", which
+            # is `Damage(..., "int")` -- handed to `c.damage` raw it reached
+            # `roll(dice).total + "int"` and every one of them raised.
+            self.damage(
+                line.dice, self._bonus_of(line.bonus), dtype=line.dtype, on=on
+            )
         return hit
 
     def dismiss_companion(self) -> bool:
@@ -3074,6 +3098,22 @@ def _max_of(dice: str | int) -> int:
     elif sign == "-":
         top -= int(tail)
     return top
+
+
+def _modes_of(spec: Any) -> dict[str, int]:
+    """`Summon.modes` as a mapping, however it was written.
+
+    It began as a tuple of names and became a mapping so "speed 0, fly 6"
+    could be said. Rows written against the older shape are still correct
+    English -- `modes=("fly",)` means it flies at its own speed -- so both
+    are read rather than one being a `ValueError` from inside `dict()`.
+    """
+    modes = getattr(spec, "modes", None)
+    if not modes:
+        return {}
+    if isinstance(modes, dict):
+        return dict(modes)
+    return dict.fromkeys(modes, spec.speed)
 
 
 def _min_of(dice: str | int) -> int:

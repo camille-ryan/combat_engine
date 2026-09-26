@@ -174,7 +174,7 @@ KNOWN_SILENT = {
 DID_SOMETHING = {
     "DamageApplied", "ConditionApplied", "Healed", "TempHP", "Moved",
     "ForcedMove", "RelationSet", "ZoneCreated", "EffectExpired", "Note",
-    "Bloodied", "Dropped", "Died", "SavingThrow",
+    "Bloodied", "Dropped", "Died", "SavingThrow", "Summoned",
 }  # fmt: skip
 
 #: An effect applied is also doing something, but it only shows in the log

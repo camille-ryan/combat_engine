@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from combat_engine.engine import (
+    AC,
     DAILY,
     EACH_CREATURE,
     EACH_ENEMY,
@@ -21,11 +22,13 @@ from combat_engine.engine import (
     CloseBlast,
     CloseBurst,
     Condition,
+    Damage,
     DamageApplied,
     DamageType,
     Hit,
     Keyword,
     Ranged,
+    Summon,
     Trigger,
     TurnEnd,
     UpTo,
@@ -35,6 +38,7 @@ from combat_engine.engine import (
     by_ranged,
     either,
     enemy_target_within,
+    get,
     power,
 )
 
@@ -337,3 +341,31 @@ def p7176(c: Cast) -> None:
     else:
         c.half_damage("2d6", c.wis_mod, dtype=DamageType.RADIANT)
         c.push(1)
+
+
+@power(
+    "p11288",
+    level=5,
+    cls="invoker",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=DIVINE_IMPLEMENT,
+    summon=Summon(
+        speed=6,
+        attack=Attack(WIS, vs=FORT, plus=1),
+        damage=Damage("1d12", "wis"),
+    ),
+)
+def p11288(c: Cast) -> None:
+    """+2 to AC and Reflex only, so the two are handed out in the body --
+    `Summon.defences` is one offset across all four.
+
+    Dropped: the run-in that the standard command opens with and its prone
+    rider, the +2 to speed while charging, and the shift on the opportunity
+    command."""
+    lion = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if lion:
+        c.bonus(AC, 2, on=lion, until=When.ENCOUNTER)
+        c.bonus(REF, 2, on=lion, until=When.ENCOUNTER)

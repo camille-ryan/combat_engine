@@ -28,12 +28,22 @@ zone. That is wider than the printed line and is said in the rows that do it.
 `DamageType` names one type per blow. The heavier word is used and the other
 is noted.
 
-The four summoning rows of this level are absent; see the report.
+The four summoning rows of this level are written on `Summon` in the header
+and `c.summon_inline` in the body. Each prints commands the summoner spends
+an action on later; nothing offers a command action, so the standard one is
+declared and unspendable and the opportunity one is written as the moment it
+names -- an adjacent enemy walking.
 """
 
 from __future__ import annotations
 
+from combat_engine.content.powers.wizard.level_1_d import (
+    _at_will_or_basic,
+    _commands_on_opportunity,
+    _reach_is,
+)
 from combat_engine.engine import (
+    AC,
     DAILY,
     EACH_CREATURE,
     EACH_ENEMY,
@@ -51,6 +61,7 @@ from combat_engine.engine import (
     Attack,
     Cast,
     Condition,
+    Damage,
     DamageType,
     Effect,
     Gear,
@@ -61,6 +72,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     Square,
+    Summon,
     TurnEnd,
     When,
     Window,
@@ -758,3 +770,123 @@ def p5807(c: Cast) -> None:
     )
     if held is not None:
         held.on_end.append(afterwards)
+
+
+@power(
+    "p11844",
+    level=9,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
+    summon=Summon(
+        speed=7, attack=Attack(INT, vs=REF),
+        damage=Damage("2d6", "int", dtype=DamageType.FIRE),
+    ),
+)
+def p11844(c: Cast) -> None:
+    """`Summon` carries one attack line and no shape, so the header holds the
+    command's numbers and not its close blast, and nothing offers the
+    standard action that spends it. Neither half of the symbiosis is gated
+    on the hound still standing.
+    """
+    made = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if made:
+        c.resist(10, DamageType.FIRE, on=made)
+        c.burns(c.aura(1, on=made, until=When.ENCOUNTER), 5, DamageType.FIRE)
+
+    def symbiosis(ev: Hit) -> None:
+        if ev.attacker == c.me and _reach_is(ev.power, "close", "area"):
+            c.damage("1d6", dtype=DamageType.FIRE, on=ev.target)
+        elif ev.target == c.me and _reach_is(ev.power, "melee"):
+            c.damage("1d6", dtype=DamageType.FIRE, on=ev.attacker)
+
+    c.watch(Hit, symbiosis, until=When.ENCOUNTER, label=f"{c.ref} symbiosis")
+
+
+@power(
+    "p11845",
+    level=9,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.CHARM],
+    summon=Summon(
+        speed=6, modes=("fly",),
+        attack=Attack(INT, vs=WILL), damage=Damage("1d10", "int"),
+    ),
+)
+def p11845(c: Cast) -> None:
+    """The domination the command applies, and the once-a-creature limit on
+    it, are riders on a standard action nothing offers. "Against you" is a
+    gate on the attack context's `target`, which it carries.
+    """
+    made = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if made:
+        c.resist(10, DamageType.FIRE, on=made)
+
+    def symbiosis(ev: Hit) -> None:
+        if ev.attacker != c.me or not _at_will_or_basic(ev.power):
+            return
+        c.penalty(
+            "attack", 4, on=ev.target, until=When.EOTNT,
+            when=lambda ctx: ctx.get("target") == c.me,
+        )
+
+    c.watch(Hit, symbiosis, until=When.ENCOUNTER, label=f"{c.ref} symbiosis")
+
+
+@power(
+    "p4082",
+    level=9,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=ARCANE_IMPLEMENT,
+    summon=Summon(
+        speed=8, defences=2, modes=("fly",),
+        attack=Attack(INT, vs=REF), damage=Damage("1d10", "int"),
+    ),
+)
+def p4082(c: Cast) -> None:
+    """`Summon.defences` is one offset for all four and the printed +2 is to
+    AC and Reflex, so Fortitude and Will come out 2 too high. The standard
+    command -- shift 3 and swing -- has no door; the opportunity one does,
+    and carries the mark the line prints.
+    """
+    made = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if made:
+        _commands_on_opportunity(c, made, mark=True)
+
+
+@power(
+    "p6959",
+    level=9,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.NECROTIC],
+    summon=Summon(
+        speed=6, defences=2,
+        attack=Attack(INT, vs=AC),
+        damage=Damage("1d10", "int", dtype=DamageType.NECROTIC),
+    ),
+)
+def p6959(c: Cast) -> None:
+    """Its printed target is one dead creature, whose size and reach the
+    corpse takes; nothing reads either off a body and `Summon` has no size,
+    so the row is declared with no target and the creature arrives Medium
+    with reach 1. `Summon.defences` is one offset for all four where the
+    printed +2 is AC and Fortitude. The standard command has no door.
+    """
+    made = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if made:
+        _commands_on_opportunity(c, made)

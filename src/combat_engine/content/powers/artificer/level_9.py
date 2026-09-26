@@ -8,6 +8,7 @@ from combat_engine.engine import (
     EACH_ENEMY,
     INT,
     MINOR,
+    NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
     REACTION,
@@ -17,14 +18,17 @@ from combat_engine.engine import (
     Cast,
     CloseBurst,
     Condition,
+    Damage,
     DamageType,
     Effect,
     Hit,
     Keyword,
     Melee,
     Ranged,
+    Summon,
     Trigger,
     When,
+    get,
     power,
 )
 
@@ -131,3 +135,36 @@ def p4147(c: Cast) -> None:
     else:
         c.half_damage(c.w(2), c.int_mod)
         c.slowed(until=When.SAVE_ENDS)
+
+
+@power(
+    "p7657",
+    level=9,
+    cls="artificer",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    summon=Summon(
+        speed=8,
+        attack=Attack(INT, vs=AC, plus=2),
+        damage=Damage("1d8", "int"),
+    ),
+)
+def p7657(c: Cast) -> None:
+    """The extra die is read off the landing: `c.had_advantage(ev)` is whether
+    *that* attack had combat advantage, and asking again is too late because a
+    one-shot grant has already been spent.
+
+    The standard command's "and the servant shifts 2" is dropped -- the header
+    carries one attack line and `c.command` rolls it."""
+    servant = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if not servant:
+        return
+
+    def extra(ev: Hit) -> None:
+        if ev.attacker == servant and c.had_advantage(ev):
+            c.flat(c.roll("1d6"), on=ev.target)
+
+    c.watch(Hit, extra, until=When.ENCOUNTER)

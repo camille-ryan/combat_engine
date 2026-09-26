@@ -65,12 +65,14 @@ from combat_engine.engine import (
     ConditionApplied,
     DamageType,
     Died,
+    Dropped,
     Health,
     Keyword,
     Melee,
     Position,
     Powers,
     Ranged,
+    Summon,
     Target,
     Trigger,
     When,
@@ -627,3 +629,35 @@ def p6900(c: Cast) -> None:
             c.world.effects.end(held, "the caster went down")
 
     held.subs.append(c.world.bus.on(ConditionApplied, slumped, owner=me))
+
+
+@power(
+    "p4106",
+    level=2,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.SHADOW],
+    summon=Summon(),
+)
+def p4106(c: Cast) -> None:
+    """The spec prints no attack line and no command list for the serpent,
+    so the header is the default block: the summoner's surge value for hit
+    points, its defences, speed 6. Dismissing it as a minor action is an
+    action nothing offers, and "until the end of the encounter" is what a
+    companion lasts for anyway.
+    """
+    made = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if not made:
+        return
+
+    def surge_lost(ev: Dropped) -> None:
+        if ev.actor == made:
+            c.spend_surge(on=c.me)
+
+    c.watch(
+        Dropped, surge_lost, until=When.ENCOUNTER, once=True,
+        label=f"{c.ref} serpent falls",
+    )

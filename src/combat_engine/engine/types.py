@@ -74,6 +74,7 @@ class Keyword(StrEnum):
     RELIABLE = "reliable"
     STANCE = "stance"
     CONJURATION = "conjuration"
+    SUMMONING = "summoning"
     POLYMORPH = "polymorph"
     SLEEP = "sleep"
     GAZE = "gaze"

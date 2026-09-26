@@ -70,6 +70,9 @@ from __future__ import annotations
 from combat_engine.content.monsters.level_05.brutes import _defences_down
 from combat_engine.content.monsters.level_10.soldiers import _moved_into_flank
 from combat_engine.content.monsters.level_11.controllers import _softened
+from combat_engine.content.monsters.level_12.controllers import (
+    _acts_after_its_creator,
+)
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -1297,6 +1300,21 @@ def m4938a4(c: Cast) -> None:
 
 
 _M4970_FELLED = "the m4970 drops to 0 hit points"
+
+
+@power(
+    "m4970a0",
+    level=12,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m4970a0(c: Cast) -> None:
+    """The sentence m4971a1 and m4972a1 print, and the same relation answers
+    it: "created by" is the servant bond, and nothing else on the board
+    records one creature having made another."""
+    _acts_after_its_creator(c)
 
 
 @power(

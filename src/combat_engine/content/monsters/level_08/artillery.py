@@ -718,6 +718,28 @@ def m2975a1(c: Cast) -> None:
 
 
 @power(
+    "m2975a2",
+    level=8,
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Ranged(10),
+    target=ONE_CREATURE,
+    keywords=[Keyword.IMPLEMENT, Keyword.RANGED],
+    attack=Attack(vs=REF, printed=13),
+    damage=Damage("2d8", 7),
+)
+def m2975a2(c: Cast) -> None:
+    """The rider is noted rather than invented: nothing on `Cast` shuts off
+    a creature's immediate and opportunity actions. `c.cannot_attack` bars
+    every attack it makes, which is a far larger thing than the printed
+    line, and `c.threatens(0)` would take away only the opportunity half
+    and leave an immediate interrupt untouched. See the report."""
+    if c.strike():
+        c.hit()
+        c.note("m2975a2: the target can take no immediate or opportunity actions")
+
+
+@power(
     "m2975a3",
     level=8,
     usage=Usage.RECHARGE,

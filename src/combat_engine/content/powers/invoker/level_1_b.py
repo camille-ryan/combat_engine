@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from combat_engine.engine import (
+    AC,
     DAILY,
     EACH_CREATURE,
     EACH_ENEMY,
     ENCOUNTER,
     FORT,
     MINOR,
+    NO_TARGET,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -20,16 +22,19 @@ from combat_engine.engine import (
     CloseBlast,
     CloseBurst,
     Condition,
+    Damage,
     DamageApplied,
     DamageType,
     Defense,
     Keyword,
     Miss,
     Ranged,
+    Summon,
     TurnEnd,
     TurnStart,
     UpTo,
     When,
+    get,
     power,
 )
 
@@ -374,3 +379,53 @@ def p7162(c: Cast) -> None:
     else:
         c.half_damage("1d8", c.wis_mod, dtype=DamageType.THUNDER)
         c.slowed(until=When.SAVE_ENDS)
+
+
+@power(
+    "p11282",
+    level=1,
+    cls="invoker",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=DIVINE_IMPLEMENT,
+    summon=Summon(
+        speed=6,
+        attack=Attack(WIS, vs=REF),
+        damage=Damage("2d12", "wis"),
+    ),
+)
+def p11282(c: Cast) -> None:
+    """The printed bonus is to AC alone and `Summon.defences` is one offset
+    across all four, so it is handed out in the body.
+
+    Dropped: the mark rider on the standard command, and the whole opportunity
+    command, which rolls a different defence for no damage -- the header carries
+    one attack line and `c.command` rolls it."""
+    angel = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if angel:
+        c.bonus(AC, 2, on=angel, until=When.ENCOUNTER)
+
+
+@power(
+    "p3314",
+    level=1,
+    cls="invoker",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=[Keyword.DIVINE, Keyword.FIRE, Keyword.IMPLEMENT],
+    summon=Summon(
+        speed=6,
+        modes=("fly",),
+        attack=Attack(WIS, vs=REF),
+        damage=Damage("1d8", "wis", dtype=DamageType.FIRE),
+    ),
+)
+def p3314(c: Cast) -> None:
+    """Its standard command is a close burst 1 and its opportunity command a
+    melee 1 off the same numbers; `c.command` rolls one target, so the burst's
+    spread is dropped and the shared line is what the header carries."""
+    c.summon_inline(get(c.ref).summon, at=c.origin)

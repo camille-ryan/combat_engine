@@ -403,6 +403,22 @@ def m2948a4(c: Cast) -> None:
     c.note("m2948a4: the target cannot benefit from cover or concealment")
 
 
+@power(
+    "m2948a5",
+    level=12,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    out_of_combat=True,
+)
+def m2948a5(c: Cast) -> None:
+    """Deliberately inert, for the reason m2947a5 gives a level down: the
+    engine has no jump, so there is no move for the waiver to apply to.
+    See the report."""
+    c.note("m2948a5: it provokes no opportunity attacks while jumping")
+
+
 # ==========================================================================
 # m3057
 # ==========================================================================

@@ -14,7 +14,10 @@ own hand: a `requires=` on the weapon group, and the rider armed on its own
 hits. `p13510` wants an axe, a flail, a blade, a pick or a spear and the
 class carries a mace, a crossbow and a staff, so it is correctly unusable.
 
-The three summoning rows of this level are absent; see the report.
+The three summoning rows of this level are written on `Summon` in the header
+and `c.summon_inline` in the body. Each prints its command as part of using
+the power on the turn it is cast, so `c.command` is rolled here; commands on
+later turns have no action to be spent on.
 """
 
 from __future__ import annotations
@@ -40,6 +43,7 @@ from combat_engine.engine import (
     Cast,
     CloseBurst,
     Condition,
+    Damage,
     DamageType,
     Dropped,
     Gear,
@@ -48,6 +52,7 @@ from combat_engine.engine import (
     Melee,
     MoveEnd,
     Ranged,
+    Summon,
     TurnStart,
     UpTo,
     When,
@@ -496,3 +501,87 @@ def p9643(c: Cast) -> None:
     for who in sorted(c.in_squares(spread(squares(c.world, victim), 1))):
         if c.strike(on=who):
             c.prone(on=who)
+
+
+@power(
+    "p5366",
+    level=1,
+    cls="druid",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=ONE_CREATURE,
+    keywords=PRIMAL_IMPLEMENT,
+    summon=Summon(speed=6, attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis")),
+)
+def p5366(c: Cast) -> None:
+    """The printed Effect gives the command as part of using the power, so it
+    is rolled here; commands on later turns have no action to be spent on.
+    The boar arrives in whatever free square `c.summon_inline` finds near
+    the druid -- nothing picks one out of the range for it -- and the
+    "Summoning" keyword the block prints has no member to name.
+    """
+    made = c.summon_inline(get(c.ref).summon)
+    if not made:
+        return
+    if c.command(made, on=c.target):
+        c.push(1, by=made)
+
+    def last_gasp(ev: Dropped) -> None:
+        if ev.actor != made:
+            return
+        near = c.within(1, of=made, side="enemy")
+        if near and c.command(made, on=near[0]):
+            c.push(1, on=near[0], by=made)
+
+    c.watch(
+        Dropped, last_gasp, until=When.ENCOUNTER, once=True,
+        label=f"{c.ref} last command",
+    )
+
+
+@power(
+    "p5367",
+    level=1,
+    cls="druid",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=ONE_CREATURE,
+    keywords=PRIMAL_IMPLEMENT,
+    summon=Summon(
+        speed=5, modes=("swim",),
+        attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),
+    ),
+)
+def p5367(c: Cast) -> None:
+    """The +10 to jump is a skill bonus and there are no checks here. A mode
+    is a word rather than a number, so swim 6 beside speed 5 is just "swim".
+    """
+    made = c.summon_inline(get(c.ref).summon)
+    if made and c.command(made, on=c.target):
+        c.pull(2, by=made)
+
+
+@power(
+    "p5369",
+    level=1,
+    cls="druid",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=ONE_CREATURE,
+    keywords=PRIMAL_IMPLEMENT,
+    summon=Summon(speed=6, attack=Attack(WIS, vs=REF), damage=Damage("1d6", "wis")),
+)
+def p5369(c: Cast) -> None:
+    """Whether the wolf had combat advantage is read off the result the
+    command returns; asking the board again afterwards is too late, since a
+    one-shot grant has already been spent.
+    """
+    made = c.summon_inline(get(c.ref).summon)
+    if not made:
+        return
+    landed = c.command(made, on=c.target)
+    if landed and landed.advantage:
+        c.prone()

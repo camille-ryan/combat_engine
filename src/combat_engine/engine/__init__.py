@@ -98,6 +98,7 @@ from .events import (
     RoundEnd,
     RoundStart,
     SavingThrow,
+    Summoned,
     SurgeSpent,
     TempHP,
     TurnEnd,

@@ -20,6 +20,7 @@ from combat_engine.engine import (
     CON,
     DAILY,
     MINOR,
+    NO_TARGET,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -29,11 +30,14 @@ from combat_engine.engine import (
     Cast,
     DamageApplied,
     DamageType,
+    Dropped,
     Keyword,
     Mod,
     Ranged,
     SavingThrow,
+    Summon,
     When,
+    get,
     power,
     spread,
 )
@@ -223,3 +227,34 @@ def p1474(c: Cast) -> None:
         c.damage("1d8", dtype=DamageType.COLD, on=victim)
 
     frost.subs.append(c.world.bus.on(MoveEnd, stepped))
+
+
+@power(
+    "p13649",
+    level=9,
+    cls="warlock",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+    summon=Summon(),
+)
+def p13649(c: Cast) -> None:
+    """The spec prints no stat block -- which creature arrives is the pact's and
+    the pacts' creatures are not given -- so the summon takes the defaults,
+    which are the summoner's defences and a surge's worth of hit points.
+
+    "Or hit points equal to your surge value if you have no surges left" is the
+    fallback when `c.spend_surge` comes back False. Dropped: dismissing it as a
+    minor action, which would be a second row and the spec names no id for
+    one."""
+    made = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if not made:
+        return
+
+    def pay(ev: Dropped) -> None:
+        if ev.actor == made and not c.spend_surge(on=c.me):
+            c.flat(c.surge_value(), on=c.me)
+
+    c.watch(Dropped, pay, until=When.ENCOUNTER)

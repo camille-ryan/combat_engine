@@ -1733,6 +1733,29 @@ def m1279a5(c: Cast) -> None:
 
 
 @power(
+    "m2904a0",
+    level=5,
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Melee(2),
+    target=ONE_CREATURE,
+    keywords=[Keyword.LIGHTNING],
+    attack=Attack(vs=AC, printed=10),
+    damage=Damage("2d8", 4),
+)
+def m2904a0(c: Cast) -> None:
+    """Two packets, because only the second is lightning: one `Damage` line
+    carries one type, and resistance is read per type.
+
+    The card prints no attack bonus on this line, so the +10 vs AC that the
+    other reach-2 at-will on this block prints is what is written.
+    """
+    if c.strike():
+        c.hit()
+        c.damage("1d8", dtype=DamageType.LIGHTNING, detail=c.ref)
+
+
+@power(
     "m2904a1",
     level=5,
     usage=AT_WILL,

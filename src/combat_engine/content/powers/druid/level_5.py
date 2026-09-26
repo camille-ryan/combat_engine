@@ -10,7 +10,10 @@ five saving throws -- penalties always stack, so "the largest wins" is not
 available either -- so it is one hold carrying five `Mod` objects whose
 values are written down in place as the blows land.
 
-The four summoning rows of this level are absent; see the report.
+The four summoning rows of this level are written the way `level_1_d.py`
+writes its own: `Summon` in the header, `c.summon_inline` and one `c.command`
+in the body, since the printed Effect gives that command as part of using the
+power.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from combat_engine.engine import (
     EACH_CREATURE,
     FORT,
     MINOR,
+    NO_TARGET,
     ONE_CREATURE,
     PERSONAL,
     REF,
@@ -34,11 +38,14 @@ from combat_engine.engine import (
     Attack,
     Cast,
     Condition,
+    Damage,
     DamageType,
     Hit,
     Keyword,
     Melee,
     Mod,
+    Ranged,
+    Summon,
     When,
     get,
     power,
@@ -291,3 +298,98 @@ def p16120(c: Cast) -> None:
             m.value = max(floor, m.value - 1)
 
     hold.subs.append(c.world.bus.on(Hit, worsen, owner=c.me))
+
+
+@power(
+    "p5371",
+    level=5,
+    cls="druid",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.FIRE],
+    summon=Summon(
+        speed=6, attack=Attack(WIS, vs=REF),
+        damage=Damage("1d8", "wis", dtype=DamageType.FIRE),
+    ),
+)
+def p5371(c: Cast) -> None:
+    """`Summon` carries one attack line and no shape, so the command's close
+    blast is written out: everything within 3 of the beetle is commanded
+    one at a time. The command is given as part of using the power, which
+    is what the printed Effect says; later ones have no action to spend.
+    """
+    made = c.summon_inline(get(c.ref).summon)
+    if not made:
+        return
+    c.resist(5, DamageType.FIRE, on=made)
+    for foe in c.within(3, of=made, side="enemy"):
+        c.command(made, on=foe)
+
+
+@power(
+    "p5373",
+    level=5,
+    cls="druid",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=ONE_CREATURE,
+    keywords=PRIMAL_IMPLEMENT,
+    summon=Summon(speed=6, attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis")),
+)
+def p5373(c: Cast) -> None:
+    """The instinctive effect -- what the drake does on a turn nobody
+    commanded it -- has nowhere to go, and `c.guard` makes the caster the
+    protector rather than the drake, so which character it guards is not
+    held either.
+    """
+    made = c.summon_inline(get(c.ref).summon)
+    if made and c.command(made, on=c.target):
+        c.mark(on=c.target, by=made, until=When.EONT)
+
+
+@power(
+    "p5374",
+    level=5,
+    cls="druid",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=ONE_CREATURE,
+    keywords=PRIMAL_IMPLEMENT,
+    summon=Summon(speed=7, attack=Attack(WIS, vs=REF), damage=Damage("1d10", "wis")),
+)
+def p5374(c: Cast) -> None:
+    """The shift is the panther's own, so it is walked before the swing."""
+    made = c.summon_inline(get(c.ref).summon)
+    if not made:
+        return
+    c.shift(3, who=made)
+    c.command(made, on=c.target)
+
+
+@power(
+    "p9655",
+    level=5,
+    cls="druid",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=ONE_CREATURE,
+    keywords=PRIMAL_IMPLEMENT,
+    summon=Summon(
+        speed=6, modes=("climb",),
+        attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),
+    ),
+)
+def p9655(c: Cast) -> None:
+    """"All creatures have concealment from the target" is written as what
+    concealment is -- a -2 to that creature's own attack rolls, of the
+    concealment kind so two sources do not add. `c.conceal` grants it to a
+    creature against everybody, which is the other direction.
+    """
+    made = c.summon_inline(get(c.ref).summon)
+    if made and c.command(made, on=c.target):
+        c.penalty("attack", 2, on=c.target, until=When.EONT, kind="concealment")

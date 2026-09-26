@@ -9,6 +9,7 @@ docstring rather than folded in or guessed at.
 from __future__ import annotations
 
 from combat_engine.engine import (
+    AC,
     AT_WILL,
     DAILY,
     EACH_CREATURE,
@@ -23,14 +24,17 @@ from combat_engine.engine import (
     AreaBurst,
     Attack,
     Cast,
+    Damage,
     DamageType,
     Keyword,
     Melee,
     MoveEnd,
     Position,
     Ranged,
+    Summon,
     TurnStart,
     When,
+    get,
     power,
     spread,
 )
@@ -447,3 +451,24 @@ def p8230(c: Cast) -> None:
         if foe != primary and c.strike(on=foe):
             c.damage("1d6", c.int_mod, dtype=DamageType.PSYCHIC, on=foe)
             c.ongoing(5, DamageType.PSYCHIC, on=foe)
+
+
+@power(
+    "p13311",
+    level=1,
+    cls="psion",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=PSIONIC_PSYCHIC,
+    summon=Summon(
+        speed=8,
+        attack=Attack(INT, vs=AC),
+        damage=Damage("1d10", "int", dtype=DamageType.PSYCHIC),
+    ),
+)
+def p13311(c: Cast) -> None:
+    """Augment 0, as everywhere in this class. Augment 1 gives the servant a
+    further command and is dropped with the rest of the augment clauses."""
+    c.summon_inline(get(c.ref).summon, at=c.origin)

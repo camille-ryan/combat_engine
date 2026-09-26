@@ -20,15 +20,18 @@ Six rows of this level are left out; see the report and `docs/blocked.json`.
 from __future__ import annotations
 
 from combat_engine.engine import (
+    AC,
     DAILY,
     EACH_ENEMY,
     ENCOUNTER,
+    FORT,
     INTERRUPT,
     MINOR,
     MOVE,
     NO_TARGET,
     PERSONAL,
     REACTION,
+    REF,
     SELF,
     WILL,
     AttackDeclared,
@@ -40,6 +43,7 @@ from combat_engine.engine import (
     Event,
     Keyword,
     Miss,
+    Ranged,
     Trigger,
     When,
     World,
@@ -365,3 +369,24 @@ def p5860(c: Cast) -> None:
     ]
     for amount, kind in standing:
         c.ongoing(amount + 10, kind, on=victim)
+
+
+@power(
+    "p12474",
+    level=10,
+    cls="sorcerer",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def p12474(c: Cast) -> None:
+    """"Target: your familiar" has no header spelling, so the familiar is found
+    in the body and the header takes no target."""
+    fam = c.companion()
+    if fam is None:
+        return
+    for defence in (AC, FORT, REF, WILL):
+        c.bonus(defence, c.cha_mod, on=fam, until=When.ENCOUNTER)
+    c.resist(10, on=fam, until=When.ENCOUNTER)

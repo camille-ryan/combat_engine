@@ -125,6 +125,7 @@ from combat_engine.engine import (
     footprint,
     power,
     spread,
+    use,
 )
 from combat_engine.engine.components import Conjuration
 from combat_engine.engine.events import (
@@ -1286,6 +1287,90 @@ def m4928a2(c: Cast) -> None:
         me, me, When.SUSTAIN, label=_M4928_SUSTAIN, sustain_cost=MINOR
     )
     c.on_sustain(holder, squeeze)
+
+
+#: The hold m4928a3 keeps on whatever it has wrapped up.
+_M4928_CRUSH = "m4928a3 crush"
+
+
+@power(
+    "m4928a3",
+    level=10,
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Melee(3),
+    target=ONE_CREATURE,
+    attack=Attack(vs=FORT, printed=13),
+    damage=Damage("2d10", 10),
+)
+def m4928a3(c: Cast) -> None:
+    """Held for as long as it stays close, and crushed once a round for it.
+
+    "One vehicle" is not a target the engine has -- nothing on the board is
+    a vehicle -- so the row takes one creature, which is what the printed
+    line is about in every way that resolves.
+
+    The hold is not save-ends: it runs to the end of the encounter and is
+    ended by the m4928 drifting more than three squares off, which is the
+    clock the card names. The distance is therefore re-asked wherever
+    either of them can have moved, and again as the toll falls due.
+
+    The pilot's standard action to force a saving throw is left out. It is
+    another stat block's row, and nothing on `Cast` hands one creature an
+    action taken on another's behalf. See the report.
+    """
+    me, victim = c.me, c.target
+    if victim is None or not c.strike():
+        return
+    c.hit()
+    hold = c.condition(Condition.RESTRAINED, until=When.ENCOUNTER, on=victim)
+    if hold is None:
+        return
+
+    def let_go() -> None:
+        if not hold.ended and distance_between(c.world, me, victim) > 3:
+            c.world.effects.end(hold, "the m4928 has drifted off")
+
+    def moved(_ev: MoveEnd) -> None:
+        let_go()
+
+    def crush(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != me:
+            return
+        let_go()
+        if not hold.ended:
+            c.flat(20, on=victim)
+
+    c.watch(MoveEnd, moved, until=When.ENCOUNTER, on=me, label=_M4928_CRUSH)
+    c.watch(TurnStart, crush, until=When.ENCOUNTER, on=me, label=_M4928_CRUSH)
+    c.note("m4928a3: the vehicle's pilot may spend a standard action to give it a save")
+
+
+@power(
+    "m4928a4",
+    level=10,
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Melee(3),
+    target=NO_TARGET,
+)
+def m4928a4(c: Cast) -> None:
+    """Three swings, each picking its own victim.
+
+    Declared with no target: the rows it spends are aimed separately on the
+    card, and a target list settled before the body runs would force all
+    three onto one creature. Each swing is the row that prints it, so no
+    attack or damage line is copied.
+    """
+    me = c.me
+    for ref in ("m4928a2", "m4928a2", "m4928a3"):
+        near = sorted(
+            foe for foe in c.enemies() if alive(c.world, foe) and c.distance(foe) <= 3
+        )
+        victim = c.choose(near, f"m4928a4: who {ref} takes") if near else None
+        if victim is None:
+            return
+        use(c.world, me, ref, targets=[victim], spend=False)
 
 
 @power(

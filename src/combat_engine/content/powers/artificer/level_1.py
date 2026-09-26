@@ -30,16 +30,20 @@ from combat_engine.engine import (
     AttackDeclared,
     Cast,
     CloseBurst,
+    Condition,
+    Damage,
     DamageType,
     Hit,
     Keyword,
     Melee,
     MeleeOrRanged,
     Ranged,
+    Summon,
     TurnStart,
     When,
     ZoneEntered,
     by_melee,
+    get,
     power,
     spread,
 )
@@ -510,3 +514,41 @@ def p7638(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(2), c.int_mod, dtype=DamageType.ACID)
         c.penalty(AC, 2, until=When.EONT)
+
+
+@power(
+    "p7641",
+    level=1,
+    cls="artificer",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    summon=Summon(
+        speed=6,
+        attack=Attack(INT, vs=AC, plus=2),
+        damage=Damage("1d10", "int"),
+    ),
+)
+def p7641(c: Cast) -> None:
+    """"Any marked enemy" is the condition rather than a mark of the caster's,
+    so this asks `c.is_` and not `c.marked`, which would narrow it to mine.
+
+    The opportunity command's mark rider is dropped: the header carries one
+    attack line and `c.command` rolls it, and the two printed commands differ
+    only in that rider."""
+    servant = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if not servant:
+        return
+
+    def sting(ev: TurnStart) -> None:
+        who = ev.actor
+        if (
+            who in c.enemies()
+            and c.is_(Condition.MARKED, on=who)
+            and c.adjacent_to(servant, who)
+        ):
+            c.flat(c.wis_mod, on=who)
+
+    c.watch(TurnStart, sting, until=When.ENCOUNTER)

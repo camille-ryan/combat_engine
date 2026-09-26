@@ -9,7 +9,9 @@ The three forms follow `level_1_d.py`: the minor action the header
 describes, with the shape's standing benefits hung on the form. `p10854` is
 the one printed as a standard action, which is what its header says.
 
-The three summoning rows of this level are absent; see the report.
+The three summoning rows of this level are written the way `level_1_d.py`
+writes its own. `Summon` has no size, so the two Large creatures arrive
+Medium and the bear's bonus against its own size or larger is dropped.
 """
 
 from __future__ import annotations
@@ -31,12 +33,14 @@ from combat_engine.engine import (
     Attack,
     Cast,
     CloseBurst,
+    Damage,
     DamageRolled,
     DamageType,
     Defences,
     Keyword,
     Melee,
     Ranged,
+    Summon,
     TurnStart,
     UpTo,
     When,
@@ -334,3 +338,79 @@ def p16122(c: Cast) -> None:
     foes = set(c.enemies())
     burns_at_end(c, ring, c.wis_mod, DamageType.FIRE, ok=lambda who: who in foes)
     c.note(f"{c.ref}: a minor action each round would widen the aura, and there is no door for one")
+
+
+@power(
+    "p5375",
+    level=9,
+    cls="druid",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=ONE_CREATURE,
+    keywords=PRIMAL_IMPLEMENT,
+    summon=Summon(speed=6, attack=Attack(WIS, vs=FORT), damage=Damage("2d6", "wis")),
+)
+def p5375(c: Cast) -> None:
+    """`Summon` has no size, so the bear arrives Medium and its +4 against
+    creatures its own size or larger -- which reads off a size it has not
+    got -- is dropped.
+    """
+    made = c.summon_inline(get(c.ref).summon)
+    if made:
+        c.command(made, on=c.target)
+
+
+@power(
+    "p5377",
+    level=9,
+    cls="druid",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=ONE_CREATURE,
+    keywords=PRIMAL_IMPLEMENT,
+    summon=Summon(
+        speed=6, modes=("swim",),
+        attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),
+    ),
+)
+def p5377(c: Cast) -> None:
+    """`c.grab` makes the caster the grabber and nothing grabs on a
+    companion's behalf; the -3 to escape checks has no check to modify, and
+    `Summon` has no size, so the crocodile arrives Medium.
+    """
+    made = c.summon_inline(get(c.ref).summon)
+    if made and c.command(made, on=c.target):
+        c.grab(on=c.target)
+
+
+@power(
+    "p7414",
+    level=9,
+    cls="druid",
+    usage=DAILY,
+    action=STANDARD,
+    reach=Ranged(5),
+    target=ONE_CREATURE,
+    keywords=PRIMAL_IMPLEMENT,
+    summon=Summon(
+        speed=8, modes=("fly",),
+        attack=Attack(WIS, vs=REF), damage=Damage("2d6", "wis"),
+    ),
+)
+def p7414(c: Cast) -> None:
+    """It attacks at one point during the move; the eagle walks first and
+    swings after, which is the same thing whenever the target is still in
+    reach at the end. Hovering has nowhere to go.
+    """
+    made = c.summon_inline(get(c.ref).summon)
+    if not made:
+        return
+    c.bonus(
+        AC, 4, on=made, until=When.ENCOUNTER,
+        when=lambda ctx: bool(ctx.get("opportunity")),
+    )
+    c.move(8, who=made)
+    if c.command(made, on=c.target):
+        c.grants_advantage(on=c.target, until=When.EONT)

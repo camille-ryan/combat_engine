@@ -26,6 +26,8 @@ from combat_engine.engine import (
     Keyword,
     Miss,
     PowerUsed,
+    Ranged,
+    Summon,
     SurgeSpent,
     Trigger,
     When,
@@ -192,3 +194,25 @@ def p7194(c: Cast) -> None:
     nothing to measure against and is not declared; the burst 10 target
     line carries the rest of it."""
     c.shift(c.int_mod, who=c.target)
+
+
+@power(
+    "p11296",
+    level=10,
+    cls="invoker",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[Keyword.DIVINE, Keyword.HEALING],
+    summon=Summon(speed=6, modes=("fly",)),
+)
+def p11296(c: Cast) -> None:
+    """Its one command heals rather than attacks, and `c.command` rolls the
+    header's `summon=` attack line, so there is nothing for it to read. The
+    command is dropped -- see the report -- and what is written is the creature
+    arriving. `Summon.modes` carries no speed, so the printed "fly 8" is set
+    from the body."""
+    angel = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if angel:
+        c.mode("fly", 8, on=angel, until=When.ENCOUNTER)

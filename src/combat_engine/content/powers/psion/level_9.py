@@ -10,6 +10,7 @@ from combat_engine.engine import (
     FORT,
     INT,
     MINOR,
+    NO_TARGET,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -19,10 +20,14 @@ from combat_engine.engine import (
     Cast,
     CloseBlast,
     Condition,
+    Damage,
     DamageType,
+    Dropped,
     Keyword,
     Ranged,
+    Summon,
     When,
+    get,
     power,
 )
 
@@ -216,3 +221,52 @@ def p8242(c: Cast) -> None:
     c.penalty("attack", 2, until=When.EONT)
     for defence in (AC, FORT, REF, WILL):
         c.penalty(defence, 2, until=When.EONT)
+
+
+@power(
+    "p13341",
+    level=9,
+    cls="psion",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[*PSIONIC_PSYCHIC, Keyword.ILLUSION],
+    summon=Summon(
+        speed=8,
+        attack=Attack(INT, vs=WILL),
+        damage=Damage("2d6", "int", dtype=DamageType.PSYCHIC),
+    ),
+)
+def p13341(c: Cast) -> None:
+    """Augment 0. The prey is a named hold so that the disappearance has
+    something to read, and the +4 is gated on `opportunity`, which the attack
+    context carries.
+
+    Dropped: "insubstantial to every attacker but its prey", because
+    `c.insubstantial` would halve damage from the prey as well and that is more
+    than the card says; the attack penalty on the standard command; the whole
+    opportunity command; and Augment 1's second prey."""
+    killer = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if not killer:
+        return
+    c.phasing(on=killer, until=When.ENCOUNTER)
+    for defence in (AC, REF):
+        c.bonus(
+            defence,
+            4,
+            on=killer,
+            until=When.ENCOUNTER,
+            when=lambda ctx: bool(ctx.get("opportunity")),
+        )
+    near = c.within(1, of=killer, side="enemy")
+    prey = c.choose(near, "which enemy is the killer's prey") if near else None
+    if prey is None:
+        return
+    c.effect("prey", on=prey, until=When.ENCOUNTER)
+
+    def vanish(ev: Dropped) -> None:
+        if ev.actor == prey:
+            c.dismiss_companion()
+
+    c.watch(Dropped, vanish, until=When.ENCOUNTER)

@@ -18,7 +18,11 @@ The rows printed in the later books follow. Three things recur in them:
 * **A secondary attack on a different line.** `c.strike` rolls the header's
   one attack, so a secondary against another defence goes through
   `c.attack(c.int_, <defence>)`.
-* **The four summoning rows of this level are absent** -- see the report.
+* **The four summoning rows of this level.** Three are written on
+  `Summon` in the header and `c.summon_inline` in the body; each prints a
+  command spent on a later standard action, and nothing offers one, so
+  the header declares the line and the body cannot spend it. The fourth
+  is absent -- see the report.
 
 `p10071`'s printed Requirement is a staff, and the wizard build carries no
 weapon at all, so the row is refused on this board for a reason that says
@@ -27,6 +31,11 @@ nothing about the row.
 
 from __future__ import annotations
 
+from combat_engine.content.powers.wizard.level_1_d import (
+    _at_will_or_basic,
+    _commands_on_opportunity,
+    _reach_is,
+)
 from combat_engine.engine import (
     AC,
     DAILY,
@@ -36,6 +45,7 @@ from combat_engine.engine import (
     INT,
     INTERRUPT,
     MINOR,
+    NO_TARGET,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -43,17 +53,21 @@ from combat_engine.engine import (
     AreaBurst,
     Attack,
     AttackDeclared,
+    AttackRolled,
     Cast,
     Condition,
     ConditionApplied,
+    Damage,
     DamageApplied,
     DamageType,
     Gear,
+    Hit,
     Keyword,
     Melee,
     MoveEnd,
     Ranged,
     Relation,
+    Summon,
     Target,
     Trigger,
     TurnEnd,
@@ -61,6 +75,7 @@ from combat_engine.engine import (
     When,
     World,
     enemy_within,
+    get,
     power,
     spread,
 )
@@ -677,3 +692,101 @@ def p6958(c: Cast) -> None:
                 c.world.bus.on(TurnStart, dawn),
             ]
         )
+
+
+@power(
+    "p11842",
+    level=5,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.POISON],
+    summon=Summon(
+        speed=4, modes=("fly",),
+        attack=Attack(INT, vs=REF), damage=Damage("1d8", "int"),
+    ),
+)
+def p11842(c: Cast) -> None:
+    """The command's riders -- ongoing poison, and the imp turning invisible
+    -- hang off a standard action nothing offers, so only its attack line is
+    declared. Hovering has nowhere to go, and the symbiosis is not gated on
+    the imp still standing.
+    """
+    made = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if made:
+        c.resist(5, DamageType.FIRE, on=made)
+
+    def symbiosis(ev: Hit) -> None:
+        if ev.attacker == c.me and c.had_advantage(ev):
+            c.damage("1d6", dtype=DamageType.POISON, on=ev.target)
+
+    c.watch(Hit, symbiosis, until=When.ENCOUNTER, label=f"{c.ref} symbiosis")
+
+
+@power(
+    "p11843",
+    level=5,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
+    summon=Summon(
+        speed=4, attack=Attack(INT, vs=REF),
+        damage=Damage("1d10", "int", dtype=DamageType.FIRE),
+    ),
+)
+def p11843(c: Cast) -> None:
+    """Speed 8 while charging is a second speed there is nowhere to put, and
+    the ongoing fire and the slow are riders on a command nothing offers.
+    The move-action shift the symbiosis grants is an action the caster
+    gains, and no header field or `Cast` method adds one.
+    """
+    made = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if made:
+        c.resist(5, DamageType.FIRE, on=made)
+
+    def symbiosis(ev: Hit) -> None:
+        if ev.attacker == c.me and _at_will_or_basic(ev.power):
+            c.rooted(on=ev.target, until=When.EOTNT)
+
+    c.watch(Hit, symbiosis, until=When.ENCOUNTER, label=f"{c.ref} symbiosis")
+
+
+@power(
+    "p4078",
+    level=5,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=ARCANE_IMPLEMENT,
+    summon=Summon(speed=6, attack=Attack(INT, vs=REF), damage=Damage("2d6", "int")),
+)
+def p4078(c: Cast) -> None:
+    """One `Summon` carries one attack line, so the header holds the standard
+    action's 2d6 and the opportunity attack rolls that rather than its own
+    1d8. The standard command has no door; both opportunity clauses do.
+    """
+    made = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if not made:
+        return
+    _commands_on_opportunity(c, made)
+
+    answered: dict[int, int] = {}
+
+    def retort(ev: AttackRolled) -> None:
+        if ev.target == made or not _reach_is(ev.power, "melee"):
+            return
+        if not c.adjacent_to(made, ev.attacker) or ev.attacker not in c.enemies():
+            return
+        if answered.get(ev.attacker) == c.world.round:
+            return
+        answered[ev.attacker] = c.world.round
+        c.command(made, on=ev.attacker)
+
+    c.watch(AttackRolled, retort, until=When.ENCOUNTER, label=f"{c.ref} maw retort")

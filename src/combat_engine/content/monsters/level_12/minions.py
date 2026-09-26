@@ -45,6 +45,9 @@ from typing import Any
 from combat_engine.content.monsters.level_06.controllers import _living
 from combat_engine.content.monsters.level_08.brutes import _aura
 from combat_engine.content.monsters.level_10.lurkers import EVERY_DEFENCE
+from combat_engine.content.monsters.level_12.controllers import (
+    _acts_after_its_creator,
+)
 from combat_engine.content.monsters.level_12.skirmishers import _amphibious
 from combat_engine.engine import (
     AC,
@@ -316,6 +319,20 @@ def m4968a0(c: Cast) -> None:
 
 
 @power(
+    "m4968a1",
+    level=12,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m4968a1(c: Cast) -> None:
+    """The servant bond is the only thing that records one creature having
+    made another, which is what "created by" has to read."""
+    _acts_after_its_creator(c)
+
+
+@power(
     "m4968a2",
     level=12,
     usage=AT_WILL,
@@ -376,6 +393,19 @@ def m4969a0(c: Cast) -> None:
             c.flat(2, on=ev.target)
 
     c.watch(Hit, rider, until=When.ENCOUNTER, on=me, label=c.ref)
+
+
+@power(
+    "m4969a1",
+    level=12,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def m4969a1(c: Cast) -> None:
+    """The same sentence as m4968a1, and the same relation answers it."""
+    _acts_after_its_creator(c)
 
 
 @power(

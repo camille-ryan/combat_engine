@@ -36,56 +36,20 @@
     "why": "one of three mutually exclusive leader features. Its content is proficiency with a shield -- not a thing a feature can grant -- and gaining one named power, which c.grant_row could hand over except that the power is not declared anywhere. cf:warlord-senses writes the one of the three whose content is purely narrative"
   },
   "cf:wizard-implement-rest": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "five forms of implement mastery are printed and chargen.BUILDS[\"wizard\"] carries two legs. cf:wizard-implement writes the two that are the legs. Of the other three, one stores an unknown encounter power for later and is blocked on the same thing as cf:wizard-spellbook, one pays a damage bonus to creatures summoned by a summoning power and nothing marks a power as one, and one repeats a missed attack from an illusion power against a second target and nothing marks that either"
+    "wants": "c.familiar()",
+    "why": "a wizard class feature about its familiar, which no row creates"
   },
   "cf:wizard-spellbook": {
     "wants": "a spellbook -- powers a character owns but has not prepared",
     "why": "the whole feature is holding two dailies and two utilities per slot and preparing one of each after a rest. Powers holds only what is known, so owning an unprepared power cannot be said and neither can preparing one. Same missing thing as p7377"
   },
-  "m2904a0": {
-    "wants": "",
-    "why": "SPEC: prints no attack bonus at all, so the header cannot be filled without inventing one"
-  },
-  "m2905a0": {
-    "wants": "",
-    "why": "SPEC: prints no attack bonus at all, so the header cannot be filled without inventing one. Same shape as m2904a0"
-  },
-  "m2947a5": {
-    "wants": "c.jump",
-    "why": "it does not provoke opportunity attacks while jumping; a jump is an ordinary move in the engine, so c.no_provoke would exempt all of its movement rather than the jump. Same sentence as m2988a3"
-  },
-  "m2948a5": {
-    "wants": "c.jump",
-    "why": "it does not provoke opportunity attacks while jumping; a jump is an ordinary move in the engine, so c.no_provoke would exempt all of its movement rather than the jump. Same sentence as m2947a5 and m2988a3"
-  },
   "m2963a4": {
     "wants": "c.check(skill, dc, *, who=)",
     "why": "its whole content is 'any character can make a DC 25 History check as a minor action', and on a success the m2963 gains vulnerable 10 to that character's next attack. The engine rolls no skill checks and holds no DCs, and the row is spent by a creature that does not own it, which `use` has no door for -- so both halves of the sentence are unsayable, not just the number"
   },
-  "m2975a2": {
-    "wants": "c.no_reactions(on=)",
-    "why": "Rules.no_reactions exists but only via DAZED and STUNNED, which carry other riders"
-  },
-  "m2988a3": {
-    "wants": "c.jump",
-    "why": "it can jump without provoking; a jump is an ordinary move in the engine, so c.no_provoke would exempt all of its movement rather than the jump"
-  },
-  "m3009a3": {
-    "wants": "c.no_ca_from",
-    "why": "does not grant combat advantage from running; there is no run action"
-  },
-  "m3062a0": {
-    "wants": "c.wielding(prop, who=)",
-    "why": "an attack with a metal weapon; Weapon has no material and c.wielding asks only about the caster"
-  },
   "m3062a2": {
     "wants": "c.destroy",
     "why": "the rusting item is destroyed; nothing removes gear from a creature"
-  },
-  "m3063a1": {
-    "wants": "c.wielding(prop, who=)",
-    "why": "an attack with a metal weapon; Weapon has no material, so Keyword.WEAPON would rust a quarterstaff. Same sentence as m3062a0"
   },
   "m3064a2": {
     "wants": "c.destroy",
@@ -95,41 +59,17 @@
     "wants": "c.decay(on=)",
     "why": "its whole Effect is reducing the enhancement bonus of the weapon or implement that hit it, to a minimum of 0, until the end of the encounter; Weapon has no enhancement bonus and Gear has no armour object, so there is no number to reduce"
   },
-  "m4795a3": {
-    "wants": "c.wall",
-    "why": "blocking terrain with hit points per square that can be attacked and dies square by square"
-  },
   "m4853a1": {
     "wants": "c.origin_for",
     "why": "its master's implement attacks originate from its square"
-  },
-  "m4928a3": {
-    "wants": "a vehicle",
-    "why": "targets 'one vehicle' and restrains it, and its pilot spends a standard action to give it a saving throw; nothing in the engine is a vehicle and nothing pilots one"
-  },
-  "m4928a4": {
-    "wants": "a vehicle",
-    "why": "its whole Effect is 'uses m4928a2 twice and m4928a3 once', and m4928a3 is blocked for want of a vehicle; writing the two tentacle attacks alone would be half the printed line"
-  },
-  "m4968a1": {
-    "wants": "c.acts_after(other)",
-    "why": "a creature created by another one acts immediately after its creator's turn; Encounter can splice an extra slot (c.extra_turn) or reroll a creature's own initiative, but nothing moves a creature's single slot to just behind another's"
   },
   "m4968a3": {
     "wants": "c.as_though_hit_by(ref)",
     "why": "it rolls its own +17 vs AC and the target then takes the damage and is subject to the effects of a chosen enemy at-will melee power, off that creature's ability modifier and none of its bonuses. c.grant_row lends the whole row -- its own attack line and its own numbers -- and use() re-rolls it, so neither says this. Same sentence as m4971a3"
   },
-  "m4969a1": {
-    "wants": "c.acts_after(other)",
-    "why": "acts immediately after its creator's turn. Same sentence as m4968a1"
-  },
   "m4969a3": {
     "wants": "c.as_though_hit_by(ref)",
     "why": "the same borrowed at-will melee power as m4968a3, applied to a blow this row rolled. Same sentence as m4971a3"
-  },
-  "m4970a0": {
-    "wants": "c.acts_after(other)",
-    "why": "if it was created by an m4967 it acts immediately after its creator's turn; Encounter exposes join, reroll_initiative and extra_turn(self) only, and none of them places a creature at a named count in the order. Same sentence as m4968a1, and the last clause of m2552a5"
   },
   "m4970a2": {
     "wants": "c.as_though_hit_by(ref)",
@@ -142,18 +82,6 @@
   "m4972a3": {
     "wants": "c.as_though_hit_by(ref)",
     "why": "the same sentence as m4971a3 for an at-will ranged attack power"
-  },
-  "m498a2": {
-    "wants": "c.rise",
-    "why": "rises on its next turn with 44 hit points; _die lifts the body, so a deferred heal revives an entity with no square"
-  },
-  "m5050a0": {
-    "wants": "c.extra_target(ev, who)",
-    "why": "while bloodied its charge attack takes one or two targets; the second swing has to re-enter the row that is mid-Hit and dsl._IN_FLIGHT refuses (actor, ref) twice"
-  },
-  "m674a2": {
-    "wants": "c.fall",
-    "why": "reduce the distance it falls; there is no falling and no height"
   },
   "m678a4": {
     "wants": "c.disarm(on=)",
@@ -184,16 +112,16 @@
     "why": "its whole Effect is taking a normal turn while stunned, dazed or unconscious and then having the condition continue. Conditions can be applied and ended and nothing can suspend one for a turn (act as though not stunned/dazed/unconscious)"
   },
   "p10418": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "the whole Effect is teleporting your familiar, flanking with it, and a rider on creatures it flanks; nothing in the engine is a familiar (returning one)"
+    "wants": "c.familiar()",
+    "why": "entirely about a familiar -- teleport it, teleport to it. A familiar is a standing class feature no row creates, so c.companion() finds nothing and the row is permanently inert. Needs a familiar entity from chargen"
   },
   "p10420": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "the whole Effect is teleporting to the familiar's square and putting it in passive mode. Same missing thing as p10418 (returning one)"
+    "wants": "c.familiar()",
+    "why": "same shape: entirely about a familiar that no row creates"
   },
   "p10424": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "the whole Effect is assuming a form identical to your familiar, with its movement modes, speed and senses. Same missing thing as p10418 (returning one)"
+    "wants": "c.form(like=)",
+    "why": "take your familiar's shape -- copying another creature's speed, modes and senses. Needs c.familiar() as well"
   },
   "p10484": {
     "wants": "c.reach(n)",
@@ -255,21 +183,9 @@
     "wants": "the Flurry of Blows ref, for Trigger(PowerUsed, ...)",
     "why": "'Trigger: you use your Flurry of Blows power'. The trigger cannot name a power that has no id"
   },
-  "p11282": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "c.summon(ref) goes through loader.spawn, which needs a monster row in the database. A creature defined by the power itself has no ref, and the header cannot carry its stat block or its commands. Same gap as the 25 wizard/druid conjuration rows -- see issue #169 (and a c.summon overload taking it instead of a ref)"
-  },
-  "p11288": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "c.summon(ref) goes through loader.spawn, which needs a monster row in the database. A creature defined by the power itself has no ref, and the header cannot carry its stat block or its commands. Same gap as the 25 wizard/druid conjuration rows -- see issue #169 (and a c.summon overload taking it instead of a ref)"
-  },
   "p11291": {
     "wants": "c.regain_use(ref, on=)",
     "why": "regain an expended Channel Divinity power. c.grant_row grants a row you do not know; this restores a spent use"
-  },
-  "p11296": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "c.summon(ref) goes through loader.spawn, which needs a monster row in the database. A creature defined by the power itself has no ref, and the header cannot carry its stat block or its commands. Same gap as the 25 wizard/druid conjuration rows -- see issue #169 (and a c.summon overload taking it instead of a ref)"
   },
   "p11323": {
     "wants": "c.resist(..., when=)",
@@ -303,30 +219,6 @@
     "wants": "an action point resource -- c.grant_action_point(on=)",
     "why": "both halves are action points: the trigger is an ally missing with an action-point attack and the whole Effect is granting one that does not count against the encounter limit. Same gap as p11605"
   },
-  "p11840": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints"
-  },
-  "p11841": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Same shape as p11840"
-  },
-  "p11842": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Same shape as p11840"
-  },
-  "p11843": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Same shape as p11840"
-  },
-  "p11844": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Same shape as p11840"
-  },
-  "p11845": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Same shape as p11840"
-  },
   "p1213": {
     "wants": "c.fall",
     "why": "there is no falling and no vertical position"
@@ -342,22 +234,6 @@
   "p12452": {
     "wants": "c.shift_as(ActionType.MOVE, 2)",
     "why": "'shift 2 squares as a move action'. Same gap as p9430"
-  },
-  "p12468": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "its whole Requirement and its whole Effect are the familiar -- a bonus to attacks against anything adjacent to it. Nothing in the engine is a familiar; same missing thing as p10418 (returning one)"
-  },
-  "p12471": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "the whole Effect is the familiar shifting its speed and taking a hit meant for an ally. Same missing thing as p12468 (returning one)"
-  },
-  "p12473": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "the Requirement, the target line (one creature adjacent to your familiar), the defence bonus and the flanking are all the familiar. Same missing thing as p12468 (returning one)"
-  },
-  "p12474": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "its whole target line is 'your familiar'. Same missing thing as p12468 (returning one)"
   },
   "p12500": {
     "wants": "Attack(by='companion')",
@@ -403,10 +279,6 @@
     "wants": "a Fall event, or detail='fall' on the DamageRolled a fall produces",
     "why": "'Trigger: you fall. Reduce falling damage by 5 + half your level.' Nothing falls -- no event, and no detail on the damage to gate on"
   },
-  "p13311": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "the spec prints the summoned creature's stat block inline and gives it no id, but c.summon(ref, at=) takes a database ref"
-  },
   "p13314": {
     "wants": "c.shrug_off(Condition.PRONE)",
     "why": "'you are not knocked prone by the triggering attack or fall'. ConditionApplied is a plain Event emitted after the condition is on you, so nothing can refuse it, and nothing models falling (or making ConditionApplied a Decision; plus a Fell event)"
@@ -415,14 +287,6 @@
     "wants": "kind_ on Moved",
     "why": "hinges on the size and kind of a teleport. MoveEnd carries kind_ but not from_; Moved carries from_/to but not kind_, so 'an ally adjacent to you before the teleport' cannot be said. One field fixes this and p13345"
   },
-  "p13325": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "the spec prints the summoned creature's stat block inline and gives it no id, but c.summon(ref, at=) takes a database ref"
-  },
-  "p13341": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "the spec prints the summoned creature's stat block inline and gives it no id, but c.summon(ref, at=) takes a database ref"
-  },
   "p13344": {
     "wants": "a Wall(size, within)",
     "why": "an Area wall 5. area_of knows melee, ranged, close_burst, close_blast and area_burst only, and nothing raises a multi-square barrier that blocks line of effect and can be attacked (range plus c.wall(squares, hp=, blocks_sight=) -- same as invoker p2860)"
@@ -430,10 +294,6 @@
   "p13345": {
     "wants": "kind_ on Moved",
     "why": "'teleport the same number of squares'. Same one-field gap as p13315"
-  },
-  "p13442": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "prints a creature with its own speed, defences and attack lines and no ref to name"
   },
   "p13516": {
     "wants": "a carried consumable -- an object a creature holds and spends an action on",
@@ -446,10 +306,6 @@
   "p13604": {
     "wants": "c.zone(..., obscured=True)",
     "why": "'enemies treat the zone as lightly obscured terrain', distinct from blocks_sight which is total"
-  },
-  "p13649": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "it summons a creature associated with your pact, and the spec names no id for it -- c.summon needs a row to spawn and there is none to give it. The commanding, the shared knowledge and the surge lost when it drops all hang off a creature that cannot be put on the board"
   },
   "p13697": {
     "wants": "c.unhindered(condition, on=, until=)",
@@ -484,8 +340,8 @@
     "why": "its Effect raises the creature it killed onto the caster's side, dominated, at 1 hp, unable to heal. Nothing puts a dead creature back on the board or changes a creature's Team; c.summon needs a ref and spawns a fresh entity"
   },
   "p13984": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Its Prerequisite also names a class feature that does not exist, so which creature arrives cannot be decided either"
+    "wants": "chargen.BUILDS",
+    "why": "BLOCKED ON CONTENT, not the engine: the creature summoned is chosen by a wizard build that does not exist, and the spec prints no stat block, so there is nothing to put in summon=. Wants chargen.BUILDS['wizard'] and a Summon per creature it can pick"
   },
   "p14299": {
     "wants": "a weapon category -- 'simple' in Weapon.properties, or a Weapon.category field",
@@ -619,10 +475,6 @@
     "wants": "c.sight_range(n, on=, until=)",
     "why": "'the target does not have line of sight to any creature more than 3 squares away'. c.blinded is a different condition"
   },
-  "p2880": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "c.summon(ref) goes through loader.spawn, which needs a monster row in the database. A creature defined by the power itself has no ref, and the header cannot carry its stat block or its commands. Same gap as the 25 wizard/druid conjuration rows -- see issue #169 (and a c.summon overload taking it instead of a ref)"
-  },
   "p3121": {
     "wants": "c.initiative(n, on=)",
     "why": "trigger is 'you roll initiative'. InitiativeRolled *is* emitted (turns.py:128) -- the block is that its `rolled` is an int copied onto the event, so a listener changing it is discarded, and no Cast method writes the component. Issue #168 (same gap as p11392)"
@@ -638,10 +490,6 @@
   "p3203": {
     "wants": "c.reroll_damage(keep=\"best\", *, keyword=)",
     "why": "its whole Effect is rolling damage twice and keeping the higher whenever you use an arcane power with a chosen keyword. c.maximise is a different operation and there is no reroll for damage at all"
-  },
-  "p3314": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "c.summon(ref) goes through loader.spawn, which needs a monster row in the database. A creature defined by the power itself has no ref, and the header cannot carry its stat block or its commands. Same gap as the 25 wizard/druid conjuration rows -- see issue #169 (and a c.summon overload taking it instead of a ref)"
   },
   "p3331": {
     "wants": "an 'initiative' key c.bonus can write, and c.extra_action(ActionType.MOVE)",
@@ -675,45 +523,13 @@
     "wants": "c.companions()",
     "why": "the whole row is a *second* spirit companion. c.call_companion relocates the one you have by design and c.companion() returns one id; this needs a list, plus Range(from_='companion') and every 'adjacent to your spirit companion' reading both"
   },
-  "p4016": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Same shape as p11840"
-  },
-  "p4078": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Same shape as p11840"
-  },
-  "p4082": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Same shape as p11840"
-  },
-  "p4106": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Same shape as p11840"
-  },
-  "p4112": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Its one command is an immediate interrupt making the summoned creature the target of an attack instead of its summoner, and a conjuration has no hit points to take it"
-  },
-  "p4117": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. Its one command also targets an object, which nothing on the board is"
-  },
   "p4137": {
     "wants": "c.jump(squares, on=)",
     "why": "the whole Effect is a jump of Wis squares"
   },
-  "p4141": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "prints a creature with its own speed, defences and attack lines and no ref to name"
-  },
   "p4143": {
     "wants": "c.floor(area, until=)",
     "why": "a bridge whose squares are crossed as normal terrain (a zone that makes its squares ordinary passable ground)"
-  },
-  "p4148": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "prints a creature with its own speed, defences and attack lines and no ref to name"
   },
   "p4311": {
     "wants": "chargen.BUILDS[\"warlock\"] to carry a \"dark\" leg, and a per-character counter that survives between uses of a row",
@@ -799,38 +615,6 @@
     "wants": "c.also_hits(target)",
     "why": "its whole Effect is 'the triggering attack also hits the target'. c.redirect moves an attack and c.autohit forces the one being answered; neither copies a resolved attack onto somebody else, and re-rolling the row would not be the same attack (apply the triggering attack to a second creature)"
   },
-  "p5366": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own speed and hit points that the summoner commands with a standard action, rolling the summoner's Wisdom. c.summon(ref) wants a content ref for the creature and the spec gives none, and nothing offers a commanded action on a creature the caster does not own. Same shape as p11840"
-  },
-  "p5367": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own speed and hit points that the summoner commands with a standard action, rolling the summoner's Wisdom. c.summon(ref) wants a content ref for the creature and the spec gives none, and nothing offers a commanded action on a creature the caster does not own. Same shape as p11840"
-  },
-  "p5369": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own speed and hit points that the summoner commands with a standard action, rolling the summoner's Wisdom. c.summon(ref) wants a content ref for the creature and the spec gives none, and nothing offers a commanded action on a creature the caster does not own. Same shape as p11840"
-  },
-  "p5371": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own speed and hit points that the summoner commands with a standard action, rolling the summoner's Wisdom. c.summon(ref) wants a content ref for the creature and the spec gives none, and nothing offers a commanded action on a creature the caster does not own. Same shape as p11840"
-  },
-  "p5373": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own speed and hit points that the summoner commands with a standard action, rolling the summoner's Wisdom. c.summon(ref) wants a content ref for the creature and the spec gives none, and nothing offers a commanded action on a creature the caster does not own. Same shape as p11840, and an instinctive effect for a turn nobody commanded"
-  },
-  "p5374": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own speed and hit points that the summoner commands with a standard action, rolling the summoner's Wisdom. c.summon(ref) wants a content ref for the creature and the spec gives none, and nothing offers a commanded action on a creature the caster does not own. Same shape as p11840"
-  },
-  "p5375": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own speed and hit points that the summoner commands with a standard action, rolling the summoner's Wisdom. c.summon(ref) wants a content ref for the creature and the spec gives none, and nothing offers a commanded action on a creature the caster does not own. Same shape as p11840"
-  },
-  "p5377": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own speed and hit points that the summoner commands with a standard action, rolling the summoner's Wisdom. c.summon(ref) wants a content ref for the creature and the spec gives none, and nothing offers a commanded action on a creature the caster does not own. Same shape as p11840"
-  },
   "p5398": {
     "wants": "c.ignore_cover(*, on=, until=, against=)",
     "why": "the whole Effect is ignoring cover, superior cover, concealment and total concealment against enemies in the zone. c.strike(ignore_cover=True) is per-call only"
@@ -863,10 +647,6 @@
     "wants": "c.see_invisible(on=)",
     "why": "its whole Effect is darkvision and seeing invisible creatures adjacent to you. Being unseen is the HIDDEN_FROM relation and nothing suppresses it from the looker's side, and there is no light for darkvision to answer"
   },
-  "p6959": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own hit points that the summoner commands with a standard or opportunity action. c.summon(ref) needs a content ref for the creature and there is none; c.conjure has no hit points, so 'if it is reduced to 0 hit points' can never happen, and no door for 'you can give it the following special command' -- which is most of what the row prints. It also targets one dead creature and takes that creature's size and reach, neither of which is readable off a corpse"
-  },
   "p7100": {
     "wants": "c.truesight(radius, *, on=None, until=When.ENCOUNTER)",
     "why": "'the target gains truesight 5'. The only thing the engine has for seeing the unseen is the HIDDEN_FROM relation, read at query time; there is no continuous sense to grant, and clearing the relation on whatever events happened to be watched would be an approximation"
@@ -887,10 +667,6 @@
     "wants": "a way to say an attack is made with the off-hand weapon",
     "why": "'combat advantage for the next attack you make with an off-hand weapon'; c.w(hand='off') picks the dice but nothing marks an attack as an off-hand one, so the grant cannot be gated"
   },
-  "p7414": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own speed and hit points that the summoner commands with a standard action, rolling the summoner's Wisdom. c.summon(ref) wants a content ref for the creature and the spec gives none, and nothing offers a commanded action on a creature the caster does not own. Same shape as p11840"
-  },
   "p7429": {
     "wants": "c.recast(ref, *, action=MINOR, once_per_round=True)",
     "why": "its whole Effect is that until the end of the encounter you can cast a named at-will you already know as a minor action once per turn. c.grant_row lends a row to somebody who does not know it and changes nothing about what using it costs, and the reduced action cost is the entire row"
@@ -899,25 +675,13 @@
     "wants": "Target(side='item')",
     "why": "'Target: one weapon or implement', augmented for the encounter, and the wielder ends the effect on a hit as a free action. Same gap as runepriest p15993 and p9667 (plus c.give(ref, on=ally) -- a one-use row the holder spends)"
   },
-  "p7641": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "prints a creature with its own speed, defences and attack lines and no ref to name"
-  },
   "p7649": {
     "wants": "Target(side='item')",
     "why": "'Target: one weapon or implement', augmented for the encounter, and the wielder ends the effect on a hit as a free action. Same gap as runepriest p15993 and p9667 (plus c.give(ref, on=ally) -- a one-use row the holder spends)"
   },
-  "p7650": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "prints a creature with its own speed, defences and attack lines and no ref to name"
-  },
   "p7656": {
     "wants": "Target(side='item')",
     "why": "'Target: one weapon or implement', augmented for the encounter, and the wielder ends the effect on a hit as a free action. Same gap as runepriest p15993 and p9667 (plus c.give(ref, on=ally) -- a one-use row the holder spends)"
-  },
-  "p7657": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "prints a creature with its own speed, defences and attack lines and no ref to name"
   },
   "p7659": {
     "wants": "Target(side='item')",
@@ -939,13 +703,9 @@
     "wants": "c.shrouds(on=)",
     "why": "entirely 'damage from your assassin's shroud', per shroud. Shrouds have no representation anywhere; shroud riders were also dropped from six written rows (> int, c.shroud(on=, n=1), and a shroud-damage event)"
   },
-  "p9655": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "a summoning row: the printed Effect is a creature with its own speed and hit points that the summoner commands with a standard action, rolling the summoner's Wisdom. c.summon(ref) wants a content ref for the creature and the spec gives none, and nothing offers a commanded action on a creature the caster does not own. Same shape as p11840"
-  },
   "p9665": {
-    "wants": "c.summon_inline(spec, at=)",
-    "why": "once per round it commands one of your summoned creatures to use its instinctive effect. The summoning rows it stands on could not be written, and nothing models an instinctive effect"
+    "wants": "c.instinctive(who)",
+    "why": "commands a summoned creature to use its instinctive effect. Needs Summon.instinctive -- a callable the block carries"
   },
   "p9667": {
     "wants": "a carried consumable -- an object a creature holds and spends an action on",

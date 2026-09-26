@@ -127,3 +127,16 @@ def enemies_starting_in(
             c.flat(amount, dtype=dtype, on=ev.actor)
 
     c.watch(TurnStart, on_turn, until=until)
+
+
+def holding_a_melee_weapon(world: World, eid: int) -> bool:
+    """"Requirement: you must be holding a melee weapon."
+
+    `c.wielding` answers groups and properties and has no word for this, so it
+    is read off `Gear`: a main hand with a weapon in it whose `ranged` is None.
+    """
+    from combat_engine.engine.components import Gear
+
+    gear = world.get(eid, Gear)
+    weapon = gear.main if gear is not None else None
+    return weapon is not None and weapon.ranged is None

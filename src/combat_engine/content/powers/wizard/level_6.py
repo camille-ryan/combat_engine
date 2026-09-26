@@ -28,8 +28,12 @@ Two rows here are **narrative only**. `p11035` is a ladder and a climb check;
 grant. Both carry `out_of_combat=True` for the same reason `level_0.py`'s
 cantrips do -- deliberately inert, rather than not written yet.
 
-Five are left out entirely; see the report. The recurring reason is that a
-clause is the *whole* of the row: a familiar, a summoned creature, a spellbook,
+`p4112` is this level's summoning row, written on `Summon` and
+`c.summon_inline`; its one command is an immediate interrupt, so it is the
+redirection it prints, latched to once a round.
+
+Four are left out entirely; see the report. The recurring reason is that a
+clause is the *whole* of the row: a familiar, a spellbook,
 a vertical axis, and forced movement lengthened by whoever caused it (the
 `"forced"` modifier is read off the victim with a context naming only `how`,
 so "the movement **you** cause" cannot be gated).
@@ -70,10 +74,12 @@ from combat_engine.engine import (
     Position,
     Ranged,
     Relation,
+    Summon,
     Trigger,
     TurnEnd,
     TurnStart,
     When,
+    Window,
     both,
     by_melee,
     enemy_within,
@@ -664,3 +670,42 @@ def p6902(c: Cast) -> None:
     where = c.choose(room, f"{c.ref}: where you step out to")
     if where is not None:
         c.teleport(5, to=where)
+
+
+@power(
+    "p4112",
+    level=6,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=CloseBurst(2),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    summon=Summon(speed=6, defences=2),
+)
+def p4112(c: Cast) -> None:
+    """`Summon.defences` is one offset for all four and the printed +2 is to
+    AC alone. The cohort is placed by `c.summon_inline` rather than at the
+    burst's origin, which is the caster's own square. Its one command is an
+    immediate interrupt and nothing offers a command action, so it is
+    written as the redirection it is, latched to once a round -- what an
+    immediate action costs.
+    """
+    made = c.summon_inline(get(c.ref).summon)
+    if not made:
+        return
+
+    spent: dict[int, int] = {}
+
+    def step_in(ev: AttackDeclared) -> None:
+        if ev.target != c.me or spent.get(0) == c.world.round:
+            return
+        if not c.adjacent_to(made, c.me):
+            return
+        spent[0] = c.world.round
+        ev.target = made
+
+    c.watch(
+        AttackDeclared, step_in, until=When.ENCOUNTER, window=Window.BEFORE,
+        label=f"{c.ref} cohort",
+    )

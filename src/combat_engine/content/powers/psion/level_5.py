@@ -10,6 +10,7 @@ from combat_engine.engine import (
     FORT,
     INT,
     MINOR,
+    NO_TARGET,
     ONE_CREATURE,
     PERSONAL,
     REF,
@@ -20,11 +21,14 @@ from combat_engine.engine import (
     Attack,
     Cast,
     CloseBurst,
+    Damage,
     DamageType,
     Keyword,
     Ranged,
+    Summon,
     TurnEnd,
     When,
+    get,
     power,
 )
 
@@ -217,3 +221,34 @@ def p8236(c: Cast) -> None:
         c.dazed(until=When.SAVE_ENDS)
     else:
         c.dazed(until=When.EONT)
+
+
+@power(
+    "p13325",
+    level=5,
+    cls="psion",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.POISON],
+    summon=Summon(
+        speed=7,
+        modes=("climb",),
+        attack=Attack(INT, vs=REF),
+        damage=Damage("1d8", "int"),
+    ),
+)
+def p13325(c: Cast) -> None:
+    """Augment 0. +4 to AC and +2 to Reflex only, so the two are handed out in
+    the body -- `Summon.defences` is one offset across all four.
+
+    Dropped: the grab on the standard command, the whole opportunity command
+    with its ongoing poison, and Augment 1's penalty to escaping the grab."""
+    stinger = c.summon_inline(get(c.ref).summon, at=c.origin)
+    if stinger:
+        c.bonus(AC, 4, on=stinger, until=When.ENCOUNTER)
+        c.bonus(REF, 2, on=stinger, until=When.ENCOUNTER)
+        # `Summon.modes` carries no speed, and the printed climb is slower
+        # than the creature walks.
+        c.mode("climb", 3, on=stinger, until=When.ENCOUNTER)

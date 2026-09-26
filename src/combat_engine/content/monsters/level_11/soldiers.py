@@ -889,6 +889,24 @@ def m2947a4(c: Cast) -> None:
         c.note("m2947a4: the target cannot benefit from cover or concealment")
 
 
+@power(
+    "m2947a5",
+    level=11,
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    out_of_combat=True,
+)
+def m2947a5(c: Cast) -> None:
+    """Deliberately inert: the engine has no jump. `Movement.modes` names
+    flying, swimming, climbing and burrowing and nothing that leaves the
+    ground for a square, so there is no move for the waiver to sit on --
+    and `c.no_provoke` names a creature or everybody and cannot name a
+    reason. See the report."""
+    c.note("m2947a5: it provokes no opportunity attacks while jumping")
+
+
 # ==========================================================================
 # m338
 # ==========================================================================

@@ -85,6 +85,7 @@ from combat_engine.engine import (
     Position,
     Powers,
     Ranged,
+    Summon,
     Usage,
     When,
     Window,
@@ -1034,6 +1035,65 @@ def m4795a2(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS)
+
+
+#: Each square of the wall m4795a3 raises.
+_M4795_WALL = "m4795a3 wall"
+
+
+@power(
+    "m4795a3",
+    level=6,
+    usage=ENCOUNTER,
+    action=STANDARD,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[Keyword.CONJURATION],
+    summon=Summon(hp=10, speed=0, label=_M4795_WALL),
+)
+def m4795a3(c: Cast) -> None:
+    """Six squares of wall, each of them a thing that can be hit.
+
+    Not `c.conjure`: a conjuration is deliberately un-attackable and carries
+    no hit points, and every number on this wall is about being attacked --
+    the m4795's own defences, ten hit points a square, vulnerable 5 fire.
+    `Summon` is the shape that has them, so each square is spawned as a
+    companion: it stands in its square and therefore blocks the way, it
+    takes no turn, and it has no vote on whether the fight is over.
+    `defences` is an offset from its maker's, so the printed "the wall has
+    the m4795's defenses" is the default and is left alone.
+
+    Three squares high is nothing on a flat board and is dropped. The run
+    is laid from a free square within 10 that the decider picks, and any
+    square along it that is already taken is skipped rather than refused.
+    """
+    me = c.me
+    room = sorted(
+        sq
+        for sq in spread({c.here}, 10)
+        if c.world.grid.passable(sq) and c.world.grid.occupant(sq) is None
+    )
+    start = c.choose(room, "m4795a3: where the wall begins") if room else None
+    if start is None:
+        return
+    spec = get(c.ref).summon
+    built: list[int] = []
+    for step in range(6):
+        square = (start[0] + step, start[1])
+        if square not in room:
+            continue
+        segment = c.summon_inline(spec, at=square)
+        if segment:
+            built.append(segment)
+            c.vulnerable(5, DamageType.FIRE, on=segment, until=When.ENCOUNTER)
+    if not built:
+        return
+
+    def hacked(ev: Hit) -> None:
+        if ev.target in built and by_melee(c.world, ev.attacker, ev):
+            c.immobilized(until=When.SAVE_ENDS, on=ev.attacker)
+
+    c.watch(Hit, hacked, until=When.ENCOUNTER, on=me, label=_M4795_WALL)
 
 
 @power(

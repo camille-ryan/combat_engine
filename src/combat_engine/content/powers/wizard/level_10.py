@@ -64,6 +64,7 @@ from combat_engine.engine import (
     Cast,
     CloseBurst,
     Condition,
+    Damage,
     DamageType,
     Effect,
     Hit,
@@ -77,6 +78,7 @@ from combat_engine.engine import (
     Relation,
     SavingThrow,
     Square,
+    Summon,
     Target,
     Trigger,
     TurnStart,
@@ -760,3 +762,24 @@ def p7401(c: Cast) -> None:
 
     for kind in (Hit, Miss):
         c.watch(kind, shove, until=When.EONT, on=me, label=f"{c.ref} shove")
+
+
+@power(
+    "p4117",
+    level=10,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    summon=Summon(speed=3, defences=2, attack=Attack(INT, vs=REF),
+                  damage=Damage("5d6", "int")),
+)
+def p4117(c: Cast) -> None:
+    """Its one command targets an object and nothing on this board is one,
+    so the header declares the line and nothing spends it -- which leaves
+    the whole row a summon and no more. `Summon.defences` is one offset for
+    all four where the printed +2 is AC and Fortitude.
+    """
+    c.summon_inline(get(c.ref).summon, at=c.origin)

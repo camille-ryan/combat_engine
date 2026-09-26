@@ -334,6 +334,21 @@ class Bloodied(Event):
 
 
 @dataclass
+class Summoned(Event):
+    """A creature arrived on the board because a power put it there.
+
+    `World.spawn` emits nothing, so a row whose whole printed Effect is
+    "you summon X" left no trace in the log at all -- `audit.py` could not
+    see it and reported four correct rows SILENT. It also makes "when a
+    creature is summoned" writable, which nothing could say before.
+    """
+
+    actor: int
+    summon: int
+    ref: str = ""
+
+
+@dataclass
 class Dropped(Event):
     """Went to 0 hit points or below -- dying, or dead outright.
 

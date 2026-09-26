@@ -1,8 +1,8 @@
 """Druid, level 10: the utilities.
 
-Two rows are absent. One commands a summoned creature and the summoning
-rows themselves could not be written; the other makes four berries somebody
-carries off and eats later. Both are in the report.
+Two rows are absent. One commands a summoned creature to use its instinctive
+effect, and nothing models an instinctive effect; the other makes four
+berries somebody carries off and eats later. Both are in the report.
 
 **`c.form` shapes the caster and nobody else.** `p9666` turns the whole
 party Tiny, so its holds are applied per target through `world.effects`
