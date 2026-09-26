@@ -20,6 +20,7 @@ order to hang `escalate` on it.
 
 from __future__ import annotations
 
+from combat_engine.content.powers.warlock.shared import backlash
 from combat_engine.engine import (
     CHA,
     CON,
@@ -53,18 +54,6 @@ from combat_engine.engine import (
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
 
 
-def _backlash(c: Cast) -> None:
-    """The Miss line this book gives its biggest dailies.
-
-    "You do not expend this power" has no method, so what is written is the
-    price paid and the bonus it buys against the same target.
-    """
-    if not c.may("take the backlash", who=c.me):
-        return
-    c.flat(5 + c.level // 2, dtype=DamageType.PSYCHIC, on=c.me)
-    c.bonus("attack", 4, on=c.me, kind="power", until=When.EONT, once=True)
-
-
 @power(
     "p10384",
     level=9,
@@ -79,7 +68,7 @@ def _backlash(c: Cast) -> None:
 def p10384(c: Cast) -> None:
     victim = c.target
     if not c.strike():
-        _backlash(c)
+        backlash(c)
         return
     c.damage("2d12", c.con_mod)
     if c.build("infernal"):

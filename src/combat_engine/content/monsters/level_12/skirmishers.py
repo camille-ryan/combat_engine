@@ -57,6 +57,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.level_01 import aquatic_edge
 from combat_engine.content.monsters.level_05.skirmishers import _reach_kind
 from combat_engine.content.monsters.level_06.skirmishers import _after_moving, _renew
 from combat_engine.content.monsters.level_07.lurkers import _shift_beside
@@ -115,28 +116,13 @@ from combat_engine.engine.triggers import Trigger, about_me
 
 
 def _amphibious(c: Cast) -> None:
-    """Breathes water, and fights better in it against those that cannot.
+    """The same sentence as `aquatic_edge`, and now the same code.
 
-    The bonus is a gated modifier rather than a hold put on and taken off,
-    because both halves of the printed condition -- where the fight is and
-    what the victim is -- are read at the moment of the roll. Breathing
-    itself is narrative: the engine has no drowning for it to prevent.
+    It was written twice, and the two copies disagreed about the bonus
+    type -- one racial, one untyped -- which is a real difference and not
+    a stylistic one.
     """
-    me = c.me
-
-    def against_a_landlubber(ctx: dict[str, Any]) -> bool:
-        victim = ctx.get("target")
-        return (
-            c.terrain("aquatic")
-            and victim is not None
-            and not c.is_kind("aquatic", on=victim)
-        )
-
-    c.bonus(
-        "attack", 2, until=When.ENCOUNTER, on=me, kind="untyped",
-        when=against_a_landlubber,
-    )
-    c.note(f"{c.ref}: it can breathe underwater")
+    aquatic_edge(c)
 
 
 def _pyre(c: Cast, hatch: str = "") -> None:

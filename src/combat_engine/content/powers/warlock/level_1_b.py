@@ -23,6 +23,7 @@ already does for `p1333`.
 
 from __future__ import annotations
 
+from combat_engine.content.powers.warlock.shared import backlash
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -58,19 +59,6 @@ from combat_engine.engine.query import squares as squares_of
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
 
 
-def _backlash(c: Cast) -> None:
-    """The Miss line three of these share: pay psychic damage for a bonus.
-
-    "You do not expend this power" is the half that cannot be said -- no
-    method gives a use back -- so what is written is the price and the
-    bonus it buys against the same target.
-    """
-    if not c.may("take the backlash", who=c.me):
-        return
-    c.flat(5 + c.level // 2, dtype=DamageType.PSYCHIC, on=c.me)
-    c.bonus("attack", 4, on=c.me, kind="power", until=When.EONT, once=True)
-
-
 @power(
     "p10378",
     level=1,
@@ -95,7 +83,7 @@ def p10378(c: Cast) -> None:
         if c.build("infernal"):
             c.penalty("save", 2, once=True)
     else:
-        _backlash(c)
+        backlash(c)
 
 
 @power(
@@ -112,7 +100,7 @@ def p10378(c: Cast) -> None:
 def p10379(c: Cast) -> None:
     victim = c.target
     if not c.strike():
-        _backlash(c)
+        backlash(c)
         return
     c.damage("3d10", c.con_mod, dtype=DamageType.PSYCHIC)
     caught = {victim}

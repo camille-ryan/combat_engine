@@ -338,7 +338,7 @@ def p7021(c: Cast) -> None:
     if ev is None:
         return
     rolled = c.world.rng.d20().total + c.wis_
-    c.bonus(ev.vs, rolled - ev.defence, on=c.me, until=When.EOT, kind=c.ref, once=True)
+    c.bonus(ev.vs, rolled - ev.defence, on=c.me, until=When.EOT, stacks=False, once=True)
 
 
 @power(
