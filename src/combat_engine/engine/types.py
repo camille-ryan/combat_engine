@@ -56,6 +56,12 @@ class Keyword(StrEnum):
     ARCANE = "arcane"
     DIVINE = "divine"
     PRIMAL = "primal"
+    # The power sources the heroic tier did not need. Every monk, psion,
+    # battlemind and ardent row prints PSIONIC -- 786 rows between them --
+    # and the first class to want one had no way to say it.
+    PSIONIC = "psionic"
+    SHADOW = "shadow"
+    ELEMENTAL = "elemental"
     WEAPON = "weapon"
     IMPLEMENT = "implement"
     MELEE = "melee"

@@ -110,11 +110,22 @@ def _exists(wants: str, have: dict[str, object]) -> bool:
     still took two arguments, because the name matched and the parameters
     were never looked at. Anything with a signature is now checked; only a
     bare field on an event, which has none, is taken on its name.
+
+    A dotted name is a *field* on something -- `Dropped.source`,
+    `Healed.power`. Those were never resolvable: the surface holds `Dropped`
+    and not `Dropped.source`, so the head was simply absent and the row
+    stayed blocked after its gap had been closed. `Dropped.source` was
+    added and `p11285` went on sitting there, which is the same silence
+    this file exists to break, pointing the other way.
     """
     import inspect
 
     head, _, rest = wants.partition("(")
     head = head.strip()
+    if head not in have and "." in head:
+        owner, _, attr = head.rpartition(".")
+        thing = have.get(owner)
+        return thing is not None and hasattr(thing, attr)
     if head not in have:
         return False
     wanted = [p.strip().rstrip("=") for p in rest.rstrip(")").split(",") if p.strip()]

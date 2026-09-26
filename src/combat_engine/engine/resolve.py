@@ -441,7 +441,7 @@ def deal_damage(
     )
     if not was_bloodied and health.bloodied and health.hp > 0:
         world.bus.emit(Bloodied(actor=target))
-    _check_down(world, target, health)
+    _check_down(world, target, health, source)
     return landed
 
 
@@ -494,7 +494,7 @@ def temp_hp(world: World, source: int, target: int, amount: int) -> None:
 # -- going down -------------------------------------------------------------
 
 
-def _check_down(world: World, eid: int, health: Health) -> None:
+def _check_down(world: World, eid: int, health: Health, source: int | None = None) -> None:
     from .query import is_
 
     if health.hp > 0:
@@ -504,7 +504,7 @@ def _check_down(world: World, eid: int, health: Health) -> None:
     # nor for any blow that overshot, which in play is most kills. The
     # printed sentence every row using it carries is "drops to 0 hit points
     # **or fewer**", and those rows were missing almost every death.
-    world.bus.emit(Dropped(actor=eid, dead=health.hp <= health.dying_at))
+    world.bus.emit(Dropped(actor=eid, dead=health.hp <= health.dying_at, source=source))
     # Read hit points again. A row that answers its own `Dropped` by healing
     # itself -- the shape the `dying` flag exists for -- was healed inside
     # the emit and then knocked unconscious, prone and dying regardless,

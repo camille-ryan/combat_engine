@@ -340,10 +340,18 @@ class Dropped(Event):
     `dead` says which. Emitted for both because every printed row that
     reads it says "drops to 0 hit points or fewer", and a minion is always
     the second kind.
+
+    `source` is who struck the killing blow, and may be None when nothing
+    did -- ongoing damage, a failed death save. Without it "whenever you
+    reduce an enemy to 0 hit points" could not be declared at all: two
+    waves in a row routed that line off `DamageApplied` instead, which
+    carries a source but announces before the creature is down, and a third
+    left its row out. `by_me` works on this now.
     """
 
     actor: int
     dead: bool = False
+    source: int | None = None
 
 
 @dataclass

@@ -36,6 +36,7 @@ from pathlib import Path
 from combat_engine.content import chargen, loader
 from combat_engine.engine import (
     Bus,
+    Cast,
     DamageType,
     Encounter,
     Grid,
@@ -129,6 +130,15 @@ KNOWN_SILENT = {
     # its Miss, which is credited to that row and not to this one. Driven by
     # hand: the reroll lands and the Hit follows.
     "m4839a4": "rerolls somebody else's attack; the resulting Hit belongs to their row",
+    # Takes away every standard-action attack that is not a basic. Verified
+    # against the board: all four dummies have exactly one standard row each
+    # (m145a0 three times, m416a1 once) and in every case it *is* that
+    # creature's basic, so the correct answer here is that nothing is taken
+    # away. The row is right; the board has nothing for it to remove.
+    "p7170": (
+        "forbids standard attacks other than basic; every dummy's only "
+        "standard row is its basic"
+    ),
     "p2530": "an ally must have a bloodied enemy beside it",
     "p4572": "an ally must have already spent an encounter attack power",
     # Its printed Target *is* the avenger's oath target, and nothing on this
@@ -300,6 +310,24 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     # anything to save against made every one of them look silent.
     setup.target = ally
     setup.condition(Condition.DAZED, on=ally, until=When.SAVE_ENDS)
+
+    # And one on the caster, because "Effect: make a saving throw" is a whole
+    # shape of utility power and the caster had nothing to save against --
+    # so a correct row rolled no dice and reported itself silent. A bare
+    # labelled hold rather than a condition: dazing the caster would refuse
+    # it a standard action and break every row that needs one.
+    setup.target = caster
+    setup.effect("audit:setup hold", until=When.SAVE_ENDS, on=caster)
+
+    # A mark laid by the caster. "One creature marked by you" is the whole
+    # target line of a defender's follow-up rows, and a board where the
+    # caster had marked nobody made every one of them silent -- correct
+    # rows, aimed at a creature that could not exist here. The defender
+    # class features that would lay one are not written yet, so the board
+    # lays it instead.
+    if lined_up:
+        setup.target = lined_up[0]
+        setup.mark(on=lined_up[0], until=When.ENCOUNTER)
 
     # A zone, for the rows that target one. "One conjuration or zone" had
     # nothing to aim at.
@@ -485,6 +513,20 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         if _fired(world, ref, cursor):
             return True
 
+    # Shoved about. "When you are pushed, pulled or slid" and "when an enemy
+    # knocks you prone" are printed triggers, and a harness that only swings
+    # and walks produces neither -- so the rows reported UNUSED while being
+    # perfectly correct.
+    shove = Cast(world=world, me=foes[0], ref="audit:provoke")
+    shove.target = caster
+    for move in (shove.push, shove.pull, shove.slide):
+        move(2, on=caster)
+        if _fired(world, ref, cursor):
+            return True
+    shove.prone(on=caster)
+    if _fired(world, ref, cursor):
+        return True
+
     # A burst or a blast of its own. "When the m5027 hits with a close or
     # area attack" is a common enough shape, and a harness that only ever
     # swings a basic can never produce one.
@@ -522,7 +564,13 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         health = world.get(victim, Health)
         if health is None or health.hp <= 0:
             continue
-        world.damage(caster, victim, health.hp + health.max_hp)
+        # A foe swings the killing blow, not the caster. Killing the caster
+        # *with the caster* made `source` itself, so "an enemy reduces you
+        # to 0 hit points" -- a printed trigger on several rows -- could
+        # never be true, and the row reported UNUSED as though it were
+        # unwritable rather than unasked.
+        killer = foes[0] if victim == caster else caster
+        world.damage(killer, victim, health.hp + health.max_hp)
         if _fired(world, ref, cursor):
             return True
     return _fired(world, ref, cursor)
