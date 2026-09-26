@@ -1186,6 +1186,29 @@ class Cast:
             until=until, kind=self.ref,
         )
 
+    def restore_use(self, ref: str, *, on: int | None = None) -> bool:
+        """"You regain the use of your second wind."
+
+        The inverse of spending one, and the opposite of `c.forbid`: that
+        takes a row the creature still has, this hands back one it has
+        already used. `Powers.restore` did the work and nothing on `Cast`
+        reached it, so the half-dozen rows whose entire Effect is this line
+        had no way to say it.
+
+        Defaults to the **caster** -- every printed one is about its own
+        owner -- and returns False if the row had not been used, which is
+        the Requirement those rows print.
+        """
+        from .components import Powers as _Powers
+
+        who = on if on is not None else self.me
+        powers = self.world.get(who, _Powers)
+        if powers is None or powers.times(ref) == 0:
+            return False
+        powers.restore(ref)
+        self.world.bus.emit(Note(text=f"{who} regains the use of {ref}"))
+        return True
+
     def initiative(self, amount: int, *, on: int | None = None) -> int:
         """"Each target gains a +10 bonus to his or her initiative check."
 
