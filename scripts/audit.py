@@ -148,6 +148,11 @@ KNOWN_SILENT = {
     # land: the target goes from 31 hit points to 11. Any "on a miss, swing
     # again" row will read this way.
     "p4479": "triggers on a miss and answers with an attack; the loaded 1 misses twice",
+    # A long jump plus "+2 to your fly speed (if any)". The jump is a skill
+    # check nothing rolls, and the board's ranger has no fly speed, so the
+    # printed row correctly does nothing here -- "if any" is the card's own
+    # word for it.
+    "p13696": "its only combat clause is a fly-speed bonus; the board's ranger cannot fly",
     "p2530": "an ally must have a bloodied enemy beside it",
     "p4572": "an ally must have already spent an encounter attack power",
     # Its printed Target *is* the avenger's oath target, and nothing on this
@@ -293,6 +298,21 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     world.relations.set(Relation.RIDDEN_BY, caster, ally)
     world.relations.set(Relation.GUARDED_BY, caster, ally)
 
+    # A companion, because the board had none and roughly sixty rows across
+    # shaman and ranger read "your spirit companion" or "your beast". Every
+    # one of them reported UNUSED or SILENT while being correct -- the
+    # failure the silent check exists to catch, produced by the instrument
+    # rather than the content. Placed two squares off so "adjacent to your
+    # companion" and "not adjacent" are both reachable.
+    if declared.cls:
+        pet = Cast(world=world, me=caster, ref="audit:setup")
+        companion = pet.call_companion(at=(5, 9))
+        # And something for it to shake off, for the same reason the caster
+        # has one: "your beast companion makes a saving throw" is a whole
+        # row, and a companion with nothing save-ends on it rolls no dice.
+        if companion:
+            pet.effect("audit:setup pet hold", until=When.SAVE_ENDS, on=companion)
+
     # The caster is unseen by one enemy. A whole family of rows -- the
     # assassin's, and every lurker that only strikes what cannot see it --
     # gates on `HIDDEN_FROM`, and nothing on this board ever set it, so they
@@ -308,7 +328,6 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     world.grid.blocking.add((9, 8))
     # And one dummy already burning, because several rows target "a creature
     # taking ongoing damage" and nothing on the board ever was.
-    from combat_engine.engine import Cast
     from combat_engine.engine.grid import spread
     from combat_engine.engine.types import Condition
 

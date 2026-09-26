@@ -101,7 +101,17 @@ def spread(squares: frozenset[Square] | set[Square], radius: int) -> frozenset[S
 
 
 def between(a: frozenset[Square] | set[Square], b: frozenset[Square] | set[Square]) -> int:
-    """Distance between two footprints: the closest pair of squares."""
+    """Distance between two footprints: the closest pair of squares.
+
+    A creature that is not on the board is infinitely far off, not an
+    error. `min()` over an empty footprint raised `ValueError` from three
+    frames below the row that asked, while `Cast.distance` answered 99 to
+    the same question -- so the two disagreed, and content had to pre-check
+    `squares()` before it dared ask. Found when a shaman row measured to an
+    ally that had left the board.
+    """
+    if not a or not b:
+        return 99
     return min(distance(p, q) for p in a for q in b)
 
 

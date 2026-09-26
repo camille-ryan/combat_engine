@@ -1441,14 +1441,21 @@ class Cast:
         speed: int = 0,
         aura: int = 0,
         burn: tuple[int, DamageType] | None = None,
+        solid: bool = False,
     ) -> int:
         """Put a conjuration on the board and return its entity id.
 
-        It occupies its square -- which is the clause a zone could never say
-        -- and nothing may walk through it. `speed` is how far its creator
-        may move it with a move action; `aura` gives it a footprint that
-        follows it, which is what "each creature adjacent to it" reads off
-        and is also the only reason it is drawn at all.
+        **Creatures move through it unless the printed line says otherwise**,
+        which is the rule and was not what this did. It used to claim its
+        square in `grid.occupants` always, so nothing could ever enter --
+        and "when an enemy enters its space", printed on several rows, was
+        permanently false. `solid=True` is for the ones that really do
+        block, a wall of fire rather than a spectral hound.
+
+        It keeps its `Position` either way, so it is drawn, it can be
+        targeted, and its aura follows it. `speed` is how far its creator
+        may move it with a move action; `aura` gives it a footprint, which
+        is what "each creature adjacent to it" reads off.
 
         It rolls its creator's attacks. `c.from_(sphere)` is how a body
         makes it swing.
@@ -1472,7 +1479,13 @@ class Cast:
             Movement(speed=speed),
             Conjuration(ref=name, by=self.me),
         )
-        place(self.world, eid, where)
+        if solid:
+            place(self.world, eid, where)
+        else:
+            # The square is where it *is*, not something it owns. Setting
+            # the position without indexing it in `grid.occupants` is the
+            # whole difference between standing in a square and blocking it.
+            self.world.need(eid, Position).square = where
         effect = self.world.effects.apply(
             eid,
             self.me,
@@ -2144,7 +2157,17 @@ class Cast:
         database ref is for the ones that really are their own creature --
         a ranger's beast.
         """
-        from .components import Companion, Defenses, Health, Movement, Position, Side
+        from dataclasses import replace
+
+        from .components import (
+            Companion,
+            Defenses,
+            Health,
+            Movement,
+            Position,
+            Side,
+            Stats,
+        )
         from .grid import Size
         from .query import team as side_of
 
@@ -2174,6 +2197,13 @@ class Cast:
                 # shaman and a mark laid on one is not laid on both.
                 Defenses(values=dict(mine.values), scale=mine.scale),
                 Movement(speed=speed),
+                # Its owner's level and scores. Not decoration: anything
+                # that asks a creature for an attack bonus goes through
+                # `Cast.stats`, which does `world.need(me, Stats)` and
+                # raises on a creature without one -- so a companion
+                # lacking it made four unrelated rows blow up inside
+                # `bonus_for` rather than anywhere near the companion.
+                replace(self.world.need(self.me, Stats)),
             )
         self.world.add(made, Companion(owner=self.me, ref=ref, kind=kind))
         return made

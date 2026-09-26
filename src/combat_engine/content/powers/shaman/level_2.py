@@ -12,16 +12,23 @@ from combat_engine.engine import (
     MINOR,
     NO_TARGET,
     ONE_ALLY,
+    PERSONAL,
+    REACTION,
+    SELF,
     STANDARD,
     ActionType,
+    AdjacencyLost,
     AreaBurst,
     Cast,
     CloseBurst,
+    Companion,
     DamageRolled,
     DamageType,
     Keyword,
+    Melee,
     Ranged,
     Trigger,
+    TurnStart,
     When,
     about_me,
     power,
@@ -29,6 +36,8 @@ from combat_engine.engine import (
 from combat_engine.engine.ecs import World
 from combat_engine.engine.events import InitiativeRolled
 from combat_engine.engine.query import distance_between, team
+
+from ._spirit import beside_spirit, friends, send_spirit
 
 PRIMAL = [Keyword.PRIMAL]
 
@@ -41,6 +50,23 @@ def ally_damaged_within_10(world: World, me: int, ev: Any) -> bool:
     if team(world, who) != team(world, me):
         return False
     return distance_between(world, me, who) <= 10
+
+
+def stepped_away_from_spirit(world: World, me: int, ev: Any) -> bool:
+    """An enemy stopped standing beside my spirit.
+
+    The printed trigger also asks that the enemy *started its turn* there,
+    and nothing records where a creature was when its turn began, so that
+    half is dropped: this fires when the adjacency is lost, however it was
+    gained.
+    """
+    who, other = getattr(ev, "actor", None), getattr(ev, "other", None)
+    if who is None or other is None:
+        return False
+    held = world.get(other, Companion)
+    if held is None or held.owner != me:
+        return False
+    return team(world, who) is not team(world, me)
 
 
 @power(
@@ -128,3 +154,147 @@ def p9748(c: Cast) -> None:
     """Drawing a weapon is not modelled -- everybody starts a fight armed --
     so the slide is the whole of it."""
     c.slide(3)
+
+
+# -- the rows built round the spirit ----------------------------------------
+
+
+@power(
+    "p11358",
+    level=2,
+    cls="shaman",
+    usage=ENCOUNTER,
+    action=STANDARD,
+    reach=CloseBurst(20),
+    target=ONE_ALLY,
+    keywords=PRIMAL,
+)
+def p11358(c: Cast) -> None:
+    """The printed target is an ally *or a liftable object* standing by the
+    spirit; objects are not creatures here, so the ally is all of it. The
+    adjacency is a targeting restriction the header cannot state."""
+    mate = c.target
+    if mate is None or not beside_spirit(c, mate):
+        return
+    c.slide(max(1, c.speed_of() // 2), on=mate)
+    send_spirit(c, mate)
+
+
+@power(
+    "p12527",
+    level=2,
+    cls="shaman",
+    usage=ENCOUNTER,
+    action=MINOR,
+    reach=CloseBurst(5, from_="companion"),
+    target=ONE_ALLY,
+    keywords=PRIMAL,
+)
+def p12527(c: Cast) -> None:
+    """"Makes a saving throw **or** gains temporary hit points" is a choice,
+    and it is only a choice when there is something to save against -- so a
+    save that finds nothing falls through to the hit points."""
+    mate = c.target
+    c.dismiss_companion()
+    if mate is None:
+        return
+    if c.may("make a saving throw", who=mate) and c.save(on=mate):
+        return
+    c.temp_hp(c.wis_mod, on=mate)
+
+
+@power(
+    "p12869",
+    level=2,
+    cls="shaman",
+    usage=DAILY,
+    action=MINOR,
+    reach=Melee(5, from_="companion"),
+    target=ONE_ALLY,
+    keywords=[Keyword.PRIMAL, Keyword.HEALING],
+)
+def p12869(c: Cast) -> None:
+    """Regeneration is a watch on the beneficiary's own turn start. The
+    printed end condition -- calling the companion again -- is read as the
+    spirit being back on the board, which is all that calling does."""
+    mate = c.target
+    c.dismiss_companion()
+    if mate is None:
+        return
+    c.resist(10, DamageType.FIRE, on=mate, until=When.ENCOUNTER)
+    if c.int_mod <= 0:
+        return
+
+    def mend(ev: Any) -> None:
+        if getattr(ev, "actor", None) != mate or c.companion() is not None:
+            return
+        if c.wounded(on=mate):
+            c.heal(c.int_mod, on=mate)
+
+    c.watch(TurnStart, mend, until=When.ENCOUNTER, on=mate)
+
+
+@power(
+    "p9744",
+    level=2,
+    cls="shaman",
+    usage=ENCOUNTER,
+    action=REACTION,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=PRIMAL,
+    trigger=(
+        "an enemy that started its turn adjacent to your spirit companion "
+        "ends its movement no longer adjacent to it"
+    ),
+    on=Trigger(
+        AdjacencyLost,
+        stepped_away_from_spirit,
+        "an enemy stops standing beside your spirit companion",
+    ),
+)
+def p9744(c: Cast) -> None:
+    foe = getattr(c.trigger, "actor", None)
+    send_spirit(c, foe)
+
+
+@power(
+    "p9745",
+    level=2,
+    cls="shaman",
+    usage=DAILY,
+    action=MINOR,
+    reach=CloseBurst(1, from_="companion"),
+    target=EACH_ALLY,
+    keywords=PRIMAL,
+)
+def p9745(c: Cast) -> None:
+    """"You and each ally in the burst" is two pools: the shaman is a
+    target whether or not the spirit's burst reaches back to him."""
+    mate = c.target
+    if mate is not None and mate != c.companion():
+        c.resist(c.con_mod, on=mate, until=When.ENCOUNTER)
+    if c.first and c.me not in c.targets:
+        c.resist(c.con_mod, on=c.me, until=When.ENCOUNTER)
+
+
+@power(
+    "p9747",
+    level=2,
+    cls="shaman",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=PRIMAL,
+)
+def p9747(c: Cast) -> None:
+    """The second half spends a free action to end this power early, and
+    there is no verb for spending one, so the standing bonus is the row."""
+    for mate in friends(c, with_me=True):
+        c.bonus(
+            "attack", 1, on=mate, until=When.ENCOUNTER,
+            when=lambda ctx: (
+                bool(ctx.get("ranged")) and beside_spirit(c, ctx.get("target"))
+            ),
+        )

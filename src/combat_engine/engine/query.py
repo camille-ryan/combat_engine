@@ -65,10 +65,27 @@ def team(world: World, eid: int) -> Team | None:
     return side.team if side else None
 
 
-def allies(world: World, eid: int) -> list[int]:
-    """Allies never include the creature itself."""
+def allies(world: World, eid: int, *, companions: bool = False) -> list[int]:
+    """Allies never include the creature itself, nor anybody's companion.
+
+    A companion is on your side and in the target pool, which is what makes
+    it targetable -- and it meant "each ally adjacent to your spirit
+    companion" healed, buffed or slid the spirit itself. Silently: the row
+    read correctly and did one thing too many, and three shaman rows had to
+    filter it out by hand before this default existed.
+
+    `companions=True` for the rare row that really does mean the pet.
+    """
     mine = team(world, eid)
-    return [o for o in creatures(world) if o != eid and mine is not None and team(world, o) is mine]
+    if mine is None:
+        return []
+    return [
+        o
+        for o in creatures(world)
+        if o != eid
+        and team(world, o) is mine
+        and (companions or world.get(o, Companion) is None)
+    ]
 
 
 def enemies(world: World, eid: int) -> list[int]:

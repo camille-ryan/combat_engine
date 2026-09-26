@@ -6,7 +6,10 @@ from typing import Any
 
 from combat_engine.engine import (
     DAILY,
+    EACH_CREATURE,
     FORT,
+    MINOR,
+    ONE_ALLY,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -15,10 +18,13 @@ from combat_engine.engine import (
     AreaBurst,
     Attack,
     Cast,
+    CloseBlast,
+    CloseBurst,
     Condition,
     DamageType,
     Hit,
     Keyword,
+    Melee,
     Ranged,
     RoundStart,
     Square,
@@ -29,8 +35,11 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.query import distance_between
 
+from ._spirit import by_hand, spirit_power
+
 PRIMAL = [Keyword.PRIMAL]
 PRIMAL_IMPLEMENT = [Keyword.PRIMAL, Keyword.IMPLEMENT]
+SPIRIT_MELEE = Melee(1, from_="companion")
 
 
 def free_square_beside(c: Cast, origin: Square | None) -> Square | None:
@@ -237,3 +246,139 @@ def p9766(c: Cast) -> None:
         c.damage("3d6", c.wis_mod, on=victim)
     else:
         c.half_damage("3d6", c.wis_mod, on=victim)
+
+
+# -- the rows built round the spirit ----------------------------------------
+
+
+@power(
+    "p12532",
+    level=9,
+    cls="shaman",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(20),
+    target=ONE_ALLY,
+    keywords=PRIMAL,
+)
+def p12532(c: Cast) -> None:
+    """The printed second block is a standard-action attack the change of
+    shape grants at will, and a row the engine can offer has to have an id
+    of its own -- this one has none -- so the transformation is what can be
+    written."""
+    spirit = c.companion()
+    if spirit is None:
+        return
+    c.resist(5, on=spirit, until=When.ENCOUNTER)
+
+
+@power(
+    "p12875",
+    level=9,
+    cls="shaman",
+    usage=DAILY,
+    action=STANDARD,
+    reach=SPIRIT_MELEE,
+    target=ONE_ALLY,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.POLYMORPH],
+    attack=Attack(WIS, vs=FORT),
+)
+def p12875(c: Cast) -> None:
+    """`c.form` is the caster's own shape and takes no `on=`, so the ally's
+    form is written out piece by piece. Ending it early as a minor action
+    has no verb. The burst round the ally is rolled by hand, since the
+    header's range is the spirit's."""
+    mate = c.target
+    c.dismiss_companion()
+    if mate is None:
+        return
+    c.slowed(on=mate, until=When.EONT)
+    c.resist(5, on=mate, until=When.EONT)
+    if c.int_mod > 0:
+        c.bonus("damage", c.int_mod, on=mate, until=When.EONT, when=by_hand)
+    for foe in [f for f in c.enemies() if c.adjacent_to(f, mate)]:
+        if c.strike(on=foe):
+            c.damage("2d6", c.wis_mod, on=foe)
+            c.prone(on=foe)
+        else:
+            c.half_damage("2d6", c.wis_mod, on=foe)
+
+
+@power(
+    "p13771",
+    level=9,
+    cls="shaman",
+    usage=DAILY,
+    action=STANDARD,
+    reach=SPIRIT_MELEE,
+    target=ONE_ALLY,
+    keywords=PRIMAL,
+)
+def p13771(c: Cast) -> None:
+    mate = c.target
+    if mate is None:
+        return
+    for foe in [f for f in c.enemies() if c.adjacent_to(f, mate)][:4]:
+        c.grant_attack(mate, on=foe)
+
+
+@power(
+    "p9764",
+    level=9,
+    cls="shaman",
+    usage=DAILY,
+    action=STANDARD,
+    reach=CloseBurst(2, from_="companion"),
+    target=EACH_CREATURE,
+    keywords=PRIMAL_IMPLEMENT,
+    attack=Attack(WIS, vs=REF),
+)
+def p9764(c: Cast) -> None:
+    """"You can't call it back until after the end of your next turn" wants
+    the call's own id to take away, and the call is not a row here."""
+    if c.strike(from_=c.companion()):
+        c.damage("2d6", c.wis_mod)
+        c.dazed(until=When.SAVE_ENDS)
+    else:
+        c.half_damage("2d6", c.wis_mod)
+    if c.last:
+        c.dismiss_companion()
+
+
+@power(
+    "p9765",
+    level=9,
+    cls="shaman",
+    usage=DAILY,
+    action=STANDARD,
+    reach=CloseBlast(5),
+    target=EACH_CREATURE,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.PSYCHIC, Keyword.ZONE],
+    attack=Attack(WIS, vs=REF),
+)
+def p9765(c: Cast) -> None:
+    """Every attack the spirit makes is a row the shaman used, so both
+    bonuses are the shaman's, gated on the row being one measured from the
+    spirit."""
+    if c.first:
+        glare = c.zone(c.area(), until=When.ENCOUNTER)
+        if c.wis_mod > 0:
+            c.bonus(
+                "damage", c.wis_mod, on=c.me, until=When.ENCOUNTER,
+                when=lambda ctx: (
+                    spirit_power(ctx)
+                    and c.companion() in c.world.zones.occupants(glare)
+                ),
+            )
+    victim = c.target
+    if c.strike():
+        c.damage("1d10", c.wis_mod, dtype=DamageType.PSYCHIC)
+        if victim is not None:
+            c.bonus(
+                "attack", 2, on=c.me, until=When.ENCOUNTER,
+                when=lambda ctx, v=victim: (
+                    spirit_power(ctx) and ctx.get("target") == v
+                ),
+            )
+    else:
+        c.half_damage("1d10", c.wis_mod, dtype=DamageType.PSYCHIC)

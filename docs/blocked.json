@@ -287,30 +287,6 @@
     "wants": "c.resist(..., when=)",
     "why": "'resistance, but only when the damage is from ranged or area attacks'. Written ungated it would shrug off melee too, which is strictly stronger than print (the same Callable[[dict], bool] gate c.bonus takes)"
   },
-  "p11357": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p11358": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p11360": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p11363": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p11364": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p11365": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
   "p11392": {
     "wants": "c.initiative(n, on=)",
     "why": "'+10 to your initiative check'. InitiativeRolled.rolled is an int copied onto the event, so a listener setting ev.rolled is discarded; the sort re-reads the Initiative component and no Cast method writes it. init.bonus is read before the emit, so a bonus cannot reach it either. Issue #168 (change an initiative result)"
@@ -318,10 +294,6 @@
   "p11480": {
     "wants": "a long-range penalty in resolve.attack, plus c.ignores_long_range(until=)",
     "why": "'no penalty to attack rolls for attacking at long range'. Long range is not modelled: resolve.attack never consults a weapon's ranged=(normal, long) tuple, so there is no penalty to remove and the row would be inert indistinguishably from a bug"
-  },
-  "p11573": {
-    "wants": "c.companion",
-    "why": "the whole Effect is combat advantage shared with the companion against anything the two are both adjacent to"
   },
   "p11603": {
     "wants": "a compendium ref for the second, granted row (then c.grant_row(ref))",
@@ -411,34 +383,6 @@
     "wants": "c.companion",
     "why": "same shape as p10594 -- 'Melee beast 1', beast's attack bonus, 2[B]"
   },
-  "p12527": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12528": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12529": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12530": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12531": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12532": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12534": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
   "p12563": {
     "wants": "c.conceal(*, from_=None, until=)",
     "why": "concealment does not exist: cover_between computes Cover from two positions at the moment of the attack and reads no modifier, and c.hide/c.invisible say a much stronger sentence. Asked for by shaman, assassin, artificer, seeker, warden, psion and battlemind rows (and a concealment term query.cover_between honours)"
@@ -446,46 +390,6 @@
   "p12792": {
     "wants": "the class feature's id, plus c.regain(ref, *, on=)",
     "why": "'you miss with the ranged basic attack granted by <a class feature>; you regain that power and use it immediately'. The feature has no id in the spec and nothing gives a use back"
-  },
-  "p12866": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12867": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12868": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12869": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12870": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12871": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12873": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12874": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12875": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p12876": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
   },
   "p12932": {
     "wants": "on= on c.no_provoke, i.e. c.no_provoke(on=<ally>, from_=<enemy>)",
@@ -567,49 +471,9 @@
     "wants": "a summon= header field, or a companion ref the spec carries",
     "why": "it summons a creature associated with your pact, and the spec names no id for it -- c.summon needs a row to spawn and there is none to give it. The commanding, the shared knowledge and the surge lost when it drops all hang off a creature that cannot be put on the board"
   },
-  "p13696": {
-    "wants": "c.companion",
-    "why": "Prerequisite names a companion species, and nothing in the row exists without the companion"
-  },
   "p13697": {
     "wants": "c.companion",
     "why": "same as p13696, and the Effect is about being mounted on it"
-  },
-  "p13698": {
-    "wants": "c.companion",
-    "why": "same as p13696"
-  },
-  "p13699": {
-    "wants": "c.companion",
-    "why": "same as p13696"
-  },
-  "p13700": {
-    "wants": "c.companion",
-    "why": "same as p13696, and the Target is the ranger and the companion"
-  },
-  "p13701": {
-    "wants": "c.companion",
-    "why": "same as p13696"
-  },
-  "p13702": {
-    "wants": "c.companion",
-    "why": "same as p13696"
-  },
-  "p13703": {
-    "wants": "c.companion",
-    "why": "same as p13696"
-  },
-  "p13704": {
-    "wants": "c.companion",
-    "why": "same as p13696, and its Requirement is the companion's position and its ability to make opportunity attacks"
-  },
-  "p13705": {
-    "wants": "c.companion",
-    "why": "same as p13696, and its Requirement is the companion standing next to the triggering enemy"
-  },
-  "p13771": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
   },
   "p13783": {
     "wants": "c.no_cover(*, on=, until=, by=)",
@@ -755,10 +619,6 @@
     "wants": "chargen.BUILDS[\"warlock\"] to carry an \"elemental\" leg, plus a named elemental affinity on the character",
     "why": "Prerequisite: Elemental Pact, and the whole row is that pact's boon -- the next enemy cursed gains vulnerable 5 to the type matching your current elemental affinity. The class has two legs, infernal and fey, so c.build cannot ask; and nothing holds an affinity for the vulnerability to name"
   },
-  "p16501": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
   "p1926": {
     "wants": "c.see_unseen(on=)",
     "why": "the printed line is a trade: you see the invisible, and everything else goes invisible to you. The second half is writable with c.invisible(to=c.me, on=...); the first is not, because nothing overrides another effect's relation. Writing only the half that works would ship the penalty without the benefit (suppress HIDDEN_FROM towards one creature)"
@@ -831,59 +691,15 @@
     "wants": "the dragon-magic / wild-magic fork in chargen, and c.build(...)",
     "why": "the whole Effect is changing the resistance your Dragon Soul or Wild Soul grants; chargen derives one build for this class, 'standard', so there is no resistance from a fork to change (to answer it)"
   },
-  "p3778": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p3780": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
   "p3782": {
     "wants": "c.dispel(zone_or_conjuration)",
     "why": "its whole target line is one conjuration or zone and its whole Hit is destroying it. A zone is not an entity a target line can name, a conjuration has no Will to attack, and nothing ends somebody else's zone. Same missing half as the attack line of p3056 (and a way to target one)"
-  },
-  "p3783": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p3784": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p3786": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p3789": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p3792": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p3795": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p3796": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
   },
   "p3838": {
     "wants": "c.move_zone(zone_id, squares)",
     "why": "entire Effect is 'move each of your zones and conjurations 5 squares'. Zones has no mover at all. The same gap silently drops the 'as a move action you can move the zone' rider from p3876, p3882, p5403 and p5404, which are written without it"
   },
   "p3839": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p3847": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p3878": {
     "wants": "c.companion",
     "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
   },
@@ -943,17 +759,9 @@
     "wants": "c.companion",
     "why": "same shape as p10594"
   },
-  "p4381": {
-    "wants": "c.companion",
-    "why": "its Target is the beast companion"
-  },
   "p4382": {
     "wants": "c.bonus(\"quarry_damage\", 3)",
     "why": "'add 3 to the extra damage you deal with Hunter's Quarry'. cf:ranger-quarry closes over the literal 1d6, so there is no number to raise; a plain +3 against the quarry is strictly more than printed, since it would pay on every attack rather than the once-a-round rider (or features.extra_damage reading a modifier rather than closing over a fixed dice string)"
-  },
-  "p4383": {
-    "wants": "c.companion",
-    "why": "targets the ranger and the companion, and the whole Effect is a shared Perception check"
   },
   "p4391": {
     "wants": "c.companion",
@@ -962,14 +770,6 @@
   "p4396": {
     "wants": "a run action -- c.run(n)",
     "why": "the whole Effect is running speed + 4 instead of speed + 2, and not granting combat advantage from running; there is no run action, so neither clause has a subject (or actions.legal offering one)"
-  },
-  "p4398": {
-    "wants": "c.companion",
-    "why": "its Target is the beast companion"
-  },
-  "p4399": {
-    "wants": "c.companion",
-    "why": "its Target is the beast companion"
   },
   "p4401": {
     "wants": "c.companion",
@@ -982,10 +782,6 @@
   "p4412": {
     "wants": "c.quarry_damage()",
     "why": "its whole payload is an ally's attack dealing 'extra damage equal to your Hunter's Quarry damage', and that number lives in a closure inside the class feature (the dice cf:ranger-quarry pays out, readable from a row)"
-  },
-  "p4414": {
-    "wants": "c.companion",
-    "why": "its Target is the beast companion"
   },
   "p4476": {
     "wants": "c.sneak_attack()",
@@ -1067,93 +863,17 @@
     "wants": "c.summon / c.conjure taking an inline stat line plus a commanded action",
     "why": "a summoning row: the printed Effect is a creature with its own speed and hit points that the summoner commands with a standard action, rolling the summoner's Wisdom. c.summon(ref) wants a content ref for the creature and the spec gives none, and nothing offers a commanded action on a creature the caster does not own. Same shape as p11840"
   },
-  "p5391": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5392": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5395": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5396": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
   "p5398": {
     "wants": "c.ignore_cover(*, on=, until=, against=)",
     "why": "the whole Effect is ignoring cover, superior cover, concealment and total concealment against enemies in the zone. c.strike(ignore_cover=True) is per-call only"
-  },
-  "p5399": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5400": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
   },
   "p5404": {
     "wants": "c.concealment(*, on=, until=, total=False)",
     "why": "the whole Effect is 'you and your allies gain concealment'. No concealment verb exists; c.zone(blocks_sight=True) would blind both sides"
   },
-  "p5432": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5436": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5438": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5440": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5445": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5451": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5454": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5459": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5510": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
   "p5527": {
     "wants": "c.bonus('attack', dice='1d6')",
     "why": "'roll a d6 and add it as a power bonus to every weapon attack and damage roll'. c.bonus takes a fixed int (a modifier rolled per roll)"
-  },
-  "p5537": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5538": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5545": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p5555": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
   },
   "p5590": {
     "wants": "c.add_target(who)",
@@ -1178,14 +898,6 @@
   "p5908": {
     "wants": "c.see_invisible(on=)",
     "why": "its whole Effect is darkvision and seeing invisible creatures adjacent to you. Being unseen is the HIDDEN_FROM relation and nothing suppresses it from the looker's side, and there is no light for darkvision to answer"
-  },
-  "p6521": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p6945": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
   },
   "p6959": {
     "wants": "c.summon / c.conjure taking an inline stat line plus a commanded action",
@@ -1279,97 +991,9 @@
     "wants": "a carried consumable -- an object a creature holds and spends an action on",
     "why": "four berries, each consumed as a minor action for 10 hit points, a saving throw, or 10 temporary hit points. Same missing thing as p13516"
   },
-  "p9734": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9735": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9736": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9738": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9739": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9740": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9741": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9744": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9745": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
   "p9746": {
     "wants": "c.bonus('shift', n) and c.cheaper(action, cost, on=)",
     "why": "'allies can stand up as a minor action' and 'an ally who shifts shifts 1 extra square'. The Mod keys are attack/damage/save/speed/defence and speed is walking, not shifting; nothing overrides what an action costs"
-  },
-  "p9747": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9749": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9750": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9751": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9753": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9757": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9758": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9760": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9761": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9762": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9764": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9765": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
-  },
-  "p9767": {
-    "wants": "c.companion",
-    "why": "the shaman's spirit companion: a standing entity the character owns, one square, a Position, on the board from the start and re-callable. c.conjure is wrong for it three ways (made by a power not owned by the character, defaults to When.SUSTAIN, no way to ask for the one you already have); c.servants/c.bind give creatures with turns of their own and the companion never acts; c.aura has no square so cannot be a melee origin. It must also be attackable and damageable. 48 of these need reach=Melee(1, from_='companion') specifically -- c.strike(from_=) already does the right thing for the roll, but the header's legality check measures reach from the caster before the body runs. Also wanted: c.dismiss_companion(), c.move_companion(n), and a hits_my_companion predicate. Same entity as the 26 ranger rows wanting c.companion"
   },
   "p9818": {
     "wants": "keep= on c.strike/c.attack, and both results readable off AttackResult",
