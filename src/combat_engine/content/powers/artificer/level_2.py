@@ -155,3 +155,30 @@ def p7645(c: Cast) -> None:
     """Magic item daily uses are a resource kept outside the fight, so this
     is deliberately inert rather than unwritten."""
     c.note("p7645: the next magic item daily power does not count against the day")
+
+
+@power(
+    "p14401",
+    level=2,
+    cls="artificer",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.CONJURATION],
+)
+def p14401(c: Cast) -> None:
+    """"Within 2 squares of the figurine" is an aura hung on the conjuration
+    rather than on the caster, and `c.grants_in` is what makes a zone carry
+    something rather than bite. The figurine's 5 squares of movement on a
+    sustain is its `speed`; the +4 to Stealth is a skill bonus with no check
+    to modify here."""
+    figurine = c.conjure(
+        at=c.origin,
+        label=c.ref,
+        until=When.SUSTAIN,
+        sustain=MINOR,
+        speed=5,
+    )
+    veil = c.aura(2, label=c.ref, on=figurine, until=When.SUSTAIN, sustain=MINOR)
+    c.grants_in(veil, "concealment", 2, side="ally", kind="untyped")

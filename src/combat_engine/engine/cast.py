@@ -2233,6 +2233,79 @@ class Cast:
         self.world.add(made, Companion(owner=self.me, ref=ref, kind=kind))
         return made
 
+    def summon_inline(self, spec: Any, at: Square | None = None) -> int:
+        """Put a creature the *power itself* defines on the board.
+
+        `c.summon(ref)` needs a row in the database, and thirty-six printed
+        blocks give their creature no id at all -- they print its speed,
+        its defences and its attack line in the power's own text. This
+        takes that block.
+
+        Spawned as a `Companion`, which is the right shape and already
+        exists: targetable, no initiative slot, no vote on the fight. A
+        summon in play acts only when its summoner spends an action
+        commanding it, so having no turn is the printed rule.
+
+        Several may stand at once -- "you summon two" is printed -- so this
+        does not relocate the way `c.call_companion` does.
+        """
+        from dataclasses import replace
+
+        from .components import (
+            Companion,
+            Defenses,
+            Health,
+            Movement,
+            Position,
+            Side,
+            Stats,
+        )
+        from .grid import Size
+        from .query import team as side_of
+
+        where = at or self._free_square_near(self.here)
+        if where is None:
+            return 0
+        mine = self.world.need(self.me, Defenses)
+        hp = spec.hp or max(1, self.surge_value())
+        made = self.world.spawn(
+            Position(square=where, size=Size.MEDIUM),
+            Side(team=side_of(self.world, self.me) or Team.ALLY),
+            Health(hp=hp, max_hp=hp),
+            Defenses(
+                values={k: v + spec.defences for k, v in mine.values.items()},
+                scale=mine.scale,
+            ),
+            Movement(speed=spec.speed, modes=set(spec.modes)),
+            replace(self.world.need(self.me, Stats)),
+        )
+        self.world.add(
+            made, Companion(owner=self.me, ref=spec.label or self.ref, kind="summon")
+        )
+        return made
+
+    def command(self, who: int, *, on: int | None = None) -> AttackResult | None:
+        """Spend your action making a summon attack with **its own** line.
+
+        The half `from_=` could not do: it moves where the attack is
+        measured and rolled from, and leaves the numbers the summoner's. A
+        printed block that gives its creature an attack bonus means that
+        bonus, so this reads the header's `summon=` line and rolls it from
+        the creature.
+        """
+        from .dsl import get
+
+        p = get(self.ref)
+        spec = getattr(p, "summon", None) if p else None
+        if spec is None or spec.attack is None:
+            return None
+        bonus = spec.attack.bonus_for(self.world, who, self.ref, self.branch)
+        hit = self.attack(bonus, spec.attack.vs, on=on, from_=who)
+        if hit and spec.damage is not None:
+            line = spec.damage
+            self.damage(line.dice, line.bonus, dtype=line.dtype, on=on)
+        return hit
+
     def dismiss_companion(self) -> bool:
         """"Your spirit companion disappears." An Effect line on ~20 rows."""
         standing = self.companion()
@@ -2687,6 +2760,28 @@ class Cast:
         """
         owner = self.me if on is None else on
         return self.world.zones.aura(owner, label or self.ref, radius, until, sustain)
+
+    def my_aura(self, label: str = "") -> int:
+        """The caster's own live aura, or 0 if it has none.
+
+        "Your aura gains the following effect" is printed on twelve bard
+        rows and every one of them was left out, because `c.aura` can only
+        make a *new* one -- at a radius the spec never states -- and there
+        was no way to ask for the one you already have. With this, such a
+        row hangs its payout on the standing aura and the radius stays the
+        class feature's business, which is where the card puts it.
+
+        `label` narrows it when a creature has more than one.
+        """
+        mine = [
+            zid
+            for zid, z in self.world.zones.all()
+            # `z.aura` is the radius, and a plain zone's is 0 -- so this is
+            # what tells "an aura around me" from "a patch of ground I
+            # made", which both answer `owner == me`.
+            if z.aura and z.owner == self.me and (not label or label in (z.label or ""))
+        ]
+        return mine[-1] if mine else 0
 
     def hazard(
         self,

@@ -119,6 +119,43 @@ def MeleeOrRanged(melee: int = 1, ranged: int = 10) -> Range:
 PERSONAL = Range("personal", 0)
 
 
+@dataclass(frozen=True)
+class Summon:
+    """A creature a power puts on the board, defined by the power itself.
+
+    Thirty-six rows across wizard, druid, invoker, psion and artificer
+    print a stat block inline -- speed, defences, an attack line -- and give
+    it no compendium id, so `c.summon(ref)` had nothing to name and every
+    one of them was left out of the tree.
+
+    It is spawned as a `Companion`, which is exactly the right shape and
+    was built for the shaman: targetable, takes no turn, no vote on whether
+    the fight is over. A 4e summon acts only when its summoner spends an
+    action commanding it, so having no initiative slot is the rule rather
+    than a simplification.
+
+    The numbers default to the summoner's, because that is what most
+    printed blocks say -- "its defences equal yours" -- and `defences` is an
+    offset from them rather than an absolute, so a block printing "your
+    defences +2" is `defences=2`.
+    """
+
+    #: Hit points. 0 means the summoner's healing surge value, which is the
+    #: commonest printed line by a wide margin.
+    hp: int = 0
+    speed: int = 6
+    #: Added to each of the summoner's defences.
+    defences: int = 0
+    #: Its own attack, for a block that prints one. Without it the summon
+    #: rolls whatever row commands it, the way a conjuration does.
+    attack: Attack | None = None
+    damage: Damage | None = None
+    #: "It can fly", "it can swim".
+    modes: tuple[str, ...] = ()
+    label: str = ""
+
+
+
 # --------------------------------------------------------------------------
 # Targets
 # --------------------------------------------------------------------------
@@ -338,6 +375,10 @@ class Power:
     #: inferred, so `scripts/audit.py` can tell "deliberately inert" from
     #: "written wrong", which is a distinction nothing else can draw.
     out_of_combat: bool = False
+    #: A creature this row puts on the board, defined here because the
+    #: printed block gives it no compendium id. Header data, so the card
+    #: can show what you are about to summon without running the body.
+    summon: Summon | None = None
 
     @property
     def is_attack(self) -> bool:
@@ -513,6 +554,7 @@ def power(
     group: str = "",
     no_provoke: bool = False,
     out_of_combat: bool = False,
+    summon: Summon | None = None,
 ) -> Callable[[Body], Body]:
     """Declare one power or one monster ability.
 
@@ -551,6 +593,7 @@ def power(
             group=group,
             no_provoke=no_provoke,
             out_of_combat=out_of_combat,
+            summon=summon,
         )
         return body
 

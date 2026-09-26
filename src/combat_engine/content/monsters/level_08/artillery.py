@@ -1166,6 +1166,36 @@ def m4716a3(c: Cast) -> None:
         c.unsave()
 
 
+_M4716_IMPLEMENT_HIT = "the m4716 hits an enemy with an implement attack"
+
+
+def _my_implement_hit(world: World, me: int, ev: Event) -> bool:
+    if getattr(ev, "attacker", None) != me:
+        return False
+    swung = get(getattr(ev, "power", ""))
+    return swung is not None and Keyword.IMPLEMENT in swung.keywords
+
+
+@power(
+    "m4716a4",
+    level=8,
+    usage=ENCOUNTER,
+    action=FREE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    trigger=_M4716_IMPLEMENT_HIT,
+    on=Trigger(Hit, when=_my_implement_hit, text=_M4716_IMPLEMENT_HIT),
+)
+def m4716a4(c: Cast) -> None:
+    """The row that swung is named off the `Hit` rather than left to the
+    fallback: this row is a free action and has no damage line of its own,
+    so `ref=""` would be read as *this* ref by anything that stopped
+    falling back. `When.EOT` because the roll it answers is the very next
+    one -- the window closes with the attack that opened it.
+    """
+    c.maximise(on=c.me, ref=getattr(c.trigger, "power", ""), until=When.EOT)
+
+
 # --------------------------------------------------------------------------
 # m655
 # --------------------------------------------------------------------------

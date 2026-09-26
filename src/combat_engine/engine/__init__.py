@@ -50,6 +50,7 @@ from .dsl import (
     MeleeOrRanged,
     Power,
     Ranged,
+    Summon,
     Target,
     UpTo,
     candidates,

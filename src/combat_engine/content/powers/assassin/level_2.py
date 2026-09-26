@@ -1,9 +1,11 @@
 """Assassin, level 2: the utilities.
 
-Most of this tier is concealment, and there is no concealment verb. Where a
-row's whole printed Effect is "you gain concealment" or "the burst is lightly
-obscured", the row is absent rather than approximated -- `c.zone(...,
-blocks_sight=True)` is the wrong shape, because it blinds the caster too.
+Most of this tier is concealment. `c.conceal` now says it -- a -2 on
+attacks against you that `resolve.attack` weighs against cover and takes
+the larger of -- so a row whose Effect is "you gain concealment" is
+written. What is still absent is *obscured terrain*: "the burst is lightly
+obscured" is a property of the ground and `c.zone(..., blocks_sight=True)`
+is the wrong shape for it, because it blinds the caster too.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from combat_engine.engine import (
     AT_WILL,
     DAILY,
     ENCOUNTER,
+    INTERRUPT,
     MINOR,
     MOVE,
     NO_TARGET,
@@ -20,15 +23,18 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     AdjacencyGained,
+    AttackDeclared,
     Cast,
     CloseBurst,
     Event,
     Keyword,
+    Miss,
     Trigger,
     When,
     World,
     power,
     spread,
+    targets_me,
 )
 from combat_engine.engine.query import enemies, hidden_from
 
@@ -175,3 +181,33 @@ def p9417(c: Cast) -> None:
 )
 def p9418(c: Cast) -> None:
     c.note("p9418: allies within 5 squares roll Stealth with your modifier")
+
+
+_TARGETED = "you are targeted by a melee or ranged attack"
+
+
+@power(
+    "p12563",
+    level=2,
+    cls="assassin",
+    usage=ENCOUNTER,
+    action=INTERRUPT,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.SHADOW],
+    trigger=_TARGETED,
+    on=Trigger(AttackDeclared, targets_me, _TARGETED),
+)
+def p12563(c: Cast) -> None:
+    """`AttackDeclared` is the window an interrupt owns, and it is the only
+    one where the -2 is still read: by `Hit` the defence has been compared.
+    The Stealth check is not rolled -- there are no skills here -- so the
+    hiding it buys is applied outright when the blow goes wide."""
+    foe = getattr(c.trigger, "attacker", None)
+    c.conceal(on=c.me, until=When.EONT)
+
+    def went_wide(ev: Miss) -> None:
+        if ev.target == c.me and (foe is None or ev.attacker == foe):
+            c.hide(from_=foe)
+
+    c.watch(Miss, went_wide, until=When.EOT, once=True)

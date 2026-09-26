@@ -87,6 +87,7 @@ from combat_engine.engine import (
     DamageType,
     Defense,
     Effect,
+    Hit,
     Keyword,
     Melee,
     Mod,
@@ -99,6 +100,7 @@ from combat_engine.engine import (
     Usage,
     When,
     World,
+    get,
     power,
     spread,
     would_hit_me,
@@ -576,6 +578,35 @@ def m4774a3(c: Cast) -> None:
     """
     for defended in EVERY_DEFENCE:
         c.bonus(defended, 4, until=When.EONT, on=c.me, once=True)
+
+
+_M4774_IMPLEMENT_HIT = "the m4774 hits an enemy with an implement attack"
+
+
+def _my_implement_hit(world: World, me: int, ev: Any) -> bool:
+    if getattr(ev, "attacker", None) != me:
+        return False
+    swung = get(getattr(ev, "power", ""))
+    return swung is not None and Keyword.IMPLEMENT in swung.keywords
+
+
+@power(
+    "m4774a4",
+    level=10,
+    usage=ENCOUNTER,
+    action=FREE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    trigger=_M4774_IMPLEMENT_HIT,
+    on=Trigger(Hit, when=_my_implement_hit, text=_M4774_IMPLEMENT_HIT),
+)
+def m4774a4(c: Cast) -> None:
+    """The ref of the row that swung comes off the `Hit` being answered. A
+    free action has no damage line of its own, so nothing here could be
+    read instead, and `When.EOT` keeps the window on the one roll this
+    answers.
+    """
+    c.maximise(on=c.me, ref=getattr(c.trigger, "power", ""), until=When.EOT)
 
 
 # ==========================================================================

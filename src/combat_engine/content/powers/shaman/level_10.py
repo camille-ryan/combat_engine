@@ -274,3 +274,25 @@ def p9767(c: Cast) -> None:
             c.bonus(what, 6, on=mate, until=When.EOT, once=True)
 
     c.watch(Hit, cover, until=When.ENCOUNTER, on=c.me)
+
+
+@power(
+    "p5404",
+    level=10,
+    cls="shaman",
+    usage=DAILY,
+    action=MINOR,
+    reach=CloseBurst(3),
+    target=NO_TARGET,
+    keywords=[*PRIMAL, Keyword.ZONE],
+)
+def p5404(c: Cast) -> None:
+    """`c.grants_in` rather than a plain bonus, because the printed line runs
+    on the geometry: you have it while you stand there and not a moment
+    after. `kind="untyped"` matches what `c.conceal` writes, so a shaman
+    standing in the lights and concealed by something else gets one -2 and
+    not two. Moving the zone 5 squares needs a verb for moving a zone, and
+    the Stealth checks it allows need skills; both are noted."""
+    lights = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER)
+    c.grants_in(lights, "concealment", 2, side="ally", kind="untyped")
+    c.note(f"{c.ref}: the zone cannot be moved, and no Stealth check is rolled")
