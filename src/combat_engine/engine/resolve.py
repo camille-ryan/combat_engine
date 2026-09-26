@@ -14,7 +14,7 @@ Two deliberate seams for triggered effects to reach into:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .components import Defences, Health
@@ -70,6 +70,12 @@ class AttackResult:
     #: -- but an interrupt may move it, and then the body that rolled this
     #: has to be told, or it deals its damage to the one that was missed.
     target: int = 0
+    #: Every d20 face this attack has shown, in the order they were rolled.
+    #: `natural` holds one, and anything that rolls again overwrites it --
+    #: the avenger's two-roll benefit, `c.reroll_attack`, `keep=` below --
+    #: so "you roll the same number on each die of the attack roll" and "if
+    #: both of your attack rolls would hit" had nothing left to read.
+    rolls: list[int] = field(default_factory=list)
 
     def __bool__(self) -> bool:
         return self.hit
@@ -90,6 +96,7 @@ def attack(
     branch: int = 0,
     dying: bool = False,
     charge: bool = False,
+    keep: str = "",
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
@@ -162,6 +169,15 @@ def attack(
 
         d20 = world.rng.d20()
         natural = d20.total
+        result.rolls.append(natural)
+        # "Make the attack roll twice and use either result" is printed on
+        # the attack line, so it is part of rolling and not something a body
+        # can arrange afterwards: by the time `c.strike` has returned the
+        # first roll has already decided hit or miss and paid out its riders.
+        if keep:
+            again = world.rng.d20().total
+            result.rolls.append(again)
+            natural = min(natural, again) if keep == "worst" else max(natural, again)
         total = natural + bonus + situational
         against = defence(world, target, vs, ctx)
 
@@ -435,6 +451,33 @@ def deal_damage(
         else:
             amount += defences.vulnerable.get(dtype, 0)
             amount = max(0, amount - defences.resist.get(dtype, 0))
+
+    # Resistance that only applies to some of the damage that comes in --
+    # "but only when the damage is from ranged or area attacks". `Defences`
+    # holds a flat number per type and has nowhere to put a condition, so a
+    # gated resistance written there would have shrugged off everything and
+    # been strictly stronger than the printed line. `c.resist(when=...)`
+    # lays a modifier instead and this is the only thing that reads it.
+    if amount and dtype not in (getattr(world.get(target, Defences), "immune", ())):
+        gated = _mods(
+            world, target, "resist",
+            {
+                "source": source,
+                "power": detail,
+                "dtype": dtype.value,
+                "opportunity": opportunity,
+                "charge": charge,
+            },
+        ) + _mods(
+            world, target, f"resist {dtype.value}",
+            {
+                "source": source,
+                "power": detail,
+                "opportunity": opportunity,
+                "charge": charge,
+            },
+        )
+        amount = max(0, amount - gated)
 
     absorbed = min(health.temp, amount)
     health.temp -= absorbed

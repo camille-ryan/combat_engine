@@ -3618,6 +3618,142 @@ class Cast:
         """
         return "1d6"
 
+    # -- what a zone gives the people standing in it -------------------------
+
+    def cover_in(self, zone: int, *, side: str = "ally") -> None:
+        """"You and your allies have cover while within the zone."
+
+        `c.zone(blocks_sight=True)` is the nearest thing and is not this: it
+        is terrain, it blinds both sides, and the creature standing in it
+        gets nothing for being there. Cover was traced between two positions
+        and read no modifier, so a zone could never be the thing sheltering
+        you; `query.cover_between` now takes the larger of the trace and a
+        carried `"cover"`, which is also why this does not stack with a
+        pillar.
+
+        Hung on the geometry like `c.grants_in`: taken on entering, given
+        back on leaving.
+        """
+        self._while_inside(
+            zone,
+            lambda who: self.bonus(
+                "cover", 2, on=who, until=When.ENCOUNTER, kind="cover"
+            ),
+            side,
+        )
+
+    def ignores_difficult_in(self, zone: int, *, side: str = "ally") -> None:
+        """"You and your allies can ignore difficult terrain in the zone."
+
+        `c.ignores_difficult` is per-creature and board-wide, so writing the
+        printed line as that exempts the party everywhere -- which is a
+        different rule, and why the row printing it was left out rather than
+        approximated. Same grant, bounded by the zone's squares.
+        """
+        self._while_inside(
+            zone,
+            lambda who: self.ignores_difficult(on=who, until=When.ENCOUNTER),
+            side,
+        )
+
+    # -- reach that is not a reach -------------------------------------------
+
+    def widen_areas(
+        self, squares_: int = 1, *, on: int | None = None, until: When = When.EONT
+    ) -> Effect | None:
+        """"Increase the size of your close blast or close burst attacks by 1."
+
+        `dsl._stretched` lengthened a melee reach and a ranged range from a
+        modifier and returned 0 for everything else, so a burst was the one
+        shape no printed line could stretch. Defaults to the **caster**: it
+        is a reach of yours, beside `c.threatens` and `c.mode`.
+        """
+        return self.bonus(
+            "blast_size", squares_, on=on if on is not None else self.me, until=until
+        )
+
+    # -- a second roll, which is not a maximum -------------------------------
+
+    def reroll_damage(
+        self,
+        *,
+        keyword: Keyword | None = None,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Roll the damage twice and use the higher result."
+
+        `c.maximise` is the only neighbour and it is a different operation:
+        a maximum is not a second roll, and a row printing both would pay
+        out twice. Shaped like it out of necessity -- `DamageRolled` carries
+        a total and not the expression that made it, so the dice come off
+        the row named by `detail`.
+
+        `keyword` narrows it to the powers the printed line names; without
+        one, every damage roll this creature makes.
+        """
+        from .dsl import get
+        from .events import DamageRolled
+
+        who = on if on is not None else self.me
+
+        def again(ev: DamageRolled) -> None:
+            if ev.source != who:
+                return
+            p = get(ev.detail)
+            d = p.damage_of(0) if p is not None else None
+            if d is None or not d.dice:
+                return
+            if keyword is not None and keyword not in p.keywords:
+                return
+            # `maximise`'s yardstick, and needed for the same reason: a flat
+            # rider rolled by the row carries the row's ref as `detail` too,
+            # and rerolling the header's dice for it invents damage the card
+            # does not print.
+            bonus = self._bonus_of(d.bonus)
+            if ev.amount < _min_of(d.dice) + bonus:
+                return
+            ev.amount = max(ev.amount, self.roll(d.dice) + bonus)
+
+        return self.watch(
+            DamageRolled, again, until=until, window=Window.BEFORE, on=who,
+            label=f"{self.ref} roll twice",
+        )
+
+    # -- a hold changing hands -----------------------------------------------
+
+    def transfer(
+        self, effect: Effect | None, *, to: int, save_mod: int = 0
+    ) -> Effect | None:
+        """Move a live hold from one creature to another, intact.
+
+        `Effects` can apply and end, and "you transfer one effect on the
+        target to yourself" is neither: ending it and writing a fresh one by
+        hand loses the hold's conditions, its ongoing damage and the saving
+        throw it is still owed. Rebuilt from the effect itself, with every
+        modifier that pointed at the old subject re-aimed at the new one.
+
+        **It refuses a hold carrying a relation or a subscription** and
+        returns None rather than dropping half of it: whose mark it is has
+        no answer here, and a watcher armed on the old subject is not the
+        same watcher on the new one.
+        """
+        if effect is None or effect.ended or effect.relations or effect.subs:
+            return None
+        old = effect.owner
+        self.world.effects.end(effect, "transferred")
+        return self.world.effects.apply(
+            to,
+            effect.source,
+            effect.when,
+            label=effect.label,
+            conditions=effect.conditions,
+            mods=[(to if eid == old else eid, m) for eid, m in effect.mods],
+            ongoing=effect.ongoing,
+            save_mod=effect.save_mod + save_mod,
+            escalate=effect.escalate,
+        )
+
 
 def _max_of(dice: str | int) -> int:
     """Every die showing its highest face. What a critical hit deals.

@@ -334,8 +334,14 @@ def has_combat_advantage(world: World, attacker: int, target: int) -> bool:
     # through. Four rows across runepriest, swordmage and battlemind print
     # the wider sentence, and each was left out because the +2 is computed
     # here from the board and no modifier could reach it.
+    # The pair is handed to the gate. Both of these were read with an empty
+    # context, so `c.no_advantage(when=...)` and `c.cannot_be_flanked(when=)`
+    # would have been silently false -- and the printed lines are narrow:
+    # "you do not grant combat advantage to *those* creatures", "unless both
+    # of you are flanked". Without the names there is nothing to ask about.
+    ca_ctx = {"attacker": attacker, "target": target}
     denied = world.get(target, Mods)
-    if denied is not None and denied.items and denied.total("no_advantage", {}) > 0:
+    if denied is not None and denied.items and denied.total("no_advantage", ca_ctx) > 0:
         return False
     if grants_ca(world, target):
         return True
@@ -348,7 +354,7 @@ def has_combat_advantage(world: World, attacker: int, target: int) -> bool:
     # question was answered from the board with nothing on the creature
     # able to speak to it.
     mods = world.get(target, Mods)
-    if mods is not None and mods.items and mods.total("unflankable", {}) > 0:
+    if mods is not None and mods.items and mods.total("unflankable", ca_ctx) > 0:
         return False
     return flanked_by(world, target, attacker)
 
@@ -553,7 +559,26 @@ def cover_between(
     for src in mine:
         for dst in theirs:
             best = min(best, world.grid.cover(src, dst, blockers=bodies))
-    return best
+    return max(best, _carried_cover(world, target))
+
+
+def _carried_cover(world: World, target: int) -> Cover:
+    """Cover a creature carries rather than one it stands behind.
+
+    Everything here traces two positions, so "you and your allies have cover
+    while within the zone" had nowhere to go: the zone is not an obstacle
+    between anybody, and `blocks_sight` is terrain that blinds both sides.
+    Read into this answer rather than added as a third term in
+    `resolve.attack`, so that it takes the larger with concealment the way
+    traced cover does instead of stacking with it.
+    """
+    mods = world.get(target, Mods)
+    if mods is None or not mods.items:
+        return Cover.NONE
+    n = mods.total("cover", {})
+    if n >= int(Cover.SUPERIOR):
+        return Cover.SUPERIOR
+    return Cover.PARTIAL if n > 0 else Cover.NONE
 
 
 def _blinding_squares(world: World, attacker: int, target: int) -> set[Square]:

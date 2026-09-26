@@ -634,7 +634,7 @@ def area_of(
     """
     r = p.reach_of(branch)
     mine = squares(world, measured_from(world, actor, r))
-    stretch = _stretched(world, actor, r.kind)
+    stretch = _stretched(world, actor, r.kind, {"power": p.ref, "kind": r.kind})
     if stretch:
         r = replace(r, size=r.size + stretch)
     if r.kind == "close_burst":
@@ -651,7 +651,9 @@ def area_of(
     return frozenset(sq for sq in out if world.grid.inside(sq))
 
 
-def _stretched(world: World, actor: int, kind: str) -> int:
+def _stretched(
+    world: World, actor: int, kind: str, ctx: dict[str, Any] | None = None
+) -> int:
     """How much longer than printed this creature's reach or range is.
 
     `Mods.total` was read for attack, damage, save, speed, forced, crit
@@ -661,19 +663,28 @@ def _stretched(world: World, actor: int, kind: str) -> int:
     where the area is worked out, so the extra square decides what may be
     aimed at and not merely what a body may reach.
 
-    Melee reads `"reach"` and a ranged line reads `"range"`. A burst is
-    neither: its size is the blast, and the distance it may be *placed* at
-    is `within`, which no printed line of this shape lengthens.
+    Melee reads `"reach"` and a ranged line reads `"range"`. A blast or a
+    burst reads `"blast_size"`: its size is the blast itself, so "increase
+    the size of your blasts and bursts by 1" is that number and not the
+    `within` an area burst may be placed at, which no printed line of this
+    shape lengthens.
+
+    `ctx` carries the row being measured, so "the range of your **arcane**
+    powers" is a gate on the modifier rather than a blanket stretch of
+    everything the creature can throw.
     """
     from .components import Mods
 
     mods = world.get(actor, Mods)
     if mods is None or not mods.items:
         return 0
+    ctx = ctx or {}
     if kind == "melee":
-        return max(0, mods.total("reach", {}))
+        return max(0, mods.total("reach", ctx))
     if kind == "ranged":
-        return max(0, mods.total("range", {}))
+        return max(0, mods.total("range", ctx))
+    if kind in ("close_burst", "close_blast", "area_burst"):
+        return max(0, mods.total("blast_size", ctx))
     return 0
 
 
