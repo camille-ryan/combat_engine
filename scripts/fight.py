@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import argparse
 
-from combat_engine.content import chargen, loader
+from combat_engine.content import chargen, loader, terrain
 from combat_engine.engine import (
     Bus,
     Encounter,
@@ -50,6 +50,11 @@ def build(
     world = World(Grid(16, 12), Rng(seed), Bus())
     world.scaling = PRESETS[scaling]
     world.monster_math = MATHS[math]
+
+    # Something to take cover behind and something to wade through.
+    # Without it cover, concealment, hiding and difficult terrain are all
+    # modelled and none of them ever comes up.
+    terrain.dress(world, seed)
 
     for i, cls in enumerate(PARTY):
         chargen.spawn(world, chargen.Character(cls, level), (2, 3 + i * 2))

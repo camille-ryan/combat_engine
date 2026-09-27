@@ -25,7 +25,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from combat_engine.content import chargen, loader
+from combat_engine.content import chargen, loader, terrain
 from combat_engine.engine import (
     Action,
     Bus,
@@ -151,6 +151,7 @@ class Session:
         enemies: list[str] | None = None,
     ) -> Session:
         world = World(Grid(16, 12), Rng(seed), Bus())
+        terrain.dress(world, seed)
         world.scaling = PRESETS.get(scaling, PRESETS["full"])
 
         for i, name in enumerate(pcs or PARTY):
