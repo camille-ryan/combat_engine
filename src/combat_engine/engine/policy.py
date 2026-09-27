@@ -83,6 +83,7 @@ def features(
     f["is_run"] = float(action.kind == "run")
     # Named, like every other kind, because an unnamed one scores zero.
     f["is_action_point"] = float(action.kind == "action_point")
+    f["is_hide"] = float(action.kind == "hide")
     if action.kind == "wield":
         # **Drawing the right weapon was unreachable.** `actions._wielding`
         # offers the minor and `actions` can execute it, but nothing here
@@ -312,6 +313,10 @@ WEIGHTS: dict[str, float] = {
     # more than ending a turn and less than a good attack, because the
     # point is gone for the rest of the fight either way.
     "is_action_point": 4.0,
+    # A minor spent on a check that may fail, buying combat advantage on
+    # the next attack and only against those it hides from. Worth about
+    # what the advantage is, and less than spending the minor on a power.
+    "is_hide": 2.0,
     # Enough to outweigh `is_power`, so a second stance has to be worth
     # more than an attack before the creature gives up the one it has.
     "swaps_stance": -8.0,

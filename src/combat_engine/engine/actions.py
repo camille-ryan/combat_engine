@@ -95,6 +95,7 @@ def legal(
     out.extend(_wielding(world, encounter, actor))
     out.extend(_spending(world, encounter, actor))
     out.extend(_action_points(world, encounter, actor))
+    out.extend(_hiding(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
     return out
 
@@ -145,6 +146,37 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
     return out
 
 
+
+
+def _hiding(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Going unseen. A minor action, and only where you could be missed.
+
+    Everything under this already existed -- `Relation.HIDDEN_FROM`,
+    `Cast.hide`, `query.hidden_from`, `resolve.attack` breaking it for
+    whoever swung, and a `skill:stealth` modifier read like any other.
+    What did not exist was any way to *choose* it, so the only creatures
+    that ever hid were the ones whose own rows hid them.
+
+    You can only hide from somebody who cannot plainly see you, which in
+    4e means cover or concealment against them. Both are already
+    computed: `query.cover_between` traces one and `concealment_of`
+    reads the other off the creature.
+    """
+    from .query import concealment_of, cover_between, enemies, hidden_from
+
+    if not encounter.can_spend(actor, ActionType.MINOR):
+        return []
+    unseeing = hidden_from(world, actor)
+    hideable = [
+        e
+        for e in sorted(enemies(world, actor))
+        if alive(world, e)
+        and e not in unseeing
+        and (cover_between(world, e, actor) or concealment_of(world, actor))
+    ]
+    if not hideable:
+        return []
+    return [Action(kind="hide", cost=ActionType.MINOR, targets=tuple(hideable))]
 
 def _action_points(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """Spending an action point for an extra action.
@@ -652,6 +684,17 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
 
     if action.kind == "move":
         walk(world, actor, list(action.path))
+        return True
+
+    if action.kind == "hide":
+        from .cast import Cast
+        from .skills import check
+
+        # Stealth, as printed. A failed check is a spent minor and
+        # nothing else, which is the risk the action carries.
+        rolled = check(world, actor, "stealth", dc=10 + world.round)
+        if rolled.success:
+            Cast(world=world, me=actor, ref="hide").hide()
         return True
 
     if action.kind == "action_point":
