@@ -852,7 +852,13 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
 
     line = who.line
     build = who.chosen
-    carried = list(build.weapons or line.weapons)
+    # **A copy each, always.** `LONGSWORD` and its siblings are module-level
+    # singletons, so every fighter ever built shared one object -- and
+    # `Cast.decay` reduces a magic weapon's enhancement *in place*. The
+    # moment treasure exists, one character's sword rusting rusts every
+    # sword in the game, in this fight and every later one, and nothing
+    # anywhere would say so.
+    carried = [replace(w) for w in (build.weapons or line.weapons)]
     carried_shield = _shield_for(line, carried)
     scores = scores_for(line, build)
     # Level 4, 8 and so on raise two scores by one. Applied here rather than
