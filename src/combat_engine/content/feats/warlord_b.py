@@ -31,7 +31,9 @@ from combat_engine.engine import (
     AC,
     ENCOUNTER,
     FREE,
+    MINOR,
     NO_TARGET,
+    ONE_CREATURE,
     PERSONAL,
     SELF,
     ActionPointSpent,
@@ -44,6 +46,7 @@ from combat_engine.engine import (
     Keyword,
     Miss,
     PowerUsed,
+    Ranged,
     Trigger,
     When,
     power,
@@ -495,10 +498,42 @@ def f1070(c: Cast) -> None:
         c.as_implement(on=c.me)
 
 
-@power("f1068", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.curse()",))
+@power("f1068", level=1, cls="", usage=ENCOUNTER, action=MINOR,
+       reach=Ranged(10), target=ONE_CREATURE)
 def f1068(c: Cast) -> None:
-    """A curse of its own, laid as a minor action, which pays out combat
-    advantage when the cursed creature is hit. The warlock's curse is a
-    class feature rather than a verb anything else may lay, and this
-    feat is printed for a warlord."""
+    """A curse of the feat's own, and the only row in this file that
+    costs an action.
+
+    I marked this `c.curse()` on the reasoning that the warlock's curse
+    is a class feature nothing else may lay. `scripts/todo.py` went red
+    on the next run: `c.curse` is an ordinary verb and it is
+    *relational*, which is exactly what this needs -- two cursers on a
+    board read their own and not each other's.
+
+    The payoff is a `c.watch` rather than a second row, because the
+    feat is one card: hit anything you have cursed and an ally of your
+    choice gets combat advantage on its next swing. "Of your choice" is
+    the nearest ally, since a bonus handed to somebody out of reach of
+    the target is the feat doing nothing.
+
+    The light it sheds is flavour and lights nothing the engine models.
+    """
+    from combat_engine.engine.query import distance_between
+
+    me = c.me
+    foe = c.target
+    if foe is None:
+        return
+    c.curse(on=foe)
+
+    def on_hit(ev: Any) -> None:
+        if ev.attacker != me or not c.cursed(on=ev.target):
+            return
+        near = [a for a in allies(c.world, me) if a != me]
+        if near:
+            chosen = min(
+                near, key=lambda a: distance_between(c.world, ev.target, a)
+            )
+            c.grants_advantage(on=ev.target, to=chosen, once=True)
+
+    c.watch(Hit, on_hit, on=me, until=When.ENCOUNTER)
