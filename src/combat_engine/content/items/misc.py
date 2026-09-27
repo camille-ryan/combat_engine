@@ -623,10 +623,15 @@ def i1354p1(c: Cast) -> None:
        reach=PERSONAL, target=SELF)
 def i1579x1(c: Cast) -> None:
     """One speed key covers every movement mode, which is what the card
-    says: the modes read the creature's speed."""
+    says: the modes read the creature's speed.
+
+    Untyped, because the card reads "increases by 1 square" and names
+    no type. An item bonus and an untyped one are different numbers the
+    moment anything else stacks with them.
+    """
     beast = _the_mount(c)
     if beast is not None:
-        c.bonus("speed", 1, on=beast, until=When.ENCOUNTER, kind="item")
+        c.bonus("speed", 1, on=beast, until=When.ENCOUNTER)
 
 
 @power("i1646x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -1299,7 +1304,7 @@ def _fear_or_charm_on_me(world: World, me: int, ev: EffectApplied) -> bool:
         ev.target == me
         and ev.save_ends
         and bool(
-            {Keyword.FEAR, Keyword.CHARM} & keywords_of(ev.label or "")
+            {Keyword.FEAR, Keyword.CHARM} & set(keywords_of(ev.label or ""))
         )
     )
 

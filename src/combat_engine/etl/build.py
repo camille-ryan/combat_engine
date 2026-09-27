@@ -869,20 +869,32 @@ def _cross_reference_rest(
             here = set(re.findall(r"[a-z']+", spec.lower()))
             # **A monster's ability never belongs in a character's
             # spec.** `by_word` holds every name, and several monster
-            # abilities share a name with a class power that this build
-            # does not import -- so "you don't expend the use of <name>"
-            # on a feat was resolving onto a stat block. A feat modifies
-            # what a character has; it has never modified a claw. The
-            # same guard `_named_powers`, `_label_refs` and
-            # `_associated_refs` each carry, here for the general swap.
+            # abilities share a name with a class power this build does
+            # not import -- so "you don't expend the use of <name>" on a
+            # feat was resolving onto a stat block, and 112 specs told
+            # an author that a feat modifies a claw.
+            #
+            # **Refusing the swap is not the fix**, which I learned by
+            # doing it: the name then stays in the spec as prose and
+            # `leaks.py --specs` goes red. Ten specs printed a
+            # monster's name that way, and a leak is worse than a bad
+            # pointer -- it is the thing this project may not do.
+            #
+            # So the name is swapped for an *opaque* token instead, the
+            # `x`-ref convention `_other_names` already uses for a name
+            # that will never be a row: it says a name was here without
+            # saying which, and without offering an author something to
+            # point a row at.
             monsters_ok = table in ("monster_power",)
-            others = {
-                name: other
-                for word in here & by_word.keys()
-                for name, other in by_word[word]
-                if other != ref and not other.startswith(ref)
-                and (monsters_ok or other[:1] != "m")
-            }
+            others = {}
+            for word in here & by_word.keys():
+                for name, other in by_word[word]:
+                    if other == ref or other.startswith(ref):
+                        continue
+                    if other[:1] == "m" and not monsters_ok:
+                        other = f"x_{other}"
+                        names.setdefault(other, {"name": name})
+                    others[name] = other
             if not others:
                 continue
             fixed = scrub(spec, others)

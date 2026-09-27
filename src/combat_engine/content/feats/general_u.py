@@ -75,6 +75,7 @@ from combat_engine.engine import (
     power,
     spread,
 )
+from combat_engine.engine.durations import keywords_of
 
 #: Nothing augments another row's card from outside it.
 AUGMENT = ("dsl.use(augment=)",)
@@ -109,6 +110,23 @@ def _used(ref: str):  # noqa: ANN202
         return ev.actor == me and ev.power == ref
 
     return when
+
+
+def _save_against(c: Cast, who: int, *words: Keyword, bonus: int = 0) -> bool:
+    """One saving throw against a hold whose source row printed one of
+    these keywords.
+
+    `c.save(against=)` picks by label fragment and a keyword is not one --
+    but an effect's label is the ref of the row that laid it, so
+    `durations.keywords_of` names the hold to ask for. Without it the throw
+    takes whichever save-ends effect comes first, which may be a burn.
+    """
+    wanted = set(words)
+    for eff in c.world.effects.of(who):
+        # `keywords_of` answers a *tuple* whatever its annotation says.
+        if eff.when is When.SAVE_ENDS and wanted & set(keywords_of(eff.label)):
+            return c.save(on=who, bonus=bonus, against=eff.label)
+    return False
 
 
 def _best(c: Cast) -> int:
@@ -276,21 +294,23 @@ def f3439(c: Cast) -> None:
             return
 
 
-@power("f3440", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.save(against=)",),
+@power("f3440", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you use your healing infusion",
        on=Trigger(PowerUsed, _used(HEAL_INFUSION), "you use that infusion"))
 def f3440(c: Cast) -> None:
     """Declared on `PowerUsed` because the targets are chosen before the
     body runs, which is the one thing that event can be trusted for.
 
-    Narrowing the save to a charm or fear effect is dropped: `c.save`
-    picks by label fragment and a keyword is not one, so a target carrying
-    both a charm and a burn may shake off the burn.
+    "A single charm or fear effect" plays now: the keywords belong to the
+    row that laid the hold and an effect's label is that row's ref, so
+    `keywords_of` finds the right hold and `c.save(against=)` rolls
+    against it by label. "Constitution **or** Wisdom" is the player's
+    choice and the better of the two is always the one to take.
     """
     bonus = max(c.con_mod, c.wis_mod)
     for who in c.trigger.targets:
-        c.save(on=who, bonus=bonus)
+        _save_against(c, who, Keyword.CHARM, Keyword.FEAR, bonus=bonus)
 
 
 @power("f3442", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
