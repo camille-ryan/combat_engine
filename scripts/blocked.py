@@ -216,6 +216,23 @@ def _surface() -> dict[str, object]:
         for n in dir(mod):
             if not n.startswith("_"):
                 have.setdefault(f"{prefix}{n}", getattr(mod, n))
+
+    # **Every engine module, by its own name.** A marker names a symbol
+    # by guessing where it lives, and the guess is often wrong:
+    # `query.keywords_of(effect)` sat on nine rows after
+    # `durations.keywords_of` had landed, and `todo.py` stayed quiet
+    # because the owner it was asked about genuinely does not have that
+    # attribute. Silence there is the failure this file exists to break.
+    import importlib
+    import pkgutil
+
+    import combat_engine.engine as engine_pkg
+
+    for info in pkgutil.iter_modules(engine_pkg.__path__):
+        mod = importlib.import_module(f"combat_engine.engine.{info.name}")
+        for n in dir(mod):
+            if not n.startswith("_"):
+                have.setdefault(f"{info.name}.{n}", getattr(mod, n))
     return have
 
 
@@ -295,7 +312,20 @@ def _one(token: str, have: dict[str, object]) -> bool:
     if "." in head:
         owner, _, attr = head.rpartition(".")
         thing = have.get(owner)
-        return thing is not None and hasattr(thing, attr)
+        if thing is not None and hasattr(thing, attr):
+            return True
+        # **The marker may have guessed the wrong module.** A symbol is
+        # written from memory while the row is being written, so
+        # `query.keywords_of` gets named for something that lives in
+        # `durations`. The gap is closed either way, and reporting it
+        # still blocked is the instrument agreeing with a typo. So the
+        # bare name is looked for anywhere on the surface -- but only
+        # for a lowercase owner, which is a module: `Dropped.source` is
+        # a field on one named class and must not match a `source`
+        # somewhere else.
+        return owner.islower() and any(
+            k.endswith(f".{attr}") or k == attr for k in have
+        )
     return False
 
 
