@@ -139,3 +139,100 @@ Counted by waiting rows at the end of this session
   buy more verification than any other single change.
 * The `f2071` list is empty on the page, so it is the one style feat
   whose associated set really is unknowable.
+
+---
+
+# Outcome
+
+Written at the end of the session this plan was made for. Waves A, B
+and C are done; D is begun and is the reason the tracker is still red.
+
+## What landed
+
+`spec.py --feats` and `spec.py --items` both return nothing. The whole
+heroic scope is declared.
+
+| | declared | written | inert by design | plays, clause missing | refused in play |
+|---|---:|---:|---:|---:|---:|
+| feats | 2,536 | 1,162 | 164 | 398 | 812 |
+| items | 2,491 | 1,304 | 243 | 523 | 421 |
+
+Against the start of the session: feats 223 → 2,536 declared, items
+780 → 2,491.
+
+## What the waves cost, against the estimate
+
+The plan sized this at ~34 agents. It took about 45, in four rounds,
+plus nine second-pass sweeps. The estimate was close; the *shape* was
+wrong in one way worth recording.
+
+**`--offset` does not partition this work.** `spec.py` returns
+*undeclared* rows, so the window an offset names slides as other
+agents land theirs. Two batches were written twice and one was lost
+outright. Explicit ref lists are the fix -- and they must be
+regenerated immediately before dispatch, because a list is only
+disjoint from what existed when it was computed. One of the final
+three agents still found all 78 of its refs already written.
+
+## Where the work actually was
+
+The plan assumed the engine. **The ETL was the larger half.** Four
+extraction faults, all one family -- a name the database could already
+resolve, reaching an author as prose because the pattern around it was
+slightly too narrow:
+
+* the `Associated Powers:` lists (≈60 style feats)
+* `_named_powers` blind to a qualifier: "your *fade away* **racial**
+  power" (425 names)
+* `Deft Strike **(rogue)**:` -- one bracket (82 rows)
+* 112 specs pointing a character's feat at a monster's claw
+
+Between them, more unblocked rows than any engine change. "Measure
+before building the verb" was right every time it was applied.
+
+## Instruments
+
+`audit.py` classified any `action=NONE` row as a trait **before**
+checking for a trigger, so a triggered body never ran -- a bare
+`raise` reported green. That was the gate on the entire feat corpus.
+
+Three checks added since: a context-key check narrowed by what each
+call modifies, an unread-modifier list, and a rule against `ENCOUNTER`
+on a triggered trait (163 rows fired once a fight and then went
+quiet). Both of the first two shipped with the bug they hunt and are
+now derived from the engine rather than hand-kept.
+
+## Still open
+
+* **Markers at 19.1% against the 10% ceiling.** Wave D is unfinished.
+  The cheapest remaining win is another stale-marker sweep: every
+  sweep so far converted markers to rows with *no engine change*,
+  because the gap had closed underneath and the marker named the
+  wrong thing.
+* **`audit.py`: 30 raising rows**, one warden family (`p5126`-`p5133`,
+  `p9855`-`p9870`) recursing through `query.can_act`. Diagnosed, not
+  fixed. A row triggered on its own use or resolution answers itself;
+  `triggers` should guard it rather than every author remembering.
+* **#213 blocks any reading of the win rate.** Feats and items are
+  drawn at random, so the number measures arbitrary builds. No stage
+  should optimise against it until deterministic builds exist.
+* **#212** -- the beast companion is correct on every number and
+  cannot act.
+* **#204's second half** -- the audit board carries no polearm, no
+  versatile axe, no bow, and swears no oath, so ~1,100 rows report
+  UNUSED. Gear variants would buy more verification than any other
+  single change.
+
+## Rules earned here, for the next plan
+
+* **`replay.py record` is not a tool for unattended work.** It
+  re-draws the feats a seed deals, so after a content wave it churns
+  every fixture -- 4,150 lines when I ran it. Update one case by
+  re-running it with its *saved* feats, and prove the diff is inert
+  first: normalise effect ids and check that rolls, damage and
+  outcomes are identical.
+* **Agents reading each other's files found sixteen real defects.**
+  That was luck; it should be a stage with a slot.
+* **Re-aiming a marker is a real outcome.** A marker naming the wrong
+  thing is worse than one naming nothing, because the instrument
+  agrees with the typo and stays quiet.
