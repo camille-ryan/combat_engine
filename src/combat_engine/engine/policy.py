@@ -32,7 +32,7 @@ from .components import Health, Side
 from .dsl import get
 from .events import DamageApplied, Event, OpportunityWindow, PowerUsed
 from .grid import distance
-from .query import alive, distance_between, enemies, is_
+from .query import alive, distance_between, enemies, is_, speed
 from .types import ActionType, Condition, Keyword, Team, Usage
 
 if TYPE_CHECKING:
@@ -74,6 +74,20 @@ def features(
     f["is_stand"] = float(action.kind == "stand")
     f["is_second_wind"] = float(action.kind == "second_wind")
     f["is_end"] = float(action.kind == "end")
+    f["is_wield"] = float(action.kind == "wield")
+    if action.kind == "wield":
+        # **Drawing the right weapon was unreachable.** `actions._wielding`
+        # offers the minor and `actions` can execute it, but nothing here
+        # named the kind, so a wield scored as an unrecognised action and
+        # was never once taken in any fight. `Gear.__post_init__` grips
+        # `weapons[0]`, so a ranger held a sword and a rogue a dagger
+        # because those are typed first -- and `Power.can_branch` then
+        # refused every ranged weapon row they knew, for the whole fight.
+        #
+        # Worth a minor only when it buys reach the creature does not
+        # have: swapping while the enemy is already adjacent is a wasted
+        # action, and swapping to a bow with nobody in bowshot is worse.
+        f["wield_reaches"] = float(_reaches_further(world, actor, action))
     f["targets"] = float(len(action.targets))
 
     me = world.get(actor, Health)
@@ -149,6 +163,40 @@ def features(
         f["closes_distance"] = f.get("nearest_enemy", 0.0) - after
     return dict(f)
 
+
+
+def _reaches_further(world: World, actor: int, action: Action) -> bool:
+    """Would drawing this weapon let the creature hit something it cannot?
+
+    Cheap on purpose: the exact answer is "re-run `can_branch` for every
+    known row against hypothetical gear", which is a menu rebuild per
+    candidate. The nearest enemy and the weapon's reach settle it in
+    practice -- a bow is worth drawing when the fight is at range, and a
+    blade when it is not.
+    """
+    from .components import Gear
+
+    gear = world.get(actor, Gear)
+    if gear is None:
+        return False
+    drawing = next((w for w in gear.weapons if w.ref == action.ref), None)
+    if drawing is None:
+        return False
+    foes = [e for e in enemies(world, actor) if alive(world, e)]
+    if not foes:
+        return False
+    near = min(distance_between(world, actor, e) for e in foes)
+    reach = drawing.ranged[1] if drawing.ranged else 1
+    holding = max(
+        (w.ranged[1] if w.ranged else 1) for w in gear.held
+    ) if gear.held else 0
+    # **Beyond walking, not merely beyond arm's length.** The first rule
+    # here only asked whether the drawn weapon reached further, so a
+    # rogue spent its round-one minor taking up a crossbow it could have
+    # closed on -- and then held a crossbow all fight, with every melee
+    # row refused, which for a rogue throws away the sneak attack that is
+    # most of its damage. A weapon swap has to beat walking over there.
+    return reach >= near > holding + speed(world, actor)
 
 def _adjacent(world: World, a: int, b: int) -> bool:
     from .query import adjacent
@@ -242,6 +290,11 @@ WEIGHTS: dict[str, float] = {
     "nearest_enemy": -0.1,
     # Worth about one attack, which is what it hands over.
     "provokes_now": -5.0,
+    # A minor spent on nothing visible, so it has to earn itself through
+    # `wield_reaches` exactly the way a move earns itself through
+    # `closes_distance`.
+    "is_wield": -4.0,
+    "wield_reaches": 9.0,
     # Enough to outweigh `is_power`, so a second stance has to be worth
     # more than an attack before the creature gives up the one it has.
     "swaps_stance": -8.0,
