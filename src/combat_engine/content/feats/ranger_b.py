@@ -1,10 +1,10 @@
 """Ranger feats, the second batch.
 
-`ranger.py` holds the first, and the same two-way split runs through
-this one. The quarry is nameable -- `cf:ranger-f1` is in these
-prerequisites and `c.quarry` lays the relation -- and the beast
-companion does not exist, so the eight rows that talk to one carry
-`c.beast()` beside the ten already waiting.
+`ranger.py` holds the first, and the split that used to run through
+this one has closed on both sides. The quarry is nameable --
+`cf:ranger-f1` is in these prerequisites and `c.quarry` lays the
+relation -- and the beast companion is a creature on the board now, so
+the eight rows that talk to one read it with `c.beast()`.
 
 What is new here is the **weapon-style family**, which the ranger shares
 with the fighter and the warlord. A style feat's benefit is gated on "a
@@ -34,6 +34,8 @@ from combat_engine.engine import (
     ActionPointSpent,
     ActionType,
     Cast,
+    Condition,
+    DamageApplied,
     Dropped,
     Gear,
     Hit,
@@ -49,7 +51,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import AttackDeclared
-from combat_engine.engine.query import allies, enemies
+from combat_engine.engine.query import allies, distance_between, enemies, flanked_by
 
 from .styles import among, hit_with_one_of, used_one_of
 
@@ -57,8 +59,6 @@ from .styles import among, hit_with_one_of, used_one_of
 AS_BASIC = ("c.as_basic(ref)",)
 #: …nor change which ability a named row rolls.
 ABILITY = ("c.ability_for(ref)",)
-#: There is no beast companion. Ten rows in `ranger.py` already wait.
-BEAST = ("c.beast()",)
 #: Nothing announces that the class's extra damage was about to be paid.
 EXTRA = ("c.on_extra_damage()",)
 
@@ -71,6 +71,19 @@ def _is_my_quarry(c: Cast, who: int | None) -> bool:
     relation table is the only thing that remembers a quarry."""
     return who is not None and c.world.relations.holds(
         Relation.QUARRY_OF, c.me, who
+    )
+
+
+def _quarry_hurt_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """Did this ranger's quarry just take hit points off it?
+
+    `DamageApplied` rather than `Hit`, because the card says "damages
+    you" -- an attack that hits for nothing did not.
+    """
+    return (
+        ev.target == me
+        and ev.amount > 0
+        and world.relations.holds(Relation.QUARRY_OF, me, ev.source)
     )
 
 
@@ -565,29 +578,177 @@ def f2361(c: Cast) -> None:
     changes which ability a named row rolls."""
 
 
-# -- the beast companion, which does not exist ------------------------------
+# -- the beast companion ----------------------------------------------------
+#
+# Read `c.beast()` inside the gate, never above it: the beast can be
+# killed and called again and a captured id goes quietly stale.
+
+#: The printed categories two of these rows pay out for, by ref. A
+#: category is what the beast was called with, so this is the same
+#: question `chargen` answered when the style was taken.
+_BOAR = "comp:2"
+_WOLF = "comp:8"
 
 
-def _beast(ref: str, what: str, *, wants: tuple[str, ...] = BEAST) -> None:
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=wants)
-    def feat(c: Cast) -> None: ...
+@power("f804", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.on_racial_power()",))
+def f804(c: Cast) -> None:
+    """The beast is harder to catch on the way past.
 
-    feat.__name__ = ref
-    feat.__doc__ = f"{what} There is no beast companion to do it to."
+    The defence side of the attack context is the rich one -- it is handed
+    `opportunity` -- so this is a gate that answers rather than a bonus
+    that is always on. Dropped: spending a racial row on the beast's
+    behalf, and that row is not in the tree.
+    """
+    pet = c.beast()
+    if pet is not None:
+        c.bonus(AC, 2, on=pet, until=When.ENCOUNTER,
+                when=lambda ctx: bool(ctx.get("opportunity")))
 
 
-_beast("f804", "A defence bonus for the companion, and `p1452` spent on "
-               "its behalf -- a ref now, so the second gap is that no row "
-               "uses another row.",
-       wants=("c.beast()", "c.use_power()"))
-_beast("f824", "More hit points for one particular companion.")
-_beast("f828", "The companion answers whatever damages you.")
-_beast("f1240", "The companion changes origin and rides a racial teleport.")
-_beast("f1381", "The companion shares two named racial powers.")
-_beast("f1718", "You and the companion both ignore concealment near it.")
-_beast("f2031", "The companion gains combat advantage where you flank.")
-_beast("f2100", "An attack bonus when nobody is nearer than you two.")
+@power("f824", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f824(c: Cast) -> None:
+    """Hit points for one category of beast, and only that one.
+
+    There is no modifier for a maximum, so this moves `Health` itself --
+    and then has to be safe to arm twice, because a world that runs two
+    encounters arms every trait again and the beast is not rebuilt between
+    them. The printed total is recomputed from the database and compared,
+    which is the only honest way to ask "has this already been added".
+    """
+    from combat_engine.content.loader import companion as _block
+    from combat_engine.engine.components import Health
+
+    pet = c.beast(category=_BOAR)
+    health = c.world.get(pet, Health) if pet is not None else None
+    if health is None:
+        return
+    block = _block(_BOAR)
+    printed = block.hp_base + block.hp_per_level * c.level
+    if health.max_hp >= printed + c.level:
+        return
+    health.max_hp += c.level
+    health.hp += c.level
+
+
+@power("f828", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="your quarry damages you with an attack",
+       on=Trigger(DamageApplied, _quarry_hurt_me, "your quarry damages you"))
+def f828(c: Cast) -> None:
+    """The beast answers whatever hurt its ranger.
+
+    Two bonuses rather than one: `attack` and `damage` are separate keys,
+    and a row writing only the first is half a card. Both untyped -- the
+    text prints no word in front of "bonus".
+    """
+    pet = c.beast()
+    if pet is None:
+        return
+    foe = c.trigger.source
+    for what in ("attack", "damage"):
+        c.bonus(what, 1, on=pet, until=When.EONT,
+                when=lambda ctx, f=foe: ctx.get("target") == f)
+
+
+@power("f1240", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.set_origin()", "c.on_death_save()", "c.on_racial_power()"))
+def f1240(c: Cast) -> None:
+    """The one clause of four the engine can say.
+
+    The saving-throw context carries the conditions being saved against,
+    so "against the unconscious condition" is a real gate. Dropped: the
+    beast's creature origin, which nothing models; the death-saving-throw
+    half, which does not go through the same roll; and the teleport rider
+    on a racial row that is not in the tree. The Stealth bonus is a skill
+    and belongs to no fight.
+    """
+    pet = c.beast()
+    if pet is None:
+        return
+    c.bonus(
+        "save", 2, on=pet, until=When.ENCOUNTER,
+        when=lambda ctx: Condition.UNCONSCIOUS in ctx.get("conditions", ()),
+    )
+
+
+@power("f1381", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.on_racial_power()",))
+def f1381(c: Cast) -> None:
+    """The beast shares the effect of either of two racial rows. Neither
+    row is in the tree, so there is no effect to share."""
+
+
+@power("f1718", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f1718(c: Cast) -> None:
+    """Neither of you squints at anything standing next to the beast.
+
+    Wider than the card by one word: `c.ignore_cover` waives cover and
+    concealment together -- `query.cover_waived` is asked once for both --
+    and the printed sentence names only concealment. There is no
+    concealment-only form, and the alternative is to say nothing at all.
+    """
+    def beside_the_beast(ctx: dict[str, Any]) -> bool:
+        pet = c.beast()
+        victim = ctx.get("target")
+        return pet is not None and victim is not None and c.adjacent_to(pet, victim)
+
+    pet = c.beast()
+    for who in [c.me, *([pet] if pet is not None else [])]:
+        c.ignore_cover(on=who, until=When.ENCOUNTER, when=beside_the_beast)
+
+
+@power("f2031", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2031(c: Cast) -> None:
+    """Combat advantage for one category of beast, while its ranger flanks.
+
+    "While you are flanking" is a state that changes every time anybody
+    moves, and `c.grants_advantage` lays a relation with a duration and
+    takes no gate. So the question is asked at the only moment it decides
+    anything -- as the beast declares its attack, in the interrupt window
+    before the roll -- and the grant is spent by that one swing.
+    """
+    def about_to_swing(ev: AttackDeclared) -> None:
+        pet = c.beast(category=_WOLF)
+        if pet is None or ev.attacker != pet:
+            return
+        if flanked_by(c.world, ev.target, c.me):
+            c.grants_advantage(on=ev.target, to=pet, until=When.EONT, once=True)
+
+    c.watch(AttackDeclared, about_to_swing, on=c.me, until=When.ENCOUNTER,
+            window=Window.BEFORE)
+
+
+@power("f2100", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2100(c: Cast) -> None:
+    """Prime shot, measured from whichever of the two of you is closer.
+
+    The errata'd text, which is the one the database carries: the class
+    feature it used to require is the one this style gives up, so the
+    bonus is this row's own and applies to melee as well as ranged.
+    A companion is left out of `c.allies` on purpose, so the beast cannot
+    be the ally that spoils it.
+    """
+    def nobody_nearer(ctx: dict[str, Any]) -> bool:
+        victim = ctx.get("target")
+        if victim is None:
+            return False
+        pet = c.beast()
+        ours = distance_between(c.world, c.me, victim)
+        if pet is not None:
+            ours = min(ours, distance_between(c.world, pet, victim))
+        return not any(
+            distance_between(c.world, mate, victim) < ours
+            for mate in c.allies()
+            if mate != c.me
+        )
+
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=nobody_nearer)
 
 
 # -- the class's extra damage, which announces nothing ----------------------

@@ -79,11 +79,13 @@ from combat_engine.engine import (
     PowerUsed,
     Ranged,
     SavingThrow,
+    SecondWind,
     SkillCheck,
     Trigger,
     TurnStart,
     Wall,
     When,
+    about_me,
     get,
     power,
 )
@@ -98,8 +100,6 @@ REROLL = ("c.on_reroll()",)
 PROFICIENCY = ("chargen.proficiency()",)
 #: A class feature named in prose with no ref behind it.
 FEATURE = ("c.class_feature()",)
-#: Second wind is an action rather than a power and announces nothing.
-SECOND_WIND = ("c.on_second_wind()",)
 #: "You can swap one N-level power you know for this one." The card is
 #: handed over; giving a power *up* is a build-time exchange.
 SWAP = ("chargen.power_swap()",)
@@ -166,6 +166,12 @@ def _melee_power(ctx: dict[str, Any]) -> bool:
 
 
 # -- riders on a racial power that arrives as a ref -------------------------
+
+
+def _primal(ctx: dict[str, Any]) -> bool:
+    """A primal power, read off the row the attack context names."""
+    p = get(ctx.get("power", ""))
+    return p is not None and Keyword.PRIMAL in p.keywords
 
 
 @power("f1675", level=1, cls="", usage=ENCOUNTER,
@@ -445,16 +451,30 @@ def f1863(c: Cast) -> None:
             when=lambda ctx: ctx.get("target") == foe)
 
 
-@power("f1869", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f1869", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f1869(c: Cast) -> None:
-    """Second wind is an action, not a power, and announces nothing."""
+    """"Your next attack roll" is `once=True`; the attack context carries
+    the row, which is where the primal keyword is read."""
+    c.bonus("attack", 2, on=c.me, until=When.EONT, once=True, when=_primal)
 
 
-@power("f2092", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f2092", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.hide(diversion=)",),
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f2092(c: Cast) -> None:
-    """A free skill check folded into a second wind. Same gap."""
+    """The combat-advantage half is the one with a consequence on the
+    board, and Bluff against the target's passive Insight is the printed
+    contest. The diversion to hide is dropped: hiding wants a check
+    against every watcher and `c.hide` takes one."""
+    foe = c.choose(c.enemies())
+    if foe is None:
+        return
+    if c.check("bluff", c.passive("insight", of=foe)):
+        c.grants_advantage(on=foe, to=c.me, once=True, until=When.EONT)
 
 
 @power("f1938", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -717,11 +737,16 @@ def f2095(c: Cast) -> None:
 
 
 @power("f1771", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=SECOND_WIND)
+       reach=PERSONAL, target=SELF)
 def f1771(c: Cast) -> None:
     """The saving throw context carries `conditions`, which is what the
     printed narrowing is actually about -- gating on the effect's label
-    would match whatever string the row that laid it chose."""
+    would match whatever string the row that laid it chose.
+
+    The second wind's half is a watcher rather than a declared trigger,
+    because the saving throw bonus has to be standing from the start of
+    the fight and a triggered row is not armed until it fires."""
+    me = c.me
     pet = c.companion()
     if pet is None:
         return
@@ -730,6 +755,13 @@ def f1771(c: Cast) -> None:
         "save", 2, on=pet, until=When.ENCOUNTER,
         when=lambda ctx: bool(guarded & set(ctx.get("conditions", ()))),
     )
+
+    def winded(ev: SecondWind) -> None:
+        beast = c.companion()
+        if ev.actor == me and beast is not None:
+            c.shift(3, who=beast)
+
+    c.watch(SecondWind, winded, on=me, until=When.ENCOUNTER)
 
 
 @power("f1860", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -82,6 +82,7 @@ from combat_engine.engine import (
     PowerUsed,
     Ranged,
     SavingThrow,
+    SecondWind,
     SkillCheck,
     SurgeSpent,
     Trigger,
@@ -858,17 +859,16 @@ def i920p1(c: Cast) -> None:
 @power("i923x1", level=4, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def i923x1(c: Cast) -> None:
-    """A second wind has no event of its own: `Cast.second_wind` lays a
-    `+2 ac` effect labelled `second-wind`, and that is the announcement.
-    The extra surge is spent with `c.surge`, which heals from it."""
+    """Bloodied is asked of the world the second wind was declared in --
+    `SecondWind` is announced before the hit points come back, which the
+    old `EffectApplied` sniff was not. The extra surge is spent with
+    `c.surge`, which heals from it."""
 
-    def winded(ev: EffectApplied) -> None:
-        if ev.target != c.me or "second-wind" not in (ev.label or ""):
-            return
-        if c.bloodied(on=c.me):
+    def winded(ev: SecondWind) -> None:
+        if ev.actor == c.me and c.bloodied(on=c.me):
             c.surge(on=c.me)
 
-    c.watch(EffectApplied, winded, until=When.ENCOUNTER, on=c.me)
+    c.watch(SecondWind, winded, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i937x1", level=4, cls=ITEM, action=ActionType.NONE,

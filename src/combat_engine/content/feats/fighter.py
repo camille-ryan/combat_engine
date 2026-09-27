@@ -37,9 +37,11 @@ from combat_engine.engine import (
     Dropped,
     Gear,
     Hit,
+    SecondWind,
     Size,
     Trigger,
     When,
+    about_me,
     power,
 )
 from combat_engine.engine.events import PowerResolved
@@ -265,17 +267,29 @@ def f792(c: Cast) -> None:
     """Same keyword, a smaller version of f774."""
 
 
-@power("f371", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_second_wind()",))
+@power("f371", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f371(c: Cast) -> None:
-    """Second wind is an action rather than a power, so it announces
-    nothing a trigger can answer."""
+    """"In addition to the normal bonus", so it stacks, and the card
+    prints no type word, so it is untyped. Bloodied is asked of the world
+    before the hit points come back, which is what `SecondWind` being
+    announced first is for."""
+    if not c.bloodied(on=c.me):
+        return
+    for what in (AC, FORT, REF, WILL):
+        c.bonus(what, 1, on=c.me, until=When.EONT)
 
 
-@power("f372", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_second_wind()",))
+@power("f372", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f372(c: Cast) -> None:
-    """Same gap as f371, paying an attack bonus rather than defences."""
+    """Same reading as f371, on attack rolls."""
+    if c.bloodied(on=c.me):
+        c.bonus("attack", 1, on=c.me, until=When.EONT)
 
 
 @power("f769", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -17,10 +17,14 @@ is `c.grant_row`; the card carries `group=CHANNEL_DIVINITY`, which is
 what the printed "only one of these per encounter" Special line means.
 
 **Elemental companions.** `f3724` through `f3727b` all turn on a
-companion creature with an active and a passive mode. Nothing on the
-board is one -- `c.beast()` is the symbol earlier waves named for a
-companion with no ref, and `c.familiar_state()` for the mode -- so the
-whole family is marked rather than approximated.
+companion creature with an active and a passive mode. The engine now has
+companions -- a shaman's spirit, a ranger's beast, a familiar -- and this
+is none of them: the creature is granted by the feat itself and its page
+prints no defences, no hit points and no ref, so there is nothing to put
+on the board. `c.elemental_companion()` is that gap and
+`c.familiar_state()` is the mode, and the family is marked rather than
+approximated. The ranger's beast, which these used to share a symbol
+with, exists now.
 
 **Weapon groups are a closed set**: axe, bow, crossbow, heavy blade,
 implement, light blade, mace, spear, staff, unarmed. Sickles, scythes,
@@ -47,11 +51,13 @@ from combat_engine.engine import (
     AT_WILL,
     DAILY,
     ENCOUNTER,
+    FORT,
     FREE,
     MOVE,
     NO_TARGET,
     ONE_ALLY,
     PERSONAL,
+    REF,
     SELF,
     WILL,
     ActionType,
@@ -70,11 +76,13 @@ from combat_engine.engine import (
     Keyword,
     MoveEnd,
     PowerResolved,
+    SecondWind,
     SurgeSpent,
     Trigger,
     TurnEnd,
     TurnStart,
     When,
+    about_me,
     distance,
     get,
     hits_me,
@@ -87,12 +95,20 @@ from combat_engine.engine.query import has_combat_advantage, team
 FEATURE = ("c.class_feature()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
-#: A companion creature with no ref and no way to put one on the board.
-COMPANION = ("c.beast()",)
+#: The elemental companion, which is a creature the *feat* grants and the
+#: importer never captured a stat block for: its page prints no defences,
+#: no hit points and no ref, so there is nothing for `c.summon_inline` to
+#: be handed. A ranger's beast is a different creature and now exists.
+COMPANION = ("c.elemental_companion()",)
+#: "Beast attack powers and beast form attack powers" is a druid keyword
+#: and not a companion at all. The engine's keyword set is closed.
+BEAST_KEYWORD = ("Keyword.BEAST",)
+#: The animal companion a different class feature grants, whose printed
+#: line is a *combined* attack -- one the character and the creature make
+#: together. Nothing pairs two attacks that way.
+COMBINED = ("c.combined_attack()",)
 #: Active and passive mode, which only a familiar has.
 MODE = ("c.familiar_state()",)
-#: Nothing announces a second wind: `Cast.second_wind` runs it silently.
-SECOND_WIND = ("c.on_second_wind()",)
 #: A printed weapon the engine has no group and no ref for.
 WEAPON_REF = ("spec.weapon_ref()",)
 #: Concealment is not a state a creature can be put into.
@@ -194,6 +210,16 @@ def _grants(ref: str, card: str):  # noqa: ANN202
 # -- combat advantage, second wind and the first turn -----------------------
 
 
+def _melee_or_ranged(ctx: dict[str, Any]) -> bool:
+    """"Your melee and ranged attacks", read off the row that made them.
+
+    The damage context carries no `ranged` flag, so the reach of the row
+    is the only place to ask.
+    """
+    p = get(ctx.get("power", ""))
+    return p is not None and p.reach.kind in ("melee", "ranged")
+
+
 @power("f3684", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("c.effects_on()",))
 def f3684(c: Cast) -> None:
@@ -211,17 +237,29 @@ def f3684(c: Cast) -> None:
 
 
 @power("f3685", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind on your turn",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3685(c: Cast) -> None:
-    """One or two enemies grant combat advantage when you take a second
-    wind. `actions.perform` offers the second wind and `Cast.second_wind`
-    runs it, and neither announces anything a trigger could answer."""
+    """"On your turn" is printed, and an ally's row can hand you a second
+    wind off-turn, so the turn is asked."""
+    if c.turn_of() != c.me:
+        return
+    for foe in [f for f in c.enemies() if c.can_see(f)][:2]:
+        c.grants_advantage(on=foe, to=c.me, until=When.EONT)
 
 
 @power("f3686", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF, dropped=("c.can_hear()",),
+       trigger="you use your second wind on your turn",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3686(c: Cast) -> None:
-    """An ally shifts 3 when you take a second wind. Same silence."""
+    """Hearing is not modelled, so the ally is chosen from all of them."""
+    if c.turn_of() != c.me:
+        return
+    mate = c.choose(c.allies())
+    if mate is not None:
+        c.shift(3, who=mate)
 
 
 @power("f3688", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -556,10 +594,10 @@ def f3718(c: Cast) -> None:
 
 
 @power("f3719", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF, todo=("c.surface()",))
 def f3719(c: Cast) -> None:
-    """Resist 5 all, but only off a second wind, which announces nothing.
-    `c.terrain` would have answered the earthen-or-stone half."""
+    """What the square is made of is not recorded anywhere: `c.terrain`
+    asks about the fight, not about the ground under one creature."""
 
 
 @power("f3720", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -658,13 +696,27 @@ def f3727b(c: Cast) -> None:
 
 
 @power("f3729", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=SECOND_WIND)
+       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
 def f3729(c: Cast) -> None:
     """`c.resist` adds to whatever is already stored for the type, which
     is exactly the printed "if you already have fire resistance, it
     instead increases by 5" -- so one call says both sentences. Heroic
-    tier, so 5."""
-    c.resist(5, DamageType.FIRE, on=c.me, until=When.ENCOUNTER)
+    tier, so 5.
+
+    A watcher rather than a declared trigger: the resistance has to be
+    standing from the start of the fight, and a triggered row is not armed
+    until its trigger fires. The extra damage is dropped -- it is fire, and
+    a damage modifier carries no type."""
+    me = c.me
+    c.resist(5, DamageType.FIRE, on=me, until=When.ENCOUNTER)
+
+    def winded(ev: SecondWind) -> None:
+        if ev.actor != me:
+            return
+        c.bonus("damage", 0, dice="1d6", on=me, until=When.EONT,
+                when=_melee_or_ranged)
+
+    c.watch(SecondWind, winded, on=me, until=When.ENCOUNTER)
 
 
 @power("f3733", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1125,11 +1177,14 @@ def f3773(c: Cast) -> None:
 
 
 @power("f3774", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=COMPANION)
+       reach=PERSONAL, target=SELF, todo=BEAST_KEYWORD)
 def f3774(c: Cast) -> None:
     """"Beast attack powers and beast form attack powers" is a keyword the
     engine's closed set does not carry, so the bonus cannot be narrowed
-    to them and an ungated one would apply to everything."""
+    to them and an ungated one would apply to everything.
+
+    Not a companion: the druid's own shape-changing rows are what the
+    word means here, and no creature is involved."""
 
 
 @power("f3775", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1172,10 +1227,23 @@ def f3777(c: Cast) -> None:
 
 
 @power("f3778", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=COMPANION)
+       reach=PERSONAL, target=SELF, dropped=("c.on_racial_power()",))
 def f3778(c: Cast) -> None:
-    """Both halves are about a beast companion, which nothing puts on the
-    board."""
+    """A point of everything for the beast, while it stands beside you.
+
+    "Feat bonus", printed, so `kind="feat"`. Read `c.beast()` inside the
+    gate: the beast can be killed and called again and a captured id goes
+    quietly stale. Dropped is the first sentence, which spends a racial
+    row that is not in the tree."""
+    pet = c.beast()
+    if pet is None:
+        return
+    def at_heel(ctx: dict[str, Any]) -> bool:
+        return c.adjacent_to(pet, c.me)
+
+    for where in (AC, FORT, REF, WILL):
+        c.bonus(where, 1, on=pet, until=When.ENCOUNTER, kind="feat",
+                when=at_heel)
 
 
 @power("f3779", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1388,10 +1456,14 @@ def f3796(c: Cast) -> None:
 
 
 @power("f3797", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*COMPANION, "c.use_power()"))
+       reach=PERSONAL, target=SELF, todo=(*COMBINED, "c.use_power()"))
 def f3797(c: Cast) -> None:
-    """Both an animal companion and the right to use one row off the back
-    of another's hit."""
+    """A combined attack -- the character and its creature swinging as one
+    row -- and the right to use a second row off the back of that hit.
+
+    Not the ranger's beast, which now exists: this is the animal a
+    different class feature grants, and what the row turns on is the
+    pairing of the two attacks rather than the creature."""
 
 
 @power("f3798", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

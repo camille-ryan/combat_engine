@@ -37,6 +37,7 @@ from combat_engine.engine import (
     Condition,
     PowerUsed,
     SavingThrow,
+    SecondWind,
     SurgeSpent,
     Trigger,
     TurnStart,
@@ -57,9 +58,6 @@ ARDENT_SURGE = "p10273"
 ARDENT_ERUPTION = "p12931"
 BLOODIED_ADVANTAGE = "p11060"
 
-#: Second wind is an action rather than a row and announces nothing of
-#: its own -- `SurgeSpent` cannot tell it from any other surge.
-SECOND_WIND = ("c.on_second_wind()",)
 #: A feature named in prose with no ref.
 FEATURE = ("c.class_feature()",)
 #: Spending power points emits a `Note` and no event.
@@ -316,17 +314,22 @@ def f2786(c: Cast) -> None:
 
 
 @power("f3115", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, todo=SECOND_WIND + FEATURE)
+       reach=PERSONAL, target=NO_TARGET, todo=FEATURE)
 def f3115(c: Cast) -> None:
-    """Temporary hit points when an ally under a racial trait takes a
-    second wind. Neither half is sayable: second wind is an action that
-    announces only a `SurgeSpent`, and the trait naming who benefits is
-    prose with no ref."""
+    """Which allies a racial trait is covering is prose with no ref, so
+    there is no set to pay. The second wind itself is now announced."""
 
 
-@power("f3328", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, todo=SECOND_WIND)
+@power("f3328", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3328(c: Cast) -> None:
-    """Your own second wind hands an ally theirs. `c.second_wind` exists
-    and would do the ally's half; nothing announces that you took yours,
-    so there is no moment to hang it on."""
+    """The mantle's radius is read off the feature's own header rather
+    than copied, so the two cannot drift apart. `c.second_wind` refuses an
+    ally who has already taken one, which is the printed limit."""
+    mantle = get("cf:ardent-f0")
+    radius = mantle.reach.size if mantle is not None else 0
+    mate = c.choose([a for a in c.allies() if c.distance(a) <= radius])
+    if mate is not None:
+        c.second_wind(on=mate)

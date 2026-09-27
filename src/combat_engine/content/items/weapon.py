@@ -59,6 +59,7 @@ from combat_engine.engine import (
     Moved,
     Position,
     Ranged,
+    SecondWind,
     Size,
     Trigger,
     When,
@@ -324,12 +325,17 @@ def i1045x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.on_second_wind()", "c.total_defence()"),
+    dropped=("c.total_defence()",),
+    trigger="you take the second wind action",
+    on=Trigger(SecondWind, about_me, "you take your second wind"),
 )
 def i1057x1(c: Cast) -> None:
-    """Both halves hang on noticing an action. Total defence is not an
-    action the engine has, and a second wind announces only `SurgeSpent`,
-    which every other surge announces too."""
+    """The total-defence half is dropped: it is not an action the engine
+    has. "All your defenses" is the four of them, and the card names the
+    bonus an item bonus."""
+    plus = c.enhancement
+    for what in (AC, FORT, REF, WILL):
+        c.bonus(what, plus, on=c.me, until=When.SONT, kind="item")
 
 
 @power(

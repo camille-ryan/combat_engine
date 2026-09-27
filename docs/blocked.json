@@ -7,10 +7,6 @@
     "wants": "a hand key in the attack context (the p7399 gap), Gear recording a free/empty off hand, an armour field on chargen.Build, and improvised weapons",
     "why": "three of the six talents are left: one turns on wielding an off-hand weapon, one on an empty off hand, and one on improvised weapons and on not wearing heavy armour -- the chassis wears scale and Build cannot say otherwise, so each would be a gate that is false for every fighter in the tree"
   },
-  "cf:ranger-style-beast": {
-    "wants": "the beast companion (the p10594 gap), and then a leg in chargen.BUILDS[\"ranger\"] for it",
-    "why": "the other four styles are written or are a bonus feat; this one is a second creature on the board that also rewrites the class's extra damage, and a leg with no creature behind it would deal a ranger missing its feature"
-  },
   "cf:rogue-melee-talent-die": {
     "wants": "a thrown light blade in chargen, plus c.step_die() -- a modifier that moves a weapon's damage die one size",
     "why": "the card's first sentence raises the die of a weapon no chassis carries, and nothing in the modifier language steps a die at all, so both halves of the clause are missing rather than one"

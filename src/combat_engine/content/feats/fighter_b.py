@@ -45,16 +45,18 @@ from combat_engine.engine import (
     Keyword,
     Miss,
     PowerUsed,
+    SecondWind,
     Size,
     Trigger,
     When,
+    about_me,
     power,
 )
 from combat_engine.engine.components import Position
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import ForcedMove, Moved
 from combat_engine.engine.grid import distance, neighbours
-from combat_engine.engine.query import allies, enemies, flanked_by
+from combat_engine.engine.query import allies, enemies, flanked_by, holding
 from combat_engine.engine.types import Forced
 
 from .styles import among, hit_with_one_of, used_one_of
@@ -776,11 +778,17 @@ def f1738(c: Cast) -> None:
     on too few."""
 
 
-@power("f1739", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_second_wind()",))
+@power("f1739", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.extend()",),
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f1739(c: Cast) -> None:
-    """Second wind is an action rather than a power, so it announces
-    nothing a trigger can answer."""
+    """The extra hit points play. Lengthening the second wind's own
+    defence bonus does not: nothing moves a standing effect's duration,
+    and re-laying it would stack rather than replace."""
+    if not holding(c.world, c.me, "shield") or c.wis_mod <= 0:
+        return
+    c.heal(c.wis_mod, on=c.me)
 
 
 @power("f1741", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

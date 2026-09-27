@@ -1106,11 +1106,12 @@ def f1389(c: Cast) -> None:
 
 
 @power("f1390", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_second_wind()",))
+       reach=PERSONAL, target=SELF, dropped=("c.heal_check()",))
 def f1390(c: Cast) -> None:
     """The healing-power half plays off `Healed`, whose `source` is the
-    healer. The Heal-check half is dropped: a second wind is an action
-    rather than a power and announces nothing to hang a save on."""
+    healer. The Heal-check half is dropped: `SecondWind` says that a
+    second wind happened, but nothing says a Heal check is what allowed
+    it, and paying on every ally's own second wind is a different feat."""
     me = c.me
 
     def on_heal(ev: Any) -> None:

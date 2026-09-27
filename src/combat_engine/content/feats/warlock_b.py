@@ -671,7 +671,7 @@ def f2081(c: Cast) -> None:
 
 @power("f2194", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_second_wind()", "c.forgo_heal()"))
+       todo=("c.forgo_heal()",))
 def f2194(c: Cast) -> None:
     """Regain nothing from a second wind and take a +2 to attacks, saves
     and damage instead. Second wind is an action rather than a power and

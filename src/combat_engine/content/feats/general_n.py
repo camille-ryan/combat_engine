@@ -106,8 +106,6 @@ RACIAL = ("c.on_racial_power()",)
 REROLL = ("c.on_reroll()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
-#: Second wind is an action rather than a power and announces nothing.
-SECOND_WIND = ("c.on_second_wind()",)
 #: "You can swap a power you know for this one." The card is handed over;
 #: giving one up is a build-time exchange.
 SWAP = ("chargen.power_swap()",)
@@ -1192,7 +1190,7 @@ def f2160(c: Cast) -> None:
 
 
 @power("f2161", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF, todo=("c.forgo_defences()",))
 def f2161(c: Cast) -> None:
     """Trades what second wind grants for concealment. Second wind is an
     action rather than a power and announces nothing, so there is no
@@ -1322,7 +1320,7 @@ def f2452(c: Cast) -> None:
 
 
 @power("f2457", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF, todo=("c.forgo_defences()",))
 def f2457(c: Cast) -> None:
     """Forgoes what second wind grants for an attack bonus. Nothing
     announces a second wind, so there is no moment to trade at."""

@@ -51,6 +51,7 @@ from combat_engine.engine import (
     Keyword,
     PowerUsed,
     Relation,
+    SecondWind,
     Trigger,
     When,
     power,
@@ -65,8 +66,6 @@ from combat_engine.engine.events import (
 from combat_engine.engine.query import holding
 from combat_engine.engine.triggers import about_me
 
-#: Second wind is an action rather than a power, as `defenders.py` says.
-SECOND_WIND = ("c.on_second_wind()",)
 #: A class feature named in prose with no ref.
 FEATURE = ("c.class_feature()",)
 #: A racial power the benefit line names in prose rather than by ref.
@@ -326,37 +325,58 @@ def f2796(c: Cast) -> None:
 
 
 @power("f1830", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f1830(c: Cast) -> None:
-    """Resistance to all damage after a second wind. Same gap as f583."""
+    """Heroic tier, so 2; the 11th- and 21st-level steps are paragon."""
+    c.resist(2, on=c.me, until=When.EONT)
 
 
 @power("f1846", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF, todo=FEATURE)
 def f1846(c: Cast) -> None:
-    """A saving throw for a second ally when the build's own second-wind
-    rider grants one to the first. Both halves are the same gap: nothing
-    announces the second wind, and the rider it widens has no ref -- see
-    `cf:warden-f1-rest` in `docs/blocked.json`."""
+    """A saving throw for a *second* ally, which reads the first one off
+    a class feature named in prose with no ref. Writing the first would be
+    writing the feature rather than the feat."""
 
 
 @power("f1886", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f1886(c: Cast) -> None:
-    """A damage bonus against marked enemies after a second wind."""
+    """One modifier gated on the damage context's `target` rather than a
+    bonus laid per enemy, so an enemy marked later in the turn is covered
+    too."""
+    me = c.me
+    c.bonus("damage", c.wis_mod, on=me, until=When.EONT,
+            when=lambda ctx: ctx.get("target") is not None
+            and c.marked(on=ctx["target"], by=me))
 
 
 @power("f2556", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF, dropped=FEATURE,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f2556(c: Cast) -> None:
-    """A shift in place of the slide a build's second-wind rider makes.
-    Same pair of gaps as f1846."""
+    """The shift is sayable. What it is printed as an alternative *to* --
+    sliding every enemy you have marked -- is a class feature the tree does
+    not have, so nothing is being given up for it."""
+    if c.con_mod > 0:
+        c.shift(c.con_mod)
 
 
 @power("f2558", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f2558(c: Cast) -> None:
-    """Lightning damage to every marked enemy after a second wind."""
+    """Lightning, not the untyped default."""
+    me = c.me
+    for foe in c.enemies():
+        if c.marked(on=foe, by=me):
+            c.flat(c.con_mod, dtype=DamageType.LIGHTNING, on=foe)
 
 
 @power("f1874", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -67,10 +67,12 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    SecondWind,
     Trigger,
     UpTo,
     Usage,
     When,
+    about_me,
     get,
     power,
     targets_me,
@@ -1175,13 +1177,16 @@ def f3312(c: Cast) -> None:
     the option at the moment a check happens."""
 
 
-@power("f3313", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.max_hp()", "c.on_second_wind()"))
+@power("f3313", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.max_hp()",),
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3313(c: Cast) -> None:
-    """Extra maximum hit points, and a point spent on a second wind.
-    `Health.max` is dealt at build time and second wind is an action
-    rather than a power, so it announces nothing."""
+    """Heroic tier, so 5. The hit points per tier are dropped -- nothing
+    raises a character's maximum."""
+    if c.points() >= 1 and c.may("spend a power point", who=c.me):
+        c.spend_points(1)
+        c.heal(5, on=c.me)
 
 
 @power("f3317", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

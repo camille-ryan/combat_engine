@@ -20,15 +20,17 @@ from combat_engine.engine import (
     Cast,
     Condition,
     Hit,
+    Keyword,
+    SecondWind,
     Trigger,
     When,
+    about_me,
     power,
 )
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.query import holding
 
-SECOND_WIND = ("c.on_second_wind()",)
 FEATURE = ("c.class_feature()",)
 
 
@@ -51,6 +53,13 @@ def _my_opportunity_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 
 
 # -- swordmage --------------------------------------------------------------
+
+
+def _weapon_roll(ctx: dict[str, Any]) -> bool:
+    """"Weapon damage rolls": the damage context carries the row that
+    dealt them and the keyword is on the row."""
+    p = get(ctx.get("power", ""))
+    return p is not None and Keyword.WEAPON in p.keywords
 
 
 @power("f1118", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -144,17 +153,25 @@ def f1827(c: Cast) -> None:
             c.flat(c.con_mod, on=foe)
 
 
-@power("f583", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f583", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f583(c: Cast) -> None:
-    """Second wind is an action rather than a power, so it announces
-    nothing a trigger can answer."""
+    """Weapon damage rolls only, which the damage context answers through
+    the row that dealt them."""
+    c.bonus("damage", c.con_mod, on=c.me, until=When.EONT, when=_weapon_roll)
 
 
-@power("f584", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f584", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f584(c: Cast) -> None:
-    """Same gap as f583, shifting rather than paying damage."""
+    """A free action answering the same moment, so the shift is simply
+    taken. A warden with no Wisdom bonus shifts nowhere."""
+    if c.wis_mod > 0:
+        c.shift(c.wis_mod)
 
 
 @power("f1024", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

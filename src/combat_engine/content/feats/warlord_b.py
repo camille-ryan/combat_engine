@@ -48,20 +48,19 @@ from combat_engine.engine import (
     Miss,
     PowerUsed,
     Ranged,
+    SecondWind,
     Trigger,
     When,
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.query import allies, distance_between, enemies
+from combat_engine.engine.query import allies, distance_between, enemies, team
 
 from .styles import among, hit_with_one_of
 
 #: A row that offers a deal -- a cost for a payoff -- at the moment of an
 #: attack. Nothing in the engine asks that question.
 OPT_IN = ("c.opt_in()",)
-#: Second wind is an action rather than a power and announces nothing.
-SECOND_WIND = ("c.on_second_wind()",)
 #: Knowing which rows a feat names does not let one stand in for a basic.
 AS_BASIC = ("c.as_basic(ref)",)
 #: …nor turn a melee row into a ranged one.
@@ -133,6 +132,22 @@ def _versatile(c: Cast, *groups: str) -> bool:
 
 
 # -- the action point -------------------------------------------------------
+
+
+def _ally_in_sight(world: Any, me: int, ev: Any) -> bool:
+    """An ally other than you, with a clear line to you.
+
+    Line of *sight* is not modelled; `line_of_effect` is the nearest thing
+    the grid has and it is the same question about walls.
+    """
+    from combat_engine.engine.components import Position
+
+    who = getattr(ev, "actor", None)
+    if who is None or who == me or team(world, who) is not team(world, me):
+        return False
+    a, b = world.get(who, Position), world.get(me, Position)
+    return (a is not None and b is not None
+            and world.grid.line_of_effect(a.square, b.square))
 
 
 @power("f2064", level=1, cls="", usage=ENCOUNTER, action=FREE,
@@ -448,17 +463,22 @@ _deal("f814", "Inspiring word's extra dice traded for a saving throw.")
 # -- the rest, each gap named -----------------------------------------------
 
 
-@power("f2054", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f2054", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="an ally with line of sight to you uses his or her second wind",
+       on=Trigger(SecondWind, _ally_in_sight, "an ally in sight is winded"))
 def f2054(c: Cast) -> None:
-    """A save bonus when an ally takes a second wind. Second wind is an
-    action rather than a power and announces nothing."""
+    """The ally's own next turn is the clock, not yours."""
+    c.bonus("save", c.cha_mod, on=c.trigger.actor, until=When.EOTNT)
 
 
-@power("f2061", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f2061", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="an ally with line of sight to you uses his or her second wind",
+       on=Trigger(SecondWind, _ally_in_sight, "an ally in sight is winded"))
 def f2061(c: Cast) -> None:
-    """Temporary hit points on the same trigger as f2054."""
+    """Half your level, rounded down, is the printed term."""
+    c.temp_hp(c.cha_mod + c.level // 2, on=c.trigger.actor)
 
 
 @power("f2058", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -52,8 +52,10 @@ from combat_engine.engine import (
     Keyword,
     Ranged,
     SavingThrow,
+    SecondWind,
     Trigger,
     When,
+    about_me,
     get,
     power,
 )
@@ -331,11 +333,14 @@ def f631b(c: Cast) -> None:
 # -- the standalone ones ----------------------------------------------------
 
 
-@power("f507", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-    reach=PERSONAL, target=SELF, todo=("c.on_second_wind()",))
+@power("f507", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+    reach=PERSONAL, target=SELF, dropped=("c.total_defence()",),
+    trigger="you use your second wind",
+    on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f507(c: Cast) -> None:
-    """A saving throw when you second wind or take total defence. Neither
-    is a power, so neither announces anything a trigger can answer."""
+    """The total-defence half is dropped: it is not an action the engine
+    has."""
+    c.save(on=c.me)
 
 
 @power("f509", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

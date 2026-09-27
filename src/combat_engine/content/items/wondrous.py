@@ -22,10 +22,9 @@ Three judgements run through the file.
   points -- and carry `dropped=("Summon.from_block()",)` for the numbers
   and the attack line that are missing.
 
-"When you use your second wind" has no event of its own: `Cast.second_wind`
-notes the use and lays a `+2 ac` effect labelled `second-wind`, so
-`_on_second_wind` watches `EffectApplied` for that label. It is the only
-announcement the engine makes.
+"When you use your second wind" is `SecondWind`, which `Cast.second_wind`
+emits from the one place a second wind is ever taken; `_on_second_wind`
+watches it.
 """
 
 from __future__ import annotations
@@ -65,7 +64,6 @@ from combat_engine.engine import (
     DamageApplied,
     DamageRolled,
     DamageType,
-    EffectApplied,
     Health,
     Hit,
     Keyword,
@@ -74,6 +72,7 @@ from combat_engine.engine import (
     PowerUsed,
     Ranged,
     SavingThrow,
+    SecondWind,
     Size,
     Square,
     Summon,
@@ -185,13 +184,20 @@ def _against(foe: int) -> Callable[[dict[str, Any]], bool]:
 
 
 def _on_second_wind(c: Cast, fn: Callable[[], None]) -> None:
-    """Arm "when you use your second wind" for the rest of the fight."""
+    """Arm "when you use your second wind" for the rest of the fight.
 
-    def seen(ev: EffectApplied) -> None:
-        if ev.target == c.me and ev.label.startswith("second-wind"):
+    `SecondWind` is the announcement. This used to sniff `EffectApplied`
+    for a label beginning "second-wind", which only matched when the
+    action menu ran it: `c.second_wind(on=ally)` labels the effect with
+    the *calling row's* ref, so a leader row handing somebody a second
+    wind was silently invisible here.
+    """
+
+    def seen(ev: SecondWind) -> None:
+        if ev.actor == c.me:
             fn()
 
-    c.watch(EffectApplied, seen, until=When.ENCOUNTER)
+    c.watch(SecondWind, seen, until=When.ENCOUNTER, on=c.me)
 
 
 def _free_near(c: Cast, radius: int = 1, of: int | None = None) -> Square | None:

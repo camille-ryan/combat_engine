@@ -40,8 +40,10 @@ from combat_engine.engine import (
     Cast,
     Condition,
     Hit,
+    SecondWind,
     Trigger,
     When,
+    about_me,
     power,
 )
 from combat_engine.engine.events import (
@@ -55,8 +57,6 @@ from combat_engine.engine.events import (
 from combat_engine.engine.query import allies, team
 from combat_engine.engine.triggers import both, by_charge, by_me, by_melee, targets_me
 
-#: Second wind is an action rather than a power, as `defenders.py` says.
-SECOND_WIND = ("c.on_second_wind()",)
 #: Shoving somebody, which nothing in the tree does.
 BULL_RUSH = ("c.bull_rush()",)
 
@@ -337,19 +337,25 @@ def f2282(c: Cast) -> None:
 
 
 @power("f2281", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f2281(c: Cast) -> None:
-    """A shift on taking a second wind while shaped. The shape is
-    readable; second wind is an action and announces nothing."""
+    """Beast form is the printed gate and the druid's own file answers
+    it."""
+    if in_beast_form(c.world, c.me):
+        c.shift(2)
 
 
 @power("f2284", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.on_second_wind()", "c.total_defence()"))
+       reach=PERSONAL, target=SELF, dropped=("c.total_defence()",),
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f2284(c: Cast) -> None:
-    """Resistance after either of two actions, and neither is a power:
-    second wind announces nothing and total defence is not an action the
-    menu offers at all."""
+    """The total-defence half is dropped: it is not an action the engine
+    has. Heroic tier, so 5."""
+    if in_beast_form(c.world, c.me):
+        c.resist(5, on=c.me, until=When.EONT)
 
 
 # -- powers chosen somewhere else -------------------------------------------

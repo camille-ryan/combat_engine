@@ -62,11 +62,13 @@ from combat_engine.engine import (
     Keyword,
     Position,
     PowerUsed,
+    SecondWind,
     Size,
     Trigger,
     TurnStart,
     When,
     Window,
+    about_me,
     both,
     by_me,
     cursed_by_me,
@@ -518,12 +520,15 @@ def f3458(c: Cast) -> None:
     _while_insubstantial(c, rider)
 
 
-@power("f3459", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_second_wind()",))
+@power("f3459", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3459(c: Cast) -> None:
-    """`c.expended` would answer the unexpended half. Nothing announces a
-    second wind -- `Cast.second_wind` runs it silently and `SurgeSpent`
-    fires for every surge, which is a much larger row than this one."""
+    """Unexpended is the test, so the row has to be known and not spent."""
+    if c.knows("p2482") is None or "p2482" in c.expended(on=c.me):
+        return
+    c.insubstantial(on=c.me, until=When.SONT)
 
 
 @power("f3460", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

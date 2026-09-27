@@ -81,6 +81,7 @@ from combat_engine.engine import (
     PowerUsed,
     Ranged,
     SavingThrow,
+    SecondWind,
     SkillCheck,
     SurgeSpent,
     TempHP,
@@ -396,6 +397,12 @@ def _spikes(c: Cast, dice: str, bonus: int, dtype: DamageType, until: When) -> N
 
 
 # -- level 2 ----------------------------------------------------------------
+
+
+def _arcane_power(ctx: dict[str, Any]) -> bool:
+    """"With arcane attack powers": read off the row the context names."""
+    p = get(ctx.get("power", ""))
+    return p is not None and Keyword.ARCANE in p.keywords
 
 
 @power("i1044x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -890,14 +897,23 @@ def i1288p1(c: Cast) -> None:
 
 
 @power("i1529x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_second_wind()",))
+       reach=PERSONAL, target=SELF)
 def i1529x1(c: Cast) -> None:
-    """The save bonus plays: "against fear effects" is a gate on the
-    keywords of the row that laid the hold. No type word on the card, so
-    untyped. The temporary hit points are dropped -- a second wind
-    announces only the surge it spends, which any healing row does."""
-    c.bonus("save", c.enhancement, on=c.me, until=When.ENCOUNTER,
+    """The save bonus is a gate on the keywords of the row that laid the
+    hold; no type word on the card, so untyped.
+
+    The second wind's half is a watcher rather than a declared trigger:
+    the save bonus has to be standing from the start of the fight, and a
+    triggered row is not armed until it fires."""
+    me = c.me
+    c.bonus("save", c.enhancement, on=me, until=When.ENCOUNTER,
             when=_save_keywords(Keyword.FEAR))
+
+    def winded(ev: SecondWind) -> None:
+        if ev.actor == me:
+            c.temp_hp(3 * c.enhancement, on=me)
+
+    c.watch(SecondWind, winded, on=me, until=When.ENCOUNTER)
 
 
 @power("i1558p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1025,12 +1041,22 @@ def i2283p1(c: Cast) -> None:
 
 
 @power("i2366x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_second_wind()",))
+       reach=PERSONAL, target=SELF)
 def i2366x1(c: Cast) -> None:
-    """A second wind is a surge like any other from the outside, so the
-    arcane damage half has no trigger of its own."""
-    c.bonus("skill:arcana", c.enhancement, on=c.me, until=When.ENCOUNTER,
+    """The Arcana half is an item bonus, which the card prints; the damage
+    half prints no type word at all, so it is untyped. A watcher rather
+    than a declared trigger, because the skill bonus has to be standing
+    from the start of the fight."""
+    me = c.me
+    c.bonus("skill:arcana", c.enhancement, on=me, until=When.ENCOUNTER,
             kind="item")
+
+    def winded(ev: SecondWind) -> None:
+        if ev.actor == me:
+            c.bonus("damage", c.enhancement, on=me, until=When.EONT,
+                    when=_arcane_power)
+
+    c.watch(SecondWind, winded, on=me, until=When.ENCOUNTER)
 
 
 @power("i2391x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -2165,10 +2191,15 @@ def i603p1(c: Cast) -> None:
 
 
 @power("i626x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_second_wind()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind while you are bloodied",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def i626x1(c: Cast) -> None:
-    """A second wind spends a surge and announces nothing else, so it
-    cannot be told apart from any other healing."""
+    """Bloodied is asked of the world before the hit points come back,
+    which is what `SecondWind` being announced ahead of the healing is
+    for. Heroic tier, so 1d10; the level steps are paragon and epic."""
+    if c.bloodied(on=c.me):
+        c.heal(c.roll("1d10"), on=c.me)
 
 
 @power("i721x1", level=5, cls=ITEM, action=ActionType.NONE,

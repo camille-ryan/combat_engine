@@ -74,15 +74,18 @@ from combat_engine.engine import (
     PowerUsed,
     Ranged,
     SavingThrow,
+    SecondWind,
     SkillCheck,
     SurgeSpent,
     Trigger,
     TurnStart,
     When,
+    about_me,
     get,
     power,
 )
 from combat_engine.engine.durations import keywords_of
+from combat_engine.engine.grid import neighbours, spread
 from combat_engine.engine.query import (
     allies,
     distance_between,
@@ -91,8 +94,6 @@ from combat_engine.engine.query import (
     team,
 )
 
-#: Second wind is an action rather than a power and announces nothing.
-SECOND_WIND = ("c.on_second_wind()",)
 #: "You can swap one N-level power you know for this one." The card is
 #: handed over; giving a power *up* is a build-time exchange.
 SWAP = ("chargen.power_swap()",)
@@ -171,6 +172,13 @@ def _weapon_attack(c: Cast, *groups: str):  # noqa: ANN202
 
 
 _granted("f2901", "f2901b")
+
+
+def _melee_weapon(ctx: dict[str, Any]) -> bool:
+    """A melee weapon attack, read off the row the damage context names."""
+    p = get(ctx.get("power", ""))
+    return (p is not None and p.reach.kind == "melee"
+            and Keyword.WEAPON in p.keywords)
 
 
 @power("f2901b", level=1, cls="", usage=DAILY, action=MINOR,
@@ -398,11 +406,11 @@ def f2915(c: Cast) -> None:
 
 
 @power("f2916", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF, todo=("c.forgo_defences()",))
 def f2916(c: Cast) -> None:
-    """+3 to all defences instead of the +2 second wind grants. The
-    second wind is an action rather than a power and announces nothing,
-    so there is no moment at which to replace its bonus."""
+    """"Instead of the normal +2", and the normal one is laid inside
+    `Cast.second_wind`. Nothing forgoes it, and laying a +3 on top would
+    come to +5 because untyped bonuses stack."""
 
 
 @power("f2917", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1013,12 +1021,21 @@ def f3113(c: Cast) -> None:
         c.bonus("attack", 1, on=friend, until=When.EONT, kind="racial")
 
 
-@power("f3114", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f3114", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3114(c: Cast) -> None:
-    """A shift when you take your second wind. Second wind announces
-    only the surge it spends, and that is also what a dozen other things
-    spend."""
+    """The printed constraint is on where the shift *ends*, so the square
+    is picked first and `to=` is what says it."""
+    grid = c.world.grid
+    near = {s for foe in c.enemies() for s in spread(grid.squares_of(foe), 1)}
+    good = sorted(
+        sq for sq in neighbours(c.here)
+        if sq in near and grid.passable(sq) and grid.occupant(sq) is None
+    )
+    if good:
+        c.shift(1, to=good[0])
 
 
 @power("f3117", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1182,11 +1199,10 @@ def f3129(c: Cast) -> None:
 
 
 @power("f3130", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF, todo=("c.forgo_healing()",))
 def f3130(c: Cast) -> None:
-    """Hands the hit points from your second wind to an adjacent ally.
-    Second wind heals inside `Cast.second_wind` and announces only the
-    surge, so there is no moment at which to redirect it."""
+    """Handing the hit points to a neighbour costs you yours, and nothing
+    refuses the healing a second wind does."""
 
 
 @power("f3131", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1231,17 +1247,24 @@ def f3134(c: Cast) -> None:
     c.temp_hp(5, on=c.me)
 
 
-@power("f3135", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f3135", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3135(c: Cast) -> None:
-    """A damage bonus hung on taking your second wind, which announces
-    nothing."""
+    """"Your next damage roll" is `once=True`; the damage context carries
+    the row that made it, which is where melee and weapon are read."""
+    c.bonus("damage", 5, on=c.me, until=When.EONT, kind="power", once=True,
+            when=_melee_weapon)
 
 
-@power("f3136", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f3136", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3136(c: Cast) -> None:
-    """A shift hung on taking your second wind. Same gap as f3135."""
+    """A free action answering the same moment."""
+    c.shift(3)
 
 
 @power("f3137", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

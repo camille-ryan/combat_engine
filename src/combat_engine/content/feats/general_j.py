@@ -67,12 +67,16 @@ from combat_engine.engine import (
     PowerUsed,
     Ranged,
     SavingThrow,
+    SecondWind,
     SkillCheck,
     Target,
     Trigger,
     TurnStart,
     UpTo,
     When,
+    about_me,
+    ally_within,
+    either,
     get,
     power,
 )
@@ -498,10 +502,20 @@ _granted("f1458", "f1458b")
 
 @power("f1458b", level=1, cls="", usage=ENCOUNTER, action=FREE,
        reach=CloseBurst(5), target=ONE_ALLY, keywords=DIVINE,
-       group=CHANNEL_DIVINITY, todo=("c.on_second_wind()",))
+       group=CHANNEL_DIVINITY,
+       trigger="you or an ally within 5 squares uses his or her second wind",
+       on=Trigger(SecondWind, either(about_me, ally_within(5)),
+                  "you or an ally within 5 squares takes a second wind"))
 def f1458b(c: Cast) -> None:
-    """Answers a second wind. Second wind is an action rather than a
-    power and announces nothing a trigger can be declared on."""
+    """"The triggering character" is the event's actor rather than
+    `c.target`: the burst would otherwise offer any ally standing in it,
+    and the printed target is whoever was winded -- which may be you.
+
+    `SOTNT`, not `SONT`: the printed clock is the target's next turn and
+    the target is usually somebody else."""
+    who = c.trigger.actor
+    for what in (AC, FORT, REF, WILL):
+        c.bonus(what, 3, on=who, until=When.SOTNT, kind="power")
 
 
 _granted("f1460", "f1460b")

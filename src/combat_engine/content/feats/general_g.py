@@ -65,6 +65,7 @@ from combat_engine.engine import (
     Powers,
     PowerUsed,
     SavingThrow,
+    SecondWind,
     Trigger,
     Usage,
     When,
@@ -140,6 +141,12 @@ def _holding_somebody(world, eid: int) -> bool:  # noqa: ANN001
 
 
 # -- resistances, which `c.resist` adds to rather than replaces -------------
+
+
+def _arcane_row(ctx: dict[str, Any]) -> bool:
+    """An arcane power, read off the row the context names."""
+    p = get(ctx.get("power", ""))
+    return p is not None and Keyword.ARCANE in p.keywords
 
 
 @power("f615", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1171,11 +1178,16 @@ def f1148(c: Cast) -> None:
     `c.resist` on the other creature is the wrong end of it."""
 
 
-@power("f1158", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_second_wind()",))
+@power("f1158", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f1158(c: Cast) -> None:
-    """A second wind is an action rather than a row, and announces
-    nothing a trigger can be declared on."""
+    """"Before the end of your turn", not your next turn. Neither bonus
+    prints a type word, so both are untyped."""
+    me = c.me
+    c.bonus("attack", 1, on=me, until=When.EOT, when=_arcane_row)
+    c.bonus("damage", c.con_mod, on=me, until=When.EOT, when=_arcane_row)
 
 
 

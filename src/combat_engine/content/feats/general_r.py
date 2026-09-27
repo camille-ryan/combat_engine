@@ -80,6 +80,7 @@ from combat_engine.engine import (
     PowerUsed,
     Ranged,
     SavingThrow,
+    SecondWind,
     SkillCheck,
     Summon,
     Summoned,
@@ -88,6 +89,7 @@ from combat_engine.engine import (
     TurnEnd,
     When,
     Window,
+    about_me,
     get,
     power,
 )
@@ -109,8 +111,6 @@ SWAP = ("chargen.power_swap()",)
 #: skills it is trained in, are both build-time columns.
 PROFICIENCY = ("chargen.proficiency()",)
 TRAINING = ("chargen.skill_training()",)
-#: Second wind is an action rather than a power and announces nothing.
-SECOND_WIND = ("c.on_second_wind()",)
 #: Dim light and darkness are not states of a square this engine keeps.
 LOW_LIGHT = ("c.low_light()",)
 #: A check "made to do <a particular thing>" -- to balance on ice, to
@@ -457,7 +457,7 @@ def f3568(c: Cast) -> None:
 
 
 @power("f3569", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=(*SECOND_WIND, *LOW_LIGHT))
+       reach=PERSONAL, target=SELF, todo=LOW_LIGHT)
 def f3569(c: Cast) -> None:
     """Two gaps, and either alone would sink the row: second wind is an
     action rather than a power and announces nothing a rider can answer,
@@ -1303,11 +1303,15 @@ def f3650(c: Cast) -> None:
     inside another, so there is no half of this to keep."""
 
 
-@power("f3651", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f3651", level=1, cls="", usage=AT_WILL, action=NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3651(c: Cast) -> None:
-    """Second wind is an action rather than a power and announces nothing
-    a rider can answer; the familiar half would be easy beside it."""
+    """Heroic tier, so 3."""
+    pet = c.familiar()
+    if pet is not None and c.distance(pet) <= 10:
+        c.heal(3, on=c.me)
 
 
 @power("f3652", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -1569,7 +1573,7 @@ def f3679(c: Cast) -> None:
 
 
 @power("f3680", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=(*SECOND_WIND, *LOW_LIGHT))
+       reach=PERSONAL, target=SELF, todo=LOW_LIGHT)
 def f3680(c: Cast) -> None:
     """Both halves are gated on the light in a square, and the second
     wants second wind to announce itself as well."""

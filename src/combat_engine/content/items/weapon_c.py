@@ -77,7 +77,7 @@ from combat_engine.engine import (
     Movement,
     PowerUsed,
     Ranged,
-    SurgeSpent,
+    SecondWind,
     Trigger,
     TurnStart,
     When,
@@ -222,6 +222,12 @@ def _once_a_turn(c: Cast) -> dict[str, bool]:
 
 
 # -- level 8 ----------------------------------------------------------------
+
+
+def _my_second_wind(world: World, me: int, ev: Any) -> bool:
+    """"You use your second wind **on your turn**." The clause matters: a
+    leader row can hand you one in the middle of somebody else's."""
+    return getattr(ev, "actor", None) == me and world.turn == me
 
 
 @power(
@@ -1612,13 +1618,13 @@ def i3429x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you use your second wind on your turn",
-    on=Trigger(SurgeSpent, about_me, "you spend a healing surge"),
-    dropped=("c.on_second_wind()",),
+    on=Trigger(SecondWind, _my_second_wind, "you use your second wind"),
 )
 def i3429p1(c: Cast) -> None:
-    """A second wind announces only `SurgeSpent`, which every other surge
-    announces too, so this arms on one surge too many. The defence bonus is
-    gated on `opportunity`, which the attack context does carry."""
+    """The defence bonus is gated on `opportunity`, which the attack
+    context carries. It is held to the end of the turn rather than only
+    for the flight: nothing brackets a move, and the printed line is about
+    the attacks this one provokes."""
     far = c.speed_of()
     c.mode("fly", far, on=c.me, until=When.EOT)
     for d in _DEFENCES:

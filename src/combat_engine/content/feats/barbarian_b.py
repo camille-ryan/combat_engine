@@ -227,7 +227,7 @@ def f2705(c: Cast) -> None:
 
 @power("f2885", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("Keyword.RAGE", "c.on_second_wind()"))
+       todo=("Keyword.RAGE",))
 def f2885(c: Cast) -> None:
     """Extra hit points from a second wind taken while raging. Neither
     half is announced: `c.second_wind` emits a surge and a defence

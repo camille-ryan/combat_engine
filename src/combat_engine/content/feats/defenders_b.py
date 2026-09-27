@@ -26,8 +26,11 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     ENCOUNTER,
+    FORT,
     PERSONAL,
+    REF,
     SELF,
+    WILL,
     ActionType,
     Bloodied,
     Cast,
@@ -36,6 +39,7 @@ from combat_engine.engine import (
     Keyword,
     MoveEnd,
     PowerUsed,
+    SecondWind,
     Trigger,
     When,
     about_me,
@@ -47,7 +51,6 @@ from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.types import Usage
 
 FEATURE = ("c.class_feature()",)
-SECOND_WIND = ("c.on_second_wind()",)
 RUNE_FEATS = ("c.feats(category=)",)
 
 #: The five the swordmage's own damage feat names. `Keyword.FORCE` is not
@@ -318,11 +321,14 @@ def f3287(c: Cast) -> None:
     c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
-@power("f3293", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f3293", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3293(c: Cast) -> None:
-    """Second wind is an action rather than a power -- `actions.legal`
-    offers it and `Cast.second_wind` runs it -- so it announces nothing."""
+    """Every damage roll: no weapon, keyword or reach narrowing is
+    printed, so none is written."""
+    c.bonus("damage", c.wis_mod, on=c.me, until=When.EONT)
 
 
 @power("f3298", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -448,10 +454,18 @@ def f2601(c: Cast) -> None:
                    when=lambda ctx: ctx.get("power") == RANGED)
 
 
-@power("f2619", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f2619", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f2619(c: Cast) -> None:
-    """Same gap as f3293, paying a neighbour rather than yourself."""
+    """"All defenses" is the four of them, and the card prints no type
+    word in front of the bonus, so it is untyped."""
+    mate = c.choose([a for a in c.allies() if c.adjacent(a)])
+    if mate is None:
+        return
+    for what in (AC, FORT, REF, WILL):
+        c.bonus(what, 2, on=mate, until=When.SONT)
 
 
 # -- runepriest -------------------------------------------------------------

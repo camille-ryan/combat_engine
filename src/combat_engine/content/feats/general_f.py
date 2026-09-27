@@ -38,9 +38,11 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     PowerUsed,
+    SecondWind,
     Size,
     Trigger,
     When,
+    ally_within,
     power,
 )
 from combat_engine.engine.components import Stats
@@ -386,12 +388,16 @@ def f470(c: Cast) -> None:
     gap as f469."""
 
 
-@power("f472", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_second_wind()",))
+@power("f472", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="an ally within 10 squares of you uses second wind",
+       on=Trigger(SecondWind, ally_within(10),
+                  "an ally within 10 squares takes a second wind"))
 def f472(c: Cast) -> None:
-    """Temporary hit points when a nearby ally takes a second wind.
-    Second wind is an action rather than a power and announces
-    nothing."""
+    """The temporary hit points go to the ally who was winded, whom the
+    event names -- `c.temp_hp` would otherwise follow `c.target`, which on
+    a PERSONAL row is you."""
+    c.temp_hp(c.cha_mod, on=c.trigger.actor)
 
 
 # -- proficiency, which is settled when the character is built --------------

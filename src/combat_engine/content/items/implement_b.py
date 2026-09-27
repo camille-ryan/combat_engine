@@ -77,6 +77,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     SavingThrow,
+    SecondWind,
     Summoned,
     Trigger,
     TurnEnd,
@@ -2838,11 +2839,16 @@ def i3431x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.on_second_wind()",),
+    dropped=("c.bonus(dtype=)",),
+    trigger="you use your second wind",
+    on=Trigger(SecondWind, about_me, "you use your second wind"),
 )
 def i3432x1(c: Cast) -> None:
-    """A second wind announces only `SurgeSpent`, which every other surge
-    announces too, so the trigger cannot be told apart."""
+    """"Using this ki focus" is the implement keyword: one focus is held
+    at a time. The extra damage keeps the blow's own type, because nothing
+    types a damage modifier -- that is the dropped half."""
+    c.bonus("damage", c.enhancement, on=c.me, until=When.EONT,
+            when=_has_keyword(Keyword.IMPLEMENT))
 
 
 @power(

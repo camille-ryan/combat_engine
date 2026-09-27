@@ -1893,7 +1893,7 @@ def f2726(c: Cast) -> None:
 
 @power("f2868", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_second_wind()", "c.forgo_healing()"))
+       todo=("c.forgo_healing()",))
 def f2868(c: Cast) -> None:
     """Second wind is an action rather than a power: `actions` offers it
     and `Cast.second_wind` runs it, so it announces nothing a trigger can

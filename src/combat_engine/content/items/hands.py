@@ -67,6 +67,7 @@ from combat_engine.engine import (
     PowerUsed,
     Ranged,
     Relation,
+    SecondWind,
     TempHP,
     Trigger,
     When,
@@ -429,18 +430,16 @@ def i1895p1(c: Cast) -> None:
 @power("i2018x1", level=5, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("c.total_defence()",))
 def i2018x1(c: Cast) -> None:
-    """`Cast.second_wind` lays an effect labelled `second-wind`, which is
-    the only announcement either action makes; total defence is not an
-    action the engine has."""
-    from combat_engine.engine import EffectApplied
+    """Total defence is not an action the engine has; the second wind
+    half answers `SecondWind`."""
 
-    def seen(ev: EffectApplied) -> None:
-        if ev.target != c.me or not ev.label.startswith("second-wind"):
+    def seen(ev: SecondWind) -> None:
+        if ev.actor != c.me:
             return
         for defence in (AC, FORT, REF, WILL):
             c.bonus(defence, 2, on=c.me, until=When.SONT, kind="item")
 
-    c.watch(EffectApplied, seen, until=When.ENCOUNTER, on=c.me)
+    c.watch(SecondWind, seen, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i2179x1", level=5, cls=ITEM, action=ActionType.NONE,

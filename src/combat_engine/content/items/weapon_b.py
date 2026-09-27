@@ -83,8 +83,8 @@ from combat_engine.engine import (
     Position,
     Ranged,
     Relation,
+    SecondWind,
     Size,
-    SurgeSpent,
     Target,
     Trigger,
     TurnEnd,
@@ -387,6 +387,12 @@ def _reach(c: Cast) -> int:
 
 
 # -- level 3 ----------------------------------------------------------------
+
+
+def _my_second_wind(world: World, me: int, ev: Any) -> bool:
+    """"You use your second wind **on your turn**." The clause matters: a
+    leader row can hand you one in the middle of somebody else's."""
+    return getattr(ev, "actor", None) == me and world.turn == me
 
 
 @power(
@@ -2936,13 +2942,11 @@ def i3427x1(c: Cast) -> None:
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
     trigger="you use your second wind on your turn",
-    on=Trigger(SurgeSpent, lambda world, me, ev: ev.actor == me, "you spend a surge"),
-    dropped=("c.on_second_wind()",),
+    on=Trigger(SecondWind, _my_second_wind, "you use your second wind"),
 )
 def i3427p1(c: Cast) -> None:
-    """A second wind announces only that a surge went, which every other
-    surge announces too -- so any surge of the wielder's arms this. "For
-    your enemies" is the zone plus a waiver for your own side."""
+    """"For your enemies" is the zone plus a waiver for your own side --
+    difficult going is the ground's property and has no side of its own."""
     z = c.zone(spread({c.here}, 2), difficult=True, until=When.EONT)
     c.ignores_difficult_in(z, side="ally")
 
@@ -2981,8 +2985,8 @@ def i3428x1(c: Cast) -> None:
     target=SELF,
     keywords=[Keyword.FIRE],
     trigger="you use your second wind on your turn",
-    on=Trigger(SurgeSpent, lambda world, me, ev: ev.actor == me, "you spend a surge"),
-    dropped=("c.on_second_wind()", "c.bonus(dtype=)"),
+    on=Trigger(SecondWind, _my_second_wind, "you use your second wind"),
+    dropped=("c.bonus(dtype=)",),
 )
 def i3428p1(c: Cast) -> None:
     """The melee half of the gate is readable off the power's reach; the
@@ -3024,8 +3028,7 @@ def i3430x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you use your second wind on your turn",
-    on=Trigger(SurgeSpent, lambda world, me, ev: ev.actor == me, "you spend a surge"),
-    dropped=("c.on_second_wind()",),
+    on=Trigger(SecondWind, _my_second_wind, "you use your second wind"),
 )
 def i3430p1(c: Cast) -> None:
     near = [w for w in c.within(5) if w != c.me]

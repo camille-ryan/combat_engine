@@ -79,6 +79,7 @@ from combat_engine.engine import (
     PowerResolved,
     PowerUsed,
     Relation,
+    SecondWind,
     Size,
     SurgeSpent,
     Target,
@@ -94,14 +95,12 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.components import Position, Powers
-from combat_engine.engine.query import concealment_of, creatures, is_, unseen_by
+from combat_engine.engine.query import concealment_of, creatures, is_, team, unseen_by
 
 #: A class feature the benefit names in prose, with no `cf:` ref to read.
 FEATURE = ("c.class_feature()",)
 #: A racial power named by its race rather than by a ref.
 RACIAL_POWER = ("c.on_racial_power()",)
-#: Nothing announces a second wind: `Cast.second_wind` runs it silently.
-SECOND_WIND = ("c.on_second_wind()",)
 #: A power traded for another at build time.
 SWAP = ("chargen.power_swap()",)
 #: Which weapons a character may pick up is settled when it is built.
@@ -246,6 +245,14 @@ def _grants(ref: str, card: str):  # noqa: ANN202
 # -- the goliath band: p4809, p11738 and the toughness riders ---------------
 
 
+def _ally_winded(world: Any, me: int, ev: Any) -> bool:
+    """Any ally but you. The printed limit is adjacency to the spirit
+    companion, which the body measures."""
+    who = getattr(ev, "actor", None)
+    return (who is not None and who != me
+            and team(world, who) is team(world, me))
+
+
 @power("f3477", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f3477(c: Cast) -> None:
@@ -293,12 +300,21 @@ def f3479(c: Cast) -> None:
 
 
 @power("f3480", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF,
+       trigger="an ally uses second wind while adjacent to your spirit companion",
+       on=Trigger(SecondWind, _ally_winded, "an ally takes a second wind"))
 def f3480(c: Cast) -> None:
-    """The spirit companion half is `c.companion` and the cure is `c.cure`;
-    the trigger is the gap. `actions.perform` offers a second wind and
-    `Cast.second_wind` runs it, and neither announces anything -- and
-    `SurgeSpent` cannot tell a second wind from any other surge."""
+    """The printed distance is to the spirit rather than to you, which is
+    why the predicate lets every ally through and the body measures."""
+    spirit = c.companion()
+    who = c.trigger.actor
+    if spirit is None or not c.adjacent_to(spirit, who):
+        return
+    held = [x for x in (Condition.DAZED, Condition.SLOWED, Condition.WEAKENED)
+            if c.is_(x, on=who)]
+    picked = c.choose(held) if held else None
+    if picked is not None:
+        c.cure(picked, on=who)
 
 
 @power("f3481", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -775,9 +791,19 @@ def f3509(c: Cast) -> None:
 
 
 @power("f3510", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3510(c: Cast) -> None:
-    """`c.conceal` would say the benefit; nothing says the trigger."""
+    """Two ends and the earlier wins: the concealment holds to the start
+    of your next turn, and the first attack you declare drops it."""
+    hidden = c.conceal(on=c.me, until=When.SONT)
+
+    def swung(ev: AttackDeclared) -> None:
+        if ev.attacker == c.me and hidden is not None:
+            c.world.effects.end(hidden, "you attacked")
+
+    c.watch(AttackDeclared, swung, on=c.me, until=When.SONT)
 
 
 @power("f3511", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

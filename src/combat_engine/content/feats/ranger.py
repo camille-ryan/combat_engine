@@ -7,12 +7,15 @@ one of their prerequisites, `c.quarry` lays the relation and
 `world.relations.holds` reads it back, so "against the target of your
 quarry" is a real question.
 
-**The beast half is not, and all of it is waiting on one thing.** Ten
-rows here gate on a class feature the engine does not have -- their
-prerequisites all carry the same opaque term, which is the same gap
-`docs/blocked.json` records as `cf:ranger-style-beast`. Marked
-`c.beast()`, one symbol, so the day a beast companion exists
-`scripts/todo.py` names every row that was waiting for it.
+**The beast half is written now.** The class feature exists: the
+fighting-style fork carries a leg for it, `cf:ranger-style` calls the
+creature with `c.call_beast`, and its numbers -- scores, defences, hit
+points, attack bonus, damage die -- load out of the `companion` table
+rather than being written down here. `c.beast()` is the reader.
+
+What is still missing is the *racial* powers four of these name by ref.
+None of them is in the tree, so a resistance keyed to one has no damage
+type to take and an exemption from one has nothing to be exempt from.
 """
 
 from __future__ import annotations

@@ -831,7 +831,7 @@ def f2861(c: Cast) -> None:
 
 @power("f3181", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_second_wind()", "c.chosen_weapon_group()"))
+       todo=("c.chosen_weapon_group()",))
 def f3181(c: Cast) -> None:
     """Two gaps. Second wind is an action rather than a power, so it
     announces nothing a trigger can answer; and "your arena weapons" is

@@ -1,11 +1,16 @@
 """Ranger feats, the third batch.
 
-`ranger.py` and `ranger_b.py` hold the first two, and the same split
-runs through this one: eighteen of the twenty-seven rows in the tree
-that talk to a beast companion now live across the three files, and
-eleven of them are here. Their prerequisites all carry the same opaque
-term, which is the gap `docs/blocked.json` records as
-`cf:ranger-style-beast`, so they all carry `c.beast()`.
+`ranger.py` and `ranger_b.py` hold the first two, and eighteen of the
+twenty-seven rows in the tree that talk to a beast companion live across
+the three files, eleven of them here. The beast exists now: `c.beast()`
+reads it and its numbers come out of the `companion` table.
+
+Eight of the eleven are one card printed eight times, once per beast
+category, differing only in the last sentence -- so `_leash` is the two
+sentences they share and the rider is the third. What none of them can
+say is the middle one: "while your beast companion acts independently it
+need not move adjacent to you". The beast takes no turn of its own, so
+there is no independent mode and no leash to lengthen.
 
 Two things this batch found that were thought to be gaps.
 
@@ -39,8 +44,10 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Miss,
+    Moved,
     PowerUsed,
     Relation,
+    SurgeSpent,
     Trigger,
     When,
     power,
@@ -51,8 +58,6 @@ from combat_engine.engine.query import squares
 
 from .styles import used_one_of
 
-#: There is no beast companion. Eighteen rows across three files wait.
-BEAST = ("c.beast()",)
 #: Nothing announces that the class's extra damage was about to be paid.
 EXTRA = ("c.on_extra_damage()",)
 #: `c.no_provoke` exempts a creature or everything, and nothing between.
@@ -405,26 +410,176 @@ def f2473(c: Cast) -> None:
     the same gap `skills.py` named from its other side."""
 
 
-# -- the beast companion, which does not exist ------------------------------
+# -- the beast companion ----------------------------------------------------
+#
+# Eight of these are one card printed eight times, once per beast
+# category, and they differ only in the last sentence. `_leash` is the
+# first two sentences and the rider is the third.
+
+#: The longer leash: "while your beast companion acts independently it
+#: need not move adjacent to you but must remain within 10 squares".
+#: There is no independent mode and no leash to lengthen -- the beast
+#: takes no turn of its own -- so the sentence has nowhere to land.
+LEASH = ("c.leash()",)
 
 
-def _beast(ref: str, what: str) -> None:
+def _by_the_beast(c: Cast, ev: Any, *, charge: bool) -> int | None:
+    """Was that hit the beast's own, of the kind this card names?
+
+    `bmba` is the beast's printed melee basic attack and `mba` is the
+    engine's, which a companion built without a block still uses -- both
+    are melee basic attacks and the sentence means either.
+    """
+    from combat_engine.engine.basic import BEAST as BEAST_MBA
+    from combat_engine.engine.basic import MELEE
+
+    pet = c.beast()
+    if pet is None or ev.attacker != pet:
+        return None
+    if charge:
+        return pet if getattr(ev, "charge", False) else None
+    return pet if ev.power in (BEAST_MBA, MELEE) else None
+
+
+def _leash(ref: str, what: str, rider: Any, *, charge: bool = False) -> None:
+    """Saves, the leash that cannot be said, and one rider on its attack."""
+
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=BEAST)
-    def feat(c: Cast) -> None: ...
+           reach=PERSONAL, target=SELF, dropped=LEASH)
+    def feat(c: Cast) -> None:
+        pet = c.beast()
+        if pet is None:
+            return
+        # Untyped: the card prints no word in front of "bonus".
+        c.bonus("save", 2, on=pet, until=When.ENCOUNTER)
+        busy = []
+
+        def landed(ev: Hit) -> None:
+            beast = _by_the_beast(c, ev, charge=charge)
+            # A rider that swings again would see its own hit and swing
+            # again forever; one of these grants an extra attack.
+            if beast is None or busy:
+                return
+            busy.append(ev)
+            try:
+                rider(c, beast, ev.target)
+            finally:
+                busy.clear()
+
+        c.watch(Hit, landed, on=c.me, until=When.ENCOUNTER)
 
     feat.__name__ = ref
-    feat.__doc__ = f"{what} There is no beast companion to do it to."
+    feat.__doc__ = (
+        f"{what}\n\n    The leash is dropped: the beast takes no turn, so "
+        "there is no\n    independent mode for the sentence to lengthen."
+    )
 
 
-_beast("f2402", "Saves, a longer leash, and the companion immobilises.")
-_beast("f2422", "Saves, a longer leash, and its charge pushes.")
-_beast("f2425", "Saves, a longer leash, and its target grants advantage.")
-_beast("f2447", "Saves, a longer leash, and it grabs what it hits.")
-_beast("f2453", "Saves, a longer leash, and its charge swings twice.")
-_beast("f2461", "Saves, a longer leash, and it knocks its target down.")
-_beast("f2465", "Saves, a longer leash, and its target pays for walking off.")
-_beast("f2474", "Saves, a longer leash, a slow and an attack penalty.")
-_beast("f2464", "The companion shares two named racial powers.")
-_beast("f2967", "The companion's critical hits carry the weapon's dice.")
-_beast("f2970", "A skill, and the companion heals when you spend a surge.")
+def _immobilise(c: Cast, pet: int, foe: int) -> None:
+    c.immobilized(on=foe, until=When.EOTNT)
+
+
+def _shove(c: Cast, pet: int, foe: int) -> None:
+    """Away from *the beast*, which is what the anchor argument is for."""
+    at = next(iter(sorted(squares(c.world, pet))), None)
+    c.push(2, on=foe, anchor=at)
+
+
+def _expose(c: Cast, pet: int, foe: int) -> None:
+    """"Grants combat advantage" names nobody, so it is everyone."""
+    c.grants_advantage(on=foe, until=When.EONT, to="allies")
+
+
+def _seize(c: Cast, pet: int, foe: int) -> None:
+    c.grab(on=foe, by=pet)
+
+
+def _again(c: Cast, pet: int, foe: int) -> None:
+    c.basic(who=pet, on=foe)
+
+
+def _floor(c: Cast, pet: int, foe: int) -> None:
+    c.prone(on=foe)
+
+
+def _toll(c: Cast, pet: int, foe: int) -> None:
+    """Five damage for walking off, measured against where it started.
+
+    `Moved` is the only one of the three movement events that carries
+    `from_`, which is what "moves away from" needs: the question is
+    whether the step widened the gap, not whether it moved at all.
+    """
+    def gap(square: Any) -> int:
+        here = next(iter(sorted(squares(c.world, pet))), None)
+        if here is None or square is None:
+            return 0
+        return max(abs(here[0] - square[0]), abs(here[1] - square[1]))
+
+    def walked(ev: Moved) -> None:
+        if ev.actor == foe and gap(ev.to) > gap(ev.from_):
+            c.flat(5, on=foe)
+
+    c.watch(Moved, walked, on=foe, until=When.EOTNT, once=True)
+
+
+def _stagger(c: Cast, pet: int, foe: int) -> None:
+    c.slowed(on=foe, until=When.EOTNT)
+    # "Its next attack roll", so the penalty is spent by one swing.
+    c.penalty("attack", 2, on=foe, until=When.EOTNT, once=True)
+
+
+_leash("f2402", "The beast pins what it hits.", _immobilise)
+_leash("f2422", "The beast's charge shoves what it hits away from it.",
+       _shove, charge=True)
+_leash("f2425", "What the beast hits is open to everybody.", _expose)
+_leash("f2447", "The beast holds on to what it hits.", _seize)
+_leash("f2453", "The beast's charge swings a second time.", _again, charge=True)
+_leash("f2461", "The beast puts what it hits on the ground.", _floor)
+_leash("f2465", "What the beast hits pays for walking away from it.", _toll)
+_leash("f2474", "What the beast hits is slowed and swings wide.", _stagger)
+
+
+@power("f2464", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.on_racial_power()",))
+def f2464(c: Cast) -> None:
+    """The beast shares whichever of two racial rows was used. Neither is
+    in the tree, so there is nothing to share."""
+
+
+@power("f2967", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2967(c: Cast) -> None:
+    """The beast's critical hits carry the *ranger's* enhancement.
+
+    Rolled with `c.flat(c.roll(...))` rather than handed to `c.damage`,
+    because `c.damage` maxes its dice on a critical and this is the one
+    place a critical is already true -- the extra dice are rolled, as
+    every "per plus" rider is.
+    """
+    def crit(ev: Hit) -> None:
+        pet = c.beast()
+        plus = c.enhancement
+        if pet is None or ev.attacker != pet or not ev.critical or plus < 1:
+            return
+        c.flat(c.roll(f"{plus}d6"), on=ev.target)
+
+    c.watch(Hit, crit, on=c.me, until=When.ENCOUNTER)
+
+
+@power("f2970", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2970(c: Cast) -> None:
+    """The beast is patched up whenever its ranger is.
+
+    `SurgeSpent` is emitted from every site that decrements a surge, so
+    this sees a second wind and a leader's heal alike -- which is what
+    "whenever you spend a healing surge" says. The skill training is a
+    skill and belongs to no fight.
+    """
+    def spent(ev: SurgeSpent) -> None:
+        pet = c.beast()
+        if ev.actor != c.me or pet is None or not c.adjacent_to(pet, c.me):
+            return
+        c.heal(max(1, c.surge_value() // 2), on=pet)
+
+    c.watch(SurgeSpent, spent, on=c.me, until=When.ENCOUNTER)

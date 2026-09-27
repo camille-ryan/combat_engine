@@ -46,8 +46,10 @@ from combat_engine.engine import (
     Keyword,
     Miss,
     PowerUsed,
+    SecondWind,
     Trigger,
     When,
+    about_me,
     power,
 )
 from combat_engine.engine.dsl import get
@@ -58,8 +60,6 @@ from combat_engine.engine.events import SkillCheck
 INVOKE = ("c.on_invoke_shrouds()",)
 #: A racial power named in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
-#: Second wind is an action rather than a power, so it announces nothing.
-SECOND_WIND = ("c.on_second_wind()",)
 
 #: The class's own shroud power and its shade form, both named by ref in
 #: these feats' own prerequisites.
@@ -640,18 +640,27 @@ _racial("f2817", "A named racial power spent to get shade form back.")
 # -- the rest ---------------------------------------------------------------
 
 
-@power("f1802", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f1802", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f1802(c: Cast) -> None:
-    """Gets shade form back on a second wind taken as a minor action.
-    `p9402` is a ref and `c.restore_use` takes one -- second wind is an
-    action rather than a power and announces nothing."""
+    """The printed narrowing is the *action*, which is what `SecondWind`
+    carries `cost` for. Nothing in the tree yet grants a second wind for a
+    minor, so this waits on a row that does."""
+    if c.trigger.cost is not ActionType.MINOR:
+        return
+    c.restore_use("p9402")
 
 
-@power("f2820", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+@power("f2820", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f2820(c: Cast) -> None:
-    """Shade form free on a second wind. Same gap as f1802."""
+    """A cheaper cost for one row and only for this turn: the printed line
+    is about this moment, not a standing discount."""
+    c.recast("p9402", action=ActionType.FREE, until=When.EOT)
 
 
 @power("f2814", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
