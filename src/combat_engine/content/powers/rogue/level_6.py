@@ -5,9 +5,13 @@ than using them, so none is declared as a `requires` -- the reading
 `level_2.py` settled.
 
 Two rows are their check and nothing else and carry `out_of_combat=True`.
-`p1506` is one of them for a second reason as well: nothing announces the
-loss of cover or concealment, so its printed Trigger has no event to hang
-`on=` from and is kept as prose for the card, the way `p922` is.
+`p1506` is one of them for a second reason as well. Its printed Trigger is
+the loss of cover or concealment, and neither is a thing the model can
+announce: cover is recomputed from the grid by `query.cover_between`
+every time somebody asks, and concealment is a modifier on an attack roll.
+Nothing holds either as a state, so nothing can say it went -- and a
+trigger reading a state nobody keeps is one that never fires. Kept as
+prose for the card.
 
 The rows printed in the later books follow below. Nothing in the model
 holds concealment as a state between two creatures, so where a row grants

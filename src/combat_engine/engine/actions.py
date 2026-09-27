@@ -110,19 +110,23 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
             continue
         if p.action is ActionType.NONE:
             continue  # a trait; armed at the start of the fight, never chosen
-        if p.trigger and not p.triggers:
-            # **A condition nothing can check is not a condition.**
-            # `Power.trigger` is the printed prose and `Power.on` is the
-            # machine-readable form; a row with the first and not the
-            # second was offered like any other, so its "Trigger:" line
-            # was simply ignored. For a free at-will that means the
-            # policy may take it every iteration of `take_turn` -- one
-            # brute cast the same row 22 times in a fight, walking
-            # itself across the map a square at a time, and only the
-            # turn cap stopped it.
+        if p.trigger or p.triggers:
+            # **A printed Trigger means the row is not yours to choose.**
+            # It is offered by `engine/triggers.py`, when the thing it names
+            # happens, and never from the list of what a creature may do on
+            # its turn. This used to refuse only the rows whose Trigger was
+            # prose with no `on=` -- a condition nothing can check is not a
+            # condition -- and a free at-will of that shape was taken every
+            # iteration of `take_turn`: one brute cast the same row 22 times
+            # in a fight, walking itself across the map a square at a time,
+            # and only the turn cap stopped it.
             #
-            # Refusing is the honest half. The other half is an `on=` on
-            # each of the eleven rows in this state, which is content.
+            # Which left the fix exactly half done. Writing the `on=` that
+            # makes such a row work took it straight back out of this branch
+            # and into the offered list, so the same brute did the same 22
+            # shifts the moment its trigger was declared -- now with a
+            # working trigger as well. The Trigger line is what disqualifies
+            # it, not the absence of a machine-readable one.
             continue
         if p.out_of_combat:
             # Declared on rows that light a torch or mend a cloak. The field

@@ -1,10 +1,9 @@
 """Ranger, level 2.
 
-Three immediate reactions. Two of them answer something the bus emits and
-declare their printed Trigger line with `on=` rather than only quoting it.
-The third answers an ally's skill check and hands out a bonus to it --
-nothing the model rolls, and nothing that touches the battlefield -- so it
-is `out_of_combat=True` and inert on purpose.
+Three immediate reactions, each answering something the bus emits and each
+declaring its printed Trigger line with `on=` rather than only quoting it.
+The third of them rerolls an ally's skill check, which is a real event --
+though two clauses of its Trigger line are not askable; see the row.
 
 The later rows are the utilities from the books after the first. Ten of that
 level's rows are gated on owning a particular beast companion, which this
@@ -50,12 +49,19 @@ from combat_engine.engine import (
     distance,
     power,
 )
-from combat_engine.engine.events import ForcedMove, Hit, InitiativeRolled, Miss
+from combat_engine.engine.events import (
+    ForcedMove,
+    Hit,
+    InitiativeRolled,
+    Miss,
+    SkillCheck,
+)
 from combat_engine.engine.query import allies, enemies, flanked_by
 from combat_engine.engine.query import squares as squares_of
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
+    ally_within,
     both,
     by_melee,
     targets_me,
@@ -71,6 +77,7 @@ _MISSED_BY_MELEE = "an enemy misses you with a melee attack"
 _ROLLED_INITIATIVE = "you roll initiative"
 _SHOVED = "you are pushed, pulled or slid"
 _HIT_A_MARK = "you hit an enemy an ally has marked, with a melee attack"
+_ALLY_CHECKS = "an ally you can see or hear makes a check you are trained for"
 
 
 def _has_ranged(world: World, eid: int) -> bool:
@@ -183,17 +190,21 @@ def p923(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=MARTIAL,
-    trigger="an ally you can see or hear makes a check you are trained for",
-    out_of_combat=True,
+    trigger=_ALLY_CHECKS,
+    on=Trigger(SkillCheck, ally_within(5), _ALLY_CHECKS),
 )
 def p922(c: Cast) -> None:
-    """Inert by declaration: no event announces a check, and no roll takes it.
+    """Two clauses of the printed Trigger go unasked, and both widen it.
 
-    The Trigger line is kept as prose for the card only -- there is nothing
-    for `on=` to watch, and `out_of_combat` is what stops that reading as a
-    row somebody forgot to finish.
+    **"A skill in which you're trained."** `engine/skills.py` has no
+    training model at all -- no class carries a skill list -- so there is
+    nothing to compare the ally's skill against.
+
+    **"You can see or hear."** Sight is answerable and hearing is not, so
+    gating on sight alone would refuse the half of the line the engine
+    cannot check rather than the half it can.
     """
-    c.note(f"p922: the ally rerolls, with a +{c.wis_mod} power bonus")
+    c.reroll_check(bonus=c.wis_mod)
 
 
 @power(

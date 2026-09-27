@@ -45,6 +45,7 @@ from combat_engine.engine.events import (
     DamageRolled,
     ForcedMove,
     Hit,
+    SkillCheck,
 )
 from combat_engine.engine.triggers import Trigger, both, by_melee, targets_me
 
@@ -55,6 +56,23 @@ _HIT_ON_AC_OR_REF = "you are hit by an attack that targets AC or Reflex"
 _SHOVED = "you or your beast companion are pushed, pulled or slid"
 _MELEE_DAMAGE = "you take damage from a melee attack"
 _CLIMB_OR_SAVE = "you make a climb check, or a saving throw to stay on your feet"
+_A_CLIMB_CHECK = "you make an Athletics check while climbing"
+
+
+def _climbing_athletics(world: World, me: int, ev: object) -> bool:
+    """"An Athletics check made **while climbing**."
+
+    `Movement.using` is what a creature is doing rather than what it can do,
+    and `movement.walk` holds it past the end of the move -- so a ranger who
+    climbed a wall is still climbing when the check is rolled.
+    """
+    from combat_engine.engine.query import moving_as
+
+    return (
+        getattr(ev, "actor", None) == me
+        and getattr(ev, "skill", "") == "athletics"
+        and moving_as(world, me, "climb")
+    )
 
 
 def _has_beast(world: World, eid: int) -> bool:
@@ -291,14 +309,25 @@ def p13703(c: Cast) -> None:
     requires=_has_beast,
     requires_text="you must have a spider beast companion",
     trigger=_CLIMB_OR_SAVE,
-    out_of_combat=True,
+    on=Trigger(SkillCheck, _climbing_athletics, _A_CLIMB_CHECK, window=Window.BEFORE),
 )
 def p13704(c: Cast) -> None:
-    """Inert by declaration. Nothing announces a climb check, and the save
-    it names -- against being forced into hindering terrain or over a
-    precipice -- is not a saving throw this engine ever rolls, so there is
-    no event for `on=` to watch and nothing for the bonus to apply to."""
-    c.note(f"{c.ref}: +4 power bonus to the triggering climb check or save")
+    """Half the printed Trigger; the other half names a throw nobody rolls.
+
+    The climb check is a `SkillCheck` and is answered. The save -- against
+    being forced into hindering terrain or over a precipice -- is not a
+    saving throw this engine has: `Effects.save`, the death save and
+    `c.save` are the only three, and none of them is that. So the dropped
+    half cannot silently swallow a trigger that would otherwise fire; there
+    is no moment at which it happens.
+
+    `Window.BEFORE`, the way `p11049` is: `engine/skills.py` totals the
+    modifiers inside its resolve callback, which runs once the interrupt
+    window has closed, so a bonus laid here is read by the roll it is
+    printed for. `When.EOT` because the modifier has no way to spend itself
+    on one check.
+    """
+    c.bonus("skill:athletics", 4, kind="power", on=c.me, until=When.EOT)
 
 
 @power(

@@ -1,8 +1,8 @@
 """Invoker, level 2: the utilities.
 
-Four of these are narrative only -- a skill bonus, a loud voice, a piece of
-knowledge, a reroll of a skill check -- and carry `out_of_combat=True`
-rather than an invented mechanic.
+Three of these are narrative only -- a skill bonus, a loud voice, a piece of
+knowledge -- and carry `out_of_combat=True` rather than an invented mechanic.
+The fourth rerolls a check, which is a real event, so it answers one.
 """
 
 from __future__ import annotations
@@ -27,14 +27,20 @@ from combat_engine.engine import (
     Keyword,
     PowerUsed,
     Ranged,
+    SkillCheck,
     Trigger,
     UpTo,
     Usage,
     When,
     get,
+    my_check,
     power,
 )
 from combat_engine.engine.query import team
+
+#: The three the card names.
+_KNOWLEDGE = ("arcana", "history", "religion")
+_A_KNOWLEDGE_CHECK = "you dislike the result of a knowledge check"
 
 
 def _damaged_by_an_enemy(world: object, me: int, ev: object) -> bool:
@@ -222,11 +228,13 @@ def p7165(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.DIVINE],
-    trigger="you dislike the result of a knowledge check",
-    out_of_combat=True,
+    trigger=_A_KNOWLEDGE_CHECK,
+    on=Trigger(SkillCheck, my_check(*_KNOWLEDGE), _A_KNOWLEDGE_CHECK),
 )
 def p7166(c: Cast) -> None:
-    c.note("p7166: reroll one knowledge check and use either result")
+    """"Use either result" is `keep="best"`: the roll is already made and
+    disliked, so nobody takes the worse of the two on purpose."""
+    c.reroll_check(keep="best", bonus=c.int_mod)
 
 
 @power(

@@ -6,9 +6,9 @@ Judgement calls that recur here:
   are one packet and `DamageType` holds one. Each is dealt as the *first* of
   the two printed, with both keywords on the header, which is the reading
   `paladin/level_3.py` settled.
-* **The engine has no skill checks at all.** Three rows here are nothing but
-  a bonus to one, so they are `out_of_combat=True` rather than an invented
-  mechanic.
+* **A skill check is a real event**, and `p14248` answers one. The other two
+  rows here are a bonus to a check nobody rolls -- an aura's, and one handed
+  out ahead of time -- so those stay `out_of_combat=True`.
 * **"A power bonus to all defenses"** is four modifiers, one per defence.
   They are different `what`s, so nothing collides.
 * `p14249`'s "its next saving throw" is spent by hand. `once=` on a
@@ -54,8 +54,16 @@ from combat_engine.engine import (
     MeleeOrRanged,
     Miss,
     SavingThrow,
+    SkillCheck,
+    Trigger,
     When,
+    Window,
     World,
+    about_me,
+    ally_within,
+    both,
+    check_failed,
+    either,
     get,
     power,
     spread,
@@ -68,6 +76,8 @@ DIVINE_IMPLEMENT = [Keyword.DIVINE, Keyword.IMPLEMENT]
 DIVINE_WEAPON = [Keyword.DIVINE, Keyword.WEAPON]
 
 ALL_DEFENCES = (AC, FORT, REF, WILL)
+
+_SOMEBODY_FAILS = "you or one ally in the burst fails a skill check"
 
 
 @power(
@@ -353,14 +363,26 @@ def p14247(c: Cast) -> None:
     reach=CloseBurst(10),
     target=ONE_ALLY,
     keywords=DIVINE,
-    trigger="you or one ally in the burst fails a skill check",
-    out_of_combat=True,
+    trigger=_SOMEBODY_FAILS,
+    on=Trigger(
+        SkillCheck,
+        both(either(about_me, ally_within(10)), check_failed),
+        _SOMEBODY_FAILS,
+        window=Window.AFTER,
+    ),
 )
 def p14248(c: Cast) -> None:
-    """Both halves of this row are skill checks -- the trigger and the
-    payout -- and the engine has no such thing, so it is declared inert
-    rather than given an approximate trigger that would never fire."""
-    c.note(f"{c.ref}: the triggering creature adds {c.wis_mod} to the failed skill check")
+    """Answered in the **after**-window, though the action is an interrupt.
+
+    `skills.check` settles `success` inside its resolve callback, which runs
+    once the interrupt window has closed -- so "fails a skill check" is not
+    a question that can be asked before then, and a trigger declared in the
+    interrupt's own window would fire on every check ever rolled. The
+    window is the only thing that moves: the result is still built from the
+    event after the bus is done with it, so the bonus reaches the check it
+    is printed for and can turn the failure into a success.
+    """
+    c.boost_check(c.wis_mod)
 
 
 @power(

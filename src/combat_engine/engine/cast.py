@@ -5129,6 +5129,52 @@ class Cast:
 
         return _passive(self.world, self.me if of is None else of, skill)
 
+    def boost_check(self, bonus: int) -> bool:
+        """Add to the triggering skill check, after the die is already down.
+
+        For "Trigger: you fail a skill check" -- the failure is what is
+        being answered, so the bonus cannot be laid as a modifier before the
+        roll the way `p11049` lays one. `skills.check` builds its result from
+        the event **after** the bus has finished with it, so a row answering
+        in the after-window still decides what the check came to.
+
+        Returns False when there is no check to change, which is every use
+        outside a `SkillCheck` trigger.
+        """
+        from .events import SkillCheck
+
+        ev = self.trigger
+        if not isinstance(ev, SkillCheck):
+            return False
+        ev.bonus += bonus
+        ev.total = ev.natural + ev.bonus
+        ev.success = ev.dc <= 0 or ev.total >= ev.dc
+        return True
+
+    def reroll_check(self, *, keep: str = "new", bonus: int = 0) -> int:
+        """Roll the triggering skill check again. `keep` is new, best or worst.
+
+        The skill-check twin of `c.reroll_attack`, and six rows print it.
+        Returns the **face of the second die**, or 0 if there was no check to
+        reroll: one card pays the use back when the second roll is the worse
+        of the two, and that cannot be read off the settled event.
+
+        `bonus` is for "reroll it with a power bonus equal to your Wisdom
+        modifier", which is one printed clause with the reroll.
+        """
+        from .events import SkillCheck
+
+        ev = self.trigger
+        if not isinstance(ev, SkillCheck):
+            return 0
+        fresh = self.world.rng.d20().total
+        old = ev.natural
+        ev.natural = {"new": fresh, "best": max(old, fresh), "worst": min(old, fresh)}[
+            keep
+        ]
+        self.boost_check(bonus)
+        return fresh
+
     # -- action points -------------------------------------------------------
 
     def _points(self, who: int) -> Any:

@@ -43,11 +43,14 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.dsl import use
-from combat_engine.engine.events import SurgeSpent
+from combat_engine.engine.events import AttackRolled, SurgeSpent
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import alive
+from combat_engine.engine.triggers import Trigger, both, by_me, by_opportunity
 
 from . import aquatic_edge, settle
+
+_ITS_OPPORTUNITY_ATTACK = "this creature makes an opportunity attack"
 
 
 @power(
@@ -305,12 +308,17 @@ def m2939a2(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=NO_TARGET,
-    # Not armed: nothing announces that an opportunity attack was *made*.
-    # `OpportunityWindow` announces the window, which opens whether or not
-    # anybody swings, so triggering off it would shift on every provocation.
-    trigger="this creature makes an opportunity attack",
+    trigger=_ITS_OPPORTUNITY_ATTACK,
+    on=Trigger(AttackRolled, both(by_me, by_opportunity), _ITS_OPPORTUNITY_ATTACK),
 )
 def m2939a3(c: Cast) -> None:
+    """The swing itself, not the window it was offered in.
+
+    `OpportunityWindow` opens whether or not anybody takes it, so a row
+    hung off that shifts on every provocation. `AttackRolled` is announced
+    only when a swing is actually made and carries the `opportunity` flag
+    `by_opportunity` reads, which is the printed sentence exactly.
+    """
     c.shift(1)
 
 
@@ -376,9 +384,12 @@ def m441a1(c: Cast) -> None:
     action=INTERRUPT,
     reach=Melee(1),
     target=ONE_CREATURE,
-    # Not armed: nothing in the engine ends a grab from the held creature's
-    # side, so no event says one did -- `RelationCleared` would fire for the
-    # grabber simply letting go.
+    # Not armed: there is no escape action. A grab ends when the effect
+    # holding it ends, and `RelationCleared` carries only `why` -- a string
+    # that is "expired" for the clock running out, the grabber dying or the
+    # grabber letting go, and a power's ref for the handful of content rows
+    # that break a hold. Nothing on it says the *held* creature did it, so
+    # a predicate here would swing at every grab that ended for any reason.
     trigger="an enemy this creature has grabbed escapes",
 )
 def m441a2(c: Cast) -> None:

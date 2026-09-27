@@ -489,6 +489,39 @@ def cursed_by_me(world: World, me: int, ev: Event) -> bool:
     return who is not None and world.relations.holds(Relation.CURSED_BY, me, who)
 
 
+def my_check(*skills: str) -> Callable[[World, int, Event], bool]:
+    """"You make a Stealth check" -- a `SkillCheck` of yours, by name.
+
+    Nine rows open this way and each was writing the same two `getattr`s.
+    Naming no skill means any of them.
+    """
+    wanted = frozenset(s.lower() for s in skills)
+
+    def check(world: World, me: int, ev: Event) -> bool:
+        if getattr(ev, "actor", None) != me:
+            return False
+        return not wanted or getattr(ev, "skill", "") in wanted
+
+    return check
+
+
+def check_succeeded(world: World, me: int, ev: Event) -> bool:
+    """Did the check this event announces beat its DC?
+
+    **After-window only.** `skills.check` totals the modifiers and settles
+    `success` inside the resolve callback, which runs once the interrupt
+    window has closed -- so in `Window.BEFORE` this is False for every
+    check there is, and a row declaring it there never fires.
+    """
+    return bool(getattr(ev, "success", False))
+
+
+def check_failed(world: World, me: int, ev: Event) -> bool:
+    """The other half of `check_succeeded`, and after-window only for the
+    same reason -- before the roll is settled this is true of everything."""
+    return not getattr(ev, "success", False)
+
+
 def both(*checks: Callable[[World, int, Event], bool]) -> Callable[[World, int, Event], bool]:
     def check(world: World, me: int, ev: Event) -> bool:
         return all(c(world, me, ev) for c in checks)

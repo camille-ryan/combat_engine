@@ -5,10 +5,10 @@ one place -- `movement.step` diffs who the mover is next to and announces it
 -- so "an enemy moves adjacent to you" is `AdjacencyGained` with the enemy
 as the mover, declared with `on=` rather than quoted.
 
-`p925` hands an ally a bonus to a skill it is not trained in. The model has
-no skills and rolls no checks, so it is inert by declaration. `p10624` and
-`p4397` are the same shape -- a check rerolled -- and are declared the same
-way.
+`p925` hands an ally a bonus to a skill it is not trained in, ahead of any
+check being called for, and there is no training model to read -- so it is
+inert by declaration. `p10624` and `p4397` reroll a check that has already
+been made, which is a `SkillCheck` on the bus, and both answer one.
 
 The later books add two zones and a handful of steps. A zone that bites is
 `c.zone` plus a watch rather than `c.hazard`, wherever the printed line says
@@ -45,15 +45,18 @@ from combat_engine.engine import (
     TurnEnd,
     When,
     World,
+    my_check,
     power,
 )
-from combat_engine.engine.events import AdjacencyGained, Dropped
+from combat_engine.engine.events import AdjacencyGained, Dropped, SkillCheck
 from combat_engine.engine.query import distance_between, enemies, team
 
 MARTIAL = [Keyword.MARTIAL]
 
 _ENEMY_CLOSES = "an enemy moves adjacent to you"
 _QUARRY_DROPS = "you reduce your quarry to 0 hit points"
+_STEALTH_DISLIKED = "you make a Stealth check and dislike the result"
+_ENDURANCE_DISLIKED = "you roll an Endurance check and dislike the result"
 
 
 def _my_quarry_dropped(world: World, me: int, ev: Event) -> bool:
@@ -175,13 +178,25 @@ def p10623(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    trigger="you make a Stealth check and dislike the result",
-    out_of_combat=True,
+    trigger=_STEALTH_DISLIKED,
+    on=Trigger(SkillCheck, my_check("stealth"), _STEALTH_DISLIKED),
 )
 def p10624(c: Cast) -> None:
-    """Inert by declaration: nothing announces a check and no roll takes it,
-    so there is nothing for `on=` to watch. Same shape as `p925`."""
-    c.note(f"p10624: the check is rolled again with a +{c.wis_mod} bonus")
+    """"If the second result is lower than the first, you do not expend this."
+
+    Which is why `c.reroll_check` hands back the **face of the second die**
+    rather than a flag: `keep="best"` has already thrown the worse roll
+    away by the time the settled event is read, so nothing on it can say
+    which of the two won.
+
+    The Prerequisite -- trained in Stealth -- is not asked. There is no
+    training model; see `engine/skills.py`.
+    """
+    ev = c.trigger
+    was = getattr(ev, "natural", 0)
+    fresh = c.reroll_check(keep="best", bonus=c.wis_mod)
+    if fresh and fresh < was:
+        c.restore_use(c.ref)
 
 
 @power(
@@ -255,11 +270,14 @@ def p13626(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    trigger="you roll an Endurance check and dislike the result",
-    out_of_combat=True,
+    trigger=_ENDURANCE_DISLIKED,
+    on=Trigger(SkillCheck, my_check("endurance"), _ENDURANCE_DISLIKED),
 )
 def p4397(c: Cast) -> None:
-    c.note("p4397: the check is rolled again, and the second result stands")
+    """"You decide whether to make the reroll before the result is announced"
+    is the offer itself, so the second roll is the one that stands -- there
+    is no keeping the better of the two."""
+    c.reroll_check()
 
 
 @power(

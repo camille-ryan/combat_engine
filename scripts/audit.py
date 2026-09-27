@@ -736,6 +736,9 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     if _fired(world, ref, cursor):
         return True
 
+    if _rolls_checks(world, caster, ref, cursor):
+        return True
+
     from combat_engine.engine import Health
 
     # Bloodied as a **crossing**, not as a state. The board starts the
@@ -808,6 +811,22 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
             shift(world, foe, sq)
             if _fired(world, ref, cursor):
                 return True
+
+    # An opportunity attack, swung by hand in both directions. Walking out
+    # of reach opens the window and nothing comes of it: the engine never
+    # decides what goes into one -- a policy does, and this board installs
+    # none, which is why `m3014a2` is on `KNOWN_SILENT`. "When it makes an
+    # opportunity attack" and "when one is made against it" are printed
+    # triggers on a dozen rows, every one of which reported UNUSED.
+    for attacker, target in ((caster, foes[0]), (foes[0], caster)):
+        if not alive(world, target):
+            continue
+        use(
+            world, attacker, basic(attacker), targets=[target],
+            spend=False, opportunity=True,
+        )
+        if _fired(world, ref, cursor):
+            return True
 
     # Somebody goes down. Several rows trigger on a creature dropping --
     # a leader's rally, the warlock's pact boons -- and attacking and
@@ -902,6 +921,50 @@ def _revive_everyone(world, except_: int) -> None:  # noqa: ANN001
         if conds is not None:
             for cond in (Condition.DYING, Condition.UNCONSCIOUS, Condition.PRONE):
                 conds.counts.pop(cond, None)
+
+
+def _rolls_checks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Roll skill checks, for a row whose printed trigger is one.
+
+    Nine rows answer a `SkillCheck` -- "you dislike the result", "an ally
+    succeeds", "you or one ally fails" -- and a harness that only swings,
+    shoves and walks rolls none, so every one of them reported UNUSED while
+    being perfectly correct. Both outcomes are produced: a DC of 1 is beaten
+    by any roll and a DC of 99 by none.
+
+    Gated on the row actually watching the event, because the pass is 17
+    skills by two DCs by two rollers and running it for every triggered row
+    in the tree would be most of the audit's time.
+    """
+    from combat_engine.engine import Movement
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.skills import SKILLS
+    from combat_engine.engine.skills import check as roll
+
+    declared = get(ref)
+    if declared is None or not any(
+        t.event is SkillCheck for t in declared.triggers
+    ):
+        return False
+
+    # Climbing throughout. `Movement.using` is what a creature is doing
+    # rather than what it can do, nothing on this board ever climbs, and one
+    # row's trigger is an Athletics check made while on a wall.
+    moves = world.get(caster, Movement)
+    was = moves.using if moves is not None else ""
+    if moves is not None:
+        moves.using = "climb"
+    try:
+        for roller in (caster, *_allies_of(world, caster)[:1]):
+            for dc in (1, 99):
+                for skill in sorted(SKILLS):
+                    roll(world, roller, skill, dc)
+                    if _fired(world, ref, cursor):
+                        return True
+    finally:
+        if moves is not None:
+            moves.using = was
+    return False
 
 
 def _grip_for(world, caster: int, ref: str) -> None:  # noqa: ANN001

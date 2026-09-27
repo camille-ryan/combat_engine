@@ -1,10 +1,10 @@
 """Rogue, level 2.
 
-The whole level is skill utilities, and the model has no skills: no
-training, no checks, no rerolling one. Two of the five rows still land on
-the battlefield -- a move and a hide, and a shift -- and are written out.
-The other three *are* their check and nothing else, so they carry
-`out_of_combat=True` and a note rather than an invented mechanic.
+The whole level is skill utilities, and the model has checks but no
+training. Two of the five rows land on the battlefield -- a move and a
+hide, and a shift -- and one rerolls a check it is triggered by. The other
+two *are* their check and nothing else, so they carry `out_of_combat=True`
+and a note rather than an invented mechanic.
 
 The Prerequisite lines gate *taking* these at character creation rather
 than using them, so none of them is declared as a `requires`. A
@@ -43,16 +43,20 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Relation,
+    SkillCheck,
     Trigger,
     TurnEnd,
     When,
     World,
     enemy_within,
+    my_check,
     power,
 )
 from combat_engine.engine.query import adjacent, allies, cover_between, enemies, team
 
 MARTIAL = [Keyword.MARTIAL]
+
+_BLUFF_DISLIKED = "you dislike the result of a check you just made"
 
 
 @power(
@@ -114,11 +118,16 @@ def p1039(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=MARTIAL,
-    trigger="you dislike the result of a check you just made",
-    out_of_combat=True,
+    trigger=_BLUFF_DISLIKED,
+    on=Trigger(SkillCheck, my_check("bluff"), _BLUFF_DISLIKED),
 )
 def p1040(c: Cast) -> None:
-    c.note("p1040: reroll that check, and the second result is the one that counts")
+    """"You must use the second result", so the reroll keeps the new die.
+
+    The Prerequisite -- training in Bluff -- gates taking the row rather
+    than using it, and there is no training model to ask anyway.
+    """
+    c.reroll_check()
 
 
 @power(

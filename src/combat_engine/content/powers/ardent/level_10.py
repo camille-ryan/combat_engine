@@ -34,12 +34,14 @@ from combat_engine.engine import (
     Position,
     Ranged,
     SavingThrow,
+    SkillCheck,
     Trigger,
     TurnStart,
     When,
     ally_within,
     both,
     by_melee,
+    check_succeeded,
     either,
     get,
     power,
@@ -50,6 +52,7 @@ from combat_engine.engine import (
 
 PSIONIC = [Keyword.PSIONIC]
 DEFENCES = (AC, FORT, REF, WILL)
+_ALLY_SUCCEEDS = "an ally you can see succeeds on a skill check"
 
 
 def _friends(c: Cast, radius: int, *, mine: bool = False) -> list[int]:
@@ -63,6 +66,19 @@ def _pick(c: Cast, pool: list[int], prompt: str) -> int | None:
 def _saved(world: object, me: int, ev: object) -> bool:
     """You, and only on a success. `about_me` alone answers failures too."""
     return getattr(ev, "actor", None) == me and bool(getattr(ev, "saved", False))
+
+
+def _in_sight(world: object, me: int, ev: object) -> bool:
+    """"An ally **you can see**." `Cast.can_see` asks the same two questions,
+    but a predicate is handed a world and an id and no `Cast` exists yet."""
+    from combat_engine.engine.query import line_of_effect, unseen_by
+
+    who = getattr(ev, "actor", None)
+    return (
+        who is not None
+        and line_of_effect(world, me, who)
+        and not unseen_by(world, me, who)
+    )
 
 
 @power(
@@ -199,14 +215,34 @@ def p12964(c: Cast) -> None:
     reach=CloseBurst(10),
     target=EACH_ALLY,
     keywords=PSIONIC,
-    trigger="an ally you can see succeeds on a skill check",
-    out_of_combat=True,
+    trigger=_ALLY_SUCCEEDS,
+    on=Trigger(
+        SkillCheck, both(ally_within(10), check_succeeded, _in_sight), _ALLY_SUCCEEDS
+    ),
 )
 def p12965(c: Cast) -> None:
-    """Skill checks are not fought with and the engine keeps none, so both the
-    trigger and the effect are outside a fight entirely."""
-    if c.first:
-        c.note(f"{c.ref}: +2 to each ally's next skill check")
+    """The one who made the check is left out, as the Target line says.
+
+    "His or her **next** skill check" is spent by hand: `c.bonus(once=True)`
+    is watched off an attack roll, a damage roll or a blow landing, and a
+    check is none of the three -- so a one-shot declared that way would
+    stand for the whole duration.
+    """
+    lucky = getattr(c.trigger, "actor", None)
+    who = c.target
+    if who is None or who == lucky:
+        return
+    held = c.bonus("skill", 2, kind="power", on=who, until=When.EONT)
+    if held is None:
+        return
+
+    def spent(ev: SkillCheck) -> None:
+        # After the check, not before it: `skills.check` totals the
+        # modifiers in its resolve callback, which runs first.
+        if ev.actor == who:
+            c.world.effects.end(held, "used")
+
+    c.watch(SkillCheck, spent, until=When.EONT, on=who, label=f"{c.ref} next check")
 
 
 @power(
