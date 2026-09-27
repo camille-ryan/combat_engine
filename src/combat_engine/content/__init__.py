@@ -59,3 +59,5 @@ def declared() -> dict[str, Power]:
 _load("powers")
 _load("features")
 _load("monsters")
+_load("items")
+_load("feats")

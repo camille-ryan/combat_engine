@@ -236,6 +236,57 @@ content file for style**. The examples are the style.
   its 1 hp is in the database.
 * Auras, regeneration and "the first time each round" are all in `vocab.txt`.
 
+### Magic items specifically
+
+**A magic item is not a new kind of thing.** It is a base item the engine
+already has, with properties laid on top: a magic longsword is the printed
+longsword with an enhancement bonus and some rows attached. You never
+declare a weapon, a weapon group or a suit of armour.
+
+* **The numbers load from the database**, exactly as a monster's do. The
+  level ladder, the enhancement bonus, the price, the slot, the critical
+  rider and the base-item restriction are all columns, and `spec.py` prints
+  them above the blocks with a line saying so. **Never hand-write one.** If
+  your row's whole content is "+2 to attack and damage", there is nothing
+  to write and the item is already finished by its columns.
+* **The unit of work is a block, not an item.** An item's page has a
+  Property and sometimes one or more Powers, and each is its own ref:
+  `i601x1` for the first property, `i601p1` for the first power. Write the
+  one you were given. An item with two powers is two pieces of work and
+  either can land without the other.
+* **An item's Power is an ordinary `@power` row** with `cls="item"`. It
+  goes into `Powers.known` while the item is worn, so recharge, the action
+  menu, the trigger dispatcher and `PowerUsed` all work on it unchanged —
+  write it exactly as you would write a class power.
+* **An always-on Property is `action=ActionType.NONE`** — a trait, armed
+  once at the start of the fight. Not a chooseable row: a policy offered an
+  at-will that re-applies its own state takes it every single turn, which
+  once turned a twelve-round win into a thirty-round stalemate.
+* "Critical: +1d6 damage per plus" is a column, not a body. So is the
+  enhancement bonus. Both are already applied by `engine/equipment.py`.
+
+### Feats specifically
+
+* **A feat is an ordinary row**, almost always a trait:
+  `action=ActionType.NONE` with no trigger, armed once at the start of the
+  fight. `Mod(kind="feat")` is the bonus type.
+* **The prerequisite is not yours to write.** It is a column, parsed into a
+  structured gate, and `chargen.meets` enforces it when the character is
+  built. `Power.requires` is the wrong tool: that one is asked mid-fight of
+  a creature on a board, and "you must be a fighter" does not change
+  between rounds. Write the Benefit and nothing else.
+* Your brief prints the gate as `requires: dex>=13`. A clause it shows as
+  `q17` is one the engine cannot yet express — **that is not your problem
+  to solve and not a reason to skip the feat**; the Benefit is still worth
+  writing.
+* The commonest shape by far is a rider on another row: "when you use
+  *X*…". Declare it as `on=Trigger(PowerUsed, …)` against the ref the spec
+  gives you, and read the note above about `PowerUsed` firing *before* the
+  body.
+* A feat whose whole benefit is a skill bonus or a ritual is
+  `out_of_combat=True` with an empty body, like a cantrip that lights a
+  torch. That is a finished row, not a skipped one.
+
 ## A row with no combat consequence at all
 
 Some utility powers are **narrative only**: the whole printed Effect is a
