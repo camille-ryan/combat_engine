@@ -45,7 +45,38 @@ TYPES = (
 )
 
 #: Types a card names by their mechanic instead of by the word "bonus".
-MECHANICS = ("cover", "shield", "enhancement", "proficiency", "concealment")
+#: `enhancement` is deliberately **not** here. The others are types a
+#: card grants by naming the mechanic -- "your allies have cover" is a
+#: cover bonus and never calls itself one. An item's enhancement is
+#: granted by `engine/equipment.py` off a column, never by a row, so a
+#: card mentioning it is always pointing at the number rather than
+#: handing one out.
+MECHANICS = ("cover", "shield", "proficiency", "concealment")
+
+#: A type word is printed as "a **power** bonus" or "+2 **item** bonus".
+#: The same word after "the" or "equal to the" is an *amount* being
+#: pointed at rather than a type being named.
+_AS_TYPE = r"(?:\ba\b|\ban\b|[+-]?\d+)\s+{t}\s+bonus\b"
+
+
+def _names_type(text: str, t: str) -> bool:
+    """Does the card name this as a bonus **type**?
+
+    Only `enhancement` needs the stricter reading, and it needs it badly.
+    Every other type word appears on a card only as a type; this one is
+    also the name of a number that dozens of magic items point at --
+    "deal extra damage equal to the enhancement bonus", "add 5 + the
+    enhancement bonus of the orb". Read as a type it advised
+    `kind="enhancement"` on two cards that plainly print "item bonus",
+    and that kind is the one `engine/equipment.py` uses for the item's
+    own plus -- so the two would have eaten each other under the
+    same-type rule and the item bonus would have been worth nothing, in
+    silence.
+    """
+    if t != "enhancement":
+        return bool(re.search(rf"\b{t}\s+bonus\b", text))
+    return bool(re.search(_AS_TYPE.format(t=t), text))
+
 
 #: Calls are found with `ast`, not a regex. The regex here handled one
 #: level of nesting, so a `c.bonus(...)` whose gate is a lambda containing
@@ -202,7 +233,7 @@ def _cards() -> dict[str, tuple[set[str], bool]]:
                   "item", "item_block", "feat"):
         for ref, spec in game().execute(f"select ref, spec from {table}"):
             text = (spec or "").lower()
-            typed = {t for t in TYPES if re.search(rf"\b{t}\s+bonus\b", text)}
+            typed = {t for t in TYPES if _names_type(text, t)}
             # Some types are named by their mechanic rather than by the
             # word "bonus": a card says "your allies have cover", never
             # "a cover bonus", and cover is exactly a +2 of that type.

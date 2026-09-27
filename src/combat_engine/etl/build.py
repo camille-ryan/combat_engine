@@ -776,10 +776,16 @@ def _cross_reference_rest(
 
     rules = vocabulary()
     by_word: dict[str, list[tuple[str, str]]] = {}
+    # Every name, whether or not it "identifies" -- `_label_refs` needs
+    # the ones the general test waives.
+    by_name: dict[str, str] = {}
     for ref, entry in names.items():
         name = (entry.get("name") or "").strip()
         low = name.lower()
-        if len(low) < 3 or not identifies(low, [ref], rules):
+        if len(low) < 3:
+            continue
+        by_name.setdefault(low, ref)
+        if not identifies(low, [ref], rules):
             continue
         words = re.findall(r"[A-Za-z']+", low)
         if words:
@@ -802,10 +808,41 @@ def _cross_reference_rest(
             if not others:
                 continue
             fixed = scrub(spec, others)
+            if table == "feat":
+                fixed = _label_refs(fixed, by_name)
             if fixed != spec:
                 out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
                 changed += 1
     return changed
+
+
+#: `Sly Flourish : If you score a critical hit ...` -- a feat's Associated
+#: Powers list, one clause per power, keyed by the power's printed name.
+_LABEL = re.compile(r"^([A-Z][\w' ]{2,40}?)\s*:\s", re.M)
+
+
+def _label_refs(spec: str, by_name: dict[str, str]) -> str:
+    """Swap the label of an Associated-Powers clause for its ref.
+
+    Done outside `identifies` on purpose, and this is the one place that
+    is right. That test waives a two-word phrase built of two ordinary
+    words -- "sly flourish", "careful attack" -- because in running prose
+    such a phrase is usually a coincidence, and the docstring says out
+    loud that the cost is missing a real name of that shape.
+
+    **In this position it is never a coincidence.** A capitalised phrase
+    at the start of a line, followed by a colon, inside a list a feat
+    prints of the powers it modifies, is a power's name by construction.
+    158 feats print such a list and 79 of their clause labels were
+    reaching authors as prose -- the single largest hole left, and
+    invisible to `leaks.py --specs` for exactly the reason above.
+    """
+
+    def swap(m: re.Match) -> str:
+        ref = by_name.get(m.group(1).lower())
+        return f"{ref} : " if ref else m.group(0)
+
+    return _LABEL.sub(swap, spec)
 
 
 #: A word used on the pages of at least this many rows is ordinary English.
