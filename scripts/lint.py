@@ -44,6 +44,14 @@ def main() -> int:
         print(f"{where}: {name} is defined {n} times -- the last one wins")
     faults += len(dupes)
 
+    for where, key, near in _unknown_context_keys():
+        hint = f" -- did you mean {near}?" if near else ""
+        print(
+            f"{where}: a `when=` gate reads ctx[{key!r}], which no"
+            f" modifier context carries{hint}"
+        )
+        faults += 1
+
     for where, key in _unread_modifiers():
         print(
             f"{where}: c.bonus({key!r}, ...) -- nothing reads that key,"
@@ -66,6 +74,98 @@ def main() -> int:
         print(f"\n{faults} structural fault(s).")
         return 1
     return done.returncode
+
+
+def _context_keys() -> frozenset[str]:
+    """Every key any modifier context carries, read off the engine.
+
+    **Derived, not listed.** The first version of this was a hand-kept
+    set and it was stale within the hour: it missed `how` from
+    `movement`'s forced-movement resist and `source` from
+    `resolve`'s, and reported sixteen correct rows as faults. A
+    checker that cries wolf is worse than no checker, and a list
+    somebody has to remember to update is a checker that will.
+
+    So: every dict literal handed to `_mods(...)` or `.total(...)`
+    anywhere in `engine/`, unioned. Add a key at any of those sites and
+    this sees it on the next run.
+    """
+    keys: set[str] = set()
+    for path in (ROOT / "src/combat_engine/engine").glob("*.py"):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+            if name not in ("_mods", "total"):
+                continue
+            for arg in node.args:
+                # Either the literal itself or a name bound to one; the
+                # bound case is picked up by the sweep over every dict
+                # assigned to something called `*ctx` below.
+                if isinstance(arg, ast.Dict):
+                    keys |= {
+                        k.value for k in arg.keys
+                        if isinstance(k, ast.Constant) and isinstance(k.value, str)
+                    }
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Dict):
+                continue
+            named = any(
+                getattr(t, "id", "").endswith("ctx") for t in node.targets
+            )
+            if named:
+                keys |= {
+                    k.value for k in node.value.keys
+                    if isinstance(k, ast.Constant) and isinstance(k.value, str)
+                }
+    return frozenset(keys)
+
+
+def _unknown_context_keys() -> list[tuple[str, str, str]]:
+    """`ctx[...]` reads inside a gate for a key no context carries.
+
+    **Six bugs in one wave were this shape.** `ctx.get("cover")` on a
+    cover waiver, `ctx.get("against")` on a save narrowed to two
+    conditions, `ctx.get("keywords")` before the save context carried
+    any -- each a row that read as finished, passed the audit, and did
+    nothing in every fight it was ever in. A `.get` default is what
+    hides it: the gate is not wrong, it is absent.
+    """
+    import difflib
+
+    known = _context_keys()
+    out = []
+    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            key = None
+            if (isinstance(node, ast.Call)
+                    and getattr(node.func, "attr", None) == "get"
+                    and getattr(node.func.value, "id", "") == "ctx"
+                    and node.args
+                    and isinstance(node.args[0], ast.Constant)):
+                key = node.args[0].value
+            elif (isinstance(node, ast.Subscript)
+                    and getattr(node.value, "id", "") == "ctx"
+                    and isinstance(node.slice, ast.Constant)):
+                key = node.slice.value
+            if not isinstance(key, str) or key in known:
+                continue
+            # `skill:<name>` is a modifier key asked for by name, not a
+            # context key.
+            if key.startswith("skill:"):
+                continue
+            near = difflib.get_close_matches(key, known, 1, 0.6)
+            rel = path.relative_to(ROOT)
+            out.append((f"{rel}:{node.lineno}", key, near[0] if near else ""))
+    return out
 
 
 #: Modifier keys that look like a bonus and are read by nothing.

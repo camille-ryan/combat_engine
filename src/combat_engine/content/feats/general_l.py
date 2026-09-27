@@ -878,12 +878,20 @@ def f2703(c: Cast) -> None:
 @power("f2564", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f2564(c: Cast) -> None:
-    """The save half reads the label the effect carries, which is how
-    `general_d.f945` asks the same question."""
+    """A save bonus against fear.
+
+    **The save-modifier context has no `against`.** That is a field of
+    the `SavingThrow` *event*; the context carries `actor`, `effect`,
+    `label`, `conditions`, `ongoing`, `dtype` and `keywords`. Six rows
+    in this file read it and were silently false in every fight.
+
+    Fear is a keyword, so `keywords` is the key -- derived by
+    `durations.keywords_of` from the row that laid the effect.
+    """
     me = c.me
     c.bonus(
         "save", 5, on=me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: "fear" in str(ctx.get("against", "")).lower(),
+        when=lambda ctx: Keyword.FEAR in ctx.get("keywords", ()),
     )
     # `c.initiative`, not `c.bonus("initiative", ...)`: `Initiative.bonus`
     # is summed before the d20 and `Mods` is never consulted, so the
@@ -934,8 +942,8 @@ def f2569(c: Cast) -> None:
     c.bonus(
         "save", 2, on=me, until=When.ENCOUNTER, kind="feat",
         when=lambda ctx: c.bloodied(on=me) and any(
-            w in str(ctx.get("against", "")).lower()
-            for w in ("immobil", "daze", "stun", "weaken")
+            str(x.value) in ("immobilized", "dazed", "stunned", "weakened")
+            for x in ctx.get("conditions", ())
         ),
     )
 
@@ -958,7 +966,8 @@ def f2594(c: Cast) -> None:
     c.bonus(
         "save", 4, on=c.me, until=When.ENCOUNTER, kind="feat",
         when=lambda ctx: any(
-            w in str(ctx.get("against", "")).lower() for w in ("daze", "stun")
+            str(x.value) in ("dazed", "stunned")
+            for x in ctx.get("conditions", ())
         ),
     )
 
@@ -1103,8 +1112,7 @@ def f2727(c: Cast) -> None:
     "bonus" and so is the `kind`. The Perception half is a check."""
     c.bonus(
         "save", 2, on=c.me, until=When.ENCOUNTER, kind="racial",
-        when=lambda ctx: Keyword.CHARM in ctx.get("keywords", ())
-        or "charm" in str(ctx.get("against", "")).lower(),
+        when=lambda ctx: Keyword.CHARM in ctx.get("keywords", ()),
     )
 
 
@@ -1884,10 +1892,9 @@ def f2858(c: Cast) -> None:
     one and says nothing about who asked for it."""
     c.bonus(
         "save", 4, on=c.me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: any(
-            w in str(ctx.get("against", "")).lower()
-            for w in ("fire", "necrotic")
-        ),
+        when=lambda ctx: str(
+            getattr(ctx.get("dtype"), "value", ctx.get("dtype") or "")
+        ) in ("fire", "necrotic"),
     )
 
 
@@ -1898,7 +1905,7 @@ def f2840(c: Cast) -> None:
     fall is a real one and is written, gated on the label."""
     c.bonus(
         "save", 4, on=c.me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: "fall" in str(ctx.get("against", "")).lower(),
+        when=lambda ctx: "fall" in str(ctx.get("label", "")).lower(),
     )
 
 
