@@ -1395,7 +1395,11 @@ def main() -> int:
         print(f"  {len(inert)} declared out of combat, not fired: {', '.join(inert[:6])}"
               + (" ..." if len(inert) > 6 else ""))
     if partial:
-        print(f"  {len(partial)} unfinished, not fired -- see scripts/todo.py")
+        # **Not all of them were skipped.** A `todo` row is refused in play
+        # so it is never fired; a `dropped` row works and is fired like any
+        # other. Saying "not fired" of both read as though a working row
+        # had been quietly set aside.
+        print(f"  {len(partial)} unfinished -- see scripts/todo.py")
     if broken or silent:
         print(f"  {len(broken)} raise, {len(silent)} silent")
     if never:
