@@ -116,6 +116,14 @@ def _spent_surges(c: Cast) -> int:
     return max(0, health.max_surges - health.surges)
 
 
+def _aquatic(world: World, eid: int) -> bool:
+    """"There must be a body of water adjacent" -- a `requires=` gate, which
+    gets `(world, eid)` and no `Cast`. Written as an entry requirement
+    rather than as a guard in the body so a dry board reports the row as
+    unusable rather than as one that fired and did nothing."""
+    return "aquatic" in getattr(world, "terrain", frozenset())
+
+
 def _crit_on_me(world: World, me: int, ev: Any) -> bool:
     """An enemy scored a critical hit on me."""
     return (
@@ -1190,13 +1198,11 @@ def i1325p1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
+    requires=_aquatic,
+    requires_text="there must be a body of water adjacent to you",
     dropped=("Summon.from_block()",),
 )
 def i1933p1(c: Cast) -> None:
-    """"There must be a body of water adjacent" is checked as terrain; a
-    dry board simply cannot activate it, which is the printed rule."""
-    if not c.terrain("aquatic"):
-        return
     _figurine(c, modes={"swim": 8})
 
 
@@ -2257,12 +2263,12 @@ def i1854p1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
+    requires=_aquatic,
+    requires_text="there must be a body of water adjacent to you",
     dropped=("Summon.from_block()",),
 )
 def i2022p1(c: Cast) -> None:
-    """As i1933p1, the water is a requirement rather than a flavour line."""
-    if not c.terrain("aquatic"):
-        return
+    """The water is a printed requirement, not a flavour line."""
     _figurine(c, size="large", modes={"swim": 10})
 
 
@@ -2331,7 +2337,7 @@ def i3045p1(c: Cast) -> None:
     carries, so the row has something to take off even though waking a
     sleeper is not a thing a board does."""
     for friend in c.within(10, side="ally"):
-        c.cure(Condition.SURPRISED, on=friend)
+        c.cure(Condition.UNCONSCIOUS, Condition.SURPRISED, on=friend)
 
 
 @power(
@@ -2594,12 +2600,11 @@ def i1659p1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
+    requires=_aquatic,
+    requires_text="there must be a body of water adjacent to you",
     dropped=("Summon.from_block()",),
 )
 def i1664p1(c: Cast) -> None:
-    """As the other aquatic figurines, the water is a requirement."""
-    if not c.terrain("aquatic"):
-        return
     _figurine(c, size="huge", modes={"swim": 10})
 
 

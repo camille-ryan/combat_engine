@@ -1002,6 +1002,21 @@ class Cast:
                     mods=[(who, Mod(what="attack", value=attack_bonus, kind="power"))],
                 )
             )
+        # **Lend the row if the creature does not know it.** `usable`
+        # refuses anything outside `Powers.known` -- rightly, for a row a
+        # character is choosing -- but the commonest magic item shape
+        # there is reads "use this as if it were the wizard's X", and the
+        # carrier is a fighter. Without this the swing resolved nothing
+        # and said nothing: two item blocks audited SILENT with the right
+        # expression in them.
+        #
+        # Lent rather than given: taken back in the `finally` below, so a
+        # character does not quietly keep a bard's at-will after using a
+        # rod once.
+        lent = False
+        if known is not None and chosen not in known.all:
+            known.known.append(chosen)
+            lent = True
         try:
             # The trigger goes through. A row reading "when an ally drops,
             # the ally makes a basic attack" hands the swing to a creature
@@ -1013,6 +1028,8 @@ class Cast:
                 reentrant=reentrant,
             )
         finally:
+            if lent and known is not None and chosen in known.known:
+                known.known.remove(chosen)
             for effect in granted:
                 if effect is not None:
                     self.world.effects.end(effect, "the granted attack is over")
@@ -3948,6 +3965,19 @@ class Cast:
         # and both used to lean on being `kind="power"` by accident. One
         # row had already discovered the trick and written `kind=c.ref`.
         if not stacks:
+            # **And a caller's `kind=` is refused, not overwritten.** This
+            # used to silently discard it, which let a row pass
+            # `scripts/bonuses.py` -- that reads the source literal --
+            # while bucketing under the row's ref at runtime. A row could
+            # satisfy the bonus-type audit and not be of that type, which
+            # is the one thing that audit exists to make impossible.
+            if kind != "untyped":
+                raise ValueError(
+                    f"{self.ref}: c.bonus(stacks=False) buckets under the "
+                    f"row's own ref, so it cannot also be kind={kind!r}. "
+                    f"Drop one: `stacks=False` for a bonus that renews "
+                    f"rather than adds, `kind=` for a printed type."
+                )
             kind = self.ref
         key = what.value if isinstance(what, Defense) else what
         rng = self.world.rng

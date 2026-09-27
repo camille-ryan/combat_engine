@@ -215,6 +215,7 @@ class Report:
     races: int = 0
     racial: int = 0
     terms: int = 0
+    aliases: int = 0
     unparsed: int = 0
     names: int = 0
     common: int = 0
@@ -242,6 +243,7 @@ class Report:
             f"races         {self.races:6d}",
             f"  racial rows {self.racial:6d}  (a power a race grants, never imported)",
             f"prereq terms  {self.terms:6d}  (a printed name a prerequisite asks for)",
+            f"other names   {self.aliases:6d}  (rituals, deities: indexed, never content)",
             f"names         {self.names:6d}  (localization/names.json, gitignored)",
             f"common words  {self.common:6d}  (what leaks.py treats as English)",
             "",
@@ -291,6 +293,14 @@ def build() -> Report:
     report.features = _features(source, out, names)
     report.companions = _companions(source, out, names)
     report.build_powers = _build_powers(source, out, names)
+    # Every other name the compendium prints, so the scrubber can see
+    # them. These tables are not imported as content and never will be --
+    # the engine has no rituals and no deities -- but their *names* turn
+    # up constantly in the text of things that are imported, and a name
+    # the index has never heard of is a name the scrubber cannot swap and
+    # `leaks.py` cannot report. One wondrous-item wave counted more than
+    # twenty of them reaching an author verbatim.
+    report.aliases = _other_names(source, out, names)
     # Races first: a feat's prerequisite names one and must store a ref.
     # Items before feats for the same reason, one step further out.
     item.races(source, out, report, names)
@@ -743,6 +753,57 @@ def _cross_reference(out: sqlite3.Connection, names: dict[str, dict[str, str]]) 
     return changed
 
 
+#: Compendium tables whose rows are never content but whose names are
+#: printed inside things that are. The prefix is what their ref is built
+#: from -- `x12` for a ritual, `x4` for a deity -- and it is deliberately
+#: one letter for all of them: an author is told only that a name was
+#: here, never what kind of thing it named.
+_ALIAS_TABLES = (
+    "Ritual", "Deity", "Terrain", "Trap", "Poison", "Disease",
+    "Background", "Theme", "ParagonPath", "EpicDestiny", "Associate",
+)
+
+#: **`Glossary` is the opposite of these and belongs with the rules
+#: vocabulary.** Its 518 entries are the game's own index of mechanical
+#: terms -- "Action Points", "Aid Another", "Coup de Grace", "Once Per
+#: Turn" -- which is precisely what a system is and precisely what this
+#: project is entitled to say out loud. Indexed as names it reported
+#: fourteen perfectly good comments as leaks, including one in the
+#: README, and would have had the scrubber replacing "once per turn"
+#: with an id in the middle of a rules sentence.
+_VOCABULARY_TABLE = "Glossary"
+
+
+def _other_names(
+    source: sqlite3.Connection,
+    out: sqlite3.Connection,
+    names: dict[str, dict[str, str]],
+) -> int:
+    """Index every printed name the project does not import as content.
+
+    `leaks.py` and `scrub` both work off `localization/names.json`, so a
+    name that is in the compendium and not in that file is invisible to
+    both -- it cannot be swapped out of a spec and cannot be reported if
+    it reaches the tree. Rituals, deities, paragon paths and the rest are
+    exactly that: nothing here will ever be a row, and all of them are
+    named inside rows that are.
+
+    They go in with a ref and no table of their own, because nothing will
+    ever look one up -- the ref exists so that a spec can say "a name was
+    here" without saying which.
+    """
+    seen = 0
+    for n, table in enumerate(_ALIAS_TABLES):
+        for row in source.execute(f"SELECT ID, Name FROM {table}"):
+            name = (row["Name"] or "").strip()
+            if len(name) < 3:
+                continue
+            ref = f"x{n}_{row['ID']}"
+            names.setdefault(ref, {"name": name})
+            seen += 1
+    return seen
+
+
 def _cross_reference_rest(
     out: sqlite3.Connection, names: dict[str, dict[str, str]]
 ) -> int:
@@ -926,6 +987,13 @@ def _common_words(
     occurrence anywhere in the tree as a printed name.
     """
     seen: Counter[str] = Counter()
+    # The glossary first, as whole phrases: it *is* the rules vocabulary,
+    # and every entry counts as ordinary however rare its words are.
+    for row in source.execute(f"SELECT Name FROM {_VOCABULARY_TABLE}"):
+        term = (row[0] or "").strip().lower()
+        if len(term) > 2:
+            seen[term] = COMMON_IN
+            seen.update({w: COMMON_IN for w in term.split()})
     for table in ("Monster", "Power", "Item", "Feat"):
         for row in source.execute(f"SELECT PlainTxt FROM {table}"):
             seen.update(_vocabulary([row[0]]))

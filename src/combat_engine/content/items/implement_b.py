@@ -1133,7 +1133,6 @@ def i1829x1(c: Cast) -> None:
 
 @power(
     "i1829p1",
-    todo=("p2365",),
     level=4,
     cls=ITEM,
     usage=ENCOUNTER,
@@ -1194,7 +1193,6 @@ def i1833x1(c: Cast) -> None:
 
 @power(
     "i1833p1",
-    todo=("p3403",),
     level=4,
     cls=ITEM,
     usage=ENCOUNTER,

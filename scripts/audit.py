@@ -77,6 +77,17 @@ KNOWN_SILENT = {
     # spent and there is nothing to give back. Driven by hand: with
     # `Powers.used["f960b"] = 1` the count goes back to 0.
     "f961b": "restores a sibling row nobody has spent on this board",
+    # The five the magic item waves left. Each is a Requirement or a
+    # trigger condition the board does not produce; none is a row fault.
+    # The first four were driven by hand by the agent that wrote them and
+    # reported working; `i3527p1` I read rather than drove, and its three
+    # guards -- the kill, adjacency, and the target not being a minion --
+    # are plainly what the card prints.
+    "i1875p1": "swaps a prepared power; the board's spellbook is empty",
+    "i2582p1": "escapes a grab; nothing on the board grabs the caster",
+    "i3045p1": "cures surprised or unconscious; the board produces neither",
+    "i608p1": "its Requirement is being marked, and nobody here marks",
+    "i3527p1": "wants an adjacent non-minion killed; the board's deaths are neither",
     "m417a2": (
         "the same sentence as m135a3 -- it restores a destroyed undead minion, "
         "and the board has no dead ally. Verified by hand: with a felled m812 "
@@ -1332,7 +1343,7 @@ def main() -> int:
               f"{len(REGISTRY) * 0.1:.0f}s\n")
     chosen: list[str] = []
     inert: list[str] = []
-    partial: list[tuple[str, tuple[str, ...]]] = []
+    partial: list[tuple[str, tuple[str, ...], str]] = []
     for ref in wanted:
         p = get(ref)
         if p is None:
@@ -1350,7 +1361,7 @@ def main() -> int:
             # would drown the real ones. Not fired, and **never counted
             # OK**: a marker that could pass the audit is a marker that
             # lets a class look finished by declaring that it is not.
-            partial.append((ref, p.todo))
+            partial.append((ref, p.todo, "TODO"))
             continue
         if p.dropped:
             # A row that works with one clause missing. Unlike `todo` it
@@ -1358,7 +1369,7 @@ def main() -> int:
             # like anything else -- but it is reported beside the `todo`
             # rows rather than counted done, because the clause that is
             # gone is gone whether or not the rest of it passes.
-            partial.append((ref, p.dropped))
+            partial.append((ref, p.dropped, "DROP"))
         if p.out_of_combat:
             # Declared inert. A cantrip that lights a torch is not a silent
             # power, it is a power with nothing to say in a fight.
@@ -1396,8 +1407,12 @@ def main() -> int:
     # deliberately inert is a finished state; being unfinished is a debt,
     # and the length of the list is the pressure. A count would hide a
     # hundred of them behind a number nobody reads twice.
-    for ref, todo in partial:
-        print(f"  TODO    {ref:<10} wants {', '.join(todo)}")
+    # **`TODO` and `DROP` are not the same state and must not print the
+    # same.** A `todo` row is refused in play; a `dropped` row works and
+    # is missing one clause. Shown identically, a row that plays looked
+    # exactly like one that had been set aside.
+    for ref, wants, how in partial:
+        print(f"  {how}    {ref:<10} wants {', '.join(wants)}")
 
     ok = len(chosen) - len(broken) - len(silent) - len(never)
     print(f"\n  {ok} of {len(chosen)} rows fire and do something")
@@ -1409,7 +1424,15 @@ def main() -> int:
         # so it is never fired; a `dropped` row works and is fired like any
         # other. Saying "not fired" of both read as though a working row
         # had been quietly set aside.
-        print(f"  {len(partial)} unfinished -- see scripts/todo.py")
+        # Not `refused`: that name already belongs to the negotiable-event
+        # check below, and shadowing it handed an int to `len()` -- which
+        # took out the one check in this file that catches the engine
+        # announcing a thing and then doing it anyway.
+        inert_rows = sum(1 for _, _, how in partial if how == "TODO")
+        print(
+            f"  {len(partial)} unfinished -- {inert_rows} refused in play, "
+            f"{len(partial) - inert_rows} playing with a clause missing"
+        )
     if broken or silent:
         print(f"  {len(broken)} raise, {len(silent)} silent")
     if never:
