@@ -88,14 +88,40 @@ def races(
 
         flavour = re.search(r"</h1>\s*<i>(.*?)</i>", body, re.S)
         out.execute(
-            "INSERT INTO race VALUES (?,?,?,?)",
-            (ref, row["ID"], size, scrub(spec, {name: ref})),
+            "INSERT INTO race VALUES (?,?,?,?,?)",
+            (ref, row["ID"], size, json.dumps(_scores(spec)),
+             scrub(spec, {name: ref})),
         )
         names[ref] = {
             "name": name,
             "flavour": text(flavour.group(1)) if flavour else "",
         }
         report.races += 1
+
+
+#: "+2 Charisma, +2 Constitution or +2 Strength". 46 of the 55 races print
+#: one; the rest are sub-races that amend a parent and say nothing.
+_SCORES = re.compile(r"Ability scores\s*:\s*([^\n]+)", re.I)
+_BUMP = re.compile(r"\+(\d+)\s+([A-Za-z]+)")
+
+
+def _scores(spec: str) -> dict[str, int]:
+    """What a race adds to your ability scores, as an engine ability key.
+
+    The "or" in "+2 Constitution, +2 Strength or +2 Wisdom" is a choice
+    the character makes, and this keeps all three -- which of them is
+    taken belongs to `chargen`, not to a parser. A race that prints
+    nothing gets an empty dict rather than a guess.
+    """
+    found = _SCORES.search(spec or "")
+    if not found:
+        return {}
+    out: dict[str, int] = {}
+    for amount, ability in _BUMP.findall(found.group(1)):
+        key = ability[:3].lower()
+        if key in ("str", "con", "dex", "int", "wis", "cha"):
+            out[key] = int(amount)
+    return out
 
 
 def items(

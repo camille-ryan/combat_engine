@@ -182,7 +182,7 @@ CREATE INDEX feat_tier ON feat(tier, min_level);
 -- feats gate on one, and the racial powers are already in `power` -- the
 -- compendium files them under the race in its Class column.
 CREATE TABLE race (
-  ref TEXT PRIMARY KEY, id INTEGER, size TEXT, spec TEXT
+  ref TEXT PRIMARY KEY, id INTEGER, size TEXT, scores TEXT, spec TEXT
 );
 
 -- A prerequisite clause that is a printed name rather than a mechanic: a

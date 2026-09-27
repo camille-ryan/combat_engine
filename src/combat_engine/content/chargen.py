@@ -584,6 +584,18 @@ class Character:
     #: `powers`. A feat is an ordinary row, so it lands in `Powers.known`
     #: with everything else and arms itself at the top of the fight.
     feats: list[str] = field(default_factory=list)
+    #: The race, by ref -- `r3`. Empty means raceless, which is what every
+    #: character has been until now and remains the default.
+    #:
+    #: **Not dealt automatically, and that is deliberate.** A race is +2 to
+    #: two ability scores and a handful of traits, and the traits are not
+    #: written yet. Dealing one would change every number on the sheet
+    #: while granting none of the abilities that are supposed to come with
+    #: them -- a character strictly better than the book's, quietly. What
+    #: the field buys today is that `meets` can answer a race prerequisite
+    #: honestly for a character that has one, which is 803 of the 2,536
+    #: heroic feats.
+    race: str = ""
 
     @property
     def chosen(self) -> Build:
@@ -601,6 +613,8 @@ class Character:
         out = {leg.name} - {""}
         if leg.element is not None:
             out.add(f"element:{leg.element.value}")
+        if self.race:
+            out.add(f"race:{self.race}")
         return out
 
     @property
@@ -685,15 +699,20 @@ def loadout(
     return out + sorted(r for ref in out for r in riders.get(ref, []))
 
 
-def feat_slots(level: int) -> int:
+def feat_slots(level: int, race: str = "") -> int:
     """How many feats a character of this level has taken.
 
     One at first level and one more at every even level after, which is
-    six by level 10. A human takes one more at first level; there is no
-    race in the engine yet, so there is no human to give it to, and the
-    line is not written until there is.
+    six by level 10. A human takes one more at first level, and that is
+    the one printed exception -- named by ref, because a name would be
+    prose and this file is tracked.
     """
-    return 1 + level // 2
+    return 1 + level // 2 + (1 if race == HUMAN else 0)
+
+
+#: The one race whose extra first-level feat is a rule rather than a
+#: trait. Held as a ref for the same reason everything else is.
+HUMAN = "r7"
 
 
 def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
@@ -725,6 +744,8 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
     if "ability" in node:
         scores = scores_for(who.line, who.chosen)
         return scores.get(Ability(node["ability"]), 10) >= node["min"]
+    if "race" in node:
+        return node["race"] == who.race
     if "ref" in node:
         return node["ref"] in powers
     if "weapon_prof" in node:
@@ -733,13 +754,14 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
             wanted in (w.group, w.category, w.ref.removeprefix("w:").replace("-", " "))
             for w in who.line.weapons
         )
-    # race, term, skill, source: nothing on a character answers them yet.
+    # term, skill, source: nothing on a character answers them yet.
     return False
 
 
 def feats_for(
     cls: str, level: int = 1, build: Build | None = None,
     rng: Random | None = None, powers: list[str] | None = None,
+    race: str = "",
 ) -> list[str]:
     """The feats this character has taken, drawn like its powers are.
 
@@ -754,7 +776,8 @@ def feats_for(
     from combat_engine.etl.build import game
 
     pick = rng or Random(0)
-    who = Character(cls=cls, level=level, build=(build.name if build else ""))
+    who = Character(cls=cls, level=level, build=(build.name if build else ""),
+                    race=race)
     held = list(powers or [])
     gates = {
         r["ref"]: json.loads(r["prereq"]) if r["prereq"] else None
@@ -763,7 +786,7 @@ def feats_for(
     pool = sorted(ref for ref in gates if ref in REGISTRY and not REGISTRY[ref].todo)
 
     taken: list[str] = []
-    for _ in range(feat_slots(level)):
+    for _ in range(feat_slots(level, who.race)):
         legal = [r for r in pool if r not in taken and meets(gates[r], who, held + taken)]
         if not legal:
             break
@@ -1077,7 +1100,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     feats = who.feats or feats_for(
         who.cls, who.level, build,
         Random(f"{world.rng.seed}:{who.cls}:{build.name}:feats"),
-        list(powers),
+        list(powers), who.race,
     )
 
     # First level takes the whole Constitution *score*; every level after
