@@ -778,13 +778,20 @@ def _cross_reference_rest(
     by_word: dict[str, list[tuple[str, str]]] = {}
     # Every name, whether or not it "identifies" -- `_label_refs` needs
     # the ones the general test waives.
+    #
+    # **A power wins a tie.** Several class powers share a name with a
+    # monster ability, and the monsters are imported first, so taking
+    # whichever ref arrived first pointed five of a feat's Associated
+    # Powers clauses at a stat block. A feat modifies the powers a
+    # character has; it has never modified a monster's claw.
     by_name: dict[str, str] = {}
     for ref, entry in names.items():
         name = (entry.get("name") or "").strip()
         low = name.lower()
         if len(low) < 3:
             continue
-        by_name.setdefault(low, ref)
+        if low not in by_name or (ref[:1] == "p" and by_name[low][:1] != "p"):
+            by_name[low] = ref
         if not identifies(low, [ref], rules):
             continue
         words = re.findall(r"[A-Za-z']+", low)
