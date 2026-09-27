@@ -26,6 +26,9 @@ from .html import labelled, paragraphs, text
 
 #: Paragraph labels that carry mechanics. Anything else in a `flavor`
 #: paragraph is prose and is dropped.
+#: Labels that are publication furniture rather than rules.
+_FOOTERS = ("published in", "update", "updated", "errata")
+
 MECHANICAL = {
     "requirement", "prerequisite", "trigger", "target", "targets", "attack",
     "hit", "miss", "effect", "special", "sustain", "aftereffect",
@@ -253,7 +256,19 @@ def power_spec(document: str, ref: str, name: str) -> str:
         if "publishedIn" in cls:
             continue
         pair = labelled(para)
-        mechanical = pair is not None and pair[0].lower().strip() in MECHANICAL
+        # **A bold label is itself the signal.** The allow-list only held
+        # the labels somebody had thought of, and a card's build-specific
+        # riders are open-ended -- every class names its own. So the
+        # swordmage's three aegis riders, the runepriest's runes, the
+        # warlock's five pacts, 28 sustain lines and 9 instinctive
+        # effects were all dropped as flavour: roughly a hundred printed
+        # clauses across ninety rows, on rows already written.
+        #
+        # Real flavour carries no label; it is unlabelled italic prose.
+        # `MECHANICAL` stays because `leaks.py` reads it and because it
+        # still answers "is this word mechanics" elsewhere.
+        label = pair[0].lower().strip() if pair else ""
+        mechanical = bool(pair) and not any(label.startswith(x) for x in _FOOTERS)
         if "powerstat" in cls and not mechanical:
             # The usage, keywords, action and range, which carry no label of
             # their own -- `Encounter Martial / Standard Action / Melee 1`.
