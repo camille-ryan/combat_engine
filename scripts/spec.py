@@ -68,6 +68,19 @@ def main() -> int:
     if args.monsters is not None:
         refs += _monsters(db, args.monsters, args.role)
     if not refs:
+        # Only help when nothing was *asked*. Filters that match nothing
+        # used to print usage too, which reads as "you typed it wrong"
+        # -- and the commonest cause is the book filter, which defaults
+        # to the Player's Handbook and so silently empties any query
+        # about a class printed in a later book.
+        if args.cls or args.level or args.monsters is not None:
+            print(
+                "# nothing matched those filters."
+                + (f"  --book {args.book!r} excludes later books; try --book ''"
+                   if args.book else ""),
+                file=sys.stderr,
+            )
+            return 1
         ap.print_help()
         return 1
 
@@ -167,6 +180,19 @@ def _monsters(db, level: int, role: str | None, book: bool = True) -> list[str]:
 
 
 def _render(db, ref: str, declared: set[str], include_all: bool) -> str | None:  # noqa: ANN001
+    if ref.startswith("comp:"):
+        row = db.execute("SELECT * FROM companion WHERE ref = ?", (ref,)).fetchone()
+        if row is None:
+            return None
+        return f"### {row['ref']}   {row['kind']}\n{row['spec']}"
+    if ref.startswith("cf:"):
+        row = db.execute(
+            "SELECT * FROM class_feature WHERE ref = ?", (ref,)
+        ).fetchone()
+        if row is None:
+            return None
+        build = f" ({row['build']})" if row["build"] else ""
+        return f"### {row['ref']}   {row['class']}{build}\n{row['spec']}"
     if ref.startswith("p"):
         row = db.execute("SELECT * FROM power WHERE ref = ?", (ref,)).fetchone()
         if row is None:

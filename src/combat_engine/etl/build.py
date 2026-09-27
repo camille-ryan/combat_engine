@@ -26,10 +26,12 @@ import sqlite3
 from collections import Counter
 from dataclasses import dataclass, field
 from functools import lru_cache
+from html import unescape
 from pathlib import Path
 
 from . import monster as monster_parser
 from . import power as power_parser
+from . import sanitise
 
 ROOT = Path(__file__).resolve().parents[3]
 SOURCE = ROOT / "compendium.sqlite"
@@ -105,6 +107,24 @@ CREATE TABLE class (
 -- Keyed by page order rather than by name: the name is trademarked and
 -- lives in `localization/names.json` with every other printed name, so a
 -- ref can be written into tracked source and `leaks.py` stays honest.
+-- Familiars and beast companions, never imported. `c.familiar()` and the
+-- three rows that call it were written against no text at all, and the
+-- eleven beast companions carry the full stat block -- ability scores,
+-- defences, hit points, attack bonus -- that the ranger's beast rows and
+-- `cf:ranger-style-beast` were blocked on.
+CREATE TABLE companion (
+  ref TEXT PRIMARY KEY, kind TEXT, spec TEXT
+);
+
+-- Which powers a build's own page lists. The Essentials builds print
+-- their whole set on the class page and mark almost none of it as a
+-- feature -- only 2 of 24 pages use a "Feature" card at all -- so this
+-- is deliberately a build-to-power map and NOT a feature list. It is
+-- what `chargen.BUILDS` has been guessing at.
+CREATE TABLE build_power (
+  class TEXT, build TEXT, ref TEXT, PRIMARY KEY (class, build, ref)
+);
+
 CREATE TABLE class_feature (
   ref TEXT PRIMARY KEY, class TEXT, ord INTEGER, build TEXT, spec TEXT
 );
@@ -121,6 +141,8 @@ class Report:
     features: int = 0
     seconds: int = 0
     crossed: int = 0
+    companions: int = 0
+    build_powers: int = 0
     names: int = 0
     common: int = 0
     scores: dict[str, float] = field(default_factory=dict)
@@ -135,6 +157,8 @@ class Report:
             f"features      {self.features:6d}  (class features, new)",
             f"second cards  {self.seconds:6d}  (a card printed inside another entry)",
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
+            f"companions    {self.companions:6d}  (familiars and beasts, new)",
+            f"build powers  {self.build_powers:6d}  (which build lists which row)",
             f"names         {self.names:6d}  (localization/names.json, gitignored)",
             f"common words  {self.common:6d}  (what leaks.py treats as English)",
             "",
@@ -175,6 +199,8 @@ def build() -> Report:
     _powers(source, out, report, names)
     report.classes = _classes(source, out)
     report.features = _features(source, out, names)
+    report.companions = _companions(source, out, names)
+    report.build_powers = _build_powers(source, out, names)
     _common_words(source, out, report)
 
     out.execute(
@@ -463,6 +489,77 @@ def _powers(
     report.scores["power"] = sum(scores) / max(1, len(scores))
     report.crossed = _cross_reference(out, names)
 
+
+
+def _companions(source: sqlite3.Connection, out: sqlite3.Connection,
+                names: dict[str, dict[str, str]]) -> int:
+    """Every familiar and beast companion's printed block.
+
+    Not read until now, so `c.familiar()` was written against nothing and
+    the ranger's beast had no statistics to take. The eleven of type
+    `Companion` are the beasts and carry a whole stat block; the
+    ninety-four familiars carry Constant and Active Benefits.
+    """
+    written = 0
+    for cid, name, kind, plain in source.execute(
+        "SELECT ID, Name, Type, PlainTxt FROM Companion ORDER BY ID"
+    ):
+        spec = " ".join((plain or "").split())
+        # ...and closes with the publication line.
+        # The page opens `<name> <type> <name>`, so the type word sits
+        # between the two copies and stops a plain repeat-strip.
+        for _ in range(3):
+            for lead in (name, (kind or "").strip()):
+                if lead and spec.startswith(lead):
+                    spec = spec[len(lead):].lstrip()
+        spec = re.split(r"\s*Published in\b", spec)[0].strip()
+        if len(spec) < 20:
+            continue
+        ref = f"comp:{cid}"
+        out.execute(
+            "INSERT OR REPLACE INTO companion VALUES (?,?,?)",
+            (ref, (kind or "").strip().lower(), sanitise.scrub(spec, {name: ref})),
+        )
+        names[ref] = {"name": name}
+        written += 1
+    return written
+
+
+def _build_powers(source: sqlite3.Connection, out: sqlite3.Connection,
+                  names: dict[str, dict[str, str]]) -> int:
+    """The powers each build's page lists, resolved to refs by name.
+
+    A build page names its powers and gives no ids, so they are matched
+    against the names already collected for this class. Same class only:
+    two classes share a power name often enough that a global match would
+    put a wizard row on a warlock build.
+    """
+    by_name: dict[tuple[str, str], str] = {}
+    for ref, cls in out.execute("SELECT ref, class FROM power"):
+        name = (names.get(ref) or {}).get("name", "")
+        if name:
+            by_name.setdefault((cls.lower(), name.lower()), ref)
+
+    written = 0
+    wanted = {c.lower() for c in CLASSES}
+    for name, txt in source.execute("SELECT Name, Txt FROM Class"):
+        bare = name.split("(")[0].strip()
+        build = name.partition("(")[2].rstrip(")").strip()
+        if name.lower().startswith("hybrid") or bare.lower() not in wanted or not build:
+            continue
+        seen: set[str] = set()
+        for card in re.findall(
+            r'<span class="level">[^<]*</span>([^<]*)</h1>', txt
+        ):
+            ref = by_name.get((bare.lower(), unescape(card).strip().lower()))
+            if ref and ref not in seen:
+                seen.add(ref)
+                out.execute(
+                    "INSERT OR IGNORE INTO build_power VALUES (?,?,?)",
+                    (bare, build, ref),
+                )
+                written += 1
+    return written
 
 def _cross_reference(out: sqlite3.Connection, names: dict[str, dict[str, str]]) -> int:
     """Swap one power's name for its ref wherever another power prints it.
