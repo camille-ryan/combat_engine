@@ -125,17 +125,19 @@ def _hit_quarry_with(ref: str):  # noqa: ANN202
 def f787(c: Cast) -> None:
     """Cancels the cover and concealment penalty against the quarry.
 
-    Both are a flat -2 the attack context applies, so handing the +2
-    back against exactly those targets is the printed sentence. Read off
-    the relation per attack rather than fixed at arming, because the
-    quarry moves from creature to creature over a fight.
+    **`cover` and `concealment` are not keys the attack context has.**
+    `resolve.attack` builds it with `attacker, target, power, advantage,
+    opportunity, charge, action_point, ranged, branch, hand` -- so a
+    gate reading either was silently false and this waiver never once
+    applied. `c.ignore_cover` is the verb, and it writes into the
+    `ignore_cover` modifier that `query.cover_waived` actually reads.
+
+    Read off the relation per attack rather than fixed at arming,
+    because the quarry moves from creature to creature over a fight.
     """
-    c.bonus(
-        "attack", 2, on=c.me, until=When.ENCOUNTER,
-        when=lambda ctx: (
-            _is_my_quarry(c, ctx.get("target"))
-            and (ctx.get("cover", 0) or ctx.get("concealment", 0))
-        ),
+    c.ignore_cover(
+        on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: _is_my_quarry(c, ctx.get("target")),
     )
 
 
@@ -465,7 +467,14 @@ def f2355(c: Cast) -> None:
     forever and the row was narrower than the card in a way nothing
     would have noticed.
 
-    Two rungs rather than one, because the card prints two numbers.
+    **`cover` and `concealment` are not keys the attack context has.**
+    `resolve.attack` builds it with `attacker, target, power, advantage,
+    opportunity, charge, action_point, ranged, branch, hand` -- so a
+    gate reading either was silently false and this waiver never once
+    applied. `c.ignore_cover` is the verb, and it writes into the
+    `ignore_cover` modifier that `query.cover_waived` actually reads.
+
+    `partial=True` is the card's two numbers in one call.
     Ordinary cover and concealment are a -2 the attack context applies,
     so +2 cancels them exactly. Superior cover and total concealment are
     -5, and the card leaves a -2 standing, so the bonus there is +3 --
@@ -475,20 +484,14 @@ def f2355(c: Cast) -> None:
     me = c.me
     picked = among("p529", "p1521")
 
-    def ordinary(ctx: dict) -> bool:
-        return (
-            picked(ctx) and _holding(c, "crossbow", "bow", "sling")
-            and (ctx.get("cover", 0) == 2 or ctx.get("concealment", 0) == 2)
-        )
+    def mine(ctx: dict) -> bool:
+        return picked(ctx) and _holding(c, "crossbow", "bow", "sling")
 
-    def total(ctx: dict) -> bool:
-        return (
-            picked(ctx) and _holding(c, "crossbow", "bow", "sling")
-            and (ctx.get("cover", 0) > 2 or ctx.get("concealment", 0) > 2)
-        )
-
-    c.bonus("attack", 2, on=me, until=When.ENCOUNTER, when=ordinary)
-    c.bonus("attack", 3, on=me, until=When.ENCOUNTER, when=total)
+    # `partial=True` waives the ordinary -2 and leaves superior cover
+    # standing, which is the card's two numbers said in one call --
+    # `ignore_cover` is a modifier `query.cover_waived` reads, so the
+    # two rungs do not need writing out.
+    c.ignore_cover(on=me, until=When.ENCOUNTER, partial=True, when=mine)
 
 
 def _shift_before(ref: str, squares: int, groups: tuple[str, ...],

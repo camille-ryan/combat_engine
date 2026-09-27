@@ -4040,6 +4040,25 @@ class Cast:
                 effect.subs.append(
                     self.world.bus.on(DamageRolled, spend_damage, owner=who)
                 )
+            elif key == "save":
+                # **A one-shot save bonus was spent by the next attack
+                # roll.** The branch below watches `AttackRolled` for
+                # every key that is not damage, a defence or the crit
+                # range -- so "a +2 bonus to your next saving throw", a
+                # common printed line that ten rows in the tree carry,
+                # was consumed by the owner's next *swing* and was still
+                # standing for the second save of the window. Fourth
+                # time a branch of this method has spent a modifier
+                # somewhere other than where it is read.
+                from .events import SavingThrow
+
+                def spend_save(ev: SavingThrow) -> None:
+                    if ev.actor == who:
+                        self.world.effects.end(effect, "used")
+
+                effect.subs.append(
+                    self.world.bus.on(SavingThrow, spend_save, owner=who)
+                )
             else:
 
                 def spend(ev: AttackRolled) -> None:

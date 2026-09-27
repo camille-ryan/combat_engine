@@ -354,22 +354,28 @@ def f2333(c: Cast) -> None:
 @power("f2353", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=AS_RANGED)
 def f2353(c: Cast) -> None:
-    """Two named rows shoot past cover and concealment -- a +2 that
-    cancels the printed -2 exactly, which is how the penalty reaches
-    the roll. The second benefit, casting a melee row at range, is
-    dropped: reach is header data the menu reads before anything runs.
+    """Two named rows shoot past cover and concealment.
+
+    **`cover` and `concealment` are not keys the attack context has.**
+    `resolve.attack` builds it with `attacker, target, power, advantage,
+    opportunity, charge, action_point, ranged, branch, hand` -- so a
+    gate reading either was silently false and this waiver never once
+    applied. `c.ignore_cover` is the verb, and it writes into the
+    `ignore_cover` modifier that `query.cover_waived` actually reads.
+
+    The second benefit, casting a melee row at range, is dropped: reach
+    is header data the menu reads before anything runs.
     """
     me = c.me
     picked = among("p1556", "p1075")
-    c.bonus(
-        "attack", 2, on=me, until=When.ENCOUNTER,
+    c.ignore_cover(
+        on=me, until=When.ENCOUNTER,
         when=lambda ctx: (
             picked(ctx)
             # crossbow/bow/sling, not "hand crossbow"/"shortbow":
             # those are weapons, and `Gear.group` only ever holds a
             # group. Gating on one was silently false forever.
             and _holding(c, "crossbow", "bow", "sling")
-            and (ctx.get("cover", 0) or ctx.get("concealment", 0))
         ),
     )
 

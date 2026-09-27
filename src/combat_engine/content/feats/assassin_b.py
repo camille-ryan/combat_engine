@@ -183,15 +183,21 @@ def f2232(c: Cast) -> None:
        reach=PERSONAL, target=SELF)
 def f2231(c: Cast) -> None:
     """Cancels the cover and concealment penalties against a shrouded
-    enemy. Both are a flat -2 the attack context applies, so giving the
-    +2 back against exactly those targets is the printed sentence."""
+    enemy.
+
+    **`cover` and `concealment` are not keys the attack context has.**
+    `resolve.attack` builds it with `attacker, target, power, advantage,
+    opportunity, charge, action_point, ranged, branch, hand` -- so a
+    gate reading either was silently false and this waiver never once
+    applied. `c.ignore_cover` is the verb, and it writes into the
+    `ignore_cover` modifier that `query.cover_waived` actually reads.
+    """
     me = c.me
-    c.bonus(
-        "attack", 2, on=me, until=When.ENCOUNTER,
+    c.ignore_cover(
+        on=me, until=When.ENCOUNTER,
         when=lambda ctx: (
             ctx.get("target") is not None
             and c.shrouds(ctx["target"]) >= 1
-            and (ctx.get("cover", 0) or ctx.get("concealment", 0))
         ),
     )
 
