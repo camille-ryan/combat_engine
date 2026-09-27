@@ -52,7 +52,7 @@ def _crit_with_advantage(world, me: int, ev: Any) -> bool:  # noqa: ANN001
        trigger="you crit while you have combat advantage",
        on=Trigger(Hit, _crit_with_advantage, "you crit with advantage"))
 def f302(c: Cast) -> None:
-    c.grants_ca(on=c.trigger.target, until=When.EONT)
+    c.grants_advantage(on=c.trigger.target, until=When.EONT)
 
 
 @power("f307", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

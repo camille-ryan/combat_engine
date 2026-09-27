@@ -330,7 +330,9 @@ def _hurt_bloodied_ally(world: World, me: int, ev: Any) -> bool:
     from combat_engine.engine import Health
 
     hp = world.get(foe, Health)
-    return hp is not None and hp.current <= hp.maximum // 2
+    # `hp` and `max_hp`, not `current`/`maximum`: `Health` has never had
+    # those names, and this predicate raised every time it was asked.
+    return hp is not None and hp.hp <= hp.max_hp // 2
 
 
 def _odd_arcane_at_will(world: World, me: int, ev: Any) -> bool:

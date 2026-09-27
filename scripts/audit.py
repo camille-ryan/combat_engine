@@ -1241,7 +1241,22 @@ def audit(ref: str) -> Result:
     # the time the board is built it is already in force and using it again
     # is correctly refused. Firing it a second time would report every trait
     # in the game as unusable, which is the instrument lying about the fix.
-    trait = declared is not None and declared.action is ActionType.NONE
+    #
+    # **A row with a trigger is not a trait, whatever its action costs.**
+    # This read `action is ActionType.NONE` alone, and the `if trait:`
+    # branch below returns before the triggered branch is ever reached --
+    # so every `action=NONE` row carrying a printed trigger was counted as
+    # fired on the strength of board *setup*, and its body never ran once.
+    # A body that raised outright still reported "fires and does
+    # something". The whole feat corpus is written in exactly that shape,
+    # so this was the gate on roughly four hundred rows and it was open.
+    # `turns.arm_traits_of` has always drawn the line in the right place:
+    # a trait is `action=NONE` **with no trigger**.
+    trait = (
+        declared is not None
+        and declared.action is ActionType.NONE
+        and not declared.triggers
+    )
     # A row with a declared trigger reads the event it is answering. Calling
     # it as a plain action hands it no event, so its first line finds nothing
     # to respond to and it returns -- reported as silent, when what was wrong

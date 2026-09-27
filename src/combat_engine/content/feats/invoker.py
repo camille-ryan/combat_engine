@@ -46,7 +46,7 @@ def f483(c: Cast) -> None:
     """"An invoker power" is read as a divine one: the engine has no
     per-class keyword, and every row this character casts that carries
     `DIVINE` is one of its own."""
-    c.bonus(AC, 2, on=c.me, until=When.SOT, kind="feat")
+    c.bonus(AC, 2, on=c.me, until=When.SONT, kind="feat")
 
 
 @power("f1022", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

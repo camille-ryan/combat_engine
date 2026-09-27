@@ -52,7 +52,7 @@ def _illusion_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 
 
 @power("f682", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.grants_ca(until_save=)",),
+       reach=PERSONAL, target=SELF, dropped=("c.grants_advantage(until_save=)",),
        trigger="you hit with an arcane illusion power",
        on=Trigger(Hit, _illusion_hit, "you hit with an illusion"))
 def f682(c: Cast) -> None:
@@ -60,7 +60,7 @@ def f682(c: Cast) -> None:
     "until it saves, if the power has a save-ends effect" -- needs a
     duration that ends on a *particular* effect's save, which `When` has
     no member for; the end-of-next-turn form is written."""
-    c.grants_ca(on=c.trigger.target, until=When.EONT)
+    c.grants_advantage(on=c.trigger.target, until=When.EONT)
 
 
 @power("f1140", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

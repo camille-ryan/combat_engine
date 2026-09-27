@@ -88,7 +88,7 @@ def f301(c: Cast) -> None:
     foe = c.trigger.target
     for friend in [a for a in team(c.world, me) if a != me]:
         c.bonus(
-            "attack", 1, on=friend, until=When.SOT,
+            "attack", 1, on=friend, until=When.SONT,
             when=lambda ctx: ctx.get("target") == foe,
         )
 

@@ -111,7 +111,7 @@ def f796(c: Cast) -> None:
         if distance_between(c.world, me, friend) > 10:
             continue
         c.bonus(
-            "attack", 1, on=friend, until=When.SOT,
+            "attack", 1, on=friend, until=When.SONT,
             when=lambda ctx: (
                 ctx.get("target") == foe and ctx.get("ranged", False)
             ),
