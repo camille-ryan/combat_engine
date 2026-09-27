@@ -33,6 +33,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FORT,
     PERSONAL,
@@ -163,7 +164,7 @@ def _ranged_divine_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 # -- riders on "a divine encounter or daily attack power" -------------------
 
 
-@power("f1494", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1494", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use a divine encounter or daily attack power on your turn",
        on=Trigger(PowerResolved, _mine_on_my_turn, "your invocation resolves"))
@@ -179,7 +180,7 @@ def f1494(c: Cast) -> None:
         )
 
 
-@power("f1539", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1539", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use a divine encounter or daily attack power on your turn",
        on=Trigger(PowerResolved, _mine_on_my_turn, "your invocation resolves"))
@@ -193,7 +194,7 @@ def f1539(c: Cast) -> None:
         c.bonus("save", 1, on=who, until=When.EONT, kind="power", once=True)
 
 
-@power("f1540", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1540", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use a divine encounter or daily attack power on your turn",
        on=Trigger(PowerResolved, _mine_on_my_turn, "your invocation resolves"))
@@ -256,7 +257,7 @@ def f2751(c: Cast) -> None:
         c.save(on=who)
 
 
-@power("f2981", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2981", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit only one target with a ranged invoker encounter or daily attack",
        on=Trigger(PowerResolved, _mine_at_range, "your ranged invocation resolves"))
@@ -270,7 +271,7 @@ def f2981(c: Cast) -> None:
         c.slide(1, on=struck[0])
 
 
-@power("f2990", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2990", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you miss every target with a daily invoker attack power",
        on=Trigger(PowerResolved, _missed_everyone, "your daily missed"))
@@ -316,7 +317,7 @@ def f2982(c: Cast) -> None:
     c.watch(Hit, after, until=When.ENCOUNTER, on=me, label=f"{c.ref} rebuke")
 
 
-@power("f2985", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2985", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p7150",
        on=Trigger(PowerUsed, _used("p7150"), "you use that invocation"))
@@ -551,7 +552,7 @@ def f2988(c: Cast) -> None:
         c.grants_advantage(on=foe, until=When.EONT)
 
 
-@power("f2992", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2992", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2483",
        on=Trigger(PowerUsed, _used("p2483"), "you use that racial power"))
@@ -628,7 +629,7 @@ def f2986(c: Cast) -> None:
     c.watch(DamageApplied, bite, until=When.ENCOUNTER, on=me, label=f"{c.ref} drag")
 
 
-@power("f2997", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2997", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2485",
        on=Trigger(PowerUsed, _used("p2485"), "you use that racial power"))
@@ -701,7 +702,7 @@ def f2999(c: Cast) -> None:
     creatures could be fixed, and the whole row is the gap."""
 
 
-@power("f3000", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3000", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a ranged invoker attack",
        on=Trigger(Hit, _ranged_divine_hit, "you hit somebody at range"))
@@ -721,7 +722,7 @@ def f3000(c: Cast) -> None:
             )
 
 
-@power("f2032", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2032", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit a target with f2023b",
        on=Trigger(Hit, _hit_with("f2023b"), "you hit with that card"))

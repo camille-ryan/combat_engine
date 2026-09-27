@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     MINOR,
     ONE_CREATURE,
@@ -37,7 +38,7 @@ def _i_used(ref: str):  # noqa: ANN202
     return when
 
 
-@power("f290", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f290", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1566",
        on=Trigger(PowerUsed, _i_used("p1566"), "you use p1566"))
@@ -95,7 +96,7 @@ def f1088(c: Cast) -> None:
     laid the effect, so this character is not told."""
 
 
-@power("f1497", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1497", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2483 or p2484",
        on=(

@@ -27,6 +27,7 @@ from typing import Any
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     EACH_ENEMY,
     ENCOUNTER,
     FREE,
@@ -114,7 +115,7 @@ def _radiant_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 _granted("f595", "f595b")
 
 
-@power("f595b", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f595b", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
     reach=Ranged(10), target=ONE_ALLY, keywords=DIVINE, group=CHANNEL_DIVINITY,
     trigger="you or an ally within range succeeds on a saving throw",
     on=Trigger(SavingThrow, _ally_saved, "an ally makes a saving throw"))
@@ -352,7 +353,7 @@ def f511(c: Cast) -> None:
     modelled and a skill bonus is not a fight."""
 
 
-@power("f517", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f517", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
     reach=PERSONAL, target=NO_TARGET,
     trigger="you hit a target that has fire resistance with a fire power",
     on=Trigger(Hit, lambda w, me, ev: (
@@ -375,7 +376,7 @@ def f517(c: Cast) -> None:
     )
 
 
-@power("f519", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f519", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
     reach=PERSONAL, target=NO_TARGET,
     trigger="you hit with a lightning attack power",
     on=Trigger(Hit, lambda w, me, ev: (
@@ -394,7 +395,7 @@ def f519(c: Cast) -> None:
     )
 
 
-@power("f521", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f521", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
     reach=PERSONAL, target=NO_TARGET,
     trigger="you hit with a thunder attack power",
     on=Trigger(Hit, lambda w, me, ev: (

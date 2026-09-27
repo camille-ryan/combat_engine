@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -52,7 +53,7 @@ def _my_opportunity_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 # -- swordmage --------------------------------------------------------------
 
 
-@power("f1118", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1118", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a ranged or area power",
        on=Trigger(Hit, _my_ranged_hit, "you hit at range"))
@@ -106,7 +107,7 @@ def f627(c: Cast) -> None:
 # -- warden -----------------------------------------------------------------
 
 
-@power("f585", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f585", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with an opportunity attack",
        on=Trigger(Hit, _my_opportunity_hit, "you hit on an opportunity"))
@@ -117,7 +118,7 @@ def f585(c: Cast) -> None:
     c.condition(Condition.SLOWED, on=c.trigger.target, until=When.EOT)
 
 
-@power("f1827", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1827", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you immobilize or slow an enemy with a hammer or mace",
        on=Trigger(PowerResolved, lambda w, me, ev: ev.actor == me,

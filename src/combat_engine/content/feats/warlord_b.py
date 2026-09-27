@@ -29,6 +29,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FREE,
     MINOR,
@@ -181,7 +182,7 @@ def f2302(c: Cast) -> None:
 # -- inspiring word, which is a ref -----------------------------------------
 
 
-@power("f2063", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2063", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use p1590",
        on=Trigger(PowerUsed, _my_word, "you use inspiring word"))
@@ -216,7 +217,7 @@ def f2057(c: Cast) -> None:
         c.bonus(AC, 2, on=friend, until=When.EOT)
 
 
-@power("f2062", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2062", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you roll initiative",
        on=Trigger(InitiativeRolled, lambda w, me, ev: ev.actor == me,
@@ -229,7 +230,7 @@ def f2062(c: Cast) -> None:
         c.slide(1, on=friend)
 
 
-@power("f2055", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2055", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you roll initiative",
        on=Trigger(InitiativeRolled, lambda w, me, ev: ev.actor == me,

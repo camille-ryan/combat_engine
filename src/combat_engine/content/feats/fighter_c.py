@@ -32,6 +32,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FORT,
     ONE_CREATURE,
@@ -438,7 +439,7 @@ def f2382(c: Cast) -> None:
     c.watch(Hit, on_hit, on=me, until=When.ENCOUNTER)
 
 
-@power("f2383", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2383", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit an enemy with a martial power",
        on=Trigger(Hit, _i_hit, "you hit"))
@@ -593,7 +594,7 @@ def f2470(c: Cast) -> None:
     whatever size I picked."""
 
 
-@power("f2476", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2476", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit a creature with an opportunity attack",
        on=Trigger(Hit, _i_hit, "you hit"))
@@ -630,7 +631,7 @@ def f2409(c: Cast) -> None:
     The breath is named in prose and has no ref to watch."""
 
 
-@power("f2438", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2438", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2483",
        on=Trigger(PowerUsed, _i_used("p2483"), "you use p2483"))
@@ -813,7 +814,7 @@ def f2860(c: Cast) -> None:
     apply again is not recoverable."""
 
 
-@power("f2861", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2861", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with an opportunity attack while using a shield",
        on=Trigger(Hit, _i_hit, "you hit"))

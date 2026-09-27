@@ -27,6 +27,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -131,7 +132,7 @@ def _shift_beside(c: Cast, squares_: int, foe: int) -> bool:
 # -- the quarry half, and the board ----------------------------------------
 
 
-@power("f2390", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2390", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use a ranger attack power",
        on=Trigger(PowerUsed, _my_ranger_attack, "you use a ranger power"))
@@ -148,7 +149,7 @@ def f2390(c: Cast) -> None:
     c.ignores_difficult(on=c.me, until=When.EOT)
 
 
-@power("f2391", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2391", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, trigger="you stand up",
        on=Trigger(ConditionEnded, _i_stood, "you stand up"))
 def f2391(c: Cast) -> None:
@@ -268,7 +269,7 @@ def f2712(c: Cast) -> None:
     c.watch(ConditionEnded, stood, on=foe, until=When.EONT, once=True)
 
 
-@power("f2803", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2803", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, trigger="you hit an enemy",
        on=Trigger(Hit, _i_hit, "you hit"))
 def f2803(c: Cast) -> None:

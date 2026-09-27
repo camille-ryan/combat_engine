@@ -24,6 +24,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FORT,
     PERSONAL,
@@ -92,7 +93,7 @@ def f364(c: Cast) -> None:
         )
 
 
-@power("f368", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f368", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you score a critical hit with a melee attack",
        on=Trigger(Hit, _i_crit_in_melee, "you crit in melee"))
@@ -107,7 +108,7 @@ def f368(c: Cast) -> None:
         )
 
 
-@power("f405", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f405", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you reduce an enemy to 0 hit points with a melee attack",
        on=Trigger(Dropped, _i_killed_in_melee, "you drop an enemy"))
@@ -144,7 +145,7 @@ def f416(c: Cast) -> None:
     )
 
 
-@power("f772", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f772", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you knock an enemy prone with a flail",
        on=Trigger(PowerResolved, lambda w, me, ev: ev.actor == me,

@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     FREE,
     NO_TARGET,
@@ -99,7 +100,7 @@ def f779(c: Cast) -> None:
     c.teleport(1, who=c.trigger.actor)
 
 
-@power("f796", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f796", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit an enemy with a bow attack",
        on=Trigger(Hit, _bow_hit, "you hit with a bow"))

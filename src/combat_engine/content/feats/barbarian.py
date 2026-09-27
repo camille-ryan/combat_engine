@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -28,7 +29,7 @@ from combat_engine.engine.query import allies
 RAGE = ("Keyword.RAGE",)
 
 
-@power("f454", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f454", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you reduce an enemy to 0 hit points",
        on=Trigger(Dropped, lambda w, me, ev: (
@@ -76,7 +77,7 @@ def _i_bloodied_it(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.hp <= half < ev.hp + ev.amount
 
 
-@power("f1826", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1826", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you bloody an enemy",
        on=Trigger(DamageApplied, _i_bloodied_it, "you bloody an enemy"))

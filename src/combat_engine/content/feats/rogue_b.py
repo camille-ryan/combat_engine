@@ -38,6 +38,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -204,7 +205,7 @@ def f820(c: Cast) -> None:
         c.bonus("speed", 1, on=c.me, until=When.EOT)
 
 
-@power("f2077", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2077", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you miss with a rogue encounter attack",
        on=Trigger(Miss, _my_rogue_encounter_miss, "you miss"))
@@ -230,7 +231,7 @@ def f2380(c: Cast) -> None:
         c.grants_advantage(on=c.trigger.target, until=When.EONT)
 
 
-@power("f2451", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2451", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with an opportunity attack, or one misses you",
        on=(Trigger(Hit, _i_hit, "you hit"),
@@ -268,7 +269,7 @@ def f2350(c: Cast) -> None:
         )
 
 
-@power("f2369", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2369", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a martial power, or use an associated power",
        on=(Trigger(Hit, _my_martial_hit, "you hit with a martial power"),
@@ -304,7 +305,7 @@ def f2369(c: Cast) -> None:
     )
 
 
-@power("f2388", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2388", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a martial power, or use an associated power",
        on=(Trigger(Hit, _my_martial_hit, "you hit with a martial power"),

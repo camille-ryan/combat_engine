@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     NO_TARGET,
     PERSONAL,
@@ -42,7 +43,7 @@ def _i_am_bloodied(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.actor == me
 
 
-@power("f1790", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1790", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you spend an action point",
        on=Trigger(ActionPointSpent, _my_point, "you spend an action point"))

@@ -11,6 +11,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -38,7 +39,7 @@ def _divine_hit_near(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     )
 
 
-@power("f483", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f483", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit an enemy within 3 squares with an invoker power",
        on=Trigger(Hit, _divine_hit_near, "you hit somebody close"))

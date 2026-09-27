@@ -27,6 +27,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FORT,
     MINOR,
@@ -155,7 +156,7 @@ def _shield_power_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 # -- the writable riders ----------------------------------------------------
 
 
-@power("f806", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f806", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="your polearm or spear attack pushes or slides a target 2+",
        on=Trigger(ForcedMove, _my_long_shove, "you shove a target 2 squares"))
@@ -171,7 +172,7 @@ def f806(c: Cast) -> None:
         c.prone(on=c.trigger.target)
 
 
-@power("f811", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f811", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you drop an enemy with a heavy blade",
        on=Trigger(Dropped, _i_dropped_someone, "you drop an enemy"))
@@ -184,7 +185,7 @@ def f811(c: Cast) -> None:
     c.grant_action("shift", MINOR, on=c.me, until=When.EOT)
 
 
-@power("f816", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f816", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a power that requires a shield",
        on=Trigger(Hit, _shield_power_hit, "you hit with a shield power"))
@@ -279,7 +280,7 @@ def f1740(c: Cast) -> None:
         c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER)
 
 
-@power("f1742", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1742", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with an opportunity attack with a spear",
        on=Trigger(Hit, _i_hit, "you hit"))
@@ -311,7 +312,7 @@ def f1742(c: Cast) -> None:
         c.slide(1, on=foe, to=beside[0])
 
 
-@power("f1971", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1971", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with an opportunity attack",
        on=Trigger(Hit, _i_hit, "you hit"))
@@ -493,7 +494,7 @@ def f1322(c: Cast) -> None:
 # like a lesser and a greater of the same style and share no member.
 
 
-@power("f1311", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1311", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit an unbloodied enemy with an associated power",
        on=Trigger(Hit, hit_with_one_of("p917", "p1758", "p1063"),
@@ -511,7 +512,7 @@ def f1311(c: Cast) -> None:
         c.shift(2)
 
 
-@power("f1319", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1319", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you crit with an associated power",
        on=Trigger(Hit, lambda w, me, ev: (
@@ -575,7 +576,7 @@ def f2326(c: Cast) -> None:
     )
 
 
-@power("f2339", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2339", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with an associated power",
        on=Trigger(Hit, hit_with_one_of("p10591", "p4542", "p1758"),
@@ -585,7 +586,7 @@ def f2339(c: Cast) -> None:
         c.slowed(on=c.trigger.target, until=When.EONT)
 
 
-@power("f2343", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2343", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit an enemy granting you combat advantage",
        on=Trigger(Hit, hit_with_one_of("p4541", "p10592", "p997"),

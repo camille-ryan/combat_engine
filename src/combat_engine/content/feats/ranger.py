@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -63,7 +64,7 @@ def _crit_on_quarry(kind: str):  # noqa: ANN202
     return when
 
 
-@power("f280", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f280", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you crit your quarry with a melee attack",
        on=Trigger(Hit, _crit_on_quarry("melee"), "you crit your quarry"))
@@ -78,7 +79,7 @@ def f280(c: Cast) -> None:
     )
 
 
-@power("f301", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f301", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you crit your quarry with a ranged attack",
        on=Trigger(Hit, _crit_on_quarry("ranged"), "you crit your quarry"))

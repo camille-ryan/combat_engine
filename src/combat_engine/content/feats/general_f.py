@@ -26,6 +26,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     REF,
@@ -139,7 +140,7 @@ def f193(c: Cast) -> None:
         )
 
 
-@power("f215", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f215", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you spend an action point",
        on=Trigger(ActionPointSpent, lambda w, me, ev: ev.actor == me,
@@ -252,7 +253,7 @@ def f609(c: Cast) -> None:
 # -- riders on a racial power that is a ref ---------------------------------
 
 
-@power("f203", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f203", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1628",
        on=Trigger(Hit, lambda w, me, ev: (
@@ -265,7 +266,7 @@ def f203(c: Cast) -> None:
     c.push(1, on=c.trigger.target)
 
 
-@power("f445", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f445", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2485",
        on=Trigger(PowerUsed, _used("p2485"), "you use that racial power"))
@@ -282,7 +283,7 @@ def f443(c: Cast) -> None:
     on a character to carry them."""
 
 
-@power("f444", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f444", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2485",
        on=Trigger(PowerUsed, _used("p2485"), "you use that racial power"))
@@ -298,7 +299,7 @@ def f444(c: Cast) -> None:
     c.bonus("save", 2, on=c.me, until=When.EOT, once=True, kind="feat")
 
 
-@power("f471", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f471", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2339",
        on=Trigger(PowerUsed, _used("p2339"), "you use that power"))

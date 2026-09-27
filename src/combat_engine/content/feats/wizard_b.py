@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AT_WILL,
     DAILY,
     ENCOUNTER,
     FORT,
@@ -94,7 +95,7 @@ def _minion(world, eid: int) -> bool:  # noqa: ANN001
 # -- keyword gates ---------------------------------------------------------
 
 
-@power("f1994", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1994", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a cold wizard power",
        on=Trigger(Hit, _wizard_hit_with(Keyword.COLD), "you hit with cold"))
@@ -104,7 +105,7 @@ def f1994(c: Cast) -> None:
     c.penalty(FORT, 2, on=c.trigger.target, until=When.EONT)
 
 
-@power("f1996", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1996", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a wizard illusion power",
        on=Trigger(Hit, _wizard_hit_with(Keyword.ILLUSION),
@@ -135,7 +136,7 @@ def f2133(c: Cast) -> None:
     )
 
 
-@power("f3069", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3069", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a fire attack",
        on=Trigger(Hit, _hit_with(Keyword.FIRE), "you hit with fire"))

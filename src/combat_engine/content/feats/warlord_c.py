@@ -32,6 +32,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FORT,
     FREE,
@@ -156,7 +157,7 @@ def _ranged_or_area(ctx: dict[str, Any]) -> bool:
 # -- the style feats, now that the associated lists resolve -----------------
 
 
-@power("f2357", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2357", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, trigger="you hit an enemy",
        on=Trigger(Hit, _i_hit, "you hit"))
 def f2357(c: Cast) -> None:
@@ -181,7 +182,7 @@ def f2365(c: Cast) -> None:
     context carries `conditions` and the attack context does not."""
 
 
-@power("f2368", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2368", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, trigger="you hit an enemy",
        on=Trigger(Hit, _i_hit, "you hit"))
 def f2368(c: Cast) -> None:
@@ -283,7 +284,7 @@ def f2710(c: Cast) -> None:
             )
 
 
-@power("f2711", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2711", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you push an enemy, or hit with an associated power",
        on=(Trigger(ForcedMove, _my_push, "you push an enemy"),
@@ -347,7 +348,7 @@ def f2716(c: Cast) -> None:
 # -- inspiring word, which is a ref -----------------------------------------
 
 
-@power("f2407", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2407", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET, trigger="you use p1590",
        on=Trigger(PowerUsed, _my_word, "you use inspiring word"))
 def f2407(c: Cast) -> None:
@@ -365,7 +366,7 @@ def f2407(c: Cast) -> None:
                 c.bonus(d, 1, on=who, until=When.EONT, when=_ranged_or_area)
 
 
-@power("f2416", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2416", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET, trigger="you use p1590",
        on=Trigger(PowerUsed, _my_word, "you use inspiring word"))
 def f2416(c: Cast) -> None:
@@ -373,7 +374,7 @@ def f2416(c: Cast) -> None:
         c.conceal(on=who, until=When.EONT)
 
 
-@power("f2797", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2797", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET, trigger="you use p1590",
        on=Trigger(PowerUsed, _my_word, "you use inspiring word"))
 def f2797(c: Cast) -> None:
@@ -418,7 +419,7 @@ def f2434(c: Cast) -> None:
 # -- Combat Leader, and the rest of the board -------------------------------
 
 
-@power("f2413", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2413", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, trigger="you roll initiative",
        on=Trigger(InitiativeRolled, lambda w, me, ev: ev.actor == me,
                   "you roll initiative"))
@@ -503,7 +504,7 @@ def f2414(c: Cast) -> None:
         )
 
 
-@power("f2466", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2466", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, trigger="you use p1770 or p1828",
        on=(Trigger(PowerUsed, lambda w, me, ev: (
                ev.actor == me and ev.power == "p1770"

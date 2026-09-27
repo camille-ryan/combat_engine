@@ -27,6 +27,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -190,7 +191,7 @@ def f1232(c: Cast) -> None:
     c.quarry(on=min(standing, key=lambda f: distance_between(c.world, me, f)))
 
 
-@power("f2183", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2183", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit your quarry with p1448",
        on=Trigger(Hit, _hit_quarry_with("p1448"), "you breathe on your quarry"))
@@ -221,7 +222,7 @@ def f1665(c: Cast) -> None:
     )
 
 
-@power("f2389", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2389", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you spend an action point",
        on=Trigger(ActionPointSpent, _my_point, "you spend an action point"))
@@ -317,7 +318,7 @@ def f2349(c: Cast) -> None:
         )
 
 
-@power("f2367", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2367", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, trigger="you hit with a martial power",
        on=Trigger(Hit, _my_martial_hit, "you hit"))
 def f2367(c: Cast) -> None:
@@ -412,7 +413,7 @@ def f2337(c: Cast) -> None:
 # -- the style feats, now that the lists resolve ---------------------------
 
 
-@power("f2069", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2069", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with an associated power",
        on=Trigger(Hit, hit_with_one_of("p919", "p10890"),
@@ -422,7 +423,7 @@ def f2069(c: Cast) -> None:
         c.push(1, on=c.trigger.target)
 
 
-@power("f2352", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2352", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with an associated power",
        on=Trigger(Hit, hit_with_one_of("p971", "p919", "p10890"),
@@ -504,7 +505,10 @@ def _shift_before(ref: str, squares: int, groups: tuple[str, ...],
     attack has happened and "before" has gone.
     """
 
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+    # `AT_WILL`, not `ENCOUNTER`: a triggered trait spends a use every
+    # time it fires, and neither card prints a limit. Written inside a
+    # helper, so the tree-wide sweep could not see it.
+    @power(ref, level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
            reach=PERSONAL, target=SELF, dropped=wants,
            trigger="you attack with an associated power",
            on=Trigger(PowerUsed, used_one_of(*refs),

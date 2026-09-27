@@ -22,6 +22,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FORT,
     PERSONAL,
@@ -112,7 +113,7 @@ def f1879(c: Cast) -> None:
     )
 
 
-@power("f2204", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2204", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p4932",
        on=Trigger(PowerUsed, _i_used("p4932"), "you use p4932"))
@@ -150,7 +151,7 @@ def f2706(c: Cast) -> None:
     )
 
 
-@power("f2792", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2792", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a barbarian fear power",
        on=Trigger(Hit, _my_fear_hit,

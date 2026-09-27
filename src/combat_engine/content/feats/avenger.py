@@ -15,6 +15,7 @@ from typing import Any
 from combat_engine.content.powers.avenger.oath import sworn
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FORT,
     PERSONAL,
@@ -45,7 +46,7 @@ def _charged_my_oath(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     )
 
 
-@power("f1007", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1007", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="an enemy other than your oath target hits you",
        on=Trigger(Hit, _enemy_hit_me, "somebody other than your oath hits you"))
@@ -59,7 +60,7 @@ def f1007(c: Cast) -> None:
     )
 
 
-@power("f1013", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1013", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit your oath target with a charge",
        on=Trigger(Hit, _charged_my_oath, "you charge your oath"))

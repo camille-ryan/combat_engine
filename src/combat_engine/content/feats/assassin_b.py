@@ -25,6 +25,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -266,7 +267,7 @@ def f1812(c: Cast) -> None:
     c.resist(amount, DamageType.POISON, on=c.me, until=When.ENCOUNTER)
 
 
-@power("f1801", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1801", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you miss with a fear power",
        on=Trigger(Miss, _missed_with(Keyword.FEAR), "you miss with fear"))
@@ -274,7 +275,7 @@ def f1801(c: Cast) -> None:
     c.slide(1, on=c.trigger.target)
 
 
-@power("f1805", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1805", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit an adjacent creature with an illusion power",
        on=Trigger(Hit, _my_illusion_encounter, "you hit with an illusion"))
@@ -286,7 +287,7 @@ def f1805(c: Cast) -> None:
         c.shift(1)
 
 
-@power("f1806", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1806", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a melee illusion power",
        on=Trigger(Hit, _my_illusion_melee, "you hit with a melee illusion"))
@@ -330,7 +331,7 @@ def f1809(c: Cast) -> None:
 # -- the racial powers that arrive as refs ----------------------------------
 
 
-@power("f1794", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1794", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p8278",
        on=Trigger(PowerUsed, _used("p8278"), "you use that racial power"))
@@ -377,7 +378,7 @@ def f2822(c: Cast) -> None:
         c.phasing(on=c.me, until=When.EOT)
 
 
-@power("f2821", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2821", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p7441",
        on=Trigger(PowerUsed, _used("p7441"), "you use that racial power"))
@@ -402,7 +403,7 @@ def f2815(c: Cast) -> None:
     """
 
 
-@power("f2229", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2229", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit a shrouded target with p1831",
        on=Trigger(Hit, lambda w, me, ev: (
@@ -522,7 +523,7 @@ def f2816(c: Cast) -> None:
     same gap four monk feats carry."""
 
 
-@power("f2818", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2818", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use f2023b against your shroud target",
        on=Trigger(PowerUsed, _used("f2023b"), "you use that granted power"))

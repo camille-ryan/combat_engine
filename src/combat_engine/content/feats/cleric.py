@@ -17,6 +17,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FORT,
     PERSONAL,
@@ -43,7 +44,7 @@ def _i_used(ref: str):  # noqa: ANN202
     return when
 
 
-@power("f1495", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1495", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1455",
        on=Trigger(PowerUsed, _i_used("p1455"), "you use p1455"))
@@ -52,7 +53,7 @@ def f1495(c: Cast) -> None:
     c.heal(c.str_mod, on=c.me)
 
 
-@power("f1508", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1508", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1455",
        on=Trigger(PowerUsed, _i_used("p1455"), "you use p1455"))
@@ -66,7 +67,7 @@ def f1508(c: Cast) -> None:
                     kind="power", once=True)
 
 
-@power("f1507", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1507", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p7885",
        on=Trigger(PowerUsed, _i_used("p7885"), "you use p7885"))
@@ -75,7 +76,7 @@ def f1507(c: Cast) -> None:
         c.bonus(defence, c.cha_mod, on=c.me, until=When.EONT, kind="power")
 
 
-@power("f1499", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1499", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1450 and the attack hits",
        on=Trigger(PowerUsed, _i_used("p1450"), "you use p1450"))

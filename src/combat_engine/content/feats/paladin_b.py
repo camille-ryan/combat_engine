@@ -28,6 +28,7 @@ from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.content.powers.paladin.marks import burning_mark
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     EACH_ENEMY,
     ENCOUNTER,
     FORT,
@@ -262,7 +263,7 @@ def f3083(c: Cast) -> None:
 # -- the heal, and whose surge value counts --------------------------------
 
 
-@power("f1554", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1554", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1566 or p7249 on an ally",
        on=(
@@ -277,7 +278,7 @@ def f1554(c: Cast) -> None:
         c.resist(c.str_mod, on=who, until=When.EONT)
 
 
-@power("f2295", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2295", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1566",
        on=Trigger(PowerUsed, _used(HEAL), "you use p1566"))
@@ -289,7 +290,7 @@ def f2295(c: Cast) -> None:
                  until=When.ENCOUNTER)
 
 
-@power("f2735", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2735", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1566 or p7240",
        on=(
@@ -303,7 +304,7 @@ def f2735(c: Cast) -> None:
         c.conceal(on=who, until=When.EOTNT)
 
 
-@power("f2872", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2872", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1566 on an ally",
        on=Trigger(PowerUsed, _used(HEAL), "you use p1566"))
@@ -359,7 +360,7 @@ def f3088(c: Cast) -> None:
             label=c.ref)
 
 
-@power("f1559", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1559", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you spend a healing surge",
        on=Trigger(SurgeSpent, lambda w, me, ev: ev.actor == me,
@@ -374,7 +375,7 @@ def f1559(c: Cast) -> None:
 # -- channel divinity, and the save it grants ------------------------------
 
 
-@power("f1750", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1750", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1746",
        on=Trigger(PowerUsed, _used("p1746"), "you use p1746"))
@@ -399,7 +400,7 @@ def f1750(c: Cast) -> None:
     c.watch(SavingThrow, shook_it, until=When.EOT, on=me, label=c.ref)
 
 
-@power("f3085", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3085", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1746",
        on=Trigger(PowerUsed, _used("p1746"), "you use p1746"))
@@ -436,7 +437,7 @@ def f3085(c: Cast) -> None:
 
 
 
-@power("f2756", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2756", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1747",
        on=Trigger(PowerUsed, _used("p1747"), "you use p1747"))
@@ -495,7 +496,7 @@ def f1550(c: Cast) -> None:
     c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=beside)
 
 
-@power("f3090", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3090", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="an adjacent ally is bloodied or drops to 0 hit points",
        on=(
@@ -519,7 +520,7 @@ def f3090(c: Cast) -> None:
 # -- standing on your own two feet -----------------------------------------
 
 
-@power("f1516", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1516", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you succeed on a saving throw",
        on=Trigger(SavingThrow,
@@ -661,7 +662,7 @@ def f1543(c: Cast) -> None:
     """Same shape as f1517 against a single target, and the same gap."""
 
 
-@power("f1560", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1560", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2485",
        on=Trigger(PowerUsed, _used("p2485"), "you use that racial power"))

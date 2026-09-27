@@ -24,6 +24,7 @@ from typing import Any
 from combat_engine.content.features.defenders_sa import warding
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -283,7 +284,7 @@ def _my_daily_power(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     )
 
 
-@power("f3282", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3282", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit an enemy with a daily attack power",
        on=Trigger(PowerResolved, _my_daily_power, "you use a daily attack"))
@@ -386,7 +387,7 @@ def f3401(c: Cast) -> None:
 # -- seeker -----------------------------------------------------------------
 
 
-@power("f1816", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1816", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you are bloodied by an attack",
        on=Trigger(Bloodied, about_me, "you are bloodied"))
@@ -427,7 +428,7 @@ def f1818(c: Cast) -> None:
             return
 
 
-@power("f2601", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2601", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p9501",
        on=Trigger(PowerUsed, _used("p9501"), "you use that power"))

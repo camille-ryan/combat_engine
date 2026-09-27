@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -47,7 +48,7 @@ def _crit_with_advantage(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     )
 
 
-@power("f302", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f302", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you crit while you have combat advantage",
        on=Trigger(Hit, _crit_with_advantage, "you crit with advantage"))
@@ -55,7 +56,7 @@ def f302(c: Cast) -> None:
     c.grants_advantage(on=c.trigger.target, until=When.EONT)
 
 
-@power("f307", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f307", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you crit while you have combat advantage",
        on=Trigger(Hit, _crit_with_advantage, "you crit with advantage"))
@@ -131,7 +132,7 @@ def f370(c: Cast) -> None:
     taken inside the granting row's body; nothing intercepts one."""
 
 
-@power("f750", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f750", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit a target that has not yet acted",
        on=Trigger(Hit, lambda w, me, ev: ev.attacker == me, "you hit"))

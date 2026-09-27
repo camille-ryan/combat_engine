@@ -885,7 +885,10 @@ def f2564(c: Cast) -> None:
         "save", 5, on=me, until=When.ENCOUNTER, kind="feat",
         when=lambda ctx: "fear" in str(ctx.get("against", "")).lower(),
     )
-    c.bonus("initiative", 2, on=me, until=When.ENCOUNTER, kind="feat")
+    # `c.initiative`, not `c.bonus("initiative", ...)`: `Initiative.bonus`
+    # is summed before the d20 and `Mods` is never consulted, so the
+    # modifier would be laid and no roll would read it.
+    c.initiative(2, on=me)
 
 
 @power("f2565", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

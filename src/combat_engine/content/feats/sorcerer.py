@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -30,7 +31,7 @@ def _my_at_will_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.attacker == me and p is not None and p.usage is Usage.AT_WILL
 
 
-@power("f998", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f998", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a sorcerer at-will attack power",
        on=Trigger(Hit, _my_at_will_hit, "you hit with an at-will"))

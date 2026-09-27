@@ -22,6 +22,7 @@ from typing import Any
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     EACH_ENEMY,
     ENCOUNTER,
     FREE,
@@ -235,7 +236,7 @@ def f946(c: Cast) -> None:
     combat advantage, and nothing grants it from one."""
 
 
-@power("f947", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f947", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you score a critical hit",
        on=Trigger(Hit, _i_crit, "you score a critical hit"))
@@ -251,7 +252,7 @@ def f949(c: Cast) -> None:
     a round."""
 
 
-@power("f950", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f950", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you reduce an enemy to 0 hit points",
        on=Trigger(Dropped, _i_dropped_them, "you drop an enemy"))

@@ -29,6 +29,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FORT,
     MINOR,
@@ -108,7 +109,7 @@ def _enchants_gear(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     )
 
 
-@power("f1370", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1370", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use an artificer power that targets a weapon or implement",
        on=Trigger(PowerUsed, _enchants_gear, "you enchant a weapon"))
@@ -133,7 +134,7 @@ def _my_summoning(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     )
 
 
-@power("f1380", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1380", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you summon a creature with an artificer summoning power",
        on=Trigger(Summoned, _my_summoning, "you summon a creature"))
@@ -151,7 +152,7 @@ def _force_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.attacker == me and p is not None and Keyword.FORCE in p.keywords
 
 
-@power("f1382", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1382", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit an enemy with a force power",
        on=Trigger(Hit, _force_hit, "you hit with a force power"))
@@ -329,7 +330,7 @@ def f3038(c: Cast) -> None:
 # -- riders on the infusion that heals --------------------------------------
 
 
-@power("f3024", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3024", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p4128",
        on=Trigger(PowerUsed, _used(HEAL_INFUSION), "you use that infusion"))
@@ -341,7 +342,7 @@ def f3024(c: Cast) -> None:
         c.save(on=who)
 
 
-@power("f3026", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3026", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p4128",
        on=Trigger(PowerUsed, _used(HEAL_INFUSION), "you use that infusion"))
@@ -455,7 +456,7 @@ def f3035(c: Cast) -> None:
     power", and nothing asks a creature which of its rows that is."""
 
 
-@power("f3037", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3037", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p7635 with p2475 unspent",
        on=Trigger(PowerUsed, _used(AC_INFUSION), "you use that infusion"))

@@ -95,7 +95,7 @@ def _battlemind_power(ctx: dict[str, Any]) -> bool:
 # -- speed of thought -------------------------------------------------------
 
 
-@power("f2270", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2270", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p10441",
        on=Trigger(PowerUsed, _used(SPEED_OF_THOUGHT), "you use p10441"))
@@ -107,7 +107,7 @@ def f2270(c: Cast) -> None:
     c.move(2, who=c.me)
 
 
-@power("f3285", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3285", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p10441",
        on=Trigger(PowerUsed, _used(SPEED_OF_THOUGHT), "you use p10441"))
@@ -122,7 +122,7 @@ def f3285(c: Cast) -> None:
         c.move(extra, who=c.me)
 
 
-@power("f3289", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3289", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use p10441",
        on=Trigger(PowerUsed, _used(SPEED_OF_THOUGHT), "you use p10441"))
@@ -136,7 +136,7 @@ def f3289(c: Cast) -> None:
             c.shift(1, who=friend)
 
 
-@power("f2787", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2787", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you finish the move from p10441",
        on=Trigger(PowerResolved, _used(SPEED_OF_THOUGHT), "you use p10441"))
@@ -265,7 +265,7 @@ def f3170(c: Cast) -> None:
 # -- battle resilience ------------------------------------------------------
 
 
-@power("f2591", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2591", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p11155",
        on=Trigger(PowerUsed, _used(BATTLE_RESILIENCE), "you use p11155"))
@@ -277,7 +277,7 @@ def f2591(c: Cast) -> None:
         c.bonus(d, 2, on=c.me, until=When.EONT)
 
 
-@power("f3296", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3296", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p11155",
        on=Trigger(PowerUsed, _used(BATTLE_RESILIENCE), "you use p11155"))
@@ -300,7 +300,7 @@ def f3316(c: Cast) -> None:
 # -- wild focus, forced movement, and the marked --------------------------
 
 
-@power("f3219", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3219", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use p12418",
        on=Trigger(PowerUsed, _used(WILD_FOCUS), "you use p12418"))
@@ -321,7 +321,7 @@ def f3241(c: Cast) -> None:
     c.forces(1, on=c.me, until=When.ENCOUNTER, when=_battlemind_power)
 
 
-@power("f3281", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3281", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use p6189",
        on=Trigger(PowerUsed, _used("p6189"), "you use p6189"))
@@ -335,7 +335,7 @@ def f3281(c: Cast) -> None:
             c.flat(max(0, c.str_mod), dtype=DamageType.PSYCHIC, on=foe)
 
 
-@power("f3400", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3400", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use f3395b",
        on=Trigger(PowerUsed, _used("f3395b"), "you use f3395b"))

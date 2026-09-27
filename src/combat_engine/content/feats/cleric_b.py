@@ -98,7 +98,7 @@ def _once_healed(c: Cast, fn) -> None:  # noqa: ANN001
 # -- healing word, which is p1455 in five of these prerequisites -----------
 
 
-@power("f1518", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1518", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1455 on an ally",
        on=Trigger(PowerUsed, _i_used(WORD), "you use p1455"))
@@ -107,7 +107,7 @@ def f1518(c: Cast) -> None:
     c.temp_hp(c.con_mod, on=c.me)
 
 
-@power("f1752", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1752", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1455",
        on=Trigger(PowerUsed, _i_used(WORD), "you use p1455"))
@@ -122,7 +122,7 @@ def f1752(c: Cast) -> None:
     _once_healed(c, pay)
 
 
-@power("f1966", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1966", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1455",
        on=Trigger(PowerUsed, _i_used(WORD), "you use p1455"))
@@ -137,7 +137,7 @@ def f1966(c: Cast) -> None:
     _once_healed(c, pay)
 
 
-@power("f2182", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2182", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1455 while bloodied",
        on=Trigger(PowerUsed, _i_used(WORD), "you use p1455"))
@@ -275,7 +275,7 @@ def f1553(c: Cast) -> None:
 # -- divine fortune, which is p1589 ----------------------------------------
 
 
-@power("f1526", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1526", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1589",
        on=Trigger(PowerUsed, _i_used(FORTUNE), "you use p1589"))
@@ -295,7 +295,7 @@ def f1526(c: Cast) -> None:
     c.bonus("save", 1, on=who, until=When.EONT)
 
 
-@power("f1963", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1963", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1589",
        on=Trigger(PowerUsed, _i_used(FORTUNE), "you use p1589"))
@@ -308,7 +308,7 @@ def f1963(c: Cast) -> None:
     c.bonus("save", 2, on=c.me, until=When.EONT)
 
 
-@power("f2752", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2752", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1589",
        on=Trigger(PowerUsed, _i_used(FORTUNE), "you use p1589"))
@@ -318,7 +318,7 @@ def f2752(c: Cast) -> None:
         c.temp_hp(c.cha_mod, on=friend)
 
 
-@power("f2007", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2007", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1589",
        on=Trigger(PowerUsed, _i_used(FORTUNE), "you use p1589"))
@@ -350,7 +350,7 @@ def f2007(c: Cast) -> None:
     c.watch(SavingThrow, on_save, until=When.EONT)
 
 
-@power("f2008", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2008", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1589",
        on=Trigger(PowerUsed, _i_used(FORTUNE), "you use p1589"))

@@ -204,7 +204,7 @@ def f3291(c: Cast) -> None:
 # -- riders on send thoughts and distract ----------------------------------
 
 
-@power("f1633", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1633", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use p8225",
        on=Trigger(PowerUsed, _used(SEND_THOUGHTS), "you use p8225"))
@@ -224,7 +224,7 @@ def f1633(c: Cast) -> None:
         return
 
 
-@power("f3303", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3303", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use p8225",
        on=Trigger(PowerUsed, _used(SEND_THOUGHTS), "you use p8225"))
@@ -249,7 +249,7 @@ def f3303(c: Cast) -> None:
         c.watch(Dropped, fell, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
-@power("f3325", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3325", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use p8224",
        on=Trigger(PowerUsed, _used(DISTRACT), "you use p8224"))
@@ -264,7 +264,7 @@ def f3325(c: Cast) -> None:
         )
 
 
-@power("f2789", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2789", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use p8224",
        on=Trigger(PowerUsed, _used(DISTRACT), "you use p8224"))

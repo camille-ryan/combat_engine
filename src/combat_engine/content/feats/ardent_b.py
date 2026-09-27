@@ -151,7 +151,7 @@ def f2141(c: Cast) -> None:
         c.save(on=who)
 
 
-@power("f3399", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3399", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use f3395b",
        on=Trigger(PowerUsed, _used("f3395b"), "you use f3395b"))
@@ -246,7 +246,7 @@ def f3306(c: Cast) -> None:
                 break
 
 
-@power("f3283", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3283", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use p12931",
        on=Trigger(PowerUsed, _used(ARDENT_ERUPTION), "you use p12931"))
@@ -276,7 +276,7 @@ def f3305(c: Cast) -> None:
         )
 
 
-@power("f3315", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3315", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use p11052",
        on=Trigger(PowerUsed, _used("p11052"), "you use p11052"))

@@ -29,6 +29,7 @@ from combat_engine.content.chargen import LONGSWORD
 from combat_engine.content.powers.avenger.oath import oath_target, sworn
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FORT,
     PERSONAL,
@@ -240,7 +241,7 @@ def _oath_missed_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.target == me and sworn(world, me, ev.attacker)
 
 
-@power("f2754", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2754", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="your oath target misses you",
        on=Trigger(Miss, _oath_missed_me, "your oath target misses you"))
@@ -255,7 +256,7 @@ def _dropped_my_oath(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.source == me and sworn(world, me, ev.actor)
 
 
-@power("f2758", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2758", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you drop your oath target",
        on=Trigger(Dropped, _dropped_my_oath, "you drop your oath target"))

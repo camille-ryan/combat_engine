@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -70,7 +71,7 @@ def f555(c: Cast) -> None:
     )
 
 
-@power("f1822", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1822", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p5032 to take beast form",
        on=Trigger(PowerUsed, lambda w, me, ev: (
@@ -100,7 +101,7 @@ def f1018(c: Cast) -> None:
     )
 
 
-@power("f1019", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1019", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you roll initiative",
        on=Trigger(InitiativeRolled, about_me, "you roll initiative"))

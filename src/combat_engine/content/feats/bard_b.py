@@ -24,6 +24,7 @@ from typing import Any
 
 from combat_engine.content.chargen import LONGSWORD
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -98,7 +99,7 @@ def f2892(c: Cast) -> None:
 # -- riders on the heal, which does have a ref -----------------------------
 
 
-@power("f1719", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1719", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2339",
        on=Trigger(PowerUsed, _used(WORD), "you use that power"))
@@ -115,7 +116,7 @@ def f1719(c: Cast) -> None:
             c.bonus("attack", 1, on=who, until=When.EOTNT)
 
 
-@power("f2563", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2563", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2339",
        on=Trigger(PowerUsed, _used(WORD), "you use that power"))
@@ -174,7 +175,7 @@ def _fire_or_fear(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     )
 
 
-@power("f2298", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2298", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a bard fire or fear attack",
        on=Trigger(Hit, _fire_or_fear, "you hit with fire or fear"))

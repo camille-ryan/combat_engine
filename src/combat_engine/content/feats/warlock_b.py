@@ -32,6 +32,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     CON,
     ENCOUNTER,
     FORT,
@@ -341,7 +342,7 @@ def f1153(c: Cast) -> None:
         )
 
 
-@power("f2080", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2080", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit a bloodied enemy under your curse",
        on=Trigger(Hit, _hit_by_me, "you hit with an attack"))
@@ -355,7 +356,7 @@ def f2080(c: Cast) -> None:
         _next_save(c, foe, -2)
 
 
-@power("f2761", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2761", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you score a critical hit against the target of your curse",
        on=Trigger(Hit, _crit_by_me, "you score a critical hit"))
@@ -367,7 +368,7 @@ def f2761(c: Cast) -> None:
         c.teleport(3, who=foe)
 
 
-@power("f2763", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2763", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you score a critical hit against the target of your curse",
        on=Trigger(Hit, _crit_by_me, "you score a critical hit"))
@@ -377,7 +378,7 @@ def f2763(c: Cast) -> None:
         c.teleport(4, who=c.me)
 
 
-@power("f2079", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2079", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="an enemy fails a saving throw against one of your warlock effects",
        on=Trigger(
@@ -466,7 +467,7 @@ def f2082(c: Cast) -> None:
     skill bonus, so this is deliberately inert rather than unwritten."""
 
 
-@power("f2291", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2291", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="an enemy hits you with a melee attack",
        on=Trigger(Hit, _melee_hit_on_me, "an enemy hits you in melee"))
@@ -617,7 +618,7 @@ def f2191(c: Cast) -> None:
 # -- fire, surges and temporary hit points ----------------------------------
 
 
-@power("f2196", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2196", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you spend a healing surge",
        on=Trigger(SurgeSpent, about_me, "you spend a healing surge"))

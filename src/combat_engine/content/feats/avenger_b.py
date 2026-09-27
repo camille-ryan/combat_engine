@@ -26,6 +26,7 @@ from combat_engine.content.powers.avenger.oath import (
     sworn,
 )
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
@@ -94,7 +95,7 @@ def _hit_oath_with(ref: str):  # noqa: ANN202
 # -- the oath itself --------------------------------------------------------
 
 
-@power("f1546", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1546", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p3069",
        on=Trigger(PowerUsed, _used(OATH), "you swear an oath"))
@@ -106,7 +107,7 @@ def f1546(c: Cast) -> None:
         c.mark(on=foe, until=When.EONT)
 
 
-@power("f1504", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1504", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit your oath target at range",
        on=Trigger(Hit, _ranged_hit_my_oath, "you hit your oath at range"))
@@ -145,7 +146,7 @@ def f1515(c: Cast) -> None:
         )
 
 
-@power("f1749", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1749", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you crit your oath target",
        on=Trigger(Hit, _crit_my_oath, "you crit your oath"))
@@ -189,7 +190,7 @@ def f2165(c: Cast) -> None:
     charge and the standard menu, and running is not on it."""
 
 
-@power("f2009", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2009", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p3069 on an undead creature",
        on=Trigger(PowerUsed, _used(OATH), "you swear an oath"))
@@ -204,7 +205,7 @@ def f2009(c: Cast) -> None:
 # -- riders on a racial power that is a ref ---------------------------------
 
 
-@power("f1558", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1558", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit your oath target with p1831",
        on=Trigger(Hit, _hit_oath_with("p1831"), "you hit your oath"))
@@ -214,7 +215,7 @@ def f1558(c: Cast) -> None:
     c.vulnerable(c.dex_mod, on=c.trigger.target, until=When.SONT)
 
 
-@power("f1551", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1551", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p7548",
        on=Trigger(PowerUsed, _used("p7548"), "you use that racial power"))
@@ -228,7 +229,7 @@ def f1551(c: Cast) -> None:
         return
 
 
-@power("f2011", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2011", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit your oath target with p8278",
        on=Trigger(Hit, _hit_oath_with("p8278"), "you hit your oath"))
@@ -317,7 +318,7 @@ def f1555(c: Cast) -> None:
     gap as f1523, and nothing models a disguise either."""
 
 
-@power("f1768", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1768", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you spend a healing surge",
        on=Trigger(SurgeSpent, lambda w, me, ev: ev.actor == me,
@@ -400,7 +401,7 @@ def f2028(c: Cast) -> None:
 # -- the godsworn boons ----------------------------------------------------
 
 
-@power("f2738", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2738", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you score a critical hit",
        on=Trigger(Hit, _i_crit, "you crit"))
@@ -414,7 +415,7 @@ def f2738(c: Cast) -> None:
         c.bonus("attack", 1, on=near[0], until=When.EONT)
 
 
-@power("f2739", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2739", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you score a critical hit",
        on=Trigger(Hit, _i_crit, "you crit"))
