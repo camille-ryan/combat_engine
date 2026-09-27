@@ -269,6 +269,15 @@ class Triggers:
         this used to handle the enemy case only, so such a row was aimed at
         the nearest ally rather than the hurt one. Silently, and only
         wrong when more than one ally was in range.
+
+        **And when you are the one who swung, it is whoever you hit.** The
+        third variant of the same mistake, and the commonest shape in the
+        magic item corpus: "when you hit an enemy with this weapon, use
+        this power on it" answers your *own* `Hit`, so the attacker is
+        you -- the old code found `who == eid`, gave up, and let
+        `_auto_targets` pick whichever enemy was nearest. The row applied
+        its condition to a creature you had not touched, silently, and
+        only when more than one enemy was in reach.
         """
         from .dsl import candidates
 
@@ -277,6 +286,8 @@ class Triggers:
             return None
         if side == "enemy":
             who = getattr(ev, "attacker", None) or getattr(ev, "actor", None)
+            if who == eid:
+                who = getattr(ev, "target", None)
         elif side in ("ally", "other_ally", "any", "other"):
             who = getattr(ev, "target", None) or getattr(ev, "actor", None)
         else:

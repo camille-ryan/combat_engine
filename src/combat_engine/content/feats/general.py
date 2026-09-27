@@ -601,12 +601,11 @@ def f297(c: Cast) -> None:
 
 @power("f297b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=Ranged(5), target=ONE_ALLY,
-       keywords=[Keyword.DIVINE, Keyword.HEALING],
-       todo=("c.regeneration()",))
+       keywords=[Keyword.DIVINE, Keyword.HEALING])
 def f297b(c: Cast) -> None:
-    """Regeneration 2 while bloodied, 4 at 11th and 6 at 21st. There is no
-    regeneration anywhere in the engine -- healing at the start of a turn is
-    not something a row can install."""
+    """Regeneration 2 while bloodied. The 11th and 21st level steps are
+    out of scope; the project stops at 10."""
+    c.regeneration(2, on=c.target, while_bloodied=True)
 
 
 @power("f298", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

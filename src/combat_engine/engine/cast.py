@@ -18,7 +18,7 @@ line and the unusual case still one line.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from .components import Gear, Health, Mod, Mods, Position, Stats
@@ -4046,6 +4046,73 @@ class Cast:
             AttackDeclared, guard, until=until, once=once,
             label=label or f"{self.ref} on attack",
         )
+
+    @property
+    def enhancement(self) -> int:
+        """The plus of the magic item **this row belongs to**.
+
+        "Equal to the enhancement bonus" is printed on fourteen of the
+        first sixty weapon blocks, and the number is a column that a body
+        must never write down -- so it has to be read. The first item
+        wave invented the same helper to do it and every later wave would
+        have invented it again, which is how a project ends up with three
+        subtly different answers to one question.
+
+        Found by matching this row's item against `Weapon.item`, not by
+        taking whatever magic is in hand: a character carrying a magic
+        sword and a magic bow has two, and the row belongs to one of
+        them.
+
+        Falls back to the enhancement of whatever magic *is* held, and
+        then to 1. A row that read 0 would do nothing at all, which on an
+        audit board looks exactly like a row that is broken.
+        """
+        mine = self.ref.split("x")[0].split("p")[0]
+        # `on=self.me`, not the default. `c.held` follows `c.target` like
+        # everything else that is about somebody else's body -- and this
+        # is about the caster's hand. Written without it first, and it
+        # returned 1 for a +2 axe in silence, which is the fourth time
+        # this default has caught somebody on this project.
+        magic = self.held(on=self.me, what="magic")
+        for w in magic:
+            if w.item == mine:
+                return w.enhancement
+        return magic[0].enhancement if magic else 1
+
+    def as_implement(self, *, on: int | None = None) -> None:
+        """This weapon counts as an implement for its wielder's powers.
+
+        The commonest single property in the magic weapon slot -- 35 item
+        blocks print it, eleven of them in the first sixty -- and there
+        was no door at all: `Gear.implement` picks the first held weapon
+        whose `group` is `"implement"`, and a sword's group is `"heavy
+        blade"` whatever a card says about it.
+
+        Written onto the weapon rather than held as an effect, because
+        the sentence is a fact about the object and not about the fight:
+        it is true while the thing is in your hand and meaningless when
+        it is not. `chargen.spawn` copies every weapon per character, so
+        this cannot leak into anybody else's sword -- which it would
+        have done before that copy existed.
+
+        The **class** half of the printed line -- "*bards* can use this
+        weapon as an implement" -- is not enforced here. The character
+        holding it is the one the item was dealt to, and nothing deals a
+        bard's weapon to a fighter; enforcing it would mean a `requires=`
+        that is true for every creature that will ever hold the thing.
+        """
+        gear = self.world.get(self._who(on) or self.me, Gear)
+        if gear is None:
+            return
+        arm = gear.main
+        if arm is None or arm.group == "implement":
+            return
+        gear.weapons = [
+            replace(w, group="implement", properties=w.properties | {arm.group})
+            if w is arm
+            else w
+            for w in gear.weapons
+        ]
 
     def regeneration(
         self,

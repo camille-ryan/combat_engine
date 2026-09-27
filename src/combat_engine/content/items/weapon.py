@@ -5,12 +5,11 @@ critical rider and the base-item restriction are columns in `game.db` and
 are laid on by `engine/equipment.py`; what is written here is only the part
 that needs a body.
 
-Three things this corpus keeps asking for that the engine cannot say, each
-marked with the symbol it wants rather than approximated:
+"Class X can use this weapon as an implement" is the commonest property in
+the slot -- eleven blocks in the first sixty -- and `c.as_implement` is the
+verb for it. Two things the corpus keeps asking for that still cannot be
+said, each marked with the symbol it wants rather than approximated:
 
-* **"class X can use this weapon as an implement."** The commonest property
-  in the whole slot. `Gear.implement` is computed from `Weapon.group`, so
-  there is no door for it -- `c.as_implement()`.
 * **"this weapon can be used as a heavy thrown weapon, range N/M"**, and
   "increase this weapon's range" -- `c.make_thrown()`, `c.weapon_range()`.
 * **"the damage ignores resistance"** -- `c.ignore_resistance()`.
@@ -91,22 +90,6 @@ _SIZES = (
 
 def _rank(size: Size) -> int:
     return _SIZES.index(size)
-
-
-def _plus(c: Cast) -> int:
-    """This block's own enhancement bonus, off the weapon it was laid on.
-
-    The number is a column and is never written here -- but a body saying
-    "equal to the enhancement bonus" has to read one. Falls back to the
-    heroic minimum when the board has handed out no magic weapon, so an
-    audited row still does something rather than silently doing nothing.
-    """
-    item = c.ref.split("x")[0].split("p")[0]
-    magic = c.held(on=c.me, what="magic")
-    for w in magic:
-        if w.item == item:
-            return w.enhancement
-    return magic[0].enhancement if magic else 1
 
 
 def _struck(c: Cast) -> int | None:
@@ -255,11 +238,11 @@ def i3391x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_implement()",),
 )
 def i601x1(c: Cast) -> None:
-    """A blade that counts as an implement for one class. `Gear.implement`
-    is derived from the weapon's group, so nothing can say it."""
+    """The class half of the line is not enforced: the item was dealt to
+    whoever is holding it."""
+    c.as_implement(on=c.me)
 
 
 @power(
@@ -269,10 +252,11 @@ def i601x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_implement()",),
 )
 def i602x1(c: Cast) -> None:
-    """A bow that counts as an implement for one class."""
+    """The class half of the line is not enforced: the item was dealt to
+    whoever is holding it."""
+    c.as_implement(on=c.me)
 
 
 @power(
@@ -492,7 +476,7 @@ def i1359x1(c: Cast) -> None:
     """A skill bonus, but a real modifier rather than an inert row: skill
     mods are read under `skill:<name>`."""
     c.bonus(
-        "skill:intimidate", _plus(c), kind=ITEM, on=c.me, until=When.ENCOUNTER
+        "skill:intimidate", c.enhancement, kind="item", on=c.me, until=When.ENCOUNTER
     )
 
 
@@ -546,7 +530,7 @@ def i1446x1(c: Cast) -> None:
     """An item bonus, so `kind="item"` -- and it therefore does not stack
     with another item bonus to damage, which is the printed rule."""
     c.bonus(
-        "damage", _plus(c), kind=ITEM, on=c.me, until=When.ENCOUNTER,
+        "damage", c.enhancement, kind="item", on=c.me, until=When.ENCOUNTER,
         when=_bigger(c),
     )
 
@@ -573,10 +557,11 @@ def i1490x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_implement()",),
 )
 def i1505x1(c: Cast) -> None:
-    """A blade that counts as an implement for one class."""
+    """The class half of the line is not enforced: the item was dealt to
+    whoever is holding it."""
+    c.as_implement(on=c.me)
 
 
 @power(
@@ -648,12 +633,13 @@ def i1568x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_implement()", "c.cover_from()"),
+    dropped=("c.cover_from()",),
 )
 def i1580x1(c: Cast) -> None:
-    """Two clauses, two gaps: an implement for one class, and damage to
-    whichever creature was granting the target cover. `query.cover_between`
-    answers how much cover there is, never who is giving it."""
+    """Damage to whichever creature was granting the target cover cannot
+    be said: `query.cover_between` answers how much cover there is, never
+    who is giving it."""
+    c.as_implement(on=c.me)
 
 
 @power(
@@ -762,11 +748,11 @@ def i1793p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_implement()",),
 )
 def i2008x1(c: Cast) -> None:
-    """An implement for one class and one race, without the proficiency
-    bonus -- and the implement half alone has no door."""
+    """The class half of the line is not enforced: the item was dealt to
+    whoever is holding it."""
+    c.as_implement(on=c.me)
 
 
 @power(
@@ -777,7 +763,7 @@ def i2008x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_implement()", "c.cast_through()"),
+    todo=("c.cast_through()",),
 )
 def i2008p1(c: Cast) -> None:
     """Fires another power out of this weapon, taking the weapon's range
@@ -792,10 +778,11 @@ def i2008p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_implement()",),
 )
 def i2009x1(c: Cast) -> None:
-    """An implement for one class and one race."""
+    """The class half of the line is not enforced: the item was dealt to
+    whoever is holding it."""
+    c.as_implement(on=c.me)
 
 
 @power(
@@ -805,10 +792,11 @@ def i2009x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_implement()",),
 )
 def i2010x1(c: Cast) -> None:
-    """An implement for one class and one race."""
+    """The class half of the line is not enforced: the item was dealt to
+    whoever is holding it."""
+    c.as_implement(on=c.me)
 
 
 @power(
@@ -826,7 +814,7 @@ def i2010x1(c: Cast) -> None:
 def i2010p1(c: Cast) -> None:
     foe = _struck(c)
     if foe is not None:
-        c.teleport(1 + _plus(c), who=foe)
+        c.teleport(1 + c.enhancement, who=foe)
 
 
 @power(
@@ -937,7 +925,7 @@ def i2125x1(c: Cast) -> None:
     initiative where the printed rule says the larger wins. Nothing reads
     an `"initiative"` modifier, so a typed `c.bonus` would be worse: it
     would be silently ignored rather than slightly too generous."""
-    c.initiative(_plus(c), on=c.me)
+    c.initiative(c.enhancement, on=c.me)
 
 
 @power(
@@ -1047,7 +1035,7 @@ def i2657x1(c: Cast) -> None:
     is handed `how` -- so "a power that slides" is sayable without also
     lengthening pushes and pulls, which the card does not grant."""
     c.forces(
-        _plus(c), on=c.me, until=When.ENCOUNTER,
+        c.enhancement, on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: ctx.get("how") == Forced.SLIDE,
     )
 
@@ -1070,7 +1058,7 @@ def i2657x1(c: Cast) -> None:
     on=Trigger(Hit, by_me, "you hit with the weapon"),
 )
 def i2657p1(c: Cast) -> None:
-    c.slide(_plus(c), on=_struck(c))
+    c.slide(c.enhancement, on=_struck(c))
 
 
 @power(
@@ -1080,12 +1068,13 @@ def i2657p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_implement()", "c.spirit_reach()"),
+    dropped=("c.spirit_reach()",),
 )
 def i2926x1(c: Cast) -> None:
-    """An implement for one class, and a widening of the reach a power
-    printed "melee spirit" has. `Range.from_` names the origin and nothing
-    changes how far from it a target may stand."""
+    """The widening of a "melee spirit" reach cannot be said: `Range.from_`
+    names the origin and nothing changes how far from it a target may
+    stand."""
+    c.as_implement(on=c.me)
 
 
 @power(
@@ -1095,12 +1084,13 @@ def i2926x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_implement()", "c.origin_of()"),
+    dropped=("c.origin_of()",),
 )
 def i2927x1(c: Cast) -> None:
-    """An implement for one class, and a swap of which square a power
-    printed "melee spirit" originates from. `Range.from_` is a column on
-    the power and no body can move it."""
+    """Swapping which square a "melee spirit" power originates from cannot
+    be said: `Range.from_` is a column on the power and no body moves
+    it."""
+    c.as_implement(on=c.me)
 
 
 @power(
@@ -1112,11 +1102,10 @@ def i2927x1(c: Cast) -> None:
     target=SELF,
 )
 def i3011x1(c: Cast) -> None:
-    """**Dropped:** the clause making this an implement for one class --
-    `Gear.implement` is derived from the weapon's group and no body can
-    reach it. The Stealth penalty is the rest of the card and it stands
-    on its own; skill modifiers are read under `skill:<name>`."""
-    plus = _plus(c)
+    """Skill modifiers are read under `skill:<name>`, so the Stealth
+    penalty is an ordinary one."""
+    c.as_implement(on=c.me)
+    plus = c.enhancement
 
     def on_hit(ev: Hit) -> None:
         if ev.attacker == c.me:
@@ -1133,12 +1122,13 @@ def i3011x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
+    dropped=("c.hit_before()",),
 )
 def i3011p1(c: Cast) -> None:
     """The printed entry condition -- you must already have hit this target
-    once -- is a fact about a creature the row does not name, so it is
-    dropped rather than approximated. `c.ignore_cover` covers concealment
-    as well, which is what the card waives."""
+    once this encounter -- is a fact about a creature the row does not
+    name, and dropping it makes the row freely usable rather than earned.
+    `c.ignore_cover` waives concealment as well, which is the effect."""
     c.ignore_cover(on=c.me, until=When.EONT)
 
 
@@ -1168,10 +1158,11 @@ def i3060p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_implement()",),
 )
 def i3069x1(c: Cast) -> None:
-    """A bow that counts as an implement for one class."""
+    """The class half of the line is not enforced: the item was dealt to
+    whoever is holding it."""
+    c.as_implement(on=c.me)
 
 
 @power(
@@ -1184,10 +1175,11 @@ def i3069x1(c: Cast) -> None:
     target=SELF,
     trigger="you attack an enemy with a power using this weapon",
     on=Trigger(Hit, by_me, "you attack an enemy with this weapon"),
+    dropped=("by_class()",),
 )
 def i3069p1(c: Cast) -> None:
-    """"With a bard attack power" is a class gate the engine has no way to
-    ask of a power mid-fight, so any attack of the wielder's arms it. The
+    """"With a bard attack power" is a class gate no predicate can ask of
+    the power that fired, so any attack of the wielder's arms it. The
     bonus is aimed at one enemy, which the attack context carries as
     `target`."""
     foe = _struck(c)
@@ -1268,11 +1260,11 @@ def i3140x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
+    dropped=("c.weapon_range()",),
 )
 def i3156x1(c: Cast) -> None:
-    """**Dropped:** the +10 to long range, which is a column on the weapon
-    and not something a body can change. Waiving the long-range penalty is
-    the other half and is a verb, so it is written."""
+    """Waiving the long-range penalty is a verb, so that half is written;
+    the +10 to long range is a column on the weapon."""
     c.ignores_long_range(on=c.me, until=When.ENCOUNTER)
 
 
@@ -1288,7 +1280,7 @@ def i528x1(c: Cast) -> None:
     """The attack context carries `opportunity`, so this is one gate and
     not a guess at which row an opportunity attack happens to be."""
     c.bonus(
-        "attack", 2, kind=ITEM, on=c.me, until=When.ENCOUNTER,
+        "attack", 2, kind="item", on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: bool(ctx.get("opportunity")),
     )
 
@@ -1300,14 +1292,14 @@ def i528x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
+    dropped=("c.maximise(when=)",),
 )
 def i581x1(c: Cast) -> None:
-    """**Dropped:** maximum damage against objects -- `c.maximise` takes no
-    `when=`, so it cannot be made to apply to one kind of target and not
-    another, and an ungated one would maximise every swing. The item bonus
+    """Maximum damage against objects needs a gate `c.maximise` does not
+    take, and an ungated one would maximise every swing. The item bonus
     against animates is the rest of the card."""
     c.bonus(
-        "damage", 2, kind=ITEM, on=c.me, until=When.ENCOUNTER,
+        "damage", 2, kind="item", on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: "animate" in c.kinds_of(on=ctx.get("target"))
         if ctx.get("target") is not None
         else False,
@@ -1324,17 +1316,17 @@ def i581x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with this weapon",
     on=Trigger(Hit, by_me, "you hit with this weapon"),
+    dropped=("c.flat(unpreventable=)",),
 )
 def i696p1(c: Cast) -> None:
     """The wielder pays the whole allowance rather than choosing a smaller
-    one: the trade is always worth at least double. "Cannot be reduced or
-    prevented" is not sayable and the self-damage is dealt flat, which
-    resistance would still eat -- a resistant wielder gets the payout
-    cheap, and nothing worse."""
+    one: the trade is always worth at least double. The self-damage is
+    dealt flat and resistance still eats it, so a resistant wielder gets
+    the payout cheap -- which is the clause that could not be written."""
     foe = _struck(c)
     if foe is None:
         return
-    cost = _plus(c)
+    cost = c.enhancement
     held = c.held(on=c.me)
     two_handed = bool(held) and held[0].two_handed
     c.flat(cost, on=c.me)
@@ -1391,7 +1383,7 @@ def i1155x1(c: Cast) -> None:
     and the wielder has to still have a point. The second is asked when
     the modifier is read, which is the moment the card means."""
     c.bonus(
-        "attack", 2, kind=ITEM, on=c.me, until=When.ENCOUNTER,
+        "attack", 2, kind="item", on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: bool(ctx.get("opportunity")) and c.points() >= 1,
     )
 
@@ -1440,11 +1432,12 @@ def i1300p1(c: Cast) -> None:
         AttackDeclared, _vs_ac_by_me, "you attack with this weapon against AC",
         window=Window.BEFORE,
     ),
+    dropped=("c.retarget_defence()",),
 )
 def i1318p1(c: Cast) -> None:
-    """**Dropped:** sending the attack at Fortitude instead of AC. The
-    defence is read off the power's own `Attack` line before the roll and
-    nothing redirects it. The extra damage is the other half and lands:
-    declared in the `BEFORE` window so the modifier is installed before the
-    triggering attack rolls its damage, and `once=True` spends it there."""
+    """Sending the attack at Fortitude instead of AC cannot be said -- the
+    defence is read off the power's own `Attack` line before the roll. The
+    extra damage lands: declared in the `BEFORE` window so the modifier is
+    installed before the triggering attack rolls its damage, and
+    `once=True` spends it there."""
     c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EOT, once=True)
