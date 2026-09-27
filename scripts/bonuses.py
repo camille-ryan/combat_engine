@@ -177,6 +177,18 @@ def _granted(text: str, word: str) -> bool:
             r"requirement|prerequisite|against creatures that have)\b", before
         ):
             continue
+        # **"proficiency with that weapon" is a gate, not a grant**, and
+        # the negation list above cannot see it: the sentence has no
+        # "must" in it, it simply says "you have proficiency with". Every
+        # one of the sixty weapon-style feats opens that way, so the day
+        # that family was written the checker started advising
+        # `kind="proficiency"` on rows whose bonus is plainly untyped.
+        #
+        # The distinction is the preposition. A type is named *as* a
+        # bonus -- "a proficiency bonus" -- and a possession is followed
+        # by "with".
+        if re.match(r"\s+with\b", text[m.end():]):
+            continue
         return True
     return False
 

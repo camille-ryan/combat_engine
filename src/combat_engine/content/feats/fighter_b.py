@@ -5,24 +5,20 @@ family** -- twenty rows printed as a pair, a lesser feat naming a weapon
 group and a greater one gated on the lesser -- and that family has one
 gap running through all of it.
 
-**"A power associated with this feat."** Every style feat ends with a
-printed `Associated Powers:` list, and the ETL resolves only the part of
-it that happens to be a ref: `p1063`, `p997`, `p620`. The rest arrives as
-printed names, which this project may not read. So the *set* is not
-knowable, and every clause of the form "when you hit with a power
-associated with this feat" carries `feat.associated_powers`, the symbol
-`f974` already named. Where the rest of the feat is writable the row
-plays and the clause is `dropped=`; where the associated clause is the
-whole benefit the row is `todo=`.
+**"A power associated with this feat"** used to be the whole blocker
+here, and it was never an engine gap. The printed `Associated Powers:`
+list was reaching authors as prose; now `etl/build._associated_refs`
+resolves it into refs, so the set is ordinary data and the clause is
+one `ctx["power"] in ...` read. See `styles.py`.
 
-**"In place of a melee basic attack."** The second half of most greater
-style feats. Even with the list it would want `c.as_basic(ref)`, which
-`f1239` names -- so those rows carry both symbols and the reason is two
-separate gaps, not one.
+What is left of that family is one real gap. **"In place of a melee
+basic attack"** -- the second benefit of most greater style feats --
+wants `c.as_basic(ref)`, which `f1239` named long before this batch.
+Knowing which rows may stand in for the basic does not make one able
+to.
 
-What *is* writable here is worth more than it looks: nine rows of
-ordinary riders on opportunity attacks, charges, crits and marks, all of
-which the attack and damage contexts already answer.
+The rest is ordinary riders on opportunity attacks, charges, crits and
+marks, all of which the attack and damage contexts already answer.
 """
 
 from __future__ import annotations
@@ -52,14 +48,15 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Position
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import ForcedMove
+from combat_engine.engine.events import ForcedMove, Moved
+from combat_engine.engine.grid import distance
 from combat_engine.engine.query import allies, enemies, flanked_by
 from combat_engine.engine.types import Forced
 
-#: The list a style feat names is printed prose, so the set is unknowable.
-ASSOCIATED = ("feat.associated_powers",)
-#: …and even knowing it, nothing lets a named row stand in for a basic.
-AS_BASIC = ("feat.associated_powers", "c.as_basic(ref)")
+from .styles import among, hit_with_one_of
+
+#: Knowing which rows a feat names does not let one stand in for a basic.
+AS_BASIC = ("c.as_basic(ref)",)
 #: A swing handed to you by Combat Challenge is announced as `mba` like
 #: any other, and nothing records who granted it. Seven rows already.
 GRANTED = ("c.on_granted_basic()",)
@@ -435,8 +432,7 @@ def f1320(c: Cast) -> None:
 
 @power("f1322", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("feat.associated_powers", "c.as_basic(ref)",
-                "c.provokes_on_stand()"),
+       dropped=("c.as_basic(ref)", "c.provokes_on_stand()"),
        trigger="you score a critical hit with a one-handed axe",
        on=Trigger(Hit, _i_crit, "you crit"))
 def f1322(c: Cast) -> None:
@@ -448,49 +444,187 @@ def f1322(c: Cast) -> None:
         c.prone(on=c.trigger.target)
 
 
-# -- the style family: the clause *is* the feat -----------------------------
+# -- the style family, now that the lists resolve --------------------------
+#
+# Each list is written out beside the row that uses it. They do not
+# overlap the way the printed pairs suggest: `f1317` and `f1318` look
+# like a lesser and a greater of the same style and share no member.
 
 
-def _style(ref: str, what: str, *, wants: tuple[str, ...] = ASSOCIATED) -> None:
-    """A style feat whose whole combat benefit rides on the unknowable
-    associated-powers list. The skill bonus each one also prints is not a
-    fight, so it is not what holds the row back."""
+@power("f1311", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit an unbloodied enemy with an associated power",
+       on=Trigger(Hit, hit_with_one_of("p917", "p1758", "p1063"),
+                  "you hit with an associated power"))
+def f1311(c: Cast) -> None:
+    """A shift after hitting something still at full strength.
 
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=wants)
-    def feat(c: Cast) -> None: ...
+    "Unbloodied" is asked after the blow landed, which is the only
+    reading that makes sense: a hit that bloodies the target leaves it
+    bloodied, and the printed line is about picking on the healthy.
+    """
+    if not _holding(c, "heavy blade"):
+        return
+    if not c.bloodied(on=c.trigger.target):
+        c.shift(2)
 
-    feat.__name__ = ref
-    feat.__doc__ = (
-        f"{what} The `Associated Powers:` list arrives as printed names, "
-        "which this project may not read, so the set is unknowable."
+
+@power("f1319", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you crit with an associated power",
+       on=Trigger(Hit, lambda w, me, ev: (
+           ev.attacker == me and ev.critical
+           and ev.power in ("p1758", "p1063")
+       ), "you crit with an associated power"))
+def f1319(c: Cast) -> None:
+    if _holding(c, "polearm"):
+        c.prone(on=c.trigger.target)
+
+
+@power("f1321", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("Moved.squares",),
+       trigger="you hit an unbloodied enemy with an associated power",
+       on=Trigger(Hit, hit_with_one_of("p4541", "p10592", "p997"),
+                  "you hit with an associated power"))
+def f1321(c: Cast) -> None:
+    """Punishes an unbloodied target for walking away.
+
+    A watch on the creature rather than a standing modifier, and gated
+    on the *distance*, which is the printed "more than 2 squares".
+
+    `Moved` has `from_` and `to` and **no `squares`** -- I reached for
+    one, and a `getattr` default would have made the whole row silently
+    false. The distance is measured between the two ends instead, which
+    is one move action rather than a turn's total: a creature that
+    walks two squares twice does not pay. That is the wrong reading of
+    the card, so the shortfall is named rather than left in prose.
+
+    `once=True`, because it is one payment however far it runs.
+    """
+    if not _grip(c, "axe", hands=1):
+        return
+    foe = c.trigger.target
+    if c.bloodied(on=foe):
+        return
+    hurt = c.con_mod
+
+    def on_move(ev: Any) -> None:
+        if ev.actor == foe and distance(ev.from_, ev.to) > 2:
+            c.flat(hurt, on=foe)
+
+    c.watch(Moved, on_move, on=foe, until=When.EONT, once=True)
+
+
+@power("f2326", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2326(c: Cast) -> None:
+    """An attack bonus with three named rows against a bloodied enemy.
+    A standing modifier rather than a trigger, because it is read while
+    the attack is being rolled rather than after it lands."""
+    me = c.me
+    picked = among("p2105", "p10592", "p620")
+    c.bonus(
+        "attack", 2, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            picked(ctx)
+            and _holding(c, "heavy blade")
+            and c.bloodied(on=ctx.get("target"))
+        ),
     )
 
 
-_style("f1311", "A shift after hitting an unbloodied enemy with one.")
-_style("f1317", "One stands in for a basic on an opportunity attack.",
-       wants=AS_BASIC)
-_style("f1319", "A crit with one knocks the target prone.")
-_style("f1321", "One punishes an unbloodied enemy for moving.")
-_style("f2071", "A damage bonus with one against a held-down enemy.")
-_style("f2326", "An attack bonus with one against a bloodied enemy.")
-_style("f2331", "One may target Reflex instead of AC.",
-       wants=("feat.associated_powers", "c.retarget_defence()"))
-_style("f2339", "One leaves the target slowed.")
-_style("f2343", "One penalises an enemy that gave you combat advantage.")
-_style("f2347", "A damage bonus with one against a target granting you "
-                "combat advantage.")
+@power("f2339", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with an associated power",
+       on=Trigger(Hit, hit_with_one_of("p10591", "p4542", "p1758"),
+                  "you hit with an associated power"))
+def f2339(c: Cast) -> None:
+    if _holding(c, "spear"):
+        c.slowed(on=c.trigger.target, until=When.EONT)
+
+
+@power("f2343", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit an enemy granting you combat advantage",
+       on=Trigger(Hit, hit_with_one_of("p4541", "p10592", "p997"),
+                  "you hit with an associated power"))
+def f2343(c: Cast) -> None:
+    """The advantage is read off the hit's own result rather than asked
+    of the board again: a one-shot grant has already been spent by the
+    time the hit is announced, which is exactly the case this is
+    printed for."""
+    if not _holding(c, "flail", "mace"):
+        return
+    result = getattr(c.trigger, "result", None)
+    if result is not None and result.advantage:
+        c.penalty("attack", 2, on=c.trigger.target, until=When.EONT)
+
+
+@power("f2347", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2347(c: Cast) -> None:
+    """A damage bonus, so the gate is in the *damage* context -- which
+    carries no `advantage`. The board is asked instead, which is right
+    here and wrong for `f2343`: damage is rolled inside the same swing,
+    before any one-shot grant has been cleared."""
+    from combat_engine.engine.query import has_combat_advantage
+
+    me = c.me
+    picked = among("p2248", "p1505", "p1000", "p620")
+    gear_ok = lambda: any(  # noqa: E731
+        w.group in ("axe", "hammer", "mace") and "versatile" in w.properties
+        for w in (c.world.get(me, Gear).melee if c.world.get(me, Gear) else ())
+    )
+    c.bonus(
+        "damage", 2, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            picked(ctx)
+            and gear_ok()
+            and ctx.get("target") is not None
+            and has_combat_advantage(c.world, me, ctx["target"])
+        ),
+    )
+
+
+@power("f1317", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=AS_BASIC)
+def f1317(c: Cast) -> None:
+    """`p2099` or `p10888` in place of a basic on an opportunity attack.
+    The list resolves now; nothing lets a named row stand in for the
+    basic, which is the symbol `f1239` named."""
+
+
+@power("f2331", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.retarget_defence()",))
+def f2331(c: Cast) -> None:
+    """`p4541`, `p10471` or `p10593` may hit Reflex instead of AC. The
+    list resolves; the defence a row rolls against is header data and
+    four item blocks want the same verb."""
+
+
+@power("f2071", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       todo=("feat.associated_powers", "c.coup_de_grace(bonus=)"))
+def f2071(c: Cast) -> None:
+    """The one style feat whose list does not resolve, because the page
+    prints none: the benefit says "a power associated with this feat"
+    and no `Associated Powers:` line follows it. So this really is the
+    unknowable case the other thirty were mistaken for.
+
+    Its other clause -- extra damage on a coup de grace -- has the verb
+    but no way to add to what one deals.
+    """
 
 
 @power("f2332", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("feat.associated_powers", "c.retarget_defence()",
-             "c.on_shift_away()"))
+       todo=("c.retarget_defence()", "c.on_shift_away()"))
 def f2332(c: Cast) -> None:
-    """Both halves are gaps and they are different ones. The second is
-    the associated-powers retarget. The first wants "an adjacent enemy
-    shifts away from you", and while `Moved.kind_` is `"shift"` the
-    event says nothing about which creature it is moving away from."""
+    """Both halves are gaps and they are different ones. `p622` and
+    `p1019` may hit Reflex instead of AC, and the defence a row rolls
+    against is header data. The other wants "an adjacent enemy shifts
+    away from you", and while `Moved.kind_` is `"shift"` the event says
+    nothing about which creature it went away from."""
 
 
 # -- everything waiting on a granted basic ----------------------------------

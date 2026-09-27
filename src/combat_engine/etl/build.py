@@ -878,6 +878,7 @@ def _cross_reference_rest(
             fixed = scrub(spec, others)
             if table == "feat":
                 fixed = _label_refs(fixed, by_name)
+                fixed = _associated_refs(fixed, by_name)
             fixed = _named_powers(fixed, by_name, ref)
             if fixed != spec:
                 out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
@@ -947,6 +948,75 @@ def _label_refs(spec: str, by_name: dict[str, str]) -> str:
         return f"{ref} : " if ref else m.group(0)
 
     return _LABEL.sub(swap, spec)
+
+
+#: The whole `Associated Powers:` line, to the end of the spec or the next
+#: blank line. Comma-separated, and a member may carry its own clause
+#: after a colon -- `Sly Flourish : only when used as a melee attack`.
+_ASSOCIATED = re.compile(r"^Associated Powers\s*:\s*(.+)$", re.M | re.S)
+
+#: A ref as `_named_powers` and `_label_refs` leave it.
+_IS_REF = re.compile(r"^[pmifr]\d+[a-z]*\d*$")
+
+
+def _associated_refs(spec: str, by_name: dict[str, str]) -> str:
+    """Turn a feat's Associated-Powers list into refs.
+
+    **This is the single largest gap in the feat corpus and it was never
+    an engine gap.** Sixty-odd weapon-style feats across the fighter, the
+    ranger, the rogue and the warlord print a benefit gated on "a power
+    associated with this feat", and the list naming those powers reached
+    authors as printed names -- which this project may not read. So the
+    set was unknowable and every one of those clauses was marked
+    `feat.associated_powers`.
+
+    The same argument as `_label_refs`, one step further along. A
+    comma-separated list under the heading *Associated Powers* is a list
+    of power names by construction, so `identifies` is rightly waived:
+    "Sure Strike" and "Crushing Blow" are two ordinary words each and
+    would never pass it in running prose.
+
+    **A name that does not resolve is not a failure and is not dropped
+    silently.** 213 of the 497 members are paragon or epic rows -- level
+    13 to 27 -- and this build imports heroic only, so they are powers no
+    character here can hold. The resolved subset therefore *is* the whole
+    associated set as far as the engine is concerned, and that is the
+    thing an author needs to be told. The count of the rest is printed
+    beside it so the author can see the list was trimmed rather than
+    guess.
+    """
+
+    def swap(m: re.Match) -> str:
+        refs: list[str] = []
+        above = 0
+        for part in m.group(1).split(","):
+            head = part.strip().split(":")[0].strip()
+            if not head:
+                continue
+            if _IS_REF.match(head):
+                refs.append(head)
+                continue
+            ref = by_name.get(head.lower())
+            # **Only a `p`.** `by_name` prefers a power on a tie, but a
+            # paragon power that shares its name with a monster ability
+            # has no heroic `p` to prefer -- so the tie-break silently
+            # handed two of these lists an `m` ref. A feat modifies the
+            # powers a character has; it has never modified a claw. Those
+            # count as out of scope, which is what they are.
+            if ref and ref[:1] == "p":
+                refs.append(ref)
+            else:
+                above += 1
+        if not refs and not above:
+            return m.group(0)
+        seen: list[str] = []
+        for r in refs:
+            if r not in seen:
+                seen.append(r)
+        tail = f"  (+{above} above heroic)" if above else ""
+        return f"Associated Powers: {', '.join(seen)}{tail}"
+
+    return _ASSOCIATED.sub(swap, spec)
 
 
 #: A word used on the pages of at least this many rows is ordinary English.

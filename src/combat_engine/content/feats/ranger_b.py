@@ -7,14 +7,14 @@ companion does not exist, so the eight rows that talk to one carry
 `c.beast()` beside the ten already waiting.
 
 What is new here is the **weapon-style family**, which the ranger shares
-with the fighter and the warlord. A style feat's benefit is gated on
-"a power associated with this feat", and the printed
-`Associated Powers:` list resolves only where a member happens to be a
-ref; the rest arrive as names, which this project may not read. So the
-set is unknowable and those clauses carry `feat.associated_powers`. The
-*greater* feat of each pair prints two benefits, and the first is very
-often ordinary -- which is why most of them play with one clause
-dropped rather than being refused outright.
+with the fighter and the warlord. A style feat's benefit is gated on "a
+power associated with this feat", and that list now resolves into refs
+-- see `styles.py` and `etl/build._associated_refs`. It was never an
+engine gap; the printed list was reaching authors as prose. Two real
+gaps are left behind it: `c.as_basic(ref)`, for the greater feats whose
+second benefit is standing in for a basic attack, and
+`c.ability_for(ref)`, for the ones that swap Dexterity in for Strength
+on named rows.
 
 `f2384` is the one to read. "It takes damage if it shifts before the end
 of your next turn" is a watch laid on the creature that was hit, and
@@ -39,6 +39,7 @@ from combat_engine.engine import (
     Keyword,
     Miss,
     Moved,
+    PowerUsed,
     Relation,
     Trigger,
     When,
@@ -49,9 +50,12 @@ from combat_engine.engine.dsl import get
 from combat_engine.engine.events import AttackDeclared
 from combat_engine.engine.query import allies, enemies
 
-#: The unknowable list, and the substitution that would want it anyway.
-ASSOCIATED = ("feat.associated_powers",)
-AS_BASIC = ("feat.associated_powers", "c.as_basic(ref)")
+from .styles import among, hit_with_one_of, used_one_of
+
+#: Knowing the list does not let a named row stand in for the basic…
+AS_BASIC = ("c.as_basic(ref)",)
+#: …nor change which ability a named row rolls.
+ABILITY = ("c.ability_for(ref)",)
 #: There is no beast companion. Ten rows in `ranger.py` already wait.
 BEAST = ("c.beast()",)
 #: Nothing announces that the class's extra damage was about to be paid.
@@ -236,7 +240,7 @@ def f815(c: Cast) -> None:
 
 
 @power("f1309", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ASSOCIATED,
+       reach=PERSONAL, target=SELF, dropped=ABILITY,
        trigger="you score a critical hit with a two-handed axe",
        on=Trigger(Hit, _i_crit, "you crit"))
 def f1309(c: Cast) -> None:
@@ -312,8 +316,7 @@ def f2349(c: Cast) -> None:
 
 
 @power("f2367", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ASSOCIATED,
-       trigger="you hit with a martial power",
+       reach=PERSONAL, target=SELF, trigger="you hit with a martial power",
        on=Trigger(Hit, _my_martial_hit, "you hit"))
 def f2367(c: Cast) -> None:
     """A save penalty narrowed to two conditions. The saving throw's
@@ -334,7 +337,7 @@ def f2367(c: Cast) -> None:
 
 
 @power("f2373", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ASSOCIATED)
+       reach=PERSONAL, target=SELF, dropped=ABILITY)
 def f2373(c: Cast) -> None:
     """Takes the combat-advantage bonus away from adjacent enemies.
 
@@ -363,7 +366,7 @@ def f2373(c: Cast) -> None:
 
 
 @power("f2384", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ASSOCIATED,
+       reach=PERSONAL, target=SELF, dropped=ABILITY,
        trigger="you hit with a martial power",
        on=Trigger(Hit, _my_martial_hit, "you hit"))
 def f2384(c: Cast) -> None:
@@ -387,7 +390,7 @@ def f2384(c: Cast) -> None:
 
 
 @power("f2337", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ASSOCIATED,
+       reach=PERSONAL, target=SELF, dropped=ABILITY,
        trigger="you attack with a bow or crossbow",
        on=Trigger(AttackDeclared, lambda w, me, ev: ev.attacker == me,
                   "you attack", window=Window.BEFORE))
@@ -404,35 +407,148 @@ def f2337(c: Cast) -> None:
         c.no_provoke(from_=c.trigger.target, on=c.me, until=When.EOT)
 
 
-# -- the style feats that are nothing but the unknowable list ---------------
+# -- the style feats, now that the lists resolve ---------------------------
 
 
-def _style(ref: str, what: str, *, wants: tuple[str, ...] = ASSOCIATED) -> None:
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=wants)
-    def feat(c: Cast) -> None: ...
+@power("f2069", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with an associated power",
+       on=Trigger(Hit, hit_with_one_of("p919", "p10890"),
+                  "you hit with an associated power"))
+def f2069(c: Cast) -> None:
+    if _holding(c, "bow"):
+        c.push(1, on=c.trigger.target)
 
-    feat.__name__ = ref
-    feat.__doc__ = (
-        f"{what} The `Associated Powers:` list arrives as printed names, "
-        "which this project may not read, so the set is unknowable."
+
+@power("f2352", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with an associated power",
+       on=Trigger(Hit, hit_with_one_of("p971", "p919", "p10890"),
+                  "you hit with an associated power"))
+def f2352(c: Cast) -> None:
+    """"Until the end of your turn", so `When.EOT` and not `EONT` -- a
+    speed bonus that outlived the turn it was bought for would be worth
+    twice what the card prints."""
+    if _holding(c, "crossbow", "bow", "sling"):
+        c.bonus("speed", 1, on=c.me, until=When.EOT)
+
+
+@power("f2386", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2386(c: Cast) -> None:
+    """Extra damage with two named rows against anything you are hidden
+    from. `query.hidden_from` answers the hiding, and a damage bonus is
+    the right shape because the printed extra is a flat modifier."""
+    from combat_engine.engine.query import hidden_from
+
+    me = c.me
+    picked = among("p917", "p10733")
+    c.bonus(
+        "damage", c.int_mod, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            picked(ctx)
+            and _holding(c, "bow", "crossbow")
+            and ctx.get("target") in hidden_from(c.world, me)
+        ),
     )
 
 
-_style("f2069", "One pushes the enemy it hits.")
-_style("f2325", "One punishes whatever is giving your target cover.",
-       wants=AS_BASIC)
-_style("f2335", "One gains the rattling keyword.")
-_style("f2352", "One pays a speed bonus on a hit.")
-_style("f2355", "One shoots past cover and concealment.")
-_style("f2386", "One pays extra when you are hidden from the target.")
-_style("f2361", "One uses Dexterity, and your shifts grow by a square.",
-       wants=("feat.associated_powers", "c.extend_shift()"))
-_style("f2387", "One lets you shift before the attack; the other clause "
-                "is a Perception penalty, which is not a fight.")
-_style("f2334", "One lets you shift before the attack, and the other "
-                "clause answers an enemy shifting away from you.",
-       wants=("feat.associated_powers", "c.on_shift_away()"))
+@power("f2355", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2355(c: Cast) -> None:
+    """Shoots past cover, and mostly past total cover.
+
+    Two rungs rather than one, because the card prints two numbers.
+    Ordinary cover and concealment are a -2 the attack context applies,
+    so +2 cancels them exactly. Superior cover and total concealment are
+    -5, and the card leaves a -2 standing, so the bonus there is +3 --
+    written as the difference rather than as a suppression, because
+    that is how the penalty reaches the roll.
+    """
+    me = c.me
+    picked = among("p529", "p1521")
+
+    def ordinary(ctx: dict) -> bool:
+        return (
+            picked(ctx) and _holding(c, "hand crossbow", "shortbow", "sling")
+            and (ctx.get("cover", 0) == 2 or ctx.get("concealment", 0) == 2)
+        )
+
+    def total(ctx: dict) -> bool:
+        return (
+            picked(ctx) and _holding(c, "hand crossbow", "shortbow", "sling")
+            and (ctx.get("cover", 0) > 2 or ctx.get("concealment", 0) > 2)
+        )
+
+    c.bonus("attack", 2, on=me, until=When.ENCOUNTER, when=ordinary)
+    c.bonus("attack", 3, on=me, until=When.ENCOUNTER, when=total)
+
+
+def _shift_before(ref: str, squares: int, groups: tuple[str, ...],
+                  refs: tuple[str, ...], what: str,
+                  wants: tuple[str, ...] = ()) -> None:
+    """"You can shift N squares **before** the attack."
+
+    `PowerUsed` fires before the body, which is the only reason this
+    clause is sayable at all -- by the time a `Hit` is announced the
+    attack has happened and "before" has gone.
+    """
+
+    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+           reach=PERSONAL, target=SELF, dropped=wants,
+           trigger="you attack with an associated power",
+           on=Trigger(PowerUsed, used_one_of(*refs),
+                      "you use an associated power"))
+    def feat(c: Cast) -> None:
+        if _holding(c, *groups):
+            c.shift(squares)
+
+    feat.__name__ = ref
+    feat.__doc__ = what
+
+
+_shift_before(
+    "f2387", 2, ("shortbow", "crossbow"), ("p529", "p1521"),
+    """Shift before the shot. The feat's other clause is a Perception
+    penalty, which is a check rather than a fight and so is not a
+    dropped mechanic.""",
+)
+_shift_before(
+    "f2334", 2, ("hammer", "pick"), ("p4405", "p10614"),
+    """Shift before the swing. The other clause -- answering an adjacent
+    marked enemy that shifts away -- is dropped: `Moved.kind_` says a
+    shift happened and nothing says which creature it went away
+    from.""",
+    wants=("c.on_shift_away()",),
+)
+
+
+@power("f2325", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       todo=("c.cover_from()", "c.as_basic(ref)"))
+def f2325(c: Cast) -> None:
+    """Punishes whatever is giving your target cover, and lets `p529` or
+    `p4389` stand in for a ranged basic. The list resolves now; neither
+    clause does. Cover is a number the attack context carries and
+    nothing says *which* creature is casting it, which an item block
+    also wants."""
+
+
+@power("f2335", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.add_keyword()",))
+def f2335(c: Cast) -> None:
+    """Gives `p919`, `p10890` or `p970` the rattling keyword. The list
+    resolves; `Power.keywords` is header data read before anything runs
+    and nothing adds to it for a turn."""
+
+
+@power("f2361", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       todo=("c.extend_shift()", "c.ability_for(ref)"))
+def f2361(c: Cast) -> None:
+    """Both clauses are gaps and they are different ones. Nothing adds
+    to the distance a shift somebody else's row grants, and nothing
+    changes which ability a named row rolls."""
 
 
 # -- the beast companion, which does not exist ------------------------------
