@@ -458,6 +458,13 @@ def f2386(c: Cast) -> None:
 def f2355(c: Cast) -> None:
     """Shoots past cover, and mostly past total cover.
 
+    **The groups are a closed set.** `chargen` only ever sets `group`
+    to axe, bow, crossbow, heavy blade, implement, light blade, mace,
+    spear, staff or unarmed -- "hand crossbow" and "shortbow" are
+    *weapons*, not groups, so gating on them was silently false
+    forever and the row was narrower than the card in a way nothing
+    would have noticed.
+
     Two rungs rather than one, because the card prints two numbers.
     Ordinary cover and concealment are a -2 the attack context applies,
     so +2 cancels them exactly. Superior cover and total concealment are
@@ -470,13 +477,13 @@ def f2355(c: Cast) -> None:
 
     def ordinary(ctx: dict) -> bool:
         return (
-            picked(ctx) and _holding(c, "hand crossbow", "shortbow", "sling")
+            picked(ctx) and _holding(c, "crossbow", "bow", "sling")
             and (ctx.get("cover", 0) == 2 or ctx.get("concealment", 0) == 2)
         )
 
     def total(ctx: dict) -> bool:
         return (
-            picked(ctx) and _holding(c, "hand crossbow", "shortbow", "sling")
+            picked(ctx) and _holding(c, "crossbow", "bow", "sling")
             and (ctx.get("cover", 0) > 2 or ctx.get("concealment", 0) > 2)
         )
 
@@ -508,7 +515,7 @@ def _shift_before(ref: str, squares: int, groups: tuple[str, ...],
 
 
 _shift_before(
-    "f2387", 2, ("shortbow", "crossbow"), ("p529", "p1521"),
+    "f2387", 2, ("bow", "crossbow"), ("p529", "p1521"),
     """Shift before the shot. The feat's other clause is a Perception
     penalty, which is a check rather than a fight and so is not a
     dropped mechanic.""",

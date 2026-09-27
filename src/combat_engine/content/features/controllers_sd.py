@@ -174,8 +174,17 @@ def invoker_covenant(c: Cast) -> None:
     `cf:invoker-covenant-channel` in `docs/blocked.json`.
     """
     me = c.me
-    preserving = c.build("second-int")
-    if not preserving and not c.build("second-con"):
+    # **The legs are named, not derived.** This read `c.build("second-int")`
+    # and `c.build("second-con")`, which are the legs `chargen` mints
+    # automatically for a class whose secondary ability is a choice. The
+    # invoker is a hand-written entry in `chargen.BUILDS` and its legs are
+    # `wrath`, `preservation` and `malediction` -- so both calls answered
+    # False for every invoker ever built, this returned on its second line,
+    # and the covenant manifestation did nothing in any fight since it was
+    # written. Twenty call sites in `content/powers/invoker/` already ask
+    # the right way; only this one did not.
+    preserving = c.build("preservation")
+    if not preserving and not c.build("wrath"):
         return
 
     def manifests(ref: str) -> bool:

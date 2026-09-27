@@ -9,13 +9,15 @@ The two that do not are ordinary triggers.
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.engine import (
     ENCOUNTER,
     PERSONAL,
     SELF,
     ActionType,
-    Bloodied,
     Cast,
+    DamageApplied,
     Dropped,
     Trigger,
     When,
@@ -48,20 +50,42 @@ def f454(c: Cast) -> None:
     )
 
 
+def _i_bloodied_it(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """Did *this* blow of mine take the target across half?
+
+    **`Bloodied` carries `actor` and nothing else.** This row was
+    declared on it with a predicate reading `ev.source`, which no
+    `Bloodied` has ever had -- so the predicate was False forever and
+    the row was inert from the day it was written. A `getattr` with a
+    default is what hid it.
+
+    `DamageApplied` carries `source`, `amount` and the hit points left
+    *after* the blow, which is everything the question needs: the
+    crossing is `hp` at or under half where `hp + amount` was above it.
+    Five item rows carry `Bloodied.source` as a marker for the same gap
+    and the same derivation would close all of them.
+    """
+    from combat_engine.engine import Health
+
+    if ev.source != me:
+        return False
+    health = world.get(ev.target, Health)
+    if health is None:
+        return False
+    half = health.max_hp // 2
+    return ev.hp <= half < ev.hp + ev.amount
+
+
 @power("f1826", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you bloody an enemy",
-       on=Trigger(Bloodied, lambda w, me, ev: (
-           getattr(ev, "source", None) == me
-       ), "you bloody an enemy"))
+       on=Trigger(DamageApplied, _i_bloodied_it, "you bloody an enemy"))
 def f1826(c: Cast) -> None:
     """"You **or** an ally" is a choice the scorer cannot weigh, so the
     bonus is laid on everybody -- each one is spent by its own next
     attack against that enemy, which comes to the same thing when only
     one of them takes the swing."""
-    me, foe = c.me, getattr(c.trigger, "actor", None)
-    if foe is None:
-        return
+    me, foe = c.me, c.trigger.target
     for who in [me, *(a for a in allies(c.world, me) if a != me)]:
         c.bonus(
             "damage", c.cha_mod, on=who, until=When.ENCOUNTER, once=True,

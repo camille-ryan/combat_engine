@@ -36,6 +36,8 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     Cast,
+    Condition,
+    ConditionEnded,
     Dropped,
     Gear,
     Hit,
@@ -49,7 +51,7 @@ from combat_engine.engine import (
 from combat_engine.engine.components import Position
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import ForcedMove, Moved
-from combat_engine.engine.grid import distance
+from combat_engine.engine.grid import distance, neighbours
 from combat_engine.engine.query import allies, enemies, flanked_by
 from combat_engine.engine.types import Forced
 
@@ -282,11 +284,31 @@ def f1740(c: Cast) -> None:
        trigger="you hit with an opportunity attack with a spear",
        on=Trigger(Hit, _i_hit, "you hit"))
 def f1742(c: Cast) -> None:
-    """`getattr` on `opportunity`: `resolve.attack` sets it afterwards as
-    a plain attribute rather than a field of the event."""
+    """Slide the target into a square beside you.
+
+    `getattr` on `opportunity`, because `resolve.attack` sets it
+    afterwards as a plain attribute rather than a field of the event.
+
+    **`c.slide` has no `to_adjacent`.** I invented one; its keywords are
+    `on`, `anchor`, `to` and `by`, so the call raised `TypeError` every
+    time the trigger fired. `to=` names the square outright, which is
+    what the printed "to a space adjacent to you" wants -- left to the
+    decider, a slide is a free choice and would as happily push the
+    target away.
+    """
     if not getattr(c.trigger, "opportunity", False) or not _holding(c, "spear"):
         return
-    c.slide(1, on=c.trigger.target, to_adjacent=c.me)
+    foe = c.trigger.target
+    mine = c.world.get(c.me, Position)
+    theirs = c.world.get(foe, Position)
+    if mine is None or theirs is None:
+        return
+    beside = [
+        sq for sq in neighbours(mine.square)
+        if distance(sq, theirs.square) <= 1 and sq != theirs.square
+    ]
+    if beside:
+        c.slide(1, on=foe, to=beside[0])
 
 
 @power("f1971", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -432,16 +454,36 @@ def f1320(c: Cast) -> None:
 
 @power("f1322", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.as_basic(ref)", "c.provokes_on_stand()"),
+       dropped=("c.as_basic(ref)",),
        trigger="you score a critical hit with a one-handed axe",
        on=Trigger(Hit, _i_crit, "you crit"))
 def f1322(c: Cast) -> None:
-    """The prone half plays. Two clauses are dropped: the associated
-    substitution, and "the first time it stands up it provokes" --
-    standing is an action in the menu and nothing hangs a provocation
-    off one."""
-    if _grip(c, "axe", hands=1):
-        c.prone(on=c.trigger.target)
+    """Knock it down, and punish it for getting up.
+
+    I marked the second clause `c.provokes_on_stand()` on the reasoning
+    that standing is an action in the menu with nothing to hang off.
+    **It is announced**: `actions.py:809` ends the prone effect with
+    `why="stood up"`, so `ConditionEnded` separates getting up on
+    purpose from an effect merely expiring. That is the whole clause,
+    and it is a watch.
+
+    `once=True` on the watch, because the card says "the first time it
+    stands up".
+    """
+    if not _grip(c, "axe", hands=1):
+        return
+    me, foe = c.me, c.trigger.target
+    c.prone(on=foe)
+
+    def on_stand(ev: Any) -> None:
+        if (
+            ev.target == foe
+            and ev.condition is Condition.PRONE
+            and ev.why == "stood up"
+        ):
+            c.provoke(me, on=foe, why="stood up beside you")
+
+    c.watch(ConditionEnded, on_stand, on=foe, until=When.EONT, once=True)
 
 
 # -- the style family, now that the lists resolve --------------------------

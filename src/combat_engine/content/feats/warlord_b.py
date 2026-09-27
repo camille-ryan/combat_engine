@@ -365,7 +365,10 @@ def f2353(c: Cast) -> None:
         "attack", 2, on=me, until=When.ENCOUNTER,
         when=lambda ctx: (
             picked(ctx)
-            and _holding(c, "hand crossbow", "shortbow", "sling")
+            # crossbow/bow/sling, not "hand crossbow"/"shortbow":
+            # those are weapons, and `Gear.group` only ever holds a
+            # group. Gating on one was silently false forever.
+            and _holding(c, "crossbow", "bow", "sling")
             and (ctx.get("cover", 0) or ctx.get("concealment", 0))
         ),
     )

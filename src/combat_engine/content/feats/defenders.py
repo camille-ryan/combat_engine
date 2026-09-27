@@ -24,6 +24,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.dsl import get
+from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.query import holding
 
 SECOND_WIND = ("c.on_second_wind()",)
@@ -119,16 +120,27 @@ def f585(c: Cast) -> None:
 @power("f1827", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you immobilize or slow an enemy with a hammer or mace",
-       on=Trigger(Hit, lambda w, me, ev: ev.attacker == me, "you hit"))
+       on=Trigger(PowerResolved, lambda w, me, ev: ev.actor == me,
+                  "you finish a power"))
 def f1827(c: Cast) -> None:
-    """The weapon is checked here rather than in the predicate because a
-    predicate gets no `Cast`, and the condition is checked *after* the
-    hit resolved -- which is the only moment it is true."""
+    """Extra damage to whatever this blow held down.
+
+    **Declared on `PowerResolved`, not on `Hit`.** I wrote it on `Hit`
+    and the docstring claimed the condition was "checked after the hit
+    resolved". It was not: `resolve.attack` emits `Hit` from *inside*
+    the power's body, before the body applies its riders -- so the test
+    read whatever slow happened to be on the target already and never
+    the one the hammer had just landed. `PowerResolved` is announced
+    when the body is done, which is the moment this row is printed for.
+
+    The weapon is checked in the body rather than the predicate because
+    a predicate gets no `Cast`.
+    """
     if not (holding(c.world, c.me, "hammer") or holding(c.world, c.me, "mace")):
         return
-    foe = c.trigger.target
-    if c.is_(Condition.SLOWED, on=foe) or c.is_(Condition.IMMOBILIZED, on=foe):
-        c.flat(c.con_mod, on=foe)
+    for foe in c.trigger.targets:
+        if c.is_(Condition.SLOWED, on=foe) or c.is_(Condition.IMMOBILIZED, on=foe):
+            c.flat(c.con_mod, on=foe)
 
 
 @power("f583", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

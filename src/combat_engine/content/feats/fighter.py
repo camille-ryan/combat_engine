@@ -41,6 +41,7 @@ from combat_engine.engine import (
     When,
     power,
 )
+from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.query import enemies, holding, team
 
 #: The conditions a hammer or a mace is printed as making stick.
@@ -146,15 +147,21 @@ def f416(c: Cast) -> None:
 @power("f772", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you knock an enemy prone with a flail",
-       on=Trigger(Hit, lambda w, me, ev: ev.attacker == me, "you hit"))
+       on=Trigger(PowerResolved, lambda w, me, ev: ev.actor == me,
+                  "you finish a power"))
 def f772(c: Cast) -> None:
-    """Only when the blow actually put the target down, so the prone is
-    checked after the fact rather than assumed from the hit."""
+    """Only when the blow actually put the target down.
+
+    On `PowerResolved` rather than `Hit` for the reason `f1827` in
+    `defenders.py` spells out: `resolve.attack` emits `Hit` from inside
+    the body, before the riders land, so a prone test there reads a
+    creature that was already down rather than one this flail felled.
+    """
     if not _holding(c, "flail"):
         return
-    foe = c.trigger.target
-    if c.is_(Condition.PRONE, on=foe):
-        c.slide(1, on=foe)
+    for foe in c.trigger.targets:
+        if c.is_(Condition.PRONE, on=foe):
+            c.slide(1, on=foe)
 
 
 @power("f778", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

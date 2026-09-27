@@ -99,6 +99,7 @@ from .events import (
     MoveStart,
     Note,
     OpportunityWindow,
+    PowerResolved,
     PowerUsed,
     RelationCleared,
     RelationSet,
