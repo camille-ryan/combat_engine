@@ -75,6 +75,12 @@ def features(
     f["is_second_wind"] = float(action.kind == "second_wind")
     f["is_end"] = float(action.kind == "end")
     f["is_wield"] = float(action.kind == "wield")
+    # Named, because an action kind the scorer does not name scores
+    # **zero** -- which beats ending a turn and beats a move, and is how
+    # a weapon swap became the AI's idle default twelve times a fight.
+    # A run is a move that gives the enemy combat advantage, so it is
+    # worth strictly less than walking the same way.
+    f["is_run"] = float(action.kind == "run")
     if action.kind == "wield":
         # **Drawing the right weapon was unreachable.** `actions._wielding`
         # offers the minor and `actions` can execute it, but nothing here
@@ -158,7 +164,7 @@ def features(
     if foes:
         f["nearest_enemy"] = float(min(distance_between(world, actor, e) for e in foes))
         f["enemies_left"] = float(len(foes))
-    if action.kind == "move" and action.dest is not None and foes:
+    if action.kind in ("move", "run") and action.dest is not None and foes:
         after = min(distance(action.dest, _square(world, e)) for e in foes)
         f["closes_distance"] = f.get("nearest_enemy", 0.0) - after
     return dict(f)
@@ -295,6 +301,10 @@ WEIGHTS: dict[str, float] = {
     # `closes_distance`.
     "is_wield": -4.0,
     "wield_reaches": 9.0,
+    # Strictly worse than walking: it covers the same ground and hands
+    # every enemy combat advantage until your next turn. Worth it only
+    # when `closes_distance` is large enough to pay for that.
+    "is_run": -3.0,
     # Enough to outweigh `is_power`, so a second stance has to be worth
     # more than an attack before the creature gives up the one it has.
     "swaps_stance": -8.0,

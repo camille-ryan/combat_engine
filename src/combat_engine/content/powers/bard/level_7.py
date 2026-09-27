@@ -121,7 +121,7 @@ def p13446(c: Cast) -> None:
     cls="bard",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=MeleeOrRanged(1, 10),
+    reach=MeleeOrRanged(1, 10, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[*ARCANE_WEAPON, Keyword.COLD, Keyword.CONJURATION, Keyword.PRIMAL],
     attack=Attack(CHA, vs=REF),

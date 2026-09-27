@@ -68,7 +68,7 @@ def p11473(c: Cast) -> None:
     cls="seeker",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=MeleeOrRanged(1, 20),
+    reach=MeleeOrRanged(1, 20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[
         Keyword.PRIMAL,

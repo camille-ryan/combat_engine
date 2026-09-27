@@ -298,7 +298,7 @@ def p13944(c: Cast) -> None:
     cls="cleric",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=MeleeOrRanged(1, 20),
+    reach=MeleeOrRanged(1, 20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[*DIVINE_WEAPON, Keyword.RADIANT],
     attack=Attack(WIS, vs=AC),

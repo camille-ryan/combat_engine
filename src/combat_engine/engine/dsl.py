@@ -144,15 +144,20 @@ def Wall(n: int, within: int) -> Range:
     return Range("wall", n, within)
 
 
-def MeleeOrRanged(melee: int = 1, ranged: int = 10) -> Range:
+def MeleeOrRanged(melee: int = 1, ranged: int = 10, *, by_weapon: bool = False) -> Range:
     """"Melee or Ranged weapon" -- one printed line, two ways to use it.
 
     The two branches disagree about more than distance: whether using it
     provokes, which weapon it rolls, and often which ability attacks. Each
     is offered as its own option, so picking one is a thing the player does
     rather than something decided at declaration time.
+
+    `by_weapon` lands on the **ranged half alone**. Only that half is the
+    weapon's range; putting it on the melee half too would send
+    `_reach_of` to `Gear.ranged` for a swing, and a ranger holding a
+    longbow would reach forty squares with a sword.
     """
-    return Range("melee", melee, alt=Range("ranged", ranged))
+    return Range("melee", melee, alt=Range("ranged", ranged, by_weapon=by_weapon))
 
 
 PERSONAL = Range("personal", 0)

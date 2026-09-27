@@ -358,7 +358,7 @@ def p6980(c: Cast) -> None:
     cls="avenger",
     usage=AT_WILL,
     action=STANDARD,
-    reach=MeleeOrRanged(1, 15),
+    reach=MeleeOrRanged(1, 15, by_weapon=True),
     target=ONE_CREATURE,
     keywords=DIVINE_WEAPON,
     attack=Attack(WIS, vs=AC),

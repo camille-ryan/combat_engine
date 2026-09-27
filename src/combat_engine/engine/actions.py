@@ -17,9 +17,11 @@ from typing import TYPE_CHECKING
 
 from .components import Budget, Build, Health, Powers
 from .dsl import aim_points, candidates, get, usable
+from .durations import When
 from .grid import Square, spread
-from .query import alive, can_act, is_
-from .types import ActionType, Condition, Usage
+from .query import alive, can_act, enemies, is_
+from .resolve import _mods
+from .types import ActionType, Condition, Relation, Usage
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -261,6 +263,22 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
                     path=tuple(path),
                 )
             )
+    # **Running.** Speed + 2, and you grant combat advantage until the
+    # start of your next turn. The engine built no run action at all, so
+    # seven content gates reading `kind_ == "run"` -- in fighter, avenger,
+    # ardent, warlord and two monster files -- could never once fire, and
+    # two engine docstrings promised it in the same breath ("cannot use
+    # move actions to walk or run"). A printed rule modelled nowhere.
+    #
+    # `c.bonus("run")` is read here so a stance can print a longer one:
+    # the ranger's is speed + 4 and grants nothing, which is a change to
+    # this menu rather than a power with a body.
+    if encounter.can_spend(actor, ActionType.MOVE) and can_walk(world, actor):
+        extra = 2 + _mods(world, actor, "run", {})
+        far = speed(world, actor) + extra
+        for dest, path in sorted(world.reachable_paths(actor, far).items()):
+            out.append(Action(kind="run", cost=ActionType.MOVE, dest=dest, path=tuple(path)))
+
     # A shift is its own action: one square, and it provokes nothing.
     # Offered separately because walking to the same square and shifting
     # to it are different decisions with different consequences.
@@ -520,6 +538,22 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
 
     if action.kind == "move":
         walk(world, actor, list(action.path))
+        return True
+
+    if action.kind == "run":
+        walk(world, actor, list(action.path), kind="run")
+        # "You grant combat advantage until the start of your next turn."
+        # Unless something says otherwise -- the ranger's stance is the
+        # printed exception and turns this off with `run_exposed`.
+        if _mods(world, actor, "run_exposed", {}) >= 0:
+            world.effects.apply(
+                actor, actor, When.SONT, label="running",
+                relations=[
+                    (Relation.GRANTS_CA_TO, actor, e)
+                    for e in enemies(world, actor)
+                    if alive(world, e)
+                ],
+            )
         return True
 
     if action.kind == "charge":

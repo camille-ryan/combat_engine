@@ -71,7 +71,7 @@ def _enemy_moved_next_to_me(world: World, me: int, ev: Event) -> bool:
     cls="ranger",
     usage=DAILY,
     action=STANDARD,
-    reach=MeleeOrRanged(1, 20),
+    reach=MeleeOrRanged(1, 20, by_weapon=True),
     target=UpTo(2),
     keywords=MARTIAL_RANGED,
     attack=Attack(STR, vs=AC),

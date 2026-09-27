@@ -52,7 +52,7 @@ def _carries_a_rattler(world: World, eid: int) -> bool:
     cls="rogue",
     usage=DAILY,
     action=STANDARD,
-    reach=MeleeOrRanged(1, 10),
+    reach=MeleeOrRanged(1, 10, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[Keyword.MARTIAL, Keyword.WEAPON, Keyword.RATTLING],
     attack=Attack(DEX, vs=AC),

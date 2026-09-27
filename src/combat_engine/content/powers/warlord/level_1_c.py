@@ -178,7 +178,7 @@ def _enemy_felled_an_ally(radius: int) -> Callable[[World, int, Event], bool]:
     cls="warlord",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=MeleeOrRanged(1, 10),
+    reach=MeleeOrRanged(1, 10, by_weapon=True),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(STR, vs=AC),

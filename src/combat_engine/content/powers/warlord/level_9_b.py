@@ -346,7 +346,7 @@ def p10948(c: Cast) -> None:
     cls="warlord",
     usage=DAILY,
     action=STANDARD,
-    reach=MeleeOrRanged(1, 20),
+    reach=MeleeOrRanged(1, 20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(STR, vs=AC),

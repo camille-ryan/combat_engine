@@ -140,7 +140,7 @@ def _unexpend(c: Cast) -> None:
     cls="ranger",
     usage=AT_WILL,
     action=STANDARD,
-    reach=MeleeOrRanged(1, 20),
+    reach=MeleeOrRanged(1, 20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=MARTIAL_RANGED,
     attack=Attack(DEX, vs=AC),

@@ -44,7 +44,7 @@ from combat_engine.engine.query import team
     cls="seeker",
     usage=DAILY,
     action=STANDARD,
-    reach=MeleeOrRanged(1, 20),
+    reach=MeleeOrRanged(1, 20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.ZONE],
     attack=Attack(WIS, vs=AC),

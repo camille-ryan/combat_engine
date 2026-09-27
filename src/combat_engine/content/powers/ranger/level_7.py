@@ -112,7 +112,7 @@ def p1418(c: Cast) -> None:
     cls="ranger",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=MeleeOrRanged(1, 20),
+    reach=MeleeOrRanged(1, 20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=MARTIAL_RANGED,
     attack=Attack(STR, vs=AC),
