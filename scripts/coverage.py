@@ -4,6 +4,8 @@
     uv run scripts/coverage.py
     uv run scripts/coverage.py --class fighter
     uv run scripts/coverage.py --monsters --max-level 3
+    uv run scripts/coverage.py --kind items
+    uv run scripts/coverage.py --kind feats --class fighter
     uv run scripts/coverage.py --partial          the rows that said what they lack
 
 The work list. Every row in `game.db` is in one of three states:
@@ -27,6 +29,13 @@ percentage printed is done over total; partial is counted beside it and
 listed by name, so the only way to move the number is to finish the row.
 `scripts/todo.py` fails the build if the markers outgrow their budget or if
 one of them is waiting on something that now exists.
+
+**The row counted is the row somebody writes.** For items that is the
+`item_block` -- one Property or one Power -- and not the item: an item with
+a property and a power is two jobs, either can be written without the
+other, and counting items would call such a row half-done with nowhere to
+say which half. For feats it is the `feat`, cards included, since a feat
+that prints a whole power card is two declarations under two refs.
 """
 
 from __future__ import annotations
@@ -38,18 +47,34 @@ from collections import defaultdict
 from combat_engine.content import declared
 from combat_engine.etl.build import game
 
+#: Heroic is `tier` when the page printed one and `min_level` when it did
+#: not -- 758 of the heroic feats print no tier line at all. `etl/feat.py`
+#: argues it; this is the same clause its docstring gives.
+HEROIC = "(tier = 'Heroic' OR (tier = '' AND min_level <= 10))"
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--class", dest="cls", action="append", help="only this class; repeatable")
-    ap.add_argument("--monsters", action="store_true", help="monsters instead of powers")
+    ap.add_argument(
+        "--kind",
+        choices=("powers", "monsters", "items", "feats"),
+        default="powers",
+        help="what to count",
+    )
+    ap.add_argument("--monsters", action="store_true", help="alias for --kind monsters")
     ap.add_argument("--max-level", type=int, help="stop at this level")
     ap.add_argument(
         "--book",
         default="Player's Handbook",
         help="only powers printed in this book; empty string for any",
+    )
+    ap.add_argument(
+        "--all-tiers",
+        action="store_true",
+        help="feats: paragon and epic as well, which are out of scope by default",
     )
     ap.add_argument("--list", action="store_true", help="print the undeclared refs")
     ap.add_argument("--partial", action="store_true",
@@ -61,40 +86,121 @@ def main() -> int:
     partial = {ref: p.todo for ref, p in rows.items() if p.todo}
     db = game()
 
-    if args.monsters:
-        # MM1-3 only. Everything else in the compendium is out of scope and
-        # counting it would make the work look endless.
-        where = ["m.book != ''"]
-        params: list = []
-        if args.max_level:
-            where.append("m.level <= ?")
-            params.append(args.max_level)
-        found = db.execute(
-            "SELECT a.ref, m.level, m.role FROM monster_power a "
-            "JOIN monster m ON m.ref = a.monster_ref WHERE "
-            + " AND ".join(where)
-            + " ORDER BY m.level, m.role, a.ref",
-            params,
-        ).fetchall()
-        _report(found, done, partial, "level", "role", args)
-    else:
-        sql = "SELECT ref, class, level, books FROM power"
-        where, params = [], []
-        if args.cls:
-            where.append("lower(class) IN (" + ",".join("?" * len(args.cls)) + ")")
-            params.extend(c.lower() for c in args.cls)
-        if args.max_level:
-            where.append("level <= ?")
-            params.append(args.max_level)
-        if where:
-            sql += " WHERE " + " AND ".join(where)
-        found = [
-            r
-            for r in db.execute(sql + " ORDER BY class, level, ref", params)
-            if not args.book or args.book in json.loads(r["books"] or "[]")
-        ]
-        _report(found, done, partial, "class", "level", args)
+    kind = "monsters" if args.monsters else args.kind
+    found, a, b = {
+        "monsters": lambda: (_monsters(db, args), "level", "role"),
+        "items": lambda: (_items(db, args), "category", "base_level"),
+        "feats": lambda: (_feats(db, args), "gate", "min_level"),
+        "powers": lambda: (_powers(db, args), "class", "level"),
+    }[kind]()
+    _report(found, done, partial, a, b, args)
     return 0
+
+
+def _monsters(db, args: argparse.Namespace) -> list:  # noqa: ANN001
+    # MM1-3 only. Everything else in the compendium is out of scope and
+    # counting it would make the work look endless.
+    where = ["m.book != ''"]
+    params: list = []
+    if args.max_level:
+        where.append("m.level <= ?")
+        params.append(args.max_level)
+    return db.execute(
+        "SELECT a.ref, m.level, m.role FROM monster_power a "
+        "JOIN monster m ON m.ref = a.monster_ref WHERE "
+        + " AND ".join(where)
+        + " ORDER BY m.level, m.role, a.ref",
+        params,
+    ).fetchall()
+
+
+def _powers(db, args: argparse.Namespace) -> list:  # noqa: ANN001
+    sql = "SELECT ref, class, level, books FROM power"
+    where, params = [], []
+    if args.cls:
+        where.append("lower(class) IN (" + ",".join("?" * len(args.cls)) + ")")
+        params.extend(c.lower() for c in args.cls)
+    if args.max_level:
+        where.append("level <= ?")
+        params.append(args.max_level)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    return [
+        r
+        for r in db.execute(sql + " ORDER BY class, level, ref", params)
+        if not args.book or args.book in json.loads(r["books"] or "[]")
+    ]
+
+
+def _items(db, args: argparse.Namespace) -> list:  # noqa: ANN001
+    """Every Property and every Power, filed under the item it hangs off.
+
+    `--book` is not applied here and there is no way to ask for it. Its
+    default is the Player's Handbook, which prints no magic item at all, so
+    honouring it would answer every question about items with nothing.
+    """
+    sql = (
+        "SELECT b.ref, i.category, i.base_level FROM item_block b "
+        "JOIN item i ON i.ref = b.item_ref"
+    )
+    params: list = []
+    if args.max_level:
+        sql += " WHERE i.base_level <= ?"
+        params.append(args.max_level)
+    return db.execute(sql + " ORDER BY i.category, i.base_level, b.ref", params).fetchall()
+
+
+def _feats(db, args: argparse.Namespace) -> list[dict]:  # noqa: ANN001
+    """Feats and their power cards, bucketed by what gates them.
+
+    A card carries no prerequisite of its own -- the gate stays on the
+    parent feat, which is why both share an `id` -- so it is filed under
+    the parent's gate. Bucketing it on its own null gate would have put
+    230 class feats in `general`.
+    """
+    gates = {
+        r["id"]: _gate(r["prereq"])
+        for r in db.execute("SELECT id, prereq FROM feat WHERE prereq IS NOT NULL")
+    }
+    sql = "SELECT ref, id, min_level FROM feat"
+    if not args.all_tiers:
+        sql += " WHERE " + HEROIC
+    rows = [
+        {"ref": r["ref"], "gate": gates.get(r["id"], "general"), "min_level": r["min_level"]}
+        for r in db.execute(sql + " ORDER BY id, ref")
+    ]
+    if args.cls:
+        wanted = {c.lower() for c in args.cls}
+        rows = [r for r in rows if r["gate"] in wanted]
+    return rows
+
+
+def _gate(prereq: str | None) -> str:
+    """Which shelf a feat sits on: a class, `race`, or `general`.
+
+    Class outranks race, because a feat gated on both -- one race and any
+    of three classes -- is a class feat that one race may also take, and
+    filing it under race hides it from the class about to be written.
+    `general` is the residue, so it also holds every gate the tree could
+    not read; that is the honest place for them, since nothing about an
+    opaque clause says whose feat it is.
+    """
+    leaves = list(_leaves(json.loads(prereq) if prereq else None))
+    for leaf in leaves:
+        if "class" in leaf:
+            return leaf["class"]
+    return "race" if any("race" in leaf for leaf in leaves) else "general"
+
+
+def _leaves(node: dict | None):  # noqa: ANN202
+    if not node:
+        return
+    for joiner in ("all", "any"):
+        if joiner in node:
+            for child in node[joiner]:
+                yield from _leaves(child)
+            return
+    yield node
 
 
 def _report(rows, done: set[str], partial: dict[str, tuple[str, ...]],  # noqa: ANN001

@@ -3,8 +3,12 @@
 
     uv run scripts/spec.py p289              one power
     uv run scripts/spec.py m145              a monster: its numbers, then each ability
+    uv run scripts/spec.py i601              an item: its columns, then each block
+    uv run scripts/spec.py f3                a feat: its gate, then the benefit
     uv run scripts/spec.py --class fighter --level 1
     uv run scripts/spec.py --monsters 1 --role brute
+    uv run scripts/spec.py --items --slot weapon --level 3 --limit 20
+    uv run scripts/spec.py --feats --class fighter --limit 20
     uv run scripts/spec.py --class rogue --level 1 --all
 
 By default only rows that have **not** been declared yet come out, so the
@@ -15,33 +19,62 @@ text, and no self-reference: a stat block that names itself in its own rules
 says "contracts m145 filth fever" here instead. The author writes the function
 without ever learning what the row is called, which is the arrangement that
 keeps the engine free of a publisher's prose.
+
+**Use `--limit`.** The heroic tier is 2,491 item blocks and 2,536 feats, and
+the implement slot alone is 412 items; an unbounded `--items` is a brief
+nobody can read and a context nobody can afford.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 
 from combat_engine.etl.build import game
+
+#: Heroic is `tier` when the page printed one and `min_level` when it did
+#: not. `etl/feat.py` argues it; `coverage.py` asks the same question.
+HEROIC = "(tier = 'Heroic' OR (tier = '' AND min_level <= 10))"
+
+#: The project's scope, and the reason a ladder prints two rungs here and
+#: not six: the paragon and epic ones are recorded but nobody is writing
+#: against them, and six rungs on one line buried the two that matter.
+MAX_ITEM_LEVEL = 10
+
+#: `item.enh_to` is a code, because the pages word the same bonus eleven
+#: ways. This is the wording an author needs to recognise it by.
+ENHANCES = {
+    "attack_damage": "attack rolls and damage rolls",
+    "ac": "AC",
+    "defences": "Fortitude, Reflex and Will",
+}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("refs", nargs="*", help="power or monster ids, e.g. p289 m145")
-    ap.add_argument("--class", dest="cls", help="any of the eight PHB1 classes")
+    ap.add_argument("refs", nargs="*", help="any id, e.g. p289 m145 i601 i601x1 f3 r5")
+    ap.add_argument("--class", dest="cls", help="a class; narrows powers or --feats")
     ap.add_argument(
         "--level",
         type=int,
         action="append",
-        help="power level; repeatable, because a class's level 0 and level 1 "
-        "belong in one brief and two runs concatenated end with a spurious "
-        "'nothing to write' that two agents in a row reported as a lie",
+        help="power level, or an item's base level; repeatable, because a "
+        "class's level 0 and level 1 belong in one brief and two runs "
+        "concatenated end with a spurious 'nothing to write' that two agents "
+        "in a row reported as a lie",
     )
     ap.add_argument("--monsters", type=int, help="every monster at this level")
     ap.add_argument("--role", help="narrow --monsters to one role")
+    ap.add_argument("--items", action="store_true", help="magic items, heroic tier")
+    ap.add_argument("--slot", help="narrow --items to one slot: weapon, implement, neck ...")
+    ap.add_argument("--feats", action="store_true", help="feats, heroic tier")
+    ap.add_argument("--general", action="store_true",
+                    help="narrow --feats to those gated on no class and no race")
+    ap.add_argument("--race", action="store_true", help="narrow --feats to the race-gated")
     ap.add_argument(
         "--book",
         default="Player's Handbook",
@@ -62,8 +95,18 @@ def main() -> int:
     if args.features:
         return _features(db, args.cls)
 
+    # `--class` means one thing for powers and another for feats, so the
+    # three list modes are exclusive rather than additive: `--feats --class
+    # fighter` must not also pour out the fighter's powers.
+    wants_items = args.items or bool(args.slot)
+    wants_feats = args.feats or args.general or args.race
+
     refs: list[str] = list(args.refs)
-    if args.cls or args.level:
+    if wants_items:
+        refs += _item_refs(db, args.slot, args.level)
+    elif wants_feats:
+        refs += _feat_refs(db, args.cls, args.general, args.race)
+    elif args.cls or args.level:
         refs += _powers(db, args.cls, args.level, args.book)
     if args.monsters is not None:
         refs += _monsters(db, args.monsters, args.role)
@@ -73,11 +116,11 @@ def main() -> int:
         # -- and the commonest cause is the book filter, which defaults
         # to the Player's Handbook and so silently empties any query
         # about a class printed in a later book.
-        if args.cls or args.level or args.monsters is not None:
+        if args.cls or args.level or args.monsters is not None or wants_items or wants_feats:
             print(
                 "# nothing matched those filters."
                 + (f"  --book {args.book!r} excludes later books; try --book ''"
-                   if args.book else ""),
+                   if args.book and not (wants_items or wants_feats) else ""),
                 file=sys.stderr,
             )
             return 1
@@ -91,6 +134,10 @@ def main() -> int:
         block = _render(db, ref, declared, args.all)
         if block is None:
             print(f"# {ref}: no such row", file=sys.stderr)
+            continue
+        if not block:
+            # A parent whose every child is declared. Distinct from `None`,
+            # which is a typo, and it must not be reported as one.
             continue
         print(block)
         print()
@@ -178,7 +225,89 @@ def _monsters(db, level: int, role: str | None, book: bool = True) -> list[str]:
     return [r["ref"] for r in db.execute(sql + " ORDER BY ref", params)]
 
 
+def _item_refs(db, slot: str | None, levels: list[int] | None) -> list[str]:  # noqa: ANN001
+    """Items with at least one block, which is the only kind worth listing.
+
+    37 heroic items have no Property and no Power at all: their whole rule
+    is the enhancement bonus and the critical line, both columns, and there
+    is nothing for anybody to write. Listing them put finished items in a
+    work list.
+    """
+    where, params = [], []
+    if slot:
+        where.append("i.slot = ?")
+        params.append(slot.lower())
+    if levels:
+        where.append("i.base_level IN (" + ",".join("?" * len(levels)) + ")")
+        params.extend(levels)
+    sql = "SELECT DISTINCT i.ref, i.base_level FROM item i JOIN item_block b ON b.item_ref = i.ref"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    return [r["ref"] for r in db.execute(sql + " ORDER BY i.base_level, i.ref", params)]
+
+
+def _feat_refs(db, cls: str | None, general: bool, race: bool) -> list[str]:  # noqa: ANN001
+    """Heroic feats, optionally narrowed to one shelf.
+
+    The gate is read off the whole table and not just the heroic slice,
+    because a power card carries no prerequisite of its own -- it shares
+    its parent's `id` and the parent holds the gate.
+    """
+    gates = {
+        r["id"]: _gate(r["prereq"])
+        for r in db.execute("SELECT id, prereq FROM feat WHERE prereq IS NOT NULL")
+    }
+    out = []
+    for row in db.execute(f"SELECT ref, id FROM feat WHERE {HEROIC} ORDER BY id, ref"):
+        gate = gates.get(row["id"], "general")
+        if cls and gate != cls.lower():
+            continue
+        if general and gate != "general":
+            continue
+        if race and gate != "race":
+            continue
+        out.append(row["ref"])
+    return out
+
+
+def _gate(prereq: str | None) -> str:
+    """Which shelf a feat sits on: a class, `race`, or `general`. Class
+    outranks race, since a feat gated on both is a class feat one race may
+    also take, and filing it under race hides it from the class."""
+    leaves = list(_leaves(json.loads(prereq) if prereq else None))
+    for leaf in leaves:
+        if "class" in leaf:
+            return leaf["class"]
+    return "race" if any("race" in leaf for leaf in leaves) else "general"
+
+
+def _leaves(node: dict | None):  # noqa: ANN202
+    if not node:
+        return
+    for joiner in ("all", "any"):
+        if joiner in node:
+            for child in node[joiner]:
+                yield from _leaves(child)
+            return
+    yield node
+
+
 def _render(db, ref: str, declared: set[str], include_all: bool) -> str | None:  # noqa: ANN001
+    # The new prefixes go first. `comp:` and `cf:` are already here for the
+    # same reason: the `p` and `m` branches below are bare first-letter
+    # tests, and the day a ref shaped `i601p1` reaches one of them it is
+    # read as a power that does not exist.
+    if ref.startswith("q"):
+        return _term(db, ref)
+    if ref.startswith("r") and re.fullmatch(r"r\d+", ref):
+        row = db.execute("SELECT * FROM race WHERE ref = ?", (ref,)).fetchone()
+        if row is None:
+            return None
+        return f"### {row['ref']}   race   {row['size']}\n{row['spec']}"
+    if ref.startswith("i"):
+        return _item(db, ref, declared, include_all)
+    if ref.startswith("f"):
+        return _feat(db, ref)
     if ref.startswith("comp:"):
         row = db.execute("SELECT * FROM companion WHERE ref = ?", (ref,)).fetchone()
         if row is None:
@@ -225,6 +354,186 @@ def _render(db, ref: str, declared: set[str], include_all: bool) -> str | None: 
         return "\n\n".join(out)
 
     return None
+
+
+def _term(db, ref: str) -> str | None:  # noqa: ANN001
+    """A prerequisite clause the parser could not reduce to a mechanic.
+
+    Its text is a deity, a campaign setting's background or a bit of
+    publisher's prose, and it is the one thing in the database that may
+    never be printed. What can be said is that it exists, what kind of
+    thing it is, and how many feats are waiting on it -- which is enough
+    to decide whether it is worth building the feature that would answer
+    it, and that is the only decision it is wanted for.
+    """
+    row = db.execute("SELECT * FROM prereq_term WHERE ref = ?", (ref,)).fetchone()
+    if row is None:
+        return None
+    return (
+        f"### {row['ref']}   prerequisite term   {row['kind']}   "
+        f"asked by {row['uses']} feat{'s' if row['uses'] != 1 else ''}\n"
+        "(its text is a printed name and is not printed)"
+    )
+
+
+def _item(db, ref: str, declared: set[str], include_all: bool) -> str | None:  # noqa: ANN001
+    """One item's loaded columns, then each block still to be written.
+
+    A block ref asked for by itself gets the same columns above it. The
+    numbers are most of what a block needs -- whether the thing is a
+    weapon or a neck slot decides half of what its Property can mean --
+    and an author handed `i601x1` alone would have gone looking.
+    """
+    block = None
+    if not re.fullmatch(r"i\d+", ref):
+        block = db.execute("SELECT * FROM item_block WHERE ref = ?", (ref,)).fetchone()
+        if block is None:
+            return None
+        ref = block["item_ref"]
+    row = db.execute("SELECT * FROM item WHERE ref = ?", (ref,)).fetchone()
+    if row is None:
+        return None
+    if block is not None:
+        return f"{_item_head(db, row)}\n\n{_block(block)}"
+
+    blocks = db.execute(
+        "SELECT * FROM item_block WHERE item_ref = ? ORDER BY idx", (ref,)
+    ).fetchall()
+    left = [b for b in blocks if include_all or b["ref"] not in declared]
+    if blocks and not left:
+        return ""
+    out = [_item_head(db, row)]
+    if row["spec"]:
+        out.append(row["spec"])
+    out += [_block(b) for b in left]
+    return "\n\n".join(out)
+
+
+def _item_head(db, row) -> str:  # noqa: ANN001
+    """The columns, which are loaded from the database and never hand-written.
+
+    The exact analogue of `_stat_block` and it exists for the same reason:
+    everything here is already applied by `engine/equipment.py`, so a block
+    that restates "+1 to attack and damage" in its body has written the
+    bonus twice.
+
+    Only the rungs inside the heroic tier are printed. The ladder runs to
+    level 26 and the six rungs of a common weapon filled the line, burying
+    the two an author writing heroic content can be handed.
+    """
+    base = json.loads(row["base"] or "[]")
+    lines = [
+        f"### {row['ref']}   {row['slot'] or row['category'].lower()}   "
+        f"heroic {row['base_level']}{'+' if row['scaling'] else ''}"
+        + (f"   {' or '.join(base)}" if base else "")
+    ]
+    steps = db.execute(
+        "SELECT level, plus, cost FROM item_step WHERE ref = ? AND level <= ? "
+        "ORDER BY level",
+        (row["ref"], MAX_ITEM_LEVEL),
+    ).fetchall()
+    if steps:
+        lines.append("   ".join(_rung(s) for s in steps))
+    bonus = []
+    if row["enh_to"]:
+        bonus.append(f"enhancement: {ENHANCES.get(row['enh_to'], row['enh_to'])}")
+    # Four pages print `Critical: None`, and the column holds it verbatim.
+    # Printed as-is it reads as a parser that returned nothing.
+    if row["crit"] and row["crit"] != "None":
+        bonus.append(f"crit: {row['crit']}")
+    if bonus:
+        lines.append("   ".join(bonus))
+    lines.append("(these load from game.db -- do not hand-write them)")
+    return "\n".join(lines)
+
+
+def _rung(step) -> str:  # noqa: ANN001
+    """23 heroic ladders have no enhancement bonus at all -- three levels,
+    three prices, an empty plus column -- so the plus is printed only
+    where there is one, rather than as a `+0` nobody should write."""
+    plus = f"+{step['plus']} @ " if step["plus"] else ""
+    return f"{plus}level {step['level']} ({step['cost']:,} gp)"
+
+
+def _block(row) -> str:  # noqa: ANN001
+    kw = json.loads(row["keywords"] or "[]")
+    parts = [row["kind"], row["usage"], row["action"]]
+    head = f"--- {row['ref']}   " + " / ".join(p for p in parts if p)
+    if kw:
+        head += f"   keywords: {', '.join(kw)}"
+    return f"{head}\n{row['spec']}"
+
+
+def _feat(db, ref: str) -> str | None:  # noqa: ANN001
+    """A feat's gate and its Benefit, and not one word about either.
+
+    The gate is the column, not the prose: `chargen.meets` walks the same
+    tree, so anything shown here is something the engine can already
+    enforce and nothing the author has to restate. A clause shown as `q17`
+    is one the parser could not read -- the author learns that a condition
+    exists and never learns what it says, which is the whole arrangement.
+    """
+    row = db.execute("SELECT * FROM feat WHERE ref = ?", (ref,)).fetchone()
+    if row is None:
+        return None
+    card = ref != f"f{row['id']}"
+    gate = row
+    if card:
+        # A card's gate lives on the parent, which is why `prereq` here is
+        # null: counting it twice would have doubled every opaque clause.
+        gate = db.execute(
+            "SELECT * FROM feat WHERE ref = ?", (f"f{row['id']}",)
+        ).fetchone() or row
+    head = [f"### {row['ref']}", row["tier"].lower() or "untiered"]
+    if card:
+        head.append(f"card of f{row['id']}")
+    tree = json.loads(gate["prereq"]) if gate["prereq"] else None
+    if tree:
+        head.append(f"requires: {_requires(tree, top=True)}")
+    if gate["unparsed"]:
+        head.append(f"unparsed: {gate['unparsed']}")
+    return "   ".join(head) + "\n" + re.sub(r"^Benefit\s*:\s*", "", row["spec"])
+
+
+def _requires(node: dict, top: bool = False) -> str:
+    """The prerequisite tree on one line. `&` is all of, `|` is any of.
+
+    The connective is the difference between two gates the prose spells
+    the same way -- `Fighter or Warlord` against `Fighter, Dex 13` -- so
+    it is kept, and an `any` nested in an `all` is bracketed rather than
+    run together.
+    """
+    for joiner, sep in (("all", " & "), ("any", " | ")):
+        if joiner in node:
+            inner = sep.join(_requires(child) for child in node[joiner])
+            return inner if top else f"({inner})"
+    return _atom(node)
+
+
+def _atom(node: dict) -> str:
+    """One leaf. Every shape here is an id, a number, or a word the engine
+    already says out loud -- `etl/feat.py` builds them that way precisely so
+    this function cannot print a name."""
+    if "ability" in node:
+        return f"{node['ability']}>={node['min']}"
+    if "level" in node:
+        return f"level>={node['level']}"
+    if "class" in node:
+        build = node.get("build")
+        return f"class {node['class']}" + (f" ({build})" if build else "")
+    if "race" in node:
+        return f"race {node['race']}"
+    if "ref" in node:
+        return f"has {node['ref']}"
+    if "skill" in node:
+        return f"trained {node['skill']}"
+    if "source" in node:
+        return f"{node['source']} class"
+    if "weapon_prof" in node:
+        return f"proficient {node['weapon_prof']}"
+    if "term" in node:
+        return node["term"]
+    return "?"
 
 
 def _stat_block(row) -> str:  # noqa: ANN001
