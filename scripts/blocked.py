@@ -44,12 +44,20 @@ def main() -> int:
     have = _surface()
     declared = _declared()
 
-    ready, waiting, stale = [], [], []
+    ready, waiting, stale, unchecked = [], [], [], []
     for ref, entry in sorted(entries.items()):
         wants = entry.get("wants", "")
         if ref in declared:
             stale.append((ref, wants))
-        elif wants and _exists(wants, have):
+            continue
+        verdict = _exists(wants, have) if wants else False
+        if verdict is None:
+            # Prose it cannot parse. **Not the same as blocked** -- it is
+            # not known either way, and counting it with the blocked ones
+            # is how eleven entries went unchecked while the summary said
+            # "0 ready" and two of them were writable.
+            unchecked.append((ref, wants))
+        elif verdict:
             ready.append((ref, wants, entry.get("why", "")))
         else:
             waiting.append((ref, wants, entry.get("why", "")))
@@ -63,6 +71,15 @@ def main() -> int:
             print(f"  written {ref:<10} was waiting on {wants}; drop it from the list")
 
     print(f"\n  {len(ready)} ready, {len(waiting)} still blocked, {len(stale)} to remove")
+    if unchecked:
+        # Loud, and a non-zero exit. Printing a line and carrying on was
+        # the whole failure: the summary read "0 ready" and nobody
+        # noticed that a quarter of the list had not been looked at.
+        print(f"  {len(unchecked)} NOT CHECKED -- their `wants` is prose this "
+              f"cannot read, so their readiness is unknown:")
+        for ref, wants in unchecked:
+            print(f"      {ref:<12} {wants[:88]}")
+        return 1
     return 0
 
 
@@ -96,8 +113,47 @@ def _declared() -> set[str]:
     return set(REGISTRY)
 
 
-def _exists(wants: str, have: dict[str, object]) -> bool:
+
+def _symbols(wants: str) -> list[str]:
+    """Every concrete thing a prose `wants` names.
+
+    `c.halt(on=)`, `AttackResult.parity`, `Keyword.RAGE` -- a sentence
+    almost always contains the symbol it is waiting for, even when it
+    also contains a paragraph about why.
+    """
+    import re
+
+    out: list[str] = []
+    for token in re.findall(r"\b[A-Za-z_][\w.]*\s*\([^)]*\)|\b[a-z_]+\.[A-Za-z_]\w*"
+                            r"|\b[A-Z][A-Za-z]*\.[A-Za-z_]\w*", wants):
+        token = token.strip()
+        head = token.partition("(")[0].strip()
+        # Not a symbol: an English phrase that happens to hold a dot, and
+        # the `c.` of a sentence that merely mentions one.
+        if (head and "." in head) or token.endswith(")"):
+            out.append(token)
+    return out
+
+
+def _one(token: str, have: dict[str, object]) -> bool:
+    """Is this single symbol present, with the parameter it asks for?"""
+    head, _, rest = token.partition("(")
+    head = head.strip()
+    if head in have:
+        return _params_ok(head, rest, have)
+    if "." in head:
+        owner, _, attr = head.rpartition(".")
+        thing = have.get(owner)
+        return thing is not None and hasattr(thing, attr)
+    return False
+
+def _exists(wants: str, have: dict[str, object]) -> bool | None:
     """Is the named thing on the surface, *with* the parameter asked for?
+
+    Returns **None** when the `wants` is prose it cannot read, which is
+    neither yes nor no. Returning False there made an unreadable entry
+    indistinguishable from a genuinely blocked one, and the summary
+    counted both as "still blocked".
 
     `c.no_provoke(mode=)` is not satisfied by `c.no_provoke` existing -- the
     row wanted the argument, and reporting it ready would send somebody to
@@ -118,7 +174,6 @@ def _exists(wants: str, have: dict[str, object]) -> bool:
     added and `p11285` went on sitting there, which is the same silence
     this file exists to break, pointing the other way.
     """
-    import inspect
 
     head, _, rest = wants.partition("(")
     head = head.strip()
@@ -127,20 +182,40 @@ def _exists(wants: str, have: dict[str, object]) -> bool:
     # fails, and the row reports blocked forever -- which is the silence
     # this file exists to break, so it is said out loud instead. 106 rows
     # sat ready behind one such string.
-    if rest and not rest.rstrip().endswith(")"):
-        print(f"  MALFORMED wants {wants!r} -- write `name` or `name(param=)`")
-        return False
+    # **Prose is the normal case, not the exception.** 45 of 46 entries
+    # are written as a sentence, because a gap is usually more than one
+    # symbol. Treating that as unreadable made the whole instrument
+    # silent; treating it as a name made every one of them report
+    # blocked forever, which is how `p11603` sat there after the ref it
+    # asked for had been minted. So the symbols are picked out of the
+    # sentence and each is checked -- a partial answer that is true
+    # beats a total answer that is not.
+    if " " in head or (rest and not rest.rstrip().endswith(")")):
+        named = _symbols(wants)
+        if not named:
+            return None
+        missing = [n for n in named if not _one(n, have)]
+        return not missing
     if head not in have and "." in head:
         owner, _, attr = head.rpartition(".")
         thing = have.get(owner)
         return thing is not None and hasattr(thing, attr)
     if head not in have:
         return False
-    # `label=''` and `label=` both mean "it must take a `label`". Taking
-    # the text before the `=` rather than stripping a trailing one, because
-    # a written-out default parsed as the parameter name `label=''`, which
-    # matched nothing -- so twelve rows whose method had existed for hours
-    # went on reporting themselves blocked.
+    return _params_ok(head, rest, have)
+
+
+def _params_ok(head: str, rest: str, have: dict[str, object]) -> bool:
+    """Does the named thing take the parameters the `wants` asks for?
+
+    `label=''` and `label=` both mean "it must take a `label`". Taking the
+    text before the `=` rather than stripping a trailing one, because a
+    written-out default parsed as the parameter name `label=''`, which
+    matched nothing -- so twelve rows whose method had existed for hours
+    went on reporting themselves blocked.
+    """
+    import inspect
+
     wanted = [
         p.split("=")[0].strip() for p in rest.rstrip(")").split(",") if p.strip()
     ]
