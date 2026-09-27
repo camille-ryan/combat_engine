@@ -105,6 +105,13 @@ def _i_marked(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.kind_ is Relation.MARKED_BY and ev.source == me
 
 
+def _used(ref: str):  # noqa: ANN202
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.power == ref
+
+    return when
+
+
 def _marks_this_turn(world, me: int) -> int:  # noqa: ANN001
     """How many creatures this warden has marked since its turn began.
 
@@ -442,14 +449,20 @@ def f2557(c: Cast) -> None:
     second row helped it."""
 
 
-# -- racial powers named in prose -------------------------------------------
+# -- riders on a racial power, one a ref and two still prose ----------------
 
 
 @power("f1853", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1448",
+       on=Trigger(PowerUsed, _used("p1448"), "you use that racial power"))
 def f1853(c: Cast) -> None:
-    """Marks every target of a racial power. `PowerUsed.targets` would
-    carry them; the power is named in prose with no ref."""
+    """Marks every target of the racial power. `PowerUsed` fires before
+    the body, but the targets are chosen before it too, so
+    `PowerUsed.targets` is the set the card means -- and a mark lands on
+    a creature the attack goes on to miss just the same."""
+    for foe in c.trigger.targets:
+        c.mark(on=foe, until=When.EONT)
 
 
 @power("f1946", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -1534,9 +1534,10 @@ class Cast:
 
         "Allies within 3 squares of you can stand up as a minor action" is
         not a bonus, a condition or a power -- it is a line in the action
-        menu that is normally a constant. `what` is `shift` or `stand`;
-        anything else is carried, costs nothing and does nothing, so add
-        the reader in `actions` at the same time as the word.
+        menu that is normally a constant. `what` is `shift`, `stand` or
+        `second_wind`; anything else is carried, costs nothing and does
+        nothing, so add the reader in `actions` at the same time as the
+        word.
 
         Follows `c.target`, because the printed lines grant it to somebody
         else -- `on=c.me` for a stance about yourself, which is what
@@ -2905,7 +2906,9 @@ class Cast:
             "forced", squares_, on=on or self.me, until=until, kind="untyped"
         )
 
-    def second_wind(self, *, on: int | None = None) -> bool:
+    def second_wind(
+        self, *, on: int | None = None, cost: ActionType = ActionType.STANDARD
+    ) -> bool:
         """Take a second wind: a surge, and +2 to AC until your next turn.
 
         The only implementation. `actions.perform` used to own it and there
@@ -2914,9 +2917,17 @@ class Cast:
         tell. A bare `c.surge` is not the same thing: the use has to be
         counted in `Powers` or the creature can take a second one.
 
+        Being the one implementation is what makes `SecondWind` reliable:
+        every door -- the action menu, a leader row spending an ally's,
+        an item -- comes through here, so the event is emitted once, here,
+        the way `SurgeSpent` is emitted from the one place a surge is
+        decremented. `cost` is carried because a fighter's second wind is
+        a minor action and a printed feat reads that.
+
         Returns False if it has already been taken this fight.
         """
         from .components import Health, Powers
+        from .events import SecondWind
         from .resolve import spend_surge
 
         who = on if on is not None else self.me
@@ -2928,6 +2939,8 @@ class Cast:
             if known.times("second-wind"):
                 return False
             known.note_use("second-wind", self.world.round)
+        coming = min(health.surge_value, max(0, health.max_hp - max(0, health.hp)))
+        self.world.bus.emit(SecondWind(actor=who, healed=coming, cost=cost))
         spend_surge(self.world, who)
         self.world.heal(who, who, health.surge_value)
         self.bonus("ac", 2, until=When.SONT, on=who, kind="untyped")
@@ -3230,6 +3243,30 @@ class Cast:
             return standing
 
         side = side_of(self.world, self.me) or Team.ALLY
+        if ref.startswith("comp:"):
+            # A beast's page is a formula rather than a finished stat block
+            # and lives in its own table, so it has a loader of its own. Its
+            # level is its ranger's, which is what "based on its category
+            # and level" means.
+            from combat_engine.content import loader
+
+            made = loader.spawn_companion(
+                self.world, ref, where, team=side, level=self.stats.level
+            )
+            block = loader.companion(ref)
+            damage = damage or block.damage
+            kind = kind if kind != "spirit" else "beast"
+            self.world.add(
+                made,
+                Companion(
+                    owner=self.me,
+                    ref=ref,
+                    kind=kind,
+                    damage=damage,
+                    ability=block.ability.value,
+                ),
+            )
+            return made
         if ref:
             from combat_engine.content import loader
 
@@ -3449,6 +3486,51 @@ class Cast:
         if named:
             return named[0]
         return mine[0] if mine else None
+
+    def beast(self, *, of: int | None = None, category: str = "") -> int | None:
+        """The beast companion a ranger keeps, if it is on the board.
+
+        `c.familiar` with the other word, and the same fallback for the same
+        reason: a ranger who keeps a beast keeps no spirit and no familiar,
+        so a single unnamed companion is it.
+
+        `category` is the printed "chosen from one of these categories" --
+        two feats pay out only for one particular category, and the ref the
+        beast was called with *is* the category. It never guesses: a beast
+        with no ref answers no category.
+        """
+        from .components import Companion
+
+        mine = self.companions(of=of)
+        named = [e for e in mine if self.world.get(e, Companion).kind == "beast"]
+        found = named[0] if named else (mine[0] if mine else None)
+        if found is None or not category:
+            return found
+        held = self.world.get(found, Companion)
+        return found if held is not None and held.ref == category else None
+
+    def call_beast(self, at: Square | None = None) -> int:
+        """Put the ranger's beast on the board, the category off its build.
+
+        The category is one choice with the fighting style rather than a
+        second one, so `chargen` records it beside the leg's name as
+        `beast:<ref>` and this reads it back -- exactly how `c.element`
+        reads the warlock's. A character whose build names none gets
+        nothing: a beast conjured out of no choice is a creature the sheet
+        never paid for.
+        """
+        from .components import Build
+
+        held = self.world.get(self.me, Build)
+        ref = next(
+            (
+                choice.split(":", 1)[1]
+                for choice in (held.choices if held is not None else ())
+                if choice.startswith("beast:")
+            ),
+            "",
+        )
+        return self.call_companion(ref, at, kind="beast") if ref else 0
 
     def familiar_mode(self, mode: str, *, of: int | None = None) -> bool:
         """"Your familiar enters passive mode", and the way back out of it.
@@ -5618,7 +5700,12 @@ class Cast:
         """
         from .components import Companion
 
-        pet = self.companion()
+        # Asked *of the beast itself* -- its own basic attack is a row it
+        # uses, so `self.me` is the companion and it owns none. Without this
+        # the beast rolled the d4 fallback while its block printed 1d8.
+        pet = self.companion() or (
+            self.me if self.world.get(self.me, Companion) is not None else None
+        )
         die = ""
         if pet is not None:
             mine = self.world.get(pet, Companion)
@@ -5632,16 +5719,25 @@ class Cast:
         n, _, faces = die.partition("d")
         return f"{int(n or 1) * count}d{faces}"
 
-    def b_mod(self, a: Ability) -> int:
+    def b_mod(self, a: Ability | None = None) -> int:
         """"Beast's Strength modifier" -- the companion's own, not its owner's.
+
+        With no ability named it is the one the companion's *own* damage
+        line adds, which its block prints and three of the eight categories
+        print as Dexterity.
 
         Falls back to the caster's, because a ref-less companion is built
         with a copy of its owner's scores and the two are then the same
         number; the point is that the row asks the right creature.
         """
-        from .components import Stats
+        from .components import Companion, Stats
 
-        pet = self.companion()
+        pet = self.companion() or (
+            self.me if self.world.get(self.me, Companion) is not None else None
+        )
+        if a is None:
+            mine = self.world.get(pet, Companion) if pet is not None else None
+            a = Ability(mine.ability) if mine is not None else Ability.STR
         stats = self.world.get(pet, Stats) if pet is not None else None
         return stats.mod(a) if stats is not None else self.stats.mod(a)
 

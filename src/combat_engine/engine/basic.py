@@ -19,6 +19,11 @@ from .types import Ability, ActionType, Defense, Keyword, Usage
 
 MELEE = "mba"
 RANGED = "rba"
+#: A beast companion's own melee basic attack. Here for the same reason the
+#: other two are: its page prints no id for the line, an opportunity attack
+#: *is* a melee basic attack, and `mba` would roll the die in the beast's
+#: nonexistent hands rather than the one on its block.
+BEAST = "bmba"
 
 
 @power(
@@ -47,3 +52,26 @@ def _melee_basic(c: Cast) -> None:
 def _ranged_basic(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(1), c.dex_mod)
+
+
+@power(
+    BEAST,
+    usage=Usage.AT_WILL,
+    action=ActionType.STANDARD,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+    keywords=[Keyword.MELEE],
+    attack=Attack(Ability.STR, vs=Defense.AC),
+)
+def _beast_basic(c: Cast) -> None:
+    """`1[B]` and the beast's own modifier, both read off its block.
+
+    No `Keyword.WEAPON`: the beast has no hands and adding proficiency for
+    a weapon it is not holding is two points of attack from nowhere. The
+    attack ability in the header is Strength because that is what every
+    row written against a beast already names; the *printed* total arrives
+    as a standing modifier laid on at spawn, so the header's ability only
+    decides which modifier is already counted.
+    """
+    if c.strike():
+        c.damage(c.b(1), c.b_mod())

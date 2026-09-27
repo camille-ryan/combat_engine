@@ -349,11 +349,19 @@ def f3444(c: Cast) -> None:
     nothing announces or suppresses a pact boon."""
 
 
-@power("f3446", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_racial_power()",))
+@power("f3446", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1449 with your familiar within 10 squares",
+       on=Trigger(PowerUsed, _used("p1449"), "you use that racial power"))
 def f3446(c: Cast) -> None:
-    """`c.familiar` would find the familiar; nothing announces the racial
-    power being used, so there is no moment to answer."""
+    """`PowerUsed` rather than `PowerResolved` on purpose: "your familiar
+    is within 10 squares of you" is asked of where the caster is
+    standing *when the power is used*, and `p1449` is the teleport
+    itself -- measured after it, the range would be taken from the
+    destination and a familiar left behind would qualify."""
+    fam = c.familiar()
+    if fam is not None and c.distance(to=fam) <= 10:
+        c.teleport(5, who=fam)
 
 
 # -- the freed-slave run ----------------------------------------------------

@@ -72,6 +72,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.events import PowerResolved
+from combat_engine.engine.grid import distance
 from combat_engine.engine.query import adjacent, distance_between, team
 
 #: The row that calls the spirit. Named in four prerequisites, and the
@@ -81,8 +82,6 @@ HEALING = "p3773"
 
 #: The brief prints a power by name where a ref belongs.
 NAMED = ("spec.power_ref()",)
-#: A racial power named in prose rather than by ref.
-RACIAL = ("c.on_racial_power()",)
 #: Nothing announces that a roll was a reroll.
 REROLL = ("c.on_reroll()",)
 
@@ -619,12 +618,28 @@ def f3051(c: Cast) -> None:
 
 
 @power("f1867", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1449",
+       on=Trigger(PowerUsed, _used("p1449"), "you use that racial power"))
 def f1867(c: Cast) -> None:
-    """Teleports the spirit alongside a racial teleport, as far as the
-    shaman went. The benefit line names the racial power in prose rather
-    than by ref, so there is no trigger to declare -- and the distance
-    would then come straight off `Moved`."""
+    """Teleports the spirit alongside the racial teleport, as far as the
+    shaman went.
+
+    `PowerUsed` fires **before** the body, so the distance is not known
+    here -- the shaman has not moved yet. `Moved` is the only event
+    carrying both ends of a step and the word for how it was made, so
+    the watch reads the distance off it the moment the teleport lands.
+    """
+    spirit = c.companion()
+    if spirit is None:
+        return
+
+    def follow(ev: Any) -> None:
+        if ev.actor != c.me or getattr(ev, "kind_", "") != "teleport":
+            return
+        c.teleport(distance(ev.from_, ev.to), who=spirit)
+
+    c.watch(Moved, follow, until=When.EOT, once=True)
 
 
 @power("f3056", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

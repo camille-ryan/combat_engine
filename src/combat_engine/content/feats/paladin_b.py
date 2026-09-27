@@ -85,6 +85,13 @@ def _used(ref: str):  # noqa: ANN202
     return when
 
 
+def _melee(ctx: dict[str, Any]) -> bool:
+    """"Melee damage rolls", asked of the damage context, which carries
+    the attacking row's ref and no `ranged` key of its own."""
+    p = get(ctx.get("power", ""))
+    return p is not None and p.reach.kind == "melee"
+
+
 def _beside_bloodied_ally(c: Cast, who: int | None = None) -> bool:
     """Is that creature standing next to a bloodied ally of the paladin?"""
     me = c.me
@@ -637,23 +644,43 @@ def f2126(c: Cast) -> None:
     and nothing outside that row chooses them."""
 
 
-# -- racial, and named in prose --------------------------------------------
+# -- racial, by ref ---------------------------------------------------------
 
 
-@power("f1514", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f1514", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p6189",
+       on=Trigger(PowerUsed, _used("p6189"), "you use that racial power"))
 def f1514(c: Cast) -> None:
-    """An ally's melee damage bonus against whatever a racial power was
-    just spent on. The power is named in prose with no ref, so there is
-    nothing to watch."""
+    """An ally's melee damage bonus against whatever `p6189` was spent
+    on. "Melee" is the attacking row's own reach read off the damage
+    context, which carries `power` and neither `attacker` nor `ranged`.
+    The card prints no type word in front of "bonus", so it is untyped.
+    """
+    foe = next(iter(c.trigger.targets), None)
+    if foe is None:
+        return
+    near = [a for a in c.within(5, side="ally") if a != c.me]
+    who = c.choose(near, "who gains the bonus") if near else None
+    if who is None:
+        return
+    c.bonus(
+        "damage", c.str_mod, on=who, until=When.SONT,
+        when=lambda ctx: ctx.get("target") == foe and _melee(ctx),
+    )
 
 
-@power("f1517", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f1517", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1448",
+       on=Trigger(PowerUsed, _used("p1448"), "you use that racial power"))
 def f1517(c: Cast) -> None:
-    """The second mark on every enemy a racial power caught. Laying the
-    mark is `marks.burning_mark` and would be one line; the racial power
-    is a name."""
+    """The second mark on every enemy `p1448` targeted. `PowerUsed` is
+    announced above the body, but the targets are chosen before it, so
+    the set is the printed one -- and it is "each enemy targeted",
+    which is not the same as each enemy hit."""
+    for foe in c.trigger.targets:
+        burning_mark(c, on=foe, until=When.SONT)
 
 
 @power("f1543", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

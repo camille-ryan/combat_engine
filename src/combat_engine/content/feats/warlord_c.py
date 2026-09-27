@@ -565,12 +565,23 @@ def f2430(c: Cast) -> None:
     the other side."""
 
 
-@power("f2435", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f2435", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with p1448",
+       on=Trigger(Hit, lambda w, me, ev: (
+           ev.attacker == me and ev.power == "p1448"
+       ), "you hit with your racial power"))
 def f2435(c: Cast) -> None:
-    """A damage bonus for allies against whatever a racial power hit.
-    The power is named in prose with no ref -- unlike `f2414`, which had
-    one of its two."""
+    """`f2414` with one power instead of two and damage instead of
+    attack. The damage context carries `target`, which is the whole gate
+    the sentence needs; the bonus is untyped, the card printing no word
+    in front of it."""
+    me, foe = c.me, c.trigger.target
+    for friend in [a for a in allies(c.world, me) if a != me]:
+        c.bonus(
+            "damage", 5, on=friend, until=When.EONT,
+            when=lambda ctx: ctx.get("target") == foe,
+        )
 
 
 @power("f2463", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

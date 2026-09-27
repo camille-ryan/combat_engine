@@ -39,12 +39,10 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.query import allies
+from combat_engine.engine.query import allies, line_of_effect, unseen_by
 
 #: A class feature the benefit names in prose with no ref.
 FEATURE = ("c.class_feature()",)
-#: A racial power the benefit names in prose rather than by ref.
-RACIAL = ("c.on_racial_power()",)
 #: Nothing announces that a roll was a reroll.
 REROLL = ("c.on_reroll()",)
 
@@ -253,20 +251,48 @@ def f1120(c: Cast) -> None:
     """
 
 
-@power("f1144", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f1144", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.bonus(clock=)",),
+       trigger="you use p1628",
+       on=Trigger(PowerUsed, _used("p1628"), "you use that racial power"))
 def f1144(c: Cast) -> None:
-    """An attack bonus for every ally who can see you when a racial power
-    goes off. The power is named in prose with no ref, so there is
-    nothing to watch and no triggering enemy to aim at."""
+    """An attack bonus for every ally who can see *you*, which is the
+    opposite direction from `c.can_see` -- so the sight is asked with the
+    ally as the watcher, the way `warlord/level_7_c.py` asks it.
+
+    `PowerUsed` fires above the body, but the targets are chosen before
+    it, so "the triggering enemy" is readable here.
+
+    The window is dropped: the printed one is the *enemy's* next turn and
+    an effect's clock is its owner or its source, so a bonus sitting on
+    an ally cannot be timed by a third creature. `once=True` carries the
+    substance -- it is spent by that ally's next attack on the enemy --
+    and only an attack made out of turn late in the round would get it
+    when the card says it should have lapsed.
+    """
+    foe = next(iter(c.trigger.targets), None)
+    if foe is None:
+        return
+    me = c.me
+    for friend in allies(c.world, me):
+        if friend == me:
+            continue
+        if not line_of_effect(c.world, friend, me):
+            continue
+        if unseen_by(c.world, friend, me):
+            continue
+        c.bonus(
+            "attack", 1, on=friend, until=When.EOTNT, kind="power", once=True,
+            when=lambda ctx: ctx.get("target") == foe,
+        )
 
 
 @power("f1145", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL, *REROLL))
+       reach=PERSONAL, target=SELF, todo=REROLL)
 def f1145(c: Cast) -> None:
-    """Combat advantage when a racial power's forced second attack roll
-    misses. Two holds: the power is prose, and nothing announces that a
-    roll was a reroll, which is the half f1524 also wants."""
+    """Combat advantage when `p1452`'s forced second attack roll misses.
+    The power is a ref now; what is still missing is that nothing
+    announces a roll was a reroll, which is the half f1524 also wants."""
 
 
 @power("f1231", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

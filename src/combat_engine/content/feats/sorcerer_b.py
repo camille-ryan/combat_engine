@@ -388,9 +388,9 @@ def f2807(c: Cast) -> None:
 
 @power("f1162", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_racial_power()", "c.on_reroll()"))
+       todo=("c.on_reroll()",))
 def f1162(c: Cast) -> None:
-    """A slide or a shift depending on the parity of a racial power's
-    reroll. `c.slide` and `c.shift` are the easy half; the power is named
-    in prose with no ref, and `c.reroll_attack` takes a reroll but
+    """A slide or a shift depending on the parity of `p1452`'s reroll.
+    `c.slide` and `c.shift` are the easy half and the power is a ref, so
+    the whole hold is the roll: `c.reroll_attack` takes a reroll but
     announces neither that one happened nor what it came up."""

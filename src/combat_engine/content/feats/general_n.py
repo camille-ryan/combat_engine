@@ -78,6 +78,7 @@ from combat_engine.engine import (
     Ranged,
     RoundStart,
     SavingThrow,
+    Size,
     SurgeSpent,
     Target,
     Trigger,
@@ -122,6 +123,17 @@ _AREA = ("close_burst", "close_blast", "area_burst")
 _CLOSE_OR_AREA = _AREA
 _MELEE_REACH = ("melee", "close_burst", "close_blast")
 
+#: `Size` is a `StrEnum`, so "larger than you" has to be an explicit
+#: ladder rather than a comparison.
+_SIZES = (
+    Size.TINY,
+    Size.SMALL,
+    Size.MEDIUM,
+    Size.LARGE,
+    Size.HUGE,
+    Size.GARGANTUAN,
+)
+
 #: The four elements the legacy chain names, in one place.
 _LEGACY = (
     DamageType.ACID,
@@ -148,6 +160,12 @@ def _resolved(ref: str):  # noqa: ANN202
         return ev.actor == me and ev.power == ref
 
     return when
+
+
+def _size_rank(c: Cast, who: int) -> int:
+    """Where this creature stands on the printed size ladder. `c.size_of`
+    answers `MEDIUM` for anything with no footprint of its own."""
+    return _SIZES.index(c.size_of(on=who))
 
 
 def _i_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -1399,10 +1417,27 @@ def f2096(c: Cast) -> None:
 
 
 @power("f2097", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF,
+       trigger="the first time each encounter you use p1452",
+       on=Trigger(PowerUsed, _used("p1452"), "you use that racial power"))
 def f2097(c: Cast) -> None:
-    """Hands back a racial power the benefit names in prose. `c.restore_use`
-    is the verb and the ref is the gap."""
+    """"If the attack still hits you" is the *reroll's* outcome, and
+    `PowerUsed` is announced above the body -- so at this moment the
+    second roll has not been made. The row therefore arms a one-shot
+    watch for the blow that follows and hands the use back only if one
+    lands. `once=True` means "fire once and do something", so a miss
+    does not spend it.
+
+    `ENCOUNTER` here is the card's own "the first time ... in an
+    encounter", not the default this directory otherwise avoids.
+    """
+    me = c.me
+
+    def struck(ev: Any) -> None:
+        if ev.target == me:
+            c.restore_use("p1452", on=me)
+
+    c.watch(Hit, struck, on=me, until=When.EOT, once=True)
 
 
 @power("f2099", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1419,18 +1454,35 @@ def f2101(c: Cast) -> None:
     """Two rituals and a Nature bonus."""
 
 
-@power("f2102", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f2102", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1452 and the enemy rerolling is larger than you",
+       on=Trigger(PowerResolved, _resolved("p1452"),
+                  "you use that racial power"))
 def f2102(c: Cast) -> None:
-    """A shift after a racial power's reroll resolves. The power is named
-    in prose, so there is no ref to hang a trigger on."""
+    """"After the attack is completed" is what picks `PowerResolved`
+    over `PowerUsed`: the reroll is the whole point of the card and
+    `PowerUsed` is announced before the body runs.
+
+    `Size` is a `StrEnum` and carries no order of its own, so the
+    printed ladder is spelled out in `_SIZES` and compared by index.
+    """
+    mine = _size_rank(c, c.me)
+    for foe in c.trigger.targets:
+        if _size_rank(c, foe) > mine:
+            c.shift(max(1, c.speed_of() // 2))
+            return
 
 
 @power("f2408", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL, "c.expend_row()"))
+       reach=PERSONAL, target=SELF,
+       todo=("c.expend_row()", "c.damage_of(ref)"))
 def f2408(c: Cast) -> None:
-    """Trades a racial power for extra damage. The power is prose here,
-    and spending a row the character owns has no verb either way."""
+    """Trades `p1448` for extra damage on a martial hit. The ref closes
+    the naming gap and leaves two: spending a row the character owns,
+    and rolling *that row's* damage line for a blow this one deals --
+    "as if you had hit with" is a whole damage expression borrowed from
+    elsewhere, which neither `c.damage` nor `c.as_though_hit_by` says."""
 
 
 @power("f2442", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

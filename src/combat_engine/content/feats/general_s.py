@@ -1372,11 +1372,19 @@ def f3795b(c: Cast) -> None:
 
 
 @power("f3796", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.on_racial_power()", "c.class_feature()"))
+       reach=PERSONAL, target=SELF, todo=("Healed.power",))
 def f3796(c: Cast) -> None:
-    """A racial power named in prose triggers a top-up on healing from a
-    class feature named by a ref that is a feature and not a row."""
+    """Both names are refs now -- `p6189` and `f3668b`, and `f3668b` is a
+    real row -- so what is left is telling the two apart at the moment
+    of the heal.
+
+    `Healed` carries `source`, `target`, `amount` and `hp` and does not
+    say which row paid out, and `f3668b` heals through a `c.give`
+    one-shot that announces nothing of its own. Written without that,
+    the top-up would ride on *every* heal this caster sourced for the
+    round, which is more than the card prints -- so the whole row waits
+    rather than half of it playing too wide.
+    """
 
 
 @power("f3797", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -846,6 +846,7 @@ def _cross_reference_rest(
     # Powers clauses at a stat block. A feat modifies the powers a
     # character has; it has never modified a monster's claw.
     by_name: dict[str, str] = {}
+    by_feature: dict[str, str] = {}
     for ref, entry in names.items():
         name = (entry.get("name") or "").strip()
         low = name.lower()
@@ -853,6 +854,14 @@ def _cross_reference_rest(
             continue
         if low not in by_name or (ref[:1] == "p" and by_name[low][:1] != "p"):
             by_name[low] = ref
+        # **A name can be a power for one class and a feature for
+        # another.** "Arcane Empowerment" is a sorcerer daily *and* the
+        # artificer's class feature, and preferring a `p` on a tie sent
+        # two artificer feats at the sorcerer's spell. Names are unique
+        # within a kind, so the card's own noun decides -- keep a second
+        # index of the `cf:` side and let `_named_powers` pick by it.
+        if ref.startswith("cf:"):
+            by_feature[low] = ref
         if not identifies(low, [ref], rules):
             continue
         words = re.findall(r"[A-Za-z']+", low)
@@ -901,7 +910,7 @@ def _cross_reference_rest(
             if table == "feat":
                 fixed = _label_refs(fixed, by_name)
                 fixed = _associated_refs(fixed, by_name)
-            fixed = _named_powers(fixed, by_name, ref)
+            fixed = _named_powers(fixed, by_name, ref, by_feature)
             if fixed != spec:
                 out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
                 changed += 1
@@ -939,7 +948,12 @@ _NAMED = re.compile(
 )
 
 
-def _named_powers(spec: str, by_name: dict[str, str], own: str) -> str:
+def _named_powers(
+    spec: str,
+    by_name: dict[str, str],
+    own: str,
+    by_feature: dict[str, str] | None = None,
+) -> str:
     """Swap `<name> power` for `<ref> power`.
 
     The other half of the same hole `_label_refs` closes. `identifies`
@@ -959,7 +973,13 @@ def _named_powers(spec: str, by_name: dict[str, str], own: str) -> str:
         words = phrase.split()
         for size in range(len(words), 0, -1):
             tail = " ".join(words[-size:])
-            ref = by_name.get(tail.lower())
+            # The card's own noun picks the kind. "Arcane Empowerment"
+            # is a sorcerer daily and the artificer's class feature, so
+            # a `p`-first tie-break sent two artificer feats at a spell.
+            ref = None
+            if noun == "class feature" and by_feature:
+                ref = by_feature.get(tail.lower())
+            ref = ref or by_name.get(tail.lower())
             # **Only a `p` or a `cf:`.** `by_name` prefers a power on a
             # tie, but a name with no character-side counterpart resolves
             # onto a monster's stat block -- 112 specs were pointing a

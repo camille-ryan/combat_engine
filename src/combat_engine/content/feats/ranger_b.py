@@ -577,9 +577,10 @@ def _beast(ref: str, what: str, *, wants: tuple[str, ...] = BEAST) -> None:
     feat.__doc__ = f"{what} There is no beast companion to do it to."
 
 
-_beast("f804", "A defence bonus for the companion, and a racial reroll "
-               "spent on its behalf.",
-       wants=("c.beast()", "c.on_racial_power()"))
+_beast("f804", "A defence bonus for the companion, and `p1452` spent on "
+               "its behalf -- a ref now, so the second gap is that no row "
+               "uses another row.",
+       wants=("c.beast()", "c.use_power()"))
 _beast("f824", "More hit points for one particular companion.")
 _beast("f828", "The companion answers whatever damages you.")
 _beast("f1240", "The companion changes origin and rides a racial teleport.")

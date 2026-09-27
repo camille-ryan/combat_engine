@@ -286,6 +286,10 @@ class Companion:
     #: Empty for a spirit, which has no attack of its own: every attack it
     #: makes is a row its owner used.
     damage: str = ""
+    #: Which ability its own damage line adds -- `"str"` or `"dex"`. Three
+    #: of the eight beast categories are Dexterity and taking Strength for
+    #: all of them is a point of damage quietly gone on the fast ones.
+    ability: str = "str"
     #: Active or passive, which only a familiar prints. A passive one
     #: occupies no square at all -- it cannot be targeted, nothing is
     #: adjacent to it and no range is measured from it -- so `Position` is

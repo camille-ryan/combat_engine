@@ -77,6 +77,7 @@ from combat_engine.engine import (
     Miss,
     MoveEnd,
     MoveStart,
+    Powers,
     PowerUsed,
     Ranged,
     SavingThrow,
@@ -87,6 +88,7 @@ from combat_engine.engine import (
     TurnEnd,
     TurnStart,
     When,
+    Window,
     World,
     about_me,
     both,
@@ -1426,17 +1428,65 @@ def i1674p1(c: Cast) -> None:
 
 
 @power("i1731x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF)
 def i1731x1(c: Cast) -> None:
-    """The bonus is only on the saves one class feature grants, and
-    nothing says whether a character has it."""
+    """A +1 item bonus on the extra save `cf:warden-f0` rolls, and on no
+    other save.
+
+    The feature now comes through as a ref, so both halves of the
+    sentence can be asked. "Have the class feature" is `Powers.known`,
+    read in the gate rather than at the top: a property that returns
+    early lays nothing, and a row that lays nothing is indistinguishable
+    from one that was never written.
+
+    "At the start of your turn" is a **window**, not a duration. The
+    feature rolls its throw from a `TurnStart` watcher in the ordinary
+    `AFTER` window, so this opens the window in `BEFORE` and shuts it
+    with a `late=True` subscription in `AFTER` -- which `Bus._run` puts
+    behind every ordinary listener of that window. Between those two the
+    only saves rolled are the feature's, and the ordinary end-of-turn
+    ones are out of reach: `Effects` clocks those off `TurnEnd`.
+
+    Shutting it on `TurnEnd` instead would have been the obvious way and
+    would have paid the bonus on any save taken during the warden's own
+    turn as well. "Each saving throw" is why the window is not simply
+    spent by the first one: the daily beside this property rolls several
+    inside it.
+    """
+    me = c.me
+    window = {"open": False}
+
+    def has_font() -> bool:
+        known = c.world.get(me, Powers)
+        return known is not None and "cf:warden-f0" in known.known
+
+    def opened(ev: TurnStart) -> None:
+        window["open"] = ev.actor == me and not ev.ghost and has_font()
+
+    def shut(ev: TurnStart) -> None:
+        if ev.actor == me:
+            window["open"] = False
+
+    hold = c.watch(TurnStart, opened, until=When.ENCOUNTER,
+                   window=Window.BEFORE, on=me, label=c.ref)
+    hold.subs.append(
+        c.world.bus.on(TurnStart, shut, owner=me, late=True)
+    )
+    c.bonus("save", 1, on=me, until=When.ENCOUNTER, kind="item",
+            when=lambda ctx: window["open"] and ctx["actor"] == me)
 
 
 @power("i1731p1", level=4, cls=ITEM, usage=DAILY, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.class_feature()", "c.save_all()"))
+       todo=("c.save_all()",))
 def i1731p1(c: Cast) -> None:
-    """`c.save` rolls against one effect and there is no "against each"."""
+    """`c.save` rolls against one effect and there is no "against each",
+    which is the whole of what this daily buys over the feature it names.
+
+    The class-feature half of the marker is gone: `cf:warden-f0` is a ref
+    with a row behind it, so "and have the class feature" is a look in
+    `Powers.known`, the same question the property beside this one asks.
+    What is left is the plural."""
 
 
 @power("i1870p1", level=4, cls=ITEM, usage=DAILY, action=REACTION,

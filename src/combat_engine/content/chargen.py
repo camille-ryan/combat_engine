@@ -335,6 +335,10 @@ class Build:
     #: The damage type a leg is sworn to, for the one fork that is a
     #: choice of element rather than of ability. `c.element()` reads it.
     element: DamageType | None = None
+    #: The beast companion category this leg comes with, by ref. One leg in
+    #: the game has one, and it is part of the same single choice the way
+    #: the element is: taking the style *is* gaining the creature.
+    companion: str = ""
 
 
 BUILDS: dict[str, tuple[Build, ...]] = {
@@ -394,13 +398,20 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # The page gives no ability line for either of the two new ones -- it
     # says only which build each resembles -- so each takes the scores and
     # the arms of the leg it is described against. The fifth style is the
-    # companion and has no leg: it is blocked on a creature the tree does
-    # not have, and a leg for it would deal a ranger missing its feature.
+    # companion, and it now has one: the creature exists, its numbers load
+    # from the `companion` table, and the leg carries the category so that
+    # taking the style and gaining the beast stay one choice.
+    #
+    # The page offers eight categories and the leg names one, the way the
+    # warlock's elemental leg names one damage type. It is last so that a
+    # `Character` that names no build still takes the first leg and every
+    # ranger already dealt stays the ranger it was.
     "ranger": (
         Build("two-blade", STR, WIS, (SHORTSWORD, SHORTSWORD)),
         Build("archer", DEX, WIS, (LONGBOW, SHORTSWORD)),
         Build("hunter", DEX, WIS, (LONGBOW, SHORTSWORD)),
         Build("marauder", STR, WIS, (SHORTSWORD, SHORTSWORD)),
+        Build("companion", STR, WIS, (SHORTSWORD, SHORTSWORD), companion="comp:8"),
     ),
     # V -- which pact was made. Two more pacts arrived with the later books
     # and each prints a boon row of its own, so each needs a leg for the
@@ -613,6 +624,8 @@ class Character:
         out = {leg.name} - {""}
         if leg.element is not None:
             out.add(f"element:{leg.element.value}")
+        if leg.companion:
+            out.add(f"beast:{leg.companion}")
         if self.race:
             out.add(f"race:{self.race}")
         return out

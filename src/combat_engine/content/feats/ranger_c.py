@@ -40,6 +40,7 @@ from combat_engine.engine import (
     Keyword,
     Miss,
     PowerUsed,
+    Relation,
     Trigger,
     When,
     power,
@@ -54,8 +55,6 @@ from .styles import used_one_of
 BEAST = ("c.beast()",)
 #: Nothing announces that the class's extra damage was about to be paid.
 EXTRA = ("c.on_extra_damage()",)
-#: A racial power named in prose rather than by ref.
-RACIAL = ("c.on_racial_power()",)
 #: `c.no_provoke` exempts a creature or everything, and nothing between.
 NARROW = ("c.no_provoke(when=)",)
 
@@ -79,6 +78,21 @@ def _grip(c: Cast, *groups: str, hands: int) -> bool:
 
 def _i_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.attacker == me
+
+
+def _missed_my_quarry_charging(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """A charge of mine that missed the quarry.
+
+    `charge` rides on `Miss` as a plain attribute, the way `opportunity`
+    does, so it is read with a default rather than declared. The quarry
+    is a relation and `c.is_quarry` is the same question from a `Cast`;
+    a predicate is handed the world instead.
+    """
+    return (
+        ev.attacker == me
+        and bool(getattr(ev, "charge", False))
+        and world.relations.holds(Relation.QUARRY_OF, me, ev.target)
+    )
 
 
 def _i_crit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -320,12 +334,29 @@ def f2417(c: Cast) -> None:
 
 
 @power("f2419", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, dropped=("c.expend_row()",),
+       trigger="you miss your quarry with a charge",
+       on=Trigger(Miss, _missed_my_quarry_charging,
+                  "you miss your quarry with a charge"))
 def f2419(c: Cast) -> None:
-    """A reroll of a missed charge against the quarry, bought by
-    expending a racial power. `c.reroll_attack` is the reroll and the
-    trigger is sayable; the power is named in prose with no ref, so the
-    price cannot be charged and the reroll would be free."""
+    """A reroll of a missed charge against the quarry.
+
+    The **price** is dropped: nothing spends a row from outside it, so
+    `p6189` is not expended and the reroll is had for nothing. That is
+    why this stays `ENCOUNTER` rather than `AT_WILL` -- the racial power
+    it should cost is an encounter power, so once a fight is the nearest
+    honest cap, and without it the row would reroll every missed charge.
+
+    The reroll mutates the live `AttackResult` and `resolve.attack`
+    judges the defence again once the window closes, so `result.hit` is
+    read back rather than `c.landed`, which is this row's own attack and
+    there is not one.
+    """
+    result = getattr(c.trigger, "result", None)
+    if result is None or not c.reroll_attack():
+        return
+    if result.hit:
+        c.damage(c.w(), on=c.trigger.target)
 
 
 @power("f2428", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

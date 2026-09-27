@@ -395,6 +395,38 @@ class SurgeSpent(Event):
 
 
 @dataclass
+class SecondWind(Event):
+    """A creature took its second wind.
+
+    `Cast.second_wind` is the one implementation and it announced nothing,
+    so "when you use your second wind" and "when an ally within 5 squares
+    uses his or her second wind" had no moment to hang from at all. Fifty-
+    nine rows were waiting on it. `SurgeSpent` is not a substitute: a surge
+    is spent by a dozen leader rows that are not a second wind, and the
+    healing one is not the whole of what a second wind is.
+
+    `healed` is the hit points it is about to restore -- the surge value,
+    clamped by what is actually missing, because a creature two hit points
+    off full regains two. "That ally regains the hit points instead of
+    you" is the sentence that has to be handed the number.
+
+    `cost` is the action it was taken as. Normally a standard; a printed
+    feat turns on its being a **minor**, which is why this is a field and
+    not an assumption.
+
+    **Announced before the surge is spent**, not after the healing, and
+    that is deliberate: three printed rows read "when you use your second
+    wind *while you are bloodied*", and by the time the hit points are
+    back that is no longer true. It also puts the log in causal order --
+    SecondWind, SurgeSpent, Healed, EffectApplied.
+    """
+
+    actor: int
+    healed: int
+    cost: ActionType = ActionType.STANDARD
+
+
+@dataclass
 class TempHP(Event):
     source: int
     target: int

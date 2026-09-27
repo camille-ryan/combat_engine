@@ -10,6 +10,7 @@ in `scripts/coverage.py` rather than in a broken fight.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 
 from combat_engine.engine import (
@@ -184,6 +185,126 @@ def _basic(stock: Stock) -> str:
             ):
                 return a["ref"]
     return MELEE
+
+
+# -- a beast companion, whose numbers are a formula rather than a total ------
+
+
+#: The printed stat block of one beast companion category, parsed.
+#:
+#: A companion's page is written as a *formula* -- "AC 14 + level", "Hit
+#: Points: 14 + 8 per level", "Attack Bonus: Level + 4" -- where a monster's
+#: is a finished total. That is the only real difference, and it is why this
+#: cannot go through `load`/`spawn`: there is no level on the page to take
+#: back out, so the constant is already the level-free number the engine
+#: wants.
+@dataclass
+class Block:
+    ref: str
+    scores: dict[Ability, int]
+    size: Size
+    speed: int
+    modes: dict[str, int]
+    defences: dict[object, int]
+    hp_base: int
+    hp_per_level: int
+    attack: int
+    damage: str
+    ability: Ability
+
+
+_SCORES = (
+    ("Strength", Ability.STR), ("Constitution", Ability.CON),
+    ("Dexterity", Ability.DEX), ("Intelligence", Ability.INT),
+    ("Wisdom", Ability.WIS), ("Charisma", Ability.CHA),
+)  # fmt: skip
+_DEFENCES = (("AC", AC), ("Fortitude", FORT), ("Reflex", REF), ("Will", WILL))
+
+
+def companion(ref: str) -> Block:
+    """One companion category's numbers, read off its printed block."""
+    db = game()
+    row = db.execute(
+        "SELECT spec FROM companion WHERE ref = ? AND kind = 'companion'", (ref,)
+    ).fetchone()
+    if row is None:
+        raise KeyError(f"no companion {ref}")
+    spec = row["spec"]
+
+    def one(pattern: str, default: int = 0) -> int:
+        found = re.search(pattern, spec)
+        return int(found.group(1)) if found else default
+
+    hp = re.search(r"Hit Points: (\d+) \+ (\d+) per level", spec)
+    die = re.search(r"Damage: (\d+d\d+)", spec)
+    # Which ability its own damage line adds. Three of the eight categories
+    # are Dexterity and the rest Strength, and taking Strength for all of
+    # them is a point or two of damage quietly missing on the fast ones.
+    mod = re.search(r"\+ (Strength|Dexterity|Constitution|Wisdom) modifier damage", spec)
+    size = re.search(r"Size: (\w+)", spec)
+    return Block(
+        ref=ref,
+        scores={a: one(word + r" (\d+)", 10) for word, a in _SCORES},
+        size=SIZES.get((size.group(1) if size else "medium").lower(), Size.MEDIUM),
+        speed=one(r"Speed: (\d+) squares", 6),
+        modes={
+            k.lower(): int(v)
+            for k, v in re.findall(r"(fly|swim|climb|burrow) (\d+)", spec, re.I)
+        },
+        defences={d: one(word + r" (\d+) \+ level", 10) for word, d in _DEFENCES},
+        hp_base=int(hp.group(1)) if hp else 10,
+        hp_per_level=int(hp.group(2)) if hp else 8,
+        attack=one(r"Attack Bonus: Level \+ (\d+)", 4),
+        damage=die.group(1) if die else "1d8",
+        ability=Ability.DEX if mod and mod.group(1) == "Dexterity" else Ability.STR,
+    )
+
+
+def spawn_companion(
+    world: World,
+    ref: str,
+    square: tuple[int, int],
+    *,
+    team: Team = Team.PC,
+    level: int = 1,
+) -> int:
+    """Put a beast companion on the board with the numbers off its page.
+
+    Its defences are stored the way a monster's are -- `scale="monster"`, so
+    `Scaling` decides what the level term is worth -- which needs the
+    constant the printed formula would give at level 1. "AC 14 + level" is
+    15 at level 1 and `printed_monster(1)` is 0, so the stored number is the
+    constant plus one.
+
+    The attack line is the one thing the engine cannot take straight. A
+    character's bonus is built up from parts (`_attack_bonus`) and this page
+    prints a finished total, so the difference is laid on as a standing
+    untyped modifier: the beast then rolls "Level + 4" and nothing else has
+    to know the block exists.
+    """
+    from combat_engine.engine.basic import BEAST
+    from combat_engine.engine.components import Mod
+
+    block = companion(ref)
+    hp = max(1, block.hp_base + block.hp_per_level * level)
+    printed = world.scaling.trim(level + block.attack, level)
+    built = world.scaling.pc(level) + (block.scores[block.ability] - 10) // 2
+    eid = world.spawn(
+        Ident(ref=ref),
+        Position(square=square, size=block.size),
+        Side(team=team),
+        Stats(level=level, scores=dict(block.scores)),
+        Defenses(values={d: v + 1 for d, v in block.defences.items()}, scale="monster"),
+        Health(max_hp=hp, surges=1, dies_at_zero=True),
+        Movement(speed=block.speed, modes=dict(block.modes)),
+        Defences(),
+        Conditions(),
+        Mods(items=[Mod(what="attack", value=printed - built, label=ref)]),
+        Budget(),
+        Powers(known=[], basic=BEAST),
+    )
+    place(world, eid, square)
+    return eid
 
 
 def pick(level: int, *, role: str | None = None, limit: int = 20) -> list[str]:

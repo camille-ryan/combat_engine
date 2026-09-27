@@ -639,10 +639,10 @@ def f2997(c: Cast) -> None:
 
 
 @power("f1538", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(RACIAL[0], COUNTS_AS))
+       reach=PERSONAL, target=SELF, todo=(COUNTS_AS,))
 def f1538(c: Cast) -> None:
-    """Every attack gains the fear keyword after a racial power. Two gaps:
-    the power is named in prose, and nothing adds a keyword to the rows a
+    """Every attack gains the fear keyword after `p1628`. The power is a
+    ref, so the whole hold is the keyword: nothing adds one to the rows a
     creature is about to use -- `c.rattling` does it for exactly one
     keyword and generalises to none."""
 

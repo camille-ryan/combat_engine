@@ -44,6 +44,7 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Miss,
+    PowerUsed,
     Size,
     Trigger,
     When,
@@ -56,15 +57,13 @@ from combat_engine.engine.grid import distance, neighbours
 from combat_engine.engine.query import allies, enemies, flanked_by
 from combat_engine.engine.types import Forced
 
-from .styles import among, hit_with_one_of
+from .styles import among, hit_with_one_of, used_one_of
 
 #: Knowing which rows a feat names does not let one stand in for a basic.
 AS_BASIC = ("c.as_basic(ref)",)
 #: A swing handed to you by Combat Challenge is announced as `mba` like
 #: any other, and nothing records who granted it. Seven rows already.
 GRANTED = ("c.on_granted_basic()",)
-#: A racial power named in prose rather than by ref.
-RACIAL = ("c.on_racial_power()",)
 
 _BIG = (Size.LARGE, Size.HUGE, Size.GARGANTUAN)
 
@@ -696,19 +695,48 @@ _granted("f795", "One of them may switch to thunder or lightning.",
 # -- the rest of the gaps, each named exactly -------------------------------
 
 
-@power("f798", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f798", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1628 against an enemy you have marked",
+       on=Trigger(PowerUsed, used_one_of("p1628"),
+                  "you use that racial power"))
 def f798(c: Cast) -> None:
-    """An attack bonus after a racial power lands on a marked enemy. The
-    mark half is ordinary; the racial power is named in prose with no
-    ref."""
+    """An attack bonus against a marked enemy the racial power was used
+    on.
+
+    "Until it is no longer marked by you" is not a `When`, so the hold
+    runs to the end of the encounter and the gate asks the mark again on
+    every roll -- which expires it at the right moment and, unlike a
+    fixed duration, also gives it back if the enemy is marked afresh.
+    Untyped: the card prints no word in front of the bonus.
+    """
+    for foe in c.trigger.targets:
+        if not c.marked(on=foe):
+            continue
+        c.bonus(
+            "attack", 1, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx, foe=foe: (
+                ctx.get("target") == foe and c.marked(on=foe)
+            ),
+        )
 
 
 @power("f803", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, dropped=("ConditionApplied.power",))
 def f803(c: Cast) -> None:
-    """An attack bonus with one racial power and damage to whatever it
-    knocks down. Same naming gap as f798."""
+    """An attack bonus with one racial power, and damage to whatever it
+    knocks down.
+
+    A standing modifier rather than a trigger: the bonus is asked of
+    every roll and `among` reads the ref off the attack context.
+
+    The second clause is dropped. `ConditionApplied` carries `source`,
+    `target`, `condition` and `duration` and **not** the power that
+    applied them, so "enemies knocked prone *by this power*" cannot be
+    told from any other prone this fighter lays -- and a watch without
+    that gate would pay Strength-modifier damage on every one of them.
+    """
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=among("p1767"))
 
 
 @power("f805", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

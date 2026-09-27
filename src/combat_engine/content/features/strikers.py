@@ -416,9 +416,7 @@ def _keeps_prime_shot(world: World, eid: int) -> bool:
     """Neither of the two printed ways of not having the shared ranged bonus.
 
     One style replaces it outright and one gives it up as the price of the
-    companion. No leg carries the companion -- it is blocked twice over,
-    see `docs/blocked.json` -- so that half is false for every ranger the
-    tree deals and is asked anyway, because the sentence says it.
+    companion, and both legs now exist, so both halves are live.
     """
     return not _ON_HUNTER(world, eid) and not _ON_BEAST(world, eid)
 
@@ -447,10 +445,15 @@ def ranger_style(c: Cast) -> None:
     the printed line takes away from a ranger carrying a shield or swinging
     with both hands.
 
-    The remaining style is the companion and stays in `docs/blocked.json`:
-    it has no leg and `p10594` is blocked on the same creature.
+    The remaining style is the companion, and its whole benefit is a second
+    creature: `c.call_beast` puts it on the board with the numbers off the
+    category the leg chose. The other half of that style -- giving up prime
+    shot -- is `_keeps_prime_shot` above, on the row that grants it.
     """
     me, world = c.me, c.world
+    if c.build(BEAST_STYLE):
+        c.call_beast()
+        return
     if c.build(MARAUDER_STYLE):
         def unencumbered(ctx: dict[str, Any]) -> bool:
             gear = world.get(me, Gear)

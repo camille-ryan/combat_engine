@@ -127,7 +127,12 @@ def keywords_of(label: str) -> frozenset:
     from .dsl import get
 
     p = get(label.split()[0]) if label else None
-    return p.keywords if p is not None else frozenset()
+    # **`frozenset`, not the tuple `Power.keywords` is.** The annotation
+    # said frozenset and the return did not, so `{Keyword.FEAR} & ...`
+    # raised `TypeError` -- and the audit board never lays a
+    # keyword-bearing hold, so three rows written that way passed clean
+    # and only a hand-driven board found it.
+    return frozenset(p.keywords) if p is not None else frozenset()
 
 
 class Effects:

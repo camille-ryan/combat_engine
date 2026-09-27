@@ -852,11 +852,11 @@ def f1304(c: Cast) -> None:
     """Four clauses, all attack penalties on a named row's target."""
 
 
-@_trait("f1305", todo=(*NAMED, "c.on_racial_power()"))
+@_trait("f1305", todo=NAMED)
 def f1305(c: Cast) -> None:
-    """Every clause is about a racial power's zone, and that power is
-    named in prose as well -- so both halves of every clause are
-    missing, not just the row it rides on."""
+    """Every clause is about `p2473`'s zone, which is now a ref -- but
+    three of the four exploits the clauses ride on are still prose
+    names, and p620's clause reaches inside that row's own targeting."""
 
 
 @_trait("f1306", todo=NAMED)

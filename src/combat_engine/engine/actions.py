@@ -676,9 +676,17 @@ def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
         and health.surges > 0
         and known is not None
         and known.times("second-wind") == 0
-        and encounter.can_spend(actor, ActionType.STANDARD)
     ):
-        out.append(Action(kind="second_wind", cost=ActionType.STANDARD))
+        # A standard by default, and cheaper where a row says so -- the
+        # fighter's is a minor. Written the way `stand` above is, because
+        # `SecondWind.cost` is read by a feat and a constant here would
+        # have made that field permanently a standard.
+        costs = {ActionType.STANDARD} | {
+            cost for (what, cost) in _granted(world, actor) if what == "second_wind"
+        }
+        for cost in sorted(costs, key=lambda a: a.value):
+            if encounter.can_spend(actor, cost):
+                out.append(Action(kind="second_wind", cost=cost))
     return out
 
 
@@ -874,7 +882,9 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             return False
         from .cast import Cast
 
-        return Cast(world=world, me=actor, ref="second-wind").second_wind()
+        return Cast(world=world, me=actor, ref="second-wind").second_wind(
+            cost=action.cost
+        )
 
     return False
 

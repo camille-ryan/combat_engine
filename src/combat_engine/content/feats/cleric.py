@@ -27,6 +27,7 @@ from combat_engine.engine import (
     ActionType,
     Cast,
     Health,
+    Miss,
     PowerUsed,
     Trigger,
     When,
@@ -101,11 +102,29 @@ def f1505(c: Cast) -> None:
     the target is carrying."""
 
 
-@power("f1498", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_racial_power()",))
+@power("f1498", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1452 and the attack misses",
+       on=Trigger(PowerUsed, _i_used("p1452"), "you use p1452"))
 def f1498(c: Cast) -> None:
-    """Rides on a racial power named in prose with no ref, and on that
-    power's attack *missing*."""
+    """The miss is the enemy's attack failing rather than this power's
+    own, so it carries the enemy's ref and cannot be gated on p1452.
+    `PowerUsed` fires before the body -- before the reroll -- so a
+    one-shot watcher armed here is on the attack the racial power was
+    answering. The ally is the most hurt one within 5, as f1499 picks."""
+    me = c.me
+
+    def missed(ev: Any) -> None:
+        if ev.target != me:
+            return
+        near = [
+            a for a in allies(c.world, me)
+            if distance_between(c.world, me, a) <= 5
+        ]
+        if near:
+            c.surge(on=min(near, key=lambda a: c.world.get(a, Health).hp))
+
+    c.watch(Miss, missed, on=me, until=When.EOT, once=True)
 
 
 @power("f1500", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -1779,6 +1779,7 @@
   "SurgeSpent(actor=4, left=5)",
   "Healed(source=4, target=4, amount=9, hp=14)",
   "EffectApplied(source=4, target=4, duration=\"start of source's next turn\", label='second-wind ac+2')",
+  "SecondWind(actor=4, healed=9)",
   "ActionSpent(actor=4, cost=<ActionType.MINOR: 'minor'>)",
   "PowerUsed(actor=4, power='p13970', targets=[5])",
   "OpportunityWindow(actor=5, provoker=4, why='p13970 is a ranged power')",

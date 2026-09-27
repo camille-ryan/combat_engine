@@ -6,9 +6,8 @@ question the oath itself asks, imported rather than re-derived.
 
 This list is unusually writable for a race-gated one, because the
 avenger's racial feats name their power by ref -- `p1450`, `p1831`,
-`p7548`, `p8278`, `p1628`, `p2483`, `p2484`, `p1448` -- rather than in
-prose. Only the changeling's change shape and the half-orc's furious
-assault arrive as names.
+`p7548`, `p8278`, `p1628`, `p2483`, `p2484`, `p1448`, `p6189` -- rather
+than in prose. Only change shape still arrives as a name.
 
 The class's own second feature, divine guidance, is `p5331` and is
 named by ref in one prerequisite but not the other two rows that ride
@@ -304,11 +303,19 @@ def f2181(c: Cast) -> None:
     borrows it from outside."""
 
 
-@power("f1523", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f1523", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p6189 on your oath target",
+       on=Trigger(PowerUsed, _used("p6189"), "you use that racial power"))
 def f1523(c: Cast) -> None:
-    """An attack penalty on the sworn enemy when a racial power hits it.
-    The power is named in prose with no ref."""
+    """"Used *against* your oath of enmity target" is who the power was
+    aimed at rather than who it landed on, so this is `PowerUsed` and
+    its `targets` rather than `Hit`: the penalty is printed off the
+    declaration and arrives even when the attack misses."""
+    me = c.me
+    for foe in c.trigger.targets:
+        if sworn(c.world, me, foe):
+            c.penalty("attack", 1, on=foe, until=When.SONT)
 
 
 @power("f1555", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

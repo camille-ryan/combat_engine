@@ -181,13 +181,12 @@ def f2883(c: Cast) -> None:
 
 
 @power("f1831", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("Keyword.RAGE", "c.on_racial_power()"))
+       reach=PERSONAL, target=SELF, todo=RAGE)
 def f1831(c: Cast) -> None:
     """An attack bonus after one of two racial powers, **while
-    raging**. One of the two is a ref and the other is prose, and the
-    rage gate is missing for both -- half a gate would pay out of
-    rage as well as in it."""
+    raging**. Both powers are refs now, so `used_one_of` would declare
+    the trigger -- what is left is the rage gate, and a row that paid
+    out of rage as well as in it would be wrong in every fight."""
 
 
 @power("f1858", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -8,11 +8,20 @@ of these prerequisites, `c.shroud` lays one, `c.shrouds` counts them, and
 "another shroud", "extra damage per shroud", "resist per shroud" is an
 ordinary row.
 
-**The racial powers are half nameable and half not.** `p8278`, `p2482`,
-`p2473`, `p1831`, `p7441` and `m4421a6` arrive as refs and are ordinary.
-Fade away, second chance, goring charge, changeling trick and the rest
-arrive as printed names, which this project may not read, and carry
-`c.on_racial_power()` -- the symbol the rogue's `f767` named.
+**Nearly every racial power here is nameable.** `p8278`, `p2482`,
+`p2473`, `p1831`, `p7441`, `m4421a6`, `p1448`, `p377`, `p1452`, `p1449`,
+`p2480`, `p6189` and `p7546` all arrive as refs, so a rider on one is an
+ordinary `PowerUsed` or `Hit` trigger. Three rows are left naming their
+power in prose -- a racial *trait*'s borrowed power, the shroud power
+itself and one encounter power -- and those keep `c.on_racial_power()`,
+the symbol the rogue's `f767` named.
+
+Several of the newly-named ones are still refused, but for a different
+reason each: a row cannot *use* another row (`c.use_power()`), cannot
+spend one to pay a cost (`c.expend_row()`), cannot lengthen the move a
+named row makes (`c.extend_move()`), and cannot reach back from a use to
+the roll that use was answering (`c.triggering_of()`, which `general_o`'s
+f3112 named against this same racial power).
 
 The one genuinely new gap is **invoking** the shrouds as against merely
 carrying them. `c.shroud` and `c.shrouds` say how many are on a creature;
@@ -42,6 +51,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.dsl import get
+from combat_engine.engine.events import SkillCheck
 
 #: Nothing announces the moment the shrouds are cashed in, as against
 #: merely counted. Six rows here turn on that moment and nothing else.
@@ -96,6 +106,17 @@ def _used(ref: str):  # noqa: ANN202
 
     def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
         return ev.actor == me and ev.power == ref
+
+    return when
+
+
+def _hit_with(ref: str):  # noqa: ANN202
+    """That named row landing a blow of mine. `Hit` carries `attacker`,
+    `target`, `power` and `critical`; `charge` rides on it as a plain
+    attribute, which is why the callers that want it use `getattr`."""
+
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.attacker == me and ev.power == ref
 
     return when
 
@@ -417,6 +438,139 @@ def f1831_rider(c: Cast) -> None:
         c.shroud(on=foe)
 
 
+@power("f1792", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with p1448",
+       on=Trigger(Hit, _hit_with("p1448"), "you hit with that racial power"))
+def f1792(c: Cast) -> None:
+    """Invisibility to whatever a named racial power hit.
+
+    `c.invisible(to=)` is the single-watcher form, which is what "to a
+    creature hit by" is -- the rest of the board still sees you. The
+    duration is the end of *your* turn, not your next one, so `When.EOT`
+    rather than the method's `SONT` default.
+    """
+    c.invisible(to=c.trigger.target, on=c.me, until=When.EOT)
+
+
+@power("f2228", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.lend_skills()",),
+       trigger="you use p7546 and succeed on the check",
+       on=Trigger(PowerUsed, _used("p7546"), "you use that power"))
+def f2228(c: Cast) -> None:
+    """No reprisals from whatever a named racial power fooled.
+
+    The check is rolled inside `p7546`'s own body and `PowerUsed` fires
+    before that body, so success is waited for rather than read -- the
+    same shape `assassin_c`'s f2824 uses against this power, and
+    `SkillCheck` carries `success` finished.
+
+    The substitution is dropped: the card lets a Stealth check stand in
+    for the Bluff one, and nothing puts one skill in another's place
+    inside a row it does not own. So the no-reprisal half keys off the
+    Bluff check `p7546` actually rolls, which is the printed effect
+    whenever the assassin does not take the option.
+    """
+    me, foes = c.me, list(c.trigger.targets)
+    done: list[bool] = []
+
+    def on_check(ev: SkillCheck) -> None:
+        if ev.actor != me or done or ev.skill != "bluff" or not ev.success:
+            return
+        done.append(True)
+        for foe in foes:
+            c.no_provoke(from_=foe, on=me, until=When.EONT)
+
+    c.watch(SkillCheck, on_check, until=When.EOT, on=me)
+
+
+@power("f2226", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you charge with p2480 against a shrouded enemy",
+       on=Trigger(PowerUsed, _used("p2480"), "you use that racial power"))
+def f2226(c: Cast) -> None:
+    """An attack bonus and a shift on a named racial charge.
+
+    The charge is the awkward half: neither `PowerUsed` nor
+    `PowerResolved` carries one, so it cannot be asked in the predicate.
+    It *is* a key of the attack context, so the bonus is laid here --
+    `PowerUsed` fires before the body, in time for the roll -- and gated
+    on `charge` per attack, which is exact. The shift is waited for on
+    the `Hit`/`Miss`, where `charge` rides as a plain attribute and the
+    shrouds can be counted on the creature actually struck.
+
+    `once=True` on the bonus and a `done` latch on the watch each say
+    "one firing"; the watch cannot use `once` for it, because an
+    unrelated blow would spend it before the racial power landed.
+    """
+    me = c.me
+    c.bonus(
+        "attack", 2, on=me, until=When.EOT, once=True,
+        when=lambda ctx: (
+            ctx.get("charge", False)
+            and ctx.get("power") == "p2480"
+            and ctx.get("target") is not None
+            and c.shrouds(ctx["target"]) >= 1
+        ),
+    )
+
+    done: list[bool] = []
+
+    def after(ev: Any) -> None:
+        if done or ev.attacker != me or ev.power != "p2480":
+            return
+        if not getattr(ev, "charge", False) or not c.shrouds(ev.target):
+            return
+        done.append(True)
+        c.shift(max(1, c.speed_of() // 2))
+
+    c.watch(Hit, after, until=When.EOT, on=me)
+    c.watch(Miss, after, until=When.EOT, on=me)
+
+
+# -- named by ref, and refused for some other reason ------------------------
+
+
+@power("f1793", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.triggering_of()",))
+def f1793(c: Cast) -> None:
+    """Damage to whoever a named racial power's roll was aimed at.
+
+    `m4421a6` is a ref, so this is no longer a naming gap. What is
+    missing is the same thing `general_o`'s f3112 named against this very
+    power: the racial power answers an attack roll, and a row answering
+    the *use* has no way back to the roll being answered. `PowerUsed`
+    carries the actor, the ref and the racial power's own targets, which
+    are not "the target of that attack roll".
+    """
+
+
+@power("f1799", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+def f1799(c: Cast) -> None:
+    """A free use of `p377` after a hit with a shadow power. Both halves
+    are readable -- `Keyword.SHADOW` is on the row that was used and the
+    racial power is a ref -- and what is missing is a row using another
+    row, which sixteen rows already want."""
+
+
+@power("f1803", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+def f1803(c: Cast) -> None:
+    """A second power used free when `p1452` resolves. Same gap as f1799;
+    `PowerResolved` is the event the "when the attack is resolved" half
+    would be declared on, so the wait is not the obstacle."""
+
+
+@power("f1807", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.extend_move()",))
+def f1807(c: Cast) -> None:
+    """Five squares further on `p1449`, if it ends beside a shrouded
+    enemy. The power is a ref and `c.shrouds` answers the condition;
+    nothing adds to the distance a *particular* row moves, which is the
+    symbol `avenger_b`'s f1527 and the ranger's f786 both named."""
+
+
 @power("f2812", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("c.as_implement(holy symbol)",))
 def f2812(c: Cast) -> None:
@@ -461,7 +615,7 @@ def _invoke(ref: str, what: str, *, wants: tuple[str, ...] = INVOKE) -> None:
 _invoke("f1797", "Extra damage when you invoke and hit at once.")
 _invoke("f1795", "A named racial power's damage invokes the shrouds too.")
 _invoke("f1804", "A racial power pays extra when a miss still invokes.",
-        wants=("c.on_invoke_shrouds()", "c.on_racial_power()"))
+        wants=("c.on_invoke_shrouds()", "c.expend_row()"))
 _invoke("f2233", "Leaving a named zone invokes the shrouds and clears them.",
         wants=("c.on_invoke_shrouds()", "c.on_leave_zone()"))
 
@@ -478,14 +632,7 @@ def _racial(ref: str, what: str, *, wants: tuple[str, ...] = RACIAL) -> None:
     feat.__doc__ = f"{what} The racial power is named in prose with no ref."
 
 
-_racial("f1792", "Invisibility to whatever a breath weapon hit.")
-_racial("f1793", "Damage riding on a racial reroll.")
-_racial("f1799", "A free use of one racial power after a shadow hit.")
-_racial("f1803", "A named power used free when a racial one resolves.")
-_racial("f1807", "Five squares further on a racial teleport.")
 _racial("f1808", "A shroud when a racial trait's borrowed power is used.")
-_racial("f2226", "An attack bonus and a shift on a racial charge.")
-_racial("f2228", "A different skill on a racial power, and no reprisals.")
 _racial("f2813", "Combat advantage from a target that has not yet acted.")
 _racial("f2817", "A named racial power spent to get shade form back.")
 

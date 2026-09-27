@@ -72,12 +72,18 @@ def _used(ref: str):  # noqa: ANN202
 # -- swordmage --------------------------------------------------------------
 
 
-@power("f1129", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_racial_power()",))
+@power("f1129", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1449 and land beside an enemy",
+       on=Trigger(PowerResolved, _used("p1449"), "you use that racial power"))
 def f1129(c: Cast) -> None:
-    """A melee basic when a racial teleport lands you beside an enemy. The
-    racial power is named in prose rather than by ref, so there is nothing
-    for `_used` to watch -- the same absence f786 and f1527 name."""
+    """`PowerResolved` and not `PowerUsed`: the printed condition is about
+    where the teleport *ended*, and `PowerUsed` is announced above the body
+    that does the moving. Whoever is adjacent once the power has resolved
+    is standing beside the destination the card asks about."""
+    beside = [foe for foe in c.enemies() if c.adjacent(to=foe)]
+    if beside:
+        c.basic(on=beside[0])
 
 
 @power("f1130", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

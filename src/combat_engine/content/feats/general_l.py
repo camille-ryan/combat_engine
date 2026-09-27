@@ -580,10 +580,16 @@ def f2579(c: Cast) -> None:
 
 
 @power("f2460", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF)
 def f2460(c: Cast) -> None:
-    """Extra damage on a racial power the benefit names in prose. The
-    prerequisite gives a race and an opaque term, not a ref."""
+    """The racial power is `p1767` by ref, so this is a plain damage
+    modifier gated on it -- the damage context carries `power`. No type
+    word is printed in front of "extra damage", so it is untyped, and a
+    standing modifier needs no trigger to lay it."""
+    c.bonus(
+        "damage", c.str_mod, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx["power"] == "p1767",
+    )
 
 
 @power("f2583", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -601,9 +607,22 @@ def f2584(c: Cast) -> None:
 
 
 @power("f2600", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF,
+       dropped=("c.extend_move()", "c.extend_shift()"))
 def f2600(c: Cast) -> None:
-    """Three clauses, one per racial power, all three named in prose."""
+    """Three clauses on three refs -- `p7441`, `p7442`, `p7443` -- so the
+    naming gap is gone and what is left is not one gap but two.
+
+    The middle clause is an ordinary attack modifier gated on the ref,
+    because the attack context carries `power`. The other two lengthen
+    the distance *one named row* moves, which nothing does: `c.teleport`
+    and `c.shift` would be a second, separate move rather than two more
+    squares on the printed one. Same hold `avenger_b.f1527` carries.
+    """
+    c.bonus(
+        "attack", 2, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx["power"] == "p7442",
+    )
 
 
 @power("f2617", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -616,11 +635,18 @@ def f2617(c: Cast) -> None:
 
 
 @power("f2842", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL, *PLAGUE))
+       reach=PERSONAL, target=SELF,
+       todo=("c.sustain_row()", "c.end_on_attack()", *PLAGUE))
 def f2842(c: Cast) -> None:
-    """Gives a racial power a sustain. The power is named in prose; the
-    prerequisite's `p377` is a different row from the one the benefit
-    talks about, so it cannot stand in for it."""
+    """Bolts a sustain standard onto `p377`, which the prerequisite names
+    by ref -- so the naming gap is closed and three others are not.
+
+    Nothing adds a sustain clause to another row's effect: `sustain=` is
+    a header field of the row that lays the hold, and `c.on_sustain`
+    only says what an effect *this* row already made pays out. "Until
+    you attack" is the hold ten item blocks carry, and the last clause
+    asks after a feat the spec gives no ref for.
+    """
 
 
 @power("f2871", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

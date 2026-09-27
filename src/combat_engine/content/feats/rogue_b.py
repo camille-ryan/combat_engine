@@ -58,7 +58,7 @@ from combat_engine.engine.dsl import get
 from combat_engine.engine.events import AttackDeclared, PowerResolved
 from combat_engine.engine.query import allies
 
-from .styles import used_one_of
+from .styles import hit_with_one_of, used_one_of
 
 #: Nothing announces that the class's extra damage was about to be paid.
 #: `rogue.py` named it first and three other classes wait on it.
@@ -71,8 +71,6 @@ APPLIES = ("c.extra_damage(applies=)",)
 AS_BASIC = ("c.as_basic(ref)",)
 #: One weapon group standing in for another, for named rows only.
 COUNTS_AS = ("c.counts_as(group=)",)
-#: A racial power named in prose rather than by ref.
-RACIAL = ("c.on_racial_power()",)
 #: Nothing adds to the distance somebody else's shift covers.
 EXTEND_SHIFT = ("c.extend_shift()",)
 
@@ -452,19 +450,23 @@ _counts_as("f2895", """A shortbow where the rows ask for a crossbow. The
 
 @power("f810", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_racial_power()", "c.rattling(penalty=)"))
+       todo=("c.rattling(penalty=)",))
 def f810(c: Cast) -> None:
-    """Deepens the rattling penalty against one racial power's target.
-    Two gaps: the racial power is named in prose with no ref, and the
-    penalty `Cast._rattle` applies is a fixed 2 with nothing to raise
-    it."""
+    """Deepens the rattling penalty against `p1628`'s target. The
+    trigger is sayable now the power is a ref; the penalty
+    `Cast._rattle` applies is a fixed 2 with nothing to raise it, and
+    the whole printed benefit is that number."""
 
 
-@power("f2449", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f2449", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with p6189",
+       on=Trigger(Hit, hit_with_one_of("p6189"), "you hit with it"))
 def f2449(c: Cast) -> None:
-    """Combat advantage against whatever a racial power hit. The grant
-    is ordinary; the power is named in prose with no ref."""
+    """"The enemy you hit" is the blow rather than the declaration, so
+    this hangs on `Hit` and not on `PowerUsed` -- the racial power can
+    miss."""
+    c.grants_advantage(on=c.trigger.target, until=When.EONT)
 
 
 @power("f819", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

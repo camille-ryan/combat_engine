@@ -62,6 +62,8 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Melee,
+    Miss,
+    Moved,
     PowerUsed,
     Ranged,
     SavingThrow,
@@ -731,11 +733,24 @@ def f1487b(c: Cast) -> None:
 # -- racial and divine riders, heroic ---------------------------------------
 
 
-@power("f1496", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f1496", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1452 and the enemy's attack misses you",
+       on=Trigger(PowerUsed, _used("p1452"), "you use that racial power"))
 def f1496(c: Cast) -> None:
-    """Rides on a racial power the benefit names in prose rather than by
-    ref, and on that power's own reroll missing."""
+    """The surge is paid on the *miss*, and the miss belongs to the
+    enemy's attack rather than to p1452, so it carries the enemy's ref
+    and cannot be gated on this one. `PowerUsed` firing before the body
+    is what makes the row writable: the reroll has not happened yet, so
+    a one-shot watcher armed here catches exactly the attack the racial
+    power was answering, and expires with the turn either way."""
+    me = c.me
+
+    def missed(ev: Any) -> None:
+        if ev.target == me and c.may("spend a healing surge", who=me):
+            c.surge(on=me)
+
+    c.watch(Miss, missed, on=me, until=When.EOT, once=True)
 
 
 @power("f1501", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -809,12 +824,30 @@ def f1529(c: Cast) -> None:
     )
 
 
-@power("f1532", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f1532", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1449",
+       on=Trigger(PowerUsed, _used("p1449"), "you use that racial power"))
 def f1532(c: Cast) -> None:
-    """Rides on a racial teleport named in prose. Even with the ref it
-    would want the square the character left, which only `Moved` carries
-    -- but there is no ref."""
+    """"Either your original space or your destination space" wants both
+    ends of the jump, and `Moved` is the only movement event carrying
+    `from_` as well as `to`. `PowerUsed` fires before the body, so the
+    teleport has not happened yet: the row arms a one-shot watcher and
+    reads both squares off that."""
+    me = c.me
+
+    def jumped(ev: Any) -> None:
+        if ev.actor != me:
+            return
+        space = burst({ev.from_}, 1) | burst({ev.to}, 1)
+        near = [a for a in c.in_squares(space, side="ally") if a != me]
+        if not near:
+            return
+        friend = max(near, key=c.missing)
+        c.temp_hp(c.int_mod, on=friend)
+        c.shift(1, who=friend)
+
+    c.watch(Moved, jumped, on=me, until=When.EOT, once=True)
 
 
 @power("f1533", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -849,11 +882,27 @@ def f1536(c: Cast) -> None:
     """An extra success in a skill challenge. Not a fight."""
 
 
-@power("f1537", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f1537", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1628",
+       on=Trigger(PowerUsed, _used("p1628"), "you use that racial power"))
 def f1537(c: Cast) -> None:
-    """Rides on a racial power named in prose, and on that power's own
-    target, which no event would carry without the ref."""
+    """"The target of the power" is what `PowerUsed.targets` carries, and
+    targets are chosen before the body runs, so it is trustworthy here.
+    The attack bonus is spent on one roll -- "his or her next attack
+    roll" -- hence `once`, and it runs to the end of *that ally's* next
+    turn rather than the caster's."""
+    me = c.me
+    near = [a for a in allies(c.world, me) if a != me and c.adjacent(to=a)]
+    if not near:
+        return
+    friend = max(near, key=c.missing)
+    c.heal(c.cha_mod, on=friend)
+    foes = list(c.trigger.targets)
+    if foes:
+        foe = foes[0]
+        c.bonus("attack", 1, on=friend, until=When.EOTNT, kind="power",
+                once=True, when=lambda ctx: ctx.get("target") == foe)
 
 
 @power("f1541", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

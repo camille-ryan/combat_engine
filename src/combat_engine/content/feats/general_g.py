@@ -50,6 +50,7 @@ from combat_engine.engine import (
     Ability,
     ActionType,
     Attack,
+    AttackDeclared,
     AttackRolled,
     Bloodied,
     Cast,
@@ -67,12 +68,19 @@ from combat_engine.engine import (
     Trigger,
     Usage,
     When,
+    Window,
     about_me,
     by_me,
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.query import allies, distance_between, enemies, team
+from combat_engine.engine.query import (
+    allies,
+    distance_between,
+    enemies,
+    hidden_from,
+    team,
+)
 
 #: A racial power the benefit line names in prose and no gate pins.
 RACIAL = ("c.on_racial_power()",)
@@ -524,6 +532,75 @@ def f1059(c: Cast) -> None:
     c.watch(Hit, on_crit, on=me, until=When.ENCOUNTER)
 
 
+@power("f1025", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with p6189",
+       on=Trigger(Hit, _hit_with("p6189"), "you hit with that racial power"))
+def f1025(c: Cast) -> None:
+    """"The enemy you hit", so this is declared on the hit rather than on
+    the use: the power picks its targets before the body runs but only
+    the ones it lands on take the penalty."""
+    for defence in (AC, FORT, REF, WILL):
+        c.penalty(defence, 1, on=c.trigger.target, until=When.EONT)
+
+
+@power("f719", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=UNDER,
+       trigger="you use p377",
+       on=Trigger(PowerUsed, _used("p377"), "you use that racial power"))
+def f719(c: Cast) -> None:
+    """Attacking clears `HIDDEN_FROM` at the foot of `resolve.attack`, and
+    the note there says a row that keeps its concealment hides again --
+    so the concealment is remembered in the interrupt window and put back
+    in the reaction window, which brackets the clear.
+
+    Dropped: nothing says which row laid a hold that is standing, so this
+    preserves concealment from any source rather than this power's alone.
+    """
+    me = c.me
+    kept: list[int] = []
+
+    def remember(ev: Any) -> None:
+        kept.clear()
+        if ev.attacker == me and _has({"power": ev.power}, Keyword.ARCANE):
+            kept.extend(hidden_from(c.world, me))
+
+    def restore(ev: Any) -> None:
+        if ev.attacker != me:
+            return
+        for watcher in kept:
+            c.hide(from_=watcher)
+        kept.clear()
+
+    c.watch(AttackDeclared, remember, on=me, until=When.ENCOUNTER,
+            window=Window.BEFORE)
+    c.watch(AttackDeclared, restore, on=me, until=When.ENCOUNTER)
+
+
+@power("f714", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.expend_row()",))
+def f714(c: Cast) -> None:
+    """Spends `p1449` to teleport an ally instead of yourself. The power
+    is a ref, so the moment is findable; what is missing is spending a
+    row without using it."""
+
+
+@power("f717", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+def f717(c: Cast) -> None:
+    """Uses `p1628` as a free action against a creature you missed, and
+    aims it there rather than at whoever hit you. Both halves need a row
+    to use another row, which is the gap f1556 names."""
+
+
+@power("f1114", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.on_extra_damage()",))
+def f1114(c: Cast) -> None:
+    """Spreads `p6189`'s extra damage over every target of an area power.
+    The power is a ref; what is missing is that nothing announces a
+    rider paying out, so there is no amount to copy onto the others."""
+
+
 @power("f997", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you are bloodied",
@@ -855,46 +932,11 @@ def f1136(c: Cast) -> None:
 # -- a racial power that arrives only as a name -----------------------------
 
 
-@power("f714", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL, "c.expend_row()"))
-def f714(c: Cast) -> None:
-    """Spends a racial power to teleport an ally instead of yourself.
-    The power is named in prose with no ref, and spending a row without
-    using it has no verb either."""
-
-
-@power("f717", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
-def f717(c: Cast) -> None:
-    """Redirects a named racial power onto a creature you missed. Named
-    in prose, and the gate names only the race."""
-
-
-@power("f719", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
-def f719(c: Cast) -> None:
-    """Stops an attack ending a named racial power's effect. Same gap."""
-
-
 @power("f925", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=RACIAL)
 def f925(c: Cast) -> None:
     """Temporary hit points whenever *any* power of a race is used
     successfully. The gate names the race and no row."""
-
-
-@power("f1025", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
-def f1025(c: Cast) -> None:
-    """A defence penalty riding on a named racial power's hit."""
-
-
-@power("f1114", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL, "c.on_extra_damage()"))
-def f1114(c: Cast) -> None:
-    """Spreads a named racial power's extra damage over every target of
-    an area power. Two gaps: the power has no ref, and nothing announces
-    a rider paying out."""
 
 
 @power("f1131", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

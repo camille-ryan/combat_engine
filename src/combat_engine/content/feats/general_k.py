@@ -5,11 +5,11 @@ Three shapes carry most of this batch.
 **Racial riders.** There is still no race and it does not matter for the
 benefit -- the prerequisite is a column `chargen.meets` enforces at build
 time. What decides a row is whether the racial power it rides on arrives
-as a **ref** or as a **name**. `p2475`, `p2483`, `p2484`, `m5139a3` and
-`m4421a6` are refs, so a rider on one is an ordinary `PowerUsed` trigger.
-Shifting Fortunes, iron mind's prose cousins, fey step, second chance,
-dragon breath and infernal wrath are prose and carry
-`c.on_racial_power()`.
+as a **ref** or as a **name**. `p2475`, `p2483`, `p2484`, `p1448`,
+`p1449`, `p1452`, `p1628`, `m5139a3` and `m4421a6` are refs, so a rider
+on one is an ordinary `PowerUsed` trigger. What is still a name is a
+racial *trait* rather than a power, and those keep
+`c.on_racial_power()` -- there is nothing for a trigger to watch.
 
 **The granted pair.** A feat whose printed benefit is "you gain the fNNNb
 power" is a trait that hands over the card beside it. Six of these are
@@ -348,10 +348,14 @@ def f1704(c: Cast) -> None:
 
 
 @power("f1751", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL, "DamageType.pair()"))
+       reach=PERSONAL, target=SELF,
+       todo=("c.deals(ref=)", "DamageType.pair()"))
 def f1751(c: Cast) -> None:
-    """Adds a second damage type to one already-chosen type. `c.damage`
-    rolls one type at a time, and the power is prose."""
+    """Adds a second damage type to the one already chosen for p1448.
+    The ref is no longer the gap; the two that remain are. `c.deals`
+    retypes this creature's *weapon* attacks rather than one named row,
+    and `c.damage` rolls one type at a time, so nothing can say "radiant
+    as well as whatever it already was"."""
 
 
 @power("f1773", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -368,10 +372,20 @@ def f1832(c: Cast) -> None:
 
 
 @power("f1835", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, dropped=("c.use_power()",),
+       trigger="the first time you are bloodied",
+       on=Trigger(Bloodied, lambda w, me, ev: ev.actor == me,
+                  "you are bloodied"))
 def f1835(c: Cast) -> None:
-    """Hands back a spent racial power on being bloodied. `Bloodied` is
-    the trigger and `c.restore_use` is the verb; the ref is the gap."""
+    """Hands p1449 back on being bloodied. `usage=ENCOUNTER` is the
+    printed "first time during an encounter": a triggered trait spends a
+    use each firing, so the limit is the header rather than a counter.
+
+    Dropped: the card also *uses* the power then and there, as an
+    immediate reaction. Nothing has a row use another row, so what plays
+    is the use coming back -- the avenger's f1556 named the same gap.
+    """
+    c.restore_use("p1449", on=c.me)
 
 
 @power("f1836", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -388,10 +402,22 @@ def f1848(c: Cast) -> None:
     a count of elemental manifestations that is a build choice."""
 
 
-@power("f1854", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f1854", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1452",
+       on=Trigger(PowerUsed, _used("p1452"), "you use that racial power"))
 def f1854(c: Cast) -> None:
-    """Damage against whoever triggered a prose-named racial power."""
+    """"The creature that attacked you" is p1452's own target -- it
+    answers an attack and is aimed at whoever made it -- which
+    `PowerUsed.targets` carries, chosen before the body runs. Untyped:
+    the card prints no word in front of "bonus"."""
+    foes = list(c.trigger.targets)
+    if not foes:
+        return
+    foe = foes[0]
+    step = 4 + 2 * (c.level >= 11) + 2 * (c.level >= 21)
+    c.bonus("damage", step, on=c.me, until=When.EONT,
+            when=lambda ctx: ctx.get("target") == foe)
 
 
 @power("f1855", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -402,11 +428,21 @@ def f1855(c: Cast) -> None:
     paid, so a watcher cannot tell that batch from any other."""
 
 
-@power("f1863", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL, "c.on_racial_bonus()"))
+@power("f1863", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.on_racial_bonus()",),
+       trigger="you use p1628",
+       on=Trigger(PowerUsed, _used("p1628"), "you use that racial power"))
 def f1863(c: Cast) -> None:
-    """Raises the attack bonus a racial trait already grants, and rides
-    on a prose-named racial power. Neither half has a handle."""
+    """The p1628 half plays: "the target" is what `PowerUsed.targets`
+    carries. Dropped: raising the attack bonus a racial *trait* already
+    grants -- the trait is prose, and nothing reaches into a bonus some
+    other row laid to make it bigger."""
+    foes = list(c.trigger.targets)
+    if not foes:
+        return
+    foe = foes[0]
+    c.bonus("damage", 2, on=c.me, until=When.EONT, kind="power",
+            when=lambda ctx: ctx.get("target") == foe)
 
 
 @power("f1869", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
