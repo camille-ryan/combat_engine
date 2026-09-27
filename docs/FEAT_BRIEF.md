@@ -10,10 +10,21 @@ You are writing 4e-alike feat rows into a Python combat engine at
 1. `docs/AUTHORING.md` — the whole thing. The "Feats specifically",
    "A row with no combat consequence at all" and `todo=` / `dropped=`
    sections are the rules you will be judged on.
-2. Two or three existing feat files in `src/combat_engine/content/feats/`
-   that are near your class — `fighter.py`, `ranger.py`, `rogue.py`,
-   `warlord.py`, `druid.py` are the reference standard. Match their
-   shape, their comment density and their docstring voice.
+2. **`uv run scripts/vocab.py --brief`** — every verb a body can say,
+   with its signature, generated from the code so it cannot be stale.
+   389 lines. **Keep it and grep it.** `Cast` has 285 public members
+   and nobody remembers them: six markers in one session named a verb
+   that already existed — `c.curse`, `c.threatens`, `c.reroll_damage`,
+   `c.shrouds`, `c.save(against=)`, `c.redirect` — and each one meant
+   a row refused in play for nothing. **Grep this before you mark
+   anything**, and if what you need is genuinely absent, `vocab.py`'s
+   own docstring is right that the answer is usually to add a method
+   rather than work around it.
+3. **One** existing file near your batch, for house style — shape,
+   comment density, docstring voice. One, not three. The item files
+   run to three and five thousand lines and reading two of them costs
+   more than the batch is worth; `vocab.py --brief` is what you
+   actually needed from them.
 
 ## Your brief
 Run, with YOUR class and YOUR batch size:
