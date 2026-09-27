@@ -923,30 +923,23 @@ def _role(w: Weapon) -> str:
     return "ranged" if w.ranged else "melee"
 
 
-def _swing(w: Weapon) -> float:
-    """Roughly what one blow with it is worth, for choosing between two.
-
-    Proficiency bonus plus the average of the damage die, which is the
-    whole of what separates one base weapon from another once the group
-    no longer matters.
-    """
-    count, _, faces = w.damage.partition("d")
-    return w.proficiency + int(count or 1) * (int(faces or 1) + 1) / 2
-
-
 def outfit(carried: list[Weapon], granted: list[Weapon]) -> list[Weapon]:
     """What the character ends up holding, and what goes on its belt.
 
-    A proficiency grant is not a spare weapon in a sack: nobody spends a
-    feat on hammers and then keeps swinging a sword. So a granted arm
-    takes the place of the chassis's own when it is the better of the two
-    for the same job, and the one it displaces goes on the belt.
+    A granted arm is taken **in hand only when the character has nothing
+    for that job**, and goes on the belt otherwise. The tempting rule is
+    the other one -- swing whichever hits hardest -- and it is wrong in a
+    way that would never show up in a log: a spiked chain out-damages a
+    dagger, so a rogue that took the feat for it would put the dagger
+    away, and with it every light-blade Requirement its own class rows
+    are written against. Which of the weapons a character *may* carry it
+    actually wields is a build choice, and nothing records one.
 
-    Held and owned are kept apart on purpose. `_shield_for` counts melee
-    weapons to decide whether a hand is free, and `Gear.two_weapon` reads
-    the same list, so a hammer merely *owned* would silently take a
-    fighter's shield away and turn every "wielding two melee weapons"
-    Requirement true.
+    Held and owned are kept apart for a second reason. `_shield_for`
+    counts melee weapons to decide whether a hand is free and
+    `Gear.two_weapon` reads the same list, so a hammer merely *owned*
+    would silently take a fighter's shield away and turn every "wielding
+    two melee weapons" Requirement true.
 
     Returns the belt; `carried` is edited in place.
     """
@@ -954,17 +947,10 @@ def outfit(carried: list[Weapon], granted: list[Weapon]) -> list[Weapon]:
     for arm in granted:
         if any(w.ref == arm.ref for w in carried):
             continue
-        same = [w for w in carried if _role(w) == _role(arm)]
-        if not same:
-            # Nothing of that kind at all, so there is no grip to spoil.
-            carried.append(arm)
-            continue
-        best = max(same, key=_swing)
-        if _swing(arm) > _swing(best):
-            carried[carried.index(best)] = arm
-            belt.append(best)
-        else:
+        if any(_role(w) == _role(arm) for w in carried):
             belt.append(arm)
+        else:
+            carried.append(arm)
     return belt
 
 

@@ -78,6 +78,7 @@ from combat_engine.engine import (
     PowerResolved,
     SecondWind,
     SurgeSpent,
+    Swap,
     Trigger,
     TurnEnd,
     TurnStart,
@@ -676,7 +677,7 @@ def f3724(c: Cast) -> None:
 
 @power("f3725", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.power_swap()", *MODE))
+       todo=MODE, swap=Swap(2, utility=True))
 def f3725(c: Cast) -> None:
     """A utility power traded away at build time, and a skill bonus that
     depends on the companion's mode."""
@@ -698,7 +699,7 @@ def f3726(c: Cast) -> None:
 
 @power("f3727", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.power_swap()", *MODE))
+       todo=MODE, swap=Swap(6, utility=True))
 def f3727(c: Cast) -> None:
     """A power swap and an attack bonus measured from the companion."""
 

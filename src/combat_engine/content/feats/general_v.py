@@ -82,9 +82,11 @@ from combat_engine.engine import (
     SecondWind,
     Size,
     SurgeSpent,
+    Swap,
     Target,
     Trigger,
     TurnEnd,
+    Usage,
     When,
     Window,
     about_me,
@@ -394,9 +396,13 @@ def f3484(c: Cast) -> None:
 
 
 @power("f3485", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, swap=Swap(3, Usage.ENCOUNTER))
 def f3485(c: Cast) -> None:
-    """An encounter attack power traded for `f3485b` at build time."""
+    """An encounter attack power traded for `f3485b`.
+
+    The body hands the card over; `chargen` takes the one that
+    goes back."""
+    c.grant_row("f3485b", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3485b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
@@ -417,9 +423,13 @@ def f3485b(c: Cast) -> None:
 
 
 @power("f3486", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, swap=Swap(6, utility=True))
 def f3486(c: Cast) -> None:
-    """A 6th-level or higher utility traded for `f3486b`."""
+    """A 6th-level or higher utility traded for `f3486b`.
+
+    The body hands the card over; `chargen` takes the one that
+    goes back."""
+    c.grant_row("f3486b", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3486b", level=1, cls="", usage=DAILY, action=MINOR,
@@ -447,9 +457,13 @@ def f3486b(c: Cast) -> None:
 
 
 @power("f3487", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, swap=Swap(9, Usage.DAILY))
 def f3487(c: Cast) -> None:
-    """A 9th-level or higher daily attack traded for `f3487b`."""
+    """A 9th-level or higher daily attack traded for `f3487b`.
+
+    The body hands the card over; `chargen` takes the one that
+    goes back."""
+    c.grant_row("f3487b", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3487b", level=1, cls="", usage=DAILY, action=STANDARD,

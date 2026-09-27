@@ -82,6 +82,7 @@ from combat_engine.engine import (
     query,
     targets_me,
 )
+from combat_engine.engine.components import Gear as _Gear
 
 ITEM = "item"
 
@@ -1000,11 +1001,23 @@ def i788p1(c: Cast) -> None:
 
 
 @power("i1501x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.HAMMER",))
+       reach=PERSONAL, target=SELF)
 def i1501x1(c: Cast) -> None:
-    """`c.struck_with` would report the weapon and `Weapon.group` the
-    group, but there is no hammer among the groups the game hands out, so
-    the gate would be false in every fight."""
+    """Hammer is a printed group the weapon table carries and `chargen`
+    now deals, so the gate is real. An always-on Property is armed once
+    and watches from there; the group is read off what is in hand,
+    because `Hit` names the power and not the weapon."""
+    me = c.me
+
+    def landed(ev: Hit) -> None:
+        gear = c.world.get(me, _Gear)
+        if ev.attacker != me or gear is None:
+            return
+        if any(w.group == "hammer" for w in gear.held):
+            for where in (AC, FORT, REF, WILL):
+                c.bonus(where, 1, on=me, until=When.SONT)
+
+    c.watch(Hit, landed, until=When.ENCOUNTER, on=me)
 
 
 @power("i1794p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,

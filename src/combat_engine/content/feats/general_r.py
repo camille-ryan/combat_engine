@@ -85,8 +85,10 @@ from combat_engine.engine import (
     Summon,
     Summoned,
     SurgeSpent,
+    Swap,
     Trigger,
     TurnEnd,
+    Usage,
     When,
     Window,
     about_me,
@@ -1199,15 +1201,20 @@ def f3630(c: Cast) -> None:
 
 
 @power("f3631", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, swap=Swap(1, Usage.ENCOUNTER))
 def f3631(c: Cast) -> None:
-    """An encounter power traded for `p13588`."""
+    """An encounter power traded for `p13588`. `chargen` takes the one
+    that goes back when the character is built; the body hands the card
+    over."""
+    c.grant_row("p13588", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3632", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, swap=Swap(1, Usage.ENCOUNTER))
 def f3632(c: Cast) -> None:
-    """An encounter power traded for `p12668`."""
+    """An encounter power traded for `p12668`, the same way `f3584`
+    trades the fighter's."""
+    c.grant_row("p12668", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3633", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -1330,7 +1337,8 @@ def f3645(c: Cast) -> None:
 
 
 @power("f3646", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=SWAP)
+       reach=PERSONAL, target=SELF,
+       dropped=("chargen.power_choice()",))
 def f3646(c: Cast) -> None:
     """The card printed beside the feat is `f3646b`, and it is the same
     door `p5032` already is; the feat's own copy is what is handed over,
@@ -1364,7 +1372,7 @@ def f3647(c: Cast) -> None:
 
 
 @power("f3648", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=SWAP)
+       reach=PERSONAL, target=SELF, swap=Swap(1, Usage.DAILY))
 def f3648(c: Cast) -> None:
     """Hands over the card printed beside it. Giving a known daily up in
     exchange is settled when the character is built."""

@@ -273,6 +273,16 @@ def _cards() -> dict[str, tuple[set[str], bool]]:
                 # prints "+2 feat bonus to Dungeoneering", so without
                 # this the typed half made the untyped half look wrong.
                 or bool(re.search("instead of\\s*[-\u2013]\\s*\\d", text))
+                # **A number granted without the word "bonus" is plain.**
+                # "It gains +2 to death saving throws and saving throws
+                # against the unconscious condition, as well as a +2
+                # racial bonus to Stealth" -- the first grant names no
+                # type and never calls itself a bonus, the second does
+                # both, and comparing the untyped call against the whole
+                # card's set made the row unpassable. Written as "+N to
+                # X" so it cannot match "a +2 racial bonus to Stealth",
+                # where a type word sits between the number and the "to".
+                or bool(re.search(r"[+-]\d+\s+to\s", text))
             )
             out[ref] = (typed, plain)
     return out
