@@ -3427,9 +3427,11 @@ def i2624p1(c: Cast) -> None:
 )
 def i2629p1(c: Cast) -> None:
     """One 1d8 of two types, not two rolls; the thunder half of the type
-    is dropped. "Every creature" includes allies. The squares come from
-    the header's blast, which `c.area` reports."""
-    for who in c.in_squares(c.area()):
+    is dropped. "Every creature" includes allies. A free action answering
+    a trigger is not aimed anywhere, so `c.area` can come back empty and
+    the blast is measured from the wielder instead."""
+    area = c.area() or spread({c.here}, 3)
+    for who in c.in_squares(area):
         if who != c.me:
             c.damage("1d8", dtype=DamageType.LIGHTNING, on=who)
 

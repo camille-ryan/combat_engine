@@ -444,7 +444,10 @@ class Cast:
             from .events import SavingThrow
 
             natural = self.world.rng.roll("1d20").total
-            plus = bonus + self.total("save", who)
+            plus = bonus + self.total(
+                "save", who, {"actor": who, "label": against or self.ref,
+                              "conditions": frozenset(), "ongoing": False}
+            )
             ev = self.world.bus.emit(
                 SavingThrow(
                     actor=who, against=against or self.ref, natural=natural,
@@ -4576,10 +4579,18 @@ class Cast:
 
     # -- reading modifiers back ---------------------------------------------
 
-    def total(self, what: str, on: int | None = None) -> int:
+    def total(self, what: str, on: int | None = None,
+              ctx: dict[str, Any] | None = None) -> int:
+        """Sum the modifiers to `what` on that creature.
+
+        `ctx` is what a gated modifier is asked. Without it a
+        `c.bonus(..., when=...)` cannot narrow, and every such bonus
+        counts -- which is how a "+2 to saving throws **against poison**"
+        came to be a bonus to every saving throw.
+        """
         who = on if on is not None else self.me
         mods = self.world.get(who, Mods)
-        return mods.total(what) if mods else 0
+        return mods.total(what, ctx or {}) if mods else 0
 
     # -- senses, one printed line each ---------------------------------------
 

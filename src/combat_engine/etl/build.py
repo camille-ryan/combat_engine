@@ -817,6 +817,7 @@ def _cross_reference_rest(
             fixed = scrub(spec, others)
             if table == "feat":
                 fixed = _label_refs(fixed, by_name)
+            fixed = _named_powers(fixed, by_name, ref)
             if fixed != spec:
                 out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
                 changed += 1
@@ -826,6 +827,41 @@ def _cross_reference_rest(
 #: `Sly Flourish : If you score a critical hit ...` -- a feat's Associated
 #: Powers list, one clause per power, keyed by the power's printed name.
 _LABEL = re.compile(r"^([A-Z][\w' ]{2,40}?)\s*:\s", re.M)
+
+
+#: "the wizard's **scorching burst** power", "you regain the use of your
+#: **fell might**". A phrase immediately before the word `power` is a
+#: power's name, whatever `identifies` thinks of the phrase on its own.
+_NAMED = re.compile(r"\b([A-Za-z][\w']*(?:\s+[A-Za-z][\w']*){0,3})\s+power\b")
+
+
+def _named_powers(spec: str, by_name: dict[str, str], own: str) -> str:
+    """Swap `<name> power` for `<ref> power`.
+
+    The other half of the same hole `_label_refs` closes. `identifies`
+    waives a two-word phrase built of two ordinary words -- "magic
+    missile", "fell might" -- because in running prose such a phrase is
+    usually a coincidence. Immediately before the word *power* it is not
+    a coincidence, and 33 of one item wave's 174 blocks were refused for
+    no reason but this: the row was writable, the engine had every verb
+    it needed, and there was nothing to name.
+
+    Longest match first, so a three-word name is not left as a fragment
+    of a two-word one.
+    """
+
+    def swap(m: re.Match) -> str:
+        phrase = m.group(1)
+        words = phrase.split()
+        for size in range(len(words), 0, -1):
+            tail = " ".join(words[-size:])
+            ref = by_name.get(tail.lower())
+            if ref and not ref.startswith(own):
+                head = " ".join(words[:-size])
+                return f"{head} {ref} power".strip()
+        return m.group(0)
+
+    return _NAMED.sub(swap, spec)
 
 
 def _label_refs(spec: str, by_name: dict[str, str]) -> str:

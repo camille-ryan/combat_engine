@@ -480,7 +480,20 @@ class Effects:
         # save bonus ran against `{}` and anything reading a key was
         # silently false -- "enemies within the aura take -2 to saving
         # throws" could not be written the obvious way.
-        ctx = {"actor": eff.owner, "effect": eff, "label": eff.label}
+        # `conditions` and `ongoing` as well as the label, because that is
+        # what the printed lines actually narrow on: "a +2 bonus to saving
+        # throws against **poison**", "against being immobilized or
+        # slowed", "against ongoing damage". Gating on the label alone
+        # meant matching whatever string the row that laid the effect
+        # happened to choose, which is its ref more often than not.
+        ctx = {
+            "actor": eff.owner,
+            "effect": eff,
+            "label": eff.label,
+            "conditions": frozenset(eff.conditions),
+            "ongoing": eff.ongoing is not None,
+            "dtype": eff.ongoing[1] if eff.ongoing else None,
+        }
         bonus = eff.save_mod + (holder.total("save", ctx) if holder else 0)
         roll = self.world.rng.d20()
         saved = roll.total + bonus >= 10
