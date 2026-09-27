@@ -195,13 +195,19 @@ def build() -> Report:
     report = Report()
     names: dict[str, dict[str, str]] = {}
 
+    # **First**, because the monster and power passes both consult it to
+    # decide whether a one-word name is a name or just a word. It used to
+    # run last, and `_COMMON()` read the table the build was in the
+    # middle of writing -- so a clean build saw an empty table and a
+    # rebuild saw the *previous* run's. The output depended on what was
+    # already on disk, which is the one thing a build must not do.
+    monster_parser.set_common(_common_words(source, out, report))
     _monsters(source, out, report, names)
     _powers(source, out, report, names)
     report.classes = _classes(source, out)
     report.features = _features(source, out, names)
     report.companions = _companions(source, out, names)
     report.build_powers = _build_powers(source, out, names)
-    _common_words(source, out, report)
 
     out.execute(
         "INSERT INTO meta (key, value) VALUES (?, ?)",
@@ -275,13 +281,20 @@ def _creature_names(rows: list) -> dict[str, str]:
     corrupt a spec that merely used the words, which is worse than the leak:
     an author would be handed mechanics with rules terms swapped for ids.
     """
+    from .monster import _COMMON
     from .sanitise import mechanical
 
     def worth_swapping(name: str) -> bool:
         words = re.findall(r"[A-Za-z']+", name.lower())
-        return bool(words) and len(name) >= 5 and not all(
-            w in mechanical() for w in words
-        )
+        if not words or len(name) < 5:
+            return False
+        # A one-word creature name that is ordinary English is a word
+        # before it is a name. Swapping it turned "begins to sprout" and
+        # "attacks from hiding" into references to whichever creature
+        # happens to be called that, in somebody else's rules.
+        if len(words) == 1 and words[0] in _COMMON():
+            return False
+        return not all(w in mechanical() for w in words)
 
     out: dict[str, str] = {}
     for row in rows:
@@ -612,7 +625,7 @@ def _vocabulary(texts) -> set[str]:  # noqa: ANN001
 
 def _common_words(
     source: sqlite3.Connection, out: sqlite3.Connection, report: Report
-) -> None:
+) -> frozenset[str]:
     """Record which words are ordinary English, measured by how widely used.
 
     `scripts/leaks.py` needs to tell a proper name from a word that merely
@@ -632,6 +645,7 @@ def _common_words(
     rows = [(w, n) for w, n in seen.items() if n >= COMMON_IN]
     out.executemany("INSERT INTO common_word VALUES (?, ?)", rows)
     report.common = len(rows)
+    return frozenset(w for w, _ in rows)
 
 
 def _digest(path: Path) -> str:

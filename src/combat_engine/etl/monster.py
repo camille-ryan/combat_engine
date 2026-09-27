@@ -177,9 +177,34 @@ def parse(
     # thing that refers to itself by a fragment. An ability named "Sensitive
     # to Cold" is matched whole, so the word `cold` survives in the sentence
     # that explains what it does.
-    swaps = dict(others or {})
+    # **Its own abilities first.** `others` is every creature's names, and
+    # seeding it first meant `setdefault` refused to let a creature's own
+    # ability win a name it shares -- so every dragon in the game had its
+    # bloodied-breath trait rewritten to point at the *first* dragon's
+    # breath weapon, because they are all called the same thing. A monster
+    # interacting with another monster's ability should be vanishingly
+    # rare; sharing a name is not the same as sharing an ability.
+    swaps: dict[str, str] = {}
     for a in m.abilities:
+        # **Not a one-word name that is ordinary English.** An ability
+        # called "Squeeze" turned every printed *verb* squeeze into its
+        # ref, so a swarm's trait read "it can m6685a0 through any
+        # opening" -- the word the sentence was about, replaced by an id.
+        # 3,313 single-word ability names are common English, so this is
+        # not one creature being unlucky.
+        if len(a.name.split()) == 1 and a.name.lower() in _COMMON():
+            continue
         swaps.setdefault(a.name, f"{m.ref_id}a{a.index}")
+    # And a word of this creature's **own name** beats another creature's
+    # ability spelled the same. The Chain Devil's rules said "the
+    # <another creature's Chain ability> chain devil", because `by_word`
+    # takes the name apart and then loses to whatever `others` already
+    # holds. Dropping the clash here is what lets the name win.
+    mine = {w.lower() for w in re.findall(r"[A-Za-z]+", m.name)}
+    for name, ref in (others or {}).items():
+        if name.lower() in mine:
+            continue
+        swaps.setdefault(name, ref)
     # What is printed beside the numbers is mechanics, not prose, and several
     # creatures are named after their own type. Scrubbing "goblin" out of a
     # goblin's rules would hide a word the spec already prints in its tags.
@@ -200,6 +225,26 @@ def parse(
             for k in a.keywords
         )
     return m
+
+
+
+#: Words the corpus uses widely enough to be English rather than a name.
+#: Injected by the build rather than read back off disk: the table lives
+#: in the database the build is *writing*, so a reader saw an empty table
+#: on a clean run and the previous run's on a rebuild -- the output
+#: depended on what was already there, which is the one thing a build
+#: must not do.
+_COMMON_WORDS: frozenset[str] = frozenset()
+
+
+def set_common(words: frozenset[str]) -> None:
+    """Tell the parser which words are ordinary English."""
+    global _COMMON_WORDS
+    _COMMON_WORDS = words
+
+
+def _COMMON() -> frozenset[str]:
+    return _COMMON_WORDS
 
 
 def _header(m: Monster, body: str) -> None:
@@ -272,7 +317,17 @@ def _numbers(m: Monster, blob: str) -> None:
         hit = re.search(rf"\b{label}\b\s*(.+)", flat, re.I)
         if hit:
             for amount, kind in re.findall(r"(\d+)\s+([a-z]+)", hit.group(1).split("\n")[0], re.I):
-                into[kind.lower()] = int(amount)
+                # **A real damage type, or nothing.** A swarm prints
+                # "Vulnerable 10 to close and area attacks" -- a
+                # resistance conditioned on the *shape* of the attack
+                # rather than on a type -- and the pattern happily read
+                # the word "to" as the type, giving every such creature a
+                # `{"to": 10}` that nothing could ever match. The
+                # conditional half is not modelled; inventing a damage
+                # type for it is worse than leaving it out, because the
+                # spec then prints "Resist 10 to" to whoever reads it.
+                if kind.lower() in _DAMAGE_TYPES():
+                    into[kind.lower()] = int(amount)
     immune = re.search(r"\bImmune\b\s*(.+)", flat, re.I)
     if immune:
         m.immune = tuple(
@@ -282,6 +337,13 @@ def _numbers(m: Monster, blob: str) -> None:
     if senses:
         m.senses = senses.group(1).split("\n")[0].strip()
 
+
+
+def _DAMAGE_TYPES() -> frozenset[str]:
+    """Every damage type the engine has a name for."""
+    from combat_engine.engine.types import DamageType
+
+    return frozenset(d.value for d in DamageType)
 
 def _later_stats(m: Monster, body: str) -> None:
     table = re.search(r'<table class="bodytable">(.*?)</table>', body, re.S)

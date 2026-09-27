@@ -358,6 +358,17 @@ def _option_label(session: Session, action: Action, p) -> str:  # noqa: ANN001
         return f"shift to {tuple(action.dest)}"
     if action.kind == "instinctive" and action.subject is not None:
         return f"{wire.label(action.subject)} acts on instinct"
+    if action.kind == "run":
+        return f"run to {tuple(action.dest)}"
+    if action.kind == "wield":
+        # **Which weapon.** Every swap read "wield", so three of them on a
+        # ranger's card were the same word three times. The ref is an
+        # engine constant rather than a compendium row, so there is no
+        # name to look up and no name to leak -- `w:short-sword` is the
+        # word already.
+        return f"take up {action.ref.removeprefix('w:').replace('-', ' ')}"
+    if action.kind == "action_point":
+        return f"spend an action point for a {action.ref} action"
     return {"stand": "stand up", "second_wind": "second wind", "end": "end turn"}.get(
         action.kind, action.kind
     )
@@ -768,6 +779,34 @@ def starts_span(event: Event) -> bool:
     return event.kind in SPAN_STARTS
 
 
+
+#: How a move reads, by the `kind_` every movement event carries. Walking
+#: is the unmarked case and stays plain.
+_MOVE_VERB = {
+    "walk": "moves to",
+    "shift": "shifts to",
+    "run": "runs to",
+    "teleport": "teleports to",
+    "charge": "charges to",
+    "push": "is pushed to",
+    "pull": "is pulled to",
+    "slide": "is slid to",
+    "fly": "flies to",
+}
+
+
+def _moved(d: dict) -> str:
+    """"moves to" for a walk, and the truth for everything else.
+
+    `Moved`, `MoveStart` and `MoveEnd` have all carried `kind_` for a long
+    time and nothing in `api/` read it, so every kind of movement printed
+    as "moves to". That makes an opportunity attack impossible to reason
+    about from the log -- a shift provokes nothing and a walk does -- and
+    a run, which is new, provokes exactly like a walk while covering two
+    more squares.
+    """
+    return _MOVE_VERB.get(d.get("kind_", "walk") or "walk", "moves to")
+
 def narrate_span(session: Session, events: list[Event]) -> str:
     """One sentence for one thing that happened.
 
@@ -822,7 +861,7 @@ def narrate_span(session: Session, events: list[Event]) -> str:
         elif kind == "ZoneCreated":
             lines.append(f"{wire.power(d['label'])} covers {len(d['squares'])} squares")
         elif kind == "MoveEnd":
-            lines.append(f"{wire.label(d['actor'])} moves to {tuple(d['at'])}")
+            lines.append(f"{wire.label(d['actor'])} {_moved(d)} {tuple(d['at'])}")
         elif kind == "TurnStart" and not d.get("ghost"):
             lines.append(f"{wire.label(d['actor'])}'s turn")
         elif kind == "OpportunityWindow":
@@ -889,7 +928,7 @@ def narrate(session: Session, event: Event) -> str:
             + ("saved" if d["saved"] else "failed")
         )
     if kind == "MoveEnd":
-        return f"{who('actor')} moves to {tuple(d['at'])}"
+        return f"{who('actor')} {_moved(d)} {tuple(d['at'])}"
     if kind == "ForcedMove":
         return f"{who('source')} {d['how']}s {who('target')} {d['squares']}"
     if kind == "OpportunityWindow":
