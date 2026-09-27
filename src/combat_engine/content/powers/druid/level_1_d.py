@@ -18,6 +18,11 @@ The three summoning rows of this level are written on `Summon` in the header
 and `c.summon_inline` in the body. Each prints its command as part of using
 the power on the turn it is cast, so `c.command` is rolled here; commands on
 later turns have no action to be spent on.
+
+Their Instinctive Effects go on the same header, as `instinctive=`, and the
+tail all three share is `summons.hunt`. Nothing fires them at the end of the
+summoner's turn yet -- `Cast.instinctive` is the door, and `p9665` is the one
+row that opens it.
 """
 
 from __future__ import annotations
@@ -71,6 +76,7 @@ from .forms import (
     rough_aura,
     take_beast_form,
 )
+from .summons import close_on, hunt, nearest
 
 PRIMAL_IMPLEMENT = [Keyword.PRIMAL, Keyword.IMPLEMENT]
 BEAST_FORM = "you must be in beast form"
@@ -503,6 +509,28 @@ def p9643(c: Cast) -> None:
             c.prone(on=who)
 
 
+def _p5366_instinct(c: Cast, who: int) -> None:
+    """Charge the nearest bloodied enemy it can run at; failing that, the tail.
+
+    The clause says the nearest bloodied *creature* it can charge, read as
+    an enemy: the pool a summoned creature swings at is its summoner's.
+    Skipped for one it is already standing next to, since a charge is a
+    run-in and there is nowhere to run from.
+    """
+
+    def shove(foe: int) -> None:
+        c.push(1, on=foe, by=who)
+
+    for foe in nearest(c, who, [f for f in c.enemies() if c.bloodied(f)]):
+        if c.adjacent_to(foe, who):
+            continue
+        if c.run_at(foe, who=who):
+            if c.command(who, on=foe, charge=True):
+                shove(foe)
+            return
+    hunt(c, who, then=shove)
+
+
 @power(
     "p5366",
     level=1,
@@ -512,7 +540,10 @@ def p9643(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_CREATURE,
     keywords=PRIMAL_IMPLEMENT,
-    summon=Summon(speed=6, attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis")),
+    summon=Summon(
+        speed=6, attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),
+        instinctive=_p5366_instinct,
+    ),
 )
 def p5366(c: Cast) -> None:
     """The printed Effect gives the command as part of using the power, so it
@@ -540,6 +571,22 @@ def p5366(c: Cast) -> None:
     )
 
 
+def _p5367_instinct(c: Cast, who: int) -> None:
+    """Attack an enemy within 3; failing that, close to within 3 of one.
+
+    The clause the card prints first -- attack whatever it attacked on the
+    summoner's previous turn -- is **left out**. Nothing records what a
+    summon last swung at, and a field nothing ever writes would read as
+    "it has never attacked anything" forever. See the report.
+    """
+    reach = nearest(c, who, c.within(3, of=who, side="enemy"))
+    if reach:
+        if c.command(who, on=reach[0]):
+            c.pull(2, on=reach[0], by=who)
+        return
+    close_on(c, who, gap=3)
+
+
 @power(
     "p5367",
     level=1,
@@ -552,6 +599,7 @@ def p5366(c: Cast) -> None:
     summon=Summon(
         speed=5, modes=("swim",),
         attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),
+        instinctive=_p5367_instinct,
     ),
 )
 def p5367(c: Cast) -> None:
@@ -563,6 +611,29 @@ def p5367(c: Cast) -> None:
         c.pull(2, by=made)
 
 
+def _p5369_instinct(c: Cast, who: int) -> None:
+    """An adjacent prone enemy first, then the tail.
+
+    The knocked-prone rider is the creature's own attack line, so it comes
+    with either swing, and whether it had combat advantage is read off the
+    result the command returns -- asking the board afterwards is too late.
+    """
+
+    def floor(foe: int) -> None:
+        if c.result is not None and c.result.advantage:
+            c.prone(on=foe)
+
+    down = [
+        f for f in c.within(1, of=who, side="enemy") if c.is_(Condition.PRONE, f)
+    ]
+    if down:
+        foe = nearest(c, who, down)[0]
+        if c.command(who, on=foe):
+            floor(foe)
+        return
+    hunt(c, who, then=floor)
+
+
 @power(
     "p5369",
     level=1,
@@ -572,7 +643,10 @@ def p5367(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_CREATURE,
     keywords=PRIMAL_IMPLEMENT,
-    summon=Summon(speed=6, attack=Attack(WIS, vs=REF), damage=Damage("1d6", "wis")),
+    summon=Summon(
+        speed=6, attack=Attack(WIS, vs=REF), damage=Damage("1d6", "wis"),
+        instinctive=_p5369_instinct,
+    ),
 )
 def p5369(c: Cast) -> None:
     """Whether the wolf had combat advantage is read off the result the

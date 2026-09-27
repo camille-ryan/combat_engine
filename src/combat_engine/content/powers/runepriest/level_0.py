@@ -5,12 +5,20 @@ number of uses from two to three at 16th. Both are header data read before
 the body runs, so the heroic printing is declared and the growth is left
 here in prose. The extra healing dice are the part the body can carry.
 
-The damage bonus is not conditional -- this row is the one rune's printing
-of the feature, so it always pays out.
+The row prints a rider per rune state and pays the one the runepriest is
+standing in. It used to pay the first of the two unconditionally, on the
+grounds that this row *was* that rune -- which it is not: the states are the
+class's first printed feature, they are now `cf:runepriest-rune`, and this
+row asks it rather than deciding for it.
 """
 
 from __future__ import annotations
 
+from combat_engine.content.features.leaders_sd import (
+    ALL_DEFENCES,
+    PROTECTION,
+    rune_state,
+)
 from combat_engine.engine import *
 
 
@@ -35,6 +43,12 @@ def p11353(c: Cast) -> None:
         dice = sum(lv <= c.level for lv in (6, 11, 16, 21, 26))
         if dice:
             c.heal(c.roll(f"{dice}d6"), on=who)
+    burst = dict.fromkeys([c.me, *c.within(5, side="ally")])
+    if rune_state(c) == PROTECTION:
+        for friend in burst:
+            for defence in ALL_DEFENCES:
+                c.bonus(defence, 1, on=friend, until=When.EONT, kind="untyped")
+        return
     step = 2 + 2 * sum(lv <= c.level for lv in (11, 21))
-    for friend in dict.fromkeys([c.me, *c.within(5, side="ally")]):
+    for friend in burst:
         c.bonus("damage", step, on=friend, until=When.EONT, kind="power")

@@ -356,6 +356,8 @@ def _option_label(session: Session, action: Action, p) -> str:  # noqa: ANN001
         return f"move to {tuple(action.dest)}"
     if action.kind == "shift":
         return f"shift to {tuple(action.dest)}"
+    if action.kind == "instinctive" and action.subject is not None:
+        return f"{wire.label(action.subject)} acts on instinct"
     return {"stand": "stand up", "second_wind": "second wind", "end": "end turn"}.get(
         action.kind, action.kind
     )

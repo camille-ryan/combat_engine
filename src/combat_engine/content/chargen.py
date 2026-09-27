@@ -397,6 +397,58 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # row's Prerequisite to be answerable. The elemental one is the only
     # fork in the game that is a choice of *damage type* rather than of
     # ability, which is what `Build.element` is for.
+    # The three the page lists by name. Derived legs gave this class two,
+    # and it prints three wards -- so one ward could never belong to a leg
+    # and all three were dealt to every swordmage, which is the opposite
+    # of "choose one". Which ward goes with which leg is read off the
+    # wards themselves and not guessed: one teleports *you* to the target
+    # and swings, one reduces the damage, one teleports *the target* to
+    # you. The scores are the derived pair, because the page prints build
+    # names without ability lines.
+    "swordmage": (
+        Build("assault", INT, STR),
+        Build("shielding", INT, CON),
+        Build("ensnarement", INT, CON),
+    ),
+    # Six classes whose rows were written against legs nobody added, so
+    # every `c.build(...)` in them answered False in every fight: 82
+    # riders across the invoker's covenants, the warden's four, the
+    # shaman's spirits, the avenger's censures, the warlord's commands
+    # and two barbarian rages. `scripts/legs.py` is what found them and
+    # what keeps them found.
+    #
+    # Named for what the **rows** ask about, which is the feature option
+    # rather than the build headline -- a row says `c.build("wrath")`
+    # where the page's build line says "Wrathful Invoker". The rows were
+    # written first and are the consumers; renaming them to match the
+    # headline would be churn for nothing.
+    #
+    # Scores are the derived pair reused: the pages print build names
+    # without ability lines, so a third leg takes the secondary of
+    # whichever printed option it sits closest to.
+    "avenger": (
+        Build("pursuit", WIS, DEX),
+        Build("retribution", WIS, INT),
+        Build("unity", WIS, INT),
+    ),
+    "invoker": (
+        Build("wrath", WIS, CON),
+        Build("preservation", WIS, INT),
+        Build("malediction", WIS, INT),
+    ),
+    "shaman": (
+        Build("protector", WIS, CON),
+        Build("stalker", WIS, INT),
+        Build("watcher", WIS, INT),
+        Build("elemental", WIS, CON),
+        Build("world speaker", WIS, CON),
+    ),
+    "warden": (
+        Build("earthstrength", STR, CON),
+        Build("lifespirit", STR, CON),
+        Build("stormheart", STR, WIS),
+        Build("wildblood", STR, WIS),
+    ),
     "warlock": (
         Build("infernal", CON, CHA),
         Build("fey", CHA, CON),
@@ -408,6 +460,9 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     "warlord": (
         Build("inspiring", STR, CHA),
         Build("tactical", STR, INT),
+        Build("bravura", STR, CHA),
+        Build("insightful", STR, INT),
+        Build("resourceful", STR, INT),
         Build("shielding", STR, CHA),
     ),
     # V -- which soul. The two share Charisma and differ on the secondary
@@ -425,7 +480,14 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # each one takes. Two of the four printed builds are here: the other
     # two give no ability order at all, so a leg for either would be an
     # invented pair of scores.
-    "barbarian": (Build("rageblood", STR, CON), Build("thaneborn", STR, CHA)),
+    # Four printed rages plus the Essentials one, which its own rows name.
+    "barbarian": (
+        Build("rageblood", STR, CON),
+        Build("thaneborn", STR, CHA),
+        Build("thunderborn", STR, CON),
+        Build("whirling", STR, CHA),
+        Build("berserker", STR, CON),
+    ),
 }
 
 
@@ -568,7 +630,10 @@ def loadout(
     mine = [p for p in REGISTRY.values() if p.cls == cls]
 
     out = sorted(p.ref for p in mine if p.level == 0)
-    out += sorted(p.ref for p in mine if _is_class_heal(p))
+    # Not already dealt: a class whose heal is itself a level-0 row was
+    # handed it twice, so `Powers.known` carried the ref twice over. The
+    # bard and the ardent are the two.
+    out += sorted(p.ref for p in mine if _is_class_heal(p) and p.ref not in out)
 
     for usage, count in SLOTS:
         at_level = [p for p in mine if p.level == level and p.usage is usage]

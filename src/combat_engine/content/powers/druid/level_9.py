@@ -10,8 +10,10 @@ describes, with the shape's standing benefits hung on the form. `p10854` is
 the one printed as a standard action, which is what its header says.
 
 The three summoning rows of this level are written the way `level_1_d.py`
-writes its own. `Summon` has no size, so the two Large creatures arrive
-Medium and the bear's bonus against its own size or larger is dropped.
+writes its own, Instinctive Effects included. `Summon` takes a size now and
+these two do not pass one, so the two Large creatures still arrive Medium
+and the bonus against creatures of their own size or larger is dropped --
+it reads off a size they have not got.
 """
 
 from __future__ import annotations
@@ -58,6 +60,7 @@ from .forms import (
     rough_aura,
     take_beast_form,
 )
+from .summons import close_on, hunt
 
 PRIMAL_IMPLEMENT = [Keyword.PRIMAL, Keyword.IMPLEMENT]
 PRIMAL_WEAPON = [Keyword.PRIMAL, Keyword.WEAPON]
@@ -349,16 +352,39 @@ def p16122(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_CREATURE,
     keywords=PRIMAL_IMPLEMENT,
-    summon=Summon(speed=6, attack=Attack(WIS, vs=FORT), damage=Damage("2d6", "wis")),
+    summon=Summon(
+        speed=6, attack=Attack(WIS, vs=FORT), damage=Damage("2d6", "wis"),
+        instinctive=hunt,
+    ),
 )
 def p5375(c: Cast) -> None:
-    """`Summon` has no size, so the bear arrives Medium and its +4 against
+    """Its Instinctive Effect is the shared tail and nothing else, so the
+    header points straight at `summons.hunt`. The block prints Large and
+    no size is passed, so the creature arrives Medium and its +4 against
     creatures its own size or larger -- which reads off a size it has not
     got -- is dropped.
     """
     made = c.summon_inline(get(c.ref).summon)
     if made:
         c.command(made, on=c.target)
+
+
+def _p5377_instinct(c: Cast, who: int) -> None:
+    """Attack whatever it is holding; failing that, the tail.
+
+    "Sustains the grab" needs nothing done: the grab hangs on the
+    encounter clock, so it is still there. What it holds is read back off
+    the relation, which is why the body grabs with `by=`.
+    """
+
+    def hold(foe: int) -> None:
+        c.grab(on=foe, by=who)
+
+    held = [f for f in c.grabbing(of=who) if f in c.enemies()]
+    if held:
+        c.command(who, on=held[0])
+        return
+    hunt(c, who, then=hold)
 
 
 @power(
@@ -373,16 +399,36 @@ def p5375(c: Cast) -> None:
     summon=Summon(
         speed=6, modes=("swim",),
         attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),
+        instinctive=_p5377_instinct,
     ),
 )
 def p5377(c: Cast) -> None:
-    """`c.grab` makes the caster the grabber and nothing grabs on a
-    companion's behalf; the -3 to escape checks has no check to modify, and
-    `Summon` has no size, so the crocodile arrives Medium.
+    """The grab is the creature's own -- `by=` -- because its instinctive
+    effect attacks "the creature it's grabbing" and the relation is the
+    only record of what that is. The -3 to escape checks has no check to
+    modify, and the block prints Large while the creature arrives Medium.
     """
     made = c.summon_inline(get(c.ref).summon)
     if made and c.command(made, on=c.target):
-        c.grab(on=c.target)
+        c.grab(on=c.target, by=made)
+
+
+def _p7414_instinct(c: Cast, who: int) -> None:
+    """The tail, with combat advantage on either branch.
+
+    The attack line carries it, so the swing grants it; and the move
+    clause prints it again for whichever enemy the creature ends beside.
+    """
+
+    def exposed(foe: int) -> None:
+        c.grants_advantage(on=foe, until=When.EONT)
+
+    if c.within(1, of=who, side="enemy"):
+        hunt(c, who, then=exposed)
+        return
+    foe = close_on(c, who)
+    if foe is not None and c.adjacent_to(foe, who):
+        exposed(foe)
 
 
 @power(
@@ -397,6 +443,7 @@ def p5377(c: Cast) -> None:
     summon=Summon(
         speed=8, modes=("fly",),
         attack=Attack(WIS, vs=REF), damage=Damage("2d6", "wis"),
+        instinctive=_p7414_instinct,
     ),
 )
 def p7414(c: Cast) -> None:

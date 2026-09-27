@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.builds import on_leg
 from combat_engine.engine import (
     AT_WILL,
     MINOR,
@@ -77,6 +78,7 @@ def _left_me_out(c: Cast, ev: Any, victim: int) -> bool:
     action=MINOR,
     reach=CloseBurst(2),
     target=ONE_CREATURE,
+    requires=on_leg("assault"),
     keywords=ARCANE_TELEPORT,
 )
 def p3322(c: Cast) -> None:
@@ -109,6 +111,7 @@ def p3322(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(2),
     target=ONE_CREATURE,
+    requires=on_leg("shielding"),
     keywords=ARCANE,
 )
 def p3323(c: Cast) -> None:
@@ -142,6 +145,7 @@ def p3323(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(2),
     target=ONE_CREATURE,
+    requires=on_leg("ensnarement"),
     keywords=ARCANE_TELEPORT,
 )
 def p5736(c: Cast) -> None:

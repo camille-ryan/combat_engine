@@ -308,6 +308,7 @@ class Encounter:
         from .movement import settle
 
         settle(self.world, eid)  # a flyer comes down before the turn is over
+        _uncommanded(self.world, eid)
         self.world.bus.emit(TurnEnd(actor=eid, round=self.world.round))
         self.world.turn = None
 
@@ -480,3 +481,26 @@ def refresh_encounter_powers(world: World) -> None:
             declared = get(ref)
             if declared is None or declared.usage is not Usage.DAILY:
                 powers.restore(ref)
+
+
+def _uncommanded(world: World, owner: int) -> None:
+    """Run the instinctive effect of every summon left to its own devices.
+
+    **Every summon block prints this and none of them could reach it.**
+    "If you haven't given it any commands by the end of your turn, it
+    ..." -- ten druid blocks say so, and the behaviour was written and
+    then openable only by the one utility row that spends an action to
+    provoke it. A creature that its owner ignored simply stood there.
+
+    Before `TurnEnd`, so a row answering the end of a turn sees what the
+    summon did rather than the board as the owner left it.
+    """
+    from .cast import Cast
+    from .components import Companion
+
+    for eid in sorted(world.having(Companion)):
+        mine = world.get(eid, Companion)
+        if mine is None or mine.owner != owner or mine.commanded == world.round:
+            continue
+        Cast(world=world, me=owner, ref=mine.ref).instinctive(eid)
+

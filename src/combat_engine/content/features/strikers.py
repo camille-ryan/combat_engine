@@ -643,7 +643,17 @@ def warlock_curse(c: Cast) -> None:
     keywords=[Keyword.ARCANE],
 )
 def warlock_nearest(c: Cast) -> None:
-    """The shared ranged bonus. See `prime_shot`."""
+    """The shared ranged bonus. See `prime_shot`.
+
+    **The warlock really does have this**, despite it reading as a ranger
+    feature: the class page's own list names it among the five. Its text
+    is the ranger's copied verbatim, ranger-specific trailing clause and
+    all -- "you do not gain this feature if you choose the Beast Mastery
+    fighting style", a style no warlock can take. That sentence is in the
+    source, not an import artefact, and nothing here acts on it. Left
+    alone deliberately: the row is right and the oddity is the
+    compendium's.
+    """
     prime_shot(c)
 
 

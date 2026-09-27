@@ -30,7 +30,9 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Action:
-    kind: str  # power | move | shift | charge | stand | second_wind | sustain | end
+    #: power | move | run | shift | charge | stand | second_wind | sustain |
+    #: drop | wield | item | instinctive | end
+    kind: str
     cost: ActionType
     ref: str = ""
     targets: tuple[int, ...] = ()
@@ -84,6 +86,7 @@ def legal(
 
     out.extend(_powers(world, encounter, actor, include_blocked))
     out.extend(_recasts(world, encounter, actor))
+    out.extend(_instinctives(world, encounter, actor))
     out.extend(_movement(world, encounter, actor))
     out.extend(_charges(world, encounter, actor))
     out.extend(_recovery(world, encounter, actor))
@@ -159,6 +162,50 @@ def _recasts(world: World, encounter: Encounter, actor: int) -> list[Action]:
         if not ok or not encounter.can_spend(actor, cost):
             continue
         out.extend(_aimings(world, actor, ref, cost=cost))
+    return out
+
+
+def _instinctives(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Summons this creature may set going without commanding them.
+
+    "Once per round you can use a minor action to command one of your
+    summoned creatures to use its instinctive effect" is a line in the
+    menu and nothing else, so it rides the same "<what> as <cost>" carrier
+    `c.shift_as` and `c.recast` use, with `instinctive` as the what and
+    how many times a round as the value. This is its reader, and without
+    one the word would be carried and never looked at.
+
+    Counted per round rather than per turn, which is what the carrier's
+    `last_round` already measures -- the value is a cap on the whole
+    round, not one per creature.
+    """
+    from .components import Companion
+
+    known = world.get(actor, Powers)
+    if known is None:
+        return []
+    offers = {
+        cost: n
+        for (what, cost), n in _granted(world, actor).items()
+        if what == "instinctive"
+    }
+    out: list[Action] = []
+    for cost in sorted(offers, key=lambda a: a.value):
+        if _recast_used(world, known, _recast_key("instinctive", cost)) >= offers[cost]:
+            continue
+        if not encounter.can_spend(actor, cost):
+            continue
+        for eid in sorted(world.having(Companion)):
+            mine = world.get(eid, Companion)
+            if mine.owner != actor or not alive(world, eid):
+                continue
+            p = get(mine.ref)
+            spec = getattr(p, "summon", None) if p else None
+            if spec is None or spec.instinctive is None:
+                continue
+            out.append(
+                Action(kind="instinctive", cost=cost, ref=mine.ref, subject=eid)
+            )
     return out
 
 
@@ -535,6 +582,20 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             opportunity=action.cost is ActionType.OPPORTUNITY,
             branch=action.branch,
         )
+
+    if action.kind == "instinctive":
+        from .cast import Cast
+
+        if action.subject is None:
+            return False
+        # Counted before it runs, on the carrier's key, so a body that
+        # despawns the creature still spends the round's one use.
+        known = world.get(actor, Powers)
+        if known is not None:
+            key = _recast_key("instinctive", action.cost)
+            known.used[key] = _recast_used(world, known, key) + 1
+            known.last_round[key] = world.round
+        return Cast(world=world, me=actor, ref=action.ref).instinctive(action.subject)
 
     if action.kind == "move":
         walk(world, actor, list(action.path))

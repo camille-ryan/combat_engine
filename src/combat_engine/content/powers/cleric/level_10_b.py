@@ -38,6 +38,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
     DAILY,
@@ -464,6 +465,7 @@ def p7889(c: Cast) -> None:
         when=_my_side_hurt(5, others_only=True, by_attack=True),
         text=_ALLY_HURT_BY_AN_ATTACK,
     ),
+    group=CHANNEL_DIVINITY,
 )
 def p9987(c: Cast) -> None:
     ev = c.trigger

@@ -83,8 +83,104 @@
     "wants": "a hand key in the attack context, set from a header field or c.strike(hand=\"off\")",
     "why": "c.w(hand=\"off\") picks the dice only, so a grant gated on an off-hand attack would read a key the context does not carry"
   },
-  "p9665": {
-    "wants": "Summon.instinctive on the header block, plus c.instinctive(who) and a repeatable once-per-round minor-action grant",
-    "why": "no summon block in the tree carries an instinctive effect and the field does not exist, so the method would be silently false on all 40 of them -- the row would look finished and never do anything"
+  "cf:barbarian-rage": {
+    "wants": "Keyword.RAGE on the class's daily attack rows -- the p4807 gap -- so that the row this feature grants at 5th level exists for c.grant_row to hand over",
+    "why": "the feature is two sentences and neither can be said. Every daily attack power of the class carries a keyword nothing declares, and the level-5 row the second sentence grants is p4807, which is blocked on that same keyword. Until the keyword exists the feature has nothing to mark and nothing to give, and until now nothing recorded that the feature itself was missing -- only the row it grants"
+  },
+  "cf:barbarian-might-rest": {
+    "wants": "the other three options' text on the imported class page, and a leg per option in chargen.BUILDS[\"barbarian\"]",
+    "why": "the fork names four options and the compendium's class-feature row carries only the first one's text. Four level-0 rows answer the same printed trigger and are plainly the four options' granted powers, but nothing says which option owns which, and the two legs the class has are named after builds rather than options. chargen.loadout deals a barbarian all four rows, so the exclusivity would have to be a c.forbid picked by guesswork -- which would take three working rows off the board to express half a sentence"
+  },
+  "cf:avenger-censure-allies": {
+    "wants": "a third leg in chargen.BUILDS[\"avenger\"], which the derived second-<ability> pair cannot supply",
+    "why": "three options are printed and two are written. The two are told apart by the ability each reads, which is exactly what the derived legs are named for; the third counts allies adjacent to the sworn enemy and reads no ability at all, so there is no leg it could be chosen by. Arming it beside either of the others would give one avenger two of a fork that prints \"choose one\""
+  },
+  "cf:assassin-training-guild": {
+    "wants": "c.no_encounter_attacks(), or a c.forbid that takes a class-and-usage set rather than one ref",
+    "why": "the second of the two printed methods is a granted row -- p14372, which chargen.loadout already deals -- plus the loss of every encounter attack power in the class. The grant half is written as a c.forbid on the other leg; the loss half would be a hand-listed set of refs that goes stale the moment a level is added, and a half-written version would leave an assassin holding the encounter powers its method says it never learned"
+  },
+  "cf:monk-tradition-rest": {
+    "wants": "a leg per tradition in chargen.BUILDS[\"monk\"], and the remaining traditions' text on the imported class page",
+    "why": "a tradition is a granted attack row and a standing defence bonus. Five of the granted rows sit at level 0 and chargen.loadout deals a monk all five, but the page names two traditions and prints the benefit of only one, so four of the five cannot be assigned to a leg and the second named tradition's defence bonus is not on the page at all. Forbidding by guess would make rows unreachable on every build the audit fields"
+  },
+  "cf:monk-discipline": {
+    "wants": "a per-round sibling of the group= header field, plus the full discipline keyword declared on the rows that print it",
+    "why": "the printed rule is one such power per round across a set of rows, and group= is the only cross-row budget the engine has -- it is per encounter, which is a different sentence. Nothing marks which rows are in the set either, so the budget would have no members to count"
+  },
+  "cf:sorcerer-elementalist": {
+    "wants": "a leg per elemental specialty in chargen.BUILDS[\"sorcerer\"], and then c.vulnerable gated on the caster's own attacks rather than on a damage type, plus a saving-throw bonus against ongoing damage of one type",
+    "why": "the class page carries a second set of features for a build the tree has no leg for: a damage bonus and an armour clause off Constitution, then a specialty that rewrites the level-0 at-will and adds a resistance ladder. The rows themselves are declared and dealt; what is missing is anything for c.build to answer, so the features would arm for every sorcerer or for none, and a leg with no feature behind it would deal a sorcerer whose specialty does nothing"
+  },
+  "cf:warden-f1-rest": {
+    "wants": "a leg per option in chargen.BUILDS[\"warden\"], plus an event announcing a second wind",
+    "why": "the class page prints four options and the derived legs are second-con and second-wis. That settles which ability the first sentence names -- cf:warden-f1 writes that half as the difference between it and the armour's own modifier -- but not which of the two options on each side was taken, and the second sentence differs on all four: an AC bonus, an ally's surge and save, a slide and a slow on everything marked, an extra attack penalty on everything marked. Nothing announces a second wind either. Cast.second_wind emits a SurgeSpent and a Healed like every other heal, so even with a leg the trigger would have to be inferred from Powers.times(\"second-wind\") inside a surge watcher"
+  },
+  "cf:swordmage-f0": {
+    "wants": "taking an item up off the ground, and a Gear that records a weapon the creature owns but is not holding",
+    "why": "the only clause of this feature with a reading inside a fight is calling the bonded blade back to hand as a standard action from ten squares away. c.disarm drops a weapon into the disarmed creature's square and nothing anywhere picks one back up, so there is no state for the recall to change and the row would be a standard action that does nothing. The rest of the card is an hour of meditation between fights"
+  },
+  "cf:bard-f1-rest": {
+    "wants": "a third leg in chargen.BUILDS[\"bard\"], which the derived second-<ability> pair cannot supply",
+    "why": "three virtues are printed and two of them key off exactly the two derived legs, second-int and second-con; cf:bard-f1 writes those two. The third keys off Wisdom, which is the bard's lowest score and no leg's secondary, so there is nothing for c.build to answer and arming it beside either of the others would give one bard two legs of a fork that prints choose one. Its own mechanics need nothing new -- an immediate interrupt on an ally being hit, raising the defence the triggering attack targeted"
+  },
+  "cf:bard-f5": {
+    "wants": "a short rest in the engine, with healing surges spent at the end of one",
+    "why": "the whole feature is extra hit points per surge spent at the end of a short rest, and Encounter has no rest of any kind -- the same gap cf:sorcerer-soul-rest names. There is no moment for the clause to be read at, and the one-of-these-at-a-time rule it ends with has nothing to arbitrate"
+  },
+  "cf:ardent-f0-rest": {
+    "wants": "the remaining mantles' text on the imported class page, and then a leg per mantle in chargen.BUILDS[\"ardent\"]",
+    "why": "three mantle rows sit at level 0 and chargen.loadout deals an ardent all three. The page prints one mantle in full, so cf:ardent-f0 lays that mantle's bonuses for every ardent -- they are the half that is not a granted row. The other mantles' own bonuses are not on the page at all and nothing says which of the remaining rows belongs to which mantle, so there is no leg for requires=on_leg to name and the rows are left ungated: an ardent carries three where the page gives it one"
+  },
+  "cf:wizard-familiar": {
+    "wants": "something that puts a familiar on the board -- a Companion of kind \"familiar\" -- plus a leg in chargen.BUILDS[\"wizard\"] for the second version of the class the page prints",
+    "why": "the class page carries a whole second set of features that nothing in the tree had a ref for, and both of its combat clauses hang on a familiar: a damage resistance for the wizard and its allies while adjacent to it, and a bonus feat whose only in-fight content is that the familiar exists at all. c.familiar and c.familiar_mode are built and four wizard rows already read them, but no row anywhere creates one, so every such call answers None and this feature would be a resistance nobody ever gets. The third feature of that set is four cantrips, which are declared and need nothing"
+  },
+  "cf:druid-aspect-rest": {
+    "wants": "a leg per aspect in chargen.BUILDS[\"druid\"], which the derived second-<ability> pair cannot supply",
+    "why": "four aspects are printed and cf:druid-aspect writes the two the derived legs mean: seventeen druid riders name an aspect and an ability, and one spends Dexterity throughout while another spends Constitution, which is exactly what second-dex and second-con are. Of the other two, one spends Constitution as well -- it reduces melee and ranged damage by that modifier -- so second-con cannot tell it from the aspect already written, and the last reads no ability at all, being a flat attack bonus on cold, fire, lightning and thunder powers. Neither needs anything mechanical: c.reduce and a keyword gate would both do. What is missing is a leg to choose them by"
+  },
+  "cf:druid-at-wills": {
+    "wants": "a per-class at-will count in chargen.SLOTS, and a composition rule chargen.loadout can honour",
+    "why": "the class's first printed feature is that a druid begins with three at-will attack powers and that at least one of them, and no more than two, must have the beast form keyword. SLOTS is two at-wills for every class in the game, and loadout picks them by the build's primary ability with no notion of a required keyword -- so the druid it deals has two at-wills and neither is a beast form row, which leaves the class's other feature, the shape change, leading nowhere. Nothing recorded it: the shape change is declared, so the class read as finished"
+  },
+  "cf:invoker-covenant-channel": {
+    "wants": "something that says which covenant grants which of the two channelled rows -- the covenant named in each row's own spec, or a build column on class_feature filled in for this class",
+    "why": "each covenant hands over one channel divinity power and the tree has both, p5186 and p7150, dealt to every invoker by loadout. cf:invoker-covenant writes the manifestation half, which the page prints in full for both covenants, but the specs are sanitised: neither row says what it is called and neither covenant's clause says what its power does. Forbidding the wrong one would take a working row off the board to express half a sentence"
+  },
+  "cf:invoker-covenant-legs": {
+    "wants": "named legs in chargen.BUILDS[\"invoker\"], one per covenant, and the third covenant's own text on the imported class page",
+    "why": "twenty riders across invoker levels 1 to 9 ask c.build for a covenant by name -- five for one, eight for another, seven for a third -- and every one of the twenty is false, because the class has only the two derived second-<ability> legs and none of them is called that. They were written against legs nobody had added and nothing counted them; cf:invoker-covenant asks second-int and second-con instead, which is the same fork under the names the tree actually carries. The third covenant is worse off again: its riders spend the same Constitution modifier as one of the two, and the imported page prints only two covenants, so it has no printed benefit to write either"
+  },
+  "cf:shaman-spirit": {
+    "wants": "the companion spirits' boon text on the imported class page, and a leg per spirit in chargen.BUILDS[\"shaman\"]",
+    "why": "five spirit rows sit at level 0 and loadout deals a shaman all five, so every shaman has every companion spirit's special attack at once. The page says choose one and names what the choice gives -- a boon, one of the at-will attacks, and that special attack -- but the imported text stops before printing any boon, so there is nothing to write. The fork cannot be answered either: thirteen riders across shaman levels 1 to 7 already ask c.build for a named spirit and all thirteen are false, the class having two derived legs while the five spirits key off Constitution twice, Intelligence twice and Dexterity once"
+  },
+  "cf:psion-focus": {
+    "wants": "a leg per discipline focus in chargen.BUILDS[\"psion\"], and the other two foci's text on the imported class page",
+    "why": "six level-0 rows are three mutually exclusive pairs -- an object lifted and an object made, a slide and a granted advantage, a sent message and a conjured fragment -- and loadout deals a psion all six. The page names the choice and prints the contents of one focus only, and no psion power anywhere carries a focus rider, so there is nothing to read the pairing off. Forbidding four rows by guess would make them unreachable on every build the audit fields"
+  },
+  "cf:battlemind-study": {
+    "wants": "the remaining options' text on the imported class page, and a leg per option in chargen.BUILDS[\"battlemind\"]",
+    "why": "the page's third feature prints one option and hands over one row, p11155. Three further level-0 rows -- a move off the initiative roll, a pull and a mark on an enemy's first turn, and a reaction attack that teleports -- answer no printed feature at all and are plainly the other options of the same choose-one, and loadout deals a battlemind all four. Nothing says which is which and nothing prints what any of them does, so the exclusivity cannot be enforced. The class's other two features are accounted for: three of its level-0 rows are named outright by the second, and the point pool is chargen.CLASSES[\"battlemind\"].power_points"
+  },
+  "cf:runepriest-rune-switch": {
+    "wants": "Keyword.RUNIC declared on the rows whose type line prints it, plus a rune offered when one of them is used and a state the choice writes",
+    "why": "the class's first feature is a pair of states and the rule for entering one: the rune is chosen as part of using a runic power, and the state stands until another is chosen or the encounter ends. cf:runepriest-rune writes the state and both of its standing benefits, chosen once as the fight begins, because nothing marks a row as runic -- Keyword has no member for it and group= is a per-encounter budget rather than a keyword -- so no row can announce a rune and there is no moment for the state to change at. The same gap as the rage keyword p4807 names"
+  },
+  "cf:runepriest-tradition-rest": {
+    "wants": "a third leg in chargen.BUILDS[\"runepriest\"], which the derived second-<ability> pair cannot supply, plus a build able to wear something lighter than the class chassis",
+    "why": "three traditions are printed and cf:runepriest-tradition writes the one keyed to Constitution, which is one of the two derived legs. The other two both pay a Wisdom modifier -- one on being missed, one on being damaged -- so second-wis cannot tell them apart, and unlike every other class in this set the runepriest's powers carry no tradition riders at all, so there is nothing to read the pairing off. One of the two also opens with an AC clause that is dead on this chassis: it applies only out of heavy armour and the class wears scale, with nothing in Build able to say otherwise"
+  },
+  "cf:seeker-bond-rest": {
+    "wants": "the second bond's text on the imported class page",
+    "why": "the page prints one of the two bonds in full and cf:seeker-bond writes all of it -- the granted row, the exclusivity, and the standing minor-action shift. The other bond is not in the imported text at all. Its granted row is identifiable without it, p11462 being the only other level-0 seeker row and the one that spends the Strength modifier its riders spend, so the exclusivity is written both ways; whatever else that bond gives is not on the page and is not guessed at"
+  },
+  "cf:artificer-items": {
+    "wants": "magic items in the engine: an item with a daily power, Gear recording what is worn or carried, and an event announcing that an item's daily power was used",
+    "why": "three of the artificer's four class-page features are about magic items and none of the three has a subject. One banks a charge in a weapon or implement that its wielder spends for a bonus to an attack roll already made; one recharges an item's daily power; one pays an ally temporary hit points whenever that ally uses an item's daily power. Gear carries weapons and armour and no items at all, every chassis weapon has enhancement 0, and nothing anywhere uses an item power, so each of the three would be a hook nothing ever fires"
+  },
+  "cf:artificer-infusions": {
+    "wants": "a shared per-encounter allowance of more than one use -- group= counts to one -- and a leg in chargen.BUILDS[\"artificer\"] for the swap the feature offers at character creation",
+    "why": "the fourth feature is the budget the three declared infusion rows draw on: two per extended rest, one per round, three from 16th level. Each row is written as its own encounter power with once_per_round instead, which is three times the printed allowance, because group= is a one-per-encounter budget and would be a third of it. The feature also lets one infusion be taken in place of another when the character is made, which is a choose-one over p10187 and p7635 with no leg to answer it"
   }
 }

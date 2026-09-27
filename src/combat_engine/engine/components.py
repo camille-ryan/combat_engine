@@ -261,6 +261,10 @@ class Companion:
     ref: str = ""
     #: Dismissed companions leave the board; the owner can call them back.
     kind: str = "spirit"
+    #: The round its owner last spent an action on it. Every summon block
+    #: prints "if you haven't given it any commands by the end of your
+    #: turn", so the instinctive effect needs to know whether one was.
+    commanded: int = -1
     #: The dice its **own** attacks roll -- a ranger's beast prints `1[B]`
     #: the way a character's weapon prints `1[W]`, and `c.b(n)` reads this.
     #: Empty for a spirit, which has no attack of its own: every attack it

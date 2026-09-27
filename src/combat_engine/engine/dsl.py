@@ -206,6 +206,15 @@ class Summon:
     #: A bare tuple of names could not say "speed 0, fly 6", which three
     #: blocks print, and they had to correct it by hand in the body.
     modes: dict[str, int] | None = None
+    #: What the creature does on a round nobody gave it an order -- the
+    #: printed Instinctive Effect. Ten blocks print one and each prints a
+    #: different priority list, so it is the block's own code rather than a
+    #: flag: handed the cast driving it and the creature's id.
+    #:
+    #: `Cast.instinctive` is the only caller, and it rebinds the cast to
+    #: the ref that did the summoning first, so `c.command` inside here
+    #: reads this block's attack line and not the row spending the action.
+    instinctive: Callable[[Cast, int], None] | None = None
     label: str = ""
 
 

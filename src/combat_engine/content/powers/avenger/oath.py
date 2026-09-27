@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
@@ -182,9 +183,11 @@ def p3069(c: Cast) -> None:
     watcher closes over the creature rather than asking `sworn` each time --
     this one names a target and keeps it, where the at-will re-swears.
 
-    "You regain the use of this power" has nowhere to go: `Powers.used`
-    counts uses and nothing refunds one. The `Dropped` watcher ends the
-    reroll, which is the half that is sayable. See the report.
+    "You regain the use of this power" was reported as unsayable when this
+    was written, on the grounds that `Powers.used` counts uses and nothing
+    refunds one. `c.restore_use` does, so the clause is written: the
+    `Dropped` watcher ends the reroll *and* hands the use back, which is
+    the whole printed sentence rather than half of it.
     """
     victim = c.target
     if victim is None:
@@ -204,6 +207,7 @@ def p3069(c: Cast) -> None:
     def released(ev: Dropped) -> None:
         if ev.actor == victim:
             c.world.effects.end(held, "the oath is discharged")
+            c.restore_use(c.ref, on=me)
 
     c.watch(Dropped, released, until=When.ENCOUNTER, on=me, label=f"{c.ref} release")
 
@@ -218,15 +222,18 @@ def p3069(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.DIVINE, Keyword.IMPLEMENT, Keyword.RADIANT],
     attack=Attack(WIS, vs=WILL),
+    group=CHANNEL_DIVINITY,
 )
 def p5330(c: Cast) -> None:
     """"One undead creature in the burst" is a filter the targeting layer
     cannot apply -- it picks by side, not by type -- so the type is asked in
     the body and a living target is simply not attacked.
 
-    "You can use only one channel divinity power per encounter" is a budget
-    across a set of rows; nothing in the header spans rows, so it is dropped
-    and named in the report.
+    "You can use only one channel divinity power per encounter" is the
+    class page's own feature and it is a budget across a set of rows, which
+    is what `group=` is. It was dropped when this was written because
+    nothing in the header spanned rows; the field exists, so the sentence is
+    declared here and on the other row that prints it.
     """
     if not c.is_kind("undead"):
         return
@@ -263,6 +270,7 @@ def _ally_swings_at_oath(world: World, me: int, ev: AttackRolled) -> bool:
     keywords=[Keyword.DIVINE],
     trigger=_ALLY_SWINGS,
     on=Trigger(AttackRolled, _ally_swings_at_oath, _ALLY_SWINGS),
+    group=CHANNEL_DIVINITY,
 )
 def p5331(c: Cast) -> None:
     """`AttackRolled` rather than `AttackDeclared`: the second roll has to

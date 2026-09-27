@@ -1,7 +1,18 @@
-"""Seeker, level 0: the class features."""
+"""Seeker, level 0: the class features.
+
+Two of the three are the rows the two seeker bonds hand over, and the class
+page says choose one bond. So each carries `requires=on_leg(...)` for the
+leg whose secondary its own riders spend -- Dexterity for one bond and
+Strength for the other, which eight rows from level 1 to 7 print outright.
+Gating in the header is what "choose one of the following" means here:
+`chargen.loadout` deals a seeker both rows and the gate is what keeps the
+one it did not choose out of reach. `cf:seeker-bond` is the rest of the
+printed clause.
+"""
 
 from __future__ import annotations
 
+from combat_engine.content.features.builds import on_leg
 from combat_engine.engine import (
     EACH_ENEMY,
     ENCOUNTER,
@@ -17,6 +28,7 @@ from combat_engine.engine import (
     Miss,
     Trigger,
     When,
+    World,
     both,
     by_me,
     by_melee,
@@ -28,6 +40,15 @@ from combat_engine.engine.basic import RANGED
 
 from . import PRIMAL, PRIMAL_WEAPON, has_thrown
 
+#: The two bonds, as the derived leg each one's riders spend.
+_THROWN_BOND = on_leg("second-str")
+_CAGE_BOND = on_leg("second-dex")
+
+
+def thrown_bond(world: World, eid: int) -> bool:
+    """The bond *and* the weapon its printed Requirement names."""
+    return _THROWN_BOND(world, eid) and has_thrown(world, eid)
+
 
 @power(
     "p11462",
@@ -38,8 +59,8 @@ from . import PRIMAL, PRIMAL_WEAPON, has_thrown
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=PRIMAL_WEAPON,
-    requires=has_thrown,
-    requires_text="needs a light thrown or heavy thrown weapon",
+    requires=thrown_bond,
+    requires_text="needs the bond that hands this over, and a light or heavy thrown weapon",
     thrown_by_hand=True,
     trigger="an enemy misses you with a melee attack",
     on=Trigger(
@@ -64,6 +85,8 @@ def p11462(c: Cast) -> None:
     reach=CloseBurst(1),
     target=EACH_ENEMY,
     keywords=PRIMAL,
+    requires=_CAGE_BOND,
+    requires_text="needs the bond that hands this over",
 )
 def p9500(c: Cast) -> None:
     c.push(1)

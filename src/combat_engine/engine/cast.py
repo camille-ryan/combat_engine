@@ -1931,6 +1931,21 @@ class Cast:
         attacks as a standard action". A row could be taken away and never
         given, so anything printing this had to be left out whole rather
         than half-written.
+
+        **Not the tool for a build's own rows.** `chargen.loadout` deals a
+        character every level-0 row of its class, so this returns `None`
+        for one of those -- the creature already knows it. Three features
+        have been written around that with a `c.forbid` on the other legs,
+        and it reads like a bug in `loadout`.
+
+        It is not. The arrangement is deal-everything and gate at the
+        point of use: `requires=on_leg("...")` in the header refuses the
+        row on a build that did not take it, which is what "choose one of
+        the following" means and what eight rows already do. Withholding
+        the rows instead would need a feature to hand each one back, and
+        exactly one ref in the whole tree is granted by name -- the rest
+        of the exclusivity is written with variables, so the rows would
+        simply vanish.
         """
         from .components import Powers
 
@@ -2309,13 +2324,24 @@ class Cast:
             Relation.CURSED_BY, self.me, who
         )
 
-    def grab(self, *, on: int | None = None) -> Effect | None:
+    def grab(self, *, on: int | None = None, by: int | None = None) -> Effect | None:
+        """`by=` names the grabber when it is not the caster, as `c.mark`
+        does: a summoned creature grabs on its own account, and hanging the
+        relation on its summoner means nothing can read back what it holds.
+        """
         who = self._who(on)
         if who is None:
             return None
+        holder = self.me if by is None else by
         return self.world.effects.apply(
             who, self.me, When.ENCOUNTER, label=f"{self.ref} grab",
-            relations=[(Relation.GRABBED_BY, self.me, who)],
+            relations=[(Relation.GRABBED_BY, holder, who)],
+        )
+
+    def grabbing(self, *, of: int | None = None) -> list[int]:
+        """Everything this creature is holding in a grab."""
+        return self.world.relations.targets(
+            Relation.GRABBED_BY, self.me if of is None else of
         )
 
     def no_provoke(
@@ -3181,7 +3207,9 @@ class Cast:
         )
         return made
 
-    def command(self, who: int, *, on: int | None = None) -> AttackResult | None:
+    def command(
+        self, who: int, *, on: int | None = None, charge: bool = False
+    ) -> AttackResult | None:
         """Spend your action making a summon attack with **its own** line.
 
         The half `from_=` could not do: it moves where the attack is
@@ -3189,25 +3217,70 @@ class Cast:
         printed block that gives its creature an attack bonus means that
         bonus, so this reads the header's `summon=` line and rolls it from
         the creature.
+
+        `charge=True` is "using its attack as a melee basic attack" at the
+        end of a run-in: the swing is a charge, which is the +1 and every
+        rider that reads one. `c.charge_at` cannot say it here, because it
+        goes through `dsl.use` and a summon's attack line is not a row.
         """
+        from .components import Companion
         from .dsl import get
+
+        # Spending an action on it is what "you gave it a command" means,
+        # and `turns._uncommanded` reads this at the end of the turn.
+        held = self.world.get(who, Companion)
+        if held is not None:
+            held.commanded = self.world.round
 
         p = get(self.ref)
         spec = getattr(p, "summon", None) if p else None
         if spec is None or spec.attack is None:
             return None
         bonus = spec.attack.bonus_for(self.world, who, self.ref, self.branch)
-        hit = self.attack(bonus, spec.attack.vs, on=on, from_=who)
-        if hit and spec.damage is not None:
-            line = spec.damage
-            # Through `_bonus_of`, the way `c.hit` reads a header's damage.
-            # Every printed summon block says "+ Intelligence modifier", which
-            # is `Damage(..., "int")` -- handed to `c.damage` raw it reached
-            # `roll(dice).total + "int"` and every one of them raised.
-            self.damage(
-                line.dice, self._bonus_of(line.bonus), dtype=line.dtype, on=on
-            )
+        was, self.charge = self.charge, self.charge or charge
+        try:
+            hit = self.attack(bonus, spec.attack.vs, on=on, from_=who)
+            if hit and spec.damage is not None:
+                line = spec.damage
+                # Through `_bonus_of`, the way `c.hit` reads a header's damage.
+                # Every printed summon block says "+ Intelligence modifier",
+                # which is `Damage(..., "int")` -- handed to `c.damage` raw it
+                # reached `roll(dice).total + "int"` and every one raised.
+                self.damage(
+                    line.dice, self._bonus_of(line.bonus), dtype=line.dtype, on=on
+                )
+        finally:
+            self.charge = was
         return hit
+
+    def instinctive(self, who: int) -> bool:
+        """Set a standing summon going on its own Instinctive Effect.
+
+        The behaviour is written on the block that made the creature, and
+        the row spending the action is generally a different one, so the
+        block is found through the `Companion.ref` the summon was spawned
+        with rather than through `self.ref` -- and the cast handed to it is
+        rebound to that ref, or `c.command` inside would look for an attack
+        line on the row that is only paying for this.
+
+        False when the creature is not a summon of this caster's, or when
+        its block prints no instinctive effect: most do not.
+        """
+        from dataclasses import replace
+
+        from .components import Companion
+        from .dsl import get
+
+        mine = self.world.get(who, Companion)
+        if mine is None or mine.owner != self.me:
+            return False
+        p = get(mine.ref)
+        spec = getattr(p, "summon", None) if p else None
+        act = getattr(spec, "instinctive", None) if spec is not None else None
+        if act is None:
+            return False
+        act(replace(self, ref=mine.ref, targets=[], target=None, result=None), who)
+        return True
 
     def dismiss_companion(self) -> bool:
         """"Your spirit companion disappears." An Effect line on ~20 rows."""
@@ -3612,17 +3685,27 @@ class Cast:
         self.world.relations.set(Relation.RIDDEN_BY, who, self.me)
         return True
 
-    def guard(self, *, on: int | None = None) -> bool:
-        """Take that creature under this one's protection."""
+    def guard(self, *, on: int | None = None, by: int | None = None) -> bool:
+        """Take that creature under this one's protection.
+
+        `by=` names the protector when it is not the caster, the way
+        `c.mark` does. A summoned creature guards the character its
+        summoner chose, and hanging the relation on the summoner instead
+        means nothing can read back which character that was.
+        """
         who = self._who(on)
         if who is None:
             return False
-        self.world.relations.set(Relation.GUARDED_BY, self.me, who)
+        self.world.relations.set(
+            Relation.GUARDED_BY, self.me if by is None else by, who
+        )
         return True
 
-    def guarding(self) -> list[int]:
+    def guarding(self, *, of: int | None = None) -> list[int]:
         """Everything this creature is guarding."""
-        return self.world.relations.targets(Relation.GUARDED_BY, self.me)
+        return self.world.relations.targets(
+            Relation.GUARDED_BY, self.me if of is None else of
+        )
 
     def is_guarded(self, on: int | None = None) -> bool:
         """Is that creature under *this* one's protection?"""

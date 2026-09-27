@@ -1,8 +1,11 @@
 """Druid, level 10: the utilities.
 
-Two rows are absent. One commands a summoned creature to use its instinctive
-effect, and nothing models an instinctive effect; the other makes four
-berries somebody carries off and eats later. Both are in the report.
+One row is absent: it makes four berries somebody carries off and eats
+later. It is in the report.
+
+`p9665` buys a repeatable minor action for the rest of the fight, which is
+a line in the action menu and nothing that happens when it is cast. See
+`actions._instinctives`, which is the reader for the word it grants.
 
 **`c.form` shapes the caster and nobody else.** `p9666` turns the whole
 party Tiny, so its holds are applied per target through `world.effects`
@@ -443,3 +446,31 @@ def p9666(c: Cast) -> None:
             )
     if c.first:
         c.note(f"{c.ref}: +5 to Stealth, and a Sustain Minor that would hold every target's form")
+
+
+@power(
+    "p9665",
+    level=10,
+    cls="druid",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=PRIMAL,
+)
+def p9665(c: Cast) -> None:
+    """A repeatable minor action for the rest of the fight, so the Effect
+    is an entry in the action menu rather than anything that happens now.
+
+    `c.grant_action` is the carrier -- the same "<what> as <cost>" one a
+    granted shift rides -- with `instinctive` as the word and the value as
+    how many times a round. `actions._instinctives` is its reader: one
+    option per standing summon of this caster's whose block prints an
+    instinctive effect, counted per round on `Powers.last_round` the way
+    `c.recast` is. `Cast.instinctive` runs the block's own priority list.
+
+    `c.give` would be one use and `c.recast` re-prices a row the caster
+    knows, and this is neither: what it buys is a creature's behaviour,
+    which is not a row at all.
+    """
+    c.grant_action("instinctive", MINOR, on=c.me, until=When.ENCOUNTER)

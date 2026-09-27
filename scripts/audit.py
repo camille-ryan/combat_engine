@@ -549,11 +549,22 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     # that got spent. The board cannot know which row matters, so it does
     # not guess: it looks at whether this row reads the expended list at
     # all, the way `_aims_at` reads a body to pick a blast origin.
+    #
+    # **Not a trait.** `Encounter.start()` arms every `action=NONE` row with
+    # `spend=True` a few lines below, so a trait is on the expended list
+    # either way and spending one here buys nothing -- while using up the
+    # one deliberate spend the board gets. Class features sort before power
+    # ids under `cf:`, so the moment a class gained its first `cf:` trait
+    # the pick moved off the row that mattered: the invoker's channelled
+    # invocation stopped being the expended one and the row that hands a
+    # channelled use back reported silent while being correct.
     if _wants_expended(ref):
         mine = world.get(caster, Powers)
         for other in (mine.known if mine else []):
             spec = get(other)
             if other in (ref, mine.basic) or spec is None or spec.usage is Usage.AT_WILL:
+                continue
+            if spec.action is ActionType.NONE:
                 continue
             mine.used[other] = mine.used.get(other, 0) + 1
             break

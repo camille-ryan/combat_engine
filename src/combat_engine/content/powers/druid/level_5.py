@@ -13,7 +13,8 @@ values are written down in place as the blows land.
 The four summoning rows of this level are written the way `level_1_d.py`
 writes its own: `Summon` in the header, `c.summon_inline` and one `c.command`
 in the body, since the printed Effect gives that command as part of using the
-power.
+power. All four print an Instinctive Effect, which goes on the same header as
+`instinctive=` and shares its tail with the rest through `summons.hunt`.
 """
 
 from __future__ import annotations
@@ -53,6 +54,7 @@ from combat_engine.engine import (
 from combat_engine.engine.query import adjacent, has_combat_advantage
 
 from .forms import beast_row, ends_with, in_beast_form, take_beast_form
+from .summons import close_on, hunt, nearest, walk_beside
 
 PRIMAL_IMPLEMENT = [Keyword.PRIMAL, Keyword.IMPLEMENT]
 PRIMAL_WEAPON = [Keyword.PRIMAL, Keyword.WEAPON]
@@ -300,6 +302,24 @@ def p16120(c: Cast) -> None:
     hold.subs.append(c.world.bus.on(Hit, worsen, owner=c.me))
 
 
+def _p5371_instinct(c: Cast, who: int) -> None:
+    """"It makes its attack against at least one enemy, targeting as many
+    enemies as possible. If it can't target any enemies, it moves its speed
+    to a square adjacent to an enemy."
+
+    The blast is approximated the way the body approximates it: everything
+    within 3 of the creature, one at a time. Where the blast is laid down
+    is the choice the clause is about, and `Summon` carries an attack line
+    with no shape to place.
+    """
+    caught = c.within(3, of=who, side="enemy")
+    if not caught:
+        close_on(c, who)
+        return
+    for foe in caught:
+        c.command(who, on=foe)
+
+
 @power(
     "p5371",
     level=5,
@@ -312,6 +332,7 @@ def p16120(c: Cast) -> None:
     summon=Summon(
         speed=6, attack=Attack(WIS, vs=REF),
         damage=Damage("1d8", "wis", dtype=DamageType.FIRE),
+        instinctive=_p5371_instinct,
     ),
 )
 def p5371(c: Cast) -> None:
@@ -328,6 +349,20 @@ def p5371(c: Cast) -> None:
         c.command(made, on=foe)
 
 
+def _p5373_instinct(c: Cast, who: int) -> None:
+    """"It moves its speed to a square adjacent to the character it guards.
+    If it ends adjacent to any enemies, those enemies are marked by it."
+
+    Who it guards is read back off the relation the body laid, which is
+    why the body lays one. The marks are hung on the creature rather than
+    the summoner, the way the commanded attack's are.
+    """
+    ward = (c.guarding(of=who) or [c.me])[0]
+    walk_beside(c, who, ward)
+    for foe in c.within(1, of=who, side="enemy"):
+        c.mark(on=foe, by=who, until=When.EONT)
+
+
 @power(
     "p5373",
     level=5,
@@ -337,17 +372,55 @@ def p5371(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_CREATURE,
     keywords=PRIMAL_IMPLEMENT,
-    summon=Summon(speed=6, attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis")),
+    summon=Summon(
+        speed=6, attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),
+        instinctive=_p5373_instinct,
+    ),
 )
 def p5373(c: Cast) -> None:
-    """The instinctive effect -- what the drake does on a turn nobody
-    commanded it -- has nowhere to go, and `c.guard` makes the caster the
-    protector rather than the drake, so which character it guards is not
-    held either.
+    """Who it protects is chosen through the decider and held as a relation
+    **on the creature**, because its instinctive effect walks to whoever
+    that is and nothing else records the answer. With no decider installed
+    the caster comes first in the list, which is the printed first option.
+
+    The printed Immediate Interrupt -- a second command, triggered when an
+    enemy beside it swings at the character it guards -- is still not
+    written: a summon has no window of its own to take, and `c.watch` on
+    the summoner would spend the summoner's.
     """
     made = c.summon_inline(get(c.ref).summon)
-    if made and c.command(made, on=c.target):
+    if not made:
+        return
+    ward = c.world.decide(
+        c.me,
+        "guard",
+        [c.me, *(a for a in sorted(c.allies()) if a != made)],
+        f"{c.ref}: who it guards",
+    )
+    c.guard(on=ward, by=made)
+    if c.command(made, on=c.target):
         c.mark(on=c.target, by=made, until=When.EONT)
+
+
+def _p5374_instinct(c: Cast, who: int) -> None:
+    """Charge the nearest enemy nothing else is standing near; else the tail.
+
+    "Without the shift" is why the charge here is a run-in and a command
+    rather than the body's `c.shift` followed by a swing. "No creatures
+    within 2 squares of it" counts everybody but the enemy itself -- the
+    creature about to charge included, so one it is already next to is out
+    of the running anyway.
+    """
+    alone = [
+        f
+        for f in c.enemies()
+        if not [o for o in c.within(2, of=f, side="any") if o != f]
+    ]
+    for foe in nearest(c, who, alone):
+        if c.run_at(foe, who=who):
+            c.command(who, on=foe, charge=True)
+            return
+    hunt(c, who)
 
 
 @power(
@@ -359,7 +432,10 @@ def p5373(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_CREATURE,
     keywords=PRIMAL_IMPLEMENT,
-    summon=Summon(speed=7, attack=Attack(WIS, vs=REF), damage=Damage("1d10", "wis")),
+    summon=Summon(
+        speed=7, attack=Attack(WIS, vs=REF), damage=Damage("1d10", "wis"),
+        instinctive=_p5374_instinct,
+    ),
 )
 def p5374(c: Cast) -> None:
     """The shift is the panther's own, so it is walked before the swing."""
@@ -368,6 +444,15 @@ def p5374(c: Cast) -> None:
         return
     c.shift(3, who=made)
     c.command(made, on=c.target)
+
+
+def _p9655_instinct(c: Cast, who: int) -> None:
+    """The tail, with the attack line's concealment rider on the swing."""
+
+    def veil(foe: int) -> None:
+        c.penalty("attack", 2, on=foe, until=When.EONT)
+
+    hunt(c, who, then=veil)
 
 
 @power(
@@ -382,6 +467,7 @@ def p5374(c: Cast) -> None:
     summon=Summon(
         speed=6, modes=("climb",),
         attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),
+        instinctive=_p9655_instinct,
     ),
 )
 def p9655(c: Cast) -> None:

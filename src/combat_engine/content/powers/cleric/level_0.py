@@ -3,9 +3,16 @@
 Two printed sentences recur here and neither has a header field.
 
 **"You can use only one channel divinity power per encounter"** is a budget
-shared across a *set* of rows. `uses` and `once_per_round` are per row, and
-`group` is a string nothing spends against, so the limit is dropped rather
-than half-declared. Named in the report.
+shared across a *set* of rows. `uses` and `once_per_round` are per row, so
+neither says it; `group=CHANNEL_DIVINITY` does, and `dsl._group_spent`
+enforces it across every row carrying the name. That is the whole of the
+class's first printed feature -- it has no row of its own because a shared
+allowance is a header field and not a thing anybody does.
+
+This file was written when `group` was a string nothing spent against and
+its two channelled rows were left out of the budget when that stopped being
+true, so a cleric could channel twice a fight while the other five rows of
+the same set could not.
 
 **"One undead creature"** is a filter on creature type, and the targeting
 layer picks by side. Those rows ask `c.is_kind` in the body and leave a
@@ -17,6 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
     ANY_CREATURE,
@@ -98,6 +106,7 @@ def _fresh_roll(c: Cast, ev: Any) -> None:
     target=ONE_CREATURE,
     keywords=DIVINE_WEAPON_RADIANT,
     attack=Attack(WIS, vs=WILL),
+    group=CHANNEL_DIVINITY,
 )
 def p12601(c: Cast) -> None:
     if not c.is_kind("undead"):
@@ -175,6 +184,7 @@ def p12614(c: Cast) -> None:
     reach=CloseBurst(2),
     target=ONE_ALLY,
     keywords=DIVINE,
+    group=CHANNEL_DIVINITY,
 )
 def p12638(c: Cast) -> None:
     """Extra damage of a named type, so it is dealt rather than added as a
@@ -203,6 +213,7 @@ def p12638(c: Cast) -> None:
     reach=CloseBurst(3),
     target=ANY_CREATURE,
     keywords=DIVINE,
+    group=CHANNEL_DIVINITY,
 )
 def p14292(c: Cast) -> None:
     """`AttackRolled` rather than `Miss`: by the time a miss is announced the
@@ -232,6 +243,7 @@ def p14292(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=DIVINE_WEAPON_RADIANT,
     attack=Attack(STR, vs=AC),
+    group=CHANNEL_DIVINITY,
 )
 def p14293(c: Cast) -> None:
     """The secondary attack is a No Action burst off the back of the primary,
@@ -264,6 +276,7 @@ def p14293(c: Cast) -> None:
     reach=CloseBurst(3),
     target=ONE_ALLY,
     keywords=[Keyword.DIVINE, Keyword.SHADOW, Keyword.PSYCHIC],
+    group=CHANNEL_DIVINITY,
 )
 def p16415(c: Cast) -> None:
     c.flat(5, dtype=DamageType.PSYCHIC)
@@ -280,6 +293,7 @@ def p16415(c: Cast) -> None:
     target=EACH_CREATURE,
     keywords=DIVINE_IMPLEMENT_RADIANT,
     attack=Attack(WIS, vs=WILL),
+    group=CHANNEL_DIVINITY,
 )
 def p5981(c: Cast) -> None:
     """Targets every creature in the burst so that the Effect line reaches
@@ -311,6 +325,7 @@ def p5981(c: Cast) -> None:
     reach=CloseBurst(5),
     target=EACH_ALLY,
     keywords=[Keyword.DIVINE, Keyword.HEALING],
+    group=CHANNEL_DIVINITY,
 )
 def p7885(c: Cast) -> None:
     if c.first:
