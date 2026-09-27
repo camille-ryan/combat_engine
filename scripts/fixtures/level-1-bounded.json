@@ -3,6 +3,20 @@
  "seed": 7,
  "level": 1,
  "scaling": "bounded",
+ "feats": {
+  "fighter": [
+   "f911b"
+  ],
+  "cleric": [
+   "f519"
+  ],
+  "rogue": [
+   "f635b"
+  ],
+  "wizard": [
+   "f297b"
+  ]
+ },
  "log": [
   "InitiativeRolled(actor=1, rolled=12)",
   "InitiativeRolled(actor=2, rolled=5)",
@@ -37,6 +51,8 @@
   "PowerUsed(actor=3, power='cf:rogue-tactic', targets=[])",
   "EffectApplied(source=3, target=3, duration='end of encounter', label='cf:rogue-tactic cf:rogue-bonus damage+2')",
   "PowerResolved(actor=3, power='cf:rogue-tactic', targets=[], rolls=[])",
+  "PowerUsed(actor=3, power='f635b', targets=[1])",
+  "PowerResolved(actor=3, power='f635b', targets=[1], rolls=[])",
   "PowerUsed(actor=1, power='cf:fighter-chase', targets=[])",
   "EffectApplied(source=1, target=1, duration='end of encounter', label='cf:fighter-chase forbids p10469')",
   "PowerResolved(actor=1, power='cf:fighter-chase', targets=[], rolls=[])",
@@ -170,6 +186,9 @@
   "AttackDeclared(attacker=6, target=4, power='m1063a0', vs=<Defense.AC: 'ac'>)",
   "AttackRolled(attacker=6, target=4, power='m1063a0', vs=<Defense.AC: 'ac'>, natural=19, bonus=4, total=23, defence=15, advantage=False)",
   "Hit(attacker=6, target=4, power='m1063a0', critical=False)",
+  "ActionSpent(actor=1, cost=<ActionType.IMMEDIATE_INTERRUPT: 'immediate_interrupt'>)",
+  "PowerUsed(actor=1, power='f911b', targets=[])",
+  "PowerResolved(actor=1, power='f911b', targets=[], rolls=[])",
   "DamageRolled(source=6, target=4, amount=5, dtype=<DamageType.UNTYPED: 'untyped'>, detail='m1063a0')",
   "DamageApplied(source=6, target=4, amount=5, dtype=<DamageType.UNTYPED: 'untyped'>, absorbed=0, hp=17, detail='m1063a0')",
   "PowerResolved(actor=6, power='m1063a0', targets=[4], rolls=[AttackResult(hit=True, critical=False, natural=19, total=23, target_defence=15, advantage=False, cancelled=False, forced=False, target=4, treated='', rolls=[19])])",

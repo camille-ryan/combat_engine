@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -33,6 +34,9 @@ from combat_engine.engine import LinearPolicy, install, take_turn
 from fight import build
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+#: A feat's ref, for picking them back out of `Powers.known`.
+FEAT = re.compile(r"f\d+[a-z]?")
 
 #: Each fixture is a fight this engine should always play the same way.
 CASES = [
@@ -46,7 +50,10 @@ CASES = [
 
 
 def play(case: dict) -> list[str]:
-    world, encounter = build(case["seed"], case["level"], case["scaling"])
+    world, encounter = build(
+        case["seed"], case["level"], case["scaling"],
+        feats=case.get("feats"),
+    )
     policy = LinearPolicy()
     install(world, encounter, {}, default=policy)
     encounter.start()
@@ -59,12 +66,39 @@ def play(case: dict) -> list[str]:
     return [str(e) for e in world.bus.log]
 
 
+def _drawn(case: dict) -> dict[str, list[str]]:
+    """Which feats this seed deals each class, right now.
+
+    Recorded into the fixture so that replaying it later deals the same
+    ones. A character's feats come from the pool of *declared* ones, so
+    without this every content wave changed the party, every fixture
+    diverged, and the only way through was to re-record -- under which a
+    real regression could ride in unseen. Pinning them makes the fixture
+    a test of the engine again rather than of how much content exists.
+    """
+    from combat_engine.engine import Gear, Ident, Powers  # noqa: F401
+
+    world, _ = build(case["seed"], case["level"], case["scaling"])
+    out: dict[str, list[str]] = {}
+    for eid, ident in sorted(world.each(Ident)):
+        if not ident.ref.startswith("c:"):
+            continue
+        known = world.get(eid, Powers)
+        if known is None:
+            continue
+        out[ident.ref.removeprefix("c:")] = sorted(
+            r for r in known.known if FEAT.fullmatch(r)
+        )
+    return out
+
+
 def record() -> int:
     FIXTURES.mkdir(parents=True, exist_ok=True)
     for case in CASES:
-        log = play(case)
+        pinned = {**case, "feats": _drawn(case)}
+        log = play(pinned)
         path = FIXTURES / f"{case['name']}.json"
-        path.write_text(json.dumps({**case, "log": log}, indent=1))
+        path.write_text(json.dumps({**pinned, "log": log}, indent=1))
         print(f"  {case['name']:<18} {len(log):5d} events")
     return 0
 
@@ -80,8 +114,9 @@ def verify() -> int:
             print(f"  {case['name']:<18} MISSING")
             bad += 1
             continue
-        want = json.loads(path.read_text())["log"]
-        got = play(case)
+        saved = json.loads(path.read_text())
+        want = saved["log"]
+        got = play({**case, "feats": saved.get("feats")})
         where = _diverges(want, got)
         if where is None:
             print(f"  {case['name']:<18} ok      {len(got):5d} events")

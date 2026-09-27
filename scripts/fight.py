@@ -46,8 +46,20 @@ from combat_engine.engine.turns import extended_rest, short_rest
 PARTY = ["fighter", "cleric", "rogue", "wizard"]
 
 def build(
-    seed: int, level: int, scaling: str, math: str = "printed"
+    seed: int, level: int, scaling: str, math: str = "printed",
+    feats: dict[str, list[str]] | None = None,
 ) -> tuple[World, Encounter]:
+    """One fight, built from a seed.
+
+    `feats` pins what each class has taken, by class name. It exists for
+    `replay.py`: a character's feats are otherwise dealt from the pool
+    of *declared* ones, so every content wave changed the party and
+    every fixture diverged -- which meant re-recording after each batch,
+    and a real regression could have ridden in under a feat-draw change
+    without anybody seeing it. Pinning them makes the fixture a test of
+    the engine again rather than of the corpus's size.
+    """
+
     world = World(Grid(16, 12), Rng(seed), Bus())
     world.scaling = PRESETS[scaling]
     world.monster_math = MATHS[math]
@@ -58,7 +70,11 @@ def build(
     terrain.dress(world, seed)
 
     for i, cls in enumerate(PARTY):
-        chargen.spawn(world, chargen.Character(cls, level), (2, 3 + i * 2))
+        chargen.spawn(
+            world,
+            chargen.Character(cls, level, feats=list((feats or {}).get(cls, []))),
+            (2, 3 + i * 2),
+        )
 
     pool, found_at = _opposition(level)
     if not pool:
