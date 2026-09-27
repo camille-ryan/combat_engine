@@ -718,18 +718,25 @@ def f3214(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        trigger="an adjacent enemy takes damage from your quarry rider",
        on=Trigger(DamageApplied, lambda w, me, ev: (
-           ev.source == me and distance_between(w, me, ev.target) <= 1
-       ), "an adjacent enemy takes damage from you"),
-       dropped=("c.on_extra_damage()",))
+           ev.source == me
+           and getattr(ev, "detail", "") == "cf:ranger-quarry"
+           and distance_between(w, me, ev.target) <= 1
+       ), "your quarry rider damages an adjacent enemy"))
 def f3215(c: Cast) -> None:
-    """The quarry rider is not announced apart from the blow it rides
-    on. `DamageApplied.detail` does exist and carries the power's ref
-    -- which is why the marker is not for that field but for
-    `c.on_extra_damage()`, the fifteen-row group for exactly this: the
-    class's extra damage is paid inside another row's `c.damage` and
-    nothing says which of its lines paid. So the trigger here is every
-    blow you land on an adjacent quarry, which fires more often than
-    printed.
+    """**The quarry rider is identifiable after all.**
+
+    `features/strikers.py:109` pays it with
+    `c.damage(..., detail=label)` and the ranger's label is
+    `cf:ranger-quarry`, so `DamageApplied.detail` names the rider
+    exactly. I marked this `c.on_extra_damage()` and wrote the trigger
+    as every blow landed on an adjacent quarry -- which the docstring
+    admitted fired more often than printed, and which was the wrong
+    trade: an approximation that plays is worse than a marker, because
+    nothing ever comes back to it.
+
+    The general group is still real -- fifteen rows want to intercept
+    the extra damage *before* it is paid, or to count its dice -- but
+    this row only needed the moment, and the moment is announced.
 
     The 3-at-11th and 4-at-21st steps are paragon and epic; the project
     stops at 10, so the heroic 2 is the whole number."""
