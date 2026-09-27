@@ -32,9 +32,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from .components import Powers
-from .events import Event
+from .events import ConditionApplied, Event
 from .query import alive, can_act
-from .types import ActionType, Keyword, Window
+from .types import ActionType, Condition, Keyword, Window
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -92,6 +92,27 @@ WINDOW_OF = {
     # was ever offered to anybody, and four print it.
     ActionType.NONE: Window.AFTER,
 }
+
+
+def _shrugging(ev: Event, eid: int) -> Condition | None:
+    """The condition this creature is being asked to answer, if any.
+
+    `Effects.apply` installs a condition and *then* announces it, and that
+    ordering is deliberate: announcing first let a listener end the effect
+    while its modifiers were still unattached, leaving a penalty on the
+    creature forever. The cost is that a row printed as "when you are
+    affected by a condition, immediate interrupt: you remove it" is
+    offered to a creature that already has the condition -- and dazed and
+    stunned both forbid an immediate action, so the two conditions that
+    line most exists for were the two it could never answer.
+
+    Waiving exactly the condition being applied, and nothing else, is the
+    narrow fix: a creature stunned a round ago still cannot react, which
+    is right.
+    """
+    if isinstance(ev, ConditionApplied) and getattr(ev, "target", None) == eid:
+        return ev.condition
+    return None
 
 
 @dataclass
@@ -190,7 +211,9 @@ class Triggers:
                 continue
             if (eid, ref) in _IN_FLIGHT:
                 continue
-            if not dying and not self.encounter.can_spend(eid, p.action):
+            if not dying and not self.encounter.can_spend(
+                eid, p.action, ignoring=_shrugging(ev, eid)
+            ):
                 continue
             ok, _why = usable(self.world, eid, p, dying=dying)
             if ok:
@@ -219,7 +242,9 @@ class Triggers:
         if self.world.decide(eid, "trigger", options, printed) != ref:
             return
         dying = getattr(ev, "actor", None) == eid and not alive(self.world, eid)
-        if not dying and not self.encounter.spend(eid, p.action):
+        if not dying and not self.encounter.spend(
+            eid, p.action, ignoring=_shrugging(ev, eid)
+        ):
             return
 
         # `use` adds the pair itself, so nothing is added here -- doing both

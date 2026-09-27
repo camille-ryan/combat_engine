@@ -315,12 +315,30 @@ class Session:
             for c in self.world.entities
             if self.world.has(c, Ident) and square in occupies(self.world, c)
         ]
-        for i, option in enumerate(self.options()):
-            if option.kind != "power" or option.ref != ref:
-                continue
-            if option.origin == square or any(t in standing for t in option.targets):
-                self.act(i)
-                return
+        mine = [
+            (i, o)
+            for i, o in enumerate(self.options())
+            if o.kind == "power" and o.ref == ref
+        ]
+        # **An aimed power is aimed at the square, and only at the square.**
+        # The two tests used to be an `or`, so a click anywhere on a large
+        # creature also matched the first option that merely *caught* it --
+        # and the option list is in origin order, so a zone dropped on the
+        # creature's anchor square instead of where the player clicked. The
+        # bigger the creature, the further the spell landed from the point
+        # of it. The target test is for a power with no origin at all,
+        # where clicking a creature is how you name it.
+        aimed = [(i, o) for i, o in mine if o.origin is not None]
+        if aimed:
+            for i, option in aimed:
+                if option.origin == square:
+                    self.act(i)
+                    return
+        else:
+            for i, option in mine:
+                if any(t in standing for t in option.targets):
+                    self.act(i)
+                    return
         raise LookupError(f"{ref} cannot be aimed at {square}")
 
     def roster_refs(self) -> list[str]:

@@ -150,6 +150,7 @@ def actor_dto(session: Session, eid: int) -> dto.ActorDTO:
         effects=[
             condition_dto(session, e)
             for e in [*world.effects.of(eid), *world.effects.sustaining(eid)]
+            if not _armed_trait(e)
         ],
         traits=_traits(session, eid),
         is_current=eid == session.current,
@@ -167,6 +168,35 @@ def actor_dto(session: Session, eid: int) -> dto.ActorDTO:
         immune=", ".join(sorted(d.value for d in res.immune)) if res and res.immune else None,
         threat=_threat(session, eid),
         subtypes=None,
+    )
+
+
+def _armed_trait(effect) -> bool:  # noqa: ANN001
+    """Is this "how the creature works" rather than "what has happened to it"?
+
+    `Encounter._arm_traits` runs every `action=NONE` row at the top of a
+    fight -- a rogue's extra damage, a fighter's answer to being ignored --
+    and each holds a live subscription, so each is a real `Effect`. None of
+    them carries a condition, a modifier, a relation or ongoing damage,
+    because there is nothing to *describe*: the row is simply watching.
+
+    On the card they came out as `- until end of fight`, a dash where a
+    description goes, and they drove the amber warning dots under the
+    initiative chip -- so every fighter opened a fight already looking
+    afflicted. A player cannot tell one from a save-ends stun, and the
+    difference is the whole of what the list is for.
+
+    Identified by shape rather than by a flag: the creature is its own
+    source and the effect says nothing. Both halves are needed -- a power
+    a creature uses on itself is also its own source, but it describes
+    something.
+    """
+    return (
+        effect.owner == effect.source
+        and not effect.conditions
+        and not effect.mods
+        and not effect.relations
+        and not effect.ongoing
     )
 
 

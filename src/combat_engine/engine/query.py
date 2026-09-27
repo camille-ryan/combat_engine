@@ -374,17 +374,35 @@ def is_conjuration(world: World, eid: int) -> bool:
     return world.get(eid, Conjuration) is not None
 
 
-def can_act(world: World, eid: int) -> bool:
+def can_act(world: World, eid: int, *, ignoring: Condition | None = None) -> bool:
     # A trap and a conjuration have no hit points to be unconscious about.
     # Without this they failed `conscious` and could never make the attack
     # they exist to make.
     if is_trap(world, eid) or is_conjuration(world, eid):
         return True
-    return conscious(world, eid) and not any(rules(c).cannot_act for c in active(world, eid))
+    held = [c for c in active(world, eid) if c is not ignoring]
+    return conscious(world, eid) and not any(rules(c).cannot_act for c in held)
 
 
-def can_react(world: World, eid: int) -> bool:
-    return can_act(world, eid) and not any(rules(c).no_reactions for c in active(world, eid))
+def can_react(world: World, eid: int, *, ignoring: Condition | None = None) -> bool:
+    """Can this creature spend an immediate action?
+
+    `ignoring` waives **one** condition, and exists for one printed shape:
+    a row whose trigger is being affected by a condition, answering with
+    an immediate interrupt that shrugs it off. `Effects.apply` installs
+    the condition before announcing it -- deliberately, because announcing
+    first let a listener end the effect while its modifiers were still
+    unattached and leave them on the creature forever -- so by the time
+    the row is offered, the creature already has the thing it exists to
+    remove. Dazed and stunned both stop you reacting, which are exactly
+    the two conditions such a line is printed for.
+
+    One condition, not a general waiver: a creature stunned a round ago
+    still cannot answer, and should not.
+    """
+    return can_act(world, eid, ignoring=ignoring) and not any(
+        rules(c).no_reactions for c in active(world, eid) if c is not ignoring
+    )
 
 
 def takes_half(world: World, eid: int) -> bool:

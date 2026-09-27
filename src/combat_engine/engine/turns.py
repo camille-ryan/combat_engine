@@ -435,14 +435,19 @@ class Encounter:
 
     # -- spending actions ----------------------------------------------------
 
-    def can_spend(self, eid: int, what: ActionType) -> bool:
+    def can_spend(
+        self, eid: int, what: ActionType, *, ignoring: Condition | None = None
+    ) -> bool:
         budget = self.world.get(eid, Budget)
         if budget is None:
             return False
         if what in (ActionType.FREE, ActionType.NONE):
             return True
         if what in (ActionType.IMMEDIATE_INTERRUPT, ActionType.IMMEDIATE_REACTION):
-            return can_react(self.world, eid) and budget.immediate_round != self.world.round
+            return (
+                can_react(self.world, eid, ignoring=ignoring)
+                and budget.immediate_round != self.world.round
+            )
         if what is ActionType.OPPORTUNITY:
             return can_react(self.world, eid) and budget.opportunity_turn != self._turn_stamp()
         if self.world.turn != eid or not can_act(self.world, eid):
@@ -455,9 +460,11 @@ class Encounter:
             return budget.standard + budget.move + budget.minor > 0
         return any(getattr(budget, slot.value) > 0 for slot in DOWNGRADES[what])
 
-    def spend(self, eid: int, what: ActionType) -> bool:
+    def spend(
+        self, eid: int, what: ActionType, *, ignoring: Condition | None = None
+    ) -> bool:
         """Take the action if it is available. Returns False if it was not."""
-        if not self.can_spend(eid, what):
+        if not self.can_spend(eid, what, ignoring=ignoring):
             return False
         self.world.bus.emit(ActionSpent(actor=eid, cost=what))
         budget = self.world.need(eid, Budget)

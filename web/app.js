@@ -451,7 +451,12 @@ function renderOrder(s) {
     chip.appendChild(div("unit-name", a.label || a.id));
     // One dot per effect, so "something is on this creature" survives the
     // shrink to an icon. What the something is, is on the card.
-    const marks = (a.effects || []).length || (a.conditions || []).length;
+    //
+    // Both lists, added. It was `||`, which reads as "effects, or else
+    // conditions" and means a creature with two effects and three
+    // conditions shows two dots -- the smaller number, chosen for no
+    // reason, whenever both are non-empty.
+    const marks = (a.effects || []).length + (a.conditions || []).length;
     if (marks) {
       const dots = div("unit-dots");
       for (let i = 0; i < Math.min(marks, 4); i++) dots.appendChild(div("unit-dot"));
