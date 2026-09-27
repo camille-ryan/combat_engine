@@ -24,6 +24,7 @@ import json
 import re
 import sqlite3
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from html import unescape
@@ -212,6 +213,7 @@ class Report:
     feats: int = 0
     feat_cards: int = 0
     races: int = 0
+    racial: int = 0
     terms: int = 0
     unparsed: int = 0
     names: int = 0
@@ -238,6 +240,7 @@ class Report:
             f"  power cards {self.feat_cards:6d}  (a feat that prints a whole power)",
             f"  unparsed    {self.unparsed:6d}  (prerequisite clauses left opaque)",
             f"races         {self.races:6d}",
+            f"  racial rows {self.racial:6d}  (a power a race grants, never imported)",
             f"prereq terms  {self.terms:6d}  (a printed name a prerequisite asks for)",
             f"names         {self.names:6d}  (localization/names.json, gitignored)",
             f"common words  {self.common:6d}  (what leaks.py treats as English)",
@@ -584,8 +587,53 @@ def _powers(
         for extra in power_parser.parse_extra(dict(row), row["Txt"]):
             report.seconds += 1
             keep(extra)
+    report.racial = _racial_powers(source, out, keep)
     report.scores["power"] = sum(scores) / max(1, len(scores))
     report.crossed = _cross_reference(out, names)
+
+
+def _racial_powers(
+    source: sqlite3.Connection,
+    out: sqlite3.Connection,
+    keep: Callable[[power_parser.Power], None],
+) -> int:
+    """The powers a race grants, which the class filter threw away.
+
+    The compendium files a racial power under the **race** in the same
+    `Class` column a class power uses its class for, so `Class IN
+    (CLASSES)` dropped every one of them. Nothing noticed for a long
+    while, because no character had a race -- but the feat corpus did:
+    about 411 of the feats that are riders on a named power name a
+    racial one, and four of the ten commonest unresolvable prerequisite
+    clauses are racial powers and traits with nothing to point at.
+
+    `cls` is set to the race's **ref**, not its name. Two reasons, and
+    both matter: a name in that column would be a printed name in a
+    tracked-readable table, and `chargen.loadout` filters on
+    `p.cls == cls`, so anything spelled like a class would be dealt to
+    every character of it.
+    """
+    # Read from the source rather than from `race`, which is the only
+    # place the name and the id are both held -- the built table keeps
+    # ids alone, on purpose.
+    races = {
+        (r["Name"] or "").strip().lower(): f"r{r['ID']}"
+        for r in source.execute("SELECT ID, Name FROM Race")
+    }
+    if not races:
+        return 0
+    marks = ",".join("?" * len(races))
+    rows = source.execute(
+        f"SELECT * FROM Power WHERE Level <= ? AND lower(Class) IN ({marks}) ORDER BY ID",
+        (MAX_POWER_LEVEL, *races),
+    )
+    written = 0
+    for row in rows:
+        p = power_parser.parse(dict(row), row["Txt"])
+        p.cls = races[(row["Class"] or "").strip().lower()]
+        keep(p)
+        written += 1
+    return written
 
 
 
