@@ -128,7 +128,11 @@ def spawn(world: World, ref: str, square: tuple[int, int], *, team: Team = Team.
         # "an adjacent ally can spend a healing surge" inert between
         # monsters -- the row fired and did nothing, which is what a wrong
         # row looks like.
-        Health(max_hp=max(1, row["hp"]), surges=1 + max(0, row["level"] - 1) // 10),
+        Health(
+            max_hp=max(1, row["hp"]),
+            surges=1 + max(0, row["level"] - 1) // 10,
+            dies_at_zero=True,
+        ),
         Movement(speed=row["speed"], modes=modes),
         Defences(resist=resist, vulnerable=vulnerable, immune=immune),
         Initiative(bonus=row["initiative"] - printed, scale="monster"),

@@ -101,6 +101,13 @@ class Health:
     surges: int = 0
     #: Failed death saves. Three and the creature is dead.
     failures: int = 0
+    #: **A monster dies at 0.** Only a character keeps fighting into the
+    #: negatives and only a character rolls death saves. Without this
+    #: every monster inherited the player's floor and was still alive at
+    #: minus half its printed hit points -- a 38-hit-point brute had to be
+    #: taken to -19, which is half again the hit points on its card, on
+    #: every monster in the game. Set by `loader.spawn`.
+    dies_at_zero: bool = False
 
     def __post_init__(self) -> None:
         if self.hp == 0:
@@ -118,6 +125,9 @@ class Health:
     def dying_at(self) -> int:
         """Below this and the creature is dead outright.
 
+        Zero for a monster, which simply dies; minus half its maximum for
+        a character, who drops and rolls death saves.
+
         **Derived, so raising `max_hp` lowers the death floor
         retroactively** -- and `query.alive` is `hp > dying_at`, with no
         memory of having died. An `on_end` callback that restores an
@@ -133,7 +143,7 @@ class Health:
         it, so a heal that missed one would leave a healed creature dead
         forever -- a commoner failure than the rare one it prevents.
         """
-        return -(self.max_hp // 2)
+        return 0 if self.dies_at_zero else -(self.max_hp // 2)
 
 
 @dataclass
