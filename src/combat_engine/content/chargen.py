@@ -241,7 +241,23 @@ def _arms(weapons: str, implements: str) -> tuple[Weapon, ...]:
         held.append(UNARMED)
     elif "longspear" in text:
         held.append(LONGSPEAR)
-    elif "military melee" in text:
+    # Blades before the generic lines, because three classes print a
+    # blade proficiency *and* a simple-melee one, and falling through to
+    # the simple line handed them a mace. That made `warding()` -- which
+    # needs "a light blade or a heavy blade" in hand -- read 0 on every
+    # swordmage the tree deals, so a feature written today was inert
+    # before it shipped. The assassin was worse: it prints "simple
+    # **one-handed** melee", which the `simple melee` test does not
+    # match, so it was dealt no melee weapon at all and swung a crossbow.
+    #
+    # A named weapon wins over a group, and a light blade over a heavy
+    # one: the only rows in the tree that gate on a group want
+    # `light blade`, and nothing yet asks for a heavy one specifically.
+    elif "longsword" in text:
+        held.append(LONGSWORD)
+    elif "light blade" in text or "short sword" in text:
+        held.append(SHORTSWORD)
+    elif "heavy blade" in text or "military melee" in text:
         held.append(LONGSWORD)
     elif "simple melee" in text:
         held.append(MACE)
@@ -683,6 +699,27 @@ def _is_class_heal(p) -> bool:  # noqa: ANN001
     )
 
 
+
+def _shield_for(line: ClassLine, weapons: list[Weapon]) -> int:
+    """A shield, unless what the build carries makes one impossible.
+
+    `shield` is on the chassis, and the chassis is right about a class --
+    a fighter is trained with one. It is wrong about a *build*: the
+    great-weapon leg carries a greataxe and the tempest leg carries two
+    blades, and neither of them has a hand left. Both were being given a
+    heavy shield's +2 to AC and Reflex anyway, and the tempest leg was
+    worse off than that -- `Gear.two_weapon` reads
+    `len(melee) > 1 and not shield`, so a shield it could not be holding
+    made every "wielding two melee weapons" Requirement false.
+
+    Derived rather than declared: a new `Build.shield` field would have
+    to be remembered on every future leg, and this cannot be forgotten.
+    """
+    melee = [w for w in weapons if not w.ranged and w.group != "implement"]
+    if any("two-handed" in w.properties for w in melee) or len(melee) > 1:
+        return 0
+    return line.shield
+
 def defences(line: ClassLine, scores: dict[Ability, int], level: int) -> dict:
     """The four defences, worked out rather than recorded.
 
@@ -718,6 +755,8 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
 
     line = who.line
     build = who.chosen
+    carried = list(build.weapons or line.weapons)
+    carried_shield = _shield_for(line, carried)
     scores = scores_for(line, build)
     # Level 4, 8 and so on raise two scores by one. Applied here rather than
     # recorded, so a level 8 character is derivable from its class and level.
@@ -745,7 +784,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         Position(square=square, size=Size.MEDIUM),
         Side(team=who.team),
         Stats(level=who.level, scores=scores),
-        Defenses(values=defences(line, scores, who.level)),
+        Defenses(values=defences(replace(line, shield=carried_shield), scores, who.level)),
         Health(max_hp=max_hp, surges=line.surges + con),
         Movement(speed=5 if line.armour in ("scale", "plate") else 6),
         Initiative(bonus=modifier(scores[DEX])),  # level term via scaling
@@ -768,8 +807,8 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         ActionPoints(points=1),
         BuildState(choices=set(who.choices)),
         Gear(
-            weapons=list(build.weapons or line.weapons),
-            shield=bool(line.shield),
+            weapons=carried,
+            shield=bool(carried_shield),
             armour=line.armour,
         ),
     )
