@@ -10,10 +10,12 @@ available on the wizard's.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from .components import Budget, Health, Initiative, Powers
 from .conditions import rules
+from .durations import When
 from .events import (
     ActionSpent,
     Died,
@@ -41,6 +43,8 @@ class Encounter:
         self.index = 0
         self.started = False
         self.finished = False
+        #: Whether round 1 is a surprise round. See `start`.
+        self._surprise = False
         world.bus.on(TurnEnd, self._death_saves)
         world.bus.on(Died, self._on_death)
         from .triggers import Triggers
@@ -51,7 +55,20 @@ class Encounter:
 
     # -- the clock -----------------------------------------------------------
 
-    def start(self) -> None:
+    def start(self, surprised: Iterable[int] = ()) -> None:
+        """Begin the fight. `surprised` is whoever did not see it coming.
+
+        **There was no surprise round at all**, which is why a rogue could
+        never open a fight with a sneak attack -- and why eight content
+        rows that read `Condition.SURPRISED` were permanently false.
+        Every occurrence of it in the tree was a reader or a cure; nothing
+        anywhere applied it.
+
+        The condition already says what being surprised means -- grants
+        combat advantage, cannot act, no reactions -- so the round falls
+        out of applying it: the surprised take their turn and can do
+        nothing with it, and it lifts when the round does.
+        """
         # Armed *before* the rolls, so a row triggered on `InitiativeRolled`
         # can hear the opening ones. Arming after meant the only initiative
         # rolls a row could ever answer were rerolls, which is not what any
@@ -63,8 +80,23 @@ class Encounter:
         self.started = True
         self.world.round = 1
         self.index = 0
+        for eid in surprised:
+            self.world.effects.apply(
+                eid, eid, When.ENCOUNTER, label="surprised",
+                conditions=[Condition.SURPRISED],
+            )
+        self._surprise = bool(surprised)
         self.world.bus.emit(RoundStart(round=1))
         self._begin(self.order[0])
+
+    def _end_surprise(self) -> None:
+        """The surprise round is over; everybody is in the fight now."""
+        if not self._surprise:
+            return
+        self._surprise = False
+        for eff in list(self.world.effects.live.values()):
+            if eff.label == "surprised":
+                self.world.effects.end(eff, "the surprise round is over")
 
     def _refresh_pools(self) -> None:
         """Power points come back and the action-point limit resets.
@@ -328,6 +360,7 @@ class Encounter:
             if self.index >= len(self.order):
                 self.index = 0
                 self.world.bus.emit(RoundEnd(round=self.world.round))
+                self._end_surprise()
                 self.world.round += 1
                 self.world.bus.emit(RoundStart(round=self.world.round))
             nxt = self.order[self.index]

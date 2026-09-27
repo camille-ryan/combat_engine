@@ -138,13 +138,28 @@ def main() -> int:
     )
     ap.add_argument("--quiet", action="store_true", help="the summary only")
     ap.add_argument("--rounds", type=int, default=30, help="give up after this many")
+    ap.add_argument(
+        "--surprise",
+        choices=("none", "party", "monsters"),
+        default="none",
+        help="who did not see it coming. A surprised creature grants combat "
+        "advantage and can do nothing on the first round, which is the only "
+        "way a rogue ever opens a fight with a sneak attack",
+    )
     args = ap.parse_args()
 
     world, encounter = build(args.seed, args.level, args.scaling, args.monster_math)
     policy = LinearPolicy()
     install(world, encounter, {}, default=policy)
 
-    encounter.start()
+    caught: list[int] = []
+    if args.surprise != "none":
+        from combat_engine.engine.query import combatants, team
+        from combat_engine.engine.types import Team
+
+        losing = Team.PC if args.surprise == "party" else Team.ENEMY
+        caught = [c for c in combatants(world) if team(world, c) is losing]
+    encounter.start(caught)
     while not encounter.finished and world.round <= args.rounds:
         actor = world.turn
         if actor is None:
