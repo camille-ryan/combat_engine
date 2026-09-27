@@ -1,0 +1,1135 @@
+"""Waist-, ring- and ammunition-slot magic items, heroic tier.
+
+Nothing here declares an item. The level, the price, the slot, the ladder
+and the enhancement bonus are columns in `game.db` and are laid on by
+`engine/equipment.py` -- which writes a worn item's modifiers straight into
+`Mods` so they survive the end of a fight. What is written here is only the
+part that needs a body, and a property's *own* bonus is an ordinary
+`c.bonus` with an encounter duration, because a trait is re-armed at the
+start of every fight.
+
+Four judgements run through the file.
+
+* **Ammunition is spent when it is used and nothing models that.** There is
+  no way to ask whether the shot that just landed was fired with this
+  arrow, and no way to take the arrow out of the quiver afterwards. Every
+  ammunition property therefore answers *every* ranged hit of the wearer's
+  and carries `dropped=("c.ammunition()",)`. The payload is real; what is
+  missing is the quiver. Each declares `no_provoke=True`: the rider needs a
+  ranged reach to name the creature that was shot, and without it every
+  such rider opened a second opportunity window for the one shot.
+* **A property that answers a printed trigger is `action=ActionType.NONE`
+  with the trigger declared**, not a trait holding a `c.watch`. The
+  dispatcher costs nothing for a no-action row and `Triggers._at` aims a
+  single-target enemy row answering your own `Hit` at the creature you hit,
+  which is what "that enemy" means. A trait is kept for the properties that
+  are standing modifiers, and for the two that are both.
+* **A saving throw and a skill check are announced before they are acted
+  on**, so "+2 to the saving throw" and "treat the check as a natural 20"
+  are written onto the event. `SavingThrow` carries no damage type, so
+  "against ongoing *poison*" cannot be told from any other save.
+* **A healing surge is a quarter of maximum hit points, computed rather
+  than stored**, so nothing can add to one. Every card raising a surge
+  value is `todo=("c.surge_bonus()",)`, matching `i536x1`.
+
+Paragon and epic lines (`Level 11:`, `Level 15 or 20:`) are out of scope;
+the heroic number is the one written.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from combat_engine.engine import (
+    AC,
+    DAILY,
+    ENCOUNTER,
+    FORT,
+    FREE,
+    INTERRUPT,
+    MINOR,
+    MOVE,
+    NO_TARGET,
+    ONE_ALLY,
+    ONE_CREATURE,
+    PERSONAL,
+    REACTION,
+    REF,
+    SELF,
+    STANDARD,
+    WILL,
+    ActionType,
+    Attack,
+    AttackDeclared,
+    AttackRolled,
+    Cast,
+    CloseBurst,
+    Condition,
+    DamageRolled,
+    DamageType,
+    ForcedMove,
+    Health,
+    Hit,
+    InitiativeRolled,
+    Keyword,
+    Melee,
+    Miss,
+    Position,
+    Ranged,
+    SavingThrow,
+    SkillCheck,
+    Square,
+    Trigger,
+    TurnEnd,
+    TurnStart,
+    When,
+    Window,
+    World,
+    both,
+    by_me,
+    by_melee,
+    by_ranged,
+    get,
+    my_check,
+    power,
+    spread,
+    targets_me,
+    would_hit_me,
+)
+
+ITEM = "item"
+
+
+# -- shared reading of the board --------------------------------------------
+
+
+def _free_near(c: Cast, of: int) -> Square | None:
+    """An unoccupied square beside somebody, for a "to" clause."""
+    pos = c.world.get(of, Position)
+    if pos is None:
+        return None
+    for sq in sorted(spread({pos.square}, 1)):
+        if sq != pos.square and c.world.grid.occupant(sq) is None:
+            return sq
+    return None
+
+
+def _boost_save(c: Cast, amount: int) -> bool:
+    """Add to the saving throw being answered, and read the outcome back.
+
+    `c.reroll_save` is the only saving-throw verb and it replaces the die;
+    a printed "+2 bonus to the saving throw" wants the die kept. The event
+    is announced before it is acted on, so the total is rewritten here the
+    way `SkillCheck` is rewritten by `c.boost_check`.
+    """
+    ev = c.trigger
+    if not isinstance(ev, SavingThrow):
+        return False
+    ev.bonus += amount
+    ev.saved = ev.natural + ev.bonus >= 10
+    return True
+
+
+def _weapon_damage(ctx: dict[str, Any]) -> bool:
+    """Gate: this damage came from a weapon power."""
+    row = get(ctx.get("power") or "")
+    return row is not None and Keyword.WEAPON in row.keywords
+
+
+def _typed_nonweapon(ctx: dict[str, Any]) -> bool:
+    """Gate: typed damage from something that is not a weapon attack."""
+    if ctx.get("dtype") in (None, DamageType.UNTYPED):
+        return False
+    row = get(ctx.get("power") or "")
+    return row is None or Keyword.WEAPON not in row.keywords
+
+
+def _poison_save(ctx: dict[str, Any]) -> bool:
+    """Gate: the effect this save is against is ongoing poison damage."""
+    return ctx.get("dtype") is DamageType.POISON
+
+
+def _took_typed_nonweapon(world: World, me: int, ev: Any) -> bool:
+    if getattr(ev, "target", None) != me:
+        return False
+    if getattr(ev, "dtype", DamageType.UNTYPED) is DamageType.UNTYPED:
+        return False
+    row = get(getattr(ev, "detail", "") or "")
+    return row is None or Keyword.WEAPON not in row.keywords
+
+
+def _hurt_by_enemy(world: World, me: int, ev: Any) -> bool:
+    from combat_engine.engine import query
+
+    who = getattr(ev, "source", None)
+    return (
+        getattr(ev, "target", None) == me
+        and getattr(ev, "amount", 0) > 0
+        and who is not None
+        and who != me
+        and query.team(world, who) is not query.team(world, me)
+    )
+
+
+def _would_drop_me(world: World, me: int, ev: Any) -> bool:
+    """This blow, as rolled, takes me to 0 hit points or fewer."""
+    health = world.get(me, Health)
+    return (
+        getattr(ev, "target", None) == me
+        and health is not None
+        and health.hp - getattr(ev, "amount", 0) <= 0
+    )
+
+
+def _my_poison(world: World, me: int, ev: Any) -> bool:
+    return (
+        getattr(ev, "target", None) == me
+        and getattr(ev, "dtype", None) is DamageType.POISON
+    )
+
+
+def _natural_20_initiative(world: World, me: int, ev: Any) -> bool:
+    return getattr(ev, "actor", None) == me and getattr(ev, "rolled", 0) == 20
+
+
+def _ammo_hit(world: World, me: int, ev: Any) -> bool:
+    """A ranged hit of mine -- the nearest the engine gets to "using this
+    ammunition", since nothing records which shot came out of which quiver."""
+    return by_me(world, me, ev) and by_ranged(world, me, ev)
+
+
+def _at_target(foe: int) -> Any:
+    """Gate a modifier on which creature is being attacked."""
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return ctx.get("target") == foe
+
+    return gate
+
+
+def _plus(c: Cast) -> int:
+    """The item's enhancement, never below 1: "1d6 per plus" on a piece of
+    ammunition whose plus has been decayed away still rolls something."""
+    return max(1, c.enhancement)
+
+
+# == waist ==================================================================
+
+
+@power("i650x1", level=1, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.aided_check()",))
+def i650x1(c: Cast) -> None:
+    """The bonus rides on somebody *else's* Heal check and only when that
+    check is aimed at me. A skill-check context carries `actor` and `skill`
+    and nothing about who is being helped."""
+
+
+@power("i1897x1", level=2, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def i1897x1(c: Cast) -> None:
+    """Carrying capacity: normal load, heavy load and drag load are not
+    weighed anywhere on a board."""
+
+
+@power("i2131x1", level=2, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.raging()",))
+def i2131x1(c: Cast) -> None:
+    """A death save is an ordinary `SavingThrow` with `against="death"`,
+    announced before it is read back, so the bonus is written onto it.
+    `once=True` is the printed "first". Nothing asks whether a barbarian is
+    raging, so the bonus is paid whatever the wearer was doing."""
+
+    def death_save(ev: SavingThrow) -> None:
+        if ev.actor != c.me or ev.against != "death":
+            return
+        ev.bonus += 4
+        ev.saved = ev.natural + ev.bonus >= 10
+
+    c.watch(SavingThrow, death_save, until=When.ENCOUNTER, once=True)
+
+
+@power("i654x1", level=2, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.surge_bonus()",))
+def i654x1(c: Cast) -> None:
+    """A surge is a quarter of maximum hit points, computed rather than
+    stored, so nothing can add to it."""
+
+
+@power("i3523x1", level=3, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+def i3523x1(c: Cast) -> None:
+    """The regeneration this raises belongs to a named class feature, and a
+    row cannot reach one: `c.regeneration` would lay a second, separate
+    heal rather than adding to the feature's."""
+
+
+@power("i640x1", level=3, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+def i640x1(c: Cast) -> None:
+    """The temporary hit points come from a named class feature; nothing
+    announces one paying out, so there is nothing to add to."""
+
+
+@power("i657x1", level=3, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.as_weapon()",))
+def i657x1(c: Cast) -> None:
+    """An improvised or unarmed attack is not a `Weapon`, so nothing can be
+    told to count as a club."""
+
+
+@power("i2993x1", level=4, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i2993x1(c: Cast) -> None:
+    c.resist(5, DamageType.POISON, on=c.me, until=When.ENCOUNTER)
+
+
+@power("i2993p1", level=4, cls=ITEM, usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you make a saving throw against ongoing poison damage",
+       on=Trigger(SavingThrow, lambda w, me, ev: getattr(ev, "actor", None) == me
+                  and getattr(ev, "against", "") != "death",
+                  "you make a saving throw"),
+       dropped=("SavingThrow.ongoing",))
+def i2993p1(c: Cast) -> None:
+    """"No action" is `ActionType.NONE` with the trigger declared. The save
+    cannot be told to be against poison -- a `SavingThrow` carries the
+    effect's label and no damage type -- so any save but a death save is
+    answered."""
+    _boost_save(c, 2)
+
+
+@power("i1415x1", level=5, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.bull_rush()",))
+def i1415x1(c: Cast) -> None:
+    """A bull rush is not its own action here, so the extra square is paid
+    on every push the wearer makes rather than on that one manoeuvre."""
+    c.forces(1, on=c.me, until=When.ENCOUNTER,
+             when=lambda ctx: ctx.get("how") == "push")
+
+
+@power("i1657p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
+       reach=PERSONAL, target=SELF)
+def i1657p1(c: Cast) -> None:
+    """"Weapon damage" is not a damage type; it is damage from a power with
+    the weapon keyword, which the damage context can be asked about."""
+    c.resist(5, on=c.me, until=When.EONT, when=_weapon_damage)
+
+
+@power("i600x1", level=5, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i600x1(c: Cast) -> None:
+    """"Grabbing you" is the relation read from the grabber's side:
+    `c.grabbing(of=foe)` is everything that foe holds."""
+
+    def mine(ev: TurnStart) -> None:
+        if ev.actor != c.me:
+            return
+        for foe in c.enemies():
+            if c.me in c.grabbing(of=foe):
+                c.damage("1d8", on=foe)
+
+    c.watch(TurnStart, mine, until=When.ENCOUNTER)
+
+
+@power("i2659x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i2659x1(c: Cast) -> None:
+    def crit(ev: Hit) -> None:
+        if ev.attacker == c.me and ev.critical:
+            c.temp_hp(c.con_mod, on=c.me)
+
+    c.watch(Hit, crit, until=When.ENCOUNTER)
+
+
+@power("i467x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def i467x1(c: Cast) -> None:
+    """Storage. Consumables are not carried as objects, so stowing one is a
+    line about the pack rather than about the fight."""
+
+
+@power("i467p1", level=6, cls=ITEM, action=FREE,
+       reach=PERSONAL, target=SELF, todo=("c.consume_item()",))
+def i467p1(c: Cast) -> None:
+    """The second wind half is reachable; the stowed alchemical item is the
+    whole benefit and there is no consumable to spend."""
+
+
+@power("i594x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you roll a 20 on your initiative check",
+       on=Trigger(InitiativeRolled, _natural_20_initiative,
+                  "you roll a 20 on initiative"))
+def i594x1(c: Cast) -> None:
+    """Declared rather than armed as a plain trait: traits are armed *after*
+    initiative is rolled, so a `c.watch(InitiativeRolled)` laid by one would
+    never hear the opening roll. The action is banked on the first turn
+    rather than now, because the budget it goes into is the turn's."""
+
+    def first_turn(ev: TurnStart) -> None:
+        if ev.actor == c.me:
+            c.extra_action(MOVE, on=c.me)
+
+    c.watch(TurnStart, first_turn, until=When.ENCOUNTER, once=True)
+
+
+@power("i639x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i639x1(c: Cast) -> None:
+    c.bonus("skill:endurance", 2, on=c.me, until=When.ENCOUNTER, kind="item")
+
+
+@power("i639p1", level=6, cls=ITEM, usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF,
+       trigger="before you make an Endurance check",
+       on=Trigger(SkillCheck, my_check("endurance"),
+                  "you make an Endurance check"))
+def i639p1(c: Cast) -> None:
+    """"As though you rolled a natural 20" is the die raised to 20, which
+    `c.boost_check` says by adding the difference -- the bonus half of the
+    check is kept, which is what treating the *roll* as a 20 means."""
+    ev = c.trigger
+    if isinstance(ev, SkillCheck):
+        c.boost_check(max(0, 20 - ev.natural))
+
+
+@power("i652x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i652x1(c: Cast) -> None:
+    """Gated rather than applied: the resistance is only in force below 0,
+    and the gate is read as each blow lands."""
+
+    def down(ctx: dict[str, Any]) -> bool:
+        health = c.world.get(c.me, Health)
+        return health is not None and health.hp <= 0
+
+    c.resist(10, on=c.me, until=When.ENCOUNTER, when=down)
+
+
+@power("i652p1", level=6, cls=ITEM, usage=DAILY, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you would be reduced to 0 hit points by an attack",
+       on=Trigger(DamageRolled, _would_drop_me,
+                  "an attack would drop you"))
+def i652p1(c: Cast) -> None:
+    """Answered on `DamageRolled`, where the number is known and the hit
+    points have not gone yet, so "the same amount of damage that you took"
+    is the rolled amount."""
+    ev = c.trigger
+    foe = getattr(ev, "source", None)
+    if foe is not None:
+        c.flat(getattr(ev, "amount", 0), on=foe)
+
+
+@power("i658p1", level=6, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
+       reach=Melee(1), target=ONE_CREATURE,
+       trigger="a flanking enemy makes an attack roll against you",
+       on=Trigger(AttackDeclared, targets_me, "an enemy attacks you"),
+       dropped=("query.flanking(world, a, b)",))
+def i658p1(c: Cast) -> None:
+    """Nothing asks whether an attacker is flanking, so any attacker is
+    pulled round; the slide is to a named square, which is what "to a square
+    adjacent to you" is."""
+    foe = c.target
+    sq = _free_near(c, of=c.me)
+    if foe is not None and sq is not None:
+        c.slide(2, on=foe, to=sq)
+
+
+@power("i875x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def i875x1(c: Cast) -> None:
+    """Which ability a skill check is rolled off is fixed in `skills`, and
+    the whole printed benefit is that swap."""
+
+
+@power("i2355x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i2355x1(c: Cast) -> None:
+    """Prone carries `attack=-2` in the condition rules, and nothing lifts
+    part of a condition -- so the penalty is cancelled by an untyped +2 that
+    is only in force while prone. The card prints no bonus type because it
+    prints no bonus at all."""
+    c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: c.is_(Condition.PRONE, on=c.me))
+
+
+@power("i3255x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def i3255x1(c: Cast) -> None:
+    """Both halves are narrative: a skill bonus against one race, which is
+    not a thing a creature carries, and a language."""
+
+
+@power("i3255p1", level=7, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
+       reach=PERSONAL, target=SELF,
+       trigger="an attack pushes, pulls, or slides you",
+       on=Trigger(ForcedMove, targets_me, "you are pushed, pulled or slid"))
+def i3255p1(c: Cast) -> None:
+    """The square is taken off the move being interrupted rather than laid
+    as a standing `c.resist_forced`: the shove reads its modifier before
+    this window opens, so a modifier laid here would shorten the *next*
+    one."""
+    ev = c.trigger
+    if isinstance(ev, ForcedMove):
+        ev.squares = max(0, ev.squares - 1)
+
+
+@power("i3255p2", level=7, cls=ITEM, usage=DAILY, action=REACTION,
+       reach=PERSONAL, target=SELF,
+       trigger="you take ongoing poison damage from an attack",
+       on=Trigger(DamageRolled, _my_poison, "you take poison damage"))
+def i3255p2(c: Cast) -> None:
+    c.save(on=c.me, against="ongoing")
+
+
+@power("i3491p1", level=7, cls=ITEM, action=MOVE,
+       reach=PERSONAL, target=SELF, dropped=("c.collide()",))
+def i3491p1(c: Cast) -> None:
+    """Two dice rather than one `2d10`, because the malfunction reads each
+    of them. The malfunction itself is dropped: nothing carries a creature
+    in a random direction into whatever is standing there."""
+    first, second = c.roll("1d10"), c.roll("1d10")
+    c.rise(first + second)
+    c.fall()
+
+
+@power("i591x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.is_minion()",))
+def i591x1(c: Cast) -> None:
+    """The attack context carries `opportunity`, so half the printed gate is
+    real; nothing distinguishes a minion, so the bonus is paid against every
+    opportunity attack."""
+    c.bonus(AC, 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=lambda ctx: bool(ctx.get("opportunity")))
+
+
+@power("i591p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
+       reach=PERSONAL, target=SELF, dropped=("c.is_minion()",))
+def i591p1(c: Cast) -> None:
+    """Phasing is broader than the printed line -- it walks through walls as
+    well as through minions -- but it is the only verb that lets a creature
+    cross an occupied square, and ending in one is refused by the grid
+    either way."""
+    c.phasing(on=c.me, until=When.EONT)
+
+
+@power("i642p1", level=7, cls=ITEM, usage=DAILY, action=INTERRUPT,
+       reach=PERSONAL, target=SELF, todo=("c.defence_from_check()",))
+def i642p1(c: Cast) -> None:
+    """A defence is a number summed from `Defenses` and `Mods`; a skill
+    check cannot be put in its place."""
+
+
+@power("i647x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i647x1(c: Cast) -> None:
+    """Not needing to eat is narrative, and so is the day of wear the
+    property asks for; the Endurance bonus is the whole combat content."""
+    c.bonus("skill:endurance", 3, on=c.me, until=When.ENCOUNTER, kind="item")
+
+
+@power("i649x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i649x1(c: Cast) -> None:
+    def crit_on_me(ev: Hit) -> None:
+        if ev.target == c.me and ev.critical and ev.attacker != c.me:
+            c.bonus(AC, 2, on=c.me, until=When.EONT, kind="item")
+
+    c.watch(Hit, crit_on_me, until=When.ENCOUNTER)
+
+
+@power("i651x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.surge_bonus()",))
+def i651x1(c: Cast) -> None:
+    """The same gap as `i654x1`, paid to allies instead of to the wearer."""
+
+
+@power("i651p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
+       reach=CloseBurst(5), target=ONE_ALLY)
+def i651p1(c: Cast) -> None:
+    """Two surges spent for nothing and one handed over: `c.spend_surge` is
+    the "lose a surge" half and `c.regain_surge` the other."""
+    c.spend_surge(on=c.me)
+    c.spend_surge(on=c.me)
+    c.regain_surge(1)
+
+
+@power("i942x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.ignore_squeeze_penalty()",))
+def i942x1(c: Cast) -> None:
+    """Squeezing carries `attack=-5` and `halve_speed`. The attack half is
+    cancelled by a matching untyped bonus; the speed half is a cap rather
+    than a modifier and nothing lifts it. Granting combat advantage is
+    printed as kept, so it is left alone."""
+    c.bonus("attack", 5, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: c.is_(Condition.SQUEEZING, on=c.me))
+
+
+@power("i2067x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.draw()",))
+def i2067x1(c: Cast) -> None:
+    """Drawing and stowing are not actions the engine spends, so a belt that
+    makes one of them free has nothing to make free."""
+
+
+@power("i2393x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.grab_reach()",))
+def i2393x1(c: Cast) -> None:
+    """`c.grab` is applied, not rolled and not measured: there is no reach
+    on it to lengthen and no free hand to do without."""
+
+
+@power("i2393p1", level=8, cls=ITEM, usage=DAILY, action=FREE,
+       reach=Melee(1), target=ONE_CREATURE, todo=("c.sustain_grab()",))
+def i2393p1(c: Cast) -> None:
+    """Handing a grab to an object that then holds it without the grabber
+    adjacent has no relation to set: `Relation.GRABBED_BY` names a
+    creature."""
+
+
+@power("i2689p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
+       reach=PERSONAL, target=SELF)
+def i2689p1(c: Cast) -> None:
+    c.immovable(on=c.me, until=When.EONT)
+
+
+@power("i2746x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def i2746x1(c: Cast) -> None:
+    """Swimming, holding your breath and treading water: skill checks with
+    no combat consequence, and a check context cannot be asked what the
+    check was for."""
+
+
+@power("i593p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,
+       reach=CloseBurst(1), target=NO_TARGET,
+       todo=("c.flank_from_square()",))
+def i593p1(c: Cast) -> None:
+    """Flanking is computed from two creatures' positions; an empty square
+    cannot stand in for one of them."""
+
+
+@power("i645p1", level=8, cls=ITEM, usage=DAILY, action=FREE,
+       reach=Melee(1), target=ONE_CREATURE,
+       trigger="you miss with a melee attack",
+       on=Trigger(Miss, both(by_me, by_melee), "you miss with a melee attack"))
+def i645p1(c: Cast) -> None:
+    """`Triggers._at` aims the row at the creature the missed attack named,
+    so "the same target" needs no digging out of the event."""
+    foe = c.target
+    if foe is not None:
+        c.basic(on=foe)
+
+
+@power("i655x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i655x1(c: Cast) -> None:
+    """A bare "+1 bonus": no type word on the card, so untyped."""
+    c.bonus(FORT, 1, on=c.me, until=When.ENCOUNTER)
+
+
+@power("i846p1", level=8, cls=ITEM, usage=DAILY, action=INTERRUPT,
+       reach=PERSONAL, target=SELF, trigger="you are hit by an attack",
+       on=Trigger(AttackRolled, would_hit_me, "an attack would hit you"))
+def i846p1(c: Cast) -> None:
+    """Declared on `AttackRolled` rather than `Hit`: the defence is read
+    again once the interrupt window closes, so a defence raised here can
+    still turn the blow aside."""
+    c.bonus(FORT, 4, on=c.me, until=When.EONT, kind="power")
+
+
+@power("i1152x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1152x1(c: Cast) -> None:
+    c.bonus("skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER, kind="item")
+    c.bonus("skill:athletics", 2, on=c.me, until=When.ENCOUNTER, kind="item")
+
+
+@power("i1152p1", level=9, cls=ITEM, usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF,
+       trigger="you make an Acrobatics check or an Athletics check",
+       on=Trigger(SkillCheck, my_check("acrobatics", "athletics"),
+                  "you make an Acrobatics or Athletics check"))
+def i1152p1(c: Cast) -> None:
+    """"Use the new result" is `keep="new"`, which is the default and is the
+    opposite of the commoner "use the better"."""
+    c.reroll_check(keep="new")
+
+
+@power("i1455x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       todo=("c.bull_rush()", "c.grab_check()"))
+def i1455x1(c: Cast) -> None:
+    """Neither manoeuvre is rolled: `c.grab` is applied outright and a bull
+    rush is a push, so there is no attack for the bonus to sit on and no
+    size comparison being made to relax."""
+
+
+@power("i2163x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.no_coup_de_grace()",))
+def i2163x1(c: Cast) -> None:
+    """`c.coup_de_grace` consults nothing on its victim, and who may take a
+    belt off a corpse is not a fight."""
+
+
+@power("i643p1", level=9, cls=ITEM, action=MINOR,
+       reach=PERSONAL, target=SELF)
+def i643p1(c: Cast) -> None:
+    """An at-will with a price: the vulnerability is what stops the policy
+    taking it every turn for free."""
+    c.bonus(AC, 1, on=c.me, until=When.EONT, kind="power")
+    c.vulnerable(c.level // 2, on=c.me, until=When.EONT)
+
+
+@power("i648x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("Health.max_surges",))
+def i648x1(c: Cast) -> None:
+    """`c.regain_surge` refills the pool without lifting its ceiling, and
+    the printed line raises the ceiling for the day."""
+
+
+@power("i648p1", level=9, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
+       reach=PERSONAL, target=SELF,
+       trigger="an enemy hits you and causes damage",
+       on=Trigger(DamageRolled, _hurt_by_enemy, "an enemy damages you"))
+def i648p1(c: Cast) -> None:
+    """"Resist 15 against that attack" is a reduction of the one blow rather
+    than a standing resistance, so it is `c.reduce` on the damage being
+    interrupted. The delayed 10 is paid at the first end-of-turn of the
+    wearer's after this, which is "the end of your next turn" whenever the
+    blow lands on somebody else's turn -- the usual case for an interrupt."""
+    c.reduce(15)
+
+    def later(ev: TurnEnd) -> None:
+        if ev.actor == c.me:
+            c.flat(10, on=c.me)
+
+    c.watch(TurnEnd, later, until=When.ENCOUNTER, once=True)
+
+
+@power("i895x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("chargen.race_choice()",))
+def i895x1(c: Cast) -> None:
+    """The saving-throw context carries the ongoing damage's type, so
+    "against poison effects" is a real gate. "Nondwarf" is not: a character's
+    race is not on the board, so every ally in the burst is helped."""
+    for friend in c.within(3, side="ally"):
+        c.bonus("save", 5, on=friend, until=When.ENCOUNTER, kind="item",
+                when=_poison_save)
+
+
+@power("i1083x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1083x1(c: Cast) -> None:
+    """The diamond is the power's fuel; the bonus is the whole property."""
+    c.bonus(FORT, 1, on=c.me, until=When.ENCOUNTER, kind="item")
+
+
+@power("i1083p1", level=10, cls=ITEM, action=MINOR,
+       reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING],
+       dropped=("c.item_charges()", "c.decay_bonus()"))
+def i1083p1(c: Cast) -> None:
+    """The surge is spent and the heal is paid. What is missing is the
+    fuel: nothing counts an item's charges, so the belt never runs out and
+    its Fortitude bonus never shrinks."""
+    c.surge(on=c.me)
+
+
+@power("i1766p1", level=10, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
+       reach=PERSONAL, target=SELF,
+       trigger="you are hit by an attack that deals typed nonweapon damage",
+       on=Trigger(DamageRolled, _took_typed_nonweapon,
+                  "you take typed nonweapon damage"))
+def i1766p1(c: Cast) -> None:
+    """Both the trigger and the resistance ask the same two questions of the
+    damage -- that it has a type, and that the power dealing it is not a
+    weapon power."""
+    c.resist(5, on=c.me, until=When.EONT, when=_typed_nonweapon)
+
+
+@power("i2488p1", level=10, cls=ITEM, usage=DAILY, action=INTERRUPT,
+       reach=PERSONAL, target=SELF,
+       trigger="you would be hit by an attack",
+       on=Trigger(AttackRolled, would_hit_me, "an attack would hit you"))
+def i2488p1(c: Cast) -> None:
+    c.bonus(AC, 4, on=c.me, until=When.EONT, kind="power")
+
+
+@power("i637x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.surge_bonus()",))
+def i637x1(c: Cast) -> None:
+    """The same gap as `i654x1`, with the rise gated on being bloodied."""
+
+
+@power("i876p1", level=10, cls=ITEM, usage=DAILY, action=INTERRUPT,
+       reach=PERSONAL, target=SELF, todo=("c.retarget_defence()",))
+def i876p1(c: Cast) -> None:
+    """Which defence an attack is rolled against is fixed on the power and
+    read again after this window; nothing swaps one for another."""
+
+
+# == ring ===================================================================
+
+
+@power("i3475x1", level=5, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("by_ref()",))
+def i3475x1(c: Cast) -> None:
+    """The attack context carries `attacker`, so "against the attacks of
+    constructs" is a gate on all four defences. The daze is dropped rather
+    than over-applied: it answers one named creature and nothing asks which
+    row a creature was built from, so paying it on every hit would daze the
+    whole board."""
+    for d in (AC, FORT, REF, WILL):
+        c.bonus(d, 2, on=c.me, until=When.ENCOUNTER, kind="power",
+                when=lambda ctx: c.is_kind("construct", on=ctx.get("attacker")))
+
+
+@power("i3475p1", level=5, cls=ITEM, usage=ENCOUNTER, action=STANDARD,
+       reach=Ranged(10), target=ONE_CREATURE,
+       attack=Attack(vs=WILL, printed=8),
+       dropped=("Target.kind", "by_ref()"))
+def i3475p1(c: Cast) -> None:
+    """`Target` has no creature-kind field, so "one construct" is any
+    creature; and the longer domination is printed for one named creature,
+    which nothing can recognise."""
+    if c.strike():
+        c.condition(Condition.DOMINATED, until=When.EONT)
+
+
+@power("i2208x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def i2208x1(c: Cast) -> None:
+    """A language and a conversation: neither is a fight."""
+
+
+@power("i2208p1", level=7, cls=ITEM, usage=DAILY, action=FREE,
+       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+def i2208p1(c: Cast) -> None:
+    """A day's travel and twenty-four hours: nothing an encounter reaches."""
+
+
+@power("i2208p2", level=7, cls=ITEM, usage=DAILY, action=STANDARD,
+       reach=Ranged(40), target=NO_TARGET, keywords=[Keyword.ILLUSION],
+       dropped=("c.conjure(defences=)", "c.on_sustain(conjuration)",
+                "c.zone(ends_on=)"))
+def i2208p2(c: Cast) -> None:
+    """The illusion stands on the board as a conjuration, sustained by a
+    minor. Three clauses have nowhere to go: its flat defences of 10, the
+    ten squares it moves each time it is sustained -- `c.on_sustain` takes an
+    `Effect` and `c.conjure` hands back an entity -- and the two ways it
+    pops, an attack hitting it or a creature walking into it."""
+    where = _free_near(c, of=c.me)
+    if where is not None:
+        c.conjure(at=where, label=c.ref, until=When.SUSTAIN, sustain=MINOR)
+
+
+@power("i3469x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.teleport(no_sight=)",))
+def i3469x1(c: Cast) -> None:
+    """`c.teleport` picks its destination through the decider and asks no
+    question about sight, so neither the permission nor the printed penalty
+    for aiming at an occupied square can be written."""
+
+
+@power("i3469p1", level=8, cls=ITEM, usage=DAILY, action=MOVE,
+       reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
+       out_of_combat=True)
+def i3469p1(c: Cast) -> None:
+    """A journey to anywhere in a named dungeon, which is travel between
+    encounters rather than movement on a board."""
+
+
+# == ammunition =============================================================
+
+
+@power("i1931x1", level=2, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i1931x1(c: Cast) -> None:
+    """The bonus is laid on each ally who can see the target and gated on
+    that target, so it is spent on that enemy and nobody else."""
+    foe = c.target
+    if foe is None:
+        return
+    for friend in c.allies():
+        if c.can_see(friend):
+            c.bonus("attack", 1, on=friend, until=When.EONT, kind="item",
+                    when=_at_target(foe))
+
+
+@power("i1292x1", level=3, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i1292x1(c: Cast) -> None:
+    dice = f"{_plus(c)}d6"
+    foe = c.target
+    if foe is None:
+        return
+    c.damage(dice, dtype=DamageType.FIRE, on=foe)
+    for other in c.within(1, of=foe):
+        if other != foe:
+            c.damage(dice, dtype=DamageType.FIRE, on=other)
+
+
+@power("i1357x1", level=3, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i1357x1(c: Cast) -> None:
+    c.damage(f"{_plus(c)}d6", dtype=DamageType.COLD)
+    c.slowed(until=When.EOTNT)
+
+
+@power("i1735x1", level=3, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i1735x1(c: Cast) -> None:
+    c.damage(f"{_plus(c)}d6", dtype=DamageType.LIGHTNING)
+
+
+@power("i2576x1", level=3, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i2576x1(c: Cast) -> None:
+    """"Each creature adjacent to it" is everybody, not just enemies."""
+    foe = c.target
+    if foe is None:
+        return
+    c.slowed(on=foe, until=When.EONT)
+    for other in c.within(1, of=foe):
+        if other != foe:
+            c.slowed(on=other, until=When.EONT)
+
+
+@power("i2736x1", level=3, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you attack an enemy using this ammunition",
+       on=Trigger(AttackDeclared, _ammo_hit, "you attack with this ammunition",
+                  window=Window.BEFORE),
+       dropped=("c.ammunition()",))
+def i2736x1(c: Cast) -> None:
+    """Answered in the before-window, because the advantage has to be
+    standing when the roll is made; `once=True` spends it on that attack."""
+    c.grants_advantage(to="me", until=When.EOT, once=True)
+
+
+@power("i565x1", level=3, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i565x1(c: Cast) -> None:
+    """The mark's punishment is the arrow striking the marked enemy again,
+    which is `c.on_attack` on that creature rather than a mark rider: the
+    damage is the item's, not the wearer's."""
+    foe = c.target
+    if foe is None:
+        return
+    c.mark(on=foe, until=When.EOTNT)
+    dice = f"{_plus(c)}d6"
+
+    def ignored(ev: Any) -> None:
+        if getattr(ev, "target", None) != c.me:
+            c.damage(dice, on=foe)
+
+    c.on_attack(ignored, by=foe, until=When.EOTNT)
+
+
+@power("i3163x1", level=5, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you make an attack using this ammunition",
+       on=Trigger(AttackRolled, _ammo_hit, "you attack with this ammunition"),
+       dropped=("c.ammunition()",))
+def i3163x1(c: Cast) -> None:
+    """Declared on `AttackRolled` rather than `Hit`, because the zone is
+    laid whether the shot lands or not. Heavily obscured is
+    `blocks_sight=True`, which is the grade cover and concealment are read
+    from."""
+    c.zone(spread({c.there}, 1), label=c.ref, blocks_sight=True,
+           until=When.ENCOUNTER)
+
+
+@power("i3164x1", level=5, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i3164x1(c: Cast) -> None:
+    """"Each other creature" includes the wearer's own allies, and the
+    enemy that was hit is the one creature left out."""
+    foe = c.target
+    if foe is None:
+        return
+    for other in c.within(2, of=foe):
+        if other != foe:
+            c.flat(4, on=other)
+
+
+@power("i3471x1", level=5, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with a bow or crossbow attack",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()", "c.aftereffect()"))
+def i3471x1(c: Cast) -> None:
+    """The bow-or-crossbow half of the printed trigger *is* sayable --
+    `c.wielding` reads the weapon's group -- so it is asked here rather than
+    dropped. The aftereffect is not: nothing fires when a save ends an
+    effect."""
+    if c.wielding("bow") or c.wielding("crossbow"):
+        c.ongoing(5, DamageType.POISON)
+
+
+@power("i660x1", level=5, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       todo=("c.ignore_line_of_effect()", "c.ammunition()"))
+def i660x1(c: Cast) -> None:
+    """The whole benefit is being allowed to shoot a creature you have no
+    line of effect to; line of effect is checked in targeting and nothing
+    relaxes it. Treating the enemy as having cover is the price, not the
+    benefit."""
+
+
+@power("i1097x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i1097x1(c: Cast) -> None:
+    """"One conjuration or zone that enemy has" is `c.conjurations` filtered
+    by who made it; `c.dispel` unwinds what it was holding."""
+    foe = c.target
+    if foe is None:
+        return
+    theirs = [z for z in c.conjurations() if c.made_by(z) == foe]
+    if theirs:
+        pick = c.choose(theirs, "which zone or conjuration to end")
+        if pick is not None:
+            c.dispel(pick)
+
+
+@power("i2570x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i2570x1(c: Cast) -> None:
+    foe = c.target
+    if foe is not None:
+        c.teleport(1, who=foe)
+
+
+@power("i2718x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i2718x1(c: Cast) -> None:
+    foe = c.target
+    if foe is None:
+        return
+    near = [a for a in c.within(3, of=foe, side="ally") if a != c.me]
+    sq = _free_near(c, of=foe)
+    if near and sq is not None:
+        who = c.choose(near, "which ally steps in")
+        if who is not None:
+            c.teleport(max(1, c.distance(foe)), who=who, to=sq)
+
+
+@power("i3162x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()", "c.ongoing(ends_on=)"))
+def i3162x1(c: Cast) -> None:
+    """The ongoing damage ends on a save rather than on the move action the
+    card prints, which is the only end condition `c.ongoing` has."""
+    c.ongoing(5)
+
+
+@power("i732x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i732x1(c: Cast) -> None:
+    """"Cannot shift" on its own is `c.rooted`, not `c.immobilized`: the
+    enemy may still walk."""
+    c.rooted(until=When.EOTNT)
+
+
+@power("i733x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i733x1(c: Cast) -> None:
+    foe = c.target
+    if foe is None:
+        return
+    sq = _free_near(c, of=foe)
+    if sq is not None:
+        c.teleport(max(1, c.distance(foe) + 1), to=sq)
+
+
+@power("i1341x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       todo=("c.no_teleport()", "c.ammunition()"))
+def i1341x1(c: Cast) -> None:
+    """Nothing bars a creature from teleporting, and nothing fences off the
+    squares around one: `c.immovable` refuses forced movement only."""
+
+
+@power("i551x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.ammunition()",))
+def i551x1(c: Cast) -> None:
+    """Not benefiting from invisibility is written as truesight of that one
+    creature, laid on the wearer and each ally -- `c.truesight` sits on
+    whoever is looking, so the printed "against anybody" is paid out to the
+    side that can use it."""
+    foe = c.target
+    if foe is None:
+        return
+    for who in [c.me, *c.allies()]:
+        c.truesight(of=foe, on=who, until=When.EONT)
+
+
+@power("i1136x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
+       trigger="you attack an enemy using this ammunition",
+       on=Trigger(AttackRolled, _ammo_hit, "you attack with this ammunition"),
+       dropped=("c.ammunition()",))
+def i1136x1(c: Cast) -> None:
+    """"Roll twice and use either result" is a reroll keeping the better of
+    the two: the choice is only ever worth making one way."""
+    c.reroll_attack(keep="best")
+
+
+@power("i3160x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.ammunition()",))
+def i3160x1(c: Cast) -> None:
+    """Two printed halves with different triggers, so this one is a trait
+    holding a watch rather than a declared trigger: the first clause is a
+    standing modifier on the wearer and the second answers a hit."""
+    c.ignore_cover(on=c.me, until=When.ENCOUNTER)
+
+    def landed(ev: Hit) -> None:
+        if ev.attacker != c.me or not by_ranged(c.world, c.me, ev):
+            return
+        c.no_cover(on=ev.target, until=When.SAVE_ENDS)
+        c.truesight(of=ev.target, on=c.me, until=When.SAVE_ENDS)
+
+    c.watch(Hit, landed, until=When.ENCOUNTER)

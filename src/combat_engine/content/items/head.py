@@ -1,0 +1,999 @@
+"""Head-slot magic items, heroic tier: their Properties and their Powers.
+
+Nothing here declares an item. The level, the price, the slot and the
+ladder are columns in `game.db`; nothing in this slot carries an
+enhancement bonus, so `c.enhancement` is 0 here and every number below is
+the heroic one the card prints. A `Level 11:` line is paragon and out of
+scope.
+
+Four judgements run through the file.
+
+* **A skill modifier is real** -- `skills.modifier` reads `skill:<name>`
+  off `Mods` -- but the only context it is handed is `{actor, skill}`.
+  So "+2 to Perception checks" is written in full, and "+2 to Perception
+  checks **to find secret doors**" is written as the same flat modifier
+  with `dropped=("c.skill_circumstance()",)`: the circumstance is the half
+  that cannot be said, and the bonus over-applies without it.
+* **A save carries its effect and not its keywords.** The save gate is
+  handed `effect`, so "against ongoing psychic damage" and "against
+  effects that daze, stun or dominate" are exact, and "against fear
+  effects" is not -- those rows lay the bonus and carry
+  `dropped=("SavingThrow.keywords",)`.
+* **Languages, literacy, telepathy, disguise and reading a creature's hit
+  point total are narrative**, the way `docs/AUTHORING.md` treats lighting
+  a lamp. They are `out_of_combat=True`, which is a finished row.
+* **An aura of modifiers is a snapshot.** "You and each ally within 5
+  squares" has no standing membership test -- `c.aura` carries no
+  modifier -- so those rows lay the bonus on whoever is in range when the
+  trait arms, and say so.
+
+One item keeps a counter of its own: `i3230` captures souls in seven gems
+and two of its powers ask how many are held. The count is an untyped
+`"souls"` modifier on the wearer, which is the only number the engine
+carries that a `requires=` gate can read back.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+from combat_engine.engine import (
+    AT_WILL,
+    CHA,
+    DAILY,
+    ENCOUNTER,
+    FREE,
+    INT,
+    INTERRUPT,
+    MINOR,
+    NO_TARGET,
+    ONE_CREATURE,
+    PERSONAL,
+    REACTION,
+    SELF,
+    STANDARD,
+    WILL,
+    Ability,
+    ActionType,
+    AttackRolled,
+    Cast,
+    CloseBurst,
+    Condition,
+    ConditionApplied,
+    DamageType,
+    Dropped,
+    EffectApplied,
+    Fell,
+    Hit,
+    InitiativeRolled,
+    Keyword,
+    Melee,
+    Miss,
+    PowerUsed,
+    Ranged,
+    SavingThrow,
+    SkillCheck,
+    Trigger,
+    Usage,
+    When,
+    World,
+    both,
+    by_charge,
+    by_me,
+    by_melee,
+    get,
+    power,
+    targets_me,
+)
+from combat_engine.engine.components import Mods
+
+ITEM = "item"
+
+#: The five checks a card means by "knowledge or monster knowledge".
+_KNOWLEDGE = ("arcana", "dungeoneering", "history", "nature", "religion")
+
+
+# -- shared reading of the board --------------------------------------------
+
+
+def _skills(c: Cast, value: int, *names: str, kind: str = "item") -> None:
+    """Lay one item bonus per named skill. There is no key for a set."""
+    for name in names:
+        c.bonus(f"skill:{name}", value, on=c.me, until=When.ENCOUNTER, kind=kind)
+
+
+def _keyword_gate(*words: Keyword) -> Callable[[dict[str, Any]], bool]:
+    """Gate on the keywords of the power in the attack context."""
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        row = get(ctx.get("power") or "")
+        return row is not None and any(w in row.keywords for w in words)
+
+    return gate
+
+
+def _ability_gate(ability: Ability) -> Callable[[dict[str, Any]], bool]:
+    """"A Charisma attack": the attacking ability is on the row, not the ctx."""
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        row = get(ctx.get("power") or "")
+        return (
+            row is not None
+            and row.attack is not None
+            and row.attack.ability is ability
+        )
+
+    return gate
+
+
+def _reach_gate(*kinds: str) -> Callable[[dict[str, Any]], bool]:
+    """"Against close and area attacks" -- `Range.kind` is the only word
+    that tells a burst from a bow, and the damage context has no power
+    reach at all, so this is an attack-side gate only."""
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        row = get(ctx.get("power") or "")
+        return row is not None and row.reach is not None and any(
+            row.reach.kind.startswith(k) for k in kinds
+        )
+
+    return gate
+
+
+#: `both` and `either` combine *event* predicates, which take three
+#: arguments; a modifier gate takes one dict, so the pair has its own.
+def _all_ctx(*gates: Callable[[dict[str, Any]], bool]) -> Callable[
+        [dict[str, Any]], bool]:
+    def gate(ctx: dict[str, Any]) -> bool:
+        return all(g(ctx) for g in gates)
+
+    return gate
+
+
+def _any_ctx(*gates: Callable[[dict[str, Any]], bool]) -> Callable[
+        [dict[str, Any]], bool]:
+    def gate(ctx: dict[str, Any]) -> bool:
+        return any(g(ctx) for g in gates)
+
+    return gate
+
+
+def _burning(*types: DamageType) -> Callable[[dict[str, Any]], bool]:
+    """Save gate: the effect being saved against burns with one of these."""
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        burn = getattr(ctx.get("effect"), "ongoing", None)
+        return burn is not None and burn[1] in types
+
+    return gate
+
+
+def _holding(*conditions: Condition) -> Callable[[dict[str, Any]], bool]:
+    """Save gate: the effect being saved against imposes one of these."""
+    wanted = set(conditions)
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return bool(wanted & set(getattr(ctx.get("effect"), "conditions", ())))
+
+    return gate
+
+
+def _foe(c: Cast) -> int | None:
+    """The other creature in whatever event this row is answering."""
+    ev = c.trigger
+    for name in ("attacker", "source", "actor"):
+        who = getattr(ev, name, None)
+        if who is not None and who != c.me:
+            return who
+    return c.target
+
+
+def _souls(world: World, eid: int) -> int:
+    """How many of the seven gems hold a soul.
+
+    A plain untyped modifier rather than a component, because a
+    `requires=` gate is handed `(world, eid)` and `Mods` is the only
+    per-creature number it can read without a new component."""
+    mods = world.get(eid, Mods)
+    return mods.total("souls", {}) if mods is not None else 0
+
+
+def _gems(c: Cast, delta: int) -> None:
+    c.bonus("souls", delta, on=c.me, until=When.ENCOUNTER)
+
+
+# -- level 1 ----------------------------------------------------------------
+
+
+@power("i1520x1", level=1, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1520x1(c: Cast) -> None:
+    _skills(c, 1, "perception")
+
+
+# -- level 2 ----------------------------------------------------------------
+
+
+@power("i1156x1", level=2, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("query.is_basic_attack()",))
+def i1156x1(c: Cast) -> None:
+    """The attack context knows the shot was ranged and not that it was a
+    *basic* one, so this reaches every ranged attack."""
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=lambda ctx: bool(ctx.get("ranged")))
+
+
+@power("i1390x1", level=2, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1390x1(c: Cast) -> None:
+    """The extra language is narrative, like lighting a lamp."""
+    _skills(c, 1, "bluff", "diplomacy")
+
+
+@power("i2146x1", level=2, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def i2146x1(c: Cast) -> None:
+    """Literacy only."""
+
+
+@power("i3490p1", level=2, cls=ITEM, usage=AT_WILL, action=MINOR,
+       reach=Ranged(20), target=ONE_CREATURE, out_of_combat=True)
+def i3490p1(c: Cast) -> None:
+    """Speaking at a distance, and a malfunction that changes who hears
+    you. Neither end of it is a combat effect."""
+
+
+@power("i663x1", level=2, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.skill_circumstance()",))
+def i663x1(c: Cast) -> None:
+    """The larger bonus is against one sort of creature, and a check has
+    no opponent in its context."""
+    _skills(c, 1, "diplomacy", "insight")
+
+
+# -- level 3 ----------------------------------------------------------------
+
+
+@power("i525x1", level=3, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.skill_circumstance()",))
+def i525x1(c: Cast) -> None:
+    """"To detect magic" is the circumstance that cannot be said."""
+    _skills(c, 3, "arcana")
+
+
+@power("i888p1", level=3, cls=ITEM, usage=DAILY, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you fail a saving throw",
+       on=Trigger(SavingThrow,
+                  lambda world, me, ev: ev.actor == me and not ev.saved,
+                  "you fail a saving throw"))
+def i888p1(c: Cast) -> None:
+    """"Even if it's lower" is `keep="new"`, which is the default."""
+    c.reroll_save(keep="new")
+
+
+# -- level 4 ----------------------------------------------------------------
+
+
+@power("i1543x1", level=4, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1543x1(c: Cast) -> None:
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=lambda ctx: bool(ctx.get("opportunity")))
+
+
+@power("i1550x1", level=4, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1550x1(c: Cast) -> None:
+    c.bonus(WILL, 1, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_keyword_gate(Keyword.CHARM))
+
+
+@power("i3225x1", level=4, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("query.trained()",))
+def i3225x1(c: Cast) -> None:
+    """`skills.py` has no training model, so "untrained" cannot be asked
+    and the blanket `skill` key reaches every check instead."""
+    c.bonus("skill", 1, on=c.me, until=When.ENCOUNTER, kind="item")
+
+
+@power("i3225p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
+       reach=PERSONAL, target=SELF, todo=("query.trained()",))
+def i3225p1(c: Cast) -> None:
+    """Granting training is the whole of the power and nothing is trained
+    in the first place."""
+
+
+@power("i838x1", level=4, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i838x1(c: Cast) -> None:
+    """`c.initiative` during arming moves the order itself, which is what
+    the number is for."""
+    c.initiative(1, on=c.me)
+
+
+@power("i838p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF,
+       trigger="initiative is rolled",
+       on=Trigger(InitiativeRolled, lambda world, me, ev: ev.actor == me,
+                  "initiative is rolled"))
+def i838p1(c: Cast) -> None:
+    """Swapping with the ally who rolled worst is the only reading of
+    "willing" the board can offer."""
+    allies = c.allies()
+    if allies:
+        c.swap_initiative(min(allies, key=lambda a: c.distance(a)))
+
+
+# -- level 5 ----------------------------------------------------------------
+
+
+@power("i1004x1", level=5, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.skill_circumstance()",))
+def i1004x1(c: Cast) -> None:
+    """The Will half is exact; "to detect illusions" is not sayable, so
+    the two checks go unwritten rather than over-applied to every use."""
+    c.bonus(WILL, 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_keyword_gate(Keyword.ILLUSION))
+
+
+@power("i1447x1", level=5, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1447x1(c: Cast) -> None:
+    _skills(c, 2, "heal")
+
+
+@power("i1447p1", level=5, cls=ITEM, usage=ENCOUNTER, action=MINOR,
+       reach=Ranged(10), target=ONE_CREATURE, out_of_combat=True)
+def i1447p1(c: Cast) -> None:
+    """Reading a creature's hit points and diseases tells the user
+    something and does nothing to anybody."""
+
+
+@power("i2527x1", level=5, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("SavingThrow.keywords",))
+def i2527x1(c: Cast) -> None:
+    """A saving throw carries the effect it is against and no keywords, so
+    the enemies' penalty against *fear* effects has no gate."""
+    c.resist(5, DamageType.NECROTIC, on=c.me)
+    _skills(c, 1, "intimidate")
+
+
+@power("i2656x1", level=5, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.passive_only()", "c.surprise_round()"))
+def i2656x1(c: Cast) -> None:
+    """`skills.passive` is 10 plus the same modifier an active check uses,
+    so a passive-only bonus cannot be separated from the rolled one."""
+    _skills(c, 2, "perception")
+
+
+@power("i3230p1", level=5, cls=ITEM, usage=AT_WILL, action=MINOR,
+       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+def i3230p1(c: Cast) -> None:
+    """Learning a hit point total is information, not an effect."""
+
+
+@power("i3230p2", level=5, cls=ITEM, usage=AT_WILL, action=FREE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you kill a living creature with an attack",
+       on=Trigger(Dropped, both(by_me, lambda world, me, ev: ev.dead),
+                  "you kill a creature"))
+def i3230p2(c: Cast) -> None:
+    """Seven gems, one soul each. "A living creature" is unasked: nothing
+    on the board says a thing was alive before it stopped being."""
+    if _souls(c.world, c.me) < 7:
+        _gems(c, 1)
+
+
+@power("i3230p3", level=5, cls=ITEM, usage=ENCOUNTER, action=MINOR,
+       reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING],
+       requires=lambda world, eid: _souls(world, eid) >= 3,
+       requires_text="at least three gems must hold a soul")
+def i3230p3(c: Cast) -> None:
+    c.heal(5 + c.level // 2, on=c.me)
+    _gems(c, -2)
+
+
+@power("i3230p4", level=5, cls=ITEM, usage=DAILY, action=MINOR,
+       reach=PERSONAL, target=SELF,
+       requires=lambda world, eid: _souls(world, eid) >= 7,
+       requires_text="all seven gems must hold a soul",
+       dropped=("c.maximise_dice()",))
+def i3230p4(c: Cast) -> None:
+    """`c.maximise` maxes the whole roll; "up to four of the dice" is the
+    half that has no verb, so this is generous rather than absent."""
+    c.maximise(on=c.me, until=When.EONT)
+    _gems(c, -7)
+
+
+@power("i878p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
+       reach=PERSONAL, target=SELF, todo=("c.extend_range()",))
+def i878p1(c: Cast) -> None:
+    """Lengthening a power's range is the whole of it and nothing says
+    it."""
+
+
+@power("i938x1", level=5, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def i938x1(c: Cast) -> None:
+    """Telepathy is a way of talking."""
+
+
+@power("i938p1", level=5, cls=ITEM, usage=DAILY, action=REACTION,
+       reach=Ranged(10), target=ONE_CREATURE,
+       trigger="an ally is hit by a fear effect that a save can end",
+       on=Trigger(EffectApplied,
+                  lambda world, me, ev: ev.save_ends and ev.target != me,
+                  "an ally takes a save-ends effect"),
+       dropped=("query.keywords_of(effect)",))
+def i938p1(c: Cast) -> None:
+    """An effect knows what it holds and not which power laid it, so
+    "a fear effect" has no gate and every save-ends hold answers."""
+    who = getattr(c.trigger, "target", None)
+    if who is not None:
+        c.save(on=who)
+
+
+# -- level 6 ----------------------------------------------------------------
+
+
+@power("i1539x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1539x1(c: Cast) -> None:
+    """A snapshot of who is within 3 when the fight starts: a modifier
+    cannot follow an aura's membership, and `c.aura` carries none."""
+    for who in [c.me, *c.within(3, side="ally")]:
+        c.bonus("damage", 2, on=who, until=When.ENCOUNTER,
+                when=lambda ctx: bool(ctx.get("opportunity")))
+
+
+@power("i1576x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1576x1(c: Cast) -> None:
+    c.bonus("damage", 0, dice="1d6", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: bool(ctx.get("charge")))
+
+
+@power("i2048x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i2048x1(c: Cast) -> None:
+    _skills(c, 2, "heal", "religion")
+
+
+@power("i2398x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i2398x1(c: Cast) -> None:
+    c.bonus(WILL, 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_reach_gate("close", "area"))
+
+
+@power("i3226x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i3226x1(c: Cast) -> None:
+    _skills(c, 2, "bluff", "diplomacy")
+
+
+@power("i3226p1", level=6, cls=ITEM, usage=DAILY, action=STANDARD,
+       reach=Ranged(5), target=ONE_CREATURE, keywords=[Keyword.CHARM])
+def i3226p1(c: Cast) -> None:
+    """"The eyes' level + 5" is the *item's* level, so the roll is made in
+    the body: `Attack(printed=)` would take the wearer's level term out.
+    The target not knowing it was attacked is narrative."""
+    if c.attack(get(c.ref).level + 5, WILL).hit:
+        c.condition(Condition.DOMINATED, until=When.SAVE_ENDS)
+
+
+@power("i3546x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i3546x1(c: Cast) -> None:
+    """Telepathy is narrative; the rest is exact, because a save-ends
+    effect carries the type of the damage it burns with."""
+    c.resist(5, DamageType.NECROTIC, on=c.me)
+    c.resist(5, DamageType.POISON, on=c.me)
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_burning(DamageType.NECROTIC, DamageType.POISON))
+
+
+@power("i841p1", level=6, cls=ITEM, usage=ENCOUNTER, action=MINOR,
+       reach=PERSONAL, target=SELF, todo=("c.darkvision()",))
+def i841p1(c: Cast) -> None:
+    """Darkvision is not a sense the board keeps."""
+
+
+@power("i976x1", level=6, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.skill_circumstance()",))
+def i976x1(c: Cast) -> None:
+    _skills(c, 2, "perception")
+
+
+# -- level 7 ----------------------------------------------------------------
+
+
+@power("i1545p1", level=7, cls=ITEM, usage=DAILY, action=INTERRUPT,
+       reach=PERSONAL, target=SELF,
+       trigger="an attack would blind or deafen you",
+       on=Trigger(ConditionApplied,
+                  lambda world, me, ev: ev.target == me and ev.condition in (
+                      Condition.BLINDED, Condition.DEAFENED),
+                  "an attack would blind or deafen you"))
+def i1545p1(c: Cast) -> None:
+    """`ConditionApplied` is announced, not proposed, so the condition is
+    taken off again rather than refused."""
+    c.cure(Condition.BLINDED, Condition.DEAFENED, on=c.me)
+
+
+@power("i1585x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.skill_circumstance()",))
+def i1585x1(c: Cast) -> None:
+    _skills(c, 5, "dungeoneering", "nature")
+
+
+@power("i2042x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i2042x1(c: Cast) -> None:
+    _skills(c, 1, *_KNOWLEDGE)
+
+
+@power("i2042p1", level=7, cls=ITEM, usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF,
+       trigger="you dislike a knowledge check you made",
+       on=Trigger(SkillCheck,
+                  lambda world, me, ev: ev.actor == me and ev.skill in _KNOWLEDGE,
+                  "you make a knowledge check"))
+def i2042p1(c: Cast) -> None:
+    """"Use either result" is `keep="best"`, since nobody rerolls to do
+    worse on purpose."""
+    c.reroll_check(keep="best")
+
+
+@power("i2047x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i2047x1(c: Cast) -> None:
+    """`Hit` does not carry which defence was attacked; `AttackRolled`
+    does, and it fires whether the blow landed or not, which is what
+    "whenever you attack a creature's Will defense" says."""
+
+    def rolled(ev: Any) -> None:
+        if ev.attacker != c.me or ev.vs is not WILL:
+            return
+        c.penalty("save", 1, on=ev.target, until=When.ENCOUNTER, once=True)
+
+    c.watch(AttackRolled, rolled, until=When.ENCOUNTER, on=c.me)
+
+
+@power("i2177x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i2177x1(c: Cast) -> None:
+    """The enemies not knowing about it is narrative. Whoever is within 10
+    when the fight starts is who it reaches."""
+    for foe in c.within(10, side="enemy"):
+        c.penalty("skill:insight", 2, on=foe, until=When.ENCOUNTER)
+
+
+@power("i2177p1", level=7, cls=ITEM, usage=ENCOUNTER, action=MINOR,
+       reach=Ranged(5), target=NO_TARGET)
+def i2177p1(c: Cast) -> None:
+    """The advantage is granted to the ally, not to the wearer, which is
+    what `to=` is for."""
+    allies = [a for a in c.within(5, side="ally") if c.can_see(a)]
+    for ally in allies:
+        foes = [f for f in c.enemies() if c.adjacent_to(f, ally)]
+        if foes:
+            c.grants_advantage(on=foes[0], to=ally, until=When.EONT)
+            return
+
+
+@power("i481p1", level=7, cls=ITEM, usage=ENCOUNTER, action=MINOR,
+       reach=PERSONAL, target=SELF, keywords=[Keyword.ILLUSION],
+       out_of_combat=True)
+def i481p1(c: Cast) -> None:
+    """A disguise, with no clause that changes a fight."""
+
+
+@power("i481p2", level=7, cls=ITEM, usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF,
+       trigger="you miss with a charm or illusion attack power",
+       on=Trigger(
+           Miss,
+           lambda world, me, ev: (
+               ev.attacker == me
+               and (row := get(ev.power)) is not None
+               and row.usage in (Usage.ENCOUNTER, Usage.DAILY)
+               and bool({Keyword.CHARM, Keyword.ILLUSION} & set(row.keywords))
+           ),
+           "you miss with a charm or illusion power"))
+def i481p2(c: Cast) -> None:
+    c.reroll_attack(keep="best")
+
+
+@power("i725x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.grant_weapon()",))
+def i725x1(c: Cast) -> None:
+    """The whole property is a new weapon in the wearer's hands --
+    proficiency, dice, enhancement and basic-attack standing -- and
+    nothing puts one there."""
+
+
+@power("i725p1", level=7, cls=ITEM, usage=DAILY, action=FREE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you hit with a weapon at the end of a charge",
+       on=Trigger(Hit, both(by_me, by_charge), "you hit on a charge"))
+def i725p1(c: Cast) -> None:
+    foe = _foe(c)
+    if foe is None:
+        return
+    c.flat(c.str_mod, on=foe)
+    c.push(1, on=foe)
+    c.prone(on=foe)
+
+
+@power("i880x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i880x1(c: Cast) -> None:
+    _skills(c, 2, "diplomacy", "intimidate")
+
+
+@power("i980x1", level=7, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i980x1(c: Cast) -> None:
+    _skills(c, 2, "nature", "insight")
+
+
+# -- level 8 ----------------------------------------------------------------
+
+
+@power("i1080x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1080x1(c: Cast) -> None:
+    _skills(c, 2, "insight", "perception")
+
+
+@power("i1235x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("SavingThrow.keywords",))
+def i1235x1(c: Cast) -> None:
+    """The saving-throw half wants the keywords of the power that laid the
+    effect, and a save carries the effect only."""
+    _skills(c, 2, "bluff", "stealth")
+
+
+@power("i1268x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1268x1(c: Cast) -> None:
+    """"At the start of each encounter" is exactly when a trait arms."""
+    c.temp_hp(c.cha_mod, on=c.me)
+
+
+@power("i1371x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.skill_circumstance()",))
+def i1371x1(c: Cast) -> None:
+    _skills(c, 4, "perception", "thievery")
+
+
+@power("i1371p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,
+       reach=Melee(1), target=NO_TARGET, todo=("c.disable_trap()",))
+def i1371p1(c: Cast) -> None:
+    """A trap is a creature to the board -- `c.is_trap` finds one -- and
+    there is no verb for taking one out of action with a check."""
+
+
+@power("i1816p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
+       reach=CloseBurst(1), target=ONE_CREATURE,
+       dropped=("Attack.best_of()", "c.darkvision()"))
+def i1816p1(c: Cast) -> None:
+    """The choice of three abilities is written as the Intelligence one;
+    borrowing the target's sight while it is blinded has no verb. The
+    sustain repeats the attack, which `c.on_sustain` cannot re-roll."""
+    if c.attack(c.int_mod + c.level // 2 + 2, WILL).hit:
+        c.blinded(until=When.EONT)
+
+
+@power("i2372x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("Keyword.CHANNEL_DIVINITY",))
+def i2372x1(c: Cast) -> None:
+    """Nothing marks a Channel Divinity use, so the trigger the whole
+    property hangs from cannot be declared."""
+
+
+@power("i2668x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.low_light()",))
+def i2668x1(c: Cast) -> None:
+    """Light levels are not modelled, so neither is seeing in them."""
+
+
+@power("i3470x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.escape()",))
+def i3470x1(c: Cast) -> None:
+    """Six squares is thirty feet. `Fell` is read back by its emitter, so
+    softening the drop and keeping the wearer up are both writable; an
+    escape attempt is not an action the engine has."""
+    _skills(c, 2, "stealth")
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_holding(Condition.IMMOBILIZED, Condition.RESTRAINED,
+                          Condition.SLOWED))
+
+    def landing(ev: Fell) -> None:
+        if ev.actor == c.me and ev.squares <= 6:
+            ev.soften = max(ev.soften, ev.squares * 10)
+            ev.prone = False
+
+    c.watch(Fell, landing, until=When.ENCOUNTER, on=c.me)
+
+
+@power("i3470p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
+       reach=CloseBurst(3), target=NO_TARGET, keywords=[Keyword.ZONE],
+       todo=("c.silence()",))
+def i3470p1(c: Cast) -> None:
+    """A zone whose only content is that no sound crosses it. Sound is not
+    modelled, so the zone would be an empty shape."""
+
+
+@power("i693x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.save_order()",))
+def i693x1(c: Cast) -> None:
+    """Light and a circumstantial Charisma bonus aside, the whole of this
+    is *when* a saving throw is rolled, and the turn's shape is fixed."""
+
+
+@power("i883x1", level=8, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i883x1(c: Cast) -> None:
+    """The card prints no type word, so the bonus is untyped."""
+    c.bonus(WILL, 1, on=c.me, until=When.ENCOUNTER)
+
+
+@power("i933p1", level=8, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
+       reach=PERSONAL, target=SELF,
+       trigger="you would be dazed by an attack against your Will",
+       on=Trigger(ConditionApplied,
+                  lambda world, me, ev: (
+                      ev.target == me and ev.condition is Condition.DAZED),
+                  "you would be dazed"),
+       dropped=("ConditionApplied.vs",))
+def i933p1(c: Cast) -> None:
+    """Which defence the attack went after is not on the event, so this
+    answers a daze from any source."""
+    c.cure(Condition.DAZED, on=c.me)
+
+
+# -- level 9 ----------------------------------------------------------------
+
+
+@power("i1372x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1372x1(c: Cast) -> None:
+    """`SavingThrow.against` is `str(effect)`, which spells out both the
+    burn and the conditions -- so the payout can be matched by the same
+    words the bonus is gated on."""
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_any_ctx(_burning(DamageType.PSYCHIC),
+                          _holding(Condition.DAZED, Condition.STUNNED,
+                                   Condition.DOMINATED)))
+    words = ("psychic", "dazed", "stunned", "dominated")
+
+    def saved(ev: SavingThrow) -> None:
+        if ev.actor == c.me and ev.saved and any(w in ev.against for w in words):
+            c.temp_hp(5, on=c.me)
+
+    c.watch(SavingThrow, saved, until=When.ENCOUNTER, on=c.me)
+
+
+@power("i1449x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.skill_circumstance()",))
+def i1449x1(c: Cast) -> None:
+    """"Monster knowledge" is the five knowledge skills asked about a
+    creature, and a check does not know what it is about."""
+    _skills(c, 3, *_KNOWLEDGE)
+
+
+@power("i1449p1", level=9, cls=ITEM, usage=ENCOUNTER, action=MINOR,
+       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+def i1449p1(c: Cast) -> None:
+    """Learning a creature's origin and keywords is information."""
+
+
+@power("i1538x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1538x1(c: Cast) -> None:
+    """Traits arm before the order is read back, so the allies move too."""
+    for who in [c.me, *c.within(5, side="ally")]:
+        c.initiative(1, on=who)
+
+
+@power("i1810x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1810x1(c: Cast) -> None:
+    _skills(c, 2, "intimidate")
+
+
+@power("i1810p1", level=9, cls=ITEM, usage=ENCOUNTER, action=REACTION,
+       reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.FEAR],
+       trigger="an enemy hits you with a melee attack",
+       on=Trigger(Hit, both(targets_me, by_melee), "an enemy hits you"))
+def i1810p1(c: Cast) -> None:
+    foe = _foe(c)
+    if foe is not None:
+        c.push(1, on=foe)
+
+
+@power("i631x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.in_form()",))
+def i631x1(c: Cast) -> None:
+    """`c.form` assumes a shape and nothing asks which one is on, so
+    "while affected by a primal polymorph power" has no gate."""
+    _skills(c, 2, "nature")
+
+
+@power("i979x1", level=9, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.on_racial_power()",))
+def i979x1(c: Cast) -> None:
+    """The trigger is the use of one named racial power and nothing
+    announces a racial use as such."""
+
+
+# -- level 10 ---------------------------------------------------------------
+
+
+@power("i1512x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.skill_circumstance()",))
+def i1512x1(c: Cast) -> None:
+    """Both halves of the circumstance -- the disguise and the item's own
+    power being up -- are outside what a check's context carries."""
+    _skills(c, 5, "bluff")
+
+
+@power("i1512p1", level=10, cls=ITEM, usage=AT_WILL, action=STANDARD,
+       reach=PERSONAL, target=SELF, keywords=[Keyword.ILLUSION],
+       out_of_combat=True)
+def i1512p1(c: Cast) -> None:
+    """A disguise, with no clause that changes a fight."""
+
+
+@power("i1519x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.skill_circumstance()",))
+def i1519x1(c: Cast) -> None:
+    """The attack half is exact; the knowledge half over-applies, because
+    "knowledge check" is a circumstance and not a skill."""
+    _skills(c, 2, *_KNOWLEDGE)
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_keyword_gate(Keyword.PSYCHIC))
+
+
+@power("i1519p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
+       reach=PERSONAL, target=SELF)
+def i1519p1(c: Cast) -> None:
+    c.bonus("attack", 2, on=c.me, until=When.EOT, kind="power", once=True,
+            when=_ability_gate(INT))
+
+
+@power("i1541x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("SavingThrow.keywords",))
+def i1541x1(c: Cast) -> None:
+    """Ungated, so it helps against every save-ends effect rather than
+    only against fear -- a save has no power and therefore no keywords."""
+    for who in [c.me, *c.within(10, side="ally")]:
+        c.bonus("save", 2, on=who, until=When.ENCOUNTER, kind="item")
+
+
+@power("i1541p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
+def i1541p1(c: Cast) -> None:
+    """Nothing announces the moment an ally is handed a basic attack, so
+    the trigger this whole row hangs from cannot be declared."""
+
+
+@power("i1548p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use a melee at-will attack power",
+       on=Trigger(
+           PowerUsed,
+           lambda world, me, ev: (
+               ev.actor == me
+               and (row := get(ev.power)) is not None
+               and row.usage is Usage.AT_WILL
+               and row.reach is not None
+               and row.reach.kind == "melee"
+           ),
+           "you make a melee at-will attack"))
+def i1548p1(c: Cast) -> None:
+    """`PowerUsed` fires before the body, which is the right moment: the
+    maximum has to be standing before the damage is rolled."""
+    c.dazed(on=c.me, until=When.EONT)
+    c.maximise(on=c.me, until=When.EOT)
+    if c.may("make the damage fire"):
+        c.deals(DamageType.FIRE, on=c.me, until=When.EOT)
+
+
+@power("i1678x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1678x1(c: Cast) -> None:
+    _skills(c, 2, "arcana", "history", "religion")
+
+
+@power("i1678p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
+       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+def i1678p1(c: Cast) -> None:
+    """A ritual that gives a direction and a distance in miles."""
+
+
+@power("i1709x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i1709x1(c: Cast) -> None:
+    _skills(c, 2, "diplomacy", "insight")
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_keyword_gate(Keyword.CHARM, Keyword.ILLUSION))
+
+
+@power("i1709p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
+       reach=PERSONAL, target=SELF)
+def i1709p1(c: Cast) -> None:
+    c.bonus("attack", 2, on=c.me, until=When.EOT, kind="power", once=True,
+            when=_ability_gate(CHA))
+
+
+@power("i2450p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF,
+       trigger="you dislike a Bluff or Stealth check you made",
+       on=Trigger(SkillCheck,
+                  lambda world, me, ev: (
+                      ev.actor == me and ev.skill in ("bluff", "stealth")),
+                  "you make a Bluff or Stealth check"))
+def i2450p1(c: Cast) -> None:
+    c.reroll_check(keep="best", bonus=3)
+
+
+@power("i3229x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def i3229x1(c: Cast) -> None:
+    """Languages only."""
+
+
+@power("i831x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def i831x1(c: Cast) -> None:
+    """Breathing water. Drowning is not a rule the engine keeps."""
+
+
+@power("i887x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("SavingThrow.keywords", "c.darkvision()"))
+def i887x1(c: Cast) -> None:
+    """Three clauses, each gated on a nearby ally's race. `c.is_kind`
+    answers the two that name one; the third names a race by ref, and the
+    charm save it pays out wants keywords a save does not carry."""
+    near = c.within(10, side="ally")
+    if any(c.is_kind("elf", on=a) or c.is_kind("drow", on=a) for a in near):
+        for who in [c.me, *c.within(5, side="ally")]:
+            c.bonus("skill:perception", 1, on=who, until=When.ENCOUNTER,
+                    kind="item")
+
+
+@power("i985x1", level=10, cls=ITEM, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def i985x1(c: Cast) -> None:
+    _skills(c, 2, "diplomacy", "insight")
+
+
+@power("i985p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
+       reach=PERSONAL, target=SELF)
+def i985p1(c: Cast) -> None:
+    """Two item bonuses, and the same-type rule keeps the larger -- which
+    is exactly what "this bonus increases to +3" means."""
+    c.bonus("attack", 2, on=c.me, until=When.EOT, kind="item",
+            when=_ability_gate(CHA))
+    c.bonus("attack", 3, on=c.me, until=When.EOT, kind="item",
+            when=_all_ctx(_ability_gate(CHA), _keyword_gate(Keyword.CHARM)))
