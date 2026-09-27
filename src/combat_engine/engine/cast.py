@@ -325,6 +325,23 @@ class Cast:
         held = self.world.get(who, Build)
         return held is not None and choice.lower() in held.choices
 
+    def feat(self, ref: str, *, on: int | None = None) -> bool:
+        """Has this character taken that feat? `c.feat("f611")`.
+
+        Defaults to the caster, for the same reason `c.build` does: a feat
+        is a fact about whoever is acting, never about who it lands on.
+
+        A feat is an ordinary row in `Powers.known` -- that is what makes
+        one arm itself at the start of a fight and answer a trigger, with
+        no machinery of its own. So having a feat is knowing its row, and
+        this is the question 74 heroic feats ask about another feat.
+        """
+        from .components import Powers
+
+        who = self.me if on is None else on
+        known = self.world.get(who, Powers)
+        return known is not None and ref in known.all
+
     def element(self, *, on: int | None = None) -> DamageType | None:
         """The damage type this character's build is bound to, if any.
 
