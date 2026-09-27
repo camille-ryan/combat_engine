@@ -87,6 +87,15 @@ def main() -> int:
     )
     ap.add_argument("--all", action="store_true", help="include rows already declared")
     ap.add_argument("--limit", type=int, default=0, help="stop after this many rows")
+    ap.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="skip this many first. With --limit, how two authoring agents "
+        "take disjoint halves of one slot without being handed a list of "
+        "refs each -- the order is deterministic, so offset 0 and offset "
+        "120 never overlap.",
+    )
     args = ap.parse_args()
 
     db = game()
@@ -139,13 +148,15 @@ def main() -> int:
             # A parent whose every child is declared. Distinct from `None`,
             # which is a typo, and it must not be reported as one.
             continue
+        shown += 1
+        if shown <= args.offset:
+            continue
         print(block)
         print()
-        shown += 1
-        if args.limit and shown >= args.limit:
+        if args.limit and shown - args.offset >= args.limit:
             break
 
-    if shown == 0:
+    if shown <= args.offset:
         print("# nothing to write -- every row asked for is already declared")
     return 0
 
