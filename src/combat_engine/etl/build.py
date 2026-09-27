@@ -744,6 +744,13 @@ def _racial_powers(
     for row in rows:
         p = power_parser.parse(dict(row), row["Txt"])
         p.cls = races[(row["Class"] or "").strip().lower()]
+        # The same argument as `cls`, one column over. `Kind` is copied
+        # verbatim from the compendium, and for thirteen rows it holds
+        # the **race's printed name** where every other racial power
+        # holds "Racial" -- so the name this function exists to keep out
+        # of the table walked in beside it. Every row here is a racial
+        # power by construction, which is what the column should say.
+        p.kind = "Racial"
         keep(p)
         written += 1
     return written

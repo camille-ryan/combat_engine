@@ -46,6 +46,7 @@ name to authors with nothing saying so. See `names_a_race` in
 from __future__ import annotations
 
 import re
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -137,6 +138,82 @@ def specs() -> int:
               "See `_cross_reference` in etl/build.py.")
         return 1
     print("no printed names in any spec")
+    return columns(index)
+
+
+#: Columns that hold a word from a small fixed vocabulary -- "Attack",
+#: "heavy blade", "standard" -- rather than prose. Checked separately
+#: from `spec` because the test can be much stricter: prose has to argue
+#: about whether a two-word phrase is a coincidence, and a column whose
+#: whole value *is* a printed name has nothing to argue about.
+VOCABULARY_COLUMNS = (
+    ("power", "kind"),
+    ("power", "usage"),
+    ("power", "action"),
+    ("item", "slot"),
+    ("item", "category"),
+    ("feat", "tier"),
+    ("monster", "role"),
+    ("monster", "origin"),
+)
+
+
+#: Values in those columns that match a printed name **and are not one**.
+#: Each has been read: it is the fixed word the column is for, and some
+#: unrelated row happens to be called the same thing.
+REVIEWED = {
+    ("power", "action", "move"),      # a monster ability is called Move
+    ("power", "kind", "pact"),        # the warlock's, and a card of that name
+}
+
+
+def columns(index: dict[str, list[str]]) -> int:
+    """The other place a printed name can sit: a column, not a document.
+
+    `power.kind` is copied verbatim from the compendium and for thirteen
+    racial rows it held the **race's printed name** where every other
+    one held "Racial". `--specs` never saw it, because it reads `spec`
+    and nothing else, so the tracker was green the whole time.
+
+    The test is exact and whole-value: the column's entire contents are
+    a name in `names.json`. That still coincides sometimes -- an action
+    really is called "move" and a monster ability is called Move, a
+    warlock power's kind really is "pact" -- because a one-word printed
+    name and a one-word vocabulary word are the same string.
+
+    So the coincidences are listed rather than inferred. `REVIEWED` is
+    hand-kept, which the stale lists in `lint.py` are a standing
+    argument against -- but it fails the opposite way round. A list of
+    things to *ignore* goes wrong by staying quiet; this one goes wrong
+    by reporting a value nobody has looked at yet, which is the report
+    we want. It only grows when the compendium puts a new word in one
+    of these columns.
+    """
+    db = game()
+    found: list[tuple[str, str, str, list[str]]] = []
+    for table, column in VOCABULARY_COLUMNS:
+        try:
+            rows = db.execute(
+                f"SELECT DISTINCT {column} FROM {table} WHERE {column} != ''"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            continue  # The column has been renamed or has not been built.
+        for (value,) in rows:
+            word = (value or "").strip().lower()
+            if (table, column, word) in REVIEWED:
+                continue
+            refs = index.get(word)
+            if refs:
+                found.append((table, column, word, refs))
+
+    for table, column, _value, refs in found[:40]:
+        print(f"{table}.{column}: a value is the printed name of {', '.join(refs[:3])}")
+    if found:
+        print(f"\n{len(found)} column values are printed names.")
+        print("A column is as readable as a spec. Map it to a ref or to "
+              "the fixed word the column is supposed to hold.")
+        return 1
+    print("no printed names in any vocabulary column")
     return 0
 
 
