@@ -963,7 +963,7 @@ class Cast:
         a swing back and forth forever.
         """
         from .components import Powers
-        from .dsl import use
+        from .dsl import get, use
 
         target = self._who(on)
         if target is None or not alive(self.world, who):
@@ -971,6 +971,18 @@ class Cast:
         known = self.world.get(who, Powers)
         from .basic import MELEE
 
+        # **A named row that does not exist is loud.** The fallback is for
+        # `ref=""` -- "grant a basic attack" -- and an unknown *named* ref
+        # used to fall through it silently and resolve nothing, so a row
+        # written correctly against a power nobody has imported yet looked
+        # like a row that does nothing. Two item blocks were reported
+        # SILENT for exactly that, and the expression in both was right.
+        if ref and get(ref) is None:
+            raise ValueError(
+                f"{self.ref}: c.grant_attack(ref={ref!r}) names a row that is "
+                f"not declared. Leave `ref` out for a basic attack, or mark "
+                f"the row `todo=(\"{ref}\",)` until that row lands."
+            )
         chosen = ref or (known.basic if known else MELEE) or MELEE
 
         granted = []

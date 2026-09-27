@@ -250,7 +250,12 @@ DID_SOMETHING = {
     "DamageApplied", "ConditionApplied", "Healed", "TempHP", "Moved",
     "ForcedMove", "RelationSet", "ZoneCreated", "EffectExpired", "Note",
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
+    "SurgeSpent",
 }  # fmt: skip
+# `SurgeSpent` because a healing surge moving **is** the whole printed
+# content of some rows -- "one ally loses a healing surge", "you gain
+# two". Two correct item blocks were reported SILENT for doing exactly
+# what their card says and nothing else.
 # `SkillCheck` is here for the same reason `SavingThrow` is: a row whose
 # printed content is "make a DC 25 check" has done the whole of what it
 # says by rolling one, and failing is an outcome rather than a no-op.

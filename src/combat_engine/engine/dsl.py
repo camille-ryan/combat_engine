@@ -662,6 +662,13 @@ REGISTRY: dict[str, Power] = {}
 _SYMBOL = re.compile(
     r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+\s*(?:\([^()]*\))?"
     r"|[A-Za-z_]\w*\s*\([^()]*\)"
+    # **A compendium ref is a symbol too.** "This row is waiting on
+    # another row" is a real and common state -- an item that grants a
+    # named class power nobody has written yet -- and it is exactly as
+    # checkable as a missing method: the tool looks in the registry
+    # instead of on `Cast`. Without it such a row had no way to say what
+    # it wanted, and two were left looking merely broken.
+    r"|[pmifr]\d+[a-z]?\d*|cf:[\w-]+"
 )
 
 
