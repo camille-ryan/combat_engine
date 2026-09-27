@@ -1184,14 +1184,19 @@ def i2081p1(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        trigger="you use a fear power of 5th level or lower",
        on=Trigger(PowerUsed, _reagent(5, Keyword.FEAR),
-                  "you use a fear power"),
-       dropped=("query.save_ctx()",))
+                  "you use a fear power"))
 def i2852p1(c: Cast) -> None:
-    """"To end any effect of the power" is the missing gate: a save does
-    not know which power put the hold on, so this worsens every save the
-    target makes."""
+    """"To end any effect of the power" is the save context's `label`,
+    which is the ref of the row that laid the hold -- so the penalty
+    bites only on saves against this power's own effects and not on
+    every save the target makes."""
+    spent_on = getattr(c.trigger, "power", "")
+
+    def laid_by_it(ctx: dict[str, Any]) -> bool:
+        return ctx["label"].split()[:1] == [spent_on]
+
     for who in _reagent_targets(c):
-        c.penalty("save", 2, on=who, until=When.ENCOUNTER)
+        c.penalty("save", 2, on=who, until=When.ENCOUNTER, when=laid_by_it)
 
 
 @power("i3064p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,

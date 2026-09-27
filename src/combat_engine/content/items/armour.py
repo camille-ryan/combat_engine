@@ -16,11 +16,12 @@ Three judgements run through the file.
   promises `source`; `resolve.deal_damage` does not build it. So "resist 5
   against damage from swarms" and "resistance against attacks by your oath
   target" cannot be gated and are marked, not approximated.
-* **The saving-throw context is `actor`, `effect` and `label`.** That is
-  enough for "against ongoing necrotic damage" (the effect carries its
-  burn) and for "against effects that daze, dominate or stun" (it carries
-  its conditions), and not enough for "against fear effects" -- a save has
-  no power and therefore no keywords. Those clauses are marked.
+* **The saving-throw context is `actor`, `effect`, `label`, `conditions`,
+  `ongoing`, `dtype` and `keywords`.** That is enough for "against ongoing
+  necrotic damage" (the effect carries its burn), for "against effects that
+  daze, dominate or stun" (it carries its conditions) and now for "against
+  fear effects" too: `durations.keywords_of` reads the keywords back off
+  the label, which is the ref of the row that laid the hold.
 
 Two verbs the slot keeps asking for and that do not exist: `c.escape()`
 (an escape attempt is not modelled at all, and eight blocks print a bonus
@@ -98,6 +99,7 @@ from combat_engine.engine import (
     query,
     targets_me,
 )
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import Bloodied, Event, ForcedMove
 
 ITEM = "item"
@@ -342,6 +344,26 @@ def _ally_hits(world: World, me: int, ev: Event) -> bool:
 
 def _save_ends_on_me(world: World, me: int, ev: Event) -> bool:
     return getattr(ev, "target", None) == me and getattr(ev, "save_ends", False)
+
+
+def _fear_save_ends_on_me(world: World, me: int, ev: Event) -> bool:
+    """A save-ends hold laid on me by a row printing the fear keyword.
+    `EffectApplied.label` is that row's ref, which is what `keywords_of`
+    reads."""
+    return _save_ends_on_me(world, me, ev) and Keyword.FEAR in keywords_of(
+        getattr(ev, "label", "") or ""
+    )
+
+
+def _save_keywords(*words: Keyword) -> Any:
+    """Save gate: the row that laid the hold printed one of these words.
+    The saving-throw context carries them via `durations.keywords_of`."""
+    wanted = set(words)
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return bool(wanted & set(ctx.get("keywords", ())))
+
+    return gate
 
 
 def _forced_on_me(world: World, me: int, ev: Event) -> bool:

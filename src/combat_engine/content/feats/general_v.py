@@ -57,6 +57,7 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    WIS,
     ActionType,
     Attack,
     AttackDeclared,
@@ -1148,13 +1149,25 @@ f3545 = _grants("f3545", "f3545b")
 @power("f3545b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
        reach=CloseBurst(5), target=ONE_CREATURE,
        keywords=[Keyword.DIVINE, Keyword.IMPLEMENT, Keyword.SHADOW],
-       group=CHANNEL_DIVINITY, attack=Attack(None, vs=WILL))
+       group=CHANNEL_DIVINITY, attack=Attack(WIS, vs=WILL))
 def f3545b(c: Cast) -> None:
-    """"Your primary ability modifier" is whatever the header attacked
-    with, which is `c.attack_mod` -- naming Wisdom here would be right for
-    an avenger and wrong for the row. The 5 damage is a watch on `TurnEnd`
-    rather than an aura on the target, because it is the creature standing
-    beside it that pays and the target is not the one being hurt."""
+    """The card's attack line is **Wisdom vs. Will**, so the header says
+    Wisdom.
+
+    I wrote `Attack(None, vs=WILL)` first, reasoning about "your primary
+    ability modifier" -- which is the card's *slide distance*, not its
+    attack line. `dsl.bonus_for` raises on an `Attack` with neither an
+    ability nor a `printed=`, so the row blew up the moment `c.strike`
+    was reached. It audited silent only because the undead guard above
+    returns first; on a board where the target is undead it raised.
+
+    The slide still reads `c.attack_mod`, which is the right thing for
+    that clause and the reason the confusion was available.
+
+    The 5 damage is a watch on `TurnEnd` rather than an aura on the
+    target, because it is the creature standing beside it that pays and
+    the target is not the one being hurt.
+    """
     if not c.is_kind("undead"):
         return
     foe = c.target

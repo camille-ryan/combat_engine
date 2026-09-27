@@ -2467,13 +2467,13 @@ def i3017p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("query.save_ctx()",),
 )
 def i3075x1(c: Cast) -> None:
-    """A saving-throw modifier is totalled with no context at all, so
-    "against ongoing fire damage" cannot narrow it and the +2 applies to
-    every save. No type word on the card, so untyped."""
-    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER)
+    """The save context carries the burn's damage type, so "against
+    ongoing fire damage" narrows: `dtype` is set only for an effect that
+    burns. No type word on the card, so untyped."""
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx["dtype"] is DamageType.FIRE)
 
 
 @power(

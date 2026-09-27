@@ -867,11 +867,21 @@ def _cross_reference_rest(
             if not spec:
                 continue
             here = set(re.findall(r"[a-z']+", spec.lower()))
+            # **A monster's ability never belongs in a character's
+            # spec.** `by_word` holds every name, and several monster
+            # abilities share a name with a class power that this build
+            # does not import -- so "you don't expend the use of <name>"
+            # on a feat was resolving onto a stat block. A feat modifies
+            # what a character has; it has never modified a claw. The
+            # same guard `_named_powers`, `_label_refs` and
+            # `_associated_refs` each carry, here for the general swap.
+            monsters_ok = table in ("monster_power",)
             others = {
                 name: other
                 for word in here & by_word.keys()
                 for name, other in by_word[word]
                 if other != ref and not other.startswith(ref)
+                and (monsters_ok or other[:1] != "m")
             }
             if not others:
                 continue
@@ -894,7 +904,21 @@ _LABEL = re.compile(r"^([A-Z][\w' ]{2,40}?)\s*:\s", re.M)
 #: "the wizard's **scorching burst** power", "you regain the use of your
 #: **fell might**". A phrase immediately before the word `power` is a
 #: power's name, whatever `identifies` thinks of the phrase on its own.
-_NAMED = re.compile(r"\b([A-Za-z][\w']*(?:\s+[A-Za-z][\w']*){0,3})\s+power\b")
+#:
+#: **The qualifier is part of the match, not part of the name.** A card
+#: writes "your *fade away* **racial** power" and "your *Combat
+#: Challenge* **class feature**, and the old pattern captured "your fade
+#: away racial" and then looked up its tails -- "racial", "away racial",
+#: "fade away racial" -- never "fade away". So 111 racial powers and 81
+#: class features that `by_name` could resolve were reaching authors as
+#: prose, and 134 rows across the corpus carry a marker for want of a
+#: name the database had all along. Measured before the verbs they
+#: wanted were built, which is what `plans/` said to do.
+_NAMED = re.compile(
+    r"\b([A-Za-z][\w']*(?:\s+[A-Za-z][\w']*){0,3}?)"
+    r"(\s+(?:racial|encounter|daily|at-will|utility|attack))*"
+    r"\s+(power|class feature)\b"
+)
 
 
 def _named_powers(spec: str, by_name: dict[str, str], own: str) -> str:
@@ -913,14 +937,21 @@ def _named_powers(spec: str, by_name: dict[str, str], own: str) -> str:
     """
 
     def swap(m: re.Match) -> str:
-        phrase = m.group(1)
+        phrase, quals, noun = m.group(1), m.group(2) or "", m.group(3)
         words = phrase.split()
         for size in range(len(words), 0, -1):
             tail = " ".join(words[-size:])
             ref = by_name.get(tail.lower())
+            # **Only a `p` or a `cf:`.** `by_name` prefers a power on a
+            # tie, but a name with no character-side counterpart resolves
+            # onto a monster's stat block -- 112 specs were pointing a
+            # feat at a claw. A feat modifies what a character has; it
+            # has never modified a monster's ability.
+            if ref and ref[:1] not in ("p", "c"):
+                continue
             if ref and not ref.startswith(own):
                 head = " ".join(words[:-size])
-                return f"{head} {ref} power".strip()
+                return f"{head} {ref}{quals} {noun}".strip()
         return m.group(0)
 
     return _NAMED.sub(swap, spec)
@@ -945,6 +976,13 @@ def _label_refs(spec: str, by_name: dict[str, str]) -> str:
 
     def swap(m: re.Match) -> str:
         ref = by_name.get(m.group(1).lower())
+        # **Only a `p` or a `cf:`.** `by_name` prefers a power on a tie,
+        # but a name with no character-side counterpart resolves onto a
+        # monster's stat block -- and a feat modifies the powers a
+        # character has, never a monster's claw. The same guard
+        # `_named_powers` and `_associated_refs` carry.
+        if ref and ref[:1] not in ("p", "c"):
+            return m.group(0)
         return f"{ref} : " if ref else m.group(0)
 
     return _LABEL.sub(swap, spec)

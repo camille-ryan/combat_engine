@@ -232,12 +232,15 @@ def i472p1(c: Cast) -> None:
 
 
 @power("i521p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("query.save_ctx()",))
+       reach=PERSONAL, target=SELF, dropped=("query.level()",))
 def i521p1(c: Cast) -> None:
-    """"Against poisons from a source of 10th level or lower" is two gates
-    on a saving throw, and the save context carries neither the keyword
-    nor the source's level -- so the bonus applies to every save."""
-    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER)
+    """"Against poisons" is now sayable -- the save context carries the
+    keywords of the row that laid the hold. "From a source of 10th level
+    or lower" is the half still missing: a gate is handed the context and
+    no world, so the source's level cannot be looked up, and the database
+    has monsters above 10 so it is not a clause that is always true."""
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: Keyword.POISON in ctx["keywords"])
 
 
 @power("i898p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
