@@ -190,7 +190,7 @@ def p13942(c: Cast) -> None:
 def p13943(c: Cast) -> None:
     """"You or one ally", and the target must be bloodied -- a restriction the
     dispatcher's pick cannot honour, so the pool is gathered here."""
-    bled = sorted(a for a in c.within(2, side="ally") if c.bloodied(a))
+    bled = sorted(a for a in c.within(2, side="team") if c.bloodied(a))
     if not bled:
         return
     who = c.choose(bled, "who is steadied")
@@ -241,7 +241,7 @@ def p14231(c: Cast) -> None:
 def p14233(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(1), c.wis_mod)
-    who = c.choose(sorted(c.within(5, side="ally")), "who shifts")
+    who = c.choose(sorted(c.within(5, side="team")), "who shifts")
     if who is not None:
         c.shift(1, who=who)
 
@@ -458,7 +458,7 @@ def p14258(c: Cast) -> None:
 def p14259(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(1), c.wis_mod, dtype=DamageType.COLD)
-    for friend in c.within(5, side="ally"):
+    for friend in c.within(5, side="team"):
         c.bonus("save", 2, on=friend, until=When.SONT, kind="power")
 
 
@@ -524,7 +524,7 @@ def p14261(c: Cast) -> None:
     group=CHANNEL_DIVINITY,
 )
 def p14262(c: Cast) -> None:
-    for friend in c.within(5, side="ally"):
+    for friend in c.within(5, side="team"):
         c.resist(5, DamageType.NECROTIC, until=When.EONT, on=friend)
     for foe in c.within(5, side="enemy"):
         c.vulnerable(5, DamageType.RADIANT, until=When.EONT, on=foe)

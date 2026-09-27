@@ -678,7 +678,7 @@ def m3105a2(c: Cast) -> None:
     """
     if c.first:
         c.temp_hp(5, on=c.me)
-        for friend in sorted(c.within(5, side="ally")):
+        for friend in sorted(c.within(5, side="team")):
             if friend == c.me:
                 continue
             c.temp_hp(5, on=friend)

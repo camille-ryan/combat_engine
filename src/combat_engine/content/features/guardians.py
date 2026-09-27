@@ -594,10 +594,10 @@ def warden_might_ally(c: Cast) -> None:
     def caught_breath(ev: SecondWind) -> None:
         if ev.actor != me:
             return
-        # **`side="ally"` counts the caster**, and the card says "an ally":
-        # left in, the warden was the most hurt creature in its own list on
-        # the turn it took a second wind, so it healed itself twice and no
-        # ally ever got the surge.
+        # The card says "an ally", which `side="ally"` now is. It counted
+        # the caster once, and the warden was then the most hurt creature in
+        # its own list on the turn it took a second wind -- it healed itself
+        # twice and no ally ever got the surge.
         near = sorted(
             (a for a in c.within(5, side="ally") if a != me),
             key=lambda a: -c.missing(on=a),

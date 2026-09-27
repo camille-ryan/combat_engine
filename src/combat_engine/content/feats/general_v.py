@@ -1370,7 +1370,7 @@ def f3552(c: Cast) -> None:
     Untyped, so it stacks with the shield's own bonus, which is what the
     card's silence about a type means."""
     c.bonus(AC, 2, on=c.me, until=When.SONT)
-    beside = c.within(1, side="ally")
+    beside = c.within(1, side="team")
     if beside:
         c.bonus(AC, 2, on=beside[0], until=When.SONT)
 

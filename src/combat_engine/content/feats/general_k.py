@@ -612,13 +612,18 @@ def f1715(c: Cast) -> None:
 
 
 @power("f1721", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.as_basic(ref)",))
+       reach=PERSONAL, target=SELF, dropped=("c.rattling(when=)",))
 def f1721(c: Cast) -> None:
     """The trade is per-attack and nothing offers it per-attack, so both
-    halves stand for the encounter and are narrowed to melee, which is as
-    close as the printed line gets. What is dropped is *basic*: nothing
-    asks whether the row being rolled is the creature's basic attack, so
-    the penalty falls on every melee swing rather than only those."""
+    halves stand for the encounter and are narrowed to melee, which is
+    as close as the printed line gets.
+
+    Not `c.as_basic`, which this carried: that verb *installs* a stand-in
+    for the basic attack and this row asks after one. The narrowing it
+    wants is `c.rattling(when=)` -- `c.penalty` already takes a gate and
+    `c.rattling` does not, so the penalty can be held to the basic
+    attack and the keyword cannot, and gating only one half would make
+    the two disagree."""
     me = c.me
     c.rattling(on=me, until=When.ENCOUNTER, melee=True)
     c.penalty("attack", 2, on=me, until=When.ENCOUNTER, when=_melee_power)

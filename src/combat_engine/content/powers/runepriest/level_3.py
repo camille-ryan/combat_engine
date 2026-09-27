@@ -188,7 +188,7 @@ def p15990(c: Cast) -> None:
         return
     bonus = c.wis_mod if protection else 0
     c.save(on=c.me, bonus=bonus)
-    near = c.within(5, side="ally")
+    near = c.within(5, side="team")
     mate = c.choose(near, "the ally who shakes it off with you") if near else None
     if mate is not None:
         c.save(on=mate, bonus=bonus)

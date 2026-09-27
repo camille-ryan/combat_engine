@@ -32,8 +32,8 @@ MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 
 
 def _squad(c: Cast, squares: int) -> list[int]:
-    """"You or one ally within 5 squares" -- the caster is in this pool."""
-    return c.within(squares, side="ally")
+    """"You or one ally within 5 squares" -- `side="team"` is that pool."""
+    return c.within(squares, side="team")
 
 
 def _saves(c: Cast, who: int, *, by: int | None = None) -> list[Effect]:

@@ -50,10 +50,11 @@ DEFENCES = (AC, FORT, REF, WILL)
 def _friends(c: Cast, radius: int, *, of: int | None = None, mine: bool = False) -> list[int]:
     """Allies within `radius` of `of` (the caster by default).
 
-    `c.within(side="ally")` counts the caster as one of his own allies, which
-    is right for "you or one ally" and wrong for "one ally".
+    `side="ally"` leaves the caster out, which is "one ally"; `mine=True`
+    is the half of the fork printing "you or one ally", and `"team"` is the
+    same pool with the caster in it.
     """
-    return [a for a in c.within(radius, of=of, side="ally") if mine or a != c.me]
+    return c.within(radius, of=of, side="team" if mine else "ally")
 
 
 def _pick(c: Cast, pool: list[int], prompt: str) -> int | None:

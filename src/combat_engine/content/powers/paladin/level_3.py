@@ -402,5 +402,5 @@ def p754(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(2), c.cha_mod)
         amount = 5 + c.wis_mod
-        for friend in c.within(5, side="ally"):  # the ally pool has the caster in it
+        for friend in c.within(5, side="team"):  # "you and each ally"
             c.temp_hp(amount, on=friend)

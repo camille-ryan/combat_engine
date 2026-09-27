@@ -203,26 +203,40 @@ class Cast:
     def enemies(self) -> list[int]:
         return enemies(self.world, self.me)
 
-    def within(self, radius: int, *, of: int | None = None, side: str = "any") -> list[int]:
-        """Creatures within `radius` squares. `side` is any, enemy, ally or other."""
-        origin = self.me if of is None else of
-        area = spread(squares(self.world, origin), radius)
-        pool = {
+    def _side(self, side: str, other_than: int) -> list[int]:
+        """The pool a `side=` names.
+
+        **`"ally"` leaves the caster out**, which is the printed word: a
+        card that means you as well says "you and each ally", and `"team"`
+        is that pool -- your side with you in it. It was the other way
+        round, and ninety rows printing "an ally" quietly counted the
+        caster: a heal that mended the healer, a slide that moved the
+        slider, and nothing to see in either.
+        """
+        return {
             "any": creatures(self.world),
             "enemy": enemies(self.world, self.me),
-            "ally": [*allies(self.world, self.me), self.me],
-            "other": [c for c in creatures(self.world) if c != origin],
+            "ally": allies(self.world, self.me),
+            "team": [*allies(self.world, self.me), self.me],
+            "other": [c for c in creatures(self.world) if c != other_than],
         }[side]
+
+    def within(self, radius: int, *, of: int | None = None, side: str = "any") -> list[int]:
+        """Creatures within `radius` squares.
+
+        `side` is any, enemy, ally, team or other. `"ally"` is allies and
+        **not** the caster; `"team"` is the caster as well.
+        """
+        origin = self.me if of is None else of
+        area = spread(squares(self.world, origin), radius)
+        pool = self._side(side, origin)
         return [c for c in pool if squares(self.world, c) & area and alive(self.world, c)]
 
     def in_squares(self, area: Iterable[Square], *, side: str = "any") -> list[int]:
+        """Whoever stands in these squares. `side` reads as it does on
+        `c.within`: `"ally"` without the caster, `"team"` with."""
         space = frozenset(area)
-        pool = {
-            "any": creatures(self.world),
-            "enemy": enemies(self.world, self.me),
-            "ally": [*allies(self.world, self.me), self.me],
-            "other": [c for c in creatures(self.world) if c != self.me],
-        }[side]
+        pool = self._side(side, self.me)
         return [c for c in pool if squares(self.world, c) & space and alive(self.world, c)]
 
     def distance(self, to: int | None = None) -> int:
@@ -1229,7 +1243,12 @@ class Cast:
         return True
 
     def basic(
-        self, *, on: int | None = None, who: int | None = None, ranged: bool = False
+        self,
+        *,
+        on: int | None = None,
+        who: int | None = None,
+        ranged: bool = False,
+        window: str = "",
     ) -> bool:
         """Make a basic attack -- whichever row that creature's actually is.
 
@@ -1238,10 +1257,15 @@ class Cast:
         monster points `Powers.basic` at one of its own abilities, and a
         hand-written copy of "roll and deal weapon damage" would quietly
         ignore that.
+
+        `window` names which grant this is, so that a stand-in filed by
+        `c.as_basic` for that window is offered beside the ordinary
+        swing. A grant that names no window -- most of them -- still
+        picks up the stand-ins written with no window of their own.
         """
         from .basic import MELEE, RANGED
         from .components import Powers
-        from .dsl import use
+        from .dsl import basic_options, use
 
         attacker = self.me if who is None else who
         target = self._who(on)
@@ -1259,6 +1283,11 @@ class Cast:
                 (r for r in (known.known if known else ()) if r == RANGED), ""
             )
             ref = own or RANGED
+        offered = basic_options(
+            self.world, attacker, "ranged" if ranged else window, ref
+        )
+        if len(offered) > 1:
+            ref = self.choose(offered, "which attack to make") or ref
         return use(self.world, attacker, ref, targets=[target], spend=False)
 
     def attack(
@@ -2081,14 +2110,27 @@ class Cast:
             )
         kinds = [dtype] if dtype is not None else list(DamageType)
         defences = self.world.get(who, Defences) or self.world.add(who, Defences())
+        # **Resistances of one type do not stack -- the highest applies**, the
+        # same printed rule `Effects.apply` enforces for ongoing damage. This
+        # added, so resist 5 laid on a creature already resisting 10 came to
+        # 15. A weaker one is refused outright and changes nothing, which is
+        # also what makes `undo` right: it puts back what this call moved and
+        # nothing else, however the holds overlap.
+        #
+        # A **negative** amount is the other printed sentence -- "the target
+        # loses resist 10 to fire" -- and stays arithmetic: there is no
+        # highest to take, and four rows hand over a computed delta.
+        before: dict[DamageType, int] = {}
         for kind in kinds:
-            defences.resist[kind] = defences.resist.get(kind, 0) + amount
+            standing = defences.resist.get(kind, 0)
+            if amount < 0 or amount > standing:
+                before[kind] = standing
+                defences.resist[kind] = standing + amount if amount < 0 else amount
 
         def undo() -> None:
-            for kind in kinds:
-                left = defences.resist.get(kind, 0) - amount
-                if left > 0:
-                    defences.resist[kind] = left
+            for kind, standing in before.items():
+                if standing > 0:
+                    defences.resist[kind] = standing
                 else:
                     defences.resist.pop(kind, None)
 
@@ -3052,6 +3094,56 @@ class Cast:
         effect.on_sustain.append(fn)
         return True
 
+    def as_basic(
+        self,
+        *refs: str,
+        window: str = "",
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You can use <this row> in place of a melee basic attack."
+
+        The other side of `c.no_basic`, which takes away what the basic
+        attack *is*. This sentence only ever matters where the game
+        **grants** a swing rather than asking for one, so the offer is
+        filed under the window that hands it out -- `"opportunity"`,
+        `"charge"`, `"challenge"` for the melee basic a defender's mark
+        punishes with, `"ranged"` for a granted ranged basic -- and the
+        default `""` is the card that names no window and answers every
+        melee one.
+
+        Several refs, because the printed line is nearly always a choice
+        among an associated-powers list. Nothing is checked here: a list
+        names rows the character may not possess and rows this build has
+        not imported, and `dsl.basic_options` drops both at the moment
+        the swing is offered rather than at the moment the feat is armed,
+        which is when a borrowed row could still arrive.
+
+        Yours, so it defaults to the caster.
+        """
+        from .components import Powers
+
+        who = on if on is not None else self.me
+        known = self.world.get(who, Powers)
+        if known is None or not refs:
+            return None
+        was = known.instead.get(window)
+        known.instead[window] = tuple(
+            dict.fromkeys((*known.instead.get(window, ()), *refs))
+        )
+
+        def restore() -> None:
+            if was is None:
+                known.instead.pop(window, None)
+            else:
+                known.instead[window] = was
+
+        return self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} instead of a basic attack",
+            on_end=[restore],
+        )
+
     def no_basic(self, *, on: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
         """Take away what this creature's basic attack *is*, not the ability.
 
@@ -3067,12 +3159,15 @@ class Cast:
         known = self.world.get(who, Powers)
         if known is None:
             return None
-        was, was_opp = known.basic, known.opportunity
+        was, was_instead = known.basic, dict(known.instead)
 
         def restore() -> None:
-            known.basic, known.opportunity = was, was_opp
+            known.basic, known.instead = was, was_instead
 
-        known.basic, known.opportunity = "", ""
+        # The stand-ins go with it: they are what the basic attack *is*
+        # in one window each, so leaving them would let a creature that
+        # cannot make a basic attack still swing one on a charge.
+        known.basic, known.instead = "", {}
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} no basic attack",
             on_end=[restore],
@@ -3164,7 +3259,7 @@ class Cast:
         Three content files had grown their own copy of this.
         """
         from .components import Powers
-        from .dsl import use
+        from .dsl import basic_options, use
 
         # `who` charges instead of the caster -- "three of its allies can
         # charge one creature of its choice". `c.grant_attack` hands over
@@ -3176,6 +3271,14 @@ class Cast:
         if not ref:
             known = self.world.get(runner, Powers)
             ref = (known.basic if known else "") or "mba"
+            # "You can use this in place of a melee basic attack when
+            # charging." Asked of the runner, not the caster: a row that
+            # sends somebody else charging is their choice to make.
+            offered = basic_options(self.world, runner, "charge", ref)
+            if len(offered) > 1:
+                ref = self.world.decide(
+                    runner, "choose", offered, "which attack to make"
+                )
         return use(
             self.world, runner, ref, targets=[victim], spend=False, charge=True
         )

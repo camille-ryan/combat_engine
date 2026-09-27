@@ -137,7 +137,7 @@ def p16504(c: Cast) -> None:
     where anything reading for resistance will find them."""
     if c.strike():
         c.damage("1d6", c.int_mod, dtype=DamageType.COLD)
-    for who in c.within(1, side="ally"):
+    for who in c.within(1, side="team"):
         c.temp_hp(5, on=who)
 
 
@@ -214,7 +214,7 @@ def p7653(c: Cast) -> None:
     if c.con_mod <= 0:
         return
     gate = with_keyword(Keyword.WEAPON, Keyword.COLD)
-    for who in c.within(2, side="ally"):
+    for who in c.within(2, side="team"):
         c.bonus("damage", c.con_mod, on=who, until=When.EONT, when=gate)
 
 

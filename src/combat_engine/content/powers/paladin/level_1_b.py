@@ -88,7 +88,7 @@ def p10246(c: Cast) -> None:
         return
     c.damage(c.w(2), c.str_mod, dtype=DamageType.NECROTIC)
     # "You or an ally": the ally pool already has the caster in it.
-    pool = c.within(5, side="ally")
+    pool = c.within(5, side="team")
     hurt = [a for a in pool if c.wounded(a)]
     who = c.choose(sorted(hurt or pool), "who is mended")
     if who is not None:

@@ -1059,7 +1059,7 @@ def f3248(c: Cast) -> None:
     if best <= 0:
         return
     c.temp_hp(best, on=c.me)
-    for friend in c.within(1, side="ally"):
+    for friend in c.within(1, side="team"):
         c.temp_hp(best, on=friend)
 
 

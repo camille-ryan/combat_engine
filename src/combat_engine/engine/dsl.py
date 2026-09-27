@@ -975,6 +975,45 @@ def aim_points(world: World, actor: int, p: Power) -> list[Square]:
     return []
 
 
+def basic_options(world: World, actor: int, window: str, own: str = "") -> list[str]:
+    """What may be swung where the game *grants* a basic attack.
+
+    "You can use <this row> in place of a melee basic attack" is an
+    option beside the ordinary swing and not a replacement for it, so
+    the creature's own basic is always in the list. `c.as_basic` files
+    the stand-ins; the three places that hand out a swing -- the charge
+    menu, the opportunity window and a defender's punishment -- all ask
+    here, so the two guards below are written once.
+
+    **Ordered rather than sorted, because a headless run takes the
+    first.** An at-will stand-in costs nothing and is the whole reason
+    the card was taken, so it leads; the plain basic comes next; one
+    that spends an encounter or a daily goes last, where nobody burns a
+    daily on a riposte by default.
+    """
+    from .components import Powers
+
+    known = world.get(actor, Powers)
+    if known is None:
+        return []
+    # `own` is the caller's answer to "what is this creature's basic
+    # attack": `c.basic` has already worked out the engine's fallbacks
+    # and a PC's `Powers.ranged` is empty, so asking again here would
+    # drop the bow out of its own list.
+    own = own or (known.ranged if window == "ranged" else known.basic)
+    free: list[str] = []
+    costly: list[str] = []
+    for ref in known.instead_of_basic(window):
+        p = get(ref)
+        # An associated-powers list names rows the character may not
+        # possess, and `usable` is what says so -- along with refusing a
+        # spent encounter power and an unfinished one.
+        if p is None or not usable(world, actor, p)[0]:
+            continue
+        (free if p.usage is Usage.AT_WILL else costly).append(ref)
+    return list(dict.fromkeys([*free, *([own] if own else []), *costly]))
+
+
 def candidates(
     world: World, actor: int, p: Power, origin: Square | None = None, branch: int = 0
 ) -> list[int]:

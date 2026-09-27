@@ -756,7 +756,7 @@ def i2308p1(c: Cast) -> None:
     )
     amount = 5 + c.con_mod
     c.resist(amount, kind or DamageType.FIRE, on=c.me, until=When.EONT)
-    for mate in c.within(1, side="ally"):
+    for mate in c.within(1, side="team"):
         c.resist(amount, kind or DamageType.FIRE, on=mate, until=When.EONT)
 
 
@@ -1022,7 +1022,7 @@ def i2641p1(c: Cast) -> None:
             c.initiative(10 - rolled, on=who)
 
     take_ten(c.me)
-    for mate in c.within(5, side="ally"):
+    for mate in c.within(5, side="team"):
         take_ten(mate)
 
 

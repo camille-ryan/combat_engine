@@ -293,7 +293,7 @@ def p2531(c: Cast) -> None:
     foe = c.target
     if foe is None:
         return
-    pool = sorted(c.within(5, side="ally"))
+    pool = sorted(c.within(5, side="team"))
     friend = c.choose(pool, "who sizes it up") if pool else None
     if friend is None:
         return
@@ -328,7 +328,7 @@ def p2555(c: Cast) -> None:
     if c.target is not None and c.may("shift a square", who=c.target):
         c.shift(1, who=c.target)
     if c.first and c.build("tactical"):
-        for friend in c.within(10, side="ally"):
+        for friend in c.within(10, side="team"):
             if friend in c.targets:
                 continue
             if c.may("shift a square", who=friend):

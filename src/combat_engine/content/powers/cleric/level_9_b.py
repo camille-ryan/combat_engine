@@ -331,12 +331,12 @@ def p3667(c: Cast) -> None:
 )
 def p7097(c: Cast) -> None:
     """Each surge is its owner's, so each of them is asked separately.
-    `c.within(5, side="ally")` already counts the caster, which is the
-    printed "you and each ally".
+    `side="team"` is the ally pool with the caster in it, which is the
+    printed "you and each ally"; `side="ally"` would leave the caster out.
     """
     if c.strike():
         c.damage(c.w(2), c.str_mod)
-    for friend in sorted(c.within(5, side="ally")):
+    for friend in sorted(c.within(5, side="team")):
         if c.may("spend a healing surge", who=friend):
             c.surge(on=friend)
 

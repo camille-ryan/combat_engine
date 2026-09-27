@@ -507,8 +507,17 @@ class Powers:
     #: What this creature's basic attack is. A monster points at one of its
     #: own abilities; everyone else uses the engine's melee basic.
     basic: str = "mba"
-    #: A power that replaces the basic attack when opportunity knocks.
-    opportunity: str = ""
+    #: Rows that may be swung *instead of* the basic attack, keyed by the
+    #: window that hands one out: `"opportunity"`, `"charge"`,
+    #: `"challenge"` -- the swing a defender's mark punishes with -- and
+    #: `"ranged"`. A tuple per window, because the printed line is nearly
+    #: always a choice among an associated-powers list, and `""` is the
+    #: key for a card that names no window and answers every melee one.
+    #:
+    #: Not folded into `all`: a feat lists rows the character may not
+    #: possess, and one of those in `all` would be offered on an ordinary
+    #: turn as well. `dsl.basic_options` is the read.
+    instead: dict[str, tuple[str, ...]] = field(default_factory=dict)
     #: The ranged basic attack, for a creature that has one. Separate from
     #: `basic`, which is the melee one: pointing `basic` at a ranged row
     #: would hand it to the opportunity window too. Empty for a monster,
@@ -546,10 +555,21 @@ class Powers:
     def all(self) -> list[str]:
         """Everything usable, with the basic attack included exactly once."""
         out = list(self.known)
-        for extra in (self.basic, self.opportunity, self.ranged):
+        for extra in (self.basic, self.ranged):
             if extra and extra not in out:
                 out.append(extra)
         return out
+
+    def instead_of_basic(self, window: str) -> tuple[str, ...]:
+        """What may stand in for the basic attack in that window.
+
+        The windowless key is folded in for every melee window and not
+        for the bow: "in place of a melee basic attack" with no window
+        named answers the charge, the opportunity attack and the
+        defender's punishment alike, and none of them is ranged.
+        """
+        wide = () if window == "ranged" else self.instead.get("", ())
+        return tuple(dict.fromkeys((*self.instead.get(window, ()), *wide)))
 
     @property
     def spent(self) -> set[str]:

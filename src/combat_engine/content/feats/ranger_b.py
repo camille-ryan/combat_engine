@@ -10,11 +10,11 @@ What is new here is the **weapon-style family**, which the ranger shares
 with the fighter and the warlord. A style feat's benefit is gated on "a
 power associated with this feat", and that list now resolves into refs
 -- see `styles.py` and `etl/build._associated_refs`. It was never an
-engine gap; the printed list was reaching authors as prose. Two real
-gaps are left behind it: `c.as_basic(ref)`, for the greater feats whose
-second benefit is standing in for a basic attack, and
-`c.ability_for(ref)`, for the ones that swap Dexterity in for Strength
-on named rows.
+engine gap; the printed list was reaching authors as prose. The greater
+feats' second benefit -- standing in for a basic attack -- is
+`c.as_basic`, filed under the window the card names. One real gap is
+left behind it: `c.ability_for(ref)`, for the ones that swap Dexterity
+in for Strength on named rows.
 
 `f2384` is the one to read. "It takes damage if it shifts before the end
 of your next turn" is a watch laid on the creature that was hit, and
@@ -55,8 +55,12 @@ from combat_engine.engine.query import allies, distance_between, enemies, flanke
 
 from .styles import among, hit_with_one_of, used_one_of
 
-#: Knowing the list does not let a named row stand in for the basic…
-AS_BASIC = ("c.as_basic(ref)",)
+#: **A standing clause and a triggered one on the same card.** The
+#: dispatcher only reaches a no-action row when its declared trigger
+#: fires, so a row that also has to be *true* from the start of the
+#: fight -- "you can use this in place of a melee basic attack" is --
+#: is never armed. Those rows keep the printed Trigger as text and
+#: answer it with `c.watch`, the shape `p7419` already uses.
 #: …nor change which ability a named row rolls.
 ABILITY = ("c.ability_for(ref)",)
 #: Nothing announces that the class's extra damage was about to be paid.
@@ -273,25 +277,35 @@ def f1309(c: Cast) -> None:
 
 
 @power("f2328", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you miss with a martial encounter power",
-       on=Trigger(Miss, _my_martial_encounter_miss, "you miss"))
+       reach=PERSONAL, target=SELF,
+       trigger="you miss with a martial encounter power")
 def f2328(c: Cast) -> None:
     if not _holding(c, "heavy blade"):
         return
-    foe = c.trigger.target
-    c.bonus(
-        "attack", 2, on=c.me, until=When.EONT, once=True,
-        when=lambda ctx: ctx.get("target") == foe,
-    )
+    c.as_basic("p1419", window="charge")
+
+    def on_miss(ev: Any) -> None:
+        if not _my_martial_encounter_miss(c.world, c.me, ev):
+            return
+        if not _holding(c, "heavy blade"):
+            return
+        foe = ev.target
+        c.bonus(
+            "attack", 2, on=c.me, until=When.EONT, once=True,
+            when=lambda ctx: ctx.get("target") == foe,
+        )
+
+    c.watch(Miss, on_miss, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2341", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC)
+       reach=PERSONAL, target=SELF)
 def f2341(c: Cast) -> None:
     """"Larger than you", so `Size.order` and not `>`: `Size` is a
     `StrEnum` and a bare comparison sorts the words alphabetically."""
     me = c.me
+    if _holding(c, "spear"):
+        c.as_basic("p4403", "p4386", window="charge")
     mine = c.size_of(me)
     c.bonus(
         "damage", 2, on=me, until=When.ENCOUNTER,
@@ -304,18 +318,23 @@ def f2341(c: Cast) -> None:
 
 
 @power("f2346", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you score a critical hit",
-       on=Trigger(Hit, _i_crit, "you crit"))
+       reach=PERSONAL, target=SELF,
+       trigger="you score a critical hit")
 def f2346(c: Cast) -> None:
-    if _holding(c, "flail", "mace"):
-        c.push(1, on=c.trigger.target)
+    if not _holding(c, "flail", "mace"):
+        return
+    c.as_basic("p10627", "p10611", window="charge")
+
+    def on_crit(ev: Any) -> None:
+        if _i_crit(c.world, c.me, ev) and _holding(c, "flail", "mace"):
+            c.push(1, on=ev.target)
+
+    c.watch(Hit, on_crit, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2349", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you hit with a martial encounter power",
-       on=Trigger(Hit, _my_martial_encounter_hit, "you hit"))
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with a martial encounter power")
 def f2349(c: Cast) -> None:
     me = c.me
     gear = c.world.get(me, Gear)
@@ -324,11 +343,18 @@ def f2349(c: Cast) -> None:
         for w in gear.melee
     ):
         return
-    for friend in [a for a in allies(c.world, me) if a != me]:
-        c.bonus(
-            AC, 2, on=friend, until=When.EONT, kind="feat",
-            when=lambda ctx, f=friend: c.adjacent_to(f, me),
-        )
+    c.as_basic("p4404", "p855", window="charge")
+
+    def on_hit(ev: Any) -> None:
+        if not _my_martial_encounter_hit(c.world, me, ev):
+            return
+        for friend in [a for a in allies(c.world, me) if a != me]:
+            c.bonus(
+                AC, 2, on=friend, until=When.EONT, kind="feat",
+                when=lambda ctx, f=friend: c.adjacent_to(f, me),
+            )
+
+    c.watch(Hit, on_hit, on=me, until=When.ENCOUNTER)
 
 
 @power("f2367", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -551,14 +577,17 @@ _shift_before(
 
 
 @power("f2325", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.cover_from()", "c.as_basic(ref)"))
+       reach=PERSONAL, target=SELF, dropped=("c.cover_from()",))
 def f2325(c: Cast) -> None:
-    """Punishes whatever is giving your target cover, and lets `p529` or
-    `p4389` stand in for a ranged basic. The list resolves now; neither
-    clause does. Cover is a number the attack context carries and
-    nothing says *which* creature is casting it, which an item block
-    also wants."""
+    """The substitution plays; the cover half does not. Cover is a
+    number the attack context carries and nothing says *which* creature
+    is casting it, which an item block also wants.
+
+    `window="ranged"` and not the default: this is the only one of the
+    family printed against a *ranged* basic, and the windowless key is
+    deliberately not folded into that one."""
+    if _holding(c, "bow"):
+        c.as_basic("p529", "p4389", window="ranged")
 
 
 @power("f2335", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -803,12 +803,32 @@ def f1111(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.DIVINE, Keyword.WEAPON],
        trigger="you make an opportunity attack",
-       todo=("c.as_basic(ref)", "c.opportunity_instead()"))
+       dropped=("c.as_basic(uses=)",))
 def f1111b(c: Cast) -> None:
     """Swaps what an opportunity attack *is* for one of the character's
-    own at-wills. `Powers.opportunity` holds one such row per creature
-    and nothing writes it from a `Cast`, so neither half is sayable and
-    the printed trigger has nothing to hang on."""
+    own at-wills. The set is not an associated-powers list but a
+    question asked of the character: `c.borrowed_rows` already filters
+    to at-will melee attack rows, and the card narrows that to level 1
+    and to a single target.
+
+    Dropped: the swap stands for the encounter rather than for the one
+    opportunity attack the Trigger names. The row's own `usage` limits
+    it to one *use*, so the fighter cannot arm it twice; nothing limits
+    it to one swing."""
+    picked = [
+        r for r in c.borrowed_rows(c.me)
+        if (p := get(r)) is not None and p.level <= 1 and p.target.count == 1
+    ]
+    if not picked:
+        return
+    c.as_basic(*picked, window="opportunity")
+    chosen = frozenset(picked)
+    c.bonus(
+        "damage", c.str_mod, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            bool(ctx.get("opportunity")) and ctx.get("power") in chosen
+        ),
+    )
 
 
 # -- not a fight ------------------------------------------------------------

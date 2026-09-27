@@ -902,9 +902,8 @@ def m3085a2(c: Cast) -> None:
 def m3085a3(c: Cast) -> None:
     """The temporary hit points are an Effect line and the row targets
     enemies, so the allies are gathered from the squares rather than from
-    the target list, and once for the whole burst. `side="ally"` counts the
-    caster among them and "each ally" does not, which is the reading the
-    levels below settled on."""
+    the target list, and once for the whole burst. `side="ally"` leaves the
+    caster out, which is what "each ally" says."""
     if c.first:
         for mate in c.in_squares(c.area(), side="ally"):
             if mate != c.me:

@@ -112,7 +112,7 @@ def f3288(c: Cast) -> None:
     The second clause pays out the first time the ardent's pool empties,
     and spending power points emits a `Note` and nothing a trigger can
     watch."""
-    for who in c.within(MANTLE, of=c.me, side="ally"):
+    for who in c.within(MANTLE, of=c.me, side="team"):
         c.initiative(2, on=who)
 
 

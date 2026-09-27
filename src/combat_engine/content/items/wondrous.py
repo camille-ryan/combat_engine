@@ -419,7 +419,7 @@ def i2998x1(c: Cast) -> None:
        reach=CloseBurst(5), target=NO_TARGET)
 def i2998p1(c: Cast) -> None:
     c.ignores_difficult(on=c.me, until=When.EONT)
-    for friend in c.within(5, side="ally"):
+    for friend in c.within(5, side="team"):
         c.ignores_difficult(on=friend, until=When.EONT)
     c.move(c.speed_of())
 
@@ -758,7 +758,7 @@ def i613p1(c: Cast) -> None:
     c.zone(area, until=When.ENCOUNTER)
 
     def surged(ev: SurgeSpent) -> None:
-        inside = c.in_squares(area, side="ally")
+        inside = c.in_squares(area, side="team")
         if ev.actor not in inside:
             return
         for who in inside:

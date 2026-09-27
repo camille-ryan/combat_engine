@@ -154,7 +154,7 @@ def p10254(c: Cast) -> None:
             return
         if team(c.world, who) is team(c.world, me) or c.distance(who) > 5:
             return
-        pool = c.within(5, side="ally")
+        pool = c.within(5, side="team")
         hurt = [a for a in pool if c.wounded(a)]
         lucky = c.choose(sorted(hurt or pool), "who is mended")
         if lucky is not None:

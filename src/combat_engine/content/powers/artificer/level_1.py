@@ -498,7 +498,7 @@ def p7637(c: Cast) -> None:
     if c.con_mod <= 0:
         return
     gate = with_keyword(Keyword.WEAPON, Keyword.FIRE)
-    for who in c.within(2, side="ally"):
+    for who in c.within(2, side="team"):
         c.bonus("damage", c.con_mod, on=who, until=When.EONT, when=gate)
 
 

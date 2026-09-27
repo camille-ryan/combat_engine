@@ -287,7 +287,7 @@ def p14543(c: Cast) -> None:
         c.push(max(0, c.wis_mod))
     if not c.first:
         return
-    for friend in c.within(2, side="ally"):
+    for friend in c.within(2, side="team"):
         c.temp_hp(max(1, c.wis_mod), on=friend)
 
 

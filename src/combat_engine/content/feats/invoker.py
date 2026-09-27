@@ -76,9 +76,14 @@ _feature("f1488", "A damage type and a save penalty on the same power.")
 
 
 @power("f1239", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.as_basic(ref)",))
+       reach=PERSONAL, target=SELF, todo=("c.as_melee(ref)",))
 def f1239(c: Cast) -> None:
-    """Gives five named at-wills a melee reach and lets each be used as a
-    basic attack. One of the five is named by ref and four are prose --
-    but even for the one, nothing adds a reach to another row or makes
-    it count as a basic."""
+    """Gives five named at-wills a melee reach **and** lets each be used
+    as a melee basic attack. Only the second half is sayable now.
+
+    Re-aimed rather than half-written: the reach is what makes the
+    swap mean anything, and `c.as_basic` on a row that is still ranged
+    only would offer a bow shot where the game hands out a melee basic.
+    `c.as_ranged` is the verb this wants the mirror of. Four of the five
+    rows arrive as prose in any case, so p3705 is the whole of what
+    could be written even with the reach."""

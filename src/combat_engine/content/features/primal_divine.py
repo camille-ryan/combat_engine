@@ -768,7 +768,11 @@ def invoker_covenant_wrath(c: Cast) -> None:
     `cf:invoker-f1` had to leave the pairing out for want of exactly that.
     """
     me = c.me
+    # The other covenant's card is in every invoker's loadout already --
+    # both are level-0 rows of the class -- so what this leg has to say is
+    # that it does not have that one. `cf:invoker-f1` says the mirror of it.
     c.grant_row("cf:invoker-f1c1")
+    c.forbid("cf:invoker-f1c0", until=When.ENCOUNTER, on=me)
 
     def before(ev: PowerUsed) -> None:
         if ev.actor != me or c.turn_of() != me or not _manifests(ev.power):

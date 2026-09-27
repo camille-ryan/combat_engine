@@ -334,9 +334,14 @@ def i2947x1(c: Cast) -> None:
 @power("i2947p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF)
 def i2947p1(c: Cast) -> None:
-    """The spec names the row, so the gate is the ref itself."""
+    """The spec names the row, so the gate is the ref itself.
+
+    The spec's `p4807` is declared nowhere; the card is declared under
+    `cf:barbarian-f2c0`, the feature ref that prints it. Gated on the
+    printed id this was false in every fight.
+    """
     c.bonus("attack", 4, on=c.me, until=When.ENCOUNTER,
-            when=lambda ctx: ctx.get("power") == "p4807")
+            when=lambda ctx: ctx.get("power") == "cf:barbarian-f2c0")
 
 
 @power("i673p1", level=4, cls=ITEM, usage=ENCOUNTER, action=FREE,

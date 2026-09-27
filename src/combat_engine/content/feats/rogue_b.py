@@ -28,8 +28,8 @@ the reading `strikers._SNEAK_GROUPS` already settled on.
 
 The style family is here too, and behaves as it does in `fighter_b.py`
 and `ranger_b.py`: the `Associated Powers:` list resolves to refs, so
-the clause is one `ev.power in ...` read, and what is left over is
-`c.as_basic(ref)`.
+the clause is one `ev.power in ...` read, and the second benefit is
+`c.as_basic`, filed under the window the card names.
 """
 
 from __future__ import annotations
@@ -67,8 +67,12 @@ EXTRA = ("c.on_extra_damage()",)
 #: callable closed over inside `strikers.extra_damage`, and a feat that
 #: widens it has nothing to widen.
 APPLIES = ("c.extra_damage(applies=)",)
-#: Knowing which rows a feat names does not let one stand in for a basic.
-AS_BASIC = ("c.as_basic(ref)",)
+#: **A standing clause and a triggered one on the same card.** The
+#: dispatcher only reaches a no-action row when its declared trigger
+#: fires, so a row that also has to be *true* from the start of the
+#: fight -- "you can use this in place of a melee basic attack" is --
+#: is never armed. Those rows keep the printed Trigger as text and
+#: answer it with `c.watch`, the shape `p7419` already uses.
 #: One weapon group standing in for another, for named rows only.
 COUNTS_AS = ("c.counts_as(group=)",)
 #: Nothing adds to the distance somebody else's shift covers.
@@ -218,15 +222,21 @@ def f2077(c: Cast) -> None:
 
 
 @power("f2380", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you score a critical hit",
-       on=Trigger(Hit, _i_crit, "you crit"))
+       reach=PERSONAL, target=SELF,
+       trigger="you score a critical hit")
 def f2380(c: Cast) -> None:
-    """A crit leaves the target open. The second benefit -- `p4477` or
-    `m2947a2` in place of a melee basic on an opportunity attack -- is
-    the family's standing gap."""
-    if _holding_ref(c, *_SWORDS):
-        c.grants_advantage(on=c.trigger.target, until=When.EONT)
+    """A crit leaves the target open; `p4477` stands in for the melee
+    basic on an opportunity attack. Only `p4477` of the printed pair is
+    heroic, so the list is one long here."""
+    if not _holding_ref(c, *_SWORDS):
+        return
+    c.as_basic("p4477", window="opportunity")
+
+    def on_crit(ev: Any) -> None:
+        if _i_crit(c.world, c.me, ev) and _holding_ref(c, *_SWORDS):
+            c.grants_advantage(on=ev.target, until=When.EONT)
+
+    c.watch(Hit, on_crit, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2451", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -247,9 +257,8 @@ def f2451(c: Cast) -> None:
 
 
 @power("f2350", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you hit with a martial encounter power",
-       on=Trigger(Hit, _my_martial_encounter_hit, "you hit"))
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with a martial encounter power")
 def f2350(c: Cast) -> None:
     """"Any ally, while adjacent to you", so the adjacency is asked per
     attack: the ally walks in and out of it while the bonus stands."""
@@ -260,11 +269,18 @@ def f2350(c: Cast) -> None:
         for w in gear.melee
     ):
         return
-    for friend in [a for a in allies(c.world, me) if a != me]:
-        c.bonus(
-            AC, 2, on=friend, until=When.EONT, kind="feat",
-            when=lambda ctx, f=friend: c.adjacent_to(f, me),
-        )
+    c.as_basic("p4488", "p2284", window="opportunity")
+
+    def on_hit(ev: Any) -> None:
+        if not _my_martial_encounter_hit(c.world, me, ev):
+            return
+        for friend in [a for a in allies(c.world, me) if a != me]:
+            c.bonus(
+                AC, 2, on=friend, until=When.EONT, kind="feat",
+                when=lambda ctx, f=friend: c.adjacent_to(f, me),
+            )
+
+    c.watch(Hit, on_hit, on=me, until=When.ENCOUNTER)
 
 
 @power("f2369", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

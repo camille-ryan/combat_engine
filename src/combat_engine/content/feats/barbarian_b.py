@@ -138,11 +138,18 @@ def f2706(c: Cast) -> None:
     the trait is armed: a weapon can be swapped and the distance is the
     whole point of the clause. The damage context carries `power` and
     `target`, which is exactly the pair this needs.
+
+    **The row named is `cf:barbarian-f2c0`.** The spec names it `p4807`,
+    which is declared nowhere: the same card is declared under the feature
+    ref that prints it, so the gate was false in every fight and said
+    nothing about why. `cf:barbarian-f2c0` carries its own marker, so the
+    clause is still inert -- but it is inert against a row that exists and
+    goes live the day that row does.
     """
     c.bonus(
         "damage", c.con_mod, on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: (
-            ctx.get("power") == "p4807"
+            ctx.get("power") == "cf:barbarian-f2c0"
             and c.wielding("two-handed")
             and c.wielding("reach")
             and ctx.get("target") is not None

@@ -51,7 +51,7 @@ def _worst_hurt(c: Cast) -> list[int]:
 
     Anybody untouched comes last, behind the option to keep the power.
     """
-    allies = c.within(5, side="ally")
+    allies = c.within(5, side="team")
     hurt = sorted((a for a in allies if c.wounded(a)), key=lambda a: -c.missing(a))
     return hurt or []
 
@@ -59,9 +59,8 @@ def _worst_hurt(c: Cast) -> list[int]:
 def _heal_an_ally(c: Cast) -> None:
     """You or an ally spends a surge and gets a little more besides.
 
-    The printed text lets it land on the leader itself, so `c.within(5,
-    side="ally")` -- which includes the caster -- is exactly right here
-    without filtering.
+    The printed text lets it land on the leader itself, so the pool is
+    `side="team"` -- allies with the caster in it -- rather than `"ally"`.
 
     Both halves are a printed **may**, and both are asked. Offering only the
     wounded meant that with nobody yet hurt the power fired, found an empty

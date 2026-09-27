@@ -205,7 +205,7 @@ def p12652(c: Cast) -> None:
     takes -- the first one -- is the one worth taking."""
     if c.strike():
         c.damage(c.w(2), c.wis_mod, dtype=DamageType.RADIANT)
-    pool = sorted(c.within(5, side="ally"), key=lambda a: (-c.missing(a), a))
+    pool = sorted(c.within(5, side="team"), key=lambda a: (-c.missing(a), a))
     friend = c.choose(pool, "p12652: who spends a surge") if pool else None
     if friend is not None and c.may("spend a healing surge", who=friend):
         c.surge(on=friend)

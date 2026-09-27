@@ -1502,7 +1502,7 @@ def i3091p1(c: Cast) -> None:
     would do nothing at all for a wielder standing alone, which is the one
     creature the card names first."""
     c.cure(Condition.SURPRISED, on=c.me)
-    for ally in c.within(5, side="ally"):
+    for ally in c.within(5, side="team"):
         c.cure(Condition.SURPRISED, on=ally)
 
 

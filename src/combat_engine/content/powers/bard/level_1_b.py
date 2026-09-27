@@ -82,12 +82,12 @@ def p2784(c: Cast) -> None:
         c.damage(c.w(2), c.cha_mod)
     else:
         c.half_damage(c.w(2), c.cha_mod)
-    for mate in c.within(5, side="ally"):
+    for mate in c.within(5, side="team"):
         c.bonus("damage", 1, on=mate, until=When.ENCOUNTER, kind="power")
         c.bonus("save", 1, on=mate, until=When.ENCOUNTER, kind="power")
 
     def scatter(ev: Dropped) -> None:
-        for mate in c.within(5, of=ev.actor, side="ally"):
+        for mate in c.within(5, of=ev.actor, side="team"):
             c.shift(1, who=mate)
 
     c.watch(Dropped, scatter, until=When.ENCOUNTER, on=c.me, label="p2784")

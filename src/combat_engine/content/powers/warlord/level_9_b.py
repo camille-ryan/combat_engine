@@ -85,8 +85,8 @@ _YOU_ARE_BLOODIED = "you are bloodied by an attack"
 
 
 def _friends_within(c: Cast, radius: int) -> list[int]:
-    """`side="ally"` counts the caster and every printed line here says
-    "an ally", so the caster comes back out."""
+    """`side="ally"` is allies and not the caster, which is what every
+    printed line here says."""
     return sorted(a for a in c.within(radius, side="ally") if a != c.me)
 
 

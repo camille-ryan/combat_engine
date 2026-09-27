@@ -1795,7 +1795,7 @@ def i834x1(c: Cast) -> None:
 def i845p1(c: Cast) -> None:
     c.push(1)
     c.shift(1)
-    for a in c.within(5, side="ally"):
+    for a in c.within(5, side="team"):
         c.shift(1, who=a)
 
 

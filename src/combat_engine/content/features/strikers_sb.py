@@ -12,12 +12,13 @@ Three shapes recur:
   bonus for wearing little or nothing. `chargen.defences` works out the
   armour's own contribution and knows nothing about class features, so each
   of these is a real number the character was missing.
-* **A fork with no leg of its own.** `chargen.BUILDS` derives a leg per
-  secondary ability for the classes phase C brought in, and the printed
-  fork for the avenger, the assassin and the monk *is* a choice of which
-  secondary the class leans on -- each option's benefit reads the ability
-  its leg is named for. That correspondence is the mapping used here and
-  it is a judgement, recorded in each docstring.
+* **A fork read off the secondary ability.** `chargen.BUILDS` derives a
+  leg per secondary for the classes phase C brought in, and the printed
+  fork for the assassin and the monk *is* a choice of which secondary the
+  class leans on -- each option's benefit reads the ability its leg is
+  named for. The avenger's legs are hand-written and named, and the same
+  correspondence picks which named leg each option is. It is a judgement
+  either way, recorded in each docstring.
 * **"You gain <power>".** `chargen.loadout` deals every level-0 row of a
   class, so the grant is a no-op and only the exclusivity is worth saying.
   Where the printed page does not say which option a leg took, nothing is
@@ -242,17 +243,17 @@ def avenger_faith(c: Cast) -> None:
 def avenger_censure(c: Cast) -> None:
     """Which way this avenger punishes the enemy it has sworn against.
 
-    Three are printed and two are written. Each reads a different ability,
-    and `chargen.BUILDS["avenger"]` is the derived pair of legs named for
-    the secondary each takes -- so the leg that leans on Dexterity is the
-    option whose bonus is worked out from Dexterity, and likewise for
-    Intelligence. That is the correspondence the derived legs exist to
-    express; it is a judgement and not a printed sentence, which is why it
-    is said here.
+    Three are printed and two are written, one per leg of
+    `chargen.BUILDS["avenger"]`. This asked `c.build("second-dex")` and
+    `c.build("second-int")` -- the derived legs the class no longer has --
+    so both halves were false for every avenger and no avenger had a
+    censure at all. The named legs answer it: the one whose secondary is
+    Dexterity is the option whose bonus is worked out from Dexterity, and
+    likewise for Intelligence. That correspondence is a judgement and not a
+    printed sentence, which is why it is said here.
 
     The third option counts allies standing next to the sworn enemy and
-    reads no ability at all, so there is no leg it could be told apart by.
-    See `docs/blocked.json`.
+    reads no ability at all. See `docs/blocked.json`.
 
     Both bonuses are untyped and so both stack, which is what the second
     one's "this bonus is cumulative" says outright. The gate asks who the
@@ -266,7 +267,7 @@ def avenger_censure(c: Cast) -> None:
     def against_the_sworn(ctx: dict[str, Any]) -> bool:
         return sworn(world, me, ctx.get("target"))
 
-    if c.build("second-dex"):
+    if c.build("pursuit"):
         step = 2 + 2 * _tier(c.level) + c.dex_mod
 
         def fled(ev: Moved) -> None:
@@ -290,7 +291,7 @@ def avenger_censure(c: Cast) -> None:
         c.watch(Moved, fled, until=When.ENCOUNTER, on=me, label=c.ref)
         return
 
-    if not c.build("second-int") or c.int_mod <= 0:
+    if not c.build("retribution") or c.int_mod <= 0:
         return
 
     def struck(ev: Hit) -> None:

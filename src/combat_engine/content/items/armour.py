@@ -1981,12 +1981,12 @@ def i2124p1(c: Cast) -> None:
 def i2445p1(c: Cast) -> None:
     if c.spend_points(1):
         c.conceal(on=c.me, until=When.EONT, total=True)
-        mate = next(iter(c.within(3, side="ally")), None)
+        mate = next(iter(c.within(3, side="team")), None)
         if mate is not None:
             c.conceal(on=mate, until=When.EONT, total=True)
         return
     c.conceal(on=c.me, until=When.EONT)
-    for mate in c.within(3, side="ally"):
+    for mate in c.within(3, side="team"):
         c.conceal(on=mate, until=When.EONT)
 
 

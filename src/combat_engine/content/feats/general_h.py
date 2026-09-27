@@ -1033,13 +1033,18 @@ def f1302(c: Cast) -> None:
     c.watch(PowerUsed, on_use, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1303", todo=("c.as_basic(ref)", "c.instead_of()", "c.no_provoke(when=)"))
+@_trait("f1303", dropped=("c.instead_of()", "c.no_provoke(when=)"))
 def f1303(c: Cast) -> None:
-    """All four refs resolve and none of the clauses is a rider. Two put
-    an exploit in the place of the melee basic a charge swings; one
-    rewrites the movement its row prints; one widens which ally p620 may
-    pick, which is that row's targeting rather than anything hung on it.
-    """
+    """All four refs resolve and none of the clauses is a rider. p2099
+    goes in the place of the melee basic a charge swings; the other
+    three rewrite the movement their own rows print, or widen which
+    ally p620 may pick, which is that row's targeting rather than
+    anything hung on it.
+
+    No gate on possessing p2099: `dsl.basic_options` refuses a row the
+    character does not have, which is the same question asked later and
+    once."""
+    c.as_basic("p2099", window="charge")
 
 
 # p4541's clause waits on the basic attack that row hands an ally, p653's
@@ -1059,11 +1064,13 @@ _riders("f1305", {
 }, dropped=("c.move_zone(with_me=)", "c.zone_exempt()"))
 
 # p2105 and p4542 both put the exploit in the place of a charge's melee
-# basic attack, which is the same hold f1303 carries.
+# basic attack -- but only "during the surprise round", and `c.as_basic`
+# holds its swap for a stretch of time `When` cannot name. Re-aimed
+# there: it is the duration that is missing, not the substitution.
 _riders("f1306", {
     "p2248": _advantage_in_surprise,
     "p87": _extra_in_surprise,
-}, dropped=("c.as_basic(ref)",))
+}, dropped=("When.SURPRISE",))
 
 
 @_trait("f1307", todo=("c.apply_poison()", "c.on_shift_away()", "c.instead_of()"))
@@ -1074,8 +1081,7 @@ def f1307(c: Cast) -> None:
     four other rows in the tree already carry."""
 
 
-@_trait("f1308", dropped=("c.as_basic(ref)", "c.on_granted_basic()",
-                          "c.on_riposte()"))
+@_trait("f1308", dropped=("c.on_granted_basic()", "c.on_riposte()"))
 def f1308(c: Cast) -> None:
     """Written by hand rather than through `_riders`: p4368's clause needs
     a memory of what happened on somebody else's turn, which a table of
@@ -1086,12 +1092,15 @@ def f1308(c: Cast) -> None:
     round it was armed in or the one after, which is what "next turn"
     comes to whichever side of me the enemy acts on.
 
-    Dropped: p2620 puts the exploit in the place of a class feature's
-    melee basic, p1061 hands an ally combat advantage for the attack it
+    p2620 goes in the place of the melee basic Combat Challenge allows,
+    which is the window `c.as_basic` calls `"challenge"`.
+
+    Dropped: p1061 hands an ally combat advantage for the attack it
     grants, and p653's clause rides the riposte, whose `Hit` carries the
     same `power` as the opening swing.
     """
     me = c.me
+    c.as_basic("p2620", window="challenge")
     #: enemy -> the round in which it hit me or my beast, on its own turn.
     stung: dict[int, int] = {}
 

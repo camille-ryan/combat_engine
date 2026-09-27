@@ -684,11 +684,13 @@ def f2873(c: Cast) -> None:
 
 
 @power("f2875", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL, "c.as_basic(ref)"))
+       reach=PERSONAL, target=SELF, todo=RACIAL)
 def f2875(c: Cast) -> None:
-    """Uses that borrowed power as a melee basic attack on a charge.
-    Both halves are gaps: the power has no ref, and nothing makes a
-    named row count as the basic attack."""
+    """Uses that borrowed power as a melee basic attack on a charge or
+    an opportunity attack. `c.as_basic` says that now; what is still
+    missing is the row itself -- the racial trait this names picks a
+    power at build time and nothing records which, so there is no ref
+    to hand over."""
 
 
 @power("f2877", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -36,8 +36,7 @@ from combat_engine.engine import (
     leaves_me_out,
     power,
 )
-from combat_engine.engine.basic import MELEE
-from combat_engine.engine.dsl import get, use
+from combat_engine.engine.dsl import get
 from combat_engine.engine.events import AttackDeclared, AttackRolled, Hit, Moved
 from combat_engine.engine.query import alive, enemies
 
@@ -80,7 +79,10 @@ def p7419(c: Cast) -> None:
         if not (alive(world, me) and alive(world, who)):
             return
         if c.adjacent(who):
-            use(world, me, MELEE, targets=[who], spend=False)
+            # `c.basic` rather than `MELEE` outright: eight feats read
+            # "in place of the melee basic attack that Combat Challenge
+            # allows", and this is the window they name.
+            c.basic(on=who, window="challenge")
 
     def on_attack(ev: AttackDeclared) -> None:
         # Attacking anybody *but* the fighter is the trigger. Attacking the

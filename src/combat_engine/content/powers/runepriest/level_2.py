@@ -103,7 +103,7 @@ def p11381(c: Cast) -> None:
     if who is None:
         return
     c.spend_surge(on=who)
-    near = [a for a in c.within(5, of=who, side="ally") if a != who]
+    near = [a for a in c.within(5, of=who, side="team") if a != who]
     hurt = [a for a in near if c.wounded(a)] or near
     for ally in hurt[:2]:
         c.heal(c.surge_value(of=ally), on=ally)

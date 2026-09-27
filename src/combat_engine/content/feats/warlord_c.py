@@ -66,8 +66,12 @@ from combat_engine.engine.types import Forced
 FEATURE = ("c.class_feature()",)
 #: A racial power named in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
-#: Knowing which rows a feat names does not let one stand in for a basic…
-AS_BASIC = ("c.as_basic(ref)",)
+#: **A standing clause and a triggered one on the same card.** The
+#: dispatcher only reaches a no-action row when its declared trigger
+#: fires, so a row that also has to be *true* from the start of the
+#: fight -- "you can use this in place of a melee basic attack" is --
+#: is never armed. Those rows keep the printed Trigger as text and
+#: answer it with `c.watch`, the shape `p7419` already uses.
 #: …nor turn a melee row into a ranged one.
 AS_RANGED = ("c.recast(reach=)",)
 #: A swing the warlord handed somebody is announced as the row it is.
@@ -172,14 +176,15 @@ def f2357(c: Cast) -> None:
 
 
 @power("f2365", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("resolve.ctx.conditions", "c.as_basic(ref)"))
+       reach=PERSONAL, target=SELF, dropped=("resolve.ctx.conditions",))
 def f2365(c: Cast) -> None:
-    """A defence bonus against attacks that would immobilize, restrain
-    or slow. The attack context says who is swinging, with what and from
-    where, and nothing about what the row would *do* on a hit -- so the
-    one question this needs is the one it cannot ask. The saving-throw
-    context carries `conditions` and the attack context does not."""
+    """The substitution plays. The defence bonus does not: it is
+    against attacks that would immobilize, restrain or slow, and the
+    attack context says who is swinging, with what and from where, and
+    nothing about what the row would *do* on a hit. The saving-throw
+    context carries `conditions`; the attack context does not."""
+    if _grip(c, "axe", "hammer", "pick", hands=2):
+        c.as_basic("p1413", "p2331", window="opportunity")
 
 
 @power("f2368", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -204,7 +209,7 @@ def f2368(c: Cast) -> None:
 
 
 @power("f2372", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC)
+       reach=PERSONAL, target=SELF)
 def f2372(c: Cast) -> None:
     """Takes the combat-advantage bonus away from adjacent enemies.
 
@@ -216,6 +221,7 @@ def f2372(c: Cast) -> None:
     me = c.me
     if not _versatile(c, "heavy blade"):
         return
+    c.as_basic("p2562", "p1556", window="opportunity")
     for foe in enemies(c.world, me):
         c.penalty(
             "attack", 2, on=foe, until=When.ENCOUNTER,
@@ -228,10 +234,12 @@ def f2372(c: Cast) -> None:
 
 
 @power("f2377", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC)
+       reach=PERSONAL, target=SELF)
 def f2377(c: Cast) -> None:
     """19-20 on a charge. `crit_range` is read with the attack context,
     so "whenever you charge" is a gate rather than a second row."""
+    if _grip(c, "hammer", "mace", hands=2):
+        c.as_basic("p4568", "p1065", window="charge")
     c.bonus(
         "crit_range", 1, on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: (
@@ -241,36 +249,44 @@ def f2377(c: Cast) -> None:
 
 
 @power("f2385", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you hit with a martial power",
-       on=Trigger(Hit, _i_hit, "you hit"))
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with a martial power")
 def f2385(c: Cast) -> None:
     """Punishes the target for shifting: a watch on the creature rather
     than a modifier, because the payment happens on a *move* and
     `Moved.kind_` is what tells a shift from a walk. `once=True` --
-    "it takes damage" is one payment, not one per square."""
+    "it takes damage" is one payment, not one per square.
+
+    The substitution names no window, so it answers the charge, the
+    opportunity attack and the defender's swing alike."""
     if not _holding(c, "flail"):
         return
-    ev = c.trigger
-    if not _martial(ev.power):
-        return
-    foe, hurt = ev.target, c.wis_mod
+    c.as_basic("p2562", "p1556")
 
-    def on_shift(moved: Any) -> None:
-        if moved.actor == foe and getattr(moved, "kind_", "") == "shift":
-            c.flat(hurt, on=foe)
+    def on_hit(ev: Any) -> None:
+        if not _i_hit(c.world, c.me, ev) or not _martial(ev.power):
+            return
+        foe, hurt = ev.target, c.wis_mod
 
-    c.watch(Moved, on_shift, on=foe, until=When.EONT, once=True)
+        def on_shift(moved: Any) -> None:
+            if moved.actor == foe and getattr(moved, "kind_", "") == "shift":
+                c.flat(hurt, on=foe)
+
+        c.watch(Moved, on_shift, on=foe, until=When.EONT, once=True)
+
+    c.watch(Hit, on_hit, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2710", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC)
+       reach=PERSONAL, target=SELF)
 def f2710(c: Cast) -> None:
     """"Against attacks from enemies adjacent to you" is two adjacency
     questions, and both are askable: the ally's is asked of the board
     and the attacker's off `ctx["attacker"]`, which `query.defence` is
     handed along with everything else."""
     me = c.me
+    if _grip(c, "pick", "spear", hands=1):
+        c.as_basic("p4568", "p1065", window="opportunity")
     for friend in [a for a in allies(c.world, me) if a != me]:
         for d in (AC, REF):
             c.bonus(

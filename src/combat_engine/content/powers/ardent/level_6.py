@@ -128,7 +128,7 @@ def p11103(c: Cast) -> None:
     benefits go to whoever is standing in the zone when it is laid."""
     area = spread({c.here}, 1)
     c.zone(area, until=When.EONT)
-    for who in c.in_squares(area, side="ally"):
+    for who in c.in_squares(area, side="team"):
         c.resist(3, on=who, until=When.EONT)
         c.bonus("save", 2, on=who, until=When.EONT, kind="untyped")
 

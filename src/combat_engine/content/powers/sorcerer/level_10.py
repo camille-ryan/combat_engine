@@ -222,7 +222,7 @@ def p16248(c: Cast) -> None:
         if got is not None:
             c.world.effects.end(got, "left the zone")
 
-    for who in c.in_squares(picked, side="ally"):
+    for who in c.in_squares(picked, side="team"):
         shelter(who)
 
     c.watch(

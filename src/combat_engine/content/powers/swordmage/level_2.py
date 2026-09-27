@@ -104,7 +104,7 @@ def p12218(c: Cast) -> None:
     )
     if kind is None:
         return
-    folks = set(c.within(5, side="ally"))
+    folks = set(c.within(5, side="team"))
     hold = c.effect(f"{c.ref} keen", until=When.SUSTAIN, on=c.me, sustain=MINOR)
 
     def recolour(ev: DamageRolled) -> None:

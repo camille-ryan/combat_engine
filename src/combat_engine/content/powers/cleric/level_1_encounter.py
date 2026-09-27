@@ -49,7 +49,7 @@ def p891(c: Cast) -> None:
         c.mark()
         # "you or one ally within 5" -- the caster is in the pool, and is
         # usually the right answer when the caster is the one who is hurt.
-        nearby = [a for a in c.within(5, side="ally")]
+        nearby = [a for a in c.within(5, side="team")]
         if nearby:
             c.surge(on=c.choose(nearby, "who spends a healing surge"))
 
@@ -82,7 +82,7 @@ def _worst_hurt(c: Cast) -> list[int]:
 
     Anybody untouched comes last, behind the option to keep the power.
     """
-    allies = c.within(5, side="ally")
+    allies = c.within(5, side="team")
     hurt = sorted((a for a in allies if c.wounded(a)), key=lambda a: -c.missing(a))
     return hurt or []
 
@@ -171,11 +171,8 @@ def p893(c: Cast) -> None:
         c.damage("1d8", c.wis_mod, dtype=DamageType.RADIANT)
     if c.first:
         # The Effect line lands once, and does not care what the attacks did.
-        # A blast does not cover the caster's own square, but `in_squares`
-        # counts the caster as an ally, so it comes back out.
         for friend in c.in_squares(c.area(), side="ally"):
-            if friend != c.me:
-                c.bonus("attack", 2, on=friend, kind="power")
+            c.bonus("attack", 2, on=friend, kind="power")
 
 
 @power(

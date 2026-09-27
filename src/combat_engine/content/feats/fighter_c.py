@@ -59,9 +59,12 @@ from combat_engine.engine.query import enemies, has_combat_advantage
 
 from .styles import among
 
-#: Knowing which rows a feat names still does not let one stand in for a
-#: basic attack. `f1239` named it; `fighter_b.py` carries nine more.
-AS_BASIC = ("c.as_basic(ref)",)
+#: **A standing clause and a triggered one on the same card.** The
+#: dispatcher only reaches a no-action row when its declared trigger
+#: fires, so a row that also has to be *true* from the start of the
+#: fight -- "you can use this in place of a melee basic attack" is --
+#: is never armed. Those rows keep the printed Trigger as text and
+#: answer it with `c.watch`, the shape `p7419` already uses.
 #: A racial power the page names in prose rather than by ref, and the
 #: paying half -- `c.expended` reads what has gone and nothing spends.
 RACIAL = ("c.racial_row()", "c.expend_row()")
@@ -229,14 +232,20 @@ def f2356(c: Cast) -> None:
 
 
 @power("f2358", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you hit an enemy with an attack power",
-       on=Trigger(Hit, _i_hit, "you hit"))
+       reach=PERSONAL, target=SELF,
+       trigger="you hit an enemy with an attack power")
 def f2358(c: Cast) -> None:
-    """Any attack power, not the associated ones -- the list belongs to
-    the second benefit, which is the substitution and is dropped."""
-    if _grip(c, "polearm", "spear", hands=2):
-        c.bonus(AC, 1, kind="feat", on=c.me, until=When.EONT)
+    """Any attack power for the AC bonus, not the associated ones --
+    that list belongs to the second benefit, the substitution."""
+    if not _grip(c, "polearm", "spear", hands=2):
+        return
+    c.as_basic("p608", "p4320", window="challenge")
+
+    def on_hit(ev: Any) -> None:
+        if _i_hit(c.world, c.me, ev) and _grip(c, "polearm", "spear", hands=2):
+            c.bonus(AC, 1, kind="feat", on=c.me, until=When.EONT)
+
+    c.watch(Hit, on_hit, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2359", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -280,14 +289,15 @@ def f2363(c: Cast) -> None:
 
 
 @power("f2364", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.bonus(against=)", "c.as_basic(ref)"))
+       reach=PERSONAL, target=SELF, dropped=("c.bonus(against=)",))
 def f2364(c: Cast) -> None:
-    """Both halves are gaps. The defence bonus is "against any attack
-    that **would** immobilize, restrain or slow you", and the attack
-    context carries the power's ref but nothing about what its body is
-    going to apply -- a defence cannot be gated on an effect that has
-    not happened. The other half is the associated substitution."""
+    """The substitution plays. The defence bonus does not: it is
+    "against any attack that **would** immobilize, restrain or slow
+    you", and the attack context carries the power's ref but nothing
+    about what its body is going to apply -- a defence cannot be gated
+    on an effect that has not happened."""
+    if _grip(c, "axe", "hammer", "pick", hands=2):
+        c.as_basic("p622", "p608", window="challenge")
 
 
 @power("f2366", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -327,7 +337,7 @@ def f2371(c: Cast) -> None:
 
 
 @power("f2374", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC)
+       reach=PERSONAL, target=SELF)
 def f2374(c: Cast) -> None:
     """"They don't gain the +2 for having combat advantage" is the
     printed sentence `c.no_advantage` says, narrowed to the enemies
@@ -336,6 +346,7 @@ def f2374(c: Cast) -> None:
     me = c.me
     if not _with_property(c, "heavy blade", "versatile"):
         return
+    c.as_basic("p200", "p1019", window="challenge")
     c.no_advantage(
         on=me, until=When.ENCOUNTER,
         when=lambda ctx: (
@@ -365,13 +376,14 @@ def f2375(c: Cast) -> None:
 
 
 @power("f2376", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC)
+       reach=PERSONAL, target=SELF)
 def f2376(c: Cast) -> None:
     """"A critical hit on a roll of 19-20" is one off the crit floor, and
     `resolve.attack` reads `crit_range` off the attacker's modifiers with
     the attack context -- so the charge is an ordinary gate."""
     if not _grip(c, "hammer", "mace", hands=2):
         return
+    c.as_basic("p622", "p1428", window="charge")
     c.bonus(
         "crit_range", 1, on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: ctx.get("charge", False),
@@ -402,18 +414,24 @@ def f2379(c: Cast) -> None:
 
 
 @power("f2381", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you score a critical hit against an enemy",
-       on=Trigger(Hit, _i_crit, "you crit"))
+       reach=PERSONAL, target=SELF,
+       trigger="you score a critical hit against an enemy")
 def f2381(c: Cast) -> None:
     """Every enemy beside the one you crit, and not that one: the card
     says "each enemy adjacent to that enemy"."""
     if not _named(c, "w:longsword", "w:rapier", "w:short-sword"):
         return
-    foe = c.trigger.target
-    for other in enemies(c.world, c.me):
-        if other != foe and c.adjacent_to(foe, other):
-            c.mark(on=other, until=When.EONT)
+    c.as_basic("p634", "p1428", window="opportunity")
+
+    def on_crit(ev: Any) -> None:
+        if not _i_crit(c.world, c.me, ev):
+            return
+        foe = ev.target
+        for other in enemies(c.world, c.me):
+            if other != foe and c.adjacent_to(foe, other):
+                c.mark(on=other, until=When.EONT)
+
+    c.watch(Hit, on_crit, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2382", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -717,15 +735,23 @@ def f2791(c: Cast) -> None:
 
 
 @power("f2709", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="an enemy misses you with a melee attack",
-       on=Trigger(Miss, _missed_me_in_melee, "an enemy misses you in melee"))
+       reach=PERSONAL, target=SELF,
+       trigger="an enemy misses you with a melee attack")
 def f2709(c: Cast) -> None:
-    """The reaction half plays. "High crit" is a printed property and
-    `Weapon.properties` is where the printed properties live, so the
-    weapon question is the same read `versatile` gets."""
-    if _with_property(c, "heavy blade", "high crit"):
-        c.shift(1)
+    """"High crit" is a printed property and `Weapon.properties` is
+    where the printed properties live, so the weapon question is the
+    same read `versatile` gets."""
+    if not _with_property(c, "heavy blade", "high crit"):
+        return
+    c.as_basic("p200", "p1018", window="challenge")
+
+    def on_miss(ev: Any) -> None:
+        if _missed_me_in_melee(c.world, c.me, ev) and _with_property(
+            c, "heavy blade", "high crit"
+        ):
+            c.shift(1)
+
+    c.watch(Miss, on_miss, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2714", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

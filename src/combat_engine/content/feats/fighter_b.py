@@ -11,11 +11,11 @@ list was reaching authors as prose; now `etl/build._associated_refs`
 resolves it into refs, so the set is ordinary data and the clause is
 one `ctx["power"] in ...` read. See `styles.py`.
 
-What is left of that family is one real gap. **"In place of a melee
-basic attack"** -- the second benefit of most greater style feats --
-wants `c.as_basic(ref)`, which `f1239` named long before this batch.
-Knowing which rows may stand in for the basic does not make one able
-to.
+**"In place of a melee basic attack"** -- the second benefit of most
+greater style feats -- is `c.as_basic`, filed under the window the
+card names: the charge, the opportunity attack, or the swing Combat
+Challenge allows. It is a standing arrangement, so a card that also
+prints a Trigger answers that with `c.watch` instead; see below.
 
 The rest is ordinary riders on opportunity attacks, charges, crits and
 marks, all of which the attack and damage contexts already answer.
@@ -61,8 +61,13 @@ from combat_engine.engine.types import Forced
 
 from .styles import among, hit_with_one_of, used_one_of
 
-#: Knowing which rows a feat names does not let one stand in for a basic.
-AS_BASIC = ("c.as_basic(ref)",)
+#: **A standing clause and a triggered one on the same card.** The
+#: dispatcher only reaches a no-action row when its declared trigger
+#: fires, so a row that also has to be *true* from the start of the
+#: fight -- which "you can use this in place of a melee basic attack"
+#: is -- is never armed. Those rows keep the printed Trigger as text
+#: and answer it with `c.watch`, the shape `p7419` already uses.
+
 #: A swing handed to you by Combat Challenge is announced as `mba` like
 #: any other, and nothing records who granted it. Seven rows already.
 GRANTED = ("c.on_granted_basic()",)
@@ -342,27 +347,37 @@ def f1972(c: Cast) -> None:
 
 
 @power("f2329", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you miss with a martial encounter power",
-       on=Trigger(Miss, _i_missed_with_encounter, "you miss"))
+       reach=PERSONAL, target=SELF,
+       trigger="you miss with a martial encounter power")
 def f2329(c: Cast) -> None:
-    """The miss half plays; the second sentence is the associated-powers
-    substitution and is dropped."""
+    """Both halves now. The miss is a watch so that the substitution,
+    which is a standing arrangement, has somewhere to be armed."""
     if not _holding(c, "heavy blade"):
         return
-    foe = c.trigger.target
-    c.bonus(
-        "attack", 2, on=c.me, until=When.EONT, once=True,
-        when=lambda ctx: ctx.get("target") == foe,
-    )
+    c.as_basic("p200", "p608", window="challenge")
+
+    def on_miss(ev: Any) -> None:
+        if not _i_missed_with_encounter(c.world, c.me, ev):
+            return
+        if not _holding(c, "heavy blade"):
+            return
+        foe = ev.target
+        c.bonus(
+            "attack", 2, on=c.me, until=When.EONT, once=True,
+            when=lambda ctx: ctx.get("target") == foe,
+        )
+
+    c.watch(Miss, on_miss, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2340", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC)
+       reach=PERSONAL, target=SELF)
 def f2340(c: Cast) -> None:
     """"Larger than you", so the comparison is against the caster's own
     size rather than a fixed Large."""
     me = c.me
+    if _holding(c, "spear"):
+        c.as_basic("p634", "p1428", window="charge")
     mine = c.size_of(me)  # `.order`, not `>`: Size is a StrEnum
     c.bonus(
         "damage", 2, on=me, until=When.ENCOUNTER,
@@ -375,23 +390,23 @@ def f2340(c: Cast) -> None:
 
 
 @power("f2345", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you score a critical hit",
-       on=Trigger(Hit, _i_crit, "you crit"))
+       reach=PERSONAL, target=SELF,
+       trigger="you score a critical hit")
 def f2345(c: Cast) -> None:
-    if _holding(c, "flail", "mace"):
-        c.push(1, on=c.trigger.target)
+    if not _holding(c, "flail", "mace"):
+        return
+    c.as_basic("p622", "p1428", window="challenge")
+
+    def on_crit(ev: Any) -> None:
+        if _i_crit(c.world, c.me, ev) and _holding(c, "flail", "mace"):
+            c.push(1, on=ev.target)
+
+    c.watch(Hit, on_crit, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2351", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you hit with a martial encounter power",
-       on=Trigger(Hit, lambda w, me, ev: (
-           ev.attacker == me
-           and (p := get(ev.power)) is not None
-           and p.usage is ENCOUNTER
-           and Keyword.MARTIAL in p.keywords
-       ), "you hit with a martial encounter power"))
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with a martial encounter power")
 def f2351(c: Cast) -> None:
     """"Any ally, while adjacent to you" -- so the adjacency is asked per
     attack and the ally may walk in and out of it."""
@@ -402,35 +417,57 @@ def f2351(c: Cast) -> None:
         for w in gear.melee
     ):
         return
-    for friend in [a for a in allies(c.world, me) if a != me]:
-        c.bonus(
-            AC, 2, on=friend, until=When.EONT, kind="feat",
-            when=lambda ctx, f=friend: c.adjacent_to(f, me),
-        )
+    c.as_basic("p622", "p4330", window="charge")
+
+    def on_hit(ev: Any) -> None:
+        p = get(ev.power)
+        if ev.attacker != me or p is None:
+            return
+        if p.usage is not ENCOUNTER or Keyword.MARTIAL not in p.keywords:
+            return
+        for friend in [a for a in allies(c.world, me) if a != me]:
+            c.bonus(
+                AC, 2, on=friend, until=When.EONT, kind="feat",
+                when=lambda ctx, f=friend: c.adjacent_to(f, me),
+            )
+
+    c.watch(Hit, on_hit, on=me, until=When.ENCOUNTER)
 
 
 @power("f1310", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you score a critical hit with a two-handed axe",
-       on=Trigger(Hit, _i_crit, "you crit"))
+       reach=PERSONAL, target=SELF,
+       trigger="you score a critical hit with a two-handed axe")
 def f1310(c: Cast) -> None:
     """Splash damage on a crit. Every adjacent enemy, including the one
-    that was hit if it is still standing beside you."""
+    that was hit if it is still standing beside you.
+
+    A watch rather than a declared trigger, for the reason at the head
+    of this file: the second benefit is a standing arrangement and a
+    row the dispatcher only reaches on its trigger is never armed.
+    """
     if not _grip(c, "axe", hands=2):
         return
-    for foe in enemies(c.world, c.me):
-        if c.adjacent(to=foe):
-            c.flat(c.str_mod, on=foe)
+    c.as_basic("p622", "p608", window="challenge")
+
+    def on_crit(ev: Any) -> None:
+        if not _i_crit(c.world, c.me, ev) or not _grip(c, "axe", hands=2):
+            return
+        for foe in enemies(c.world, c.me):
+            if c.adjacent(to=foe):
+                c.flat(c.str_mod, on=foe)
+
+    c.watch(Hit, on_crit, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1318", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC)
+       reach=PERSONAL, target=SELF)
 def f1318(c: Cast) -> None:
     """Two adjacencies, both asked at the moment of the attack: the ally
     beside you and the attacker beside you."""
     me = c.me
     if not _grip(c, "pick", "spear", hands=1):
         return
+    c.as_basic("p10503", "p4320", window="challenge")
     for friend in [a for a in allies(c.world, me) if a != me]:
         for defence in (AC, REF):
             c.bonus(
@@ -444,21 +481,25 @@ def f1318(c: Cast) -> None:
 
 
 @power("f1320", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_BASIC,
-       trigger="you push an enemy",
-       on=Trigger(ForcedMove, _my_push, "you push an enemy"))
+       reach=PERSONAL, target=SELF,
+       trigger="you push an enemy")
 def f1320(c: Cast) -> None:
     """"Any enemy you push", so the push itself is the trigger -- a hit
     knows nothing about whether anybody moved."""
-    if _holding(c, "polearm"):
-        c.grants_advantage(on=c.trigger.target, until=When.EONT)
+    if not _holding(c, "polearm"):
+        return
+    c.as_basic("p200", "p4330", window="charge")
+
+    def on_push(ev: Any) -> None:
+        if _my_push(c.world, c.me, ev) and _holding(c, "polearm"):
+            c.grants_advantage(on=ev.target, until=When.EONT)
+
+    c.watch(ForcedMove, on_push, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1322", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.as_basic(ref)",),
-       trigger="you score a critical hit with a one-handed axe",
-       on=Trigger(Hit, _i_crit, "you crit"))
+       trigger="you score a critical hit with a one-handed axe")
 def f1322(c: Cast) -> None:
     """Knock it down, and punish it for getting up.
 
@@ -474,18 +515,26 @@ def f1322(c: Cast) -> None:
     """
     if not _grip(c, "axe", hands=1):
         return
-    me, foe = c.me, c.trigger.target
-    c.prone(on=foe)
+    me = c.me
+    c.as_basic("p2131", "p608", window="opportunity")
 
-    def on_stand(ev: Any) -> None:
-        if (
-            ev.target == foe
-            and ev.condition is Condition.PRONE
-            and ev.why == "stood up"
-        ):
-            c.provoke(me, on=foe, why="stood up beside you")
+    def on_crit(hit: Any) -> None:
+        if not _i_crit(c.world, me, hit) or not _grip(c, "axe", hands=1):
+            return
+        foe = hit.target
+        c.prone(on=foe)
 
-    c.watch(ConditionEnded, on_stand, on=foe, until=When.EONT, once=True)
+        def on_stand(ev: Any) -> None:
+            if (
+                ev.target == foe
+                and ev.condition is Condition.PRONE
+                and ev.why == "stood up"
+            ):
+                c.provoke(me, on=foe, why="stood up beside you")
+
+        c.watch(ConditionEnded, on_stand, on=foe, until=When.EONT, once=True)
+
+    c.watch(Hit, on_crit, on=me, until=When.ENCOUNTER)
 
 
 # -- the style family, now that the lists resolve --------------------------
@@ -631,11 +680,14 @@ def f2347(c: Cast) -> None:
 
 
 @power("f1317", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=AS_BASIC)
+       reach=PERSONAL, target=SELF)
 def f1317(c: Cast) -> None:
-    """`p2099` or `p10888` in place of a basic on an opportunity attack.
-    The list resolves now; nothing lets a named row stand in for the
-    basic, which is the symbol `f1239` named."""
+    """The skill bonus stands whatever is in hand; the substitution is
+    gated on the weapon **and** on the shield, both asked once as the
+    fight opens, which is where every other weapon-style row asks."""
+    c.bonus("skill:insight", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+    if _grip(c, "pick", "spear", hands=1) and c.wielding("shield"):
+        c.as_basic("p2099", "p10888", window="opportunity")
 
 
 @power("f2331", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

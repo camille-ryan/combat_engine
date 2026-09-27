@@ -316,7 +316,7 @@ def f1963(c: Cast) -> None:
        on=Trigger(PowerUsed, _i_used(FORTUNE), "you use p1589"))
 def f2752(c: Cast) -> None:
     c.temp_hp(c.cha_mod, on=c.me)
-    for friend in c.within(1, side="ally"):
+    for friend in c.within(1, side="team"):
         c.temp_hp(c.cha_mod, on=friend)
 
 

@@ -490,7 +490,7 @@ def _opportunity_options(
     power that can reach, plus the basic.
     """
     from .components import Powers
-    from .dsl import candidates
+    from .dsl import basic_options, candidates
     from .dsl import usable as is_usable
 
     out: list[Action] = []
@@ -499,7 +499,9 @@ def _opportunity_options(
         return out
 
     refs = [r for r in known.all if (p := get(r)) and p.action is ActionType.OPPORTUNITY]
-    refs.append(known.opportunity or known.basic)
+    # The basic, plus whatever a feat has put in its place here. An option
+    # beside it rather than a replacement for it, so both are scored.
+    refs.extend(basic_options(world, actor, "opportunity"))
 
     for ref in dict.fromkeys(refs):
         p = get(ref)

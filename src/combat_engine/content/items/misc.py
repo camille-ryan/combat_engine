@@ -656,7 +656,7 @@ def i1646p1(c: Cast) -> None:
     name = c.choose(sorted(SKILLS), "which skill")
     if name is None:
         return
-    for who in (c.me, *c.within(5, side="ally")):
+    for who in (c.me, *c.within(5, side="team")):
         c.bonus(f"skill:{name}", 1, on=who, until=When.ENCOUNTER)
 
 
@@ -2457,7 +2457,7 @@ def i1716x1(c: Cast) -> None:
     """`c.initiative` adds to the check itself; it takes no `kind`, so the
     item type the card prints is not carried."""
     c.initiative(1, on=c.me)
-    for friend in c.within(5, side="ally"):
+    for friend in c.within(5, side="team"):
         c.initiative(1, on=friend)
 
 

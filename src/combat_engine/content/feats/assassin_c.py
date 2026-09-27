@@ -233,9 +233,9 @@ def f2833(c: Cast) -> None:
        trigger="you use p8278",
        on=Trigger(PowerUsed, _used("p8278"), "you use that racial power"))
 def f2932(c: Cast) -> None:
-    """`c.within(side="ally")` counts the caster among its own allies, so
-    the self is skipped in the loop rather than concealed twice -- two
-    holds of the same label on one creature is two things to end."""
+    """The caster is concealed once, outside the loop: `side="ally"` leaves
+    it out of the pool, and two holds of the same label on one creature
+    would be two things to end."""
     c.conceal(on=c.me, until=When.EONT)
     for ally in c.within(5, of=c.me, side="ally"):
         if ally != c.me:

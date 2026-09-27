@@ -118,7 +118,7 @@ def p16012(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.FORCE],
 )
 def p1703(c: Cast) -> None:
-    for mate in c.within(1, side="ally"):
+    for mate in c.within(1, side="team"):
         c.bonus(AC, 2, on=mate, until=When.EONT)
         c.bonus(REF, 2, on=mate, until=When.EONT)
 

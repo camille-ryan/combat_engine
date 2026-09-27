@@ -504,6 +504,14 @@ def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
     if known is None or not known.basic:
         return []
 
+    # "You can use a power associated with this feat in place of a melee
+    # basic attack when charging" -- one option per row rather than one
+    # per enemy, so the policy scores the swap against the plain swing
+    # instead of the charge menu deciding for it.
+    from .dsl import basic_options
+
+    swings = basic_options(world, actor, "charge")
+
     # The charge context, so "+4 power bonus to speed when charging" is read
     # by the one measurement it is about.
     reachable = world.reachable_paths(actor, speed(world, actor, {"charge": True}))
@@ -523,16 +531,17 @@ def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
         if best is None:
             continue
         _n, dest, path = best
-        out.append(
-            Action(
-                kind="charge",
-                cost=ActionType.STANDARD,
-                ref=known.basic,
-                targets=(foe,),
-                dest=dest,
-                path=tuple(path),
+        for ref in swings:
+            out.append(
+                Action(
+                    kind="charge",
+                    cost=ActionType.STANDARD,
+                    ref=ref,
+                    targets=(foe,),
+                    dest=dest,
+                    path=tuple(path),
+                )
             )
-        )
     return out
 
 

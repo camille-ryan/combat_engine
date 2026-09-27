@@ -37,8 +37,8 @@ MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 def _beside(c: Cast, foe: int | None) -> list[int]:
     """Allies adjacent to you or to the target, which is the warlord's pool.
 
-    `c.within(..., side="ally")` counts the caster, and every printed line
-    that uses this phrase says "an ally", so the caster comes back out.
+    `side="ally"` leaves the caster out, which is what every printed line
+    using this phrase says; the filter below is belt and braces.
     """
     near = set(c.within(1, side="ally"))
     if foe is not None:
@@ -304,7 +304,7 @@ def p239(c: Cast) -> None:
     foe = c.target
     against = lambda ctx: ctx.get("target") == foe  # noqa: E731
     # "you and each ally within 5" is exactly what the ally pool holds.
-    for friend in c.within(5, side="ally"):
+    for friend in c.within(5, side="team"):
         c.bonus("attack", value, on=friend, when=against, kind="power")
 
 

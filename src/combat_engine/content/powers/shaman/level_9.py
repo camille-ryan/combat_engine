@@ -138,7 +138,7 @@ def p3885(c: Cast) -> None:
     else:
         c.half_damage("3d6", c.wis_mod, dtype=DamageType.NECROTIC)
         c.vulnerable(2, until=When.SAVE_ENDS)
-    for who in dict.fromkeys(c.within(10, side="ally")):
+    for who in dict.fromkeys(c.within(10, side="team")):
         c.heal(5, on=who)
 
 

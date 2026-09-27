@@ -228,7 +228,7 @@ def p13945(c: Cast) -> None:
     health = c.world.get(victim, Health)
     if health is None or health.hp > 0:
         return
-    who = c.choose(sorted(c.within(5, side="ally")), "who spends a healing surge")
+    who = c.choose(sorted(c.within(5, side="team")), "who spends a healing surge")
     if who is not None and c.may("spend a healing surge", who=who):
         c.surge(on=who)
 

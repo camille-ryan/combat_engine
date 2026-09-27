@@ -116,7 +116,7 @@ def p1076(c: Cast) -> None:
     """
     if c.strike():
         c.damage(c.w(2), c.str_mod)
-    pool = sorted(c.within(5, side="ally"), key=lambda a: -c.missing(a))
+    pool = sorted(c.within(5, side="team"), key=lambda a: -c.missing(a))
     who = c.choose(pool, "who spends a healing surge") if pool else None
     if who is not None and c.may("spend a healing surge", who=who):
         c.surge(on=who)

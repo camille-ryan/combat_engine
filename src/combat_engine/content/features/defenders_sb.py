@@ -82,9 +82,10 @@ def warden_might(c: Cast) -> None:
     which ability it names.
 
     Two of the printed options substitute Constitution and two substitute
-    Wisdom, and `chargen.BUILDS["warden"]` is derived, so its two legs are
-    exactly `second-con` and `second-wis` -- which settles the ability
-    without settling *which* of the two options on that side was taken.
+    Wisdom. `chargen.BUILDS["warden"]` is a named leg per option, so the
+    pair on each side is asked for by name; it read `c.build("second-con")`
+    against the derived legs the class no longer has, which was false for
+    every warden and gave every warden in the tree the Wisdom branch.
 
     It is written as an untyped bonus of the difference because that is
     what a replacement comes to: `chargen.defences` gives light armour the
@@ -104,7 +105,8 @@ def warden_might(c: Cast) -> None:
     warden's second wind and the two legs cannot tell the Constitution pair
     apart from each other, nor the Wisdom pair.
     """
-    instead = c.con_mod if c.build("second-con") else c.wis_mod
+    on_con = c.build("earthstrength") or c.build("lifespirit")
+    instead = c.con_mod if on_con else c.wis_mod
     gain = instead - max(c.dex_mod, c.int_mod)
     if gain > 0:
         c.bonus(AC, gain, until=When.ENCOUNTER, on=c.me, kind="untyped")

@@ -1118,7 +1118,7 @@ def i2604p1(c: Cast) -> None:
     squares and resist 10."""
     kind = c.choose(list(_ELEMENTS), "which energy") or DamageType.FIRE
     c.resist(10, kind, on=c.me, until=When.EONT)
-    for mate in c.within(2, side="ally"):
+    for mate in c.within(2, side="team"):
         c.resist(10, kind, on=mate, until=When.EONT)
 
 
@@ -1150,7 +1150,7 @@ def i2615x1(c: Cast) -> None:
 )
 def i2615p1(c: Cast) -> None:
     c.teleport(c.enhancement)
-    for mate in c.within(1, side="ally"):
+    for mate in c.within(1, side="team"):
         c.teleport(c.enhancement, who=mate)
 
 
@@ -2058,7 +2058,7 @@ def i3167p1(c: Cast) -> None:
     triggered the row it is in, which a benefit armed a turn earlier has
     no way to reach."""
     c.save(on=c.me)
-    for mate in c.within(5, side="ally"):
+    for mate in c.within(5, side="team"):
         c.save(on=mate)
 
 
@@ -2349,7 +2349,7 @@ def i3554p1(c: Cast) -> None:
 )
 def i3554p2(c: Cast) -> None:
     c.heal(c.surge_value(), on=c.me)
-    for mate in c.within(5, side="ally"):
+    for mate in c.within(5, side="team"):
         c.heal(c.surge_value(of=mate), on=mate)
 
 

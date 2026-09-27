@@ -149,11 +149,15 @@ def invoker_covenant(c: Cast) -> None:
     """The covenant manifestation: a small thing that happens every time one
     of this invoker's bigger invocations finishes.
 
-    Two covenants are printed and `chargen.BUILDS["invoker"]` carries two
-    derived legs. Which is which is read off the class's own riders: rows
-    from level 1 to 7 print a covenant and the ability its rider spends, and
-    one covenant spends Intelligence in every one of them while the other
-    spends Constitution. Those are the two secondaries, so the legs answer.
+    Three covenants are printed and this writes two of them, one per named
+    leg of `chargen.BUILDS["invoker"]`. Which manifestation belongs to which
+    leg is not a guess: each covenant's spec names the channelled card it
+    hands over, and `cf:invoker-f1c0` says outright which covenant it is a
+    power of. So the slide is the preserving leg and the push is the
+    maledicting one. The third leg's manifestation -- a damage bonus per
+    enemy the invocation caught -- is `cf:invoker-f1s2`, and this row laid
+    the push on that leg as well, which gave a wrath invoker two arms of a
+    fork that prints "choose one".
 
     **`PowerResolved`, not `PowerUsed`.** The printed line is "after the
     power's effect is resolved", and `PowerUsed` is announced before the
@@ -165,12 +169,14 @@ def invoker_covenant(c: Cast) -> None:
     "On your turn" is asked of `c.turn_of`: an invocation used in somebody
     else's turn off an immediate action does not manifest.
 
-    **The Channel Divinity half of the printed feature is not here.** Each
-    covenant also hands over one channelled invocation, and the tree has two
-    of them (`p5186`, `p7150`) with no way to tell which covenant grants
-    which: the specs are sanitised, so neither row says what it is called
-    and neither covenant's clause says what its power does. Forbidding the
-    wrong one is worse than forbidding neither, so the exclusivity is
+    **The preserving leg's channelled invocation is handed over here.**
+    `cf:invoker-f1c0` is declared as that covenant's power and nothing was
+    granting it, so it sat on the board belonging to nobody;
+    `cf:invoker-f1s2` grants the wrath leg's card itself. The maledicting
+    leg's channelled invocation is still unplaceable -- the two candidates
+    in the tree (`p5186`, `p7150`) say neither what they are called nor
+    which covenant they answer to -- and forbidding the wrong one is worse
+    than forbidding neither, so that half stays
     `cf:invoker-covenant-channel` in `docs/blocked.json`.
     """
     me = c.me
@@ -184,8 +190,17 @@ def invoker_covenant(c: Cast) -> None:
     # written. Twenty call sites in `content/powers/invoker/` already ask
     # the right way; only this one did not.
     preserving = c.build("preservation")
-    if not preserving and not c.build("wrath"):
+    if not preserving and not c.build("malediction"):
         return
+    # **The channelled card is dealt by `chargen.loadout`, not by this.**
+    # Both covenant cards are level-0 rows of the class, so every invoker
+    # already knows both and `c.grant_row` returns `None`. The sentence
+    # worth writing is therefore the one on the legs that *lose* the card,
+    # which is the judgement `cf:barbarian-f1` records for the same shape.
+    c.grant_row("cf:invoker-f1c0")
+    if not preserving:
+        c.forbid("cf:invoker-f1c0", until=When.ENCOUNTER, on=me)
+    c.forbid("cf:invoker-f1c1", until=When.ENCOUNTER, on=me)
 
     def manifests(ref: str) -> bool:
         p = get(ref)

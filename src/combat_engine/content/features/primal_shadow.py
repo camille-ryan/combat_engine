@@ -110,7 +110,7 @@ def ardent_mantle_elation(c: Cast) -> None:
     """
     if not c.build("second-con"):
         return
-    nearby = c.within(5, side="ally")
+    nearby = c.within(5, side="team")
     if c.con_mod > 0:
         for who in nearby:
             c.bonus(
@@ -411,8 +411,8 @@ def barbarian_rage_strike(c: Cast) -> None:
     """The card `cf:barbarian-f2` grants, and the first ref it has ever had.
 
     `p4807` is the same card and has never been declared -- `docs/blocked.csv`
-    carries it, and two rows elsewhere already gate on `ctx["power"] ==
-    "p4807"` against a row that does not exist.
+    carries it, and the two rows elsewhere that gate on the card now name
+    this ref instead: `f2706` and `i2947p1`.
 
     The attack and the miss half are ordinary; the whole point of the row
     is not. The dice are the level of the rage power you burn to make it,

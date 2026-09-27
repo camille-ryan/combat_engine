@@ -13,9 +13,9 @@ first printed ability for the card and `_str_or_wis` rolls whichever the
 character is actually better at.
 
 **"You or one ally within 5 squares"** is exactly what the ally pool holds:
-`c.within(..., side="ally")` counts the caster, so the caster is already one
-of the answers and the choice is offered over the pool untouched. Where the
-printed line says only "each ally", the caster comes back out.
+is `side="team"` -- the ally pool with the caster in it -- so the caster is
+already one of the answers and the choice is offered over the pool untouched.
+Where the printed line says only "each ally", `side="ally"` is the pool.
 
 **A printed reroll inside a watcher** goes through `_reroll`, which lends
 `c.reroll_attack` the event the watcher is holding rather than copying the
@@ -214,7 +214,7 @@ def p12634(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(1), c.wis_mod)
     # The Effect line lands whether or not the blow did.
-    who = c.choose(c.within(5, side="ally"), "who gets the opening")
+    who = c.choose(c.within(5, side="team"), "who gets the opening")
     if who is not None:
         c.bonus(
             "damage", c.con_mod, on=who, until=When.EONT, kind="power",
@@ -257,7 +257,7 @@ def p12635(c: Cast) -> None:
 def p12647(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(1), c.wis_mod)
-    who = c.choose(c.within(5, side="ally"), "who is warded")
+    who = c.choose(c.within(5, side="team"), "who is warded")
     if who is not None and c.con_mod > 0:
         c.resist(c.con_mod, until=When.EONT, on=who)
 
@@ -278,7 +278,7 @@ def p12648(c: Cast) -> None:
         c.damage(c.w(1), c.wis_mod, dtype=DamageType.RADIANT)
     # Offered to whoever is actually carrying something to shake off; the
     # rest of the pool follows, because the printed line lets you pick.
-    pool = c.within(5, side="ally")
+    pool = c.within(5, side="team")
     burdened = [a for a in pool if any(e.when is When.SAVE_ENDS for e in c.world.effects.of(a))]
     who = c.choose(burdened + [a for a in pool if a not in burdened], "who tries a save")
     if who is not None:
@@ -299,7 +299,7 @@ def p12648(c: Cast) -> None:
 def p13706(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(1), c.wis_mod)
-    who = c.choose(c.within(5, side="ally"), "who is guarded")
+    who = c.choose(c.within(5, side="team"), "who is guarded")
     if who is not None:
         c.bonus(AC, 2, on=who, until=When.EONT, kind="power")
 
@@ -466,7 +466,7 @@ def p12637(c: Cast) -> None:
 def p12650(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(1), c.wis_mod, dtype=DamageType.RADIANT)
-    for friend in c.within(5, side="ally"):
+    for friend in c.within(5, side="team"):
         c.temp_hp(5, on=friend)
         c.save(on=friend)
 
@@ -509,7 +509,7 @@ def p13709(c: Cast) -> None:
             area = blast(squares(c.world, c.me), 3, c.there)
             for who in {*c.in_squares(area, side="enemy"), foe}:
                 c.flat(c.con_mod, on=who)
-    for friend in c.within(3, side="ally"):
+    for friend in c.within(3, side="team"):
         c.bonus(AC, 2, on=friend, until=When.EONT, kind="power")
         c.bonus(FORT, 2, on=friend, until=When.EONT, kind="power")
 

@@ -19,6 +19,14 @@ written against legs that were never added.
 The reverse is checked too. A leg no row asks about is usually harmless,
 but it is how a *renamed* leg shows up: one was called `ensnaring` here
 while six rows asked for `ensnarement`, an hour after being added.
+
+**A row under `features/` is attributed by its own `cls=`, not by its
+path.** This read the directory alone and answered "" for every row in
+`content/features/`, so none of them was checked against anything --
+which is how `cf:warden-f1` and `cf:avenger-f1` went on asking for the
+derived `second-<ability>` legs for months after both classes were given
+named ones. Two class features, dead on every leg, under a script written
+to find exactly that.
 """
 
 from __future__ import annotations
@@ -28,6 +36,7 @@ import ast
 import collections
 import pathlib
 import sys
+from collections.abc import Iterator
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CONTENT = ROOT / "src" / "combat_engine" / "content"
@@ -47,17 +56,47 @@ def asked() -> dict[str, collections.Counter]:
         except SyntaxError:          # a tree mid-write; say so rather than lie
             print(f"# {path}: does not parse", file=sys.stderr)
             continue
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not node.args:
-                continue
-            fn = node.func
-            name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
-            if name not in ("build", "on_leg"):
-                continue
-            value = getattr(node.args[0], "value", None)
-            if isinstance(value, str):
-                out[_class_of(path)][value] += 1
+        by_path = _class_of(path)
+        for owner, cls in _owners(tree):
+            for node in ast.walk(owner):
+                if not isinstance(node, ast.Call) or not node.args:
+                    continue
+                fn = node.func
+                name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+                if name not in ("build", "on_leg"):
+                    continue
+                value = getattr(node.args[0], "value", None)
+                if isinstance(value, str):
+                    out[cls or by_path][value] += 1
     return out
+
+
+def _owners(tree: ast.Module) -> Iterator[tuple[ast.FunctionDef, str]]:
+    """Every top-level function, with the class its decorator declares.
+
+    A helper with no decorator of its own is attributed to nothing and
+    falls back to the path -- which is right: a module-level `_beside(c)`
+    under `powers/warlord/` is a warlord's.
+    """
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        cls, marked = "", False
+        for dec in node.decorator_list:
+            if not isinstance(dec, ast.Call):
+                continue
+            for kw in dec.keywords:
+                value = getattr(kw, "value", None)
+                if kw.arg == "cls" and isinstance(value, ast.Constant):
+                    cls = value.value or ""
+                # A row that names a missing leg **and says so** is not the
+                # failure this hunts: `todo=("chargen.BUILDS",)` is the
+                # author declaring the leg absent, and it goes red in
+                # `todo.py` the day one arrives.
+                if kw.arg in ("todo", "dropped"):
+                    marked = marked or "chargen.BUILDS" in ast.dump(value)
+        if not marked:
+            yield node, cls
 
 
 def _class_of(path: pathlib.Path) -> str:

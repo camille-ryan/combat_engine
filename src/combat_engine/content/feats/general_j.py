@@ -325,11 +325,15 @@ def _one_of(refs: frozenset[str]):  # noqa: ANN202
 
 @power("f1461", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.bonus('skill:any')", "c.as_basic(ref)"))
+       dropped=("c.bonus('skill:any')",))
 def f1461(c: Cast) -> None:
-    """Both halves are gaps. A skill bonus is keyed `skill:<name>` and
-    this one names every trained skill instead of one; and nothing turns
-    a named row into something that counts as a basic attack."""
+    """The substitution plays and names no window, so it answers the
+    charge, the opportunity attack and a defender's swing alike.
+
+    Dropped: a skill bonus is keyed `skill:<name>` and a blanket
+    `skill` key covers every skill; this one covers every *trained*
+    one, which is neither."""
+    c.as_basic("p2848", "p3423", "p839", "p835")
 
 
 @power("f1463", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
