@@ -738,12 +738,20 @@ class Gear:
         Not simply `weapons[0]`: an archer's list starts with a bow, and
         taking the first thing listed had it clubbing people with the bow
         whenever a melee attack asked what was in hand.
+
+        The fallbacks skip implements for the same reason `melee` does: a
+        wizard holding nothing but an orb is holding nothing it can swing,
+        and answering "the orb" makes every row that asks what is in hand
+        quietly true.
         """
         melee = self.melee
         if melee:
             return melee[0]
-        held = self.held
-        return held[0] if held else (self.weapons[0] if self.weapons else None)
+        usable = [w for w in self.held if w.group != "implement"]
+        if usable:
+            return usable[0]
+        rest = [w for w in self.weapons if w.group != "implement"]
+        return rest[0] if rest else None
 
     @property
     def ranged(self) -> Weapon | None:
@@ -756,7 +764,30 @@ class Gear:
 
     @property
     def melee(self) -> list[Weapon]:
-        return [w for w in self.held if not w.ranged]
+        """What is in hand that can actually be swung at somebody.
+
+        **An implement is not one, and it used to count as one**, because
+        the test was "held and not ranged" and an orb is neither. That was
+        invisible only for as long as nobody held an implement without a
+        weapon: give a wizard an orb and a row printing "Requirement: you
+        must be wielding a melee weapon in one hand" starts firing off the
+        orb, which is not a thing a wizard can hit anyone with.
+        `chargen._shield_for` had already worked this out and was excluding
+        implements by hand.
+        """
+        return [w for w in self.held if not w.ranged and w.group != "implement"]
+
+    @property
+    def implement(self) -> Weapon | None:
+        """The rod, staff, wand or holy symbol in hand, if there is one.
+
+        Its own property because `main` would answer the wrong thing: an
+        implement is not ranged, so it counts as melee, and a cleric
+        holding a mace and a symbol has the mace returned. Harmless while
+        every implement was a plain one -- and the moment a magic implement
+        has an enhancement bonus, that bonus is read off the mace instead.
+        """
+        return next((w for w in self.held if w.group == "implement"), None)
 
     @property
     def off(self) -> Weapon | None:
@@ -796,6 +827,21 @@ class Weapon:
     #: plain -- the number is here so that the rows that *reduce* it have
     #: something to reduce, and so that a weapon with one runs hotter.
     enhancement: int = 0
+    #: What this weapon's damage *is*. `None` is the ordinary case -- a
+    #: sword deals whatever the power says, which is usually untyped -- and
+    #: a type here is a weapon that has been made of something: a flaming
+    #: blade, a frost axe. Twenty-five heroic feats and a long tail of items
+    #: turn on it, and there was nowhere to write it down.
+    #:
+    #: Read by `Cast._weapon_dtype`, which resolves it **before** the damage
+    #: context is built, so a bonus gated on the damage type sees the type
+    #: the weapon actually deals.
+    dtype: DamageType | None = None
+    #: The magic item this weapon is, if it is one. A magic weapon is a
+    #: base weapon with properties laid on top -- not a weapon of its own --
+    #: so the numbers above stay the printed longsword's and this says which
+    #: item's rows come with it.
+    item: str = ""
 
     @property
     def magic(self) -> bool:

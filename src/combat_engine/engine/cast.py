@@ -56,7 +56,7 @@ from .types import (
 
 if TYPE_CHECKING:
     from .components import Weapon
-    from .dsl import Damage
+    from .dsl import Damage, Power
     from .ecs import World
 
 
@@ -678,22 +678,57 @@ class Cast:
         mace and casting an implement attack does not add the mace to it, and
         adding it anyway is invisible -- every ranged cleric attack simply
         runs two points hot for the life of the project.
+
+        **Enhancement is a different question and used to share the answer.**
+        One test gated both, so a magic implement added nothing at all --
+        and implements are the largest bucket of magic items there is. A
+        wizard with an enchanted staff attacked exactly as hard as a wizard
+        with a stick. Proficiency asks "is this a weapon power"; enhancement
+        asks "what is in hand for this power", which is the implement for an
+        implement row and the weapon for a weapon row.
         """
         bonus = self.world.scaling.pc(self.stats.level) + self.stats.mod(a)
         p = self._declared()
         weapon_power = p is None or Keyword.WEAPON in p.keywords
         gear = self.world.get(self.me, Gear)
-        if weapon_power and gear is not None:
-            # Same question `c.w()` asks, and it has to be asked the same
-            # way: the branch where there is one, the keyword otherwise.
-            if p is not None and p.reach.alt is not None:
-                ranged = self.ranged
-            else:
-                ranged = p is not None and Keyword.RANGED in p.keywords
-            weapon = (gear.ranged if ranged and gear.ranged else gear.main)
-            if weapon is not None:
-                bonus += weapon.proficiency + weapon.enhancement
+        if gear is not None:
+            if weapon_power:
+                bonus += getattr(self._wielded(), "proficiency", 0)
+            bonus += self._enhancement_of(p)
         return bonus
+
+    def _wielded(self) -> Weapon | None:
+        """The weapon this power swings or fires.
+
+        The same question `c.w()` asks, asked the same way: the branch
+        where the row has one, the keyword otherwise.
+        """
+        gear = self.world.get(self.me, Gear)
+        if gear is None:
+            return None
+        p = self._declared()
+        if p is not None and p.reach.alt is not None:
+            ranged = self.ranged
+        else:
+            ranged = p is not None and Keyword.RANGED in p.keywords
+        return gear.ranged if ranged and gear.ranged else gear.main
+
+    def _enhancement_of(self, p: Power | None) -> int:
+        """The enhancement bonus of whatever this power is cast through.
+
+        An implement row reads the implement, a weapon row reads the
+        weapon, and a row that is neither -- a class feature's attack, the
+        probe `Attack.bonus_for` builds -- reads the weapon too, because
+        that is what an unqualified attack swings.
+        """
+        gear = self.world.get(self.me, Gear)
+        if gear is None:
+            return 0
+        if p is not None and Keyword.IMPLEMENT in p.keywords:
+            arm = gear.implement
+        else:
+            arm = self._wielded()
+        return arm.enhancement if arm is not None else 0
 
     @property
     def str_(self) -> int:
@@ -1205,9 +1240,10 @@ class Cast:
         else:
             amount = self._roll_damage(dice) + bonus if dice else bonus
         amount += self._enhancement()
+        dtype = self._typed(dtype)
         dealt = deal_damage(
             self.world, self.me, who, amount, dtype, detail or self.ref,
-            opportunity=self.opportunity, charge=self.charge,
+            opportunity=self.opportunity, charge=self.charge, crit=self.crit,
         )
         if dealt:
             self._rattle(who)
@@ -1226,6 +1262,7 @@ class Cast:
         if who is None:
             return 0
         amount = (self._roll_damage(dice) + bonus) // 2 if dice else bonus // 2
+        dtype = self._typed(dtype)
         dealt = deal_damage(
             self.world, self.me, who, amount, dtype, f"{self.ref} (half)",
             opportunity=self.opportunity, charge=self.charge, miss=True,
@@ -5365,21 +5402,78 @@ class Cast:
         who = self._who(on)
         return holding(self.world, who, what) if who is not None else []
 
-    def _enhancement(self) -> int:
-        """What a magic weapon adds to the damage it deals.
+    def deals(
+        self,
+        dtype: DamageType,
+        *,
+        until: When = When.ENCOUNTER,
+        on: int | None = None,
+    ) -> Effect | None:
+        """This creature's weapon attacks deal that type from now on.
 
-        Only to a **weapon** power, the same question `_attack_bonus` asks of
-        proficiency. Zero for everything `chargen` hands out, so nothing in
-        the tree moves until something puts an enhancement on a weapon.
+        The printed line is "this weapon deals fire damage instead of its
+        normal damage type", and it is an *override*, not an addition --
+        which is why it beats the type the power named rather than stacking
+        beside it.
+
+        Held as a labelled effect rather than written onto the `Weapon`,
+        because the weapon object is the character's and the change is
+        usually for a fight. Yours, so it defaults to the caster.
         """
+        who = on if on is not None else self.me
+        for eff in list(self.world.effects.of(who)):
+            if eff.label.startswith("deals:"):
+                self.world.effects.end(eff, "deals another type now")
+        return self.world.effects.apply(
+            who, self.me, until, label=f"deals:{dtype.value}"
+        )
+
+    def _typed(self, dtype: DamageType) -> DamageType:
+        """The type this blow really is.
+
+        A weapon power whose card names no type rolls out untyped, and a
+        weapon made of something says otherwise. Only `UNTYPED` is
+        overridden and only for a weapon power: a wizard's fire spell is
+        not the staff's business, and a card that *does* name a type has
+        said what it deals.
+        """
+        if dtype is not DamageType.UNTYPED:
+            return dtype
         p = self._declared()
-        if p is None or Keyword.WEAPON not in p.keywords:
-            return 0
+        if p is not None and Keyword.WEAPON not in p.keywords:
+            return dtype
+        return self._weapon_dtype() or dtype
+
+    def _weapon_dtype(self) -> DamageType | None:
+        """What a blow from the thing in hand comes out as.
+
+        Resolved here and **not** on a `DamageRolled` listener, and the
+        ordering is the whole point: `resolve.deal_damage` sums the damage
+        modifiers against `dmg_ctx["dtype"]` before it emits. A type set
+        after that emit changes resistance and the log and nothing else, so
+        "my weapon deals fire" and "+1 damage with fire powers" would
+        disagree about the same blow.
+        """
+        for eff in self.world.effects.of(self.me):
+            if eff.label.startswith("deals:"):
+                return DamageType(eff.label.partition(":")[2])
         gear = self.world.get(self.me, Gear)
         if gear is None:
-            return 0
+            return None
         weapon = gear.ranged if self.ranged and gear.ranged else gear.main
-        return weapon.enhancement if weapon is not None else 0
+        return weapon.dtype if weapon is not None else None
+
+    def _enhancement(self) -> int:
+        """What a magic weapon or implement adds to the damage it deals.
+
+        **Not gated on `Keyword.WEAPON`**, which is what it used to be and
+        which silently threw away every implement's bonus -- see
+        `_attack_bonus`, where the same one test was answering two
+        questions. The two sides of a magic item's "attack rolls and damage
+        rolls" have to agree, and for the whole of this project they did
+        agree, on zero.
+        """
+        return self._enhancement_of(self._declared())
 
     def struck_with(self, ev: Any = None) -> Weapon | None:
         """The weapon or implement the triggering attack was made with."""

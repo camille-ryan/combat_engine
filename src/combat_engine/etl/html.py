@@ -65,13 +65,30 @@ def first_int(s: str, default: int = 0) -> int:
     return int(m.group()) if m else default
 
 
-def labelled(body: str) -> tuple[str, str] | None:
+def labelled(body: str, tags: tuple[str, ...] = ("b",)) -> tuple[str, str] | None:
     """Split `<b>Label</b>: rest` into its two halves.
 
     A mechanical line always carries one of these; a flavour line never does,
     which is the whole basis of the sanitiser.
+
+    **The item dialect labels with `<i>`.** A power card writes
+    `<b>Effect</b>`, a magic item's power block writes `<i>Effect:</i>` --
+    so an item read with the default would come out as one unlabelled blob
+    and `power_spec` would drop the whole of it as flavour. That is the same
+    failure that once cost about a hundred clauses on power cards.
+
+    `tags` is not widened by default, and must not be: the *power* dialect
+    uses `<i>` for the flavour line under the title, so accepting it
+    everywhere would push a publisher's prose into twelve thousand specs.
+    An `<i>` label is therefore only honoured **with its colon inside the
+    tag** -- which is how the item dialect always writes one, and which
+    italic flavour never does.
     """
-    m = re.match(r"\s*(?:&nbsp;|\s)*<b>(.*?)</b>\s*:?\s*(.*)", body, re.S)
+    inner = "|".join(tags)
+    m = re.match(rf"\s*(?:&nbsp;|\s)*<({inner})>(.*?)</\1>\s*:?\s*(.*)", body, re.S)
     if not m:
         return None
-    return text(m.group(1)).rstrip(":"), text(m.group(2))
+    label = text(m.group(2))
+    if m.group(1) != "b" and not label.rstrip().endswith(":"):
+        return None
+    return label.rstrip(":"), text(m.group(3))

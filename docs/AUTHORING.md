@@ -248,6 +248,11 @@ flag is the difference between *deliberately inert* and *not written yet*:
 `audit.py` stops expecting the row to do anything, `actions.legal` stops
 offering it in a fight, and `coverage.py` still counts it as done.
 
+`out_of_combat` and `todo=` are opposites and setting both is refused at
+import: one says "finished, and deliberately does nothing", the other says
+"unfinished". A row claiming both would be waved through by the audit's
+inert branch and never looked at again.
+
 **A Prerequisite is not the same thing.** A row that merely requires
 training in a skill is usually an ordinary combat power with an entry
 requirement, and should be written properly. It is narrative-only when the
@@ -255,18 +260,42 @@ requirement, and should be written properly. It is narrative-only when the
 
 ## When you cannot say something
 
-**Do not work around it and do not fake it.** If the `Cast` surface cannot
-express a row:
+**Do not work around it and do not fake it.** Write the row anyway, and say
+in the row itself what you could not say:
 
-1. Leave the row out entirely. No stub, no placeholder, no `pass`, no
-   comment explaining the absence. `scripts/coverage.py` counts what is
-   missing and a count cannot go stale.
-2. Put it in your final report, naming **the exact `Cast` method or header
-   field you wanted and what it should do**. The engine gets the method added
-   centrally and your batch is re-run.
+```python
+@power("i601p0", ..., todo=("c.deals()",))
+def _(c): ...
+```
 
-A row you half-wrote is worse than a row that is absent, because the absence
-is counted and the half-row looks finished.
+`todo=` takes **symbols, never prose** — `c.deals()`, `query.speed(world,
+eid, ctx)`, `Keyword.RAGE`, `Dropped.source`. A sentence is refused at
+import, because the whole point is that a tool can go and look for the
+thing. Name every symbol you wanted, not just the first.
+
+What that buys, and why it is not a stub:
+
+* **It is refused in play.** `dsl.usable` returns `not finished yet` for any
+  row with a `todo`, so it is exactly as inert as the absence it replaced —
+  never offered, never chosen, never half-resolved.
+* **It is counted partial and never done.** `coverage.py` prints three
+  states and the percentage is done over total, so a marker cannot move the
+  number.
+* **It is named individually.** `audit.py` prints one `TODO` line per row,
+  not a count.
+* **It holds its issue open**, and `issues.py` lists the markers on the
+  issue grouped by the symbol each wants.
+* **It goes red when the gap closes.** `todo.py` fails the moment a named
+  symbol exists, and fails if markers pass a tenth of the tree.
+
+Still put it in your final report, naming the symbol and what it should do.
+
+**Leave a row out entirely only when there is nothing to decorate** — no
+ref, no card. Then, and only then, `docs/blocked.json` records the reason.
+
+A row you half-wrote *without* the marker is worse than a row that is
+absent, because the absence is counted and the unmarked half-row looks
+finished. The marker is what makes the difference.
 
 Equally: if you find something that looks like an **engine bug**, say so in
 the report with the evidence. The last wave found a real one this way.

@@ -1,21 +1,31 @@
 #!/usr/bin/env python
-"""Rows left out of the tree, and what each is waiting for.
+"""Rows that are not finished, and what each is waiting for.
 
-    uv run scripts/blocked.py           what is blocked, and what is ready now
-    uv run scripts/blocked.py --ready   only the ones that have become writable
+    uv run scripts/blocked.py                   what is outstanding, and what is ready now
+    uv run scripts/blocked.py --ready           only the ones that have become writable
+    uv run scripts/blocked.py --group           the engine's work queue, ranked by demand
+    uv run scripts/blocked.py --refs 'c.deals()'   just the refs waiting on that one
 
-A row that cannot be written is left absent rather than half-written, and
-`coverage.py` counts the hole. What nothing recorded was *why* — that lived
-in the wave's report, which is ephemeral, and in an issue comment, which is
-not queryable. So when a method was finally built, the rows that had been
-waiting for it stayed missing until somebody happened to remember.
+Nothing recorded *why* a row was skipped. That lived in the wave's report,
+which is ephemeral, and in an issue comment, which is not queryable, so when
+a method was finally built the rows waiting for it stayed missing until
+somebody happened to remember. Three level-5 rows sat blocked on
+`c.moving_as` for four levels after it was built.
 
-Three level-5 rows sat blocked on `c.moving_as` for four levels after it was
-built, which is what this exists to stop.
+The list used to be hand-maintained, and a hand-maintained list of four
+thousand items and feats is a list nobody maintains. So the outstanding set
+is now read **out of the tree**: a row that cannot be fully written is
+written with `todo=("c.deals()",)`, and this reads those markers. The
+hand-written `docs/blocked.json` is kept only for rows that are genuinely
+absent -- there is nothing to decorate when the row does not exist -- and the
+two are reported separately so its remaining size is visible and shrinking.
 
-The list is hand-maintained, because the reason a row was skipped is a
-judgement a person made and no tool can recover it. Adding an entry is the
-last step of leaving a row out.
+`--group` is the point of the whole arrangement. The queue is generated and
+ranked by the number of rows actually asking, which is what `blocked.json`
+was trying and failing to be, and `--refs` turns a queue entry straight back
+into a brief:
+
+    uv run scripts/spec.py $(uv run scripts/blocked.py --refs 'c.deals()') --all
 """
 
 from __future__ import annotations
@@ -23,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,17 +45,58 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--ready", action="store_true", help="only what is now writable")
+    ap.add_argument("--group", action="store_true",
+                    help="wanted symbols, ranked by how many rows asked")
+    ap.add_argument("--refs", metavar="SYMBOL",
+                    help="the refs waiting on this one, space separated, for spec.py")
     args = ap.parse_args()
 
-    if not BLOCKED.exists():
-        print(f"# {BLOCKED.relative_to(ROOT)} does not exist yet")
-        return 0
+    rows = _declared()
+    marked = [(ref, tuple(p.todo)) for ref, p in sorted(rows.items()) if p.todo]
+    entries = json.loads(BLOCKED.read_text()) if BLOCKED.exists() else {}
 
-    entries = json.loads(BLOCKED.read_text())
+    if args.group or args.refs:
+        return _queue(marked, entries, set(rows), args)
+
     have = _surface()
-    declared = _declared()
+    return _report(marked, entries, set(rows), have, args.ready)
 
-    ready, waiting, stale, unchecked = [], [], [], []
+
+# --------------------------------------------------------------------------
+# The two sources, reported apart
+# --------------------------------------------------------------------------
+
+
+def _report(
+    marked: list[tuple[str, tuple[str, ...]]],
+    entries: dict,
+    declared: set[str],
+    have: dict[str, object],
+    only_ready: bool,
+) -> int:
+    ready = partial = waiting = 0
+    lines: list[str] = []
+    for ref, todo in marked:
+        arrived = [w for w in todo if _one(w, have)]
+        if len(arrived) == len(todo):
+            ready += 1
+            lines.append(f"  READY   {ref:<10} {', '.join(todo)} exists now")
+        elif arrived:
+            # Two of three built is news, and reporting it as blocked hides
+            # the only thing that changed.
+            partial += 1
+            left = [w for w in todo if w not in arrived]
+            lines.append(f"  partial {ref:<10} {', '.join(arrived)} exists; "
+                         f"still waiting on {', '.join(left)}")
+        else:
+            waiting += 1
+            if not only_ready:
+                lines.append(f"  blocked {ref:<10} {', '.join(todo)}")
+    if lines:
+        print("  in the tree, marked `todo=`")
+        print("\n".join(lines))
+
+    jready, jwaiting, stale, unchecked = [], [], [], []
     for ref, entry in sorted(entries.items()):
         wants = entry.get("wants", "")
         if ref in declared:
@@ -58,19 +110,23 @@ def main() -> int:
             # "0 ready" and two of them were writable.
             unchecked.append((ref, wants))
         elif verdict:
-            ready.append((ref, wants, entry.get("why", "")))
+            jready.append((ref, wants, entry.get("why", "")))
         else:
-            waiting.append((ref, wants, entry.get("why", "")))
+            jwaiting.append((ref, wants, entry.get("why", "")))
 
-    for ref, wants, why in ready:
+    if jready or (not only_ready and (jwaiting or stale)):
+        print(f"\n  in {BLOCKED.relative_to(ROOT)}, no row to decorate")
+    for ref, wants, why in jready:
         print(f"  READY   {ref:<10} {wants} exists now — {why}")
-    if not args.ready:
-        for ref, wants, why in waiting:
+    if not only_ready:
+        for ref, wants, why in jwaiting:
             print(f"  blocked {ref:<10} {wants or '(no method named)'} — {why}")
         for ref, wants in stale:
             print(f"  written {ref:<10} was waiting on {wants}; drop it from the list")
 
-    print(f"\n  {len(ready)} ready, {len(waiting)} still blocked, {len(stale)} to remove")
+    print(f"\n  tree: {ready} ready, {partial} partial, {waiting} still blocked")
+    print(f"  {BLOCKED.relative_to(ROOT)}: {len(jready)} ready, "
+          f"{len(jwaiting)} still blocked, {len(stale)} to remove")
     if unchecked:
         # Loud, and a non-zero exit. Printing a line and carrying on was
         # the whole failure: the summary read "0 ready" and nobody
@@ -81,6 +137,60 @@ def main() -> int:
             print(f"      {ref:<12} {wants[:88]}")
         return 1
     return 0
+
+
+def _queue(
+    marked: list[tuple[str, tuple[str, ...]]],
+    entries: dict,
+    declared: set[str],
+    args: argparse.Namespace,
+) -> int:
+    """The work queue: every wanted symbol, and who is waiting on it."""
+    # A dict per symbol rather than a list: a `wants` sentence that says
+    # `dsl.Power.reach and dsl.Power.target` names `dsl.Power` twice, and
+    # counting it twice made one entry look like two rows of demand --
+    # which is the one number this view exists to get right.
+    wanted: dict[str, dict[str, None]] = defaultdict(dict)
+    mute = 0
+    for ref, todo in marked:
+        for want in todo:
+            wanted[want.strip()][ref] = None
+    for ref, entry in sorted(entries.items()):
+        if ref in declared:
+            continue
+        named = _wants_of(entry.get("wants", ""))
+        if not named:
+            mute += 1
+            continue
+        for want in named:
+            wanted[want.strip()][ref] = None
+
+    if args.refs:
+        # Space separated and nothing else, because the whole use is
+        # `spec.py $(blocked.py --refs ...)`. An unknown symbol prints
+        # nothing rather than a complaint the shell would paste into argv.
+        print(" ".join(wanted.get(args.refs.strip(), ())))
+        return 0
+
+    if not wanted:
+        print("# nothing outstanding")
+        return 0
+    width = min(max(len(w) for w in wanted), 44)
+    for want in sorted(wanted, key=lambda w: (-len(wanted[w]), w)):
+        refs = list(wanted[want])
+        shown = ", ".join(refs[:12]) + (f", … and {len(refs) - 12} more"
+                                        if len(refs) > 12 else "")
+        print(f"  {want:<{width}} ({len(refs):>3} rows): {shown}")
+    print(f"\n  {len(wanted)} symbols wanted by {sum(len(v) for v in wanted.values())} rows")
+    if mute:
+        print(f"  {mute} blocked.json entr(ies) name no symbol at all "
+              f"-- run without --group to see them")
+    return 0
+
+
+# --------------------------------------------------------------------------
+# What exists, and whether a `wants` names it
+# --------------------------------------------------------------------------
 
 
 def _surface() -> dict[str, object]:
@@ -105,13 +215,11 @@ def _surface() -> dict[str, object]:
     return have
 
 
-def _declared() -> set[str]:
+def _declared() -> dict:
     sys.argv = sys.argv[:1]
-    import combat_engine.content  # noqa: F401
-    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.content import declared
 
-    return set(REGISTRY)
-
+    return declared()
 
 
 def _symbols(wants: str) -> list[str]:
@@ -135,6 +243,33 @@ def _symbols(wants: str) -> list[str]:
     return out
 
 
+def _wants_of(wants: str) -> list[str]:
+    """The symbols one `wants` string names, whether or not it is prose.
+
+    **Prose is the normal case, not the exception.** 45 of `blocked.json`'s
+    46 entries were written as a sentence, because a gap is usually more
+    than one symbol. Treating that as unreadable made the whole instrument
+    silent; treating it as a name made every one of them report blocked
+    forever, which is how `p11603` sat there after the ref it asked for had
+    been minted. So the symbols are picked out of the sentence and each is
+    checked -- a partial answer that is true beats a total answer that is
+    not.
+
+    A `todo=` element never comes through here: `dsl.power` already refuses
+    anything but a single symbol, which is the whole reason the marker is
+    symbols and not prose.
+    """
+    head, _, rest = wants.partition("(")
+    head = head.strip()
+    # `wants` is `name` or `name(param=, param=)`. Prose after the closing
+    # bracket makes the parameter list garbage, every check against it
+    # fails, and the row reports blocked forever -- which is the silence
+    # this file exists to break. 106 rows sat ready behind one such string.
+    if " " in head or (rest and not rest.rstrip().endswith(")")):
+        return _symbols(wants)
+    return [wants.strip()] if head else []
+
+
 def _one(token: str, have: dict[str, object]) -> bool:
     """Is this single symbol present, with the parameter it asks for?"""
     head, _, rest = token.partition("(")
@@ -146,6 +281,7 @@ def _one(token: str, have: dict[str, object]) -> bool:
         thing = have.get(owner)
         return thing is not None and hasattr(thing, attr)
     return False
+
 
 def _exists(wants: str, have: dict[str, object]) -> bool | None:
     """Is the named thing on the surface, *with* the parameter asked for?
@@ -174,35 +310,10 @@ def _exists(wants: str, have: dict[str, object]) -> bool | None:
     added and `p11285` went on sitting there, which is the same silence
     this file exists to break, pointing the other way.
     """
-
-    head, _, rest = wants.partition("(")
-    head = head.strip()
-    # `wants` is `name` or `name(param=, param=)`. Prose after the closing
-    # bracket makes the parameter list garbage, every check against it
-    # fails, and the row reports blocked forever -- which is the silence
-    # this file exists to break, so it is said out loud instead. 106 rows
-    # sat ready behind one such string.
-    # **Prose is the normal case, not the exception.** 45 of 46 entries
-    # are written as a sentence, because a gap is usually more than one
-    # symbol. Treating that as unreadable made the whole instrument
-    # silent; treating it as a name made every one of them report
-    # blocked forever, which is how `p11603` sat there after the ref it
-    # asked for had been minted. So the symbols are picked out of the
-    # sentence and each is checked -- a partial answer that is true
-    # beats a total answer that is not.
-    if " " in head or (rest and not rest.rstrip().endswith(")")):
-        named = _symbols(wants)
-        if not named:
-            return None
-        missing = [n for n in named if not _one(n, have)]
-        return not missing
-    if head not in have and "." in head:
-        owner, _, attr = head.rpartition(".")
-        thing = have.get(owner)
-        return thing is not None and hasattr(thing, attr)
-    if head not in have:
-        return False
-    return _params_ok(head, rest, have)
+    named = _wants_of(wants)
+    if not named:
+        return None
+    return all(_one(n, have) for n in named)
 
 
 def _params_ok(head: str, rest: str, have: dict[str, object]) -> bool:

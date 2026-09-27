@@ -8,15 +8,16 @@ ids and mechanics, and the prose lives in a git-ignored `localization/`
 built from your own copy of the compendium. `scripts/leaks.py` checks that
 nothing has crept in, and it runs as part of `check.py`.
 
-A row that cannot be expressed is **left out**, and the missing `Cast`
-method reported. Never stubbed, never faked: `scripts/coverage.py` counts
-what is absent and a count cannot go stale, where a half-written row looks
-finished.
+A row that cannot be fully expressed is **written with `todo=` naming the
+symbols it wanted**, and the missing `Cast` method reported. Never faked:
+such a row is refused in play, counted partial and never done, named
+individually by the audit, and it holds its issue open. A row is left out
+entirely only when there is nothing to decorate.
 
 ## Checking your work
 
 ```
-uv run scripts/check.py            # all seven instruments, ~47s
+uv run scripts/check.py            # all eight instruments, ~47s
 uv run scripts/check.py --fast     # skip the two that start a server, ~3s
 uv run scripts/check.py --all      # audit every row, not just changed ones
 uv run scripts/check.py --history  # what each has cost, and what it has caught
@@ -46,19 +47,40 @@ method that had existed for a day.
 
 ### When a row cannot be written
 
-Leave it out — no stub, no placeholder — and add it to `docs/blocked.json`
-with the `Cast` method or header field it wanted. `coverage.py` counts the
-hole; that file records *why*, which nothing else did.
+Write it with `todo=("c.deals()",)` — symbols, never prose; a sentence is
+refused at import. The row is then refused by `usable`, so it is as inert
+in play as an absence, but the reason lives in the tree where a tool can
+read it.
+
+That reverses the old no-stubs rule, deliberately. The old rule was sound
+while everything absent could be counted, and it stops working at ~1,900
+items and ~1,675 feats against an engine that has never modelled either:
+the absences become the majority and the reason for each lives nowhere. It
+is only safe because **a half-written row cannot look finished** —
+`coverage.py` counts it partial and never done, `audit.py` names it on its
+own line, `issues.py` keeps the bucket open, and `todo.py` fails the build
+when a wanted symbol arrives or when markers pass a tenth of the tree.
 
 ```
-uv run scripts/blocked.py --ready
+uv run scripts/blocked.py --group              the work queue, ranked by demand
+uv run scripts/blocked.py --refs 'c.deals()'   the refs waiting on one symbol
+uv run scripts/blocked.py --ready              what has become writable
 ```
 
-lists the rows whose gap has since been built. Three level-5 rows sat
-waiting on `c.moving_as` for four levels after it existed, because the
-reason lived only in a wave's report and an issue comment, and neither is
-something you can grep. Adding the entry is the last step of leaving a row
-out.
+`--refs` feeds straight back in as a brief:
+
+```
+uv run scripts/spec.py $(uv run scripts/blocked.py --refs 'c.deals()') --all
+```
+
+Three level-5 rows sat waiting on `c.moving_as` for four levels after it
+existed, because the reason lived only in a wave's report and an issue
+comment, and neither is something you can grep.
+
+`docs/blocked.json` is still hand-maintained, but only for rows left out
+entirely — there is nothing to decorate when the row does not exist.
+`blocked.py` reports it apart from the tree's markers, so it is visible as
+it shrinks.
 
 ## Git
 

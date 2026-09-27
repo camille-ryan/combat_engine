@@ -88,10 +88,9 @@ def _rows_for(what: str) -> int:
     import sys
 
     sys.argv = sys.argv[:1]
-    import combat_engine.content  # noqa: F401
-    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.content import declared
 
-    return sum(1 for p in REGISTRY.values() if getattr(p, "cls", None) == what)
+    return sum(1 for p in declared().values() if getattr(p, "cls", None) == what)
 
 
 def _record(what: str, agents: int, tokens: int, calls: int, rows: int) -> None:

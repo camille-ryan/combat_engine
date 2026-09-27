@@ -111,6 +111,14 @@ CROSSBOW = Weapon(ref="w:crossbow", category="simple", damage="1d8", proficiency
                   group="crossbow", ranged=(15, 30),
                   properties=frozenset({"two-handed"}))
 ROD = Weapon(ref="w:rod", damage="1d4", proficiency=0, group="implement")
+#: The two implements nobody was carrying. The class pages print one for
+#: the wizard (orbs, staffs, wands, tomes) and one for the cleric and the
+#: paladin (holy symbols), and neither chassis held anything -- the wizard
+#: held nothing at all. That cost nothing while every implement was plain,
+#: and costs an enhancement bonus per fight the moment one is magic, which
+#: is the largest bucket of magic items there is.
+ORB = Weapon(ref="w:orb", damage="1d4", proficiency=0, group="implement")
+HOLY_SYMBOL = Weapon(ref="w:holy-symbol", damage="1d4", proficiency=0, group="implement")
 
 #: The eight Player's Handbook classes. Numbers off the class pages.
 CLASSES: dict[str, ClassLine] = {
@@ -119,7 +127,7 @@ CLASSES: dict[str, ClassLine] = {
         {STR: 18, CON: 14, DEX: 13, INT: 10, WIS: 12, CHA: 8},
     ),
     "cleric": ClassLine(
-        "cleric", 12, 5, 7, {"will": 2}, "chain", 0, (MACE,), WIS,
+        "cleric", 12, 5, 7, {"will": 2}, "chain", 0, (MACE, HOLY_SYMBOL), WIS,
         {STR: 14, CON: 13, DEX: 10, INT: 8, WIS: 18, CHA: 12},
     ),
     "rogue": ClassLine(
@@ -127,12 +135,12 @@ CLASSES: dict[str, ClassLine] = {
         {STR: 12, CON: 13, DEX: 18, INT: 10, WIS: 8, CHA: 14},
     ),
     "wizard": ClassLine(
-        "wizard", 10, 4, 6, {"will": 2}, "cloth", 0, (), INT,
+        "wizard", 10, 4, 6, {"will": 2}, "cloth", 0, (ORB,), INT,
         {STR: 10, CON: 13, DEX: 14, INT: 18, WIS: 12, CHA: 8},
     ),
     "paladin": ClassLine(
         "paladin", 15, 6, 10, {"fort": 1, "ref": 1, "will": 1}, "plate", 2,
-        (LONGSWORD,), STR,
+        (LONGSWORD, HOLY_SYMBOL), STR,
         {STR: 16, CON: 13, DEX: 10, INT: 8, WIS: 12, CHA: 16},
     ),
     # Two blades and a bow. The two-weapon build is the one several of its

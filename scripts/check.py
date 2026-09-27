@@ -50,6 +50,8 @@ CHECKS = (
                "every declared row fires, and does something"),
     Instrument("leaks", ("uv", "run", "scripts/leaks.py"),
                "no printed name reached the tree"),
+    Instrument("todo", ("uv", "run", "scripts/todo.py"),
+               "no `todo=` waits on a symbol that now exists, and they stay under budget"),
     Instrument("bonuses", ("uv", "run", "scripts/bonuses.py", "--quiet"),
                "every bonus says the type its card prints"),
     Instrument("replay", ("uv", "run", "scripts/replay.py", "verify"),

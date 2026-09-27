@@ -1303,6 +1303,7 @@ def main() -> int:
               f"{len(REGISTRY) * 0.1:.0f}s\n")
     chosen: list[str] = []
     inert: list[str] = []
+    partial: list[tuple[str, tuple[str, ...]]] = []
     for ref in wanted:
         p = get(ref)
         if p is None:
@@ -1313,6 +1314,14 @@ def main() -> int:
         if args.level is not None and p.level != args.level:
             continue
         if args.monsters and not ref.startswith("m"):
+            continue
+        if p.todo:
+            # Declared unfinished. `usable` refuses it, so firing it here
+            # would only prove the refusal works -- and reporting it SILENT
+            # would drown the real ones. Not fired, and **never counted
+            # OK**: a marker that could pass the audit is a marker that
+            # lets a class look finished by declaring that it is not.
+            partial.append((ref, p.todo))
             continue
         if p.out_of_combat:
             # Declared inert. A cantrip that lights a torch is not a silent
@@ -1347,12 +1356,20 @@ def main() -> int:
         print(f"  UNUSED  {r.ref:<10} could not be used on the test board at all")
     for r in known_quiet:
         print(f"  quiet   {r.ref:<10} {KNOWN_SILENT[r.ref]}")
+    # One line each, where `inert` gets a single summary line. Being
+    # deliberately inert is a finished state; being unfinished is a debt,
+    # and the length of the list is the pressure. A count would hide a
+    # hundred of them behind a number nobody reads twice.
+    for ref, todo in partial:
+        print(f"  TODO    {ref:<10} wants {', '.join(todo)}")
 
     ok = len(chosen) - len(broken) - len(silent) - len(never)
     print(f"\n  {ok} of {len(chosen)} rows fire and do something")
     if inert:
         print(f"  {len(inert)} declared out of combat, not fired: {', '.join(inert[:6])}"
               + (" ..." if len(inert) > 6 else ""))
+    if partial:
+        print(f"  {len(partial)} unfinished, not fired -- see scripts/todo.py")
     if broken or silent:
         print(f"  {len(broken)} raise, {len(silent)} silent")
     if never:

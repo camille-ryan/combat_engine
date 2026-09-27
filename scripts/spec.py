@@ -134,10 +134,9 @@ def _features(db, cls: str | None) -> int:  # noqa: ANN001
 
 
 def _declared() -> set[str]:
-    import combat_engine.content  # noqa: F401  (importing registers what exists)
-    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.content import declared
 
-    return set(REGISTRY)
+    return set(declared())
 
 
 def _powers(db, cls: str | None, levels: list[int] | None, book: str = "") -> list[str]:  # noqa: ANN001

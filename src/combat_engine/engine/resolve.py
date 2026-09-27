@@ -485,6 +485,7 @@ def deal_damage(
     opportunity: bool = False,
     charge: bool = False,
     miss: bool = False,
+    crit: bool = False,
 ) -> int:
     """Apply damage, honouring weakened, resistance, vulnerability and temp hp.
 
@@ -498,11 +499,25 @@ def deal_damage(
     # gated without them, since the ctx named only the first two. A gate on
     # a key the ctx does not carry is silently false, which is the worst
     # way for a rider to be wrong.
+    #
+    # **`dtype` for the same reason, and it was the commonest one left.**
+    # "You gain a +1 bonus to the damage rolls of your fire powers" is a
+    # whole family of feats and a long tail of item riders, and every one
+    # of them had to gate on a key that was not here.
+    #
+    # It is read from the local rather than from the event below, and that
+    # ordering is the point: a *weapon* that deals fire has to have said so
+    # before this line, in `Cast.damage`'s dtype resolution. Set on a
+    # `DamageRolled` listener instead, the type would change after the
+    # bonus had been decided, and "my weapon deals fire" and "+1 with fire"
+    # would disagree about the same blow.
     dmg_ctx = {
         "target": target,
         "power": detail,
         "opportunity": opportunity,
         "charge": charge,
+        "dtype": dtype,
+        "crit": crit,
     }
     if from_attack:
         # A bonus to damage is a thing powers grant constantly -- "+4 damage
@@ -510,6 +525,17 @@ def deal_damage(
         # while this line was missing, so every one of them was stored and
         # never read. Nothing failed; the damage was simply never larger.
         amount += _mods(world, source, "damage", dmg_ctx)
+    # **What a critical hit adds beyond maximising the dice.** 734 of the
+    # heroic magic items print "Critical: +1d6 damage per plus" and the
+    # engine had no hook for any of them: `Cast.damage` maxed the dice and
+    # that was the whole of it, and `Mods` was read for `crit_range` --
+    # how often you crit -- and never for what one is worth.
+    #
+    # Its own `what` rather than a `damage` mod gated on `crit`, because a
+    # crit rider is rolled (`Mod.roll` already carries "+1d6") and because
+    # the two stack differently: every item you hold adds its own.
+    if crit:
+        amount += _mods(world, source, "crit_damage", dmg_ctx)
     if from_attack and deals_half(world, source):
         amount = amount // 2
 

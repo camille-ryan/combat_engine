@@ -41,16 +41,42 @@ def main() -> int:
     return 0
 
 
+#: A ref's kind, by its prefix and a digit. The digit matters: `mba` and
+#: `rba` are the engine's own basic attacks, not a monster and not a ranged
+#: power, and a prefix test alone files them wrong.
+KINDS = (("cf:", "features"), ("p", "powers"), ("m", "monsters"),
+         ("i", "items"), ("f", "feats"))
+
+
+def _kind(ref: str) -> str:
+    for prefix, name in KINDS:
+        if ref.startswith(prefix) and (prefix.endswith(":") or ref[len(prefix):][:1].isdigit()):
+            return name
+    return "other"
+
+
 def _count() -> dict[str, int]:
+    """Rows by kind.
+
+    This used to be `powers = not ref.startswith("m")`, everything else
+    monsters, which was true only while the tree held nothing but powers and
+    monsters. It already filed 58 class features as powers, and the moment
+    items and feats land it would file four thousand of those as powers too
+    -- silently, into a ledger whose whole job is to say how fast each kind
+    is going in.
+    """
     import sys
+    from collections import Counter
 
     sys.argv = sys.argv[:1]
-    import combat_engine.content  # noqa: F401
-    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.content import declared
 
-    powers = sum(1 for r in REGISTRY if not r.startswith("m"))
-    monsters = len(REGISTRY) - powers
-    return {"powers": powers, "monsters": monsters, "total": len(REGISTRY)}
+    rows = declared()
+    counts = Counter(_kind(ref) for ref in rows)
+    return {name: counts.get(name, 0) for _, name in KINDS} | {
+        "other": counts.get("other", 0),
+        "total": len(rows),
+    }
 
 
 def _record(note: str) -> None:

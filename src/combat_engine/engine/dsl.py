@@ -12,6 +12,7 @@ being only one kind of thing to share.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
@@ -461,6 +462,23 @@ class Power:
     #: printed block gives it no compendium id. Header data, so the card
     #: can show what you are about to summon without running the body.
     summon: Summon | None = None
+    #: What this row could not say, as the symbols it wanted.
+    #:
+    #: The old rule was that an unwritable row is left out entirely, and the
+    #: reason was sound: an absence is counted and a half-row looks
+    #: finished. But items and feats are four thousand rows against an
+    #: engine that has never met either, so the absences would be the
+    #: majority and the reason for each would live nowhere.
+    #:
+    #: So a row may now be written with the gap declared -- `todo=("c.deals
+    #: ()",)`. Symbols, never prose: the same grammar `docs/blocked.json`
+    #: uses, so `scripts/blocked.py` reads it with the parser it already
+    #: has, and `power()` refuses anything that parser could not read.
+    #:
+    #: `usable` refuses such a row outright, which is the whole safety of
+    #: the arrangement: it is exactly as inert in play as the absence it
+    #: replaced, and says what it is waiting for.
+    todo: tuple[str, ...] = ()
 
     @property
     def is_attack(self) -> bool:
@@ -542,7 +560,13 @@ class Power:
         # attack is its claws: the row carries `Keyword.WEAPON` and the
         # creature has no `Gear` to hold anything, and demanding one made
         # thirty-two perfectly good monster rows unusable.
-        if gear is None or not gear.weapons:
+        #
+        # **An implement counts as nothing here**, and has to. A wizard
+        # carrying no gear at all could always punch; give it the orb its
+        # class page prints and the list stops being empty, the gate starts
+        # being applied, and the punch it always had is refused -- an
+        # implement being the one thing you cannot hit anybody with.
+        if gear is None or not any(w.group != "implement" for w in gear.weapons):
             return True
         kind = self.reach_of(branch).kind
         if kind == "ranged":
@@ -608,6 +632,17 @@ class Power:
 
 REGISTRY: dict[str, Power] = {}
 
+#: What a `todo=` element may look like. Either a dotted name --
+#: `Keyword.RAGE`, `AttackResult.parity`, `c.deals` -- or any name with an
+#: argument list, `enemy_within(n)`. Both forms are things a tool can go and
+#: look for; a sentence is not, and 45 of `blocked.json`'s 46 entries were
+#: sentences, which is why a quarter of that list went unchecked for weeks
+#: while the summary read "0 ready".
+_SYMBOL = re.compile(
+    r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+\s*(?:\([^()]*\))?"
+    r"|[A-Za-z_]\w*\s*\([^()]*\)"
+)
+
 
 def power(
     ref: str,
@@ -637,6 +672,7 @@ def power(
     no_provoke: bool = False,
     out_of_combat: bool = False,
     summon: Summon | None = None,
+    todo: Iterable[str] = (),
 ) -> Callable[[Body], Body]:
     """Declare one power or one monster ability.
 
@@ -644,6 +680,20 @@ def power(
     second ability. Never a name: the engine has no use for one, and the
     agent that wrote this function was never shown it.
     """
+    todo = tuple(todo)
+    for want in todo:
+        if not _SYMBOL.fullmatch(want.strip()):
+            raise ValueError(
+                f"{ref}: todo={want!r} is prose. Name the symbol you wanted "
+                f"-- c.deals(), query.speed(world, eid, ctx), Keyword.RAGE "
+                f"-- so the tools can tell when it arrives."
+            )
+    if todo and out_of_combat:
+        # One says "this row is finished and deliberately does nothing";
+        # the other says "this row is unfinished". A row claiming both is
+        # counted as fine by `audit.py`'s inert branch and never looked at
+        # again, which is the exact hole the marker exists to close.
+        raise ValueError(f"{ref}: out_of_combat and todo cannot both be set")
 
     def wrap(body: Body) -> Body:
         if ref in REGISTRY:
@@ -676,6 +726,7 @@ def power(
             no_provoke=no_provoke,
             out_of_combat=out_of_combat,
             summon=summon,
+            todo=todo,
         )
         return body
 
@@ -950,6 +1001,16 @@ def usable(
     """
     from .components import Powers
     from .query import can_act
+
+    # **An unfinished row is refused outright**, and this is the whole
+    # safety of letting one be written at all. A `todo` row is still in
+    # `REGISTRY`, so without this it is offered, chosen, and plays whatever
+    # fraction of its card got written -- which is worse than the absence
+    # it replaced, because a wrong result is harder to see than a missing
+    # one. Refused here, it is exactly as inert as being absent was, and it
+    # says what it is waiting for.
+    if p.todo:
+        return False, "not finished yet"
 
     # `dying` is for the one row shape that answers its own downfall: a
     # death throe fires *because* the creature has dropped, so refusing it
