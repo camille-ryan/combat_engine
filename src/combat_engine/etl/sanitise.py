@@ -68,6 +68,17 @@ RULES_TERMS = {
     "holy symbol", "orb", "rod", "wand", "tome", "totem",
     "leather armor", "hide armor", "chainmail", "scale armor", "plate armor",
     "light shield", "heavy shield", "bow", "sword", "axe",
+    # Magic items. A slot is printed beside the price because it is
+    # mechanics, and several items are named after the slot they fill --
+    # so without these, scrubbing takes the word "neck" out of a neck
+    # item's own rules and the line stops meaning anything.
+    "enhancement bonus", "item bonus", "critical", "property", "consumable",
+    "head slot", "neck slot", "arms slot", "hands slot", "waist slot",
+    "feet slot", "ring slot", "wondrous item", "alchemical item",
+    "head", "neck", "arms", "hands", "waist", "feet", "ring", "wondrous",
+    "ammunition", "implement", "armor", "armour", "weapon", "gp",
+    # Feats. The tier and the two labels every feat page prints.
+    "heroic tier", "paragon tier", "epic tier", "prerequisite", "benefit",
 }  # fmt: skip
 
 
@@ -232,6 +243,64 @@ def flavour(document: str) -> str:
         ):
             lines.append(flat)
     return "\n".join(lines).strip()
+
+
+#: An item head line whose label is read straight into a column of `item`.
+#: The **base-item line is not here**, and cannot be: its label is a
+#: different phrase on every page -- `Weapon`, `Neck Slot`, `Divine Boon`,
+#: 32 of them in the heroic tier -- and one of those phrases is also the
+#: printed name of an item, so writing the list into tracked source would be
+#: a leak as well as a thing to keep feeding. It is found by position below.
+_ITEM_COLUMNS = ("enhancement bonus", "critical")
+
+
+def item_spec(document: str, ref: str, name: str) -> str:
+    """One item's mechanical lines, or one Property or Power block of one.
+
+    The same routine does both, because an item's head and its blocks are
+    written in the same dialect and only differ in what has to come out. It
+    is therefore called on a fragment as often as on a page; `detail()`
+    hands back whatever it was given when there is no page furniture.
+
+    **The base-item line is dropped by position, not by label** -- it is
+    always the first labelled line on a *page*, and a block never has an
+    `<h1>` because the caller cuts at the second one. Matching it by label
+    would mean listing every phrase the books use for "what this goes on",
+    which is 32 phrases and one printed name.
+
+    Labels are read with `<i>` allowed as well as `<b>`: the item dialect
+    writes `<i>Trigger:</i>`, and reading it with the default dropped every
+    line of every Power block as flavour.
+    """
+    from .html import detail
+
+    body = detail(document)
+    page = "<h1" in body
+    body = re.sub(r"<h1\b.*?</h1>", " ", body, flags=re.S)
+    body = re.sub(r'<table class="magicitem">.*?</table>', " ", body, flags=re.S)
+    # A Properties block lists its entries as `<li>`, which `paragraphs` does
+    # not look for at all -- 103 blocks came out empty until these were made
+    # paragraphs first.
+    body = re.sub(r"<li\b[^>]*>", '<p class="mistat">', body)
+
+    lines: list[str] = []
+    labels = 0
+    for cls, para in paragraphs(body):
+        if "publishedIn" in cls or "miflavor" in cls:
+            continue
+        pair = labelled(para, ("b", "i"))
+        if pair is None:
+            flat = text(para)
+            if flat:
+                lines.append(flat)
+            continue
+        labels += 1
+        label = pair[0].lower().strip()
+        if (page and labels == 1) or label in _ITEM_COLUMNS:
+            continue
+        lines.append(f"{pair[0]}: {pair[1]}".strip())
+    kept = [line for line in lines if line.strip()]
+    return scrub("\n".join(kept), {name: ref})
 
 
 def power_spec(document: str, ref: str, name: str) -> str:
