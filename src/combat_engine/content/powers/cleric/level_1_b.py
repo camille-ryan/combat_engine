@@ -168,7 +168,7 @@ def p12205(c: Cast) -> None:
     cls="cleric",
     usage=AT_WILL,
     action=STANDARD,
-    reach=Ranged(20),
+    reach=Ranged(20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[*DIVINE_WEAPON, Keyword.RADIANT, Keyword.RANGED],
     attack=Attack(WIS, vs=AC),

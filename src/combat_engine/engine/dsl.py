@@ -97,7 +97,13 @@ class Range:
         if which and self.alt:
             return self.alt
         return (
-            Range(self.kind, self.size, self.within, from_=self.from_)
+            Range(
+                self.kind,
+                self.size,
+                self.within,
+                by_weapon=self.by_weapon,
+                from_=self.from_,
+            )
             if self.alt
             else self
         )
@@ -111,8 +117,8 @@ def Melee(n: int = 1, *, from_: str = "") -> Range:
     return Range("melee", n, from_=from_)
 
 
-def Ranged(n: int, *, from_: str = "") -> Range:
-    return Range("ranged", n, from_=from_)
+def Ranged(n: int, *, by_weapon: bool = False, from_: str = "") -> Range:
+    return Range("ranged", n, by_weapon=by_weapon, from_=from_)
 
 
 def CloseBurst(n: int, *, from_: str = "") -> Range:

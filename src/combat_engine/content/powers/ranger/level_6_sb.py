@@ -52,7 +52,7 @@ def _falls_by_a_wall(world: World, me: int, ev: Fell) -> bool:
     cls="ranger",
     usage=ENCOUNTER,
     action=INTERRUPT,
-    reach=Ranged(10),
+    reach=Ranged(10, by_weapon=True),
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL, Keyword.WEAPON],
     requires=_bow_in_hand,

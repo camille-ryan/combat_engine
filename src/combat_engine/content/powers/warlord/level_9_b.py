@@ -263,7 +263,7 @@ def p10945(c: Cast) -> None:
     cls="warlord",
     usage=DAILY,
     action=STANDARD,
-    reach=Ranged(20),
+    reach=Ranged(20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[*MARTIAL_WEAPON, Keyword.RELIABLE],
     attack=Attack(STR, vs=AC),

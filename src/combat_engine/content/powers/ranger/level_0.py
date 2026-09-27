@@ -207,7 +207,7 @@ def p13587(c: Cast) -> None:
     cls="ranger",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=Ranged(10, by_weapon=True),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=AC),

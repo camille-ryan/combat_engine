@@ -57,7 +57,7 @@ def _ally_takes_it(world: World, me: int, ev: Any) -> bool:
     cls="ranger",
     usage=ENCOUNTER,
     action=REACTION,
-    reach=Ranged(20),
+    reach=Ranged(20, by_weapon=True),
     target=ONE_ALLY,
     keywords=[Keyword.MARTIAL],
     requires=_shooting,

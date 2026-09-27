@@ -318,7 +318,7 @@ def p10923(c: Cast) -> None:
     cls="warlord",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(20),
+    reach=Ranged(20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=MARTIAL_RANGED,
     attack=Attack(STR, vs=AC),

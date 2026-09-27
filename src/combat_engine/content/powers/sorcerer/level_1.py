@@ -189,7 +189,7 @@ def p12467(c: Cast) -> None:
     dropped: nothing in the engine is a familiar.
     """
     shot = c.strike()
-    kind = DamageType.ACID if shot.natural % 2 == 0 else DamageType.RADIANT
+    kind = DamageType.ACID if shot.parity == "even" else DamageType.RADIANT
     if shot:
         c.damage("2d10", c.cha_mod, dtype=kind)
         c.push(c.dex_mod)

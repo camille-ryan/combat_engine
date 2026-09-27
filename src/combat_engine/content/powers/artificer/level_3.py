@@ -41,7 +41,7 @@ from . import ally_struck, one_ally
     cls="artificer",
     usage=ENCOUNTER,
     action=INTERRUPT,
-    reach=Ranged(10),
+    reach=Ranged(10, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.LIGHTNING, Keyword.WEAPON, Keyword.RANGED],
     attack=Attack(INT, vs=AC),

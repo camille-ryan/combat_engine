@@ -43,7 +43,7 @@ from . import enemies_starting_in, holding_a_melee_weapon, one_ally
     cls="artificer",
     usage=DAILY,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=Ranged(10, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.FORCE, Keyword.WEAPON, Keyword.RANGED],
     attack=Attack(INT, vs=AC),

@@ -131,7 +131,7 @@ def p5677(c: Cast) -> None:
     cls="bard",
     usage=DAILY,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=Ranged(10, by_weapon=True),
     target=ONE_CREATURE,
     keywords=ARCANE_WEAPON,
     attack=Attack(CHA, vs=AC),

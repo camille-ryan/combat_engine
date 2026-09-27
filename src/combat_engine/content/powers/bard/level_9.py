@@ -226,7 +226,7 @@ def p5695(c: Cast) -> None:
     cls="bard",
     usage=DAILY,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=Ranged(10, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[*ARCANE_WEAPON, Keyword.HEALING],
     attack=Attack(CHA, vs=AC),

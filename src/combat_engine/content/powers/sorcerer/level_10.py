@@ -132,7 +132,7 @@ def p11834(c: Cast) -> None:
         result = getattr(ev, "result", None)
         if result is None:
             return
-        if result.natural % 2 == 0:
+        if result.parity == "even":
             c.slide(1, on=ev.target)
         else:
             c.bonus(

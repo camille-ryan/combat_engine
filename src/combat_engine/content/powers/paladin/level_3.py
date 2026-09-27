@@ -135,7 +135,7 @@ def p10248(c: Cast) -> None:
     cls="paladin",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(20),
+    reach=Ranged(20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[*DIVINE_WEAPON, Keyword.RANGED],
     attack=Attack(CHA, vs=AC),

@@ -104,7 +104,7 @@ def p10189(c: Cast) -> None:
     cls="artificer",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=Ranged(10, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.WEAPON, Keyword.RANGED, Keyword.POISON],
     attack=Attack(INT, vs=AC),

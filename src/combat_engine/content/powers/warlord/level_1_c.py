@@ -315,7 +315,7 @@ def _send_in(c: Cast, friend: int, barred: set[int | None]) -> None:
     cls="warlord",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=Ranged(10, by_weapon=True),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(STR, vs=AC),

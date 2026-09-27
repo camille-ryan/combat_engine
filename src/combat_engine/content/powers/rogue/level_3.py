@@ -331,7 +331,7 @@ def p10750(c: Cast) -> None:
     cls="rogue",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(20),
+    reach=Ranged(20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=MARTIAL_RANGED,
     attack=Attack(DEX, vs=AC),

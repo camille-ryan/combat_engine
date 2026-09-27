@@ -42,7 +42,7 @@ from . import ally_at, ally_struck, one_ally, with_keyword
     cls="artificer",
     usage=ENCOUNTER,
     action=REACTION,
-    reach=Ranged(10),
+    reach=Ranged(10, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.NECROTIC, Keyword.WEAPON, Keyword.RANGED],
     attack=Attack(INT, vs=AC),

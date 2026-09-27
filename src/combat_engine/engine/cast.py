@@ -812,6 +812,7 @@ class Cast:
         from_: int | None = None,
         ignore_cover: bool = False,
         keep: str = "",
+        hand: str = "main",
     ) -> AttackResult:
         """Roll the attack the header declared.
 
@@ -848,6 +849,7 @@ class Cast:
             from_=from_,
             ignore_cover=ignore_cover,
             keep=keep,
+            hand=hand,
         )
 
     def grant_attack(
@@ -1098,6 +1100,7 @@ class Cast:
         from_: int | None = None,
         ignore_cover: bool = False,
         keep: str = "",
+        hand: str = "main",
     ) -> AttackResult:
         who = self._who(on)
         if who is None:
@@ -1110,7 +1113,7 @@ class Cast:
             advantage=advantage, opportunity=self.opportunity,
             among=tuple(self.targets) or (who,), branch=self.branch,
             ignore_cover=ignore_cover, dying=self.dying, charge=self.charge,
-            keep=keep,
+            keep=keep, hand=hand,
         )
         # An interrupt may have moved the blow onto somebody else. The roll
         # and the `Hit` already name the new target; without this the body's
@@ -3672,6 +3675,42 @@ class Cast:
                 self.world.bus.on(AttackRolled, spend, owner=self.me)
             )
         return granted
+
+    def treat_roll_as(
+        self, parity: str, *, until: When = When.EONT, on: int | None = None
+    ) -> Effect | None:
+        """"Treat your attack roll as odd", whatever the die shows.
+
+        Set on the result rather than by rewriting the die: the card says
+        the *roll* counts as odd, not that a different number came up, and
+        faking `natural` would change whether the attack hit and whether
+        it was a critical -- both recomputed from it after the interrupt
+        window. `AttackResult.parity` is the only thing that should read
+        either, and the two rows that were asking `natural % 2` by hand
+        now go through it.
+
+        One roll, so it is spent on the first attack the creature makes.
+        """
+        from .events import AttackRolled
+
+        # The **caster**, not `c.target`. `_who` follows the target, and
+        # every printed one of these is about its own owner -- the same
+        # trap that made `c.forbid` take a row away from nobody.
+        who = on if on is not None else self.me
+        held = self.effect(f"{self.ref} roll counts as {parity}", until=until, on=who)
+        if held is None:
+            return None
+
+        def dictate(ev: AttackRolled) -> None:
+            if ev.attacker != who or held.ended:
+                return
+            result = getattr(ev, "result", None)
+            if result is not None:
+                result.treated = parity
+                self.world.effects.end(held, "spent")
+
+        held.subs.append(self.world.bus.on(AttackRolled, dictate, owner=who))
+        return held
 
     def bonus(
         self,

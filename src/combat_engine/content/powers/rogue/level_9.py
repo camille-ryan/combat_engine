@@ -424,7 +424,7 @@ def p2908(c: Cast) -> None:
     cls="rogue",
     usage=DAILY,
     action=STANDARD,
-    reach=Ranged(20),
+    reach=Ranged(20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=MARTIAL_RANGED,
     attack=Attack(DEX, vs=REF),

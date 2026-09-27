@@ -70,12 +70,31 @@ class AttackResult:
     #: -- but an interrupt may move it, and then the body that rolled this
     #: has to be told, or it deals its damage to the one that was missed.
     target: int = 0
+    #: "Treat the attack roll as odd", regardless of what the die shows.
+    #: Set rather than rewriting `natural`, because the card says the
+    #: *roll* counts as odd and not that the die landed differently --
+    #: faking the die would change whether it hit and whether it crit,
+    #: both of which are recomputed from `natural` after the interrupt
+    #: window. Read through `parity`, never directly.
+    treated: str = ""
     #: Every d20 face this attack has shown, in the order they were rolled.
     #: `natural` holds one, and anything that rolls again overwrites it --
     #: the avenger's two-roll benefit, `c.reroll_attack`, `keep=` below --
     #: so "you roll the same number on each die of the attack roll" and "if
     #: both of your attack rolls would hit" had nothing left to read.
     rolls: list[int] = field(default_factory=list)
+
+    @property
+    def parity(self) -> str:
+        """`"odd"` or `"even"`, honouring anything that dictated it.
+
+        Two rows read `natural % 2` by hand, which is right until
+        something says otherwise -- and a whole build turns on a row
+        that does.
+        """
+        if self.treated:
+            return self.treated
+        return "even" if self.natural % 2 == 0 else "odd"
 
     def __bool__(self) -> bool:
         return self.hit
@@ -97,6 +116,7 @@ def attack(
     dying: bool = False,
     charge: bool = False,
     keep: str = "",
+    hand: str = "main",
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
@@ -147,6 +167,11 @@ def attack(
             # lookup duplicating `_is_ranged`.
             "ranged": _is_ranged(power, branch),
             "branch": branch,
+            # Which hand swung. `Cast.w(hand="off")` already picked the
+            # off-hand weapon's dice, and then threw the fact away -- so
+            # a rider gated on an off-hand attack read a key the context
+            # did not carry, which is silently false rather than wrong.
+            "hand": hand,
         }
 
         situational = attack_penalty(world, attacker)
