@@ -163,7 +163,7 @@ def f2827(c: Cast) -> None:
 
 
 @power("f2831", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=(*DISTANCE, "p2473"),
+       reach=PERSONAL, target=SELF, dropped=DISTANCE,
        trigger="you use p9401 inside your p2473",
        on=Trigger(PowerUsed, _used("p9401"), "you use that teleport"))
 def f2831(c: Cast) -> None:
@@ -177,11 +177,9 @@ def f2831(c: Cast) -> None:
     `PowerUsed` is announced before the body and nothing has moved yet --
     which is precisely the adjacency the card asks about.
 
-    **`p2473` is declared nowhere in the tree.** The zone this gates on
-    therefore never exists, so the gate is false in every fight and the
-    row pays nothing. Marked rather than left looking finished: a ref
-    is a symbol `blocked.py` resolves against the registry, so this
-    goes red the day that power is written.
+    `p2473` lays its zone with no `label=`, and `Cast.zone` defaults one
+    to the casting row's own ref -- so the string `_in_zone` matches on
+    is that ref and nothing else.
     """
     if not _in_zone(c, "p2473"):
         return

@@ -48,7 +48,8 @@ from combat_engine.engine.zones import Zone
 
 SEND_THOUGHTS = "p8225"
 DISTRACT = "p8224"
-#: A racial zone named by ref. No row carries it yet.
+#: A racial zone named by ref. `Cast.zone` defaults a zone's label to the
+#: ref that laid it, so the zone that row makes carries this string.
 CLOUD = "p2473"
 
 #: The discipline focus is a build the chassis does not deal.
@@ -181,17 +182,11 @@ def f3300(c: Cast) -> None:
 
 
 @power("f3291", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("p2473", "c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
 def f3291(c: Cast) -> None:
     """Standing inside a zone of one's own is asked per damage roll, since
     the psion walks in and out of it. The extra 3 is psychic and a damage
     modifier carries no type, so that word is one half that is missing.
-
-    **`p2473` is declared nowhere in the tree.** The zone this gates on
-    therefore never exists, so the gate is false in every fight and the
-    row pays nothing. Marked rather than left looking finished: a ref
-    is a symbol `blocked.py` resolves against the registry, so this
-    goes red the day that power is written.
     """
     me = c.me
 

@@ -9,7 +9,7 @@ Two shapes make up most of the list.
 
 **"A divine encounter or daily attack power"** is writable and is the
 spine of eight rows: `Keyword.DIVINE` plus `p.usage` plus `p.is_attack`,
-read off the resolved row exactly the way `cf:invoker-covenant` reads it.
+read off the resolved row exactly the way `cf:invoker-f1` reads it.
 `PowerResolved` rather than `PowerUsed`, for the same reason that feature
 gives -- the printed line is about what the power did, and `PowerUsed`
 fires before the body.
@@ -144,6 +144,20 @@ def _used(ref: str):  # noqa: ANN202
     return when
 
 
+def _in_my_zone(c: Cast, ref: str) -> bool:
+    """Is the caster standing in a zone its own named row laid?
+
+    Nothing asks membership of a zone by ref -- `c.my_zones` gives ids and
+    `c.in_my_aura` only answers for auras -- so the squares are read off
+    the zone. `Cast.zone` labels one with the ref that laid it when the
+    row passes no `label=`, which is how `p2473` is found.
+    """
+    return any(
+        zone.owner == c.me and zone.label == ref and c.here in zone.squares
+        for _zid, zone in c.world.zones.all()
+    )
+
+
 def _hit_with(ref: str):  # noqa: ANN202
     def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
         return ev.attacker == me and ev.power == ref
@@ -214,7 +228,7 @@ def f1540(c: Cast) -> None:
        on=Trigger(PowerResolved, _mine_daily, "your daily invocation resolves"))
 def f1548(c: Cast) -> None:
     """The pull is written and "instead of the normal benefit of your
-    covenant manifestation" is dropped: `cf:invoker-covenant` arms its own
+    covenant manifestation" is dropped: `cf:invoker-f1` arms its own
     watch for the encounter and nothing declines one payout of it."""
     for friend in c.within(5, side="ally"):
         if friend != c.me:
@@ -504,14 +518,28 @@ def f2874(c: Cast) -> None:
     feature, which has no ref -- so there is nothing to widen."""
 
 
-@power("f2987", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("p2473",))
+@power("f2987", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="your covenant manifestation goes off inside your p2473",
+       on=Trigger(PowerResolved, _mine_on_my_turn, "your invocation resolves"))
 def f2987(c: Cast) -> None:
     """Concealment for an ally when the covenant manifestation goes off
-    while you stand in your own racial zone. The manifestation is
-    `cf:invoker-covenant` and its moment is readable -- `p2473` is not in
-    the tree, so there is no zone to ask about and `c.my_zones` cannot tell
-    which of several it would be."""
+    while you stand in your own racial zone.
+
+    The manifestation has no event of its own: `cf:invoker-f1` hangs its
+    payout on the same `PowerResolved` under the same gate, so "when you
+    trigger it" is that gate repeated rather than anything read off the
+    feature. The prerequisite is what guarantees the feature is there.
+
+    `AT_WILL` because the card prints no limit, and a triggered
+    `action=NONE` row spends a use every time it fires.
+    """
+    if not _in_my_zone(c, "p2473"):
+        return
+    friends = [a for a in c.within(10, side="ally") if a != c.me]
+    who = c.choose(friends, f"{c.ref}: which ally is hidden", optional=True)
+    if who is not None:
+        c.conceal(on=who, until=When.EONT)
 
 
 # -- racial riders ----------------------------------------------------------
@@ -652,7 +680,7 @@ def f1538(c: Cast) -> None:
 def f2983(c: Cast) -> None:
     """Makes a racial power count as a divine encounter attack so the
     covenant manifestation reads it. The power is named in prose, and
-    `cf:invoker-covenant` asks the header fields of the resolved row --
+    `cf:invoker-f1` asks the header fields of the resolved row --
     nothing overrides those from outside. The skill bonus is a column."""
 
 

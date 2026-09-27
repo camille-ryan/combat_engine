@@ -85,7 +85,11 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
+from combat_engine.engine.grid import Square
 from combat_engine.engine.query import allies, distance_between
+
+#: The racial zone `p2473` lays, by the label it carries.
+CLOUD = "p2473"
 
 #: Another class's feature, named in prose or pointing at a row that is
 #: not declared. The symbol the multiclass waves settled on.
@@ -905,6 +909,40 @@ def _extra_in_surprise(c: Cast, ev: Any) -> None:
     c.flat(c.str_mod if _melee_half(ev) else c.dex_mod, on=ev.target)
 
 
+def _others_in_cloud(c: Cast, ev: Any) -> list[int]:
+    """"All other enemies within the area" of the caster's own `p2473`.
+
+    Empty unless the creature just hit is standing in it, which is the
+    clause's first half. `Cast.zone` labels a zone with the ref that laid
+    it when the row passes no `label=`, so that ref is the whole match.
+    """
+    area: frozenset[Square] = frozenset()
+    for _zid, zone in c.world.zones.all():
+        if zone.owner == c.me and zone.label == CLOUD:
+            area = zone.squares
+            break
+    inside = c.in_squares(area, side="enemy") if area else []
+    return [] if ev.target not in inside else [f for f in inside if f != ev.target]
+
+
+def _splash_in_cloud(c: Cast, ev: Any) -> None:
+    if c.str_mod > 0:
+        for foe in _others_in_cloud(c, ev):
+            c.flat(c.str_mod, on=foe)
+
+
+def _rattle_in_cloud(c: Cast, ev: Any) -> None:
+    """The rattling keyword, paid to creatures the blow never touched.
+
+    `Cast._rattle` pays it out on damage dealt and these enemies take
+    none, so the two halves of the word -- the penalty, and the hold
+    `c.rattled` reads -- are laid directly.
+    """
+    for foe in _others_in_cloud(c, ev):
+        c.penalty("attack", 2, on=foe, until=When.EONT)
+        c.effect("rattled", on=foe, until=When.EONT)
+
+
 # -- the rows ---------------------------------------------------------------
 
 
@@ -1010,18 +1048,15 @@ _riders("f1304", {
     "p992": _mark_the_hit,
 }, dropped=("c.on_granted_basic()", "c.on_riposte()", "c.hit_twice()"))
 
-@_trait("f1305", todo=("p2473", "c.move_zone(with_me=)", "c.zone_exempt()"))
-def f1305(c: Cast) -> None:
-    """Every ref on this card resolves, and every clause is still false.
-    All four are about the zone `p2473` lays, and **`p2473` is declared
-    nowhere in the tree** -- three files already read a zone whose label
-    carries that ref and none of them can ever find one. Written against
-    it, the two splash clauses would be silently false forever, which is
-    the failure this project exists to catch, so they are not written.
-
-    The other two clauses want a zone that follows its owner and a named
-    ally exempted from it, neither of which has a verb.
-    """
+# All four clauses are about the zone `p2473` lays. The two splash ones
+# are riders on a hit inside it and are written; p87's wants the zone to
+# travel with its owner -- `c.move_zone` puts one on a named square and
+# nothing ties it to a creature -- and p620's wants one named ally left
+# out of a zone that is otherwise blinding everybody in it.
+_riders("f1305", {
+    "p992": _splash_in_cloud,
+    "p2248": _rattle_in_cloud,
+}, dropped=("c.move_zone(with_me=)", "c.zone_exempt()"))
 
 # p2105 and p4542 both put the exploit in the place of a charge's melee
 # basic attack, which is the same hold f1303 carries.
