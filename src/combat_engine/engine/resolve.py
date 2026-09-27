@@ -518,6 +518,23 @@ def deal_damage(
         "charge": charge,
         "dtype": dtype,
         "crit": crit,
+        # **Asked of the board, not carried from the roll.** "+2 damage
+        # against a creature granting you combat advantage" is a whole
+        # family of feats, and the key was simply absent -- so each of
+        # them either dropped the clause or called
+        # `has_combat_advantage` by hand from inside its own gate, which
+        # is the same question asked in the same place with more code.
+        #
+        # The caveat is real and is the reason this is not simply the
+        # attack context's `advantage`: a *one-shot* grant is spent by
+        # the attack roll, so by damage time the board says no and this
+        # key says no with it. That is wrong for exactly those grants
+        # and right for every standing one. Threading the rolled value
+        # down would fix it and means an argument on six call sites
+        # plus `Cast.damage` knowing its own result, which it does not.
+        "advantage": (
+            has_combat_advantage(world, source, target) if from_attack else False
+        ),
     }
     if from_attack:
         # A bonus to damage is a thing powers grant constantly -- "+4 damage

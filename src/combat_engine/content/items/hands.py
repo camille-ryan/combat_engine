@@ -348,7 +348,7 @@ def i673p1(c: Cast) -> None:
 
 @power("i893x1", level=4, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.in_form()", "resolve.dmg_ctx.advantage"))
+       todo=("c.in_form()",))
 def i893x1(c: Cast) -> None:
     """Both gates are missing: nothing asks which form is on, and the
     damage context does not carry whether the blow had advantage."""

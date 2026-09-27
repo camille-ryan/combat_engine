@@ -89,16 +89,17 @@ def _again_this_round(c: Cast) -> bool:
 
 
 @power("f1829", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("resolve.dmg_ctx.advantage",))
+       reach=PERSONAL, target=SELF)
 def f1829(c: Cast) -> None:
-    """The same printed sentence as f555 on a different prerequisite, and
-    the same half is dropped: the damage context carries no `advantage`,
-    only the attack context does, so gating on it would be silently
-    false."""
+    """The same printed sentence as f555 on a different prerequisite,
+    and written the same way now that the damage context carries
+    `advantage`."""
     me = c.me
     c.bonus(
         "damage", 2, on=me, until=When.ENCOUNTER,
-        when=lambda ctx: in_beast_form(c.world, me),
+        when=lambda ctx: (
+            in_beast_form(c.world, me) and ctx.get("advantage", False)
+        ),
     )
 
 

@@ -1,0 +1,1675 @@
+"""General feats, the fourteenth batch: the skill-swap cards, the
+elemental legacy chain, and the long martial tail.
+
+Four shapes carry most of this file.
+
+**The swap feat and its card.** Fifteen rows here read "you can exchange
+a power you know for `fNNNb`", and the card beside them is the real
+work. The parent hands the card over with `c.grant_row`; giving a power
+*up* is a build-time exchange and carries `chargen.power_swap()`
+throughout. Writing the parent as a grant rather than a marker is what
+puts the card on a board at all.
+
+**`PowerResolved` carries `rolls`, and that is what "you hit only one of
+them" is asked of.** `dsl.use` appends one `AttackResult` per target
+that swung, and each names the creature it finally landed on -- so three
+area-attack riders that would otherwise have been blind (`f2150`,
+`f2152b`, `f2153b`) are ordinary rows. `PowerUsed` cannot answer any of
+them: it is announced above the body and no attack has been rolled.
+
+**`c.resist` adds.** `f2320` prints "increase the resistance from f2319
+to 5" and f2319 already laid 2, so this row lays **3**. Laying 5 would
+have come to 7 in every fight, and it would have looked right on the
+card.
+
+**A triggered `action=NONE` row spends a use each time it fires**, so
+everything here whose printed benefit has no limit is `AT_WILL`. The
+three that do print one -- "the first time you are bloodied", "once per
+encounter" -- are `ENCOUNTER`, and that is the card speaking.
+
+Weapon groups are a closed set, so the khopesh/scimitar/falchion row and
+the shortbow rows can only be marked: `chargen.FALCHION` and
+`chargen.SHORTBOW` join the family earlier waves started.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+from combat_engine.content.features import CHANNEL_DIVINITY
+from combat_engine.engine import (
+    AC,
+    AT_WILL,
+    DAILY,
+    ENCOUNTER,
+    FORT,
+    FREE,
+    MINOR,
+    MOVE,
+    NO_TARGET,
+    ONE_CREATURE,
+    PERSONAL,
+    REF,
+    SELF,
+    STANDARD,
+    WILL,
+    ActionSpent,
+    ActionType,
+    Attack,
+    Bloodied,
+    Cast,
+    CloseBurst,
+    Condition,
+    Cover,
+    DamageApplied,
+    DamageRolled,
+    DamageType,
+    Dropped,
+    Gear,
+    Hit,
+    Keyword,
+    Melee,
+    Miss,
+    Moved,
+    PowerResolved,
+    Powers,
+    PowerUsed,
+    Ranged,
+    RoundStart,
+    SavingThrow,
+    SurgeSpent,
+    Target,
+    Trigger,
+    TurnStart,
+    When,
+    about_me,
+    both,
+    by_charge,
+    distance,
+    get,
+    power,
+)
+from combat_engine.engine.basic import MELEE, RANGED
+from combat_engine.engine.query import (
+    allies,
+    concealment_of,
+    distance_between,
+    enemies,
+    flanked_by,
+)
+
+#: A racial power or trait the benefit names in prose rather than by ref.
+RACIAL = ("c.on_racial_power()",)
+#: Nothing announces that a roll was a reroll.
+REROLL = ("c.on_reroll()",)
+#: Which weapons a character may pick up is settled when it is built.
+PROFICIENCY = ("chargen.proficiency()",)
+#: Second wind is an action rather than a power and announces nothing.
+SECOND_WIND = ("c.on_second_wind()",)
+#: "You can swap a power you know for this one." The card is handed over;
+#: giving one up is a build-time exchange.
+SWAP = ("chargen.power_swap()",)
+#: A class feature named in prose with no `cf:` row behind it.
+FEATURE = ("c.class_feature()",)
+#: Another class's feature, named by a `cf:` ref nothing declares.
+BORROW = ("c.borrow_feature()",)
+
+DIVINE = [Keyword.DIVINE]
+WEAPON = [Keyword.WEAPON]
+ALL_DEFENCES = (AC, FORT, REF, WILL)
+_AREA = ("close_burst", "close_blast", "area_burst")
+_CLOSE_OR_AREA = _AREA
+_MELEE_REACH = ("melee", "close_burst", "close_blast")
+
+#: The four elements the legacy chain names, in one place.
+_LEGACY = (
+    DamageType.ACID,
+    DamageType.COLD,
+    DamageType.FIRE,
+    DamageType.LIGHTNING,
+)
+
+
+# -- small shared questions -------------------------------------------------
+
+
+def _used(ref: str):  # noqa: ANN202
+    """`PowerUsed` names its subject `actor`, which `by_me` never reads."""
+
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.power == ref
+
+    return when
+
+
+def _resolved(ref: str):  # noqa: ANN202
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.power == ref
+
+    return when
+
+
+def _i_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return ev.attacker == me
+
+
+def _i_crit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return ev.attacker == me and ev.critical
+
+
+def _i_am_bloodied(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return ev.actor == me
+
+
+def _granted(ref: str, card: str, **kw: Any):  # noqa: ANN202
+    """The parent half of a feat whose benefit is "you gain <card>"."""
+
+    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+           reach=PERSONAL, target=SELF, **kw)
+    def parent(c: Cast) -> None:
+        c.grant_row(card, on=c.me, until=When.ENCOUNTER)
+
+    parent.__name__ = ref
+    parent.__doc__ = f"Hands over {card}, which is the whole of the feat."
+    return parent
+
+
+def _keywords(ref: str) -> frozenset:
+    p = get(ref)
+    return frozenset(p.keywords) if p is not None else frozenset()
+
+
+def _reach_kind(ref: str) -> str:
+    p = get(ref)
+    return p.reach.kind if p is not None and p.reach is not None else ""
+
+
+def _group_in(c: Cast, *groups: str) -> bool:
+    gear = c.world.get(c.me, Gear)
+    return gear is not None and any(w.group in groups for w in gear.held)
+
+
+def _basic_refs(c: Cast, *, ranged: bool = True) -> tuple[str, ...]:
+    """What this creature's basic attack actually **is**.
+
+    `Powers.basic` is a monster's own row more often than `mba`, so a
+    damage gate comparing against the engine's default alone is false for
+    anything that replaced it.
+    """
+    known = c.world.get(c.me, Powers)
+    melee = (known.basic if known else "") or MELEE
+    if not ranged:
+        return (melee,)
+    shot = (known.ranged if known else "") or RANGED
+    return (melee, shot)
+
+
+def _adjacent_square(c: Cast, who: int, square: Any) -> bool:
+    from combat_engine.engine.query import squares_of
+
+    return any(distance(s, square) <= 1 for s in squares_of(c.world, who))
+
+
+def _keeps_a_familiar(world, eid: int) -> bool:  # noqa: ANN001
+    """A `requires=` gate, so it gets `(world, eid)` and no `Cast`.
+
+    A card whose whole printed Effect is about "your familiar" has
+    nothing to do without one, and offering it anyway is a row that
+    fires and does nothing -- which is what a wrong power looks like.
+    """
+    from combat_engine.engine.components import Companion
+
+    return any(
+        world.get(e, Companion).owner == eid for e in world.having(Companion)
+    )
+
+
+def _scaled(c: Cast, what: str, count: Callable[[dict[str, Any]], int],
+            cap: int = 8, **kw: Any) -> None:
+    """A bonus whose size is counted when the roll happens.
+
+    `c.bonus` takes a fixed number, and "a bonus equal to the number of
+    your allies adjacent to that enemy" is not one. So it is laid as
+    `cap` separate +1s, each with a `kind` of its own -- two of the same
+    kind do not stack and the larger wins, which would have made the
+    whole thing +1 forever -- and each gated on the count reaching its
+    own step.
+    """
+    for step in range(1, cap + 1):
+        c.bonus(
+            what, 1, on=c.me, until=When.ENCOUNTER,
+            kind=f"{c.ref}:{what}:{step}",
+            when=lambda ctx, n=step: count(ctx) >= n,
+            **kw,
+        )
+
+
+# -- ridden on a power the spec hands over as a ref -------------------------
+
+
+@power("f1348", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you take cold or fire damage",
+       on=Trigger(DamageApplied, lambda w, me, ev: (
+           ev.target == me and ev.amount > 0
+           and ev.dtype in (DamageType.COLD, DamageType.FIRE)
+       ), "you take cold or fire damage"))
+def f1348(c: Cast) -> None:
+    """`DamageApplied` rather than `DamageRolled`: the printed line is
+    "when you take" it, and resistance may leave nothing to take."""
+    c.temp_hp(c.wis_mod, on=c.me)
+
+
+@power("f1350", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with or are damaged by a radiant attack",
+       on=(
+           Trigger(Hit, lambda w, me, ev: (
+               ev.attacker == me and Keyword.RADIANT in _keywords(ev.power)
+           ), "you hit with a radiant attack"),
+           Trigger(DamageApplied, lambda w, me, ev: (
+               ev.target == me and ev.amount > 0
+               and ev.dtype is DamageType.RADIANT
+           ), "you are damaged by radiant damage"),
+       ))
+def f1350(c: Cast) -> None:
+    """Both halves declared. The keyword is read off the row for the
+    attack you make and off the damage type for the one you take --
+    `DamageApplied` drops the power, and radiant is a `Keyword` and a
+    `DamageType` with the same word behind both."""
+    c.temp_hp(c.con_mod, on=c.me)
+
+
+@power("f1359", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use one of the associated powers",
+       on=Trigger(PowerUsed, lambda w, me, ev: (
+           ev.actor == me
+           and ev.power in ("p569", "p7152", "p1580", "p835")
+       ), "you use one of the associated powers"))
+def f1359(c: Cast) -> None:
+    """The Associated Powers family, and one of the few where the spec
+    prints refs rather than names -- so this one is hangable where the
+    twenty-two marked `feat.associated_powers` are not.
+
+    `PowerUsed` is announced above the body, which is exactly right
+    here: the bonus has to be standing before the power rolls damage.
+    The Diplomacy half is a check rather than a fight.
+    """
+    me = c.me
+    near = sum(1 for f in enemies(c.world, me) if c.adjacent(to=f))
+    if near:
+        c.bonus(
+            "damage", near, on=me, until=When.EOT,
+            when=lambda ctx: ctx.get("power") == c.trigger.power,
+        )
+
+
+_granted("f1360", "f1360b")
+
+
+@power("f1360b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
+       reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY)
+def f1360b(c: Cast) -> None:
+    """"Any enemy he or she flanks" is asked per roll, not at the grant:
+    a flank is made and broken inside a turn, and `query.flanked_by` is
+    the question from the beneficiary's side."""
+    me = c.me
+    who = c.choose([me, *c.within(3, side="ally")], "who gains the bonus")
+    if who is None:
+        who = me
+    c.bonus(
+        "attack", 2, on=who, until=When.EONT,
+        when=lambda ctx: (
+            ctx.get("target") is not None
+            and flanked_by(c.world, ctx["target"], who)
+        ),
+    )
+
+
+@power("f2131", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1628",
+       on=Trigger(PowerResolved, _resolved("p1628"), "you use that power"))
+def f2131(c: Cast) -> None:
+    """`PowerResolved` rather than `PowerUsed`: the racial power picks
+    its targets before the body, but the opening this lays is the
+    consequence of the whole use rather than the declaration.
+
+    "Provokes opportunity attacks from your allies **when it attacks
+    you**" is a window opened per attack, so it is a watch rather than a
+    standing grant.
+    """
+    me = c.me
+    friends = [a for a in allies(c.world, me) if a != me]
+    for foe in c.trigger.targets:
+
+        def open_up(ev: Any, foe: int = foe) -> None:
+            if ev.attacker != foe or ev.target != me:
+                return
+            for friend in friends:
+                c.provoke(friend, on=foe, why=c.ref)
+
+        c.watch(Hit, open_up, on=me, until=When.EOTNT)
+
+
+@power("f2176", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1448",
+       on=Trigger(PowerResolved, _resolved("p1448"), "you use that power"),
+       dropped=("c.retarget_side()",))
+def f2176(c: Cast) -> None:
+    """The ally bonus plays. Narrowing the racial power to enemies only
+    does not: whom a row targets is header data chosen before the body,
+    and nothing rewrites one mid-use. That the allies are in the area is
+    what makes them targets at all, so `ev.targets` finds them."""
+    me = c.me
+    friends = set(allies(c.world, me))
+    for who in c.trigger.targets:
+        if who in friends:
+            c.bonus("attack", 1, on=who, until=When.EONT)
+
+
+@power("f2178", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with p1448",
+       on=Trigger(Hit, lambda w, me, ev: (
+           ev.attacker == me and ev.power == "p1448"
+       ), "you hit a creature with that power"))
+def f2178(c: Cast) -> None:
+    c.mark(on=c.trigger.target, until=When.EONT)
+
+
+@power("f2208", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with p1448",
+       on=Trigger(Hit, lambda w, me, ev: (
+           ev.attacker == me and ev.power == "p1448"
+       ), "you hit a creature with that power"))
+def f2208(c: Cast) -> None:
+    c.grants_advantage(on=c.trigger.target, until=When.SONT)
+
+
+@power("f2201", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use a channel divinity power",
+       on=Trigger(PowerUsed, lambda w, me, ev: (
+           ev.actor == me
+           and (p := get(ev.power)) is not None
+           and p.group == CHANNEL_DIVINITY
+       ), "you use a channel divinity power"))
+def f2201(c: Cast) -> None:
+    """The feature arrives as a `group` on the row rather than as a ref,
+    which is enough: `PowerUsed` names the power and `get` reads its
+    group off the header."""
+    me = c.me
+    for foe in enemies(c.world, me):
+        if c.bloodied(on=foe) and distance_between(c.world, me, foe) <= 5:
+            for defence in ALL_DEFENCES:
+                c.penalty(defence, 2, on=foe, until=When.EONT)
+
+
+@power("f2242", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.shift_as(when=)",))
+def f2242(c: Cast) -> None:
+    """The shift is granted for the fight. Gating it on standing next to
+    a creature your p1831 is holding is the half that is missing:
+    `c.suffering("p1831")` asks the question, and `c.shift_as` has
+    nowhere to hang the answer -- it grants an action outright."""
+    c.shift_as(MOVE, 2, on=c.me, until=When.ENCOUNTER)
+
+
+_granted("f2243", "f2243b")
+
+
+@power("f2243b", level=1, cls="", usage=ENCOUNTER,
+       action=ActionType.IMMEDIATE_REACTION, reach=Ranged(5), target=NO_TARGET,
+       keywords=[Keyword.DIVINE, Keyword.POISON], group=CHANNEL_DIVINITY,
+       trigger="an enemy within 5 squares saves against a condition",
+       on=Trigger(SavingThrow, lambda w, me, ev: (
+           ev.saved and ev.actor != me
+       ), "an enemy within range saves"))
+def f2243b(c: Cast) -> None:
+    """`SavingThrow` names its subject `actor`, so `by_me` and
+    `targets_me` are both false on it and the predicate is written out.
+    The side and the range are asked in the body, where the board is."""
+    who = c.trigger.actor
+    if who in enemies(c.world, c.me) and c.distance(who) <= 5:
+        c.ongoing(5, DamageType.POISON, on=who)
+
+
+@power("f2245", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you succeed on a saving throw",
+       on=Trigger(SavingThrow, lambda w, me, ev: (
+           ev.actor == me and ev.saved
+       ), "you succeed on a saving throw"))
+def f2245(c: Cast) -> None:
+    """The hide is conditioned on the cover you already have, which
+    `query.concealment_of` answers -- superior concealment is the -5
+    that `c.conceal(total=True)` sets, and the printed line wants that
+    or superior cover."""
+    c.shift(1)
+    if concealment_of(c.world, c.me) is Cover.SUPERIOR:
+        c.hide()
+
+
+@power("f2255", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you take a move action",
+       on=Trigger(ActionSpent, lambda w, me, ev: (
+           ev.actor == me and ev.cost is ActionType.MOVE
+       ), "you take a move action"))
+def f2255(c: Cast) -> None:
+    """`ActionSpent` is the only announcement that an action was taken
+    at all, and `Encounter.spend` emits it before the action runs --
+    which is where "you can **also** move your familiar" belongs."""
+    fam = c.familiar()
+    if fam is not None:
+        c.move(c.speed_of(fam), who=fam)
+
+
+@power("f2287", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit a bloodied foe",
+       on=Trigger(Hit, lambda w, me, ev: ev.attacker == me,
+                  "you hit an enemy"))
+def f2287(c: Cast) -> None:
+    """Bloodied is asked in the body rather than the predicate: the blow
+    that bloodies is the one this is printed for, and `Hit` fires before
+    the damage lands."""
+    foe = c.trigger.target
+    if not c.bloodied(on=foe):
+        return
+    me = c.me
+    c.penalty("attack", 2, on=foe, until=When.EONT,
+              when=lambda ctx: ctx.get("target") == me)
+
+
+@power("f2288", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2288(c: Cast) -> None:
+    """A trait, not a trigger: flanking is a fact about two positions
+    that is true or false at the moment the blow lands, so every gate
+    here is asked of the damage context rather than at arming.
+
+    Each ally carries the bonus only while **it** is flanking the same
+    foe with me, which is what "allies you flank with" reads.
+    """
+    me = c.me
+
+    def worth_it(ctx: dict[str, Any], who: int) -> bool:
+        foe = ctx.get("target")
+        return (
+            foe is not None and c.bloodied(on=foe)
+            and flanked_by(c.world, foe, me)
+            and flanked_by(c.world, foe, who)
+        )
+
+    for who in [me, *(a for a in allies(c.world, me) if a != me)]:
+        c.bonus(
+            "damage", 2, on=who, until=When.ENCOUNTER,
+            when=lambda ctx, who=who: worth_it(ctx, who),
+        )
+
+
+@power("f2294", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="an enemy saves against ongoing damage",
+       on=Trigger(SavingThrow, lambda w, me, ev: (
+           ev.saved and ev.actor != me and "ongoing " in ev.against
+       ), "an enemy saves against ongoing damage"),
+       dropped=("SavingThrow.source",))
+def f2294(c: Cast) -> None:
+    """"Ongoing damage" is readable -- `SavingThrow.against` is
+    `str(effect)`, and `Effect.__str__` spells out "ongoing N type".
+    Whose ongoing damage it was is not on the event, so this pays out on
+    any enemy's successful save rather than only on one you imposed."""
+    who = c.trigger.actor
+    if who in enemies(c.world, c.me):
+        c.flat(max(c.cha_mod, c.int_mod), dtype=DamageType.COLD, on=who)
+
+
+@power("f2297", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with an augmented psionic power",
+       on=Trigger(Hit, lambda w, me, ev: (
+           ev.attacker == me and Keyword.PSIONIC in _keywords(ev.power)
+       ), "you hit with a psionic power"),
+       dropped=("c.vulnerable(when=)",))
+def f2297(c: Cast) -> None:
+    """"Augmented" is `c.points_spent`, which counts what went into that
+    row this encounter. What is dropped is "of your powers": `c.vulnerable`
+    writes a flat number into `Defences` with nowhere to hang a gate, so
+    an ally's fire gets the benefit of it too."""
+    foe = c.trigger.target
+    if c.points_spent(c.trigger.power) <= 0:
+        return
+    c.vulnerable(2, DamageType.FIRE, on=foe, until=When.EONT)
+    c.vulnerable(2, DamageType.PSYCHIC, on=foe, until=When.EONT)
+
+
+@power("f2299", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you shift",
+       on=Trigger(Moved, lambda w, me, ev: (
+           ev.actor == me and ev.kind_ == "shift"
+       ), "you shift"))
+def f2299(c: Cast) -> None:
+    """`Moved` is the only one of the three movement events that carries
+    `from_`, and "an ally adjacent to your **starting** square" is asked
+    of nothing else. `MoveEnd` knows where you arrived and not where you
+    left."""
+    start = c.trigger.from_
+    me = c.me
+    for friend in allies(c.world, me):
+        if friend != me and _adjacent_square(c, friend, start):
+            c.slide(1, on=friend)
+            return
+
+
+@power("f2321", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use f2319b",
+       on=Trigger(PowerResolved, _resolved("f2319b"), "you use that power"))
+def f2321(c: Cast) -> None:
+    """One roll, so `once=True`: a +2 held to the end of the next turn
+    would buy every attack in between."""
+    c.bonus("attack", 2, on=c.me, until=When.EONT, once=True)
+
+
+@power("f2322", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you are first bloodied",
+       on=Trigger(Bloodied, about_me, "you are bloodied"))
+def f2322(c: Cast) -> None:
+    """`ENCOUNTER` is right here and nowhere else in this file: the card
+    prints "the first time ... in each encounter", so a use spent on the
+    first firing is the printed limit rather than an accident."""
+    c.restore_use("f2319b", on=c.me)
+
+
+@power("f2433", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1628",
+       on=Trigger(PowerResolved, _resolved("p1628"), "you use that power"))
+def f2433(c: Cast) -> None:
+    """The racial power is named in prose here, but `f2131`'s gate in the
+    same batch spells it `p1628`, so the trigger is a ref rather than a
+    guess. `c.bonus(dice=)` is how an extra `[W]` is added to a roll that
+    has not happened yet."""
+    c.bonus(
+        "damage", 0, dice=c.w(), on=c.me, until=When.EONT, once=True,
+        when=lambda ctx: (
+            Keyword.MARTIAL in _keywords(ctx.get("power", ""))
+            and Keyword.WEAPON in _keywords(ctx.get("power", ""))
+        ),
+    )
+
+
+# -- the skill-swap cards ---------------------------------------------------
+
+
+_granted("f2103", "f2103b", dropped=SWAP)
+
+
+@power("f2103b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
+       reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
+       attack=Attack(REF, vs=WILL), dropped=("c.pick_pocket()",))
+def f2103b(c: Cast) -> None:
+    """"Dexterity or Charisma" with one ability in the header: the roll
+    carries the difference as `plus=` and the damage line reads the
+    larger modifier directly.
+
+    "Grants combat advantage to **all** attackers" is `to="allies"` --
+    the relation names one beneficiary at a time, and my side is who it
+    matters to. Picking the pocket is a free-action Thievery check with
+    no combat consequence and nowhere to put its result.
+    """
+    edge = max(0, c.cha_mod - c.dex_mod)
+    if c.strike(plus=edge):
+        c.damage(c.w(), max(c.dex_mod, c.cha_mod))
+        c.grants_advantage(to="allies", until=When.EONT)
+    if c.first:
+        c.shift(1)
+
+
+_granted("f2104", "f2104b", dropped=SWAP)
+
+
+@power("f2104b", level=1, cls="", usage=ENCOUNTER, action=MOVE,
+       reach=PERSONAL, target=SELF)
+def f2104b(c: Cast) -> None:
+    """The errata'd text, which drops the trigger line and makes the whole
+    thing an Effect. A grab is a `Condition` like the other three, so one
+    `c.cure` says all of it."""
+    c.cure(
+        Condition.GRABBED, Condition.SLOWED, Condition.IMMOBILIZED,
+        Condition.RESTRAINED, on=c.me,
+    )
+    c.shift(1)
+
+
+_granted("f2105", "f2105b", dropped=SWAP)
+
+
+@power("f2105b", level=1, cls="", usage=DAILY, action=STANDARD,
+       reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
+       attack=Attack(REF, vs=AC), dropped=("c.phasing(through=)",))
+def f2105b(c: Cast) -> None:
+    """The Effect runs first, as printed: the shift is what brings you
+    into reach. Moving through the target's space on the way is the
+    dropped clause -- `c.phasing` goes through terrain and has no way to
+    name one creature.
+
+    The secondary attack is rolled by hand with `c.attack`, because a
+    header carries one attack line and this card prints two.
+    """
+    foe = c.target
+    if foe is None:
+        return
+    edge = max(0, c.cha_mod - c.dex_mod)
+    c.shift(4)
+    if c.strike(plus=edge):
+        c.damage(c.w(2))
+    else:
+        c.shift(1)
+    if c.attack(c.dex_ + edge, AC, on=foe):
+        c.damage(c.w(), on=foe)
+    c.shift(c.speed_of())
+
+
+_granted("f2106", "f2106b", dropped=SWAP)
+
+
+@power("f2106b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
+       reach=Melee(1),
+       target=Target(side="enemy", count=1,
+                     label="granting you combat advantage"),
+       keywords=WEAPON, attack=Attack(FORT, vs=FORT),
+       dropped=("Target.kind",))
+def f2106b(c: Cast) -> None:
+    """The restriction on which creature may be picked is printed on the
+    target line and the header has nowhere to enforce it; `label=`
+    records it for the card and `Target.kind` is the gap.
+
+    "Falls prone if it takes damage while dazed **from this attack**" is
+    a watch tied to the hold this row laid, so a daze from anywhere else
+    does not set it off.
+    """
+    edge = max(0, c.cha_mod - c.str_mod)
+    if not c.strike(plus=edge):
+        return
+    c.damage(c.w(), max(c.str_mod, c.cha_mod))
+    held = c.dazed(until=When.EONT)
+    foe = c.target
+    if held is None or foe is None:
+        return
+
+    def topple(ev: Any) -> None:
+        if ev.target == foe and ev.amount > 0 and held.live:
+            c.prone(on=foe)
+
+    c.watch(DamageApplied, topple, on=c.me, until=When.EONT, once=True)
+
+
+_granted("f2107", "f2107b", dropped=SWAP)
+
+
+@power("f2107b", level=1, cls="", usage=ENCOUNTER,
+       action=ActionType.IMMEDIATE_REACTION, reach=PERSONAL, target=SELF,
+       keywords=[Keyword.FEAR],
+       trigger="you are hit or missed by an attack",
+       on=(
+           Trigger(Hit, lambda w, me, ev: ev.target == me and ev.attacker != me,
+                   "you are hit by an attack"),
+           Trigger(Miss, lambda w, me, ev: ev.target == me and ev.attacker != me,
+                   "you are missed by an attack"),
+       ),
+       dropped=("c.immune(keyword=)",))
+def f2107b(c: Cast) -> None:
+    """Both halves of "hit or missed" are declared; declaring one would
+    have looked finished. Creatures immune to fear are the dropped
+    clause -- immunity in this engine is to conditions, not keywords."""
+    c.grants_advantage(on=c.trigger.attacker, until=When.EONT)
+
+
+_granted("f2108", "f2108b", dropped=SWAP)
+
+
+@power("f2108b", level=1, cls="", usage=DAILY, action=STANDARD,
+       reach=Melee(1),
+       target=Target(side="enemy", count=1,
+                     label="granting you combat advantage"),
+       keywords=WEAPON, attack=Attack(FORT, vs=FORT),
+       dropped=("Target.kind",))
+def f2108b(c: Cast) -> None:
+    """The Effect lands whether the attack does, which is what "Effect"
+    means, so both watches are armed outside the hit branch.
+
+    Standing up is announced as `ConditionEnded` on prone and nothing
+    else, and `c.provoke` is the verb that opens a window for one named
+    attacker.
+    """
+    foe = c.target
+    edge = max(0, c.cha_mod - c.str_mod)
+    if c.strike(plus=edge):
+        c.damage(c.w(), max(c.str_mod, c.cha_mod))
+    else:
+        c.half_damage(c.w(), max(c.str_mod, c.cha_mod))
+    if foe is None:
+        return
+    me = c.me
+
+    def stood(ev: Any) -> None:
+        if ev.target == foe and ev.condition is Condition.PRONE:
+            c.provoke(me, on=foe, why=c.ref)
+
+    from combat_engine.engine import ConditionEnded
+
+    c.watch(ConditionEnded, stood, on=me, until=When.ENCOUNTER)
+
+    def follow_up(ev: Any) -> None:
+        if (
+            ev.attacker == me and ev.target == foe
+            and c.turn_of() == me
+            and _reach_kind(ev.power) in _MELEE_REACH
+        ):
+            c.prone(on=foe)
+
+    c.watch(Hit, follow_up, on=me, until=When.ENCOUNTER)
+
+
+_granted("f2117", "f2117b", dropped=(*SWAP, "c.light()"))
+
+
+@power("f2117b", level=1, cls="", usage=ENCOUNTER, action=FREE,
+       reach=PERSONAL, target=SELF,
+       keywords=[Keyword.DIVINE, Keyword.RADIANT],
+       trigger="you hit an enemy with an attack",
+       on=Trigger(Hit, _i_hit, "you hit an enemy with an attack"))
+def f2117b(c: Cast) -> None:
+    """"Cannot benefit from invisibility" is `c.truesight(of=)`, which is
+    the one named-creature shape of the sense -- laid on everybody on my
+    side, because the printed line takes the invisibility away rather
+    than granting me one pair of eyes."""
+    foe = c.trigger.target
+    c.damage("1d6", dtype=DamageType.RADIANT, on=foe)
+    c.grants_advantage(on=foe, to="allies", until=When.EONT)
+    for who in [c.me, *(a for a in allies(c.world, c.me) if a != c.me)]:
+        c.truesight(of=foe, on=who, until=When.EONT)
+
+
+_granted("f2151", "f2151b", dropped=SWAP)
+
+
+@power("f2151b", level=1, cls="", usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF, todo=("c.reroll_ones()",))
+def f2151b(c: Cast) -> None:
+    """Both halves want the same thing that does not exist: nothing
+    announces an individual damage die, so neither "you roll a 1 on a
+    damage die" nor "reroll any 1 or 2" has anywhere to stand."""
+
+
+_granted("f2152", "f2152b", dropped=SWAP)
+
+
+@power("f2152b", level=1, cls="", usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with an area or close attack power",
+       on=Trigger(PowerResolved, lambda w, me, ev: (
+           ev.actor == me and _reach_kind(ev.power) in _AREA
+           and any(r.hit for r in ev.rolls)
+       ), "you hit with an area or close attack power"),
+       dropped=("c.origin_of()",))
+def f2152b(c: Cast) -> None:
+    """Everybody the attack touched is pushed. What is dropped is the
+    square they are pushed *from*: the printed line measures from the
+    attack's origin and nothing records where a resolved power was
+    aimed, so this pushes away from the caster -- which is the same
+    square for a close burst and not for an area one."""
+    for who in c.trigger.targets:
+        c.push(5, on=who)
+
+
+_granted("f2153", "f2153b", dropped=SWAP)
+
+
+@power("f2153b", level=1, cls="", usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with an area attack power",
+       on=Trigger(PowerResolved, lambda w, me, ev: (
+           ev.actor == me and _reach_kind(ev.power) == "area_burst"
+           and any(r.hit for r in ev.rolls)
+       ), "you hit with an area attack power"))
+def f2153b(c: Cast) -> None:
+    """"Each creature you hit" is `PowerResolved.rolls`: one
+    `AttackResult` per swing, each naming the creature the blow finally
+    landed on. `ev.targets` would knock down the ones that were missed
+    as well."""
+    for roll in c.trigger.rolls:
+        if roll.hit and roll.target:
+            c.prone(on=roll.target)
+
+
+_granted("f2154", "f2154b", dropped=SWAP)
+
+
+@power("f2154b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
+       reach=PERSONAL, target=SELF, todo=("c.ignore_resistance()",))
+def f2154b(c: Cast) -> None:
+    """Resistance and insubstantial are read inside `resolve.damage` and
+    neither can be bypassed by an attacker today."""
+
+
+_granted("f2155", "f2155b", dropped=SWAP)
+
+
+@power("f2155b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
+       reach=PERSONAL, target=SELF, dropped=("c.ignore_cover(once=)",))
+def f2155b(c: Cast) -> None:
+    """The regain-on-a-miss is real -- `c.restore_use` hands a use back
+    by ref, and this row's own ref is `c.ref`. What is dropped is "the
+    **next** attack": `c.ignore_cover` holds for a duration and has no
+    one-shot, so the grant covers every ranged roll until the end of the
+    next turn rather than one."""
+    me = c.me
+    c.ignore_cover(on=me, until=When.EONT,
+                   when=lambda ctx: bool(ctx.get("ranged", False)))
+
+    def missed(ev: Any) -> None:
+        if ev.attacker == me:
+            c.restore_use(c.ref, on=me)
+
+    c.watch(Miss, missed, on=me, until=When.EONT, once=True)
+
+
+_granted("f2891", "f2891b", dropped=SWAP)
+
+
+@power("f2891b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
+       reach=PERSONAL, target=SELF, keywords=DIVINE,
+       requires=_keeps_a_familiar, requires_text="you must have a familiar",
+       dropped=("c.grants_in(advantage=)",))
+def f2891b(c: Cast) -> None:
+    """The light itself is not a combat effect. What is is "enemies grant
+    combat advantage while within 3 squares of your familiar", and that
+    is a standing area condition: `c.grants_in` carries numbers into a
+    zone and combat advantage is a relation, so this is laid on whoever
+    is inside the radius when the power goes off."""
+    fam = c.familiar()
+    if fam is None:
+        return
+    for foe in c.within(3, of=fam, side="enemy"):
+        c.grants_advantage(on=foe, to="allies", until=When.EONT)
+
+
+# -- the divine free-action cards -------------------------------------------
+
+
+_granted("f2138", "f2138b")
+
+
+@power("f2138b", level=1, cls="", usage=ENCOUNTER, action=FREE,
+       reach=CloseBurst(3), target=SELF,
+       keywords=[Keyword.DIVINE, Keyword.HEALING],
+       trigger="you drop an enemy",
+       on=Trigger(Dropped, lambda w, me, ev: (
+           ev.source == me and ev.actor != me
+       ), "you reduce an enemy to 0 hit points"),
+       dropped=("Bloodied.source",))
+def f2138b(c: Cast) -> None:
+    """Only half of "you bloody an enemy **or** reduce one to 0" can be
+    declared: `Dropped` carries `source` and `Bloodied` carries `actor`
+    alone, so nothing says who did the bloodying.
+
+    The surge is spent by the caster and the hit points land on whoever
+    is chosen, which is what "gains hit points **as if** it spent the
+    healing surge" reads.
+    """
+    me = c.me
+    who = c.choose([me, *c.within(3, side="ally")], "who gains the surge")
+    if who is None:
+        who = me
+    if c.spend_surge(on=me):
+        c.heal(c.surge_value(of=who), on=who)
+
+
+_granted("f2140", "f2140b")
+
+
+@power("f2140b", level=1, cls="", usage=ENCOUNTER,
+       action=ActionType.IMMEDIATE_REACTION, reach=Ranged(5), target=NO_TARGET,
+       keywords=[Keyword.DIVINE, Keyword.HEALING], group=CHANNEL_DIVINITY,
+       trigger="you or an ally within 5 squares is crit or bloodied",
+       on=(
+           Trigger(Hit, lambda w, me, ev: ev.critical, "a critical hit lands"),
+           Trigger(Bloodied, lambda w, me, ev: True, "somebody is bloodied"),
+       ))
+def f2140b(c: Cast) -> None:
+    """Two events for one printed trigger, and the side and the range are
+    asked in the body: `Hit` names its victim `target` and `Bloodied`
+    names its subject `actor`, so no one predicate covers both."""
+    me = c.me
+    ev = c.trigger
+    who = getattr(ev, "target", None)
+    if who is None:
+        who = ev.actor
+    if who != me and who not in allies(c.world, me):
+        return
+    if c.distance(who) > 5:
+        return
+    if c.may("spend a healing surge", who=who):
+        c.surge(on=who)
+
+
+# -- the elemental legacy chain ---------------------------------------------
+
+
+@power("f2319", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2319(c: Cast) -> None:
+    """The card and the resistance both, which is why this is not
+    `_granted`."""
+    c.grant_row("f2319b", on=c.me, until=When.ENCOUNTER)
+    for dtype in _LEGACY:
+        c.resist(2, dtype, on=c.me, until=When.ENCOUNTER)
+
+
+@power("f2319b", level=1, cls="", usage=ENCOUNTER, action=FREE,
+       reach=PERSONAL, target=SELF,
+       keywords=[Keyword.ACID, Keyword.COLD, Keyword.FIRE, Keyword.LIGHTNING],
+       trigger="you hit an enemy with an attack",
+       on=Trigger(Hit, _i_hit, "you hit an enemy with an attack"))
+def f2319b(c: Cast) -> None:
+    """The type is chosen at use, which is what "acid, cold, fire **or**
+    lightning" means on a card that carries all four keywords."""
+    pick = c.choose(list(_LEGACY), "which damage type")
+    c.flat(3, dtype=pick or DamageType.FIRE, on=c.trigger.target)
+
+
+@power("f2318", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2318(c: Cast) -> None:
+    """`query.speed` reads `Mods.total("speed", ...)`, so a gated speed
+    bonus is a real thing rather than a number nobody looks at."""
+    me = c.me
+    c.bonus("speed", 1, on=me, until=When.ENCOUNTER,
+            when=lambda ctx: c.bloodied(on=me))
+
+
+@power("f2320", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2320(c: Cast) -> None:
+    """**Three**, not five. `c.resist` adds into `Defences.resist`, and
+    f2319 -- which this feat requires -- has already laid 2, so laying
+    the printed total would come to 7 in every fight."""
+    for dtype in _LEGACY:
+        c.resist(3, dtype, on=c.me, until=When.ENCOUNTER)
+
+
+# -- the diabolic and intimidating cards ------------------------------------
+
+
+@power("f2129", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=RACIAL)
+def f2129(c: Cast) -> None:
+    """A trait, not a trigger, because the row has to do two things: hand
+    over the card and arm the crit rider. Declared `on=Trigger(Hit, ...)`
+    the grant would never happen at all.
+
+    Taking the old racial power *away* is the dropped half -- it is named
+    in prose and `c.forbid` needs a ref.
+    """
+    me = c.me
+    c.grant_row("f2129b", on=me, until=When.ENCOUNTER)
+
+    def avenge(ev: Any) -> None:
+        if ev.target != me or not ev.critical:
+            return
+        foe = ev.attacker
+        c.bonus(
+            "attack", 2, on=me, until=When.ENCOUNTER, kind="feat",
+            when=lambda ctx: ctx.get("target") == foe,
+        )
+
+    c.watch(Hit, avenge, on=me, until=When.ENCOUNTER)
+
+
+@power("f2129b", level=1, cls="", usage=DAILY, action=MINOR,
+       reach=PERSONAL, target=SELF, keywords=[Keyword.POLYMORPH],
+       dropped=("c.bonus(of_ref=)",))
+def f2129b(c: Cast) -> None:
+    """Raising the attack bonus that *another* row grants is the dropped
+    clause: m1031a4's bonus lives inside its own effect and nothing can
+    reach in and rewrite one."""
+    me = c.me
+    c.form(until=When.ENCOUNTER, label=c.ref)
+    c.regeneration(2, on=me, until=When.ENCOUNTER)
+    c.resist(5, DamageType.FIRE, on=me, until=When.ENCOUNTER)
+    c.bonus("damage", 2, on=me, until=When.ENCOUNTER)
+    c.grant_row("f2129c", on=me, until=When.ENCOUNTER)
+
+
+@power("f2129c", level=1, cls="", usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit an enemy with an attack",
+       on=Trigger(Hit, _i_hit, "you hit an enemy with an attack"))
+def f2129c(c: Cast) -> None:
+    me = c.me
+    foe = c.trigger.target
+    c.damage("1d10", on=foe)
+    c.penalty("attack", max(c.int_mod, c.cha_mod), on=foe,
+              until=When.SAVE_ENDS,
+              when=lambda ctx: ctx.get("target") == me)
+
+
+_granted("f2130", "f2130b", dropped=SWAP)
+
+
+@power("f2130b", level=1, cls="", usage=DAILY, action=FREE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with an attack",
+       on=Trigger(Hit, _i_hit, "you hit an enemy with an attack"),
+       dropped=("SkillCheck.target", "c.aftereffect()"))
+def f2130b(c: Cast) -> None:
+    """Half the printed trigger is declared. `SkillCheck` says who rolled
+    and against what skill but never who it was aimed at, so "the
+    creature you intimidated" has no referent; the attack half does.
+
+    The aftereffect -- a shorter penalty once the save lands -- has no
+    verb. The Intimidate bonus is a check rather than a fight.
+    """
+    me = c.me
+    c.penalty("attack", c.cha_mod, on=c.trigger.target, until=When.SAVE_ENDS,
+              when=lambda ctx: ctx.get("target") == me)
+
+
+@power("f2132", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2132(c: Cast) -> None:
+    """Two clauses, both written.
+
+    The initiative swap is the *difference* between the two modifiers,
+    laid with `c.initiative` -- `c.bonus("initiative", ...)` is read by
+    nothing. A trait is armed after the opening rolls, so this moves the
+    character in the order rather than changing the roll.
+
+    "Has not yet acted" is not a state anything holds, so the row keeps
+    its own roll. `ev.ghost` is the guard: a ghost turn is the policy
+    looking ahead, and counting one would retire every victim before the
+    first real turn.
+    """
+    me = c.me
+    if c.cha_mod != c.dex_mod:
+        c.initiative(c.cha_mod - c.dex_mod, on=me)
+
+    acted: set[int] = set()
+
+    def note_turn(ev: Any) -> None:
+        if not ev.ghost:
+            acted.add(ev.actor)
+
+    c.watch(TurnStart, note_turn, on=me, until=When.ENCOUNTER)
+
+    def sting(ev: Any) -> None:
+        if ev.attacker != me or ev.target in acted:
+            return
+        foe = ev.target
+        c.penalty("attack", c.cha_mod, on=foe, until=When.EONT,
+                  when=lambda ctx: ctx.get("target") == me)
+
+    c.watch(Hit, sting, on=me, until=When.ENCOUNTER)
+
+
+# -- the elf bloodline and the concealment tail -----------------------------
+
+
+@power("f2156", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def f2156(c: Cast) -> None:
+    """A Stealth bonus for nearby allies and nothing else."""
+
+
+@power("f2157", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=PROFICIENCY)
+def f2157(c: Cast) -> None:
+    """Light blade is one of the ten groups the engine carries, so the
+    damage half is exact. The proficiency grant is settled in `chargen`
+    and a character that cannot hold one never meets the gate."""
+    me = c.me
+    c.bonus("damage", 2, on=me, until=When.ENCOUNTER, kind="feat",
+            when=lambda ctx: _group_in(c, "light blade"))
+
+
+@power("f2158", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.total_defence()",))
+def f2158(c: Cast) -> None:
+    """Total defence is not an action this engine offers, so the moment
+    the row is printed for never arrives."""
+
+
+@power("f2159", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you are first bloodied",
+       on=Trigger(Bloodied, about_me, "you are bloodied"))
+def f2159(c: Cast) -> None:
+    """`ENCOUNTER` is the printed limit: "the first time you are bloodied
+    in an encounter" is exactly one firing."""
+    c.conceal(on=c.me, until=When.EONT)
+
+
+@power("f2160", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you spend a healing surge",
+       on=Trigger(SurgeSpent, lambda w, me, ev: ev.actor == me,
+                  "you spend a healing surge"))
+def f2160(c: Cast) -> None:
+    """`SurgeSpent` names its subject `actor`, so `by_me` is false on it.
+    Total concealment is `Cover.SUPERIOR`, which is what
+    `c.conceal(total=True)` sets and `query.concealment_of` reads back."""
+    if concealment_of(c.world, c.me) is Cover.SUPERIOR:
+        c.heal(c.wis_mod, on=c.me)
+
+
+@power("f2161", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+def f2161(c: Cast) -> None:
+    """Trades what second wind grants for concealment. Second wind is an
+    action rather than a power and announces nothing, so there is no
+    moment at which to make the trade."""
+
+
+# -- the martial tail -------------------------------------------------------
+
+
+@power("f2392", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2392(c: Cast) -> None:
+    """Three conditions at once -- first enemy, first round, has not yet
+    acted -- and the row keeps its own book for two of them. The round
+    is counted from `RoundStart` rather than assumed, because a trait
+    armed at the top of the fight outlives the round it was armed in."""
+    me = c.me
+    acted: set[int] = set()
+    round_ = [1]
+
+    def note_round(ev: Any) -> None:
+        round_[0] = ev.round
+
+    def note_turn(ev: Any) -> None:
+        if not ev.ghost:
+            acted.add(ev.actor)
+
+    c.watch(RoundStart, note_round, on=me, until=When.ENCOUNTER)
+    c.watch(TurnStart, note_turn, on=me, until=When.ENCOUNTER)
+
+    def opener(ev: Any) -> None:
+        if ev.attacker != me or round_[0] != 1 or ev.target in acted:
+            return
+        c.damage("1d6", on=ev.target)
+
+    c.watch(Hit, opener, on=me, until=When.ENCOUNTER, once=True)
+
+
+@power("f2394", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def f2394(c: Cast) -> None:
+    """An armour check penalty on skill checks, which is not a fight."""
+
+
+@power("f2395", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def f2395(c: Cast) -> None:
+    """Same as f2394, for the other half of the skill list."""
+
+
+@power("f2397", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.charge_at(stop=)",))
+def f2397(c: Cast) -> None:
+    """Where a charge stops is decided inside the run `c.charge_at`
+    makes, and nothing lets a row say "closer than you had to"."""
+
+
+@power("f2403", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2403(c: Cast) -> None:
+    """Mace is one of the ten groups, and "melee basic attack" is asked
+    of the damage context's `power` against `Powers.basic` -- which is
+    the creature's own row, not always the engine's `mba`."""
+    me = c.me
+    c.bonus(
+        "damage", 2, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("power") in _basic_refs(c, ranged=False)
+            and _group_in(c, "mace")
+        ),
+    )
+
+
+@power("f2410", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2410(c: Cast) -> None:
+    """"Undamaged" is `c.wounded` read the other way round: it is true of
+    anything that has lost a single hit point."""
+    me = c.me
+    c.bonus(
+        "damage", c.wis_mod, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("power") in _basic_refs(c)
+            and ctx.get("target") is not None
+            and not c.wounded(on=ctx["target"])
+        ),
+    )
+
+
+@power("f2418", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2418(c: Cast) -> None:
+    """The size of the bonus is counted when the blow lands, which
+    `c.bonus` cannot take -- so it is eight +1s with eight kinds, each
+    gated on the count reaching its own step. Eight is every square
+    around a medium creature.
+
+    Both contexts carry `opportunity`, which is the one gate the damage
+    side is rich enough for.
+    """
+    me = c.me
+
+    def flankers(ctx: dict[str, Any]) -> int:
+        foe = ctx.get("target")
+        if foe is None or not ctx.get("opportunity"):
+            return 0
+        return sum(
+            1 for a in allies(c.world, me)
+            if a != me and c.adjacent_to(foe, a)
+        )
+
+    _scaled(c, "attack", flankers)
+    _scaled(c, "damage", flankers)
+
+
+@power("f2452", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you score a critical hit with a charge",
+       on=Trigger(Hit, both(_i_crit, by_charge),
+                  "you crit with a charge attack"))
+def f2452(c: Cast) -> None:
+    """`by_charge` reads `ev.charge`, which `resolve.attack` sets on the
+    `Hit` as a plain attribute after the event class was declared."""
+    foe = c.trigger.target
+    c.push(1, on=foe)
+    c.prone(on=foe)
+
+
+@power("f2457", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=SECOND_WIND)
+def f2457(c: Cast) -> None:
+    """Forgoes what second wind grants for an attack bonus. Nothing
+    announces a second wind, so there is no moment to trade at."""
+
+
+@power("f2458", level=1, cls="", usage=ENCOUNTER,
+       action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL, target=SELF,
+       trigger="you are damaged by an attack",
+       on=Trigger(DamageRolled, lambda w, me, ev: (
+           ev.target == me and ev.source != me and ev.amount > 0
+       ), "you are damaged by an attack"))
+def f2458(c: Cast) -> None:
+    """The feat changes what *action* a second wind costs, and the only
+    way to say that is to declare the interrupt and take one.
+    `DamageRolled` is the `Decision` the blow passes through, so the
+    +2 to defences is standing before the damage lands, which is the
+    whole point of the printed line."""
+    c.second_wind(on=c.me)
+
+
+@power("f2454", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def f2454(c: Cast) -> None:
+    """Martial practices are rituals by another name: not a fight."""
+
+
+# -- the area-attack riders -------------------------------------------------
+
+
+@power("f2150", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit only one of two or more targets",
+       on=Trigger(PowerResolved, lambda w, me, ev: (
+           ev.actor == me and _reach_kind(ev.power) in _CLOSE_OR_AREA
+           and len(ev.targets) >= 2
+           and sum(1 for r in ev.rolls if r.hit) == 1
+       ), "you hit only one creature with a close or area power"))
+def f2150(c: Cast) -> None:
+    """`PowerResolved` is the only event that can answer this: it carries
+    every roll the use made, and `AttackResult.target` names who each one
+    finally landed on. `PowerUsed` is announced before a die is thrown
+    and `Hit` sees one victim at a time."""
+    for roll in c.trigger.rolls:
+        if roll.hit and roll.target:
+            c.damage("1d6", on=roll.target)
+            return
+
+
+# -- the familiar tail ------------------------------------------------------
+
+
+@power("f2256", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.familiar_state()",))
+def f2256(c: Cast) -> None:
+    """Rides on the familiar changing mode. `c.familiar_mode` sets one
+    and announces nothing, so there is no moment to ride."""
+
+
+@power("f2257", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.familiar_state()",))
+def f2257(c: Cast) -> None:
+    """Holds a destroyed familiar in its active state for a turn. Same
+    gap as f2256, from the other end -- nothing says it was destroyed
+    and nothing holds a mode past it."""
+
+
+@power("f2258", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.familiar_state()",))
+def f2258(c: Cast) -> None:
+    """Cheapens the action that switches a familiar's mode.
+    `c.grant_action` understands `shift` and `stand` and silently eats
+    anything else, so writing it that way would look finished."""
+
+
+# -- riders on a racial power named only in prose ---------------------------
+
+
+@power("f2096", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.no_provoke(once=)",))
+def f2096(c: Cast) -> None:
+    """Laid at the top of each of the caster's turns while bloodied, and
+    held to the end of it. "The **first** time you leave a square" is the
+    dropped half: `c.no_provoke` holds for a duration and cannot be spent
+    on one step, so this covers the whole turn's movement."""
+    me = c.me
+
+    def each_turn(ev: Any) -> None:
+        if ev.actor == me and not ev.ghost and c.bloodied(on=me):
+            c.no_provoke(on=me, until=When.EOT)
+
+    c.watch(TurnStart, each_turn, on=me, until=When.ENCOUNTER)
+
+
+@power("f2097", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=RACIAL)
+def f2097(c: Cast) -> None:
+    """Hands back a racial power the benefit names in prose. `c.restore_use`
+    is the verb and the ref is the gap."""
+
+
+@power("f2099", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       todo=("chargen.SHORTBOW", "Weapon.brutal"))
+def f2099(c: Cast) -> None:
+    """Both halves are about one named weapon. Bow is a group and
+    shortbow is not, and brutal is a weapon property nothing carries."""
+
+
+@power("f2101", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def f2101(c: Cast) -> None:
+    """Two rituals and a Nature bonus."""
+
+
+@power("f2102", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=RACIAL)
+def f2102(c: Cast) -> None:
+    """A shift after a racial power's reroll resolves. The power is named
+    in prose, so there is no ref to hang a trigger on."""
+
+
+@power("f2408", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=(*RACIAL, "c.expend_row()"))
+def f2408(c: Cast) -> None:
+    """Trades a racial power for extra damage. The power is prose here,
+    and spending a row the character owns has no verb either way."""
+
+
+@power("f2442", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=RACIAL)
+def f2442(c: Cast) -> None:
+    """A second use of whatever a racial trait handed over. The trait is
+    prose and the power it granted is a build-time choice."""
+
+
+@power("f2450", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=REROLL)
+def f2450(c: Cast) -> None:
+    """A penalty on the roll a racial power forces to be made again.
+    Nothing announces that a roll is a second one."""
+
+
+@power("f2244", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=RACIAL)
+def f2244(c: Cast) -> None:
+    """A damage bonus against anything standing inside a racial zone. The
+    zone is laid by a power named in prose, and `c.my_zones` cannot tell
+    which of a caster's zones it is."""
+
+
+@power("f2175", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       todo=("c.counts_as(keyword=)", *FEATURE))
+def f2175(c: Cast) -> None:
+    """Adds a keyword to one named power, then rides on a class feature's
+    chosen resistance matching that power's damage type. Neither can be
+    said: a row's keywords are header data, and the feature is prose."""
+
+
+@power("f2179", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.deals(ref=)",))
+def f2179(c: Cast) -> None:
+    """Changes the damage type of one named power. `c.deals` overrides
+    what a creature's *weapon* attacks roll and has no way to name a
+    row, which would make this touch everything the character does."""
+
+
+@power("f2202", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.recast(reach=)",))
+def f2202(c: Cast) -> None:
+    """Narrows a blast and pays for it in damage. Reach is header data
+    the action menu reads before anything runs, and nothing rewrites
+    one."""
+
+
+@power("f2206", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.ability_for(ref)",))
+def f2206(c: Cast) -> None:
+    """Rolls one named power off a chosen ability. The ability a row
+    attacks with is in its header."""
+
+
+@power("f2203", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you reduce an enemy to 0 hit points",
+       on=Trigger(Dropped, lambda w, me, ev: (
+           ev.source == me and ev.actor != me
+       ), "you drop an enemy"))
+def f2203(c: Cast) -> None:
+    """`ENCOUNTER` is the card's own "once per encounter", so spending the
+    use on the first firing is the printed limit. `Dropped` carries
+    `source` and no `target`, which is the field this needs."""
+    if c.may("spend a healing surge", who=c.me):
+        c.surge(on=c.me)
+
+
+# -- build-time, and the rows that are not a fight --------------------------
+
+
+@power("f1217", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=BORROW)
+def f1217(c: Cast) -> None:
+    """Another class's feature hands over a power of the taker's choice.
+    The `cf:` ref names a row nothing in the tree declares, so
+    `c.grant_row` has nothing to hand over."""
+
+
+@power("f1351", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       todo=("c.alignment()", "Mods.applied()"))
+def f1351(c: Cast) -> None:
+    """Adds whatever a named power put on an attack roll to the damage
+    roll too, and only against an evil immortal. Alignment is not a thing
+    a creature carries, and nothing reads back how much a modifier
+    contributed to a roll that is already made."""
+
+
+@power("f1352", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.on_revive()",))
+def f1352(c: Cast) -> None:
+    """Pays out on coming back up in the same fight. `Dropped` announces
+    going down and `Healed` announces the hit points, but regaining
+    consciousness is cleared inside `Health` without a word."""
+
+
+@power("f2149", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("feat.weapon_choice()",))
+def f2149(c: Cast) -> None:
+    """Widens two other feats from the weapon group each was taken for to
+    every group. Both are refs, and what is missing is the *choice* each
+    of them recorded -- a feat's arguments are not stored anywhere."""
+
+
+@power("f2241", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=(*PROFICIENCY, "chargen.skill_training()"))
+def f2241(c: Cast) -> None:
+    """The power is a ref, so the middle clause is the one that plays.
+    Skill training and what a character may wield are both settled when
+    it is built."""
+    c.grant_row("p9401", on=c.me, until=When.ENCOUNTER)
+
+
+@power("f2246", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def f2246(c: Cast) -> None:
+    """Climbing walls and an Acrobatics bonus."""
+
+
+@power("f2290", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def f2290(c: Cast) -> None:
+    """Drawing and stowing small objects, and Thievery with your hands
+    full. The feat says outright that it grants no attack."""
+
+
+@power("f2301", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       todo=(*PROFICIENCY, "chargen.FALCHION"))
+def f2301(c: Cast) -> None:
+    """Six named weapons rather than a group. Gating the damage bonus on
+    "heavy blade" would hand it to every longsword as well, which is a
+    number quietly too generous in every fight."""
+
+
+@power("f2420", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       todo=(*PROFICIENCY, "chargen.HAMMER"))
+def f2420(c: Cast) -> None:
+    """Hammers and picks are printed groups this engine does not carry,
+    so a gate on one is false forever."""
+
+
+@power("f2441", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=SWAP)
+def f2441(c: Cast) -> None:
+    """Swaps a daily between extended rests. Entirely build-time, and
+    the row it names is a placeholder rather than a ref."""
+
+
+@power("f2443", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=SWAP)
+def f2443(c: Cast) -> None:
+    """Same as f2441 for a utility power."""
+
+
+@power("f2445", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=SWAP)
+def f2445(c: Cast) -> None:
+    """Same as f2441 for an at-will."""
+
+
+@power("f2446", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=SWAP)
+def f2446(c: Cast) -> None:
+    """Same as f2441 for an encounter power."""
+
+
+@power("f2444", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.aid_another()",))
+def f2444(c: Cast) -> None:
+    """Rewrites what the aid attack action grants. Aiding is not an
+    action this engine offers, so there is nothing to rewrite."""
+
+
+@power("f2455", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.ability_for(ref)",))
+def f2455(c: Cast) -> None:
+    """Rolls the ranged basic attack off Dexterity when the weapon is
+    thrown. Which ability a row attacks with is header data."""
+
+
+@power("f2896", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.ability_for(ref)",))
+def f2896(c: Cast) -> None:
+    """The same shape as f2455, for a bow and Wisdom."""
+
+
+@power("f2889", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("SkillCheck.target",))
+def f2889(c: Cast) -> None:
+    """Widens who benefits from a Bluff that wins combat advantage.
+    `SkillCheck` never says who a check was aimed at, so "the enemy" has
+    no referent."""
+
+
+@power("f2893", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.silvered()",))
+def f2893(c: Cast) -> None:
+    """Counts attacks as silvered against one creature. Silver is a
+    material nothing on a weapon or a blow carries."""
+
+
+@power("f2894", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       todo=(*PROFICIENCY, "chargen.SHORTBOW"))
+def f2894(c: Cast) -> None:
+    """Three clauses about one named weapon. Bow is a group and shortbow
+    is not, so the damage bonus cannot be narrowed to the right one and
+    `c.as_implement` has nothing to aim at."""
+
+
+@power("f2897", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2897(c: Cast) -> None:
+    """Cold and radiant are both `Keyword` members as well as damage
+    types, and the damage context carries the row that is rolling -- so
+    "with cold powers and radiant powers" is exact."""
+    me = c.me
+    wanted = (Keyword.COLD, Keyword.RADIANT)
+    c.bonus(
+        "damage", 2, on=me, until=When.ENCOUNTER, kind="feat",
+        when=lambda ctx: any(
+            k in _keywords(ctx.get("power", "")) for k in wanted
+        ),
+    )
+
+
+@power("f2898", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.on_pact_boon()",))
+def f2898(c: Cast) -> None:
+    """Rides on a pact boon firing. Nothing announces one."""
+
+
+@power("f2900", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def f2900(c: Cast) -> None:
+    """A language, a skill bonus and a disguise check. No fight in it."""

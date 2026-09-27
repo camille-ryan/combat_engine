@@ -57,17 +57,22 @@ def f552(c: Cast) -> None:
 
 
 @power("f555", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("resolve.dmg_ctx.advantage",))
+       reach=PERSONAL, target=SELF)
 def f555(c: Cast) -> None:
     """A damage bonus in beast form against anything granting combat
-    advantage. The form half is written; the advantage half is dropped
-    because the *damage* context carries no `advantage` -- only the
-    attack context does -- and gating on a key it does not have would
-    be silently false."""
+    advantage.
+
+    The advantage half used to be dropped: the damage context carried
+    no `advantage` and only the attack context did. It carries one
+    now, asked of the board at damage time -- see the note in
+    `resolve.deal_damage` about what that costs on a one-shot grant.
+    """
     me = c.me
     c.bonus(
         "damage", 2, on=me, until=When.ENCOUNTER,
-        when=lambda ctx: in_beast_form(c.world, me),
+        when=lambda ctx: (
+            in_beast_form(c.world, me) and ctx.get("advantage", False)
+        ),
     )
 
 
