@@ -25,10 +25,10 @@ grab. `c.effect(until=When.SUSTAIN, sustain=...)` plus `c.on_sustain`
 is the shape `p13793` uses for exactly this sentence, so the two
 strangling cards pay out rather than dropping their payout clause.
 
-**A saving throw's context carries `ongoing` and `dtype` and no
-keywords.** That is enough for "against ongoing necrotic damage" and
-not enough for "against charm or fear effects"; the split is why f1230
-and f1241 are written and f1328 is not.
+**A saving throw's context carries `ongoing`, `dtype` and `keywords`.**
+`durations.keywords_of` reads the last off the row that laid the effect,
+so "against ongoing necrotic damage" and "against charm or fear effects"
+are both sayable -- f1230, f1241, f1260 and f1328 all narrow this way.
 
 **The Associated Powers rows here are all prose.** Where the spec does
 print a ref -- p1061, p620, p997, p1063 -- the clause hung on it reaches
@@ -283,15 +283,16 @@ def f1241(c: Cast) -> None:
     )
 
 
-@_trait("f1260", dropped=("SavingThrow.keywords",))
+@_trait("f1260")
 def f1260(c: Cast) -> None:
-    """Ongoing poison is answerable and plays; a poison *effect* that
-    deals no ongoing damage is not. The save context carries the burn's
-    type and nothing about what an effect is made of."""
+    """Both halves of "a poison effect": the keywords of the row that laid
+    the hold, and the burn's own type for an ongoing poison laid by a row
+    that prints no keyword."""
     me = c.me
     c.bonus(
         "save", c.con_mod, on=me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: ctx.get("dtype") is DamageType.POISON,
+        when=lambda ctx: Keyword.POISON in ctx.get("keywords", ())
+        or ctx.get("dtype") is DamageType.POISON,
     )
 
 
@@ -903,13 +904,17 @@ def f1327(c: Cast) -> None:
         )
 
 
-@_trait("f1328", todo=("SavingThrow.keywords",))
+@_trait("f1328")
 def f1328(c: Cast) -> None:
-    """The whole benefit is a saving throw bonus narrowed to charm and
-    fear. The save context carries the burn's damage type and the
-    conditions in play, and nothing saying what kind of effect is being
-    shaken off -- so the narrowing cannot be written and the bonus
-    without it would apply to every save."""
+    """Counted once like the rest of the fellowship rows, so the cap is
+    reached at three nearby allies holding the feat."""
+    me = c.me
+    c.bonus(
+        "save", _fellowship(c, 2), on=me, until=When.ENCOUNTER, kind="feat",
+        when=lambda ctx: bool(
+            {Keyword.CHARM, Keyword.FEAR} & set(ctx.get("keywords", ()))
+        ),
+    )
 
 
 @_trait("f1329", usage=AT_WILL, trigger="you spend a healing surge",

@@ -77,6 +77,7 @@ from combat_engine.engine import (
     Moved,
     PowerResolved,
     PowerUsed,
+    Relation,
     Size,
     SurgeSpent,
     Target,
@@ -146,6 +147,11 @@ def _at(world: Any, eid: int) -> tuple[int, int]:
 def _groups(world: Any, eid: int) -> set[str]:
     gear = world.get(eid, Gear)
     return {w.group for w in gear.held} if gear is not None else set()
+
+
+def _keyword(ref: str, word: Keyword) -> bool:
+    p = get(ref)
+    return p is not None and word in p.keywords
 
 
 def _used(ref: str):  # noqa: ANN202
@@ -916,10 +922,14 @@ def f3522(c: Cast) -> None:
     narrowed to implement attacks -- which is the widest true statement --
     and the narrowing to the rod itself is the dropped half. Heroic tier,
     so +1. The shield bonus is printed as one and does not stack with a
-    shield's own."""
+    shield's own.
+
+    The attack context carries the row's ref and not its keywords, so the
+    gate looks the row up: `ctx["keywords"]` is a key only the *save*
+    context has, and reading it here would be silently false."""
     me = c.me
     c.bonus("attack", 1, kind="feat", on=me, until=When.ENCOUNTER,
-            when=lambda ctx: Keyword.IMPLEMENT in ctx.get("keywords", ()))
+            when=lambda ctx: _keyword(ctx.get("power", ""), Keyword.IMPLEMENT))
     if "implement" in _groups(c.world, me):
         c.bonus(AC, 1, kind="shield", on=me, until=When.ENCOUNTER)
         c.bonus(REF, 1, kind="shield", on=me, until=When.ENCOUNTER)
@@ -1069,8 +1079,18 @@ def f3536(c: Cast) -> None:
 f3539 = _grants("f3539", "f3539b")
 
 
+def _ridden_m112a1(world: Any, eid: int) -> bool:
+    """The printed Target line, asked of the board before the row is offered."""
+    found = world.relations.sources(Relation.RIDDEN_BY, eid)
+    if not found:
+        return False
+    known = world.get(found[0], Powers)
+    return known is not None and "m112a1" in known.all
+
+
 @power("f3539b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=Melee(1), target=NO_TARGET)
+       reach=Melee(1), target=NO_TARGET, requires=_ridden_m112a1,
+       requires_text="you must be riding a mount with a m112a1 power")
 def f3539b(c: Cast) -> None:
     """The aura goes on the mount, so the damage is asked of adjacency to
     the mount rather than of `c.in_my_aura` -- the aura's owner is the

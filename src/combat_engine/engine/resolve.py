@@ -535,6 +535,18 @@ def deal_damage(
         "advantage": (
             has_combat_advantage(world, source, target) if from_attack else False
         ),
+        # **Melee or ranged, which only the attack context had.** Two
+        # rows gated a damage bonus on `ctx["ranged"]` and, because the
+        # key was absent, `not ctx.get("ranged", False)` read as True --
+        # so a rider printed for melee paid on every shot as well. That
+        # is the failure mode that is *too generous* rather than inert,
+        # and nothing but reading the card would have caught it.
+        #
+        # Read off the row's own range line. `branch` is not carried
+        # this far, so a power printing two ranges answers for its
+        # first -- wrong for the handful that do, and right for
+        # everything else.
+        "ranged": _is_ranged(detail),
     }
     if from_attack:
         # A bonus to damage is a thing powers grant constantly -- "+4 damage

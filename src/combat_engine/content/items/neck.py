@@ -214,13 +214,18 @@ def _far_ranged(c: Cast):  # noqa: ANN202
     return gate
 
 
-def _saves_against(*conditions: Condition, dtype: DamageType | None = None):  # noqa: ANN202
+def _saves_against(*conditions: Condition, dtype: DamageType | None = None, keywords: tuple[Keyword, ...] = ()):  # noqa: ANN202, E501
     """Save gate: the effect being saved against holds one of these
-    conditions, or burns with that damage type."""
+    conditions, burns with that damage type, or was laid by a row
+    printing one of those keywords -- `durations.keywords_of` reads them
+    back off the effect's label."""
     wanted = set(conditions)
+    words = set(keywords)
 
     def gate(ctx: dict[str, Any]) -> bool:
         if wanted & set(ctx.get("conditions") or ()):
+            return True
+        if words & set(ctx.get("keywords", ())):
             return True
         return dtype is not None and ctx.get("dtype") is dtype
 
@@ -410,17 +415,25 @@ def i2740p1(c: Cast) -> None:
 
 
 @power("i2997x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF)
 def i2997x1(c: Cast) -> None:
-    """A gaze attack is a keyword, and a saving throw has no power behind
-    it -- only the effect, its label and what it holds."""
+    """Gaze is a keyword and the save context now carries the laying
+    row's. "Affects your eyes or sight" is taken as blinded, the only
+    sight condition there is; "originates in the attacker's eyes" is
+    printed as DM discretion and is not a mechanic to gate on."""
+    c.bonus("save", c.enhancement, on=c.me, until=When.ENCOUNTER,
+            kind="item",
+            when=_saves_against(Condition.BLINDED, keywords=(Keyword.GAZE,)))
 
 
 @power("i2997p1", level=2, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF, todo=("c.save(any_duration=)",))
 def i2997p1(c: Cast) -> None:
-    """"An effect against which this item grants a bonus" is the property
-    above, so this block cannot know which effects it means either."""
+    """Which effects it means is answerable now -- the property above is
+    gaze and blindness. What is not is rolling a saving throw against a
+    hold that is not save-ends: `c.save` walks the live effects and skips
+    every duration but `When.SAVE_ENDS`, and the whole of this power is
+    the exception to that."""
 
 
 @power("i3238x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -464,21 +477,24 @@ def i489p1(c: Cast) -> None:
 
 
 @power("i496x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF)
 def i496x1(c: Cast) -> None:
-    """Charm, illusion and sleep are keywords of the attack, and the save
-    context is built from the effect alone."""
+    """Three keywords, read off the row that laid the effect."""
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_saves_against(keywords=(Keyword.CHARM, Keyword.ILLUSION,
+                                          Keyword.SLEEP)))
 
 
 @power("i497x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF)
 def i497x1(c: Cast) -> None:
-    """Three of the four clauses are conditions the hold carries, and the
-    fourth reaches poison through the burn's damage type -- a poison effect
-    that does no ongoing damage is the half that is dropped."""
+    """Three conditions the hold carries, plus poison by the laying row's
+    keyword -- with the burn's own type kept as the fallback for an
+    ongoing poison laid by a row that prints none."""
     c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
             when=_saves_against(Condition.WEAKENED, Condition.SLOWED,
-                                Condition.IMMOBILIZED, dtype=DamageType.POISON))
+                                Condition.IMMOBILIZED, dtype=DamageType.POISON,
+                                keywords=(Keyword.POISON,)))
 
 
 @power("i500p1", level=2, cls=ITEM, usage=DAILY, action=ActionType.NONE,
@@ -585,10 +601,13 @@ def i2580p1(c: Cast) -> None:
 
 
 @power("i3246x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF, dropped=("c.skill_circumstance()",))
 def i3246x1(c: Cast) -> None:
-    """Disease is a keyword, and contracting one happens between fights;
-    neither half has anything in a saving throw to hang on."""
+    """Disease is a keyword of the row that laid the hold, so the save
+    half is exact. The Endurance half applies only to checks against
+    disease, and a skill bonus cannot be narrowed to a subject."""
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_saves_against(keywords=(Keyword.DISEASE,)))
 
 
 @power("i492x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -901,11 +920,14 @@ def i494p1(c: Cast) -> None:
 
 
 @power("i499x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF, todo=("c.save_order()",))
 def i499x1(c: Cast) -> None:
-    """Saving at the start of the turn instead of the end is a change to
-    when a hold is rolled for, and the hold has to be picked out by the
-    keywords of the attack that laid it -- which a save does not carry."""
+    """Which holds it means is answerable now -- charm, fear and psychic
+    are keywords `keywords_of` reads back. The whole of the benefit is
+    the other half: moving the throw from the end of the turn to the
+    start, and suppressing the end-of-turn one after a failure. Rolling
+    an extra save at the start instead would be a strictly better item
+    than the printed one."""
 
 
 @power("i499p1", level=5, cls=ITEM, usage=DAILY, action=REACTION,
@@ -1057,11 +1079,13 @@ def i3567p1(c: Cast) -> None:
 
 
 @power("i505p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF)
 def i505p1(c: Cast) -> None:
     c.bonus("skill:diplomacy", c.enhancement, on=c.me,
             until=When.EONT, kind="item")
     c.bonus(WILL, c.enhancement, on=c.me, until=When.EONT, kind="item")
+    c.bonus("save", c.enhancement, on=c.me, until=When.EONT, kind="item",
+            when=_saves_against(keywords=(Keyword.CHARM,)))
 
 
 @power("i918p1", level=7, cls=ITEM, usage=DAILY, action=REACTION,
@@ -1215,9 +1239,12 @@ def i873p1(c: Cast) -> None:
 
 
 @power("i964x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF)
 def i964x1(c: Cast) -> None:
-    """Charm and fear are keywords of the attack that laid the hold."""
+    """Charm and fear are keywords of the row that laid the hold, which
+    is what the save context reads back off the effect's label."""
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_saves_against(keywords=(Keyword.CHARM, Keyword.FEAR)))
 
 
 @power("i964p1", level=8, cls=ITEM, usage=DAILY, action=INTERRUPT,

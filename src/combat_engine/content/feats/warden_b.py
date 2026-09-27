@@ -369,14 +369,33 @@ def f1941(c: Cast) -> None:
     """Temporary hit points for shaking off one sort of effect.
     `cf:warden-f0` is the ref that rolls the throw and `SavingThrow`
     carries whether it succeeded -- what is missing is which keywords the
-    effect it was rolled against had."""
+    effect it was rolled against had. The save *modifier* context now
+    carries them, but this row answers the event, whose `against` is the
+    effect's `__str__` and not a ref `keywords_of` can read."""
+
+
+_ELEMENTAL = (Keyword.ACID, Keyword.COLD, Keyword.FIRE,
+              Keyword.LIGHTNING, Keyword.THUNDER)
+_ELEMENTAL_DTYPES = (DamageType.ACID, DamageType.COLD, DamageType.FIRE,
+                     DamageType.LIGHTNING, DamageType.THUNDER)
+
+
+def _elemental_save(ctx: dict[str, Any]) -> bool:
+    """The hold being saved against is one of the five elements -- by the
+    keywords of the row that laid it, or by the type of its burn."""
+    return bool(set(_ELEMENTAL) & set(ctx.get("keywords", ()))) or (
+        ctx.get("dtype") in _ELEMENTAL_DTYPES
+    )
 
 
 @power("f2553", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SAVE_KEYWORDS)
+       reach=PERSONAL, target=SELF, dropped=("c.save_order()",))
 def f2553(c: Cast) -> None:
-    """A bonus to the same throw against five named keywords. `c.save`
-    takes a `bonus`, so only the gate is missing, and it is f1941's."""
+    """The five keywords are exact. "Made at the start of your turn" is
+    not: nothing in the save context says which of the turn's two throws
+    this is, so the bonus also helps the ordinary end-of-turn one. No
+    type word on the card, so untyped."""
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, when=_elemental_save)
 
 
 @power("f2554", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -113,6 +113,18 @@ def _keyword_gate(*words: Keyword) -> Callable[[dict[str, Any]], bool]:
     return gate
 
 
+def _save_keywords(*words: Keyword) -> Callable[[dict[str, Any]], bool]:
+    """Save gate: the row that laid the effect printed one of these. The
+    save context gets them from `durations.keywords_of`, which reads the
+    effect's label back as a ref."""
+    wanted = set(words)
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return bool(wanted & set(ctx.get("keywords", ())))
+
+    return gate
+
+
 def _ability_gate(ability: Ability) -> Callable[[dict[str, Any]], bool]:
     """"A Charisma attack": the attacking ability is on the row, not the ctx."""
 
@@ -356,13 +368,17 @@ def i1447p1(c: Cast) -> None:
 
 
 @power("i2527x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF)
 def i2527x1(c: Cast) -> None:
-    """A saving throw carries the effect it is against and no keywords, so
-    the enemies' penalty against *fear* effects has no gate."""
+    """"Enemies who can see you" is read once, when the trait arms -- the
+    same treatment the other standing-presence items here get. The fear
+    narrowing comes off the laying row's keywords."""
     c.resist(5, DamageType.NECROTIC, on=c.me)
     _skills(c, 1, "intimidate")
+    for foe in c.enemies():
+        if c.can_see(foe):
+            c.penalty("save", 2, on=foe, until=When.ENCOUNTER,
+                      when=_save_keywords(Keyword.FEAR))
 
 
 @power("i2656x1", level=5, cls=ITEM, action=ActionType.NONE,
@@ -658,12 +674,13 @@ def i1080x1(c: Cast) -> None:
 
 
 @power("i1235x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF)
 def i1235x1(c: Cast) -> None:
-    """The saving-throw half wants the keywords of the power that laid the
-    effect, and a save carries the effect only."""
+    """The save context carries the keywords of the row that laid the
+    effect, which is what "the illusion or charm keywords" means."""
     _skills(c, 2, "bluff", "stealth")
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_save_keywords(Keyword.ILLUSION, Keyword.CHARM))
 
 
 @power("i1268x1", level=8, cls=ITEM, action=ActionType.NONE,
@@ -880,13 +897,14 @@ def i1519p1(c: Cast) -> None:
 
 
 @power("i1541x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF)
 def i1541x1(c: Cast) -> None:
-    """Ungated, so it helps against every save-ends effect rather than
-    only against fear -- a save has no power and therefore no keywords."""
+    """Narrowed to fear now the save context carries the laying row's
+    keywords. Counted once, when the trait arms: an ally who walks out of
+    range keeps it, which is how every aura-shaped item here is written."""
     for who in [c.me, *c.within(10, side="ally")]:
-        c.bonus("save", 2, on=who, until=When.ENCOUNTER, kind="item")
+        c.bonus("save", 2, on=who, until=When.ENCOUNTER, kind="item",
+                when=_save_keywords(Keyword.FEAR))
 
 
 @power("i1541p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
@@ -970,11 +988,13 @@ def i831x1(c: Cast) -> None:
 
 @power("i887x1", level=10, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("SavingThrow.keywords", "c.darkvision()"))
+       dropped=("c.race_of()", "c.darkvision()"))
 def i887x1(c: Cast) -> None:
     """Three clauses, each gated on a nearby ally's race. `c.is_kind`
-    answers the two that name one; the third names a race by ref, and the
-    charm save it pays out wants keywords a save does not carry."""
+    answers the two that name one; the charm save is gated on a race
+    given only as a ref, which nothing resolves -- the save half of it
+    would be one `_save_keywords(Keyword.CHARM)` if the ally could be
+    recognised."""
     near = c.within(10, side="ally")
     if any(c.is_kind("elf", on=a) or c.is_kind("drow", on=a) for a in near):
         for who in [c.me, *c.within(5, side="ally")]:

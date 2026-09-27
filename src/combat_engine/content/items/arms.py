@@ -171,12 +171,17 @@ def _ongoing_save(ctx: dict[str, Any]) -> bool:
     return bool(ctx.get("ongoing"))
 
 
-def _saves_against(*conditions: Condition):  # noqa: ANN202
-    """Save gate: the hold being saved against carries one of these."""
+def _saves_against(*conditions: Condition, keywords: tuple[Keyword, ...] = ()):  # noqa: ANN202
+    """Save gate: the hold being saved against carries one of these
+    conditions, or was laid by a row printing one of those keywords --
+    `durations.keywords_of` reads them back off the effect's label."""
     wanted = set(conditions)
+    words = set(keywords)
 
     def gate(ctx: dict[str, Any]) -> bool:
-        return bool(wanted & set(ctx.get("conditions") or ()))
+        return bool(wanted & set(ctx.get("conditions") or ())) or bool(
+            words & set(ctx.get("keywords", ()))
+        )
 
     return gate
 
@@ -1222,14 +1227,15 @@ def i3204p1(c: Cast) -> None:
 
 @power("i3402x1", level=9, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.max_hp()", "SavingThrow.keywords"))
+       dropped=("c.max_hp()",))
 def i3402x1(c: Cast) -> None:
-    """Three of the four named effects are conditions the hold carries and
-    are exact. Charm is a keyword of the attack, which a save does not
-    carry, and nothing lowers a creature's maximum hit points."""
+    """Three of the four named effects are conditions the hold carries;
+    charm is a keyword of the row that laid it, which the save context
+    now carries. Nothing lowers a creature's maximum hit points."""
     c.bonus("save", 1, on=c.me, until=When.ENCOUNTER, kind="item",
             when=_saves_against(Condition.STUNNED, Condition.DAZED,
-                                Condition.DOMINATED))
+                                Condition.DOMINATED,
+                                keywords=(Keyword.CHARM,)))
 
 
 @power("i514p1", level=9, cls=ITEM, usage=DAILY, action=REACTION,

@@ -102,8 +102,6 @@ ASSOCIATED = ("feat.associated_powers",)
 AUGMENT = ("dsl.use(augment=)",)
 #: "Choose a power granted by <feature>" -- features are not rows.
 BORROW = ("c.borrow_feature()",)
-#: A saving throw does not say what it is being made against.
-SAVE_KEYWORDS = ("SavingThrow.keywords",)
 
 MARTIAL = [Keyword.MARTIAL]
 WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
@@ -213,11 +211,18 @@ def f3177(c: Cast) -> None:
 
 
 @power("f3178", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SAVE_KEYWORDS)
+       reach=PERSONAL, target=SELF)
 def f3178(c: Cast) -> None:
-    """A saving throw carries `against` as a free-text label and no
-    keywords, so "against charm, illusion and psychic effects" cannot be
-    narrowed and the whole benefit is the narrowing."""
+    """The save context carries the keywords of the row that laid the
+    hold. Psychic is also a damage type, so an ongoing psychic burn laid
+    by a row that prints no keyword still counts."""
+    c.bonus(
+        "save", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
+        when=lambda ctx: bool(
+            {Keyword.CHARM, Keyword.ILLUSION, Keyword.PSYCHIC}
+            & set(ctx.get("keywords", ()))
+        ) or ctx.get("dtype") is DamageType.PSYCHIC,
+    )
 
 
 @power("f3179", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -772,11 +777,18 @@ def f3218(c: Cast) -> None:
 
 @power("f3220", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(*SAVE_KEYWORDS, "c.resist_forced(when=)"))
+       dropped=("c.resist_forced(when=)",))
 def f3220(c: Cast) -> None:
-    """The forced-movement half plays and is slightly too generous: it
-    is printed only while unbloodied, and `c.resist_forced` takes no
-    gate, so a bloodied character keeps the square here."""
+    """The poison save is exact -- the keywords of the row that laid the
+    hold, with the burn's type as the fallback. The forced-movement half
+    plays and is slightly too generous: it is printed only while
+    unbloodied, and `c.resist_forced` takes no gate, so a bloodied
+    character keeps the square here."""
+    c.bonus(
+        "save", 2, on=c.me, until=When.ENCOUNTER, kind="racial",
+        when=lambda ctx: Keyword.POISON in ctx.get("keywords", ())
+        or ctx.get("dtype") is DamageType.POISON,
+    )
     c.resist_forced(1, on=c.me, until=When.ENCOUNTER)
 
 

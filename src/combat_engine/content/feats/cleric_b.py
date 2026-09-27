@@ -48,6 +48,7 @@ from combat_engine.engine import (
     DamageType,
     Healed,
     Hit,
+    Keyword,
     PowerUsed,
     SavingThrow,
     Trigger,
@@ -174,18 +175,14 @@ def f2005(c: Cast) -> None:
     _once_healed(c, pay)
 
 
-@power("f2866", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("SavingThrow.keywords",),
+@power("f2866", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you use p1455",
        on=Trigger(PowerUsed, _i_used(WORD), "you use p1455"))
 def f2866(c: Cast) -> None:
-    """The Fortitude half plays; the saving-throw half is dropped.
-
-    The save context carries a label and the conditions in play, and
-    nothing on it says what the effect being shaken off *is*, so "saves
-    against poison" cannot be told from any other save. A `c.bonus`
-    with no gate would pay on all of them, which is a larger feat than
-    the one printed.
+    """Both halves. "Against poison" is the keywords of the row that laid
+    the hold, with the burn's own type as the fallback for an ongoing
+    poison laid by a row that prints no keyword.
 
     The ref for this one comes from the five prerequisites in the same
     list that gate on `has p1455`, not from a name.
@@ -193,6 +190,11 @@ def f2866(c: Cast) -> None:
 
     def pay(ev: Any) -> None:
         c.bonus(FORT, 4, on=ev.target, until=When.EONT, kind="power")
+        c.bonus(
+            "save", 4, on=ev.target, until=When.EONT, kind="power",
+            when=lambda ctx: Keyword.POISON in ctx.get("keywords", ())
+            or ctx.get("dtype") is DamageType.POISON,
+        )
 
     _once_healed(c, pay)
 

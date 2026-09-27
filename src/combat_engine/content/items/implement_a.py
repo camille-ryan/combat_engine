@@ -156,6 +156,17 @@ def _with_keywords(*words: Keyword):  # noqa: ANN202
     return gate
 
 
+def _save_keywords(*words: Keyword):  # noqa: ANN202
+    """Save gate: the row that laid the effect printed one of these.
+    `durations.keywords_of` reads them back off the effect's label."""
+    wanted = set(words)
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return bool(wanted & set(ctx.get("keywords", ())))
+
+    return gate
+
+
 def _crit_by_me(c: Cast, ev: Any) -> bool:
     return getattr(ev, "attacker", None) == c.me and getattr(ev, "critical", False)
 
@@ -1163,13 +1174,12 @@ def i2809x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("SavingThrow.keywords",),
 )
 def i2819x1(c: Cast) -> None:
-    """The save modifier is read with no context at all -- `c.save` totals
-    `"save"` bare -- so "against charm and illusion effects" cannot narrow
-    it and the bonus applies to every saving throw."""
-    c.bonus("save", c.enhancement, kind="item", on=c.me, until=When.ENCOUNTER)
+    """"Charm and illusion effects" is the pair of keywords the row that
+    laid the hold printed, which the save context carries."""
+    c.bonus("save", c.enhancement, kind="item", on=c.me, until=When.ENCOUNTER,
+            when=_save_keywords(Keyword.CHARM, Keyword.ILLUSION))
 
 
 @power(
@@ -1429,12 +1439,15 @@ def i578x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("SavingThrow.keywords",),
 )
 def i928x1(c: Cast) -> None:
-    """The save modifier is totalled with no context, so "against poison"
-    cannot narrow it."""
-    c.bonus("save", 2, kind="item", on=c.me, until=When.ENCOUNTER)
+    """Poison by the laying row's keyword, with the burn's own type as
+    the fallback for an ongoing poison laid by a row printing none."""
+    c.bonus(
+        "save", 2, kind="item", on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: Keyword.POISON in ctx.get("keywords", ())
+        or ctx.get("dtype") is DamageType.POISON,
+    )
 
 
 @power(

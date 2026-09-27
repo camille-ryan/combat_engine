@@ -253,16 +253,15 @@ def f626(c: Cast) -> None:
 
 
 @power("f927", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF)
 def f927(c: Cast) -> None:
-    """The Endurance half is not a fight. The save half is narrowed as
-    far as the save context reaches: it carries the *ongoing damage
-    type* of the effect being saved against and no keywords, so poison
-    ongoing damage is covered and a poison effect that deals none is
-    the dropped half."""
+    """The Endurance half is not a fight. The save half reads the
+    keywords of the row that laid the hold, and falls back on the burn's
+    own type for an ongoing poison laid by a row that prints none."""
     c.bonus(
         "save", 4, on=c.me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: ctx.get("dtype") is DamageType.POISON,
+        when=lambda ctx: Keyword.POISON in ctx.get("keywords", ())
+        or ctx.get("dtype") is DamageType.POISON,
     )
 
 

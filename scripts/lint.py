@@ -76,8 +76,28 @@ def main() -> int:
     return done.returncode
 
 
-def _context_keys() -> frozenset[str]:
-    """Every key any modifier context carries, read off the engine.
+#: Which context a `c.bonus` call's gate will actually be handed,
+#: decided by what it modifies.
+#:
+#: **The union is too forgiving and that is a real hole**, found by a
+#: content agent who wrote `ctx["keywords"]` into an *attack* gate and
+#: watched it pass. Keywords reach a saving throw and nothing else; an
+#: attack gate reading one is as silently false as the six rows this
+#: check was built for. So the key set is narrowed by the `what`.
+#:
+#: Anything not listed -- `speed`, `crit_range`, a `skill:` key, the
+#: internal `Mods` stores -- falls back to the union, because those are
+#: asked from places that build no context worth the name and a false
+#: alarm there would be worse than the miss.
+_CONTEXT_OF = {
+    "attack": "attack",
+    "damage": "damage",
+    "save": "save",
+}
+
+
+def _context_keys(which: str = "") -> frozenset[str]:
+    """Every key a modifier context carries, read off the engine.
 
     **Derived, not listed.** The first version of this was a hand-kept
     set and it was stale within the hour: it missed `how` from
@@ -90,8 +110,17 @@ def _context_keys() -> frozenset[str]:
     anywhere in `engine/`, unioned. Add a key at any of those sites and
     this sees it on the next run.
     """
+    #: Where each named context is built, so `which` can narrow to one.
+    homes = {
+        "attack": ("resolve.py",),
+        "damage": ("resolve.py",),
+        "save": ("cast.py", "durations.py"),
+    }
+    files = homes.get(which) or ()
     keys: set[str] = set()
     for path in (ROOT / "src/combat_engine/engine").glob("*.py"):
+        if files and path.name not in files:
+            continue
         try:
             tree = ast.parse(path.read_text())
         except SyntaxError:
@@ -117,11 +146,22 @@ def _context_keys() -> frozenset[str]:
             named = any(
                 getattr(t, "id", "").endswith("ctx") for t in node.targets
             )
-            if named:
-                keys |= {
-                    k.value for k in node.value.keys
-                    if isinstance(k, ast.Constant) and isinstance(k.value, str)
-                }
+            if not named:
+                continue
+            target = next(
+                (getattr(t, "id", "") for t in node.targets), ""
+            )
+            # `dmg_ctx` is the damage one and `ctx` in `resolve` is the
+            # attack one; narrowing by name is what lets a `when=` on a
+            # damage bonus be checked against the smaller set.
+            if which == "damage" and target != "dmg_ctx":
+                continue
+            if which == "attack" and target == "dmg_ctx":
+                continue
+            keys |= {
+                k.value for k in node.value.keys
+                if isinstance(k, ast.Constant) and isinstance(k.value, str)
+            }
     return frozenset(keys)
 
 
@@ -137,7 +177,8 @@ def _unknown_context_keys() -> list[tuple[str, str, str]]:
     """
     import difflib
 
-    known = _context_keys()
+    wide = _context_keys()
+    narrow = {k: _context_keys(v) for k, v in _CONTEXT_OF.items()}
     out = []
     for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
         try:
@@ -145,26 +186,40 @@ def _unknown_context_keys() -> list[tuple[str, str, str]]:
         except SyntaxError:
             continue
         for node in ast.walk(tree):
-            key = None
-            if (isinstance(node, ast.Call)
-                    and getattr(node.func, "attr", None) == "get"
-                    and getattr(node.func.value, "id", "") == "ctx"
-                    and node.args
-                    and isinstance(node.args[0], ast.Constant)):
-                key = node.args[0].value
-            elif (isinstance(node, ast.Subscript)
-                    and getattr(node.value, "id", "") == "ctx"
-                    and isinstance(node.slice, ast.Constant)):
-                key = node.slice.value
-            if not isinstance(key, str) or key in known:
+            if not isinstance(node, ast.Call):
                 continue
+            if getattr(node.func, "attr", None) not in ("bonus", "penalty"):
+                continue
+            what = (
+                node.args[0].value
+                if node.args and isinstance(node.args[0], ast.Constant)
+                else ""
+            )
+            known = narrow.get(what) or wide
+            for inner in ast.walk(node):
+                key = None
+                if (isinstance(inner, ast.Call)
+                        and getattr(inner.func, "attr", None) == "get"
+                        and getattr(inner.func.value, "id", "") == "ctx"
+                        and inner.args
+                        and isinstance(inner.args[0], ast.Constant)):
+                    key = inner.args[0].value
+                elif (isinstance(inner, ast.Subscript)
+                        and getattr(inner.value, "id", "") == "ctx"
+                        and isinstance(inner.slice, ast.Constant)):
+                    key = inner.slice.value
+                if not isinstance(key, str) or key in known:
+                    continue
+                if key.startswith("skill:"):
+                    continue
+                near = difflib.get_close_matches(key, known, 1, 0.6)
+                rel = path.relative_to(ROOT)
+                out.append(
+                    (f"{rel}:{inner.lineno}", key, near[0] if near else "")
+                )
+            continue
             # `skill:<name>` is a modifier key asked for by name, not a
             # context key.
-            if key.startswith("skill:"):
-                continue
-            near = difflib.get_close_matches(key, known, 1, 0.6)
-            rel = path.relative_to(ROOT)
-            out.append((f"{rel}:{node.lineno}", key, near[0] if near else ""))
     return out
 
 

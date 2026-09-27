@@ -166,6 +166,17 @@ def _of_type(*types: DamageType):  # noqa: ANN202
     return gate
 
 
+def _save_keywords(*words: Keyword):  # noqa: ANN202
+    """Save gate: the row that laid the effect printed one of these.
+    `durations.keywords_of` reads them back off the effect's label."""
+    wanted = set(words)
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return bool(wanted & set(ctx.get("keywords", ())))
+
+    return gate
+
+
 def _from_row(ref: str):  # noqa: ANN202
     """Attack gate: this roll belongs to that one row.
 
@@ -1150,16 +1161,16 @@ def i2615p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("SavingThrow.keywords",),
 )
 def i2763x1(c: Cast) -> None:
-    """The save modifier is totalled with no context at all -- `c.save`
-    sums `"save"` bare -- so "against fear effects" cannot narrow it and
-    the bonus applies to every saving throw."""
-    c.bonus("save", c.enhancement, kind="item", on=c.me, until=When.ENCOUNTER)
-    for mate in c.within(5, side="ally"):
+    """The save context carries the keywords of the row that laid the
+    effect, so "against fear effects" is one gate. Counted once, when the
+    trait arms, like the other allies-within-N properties here."""
+    gate = _save_keywords(Keyword.FEAR)
+    for who in [c.me, *c.within(5, side="ally")]:
         c.bonus(
-            "save", c.enhancement, kind="item", on=mate, until=When.ENCOUNTER
+            "save", c.enhancement, kind="item", on=who,
+            until=When.ENCOUNTER, when=gate,
         )
 
 
