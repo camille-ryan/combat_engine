@@ -446,7 +446,13 @@ def _atom(clause: str, index: _Index) -> dict:
         return {"race": index.races[race]}
 
     if low.endswith("power"):
-        found = index.powers.get(_bare_power(low))
+        # A class feature that *is* a power is printed as a card on the
+        # class page and is a `cf:` row, so the clause "<name> power" is
+        # as often a feature as a power and asking only `powers` filed
+        # the feature's own name as an opaque term.
+        found = index.powers.get(_bare_power(low)) or index.features.get(
+            _bare_power(low)
+        )
         if found:
             return _ref(found)
 
@@ -468,6 +474,21 @@ def _atom(clause: str, index: _Index) -> dict:
             return {"ref": index.feats[low]}
         if low in index.powers:
             return _ref(index.powers[low])
+        # **And a class feature named with no noun after it.** The pages
+        # gate a feat on a build choice by printing the choice and
+        # nothing else -- no "class feature", no "power" -- so the clause
+        # is the bare printed name of a `cf:` row. 66 of the rows marked
+        # `c.class_feature()` carried their own answer here and it was
+        # filed as an opaque term beside them.
+        #
+        # Safe for the same reason the two lookups above it are: this is
+        # a **whole-clause** match of more than one word against a table
+        # of printed names, in a position where a prerequisite names
+        # something the character must have. `identifies` is the test for
+        # a phrase found loose in running prose, and would rightly waive
+        # a two-word one -- there is no running prose here.
+        if low in index.features:
+            return _ref(index.features[low])
 
     return {"term": low}
 

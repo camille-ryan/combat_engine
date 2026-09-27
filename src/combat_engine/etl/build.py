@@ -594,6 +594,35 @@ _TRAILING_ESSAY = re.compile(
 
 _FEATURE_HEAD = re.compile(r"<b>\s*([A-Z][A-Z0-9 \u2019'&/-]{3,60}?)\s*</b>")
 
+#: A **sub-option** of the feature above it, set in title case: the
+#: fighter's talents, the rogue's tactics, the wizard's implement
+#: masteries, one bold line each under the capitalised heading.
+#:
+#: Dropping them was the largest hole in the feat corpus. A feat that
+#: riders on a build choice names the *sub-option* -- no feat is gated on
+#: the heading, which is only "choose one of the following" -- so 97 of
+#: the names the tree's `c.class_feature()` rows cite had no row to point
+#: at, while the heading above each one did.
+#:
+#: **What tells a heading from the bold run inside a power card is the
+#: page's own punctuation, not the case.** A heading has a `<br/>` on
+#: both sides of it; `<b>Martial</b>, <b>Weapon</b><br/>` inside a card
+#: has a comma on the left and `<b>At-Will</b>&nbsp;` a space on the
+#: right. Matching bare title-case `<b>` instead found 848 of these, most
+#: of them the word "Encounter".
+_SUB_HEAD = re.compile(
+    r"<br\s*/?>\s*<b>\s*([A-Z][A-Za-z0-9\u2019'&/ .:-]{2,60}?)\s*</b>\s*<br\s*/?>"
+)
+
+#: A whole power card printed inside a feature section -- the same shape
+#: `feat._CARD` reads, and for the same reason. The warlock's curse and
+#: the ranger's quarry are printed nowhere else, so deleting the card
+#: left the two most-cited class features in the corpus with no ref.
+_FEATURE_CARD = re.compile(r'<h1[^>]*class="[a-z-]*power"', re.I)
+_H1 = re.compile(r"<h1\b")
+_CARD_NAME = re.compile(r"<h1[^>]*>(.*?)</h1>", re.S)
+_CARD_LEVEL = re.compile(r'<span class="level">(.*?)</span>', re.S)
+
 
 def _features(source: sqlite3.Connection, out: sqlite3.Connection,
               names: dict[str, dict[str, str]]) -> int:
@@ -631,34 +660,144 @@ def _features(source: sqlite3.Connection, out: sqlite3.Connection,
         rest = html[start.end():]
         end = re.search(r"<h3[^>]*>", rest)
         section = rest[: end.start()] if end else rest
+        stem = f"cf:{bare.lower()}" if not build else (
+            f"cf:{bare.lower()}-{_slug(build)}"
+        )
         heads = list(_FEATURE_HEAD.finditer(section))
         for i, m in enumerate(heads):
             stop = heads[i + 1].start() if i + 1 < len(heads) else len(section)
             body = section[m.end(): stop]
-            # A feature that *is* a power is already a `Feature` row in
-            # `power`, embedded here as its own card. Keep the prose that
-            # introduces it and drop the card, so the two do not disagree.
-            body = re.sub(r"<h1\b.*", "", body, flags=re.S)
             # The page ends the feature list with a bare uppercase run --
             # no tag at all, just `<br/><br/>SWORDMAGE OVERVIEW<br/>` --
             # so the last feature of every class swallowed the essay about
             # deities and party role that follows it.
             body = _TRAILING_ESSAY.split(body, 1)[0]
-            from .html import text as _text
-
-            spec = " ".join(_text(body).split())
-            if len(spec) < 20:
-                continue
-            ref = f"cf:{bare.lower()}-f{i}" if not build else (
-                f"cf:{bare.lower()}-{_slug(build)}-f{i}"
-            )
-            out.execute(
-                "INSERT OR REPLACE INTO class_feature VALUES (?,?,?,?,?)",
-                (ref, bare, i, build, spec),
-            )
-            names[ref] = {"name": m.group(1).title()}
-            written += 1
+            # A feature that *is* a power is already a `Feature` row in
+            # `power`, embedded here as its own card. Keep the prose that
+            # introduces it and drop the card from the *parent's* spec, so
+            # the two do not disagree -- and file the card as a row of its
+            # own below rather than deleting it, which is what left
+            # "Warlock's Curse" unnameable.
+            #
+            # The same cut serves the sub-options: everything from the
+            # first of them belongs to *it* and not to the heading above.
+            # Leaving it on both put a sub-option's printed name in the
+            # parent's spec as prose, where the `own` guard in
+            # `_named_powers` rightly refuses to swap a child's ref into
+            # its parent -- and a name the scrubber will not touch is a
+            # leak.
+            marks = _sub_marks(body)
+            head = body[: marks[0][0]] if marks else body
+            ref = f"{stem}-f{i}"
+            written += _feature_row(out, names, ref, bare, i, build,
+                                    head, m.group(1).title())
+            written += _sub_features(out, names, ref, bare, i, build,
+                                     body, marks)
     return written
+
+
+def _feature_row(
+    out: sqlite3.Connection, names: dict[str, dict[str, str]],
+    ref: str, cls: str, ord_: int, build: str, body: str, name: str,
+) -> int:
+    from .html import text as _text
+
+    spec = " ".join(_text(body).split())
+    if len(spec) < 20:
+        return 0
+    out.execute(
+        "INSERT OR REPLACE INTO class_feature VALUES (?,?,?,?,?)",
+        (ref, cls, ord_, build, spec),
+    )
+    names[ref] = {"name": name}
+    return 1
+
+
+def _sub_marks(body: str) -> list[tuple[int, int, str, str]]:
+    """Where a feature section stops being about the heading above it."""
+    marks: list[tuple[int, int, str, str]] = []
+    for m in _SUB_HEAD.finditer(body):
+        marks.append((m.start(), m.end(), "s", m.group(1)))
+    for m in _H1.finditer(body):
+        if _FEATURE_CARD.match(body, m.start()):
+            marks.append((m.start(), m.start(), "c", ""))
+    marks.sort()
+    return marks
+
+
+def _sub_features(
+    out: sqlite3.Connection, names: dict[str, dict[str, str]],
+    parent: str, cls: str, ord_: int, build: str, body: str,
+    marks: list[tuple[int, int, str, str]],
+) -> int:
+    """The named things printed *inside* one feature's section.
+
+    Two shapes, both of which the caps-only import dropped on the floor,
+    and between them they hold every name the tree's `c.class_feature()`
+    rows were citing in prose:
+
+    * a title-case sub-option, one of the build choices listed under the
+      capitalised heading, which is the thing a feat is actually gated on;
+    * a power card, which for the warlock's curse and the ranger's quarry
+      is the only place the name is printed at all.
+
+    Suffixed off the parent (`...-f3s0`, `...-f3c0`) exactly as
+    `feat._card` suffixes a card off its feat, so the caps headings keep
+    the ordinals every `cf:` ref already written into the tree depends on.
+    Numbering the sub-options into the same sequence would have been
+    tidier and would have moved `cf:rogue-scoundrel-f4` under somebody
+    else's feet.
+    """
+    written = 0
+    per: Counter[str] = Counter()
+    for n, (_, after, kind, name) in enumerate(marks):
+        stop = marks[n + 1][0] if n + 1 < len(marks) else len(body)
+        fragment = body[after:stop]
+        ref = f"{parent}{kind}{per[kind]}"
+        per[kind] += 1
+        if kind == "c":
+            written += _card_row(out, names, ref, cls, ord_, build, fragment)
+        else:
+            written += _feature_row(out, names, ref, cls, ord_, build,
+                                    fragment, name)
+    return written
+
+
+def _card_row(
+    out: sqlite3.Connection, names: dict[str, dict[str, str]],
+    ref: str, cls: str, ord_: int, build: str, fragment: str,
+) -> int:
+    """One power card inside a feature section, read in the power dialect.
+
+    `sanitise.power_spec` is what reads a card everywhere else, so it
+    reads this one too rather than the prose flattener above: the card is
+    the power dialect exactly, and flattening it would file the keyword
+    line and the flavour as rules text.
+    """
+    name = ""
+    heading = _CARD_NAME.search(fragment)
+    if heading:
+        name = _plain(heading.group(1))
+        level = _CARD_LEVEL.search(fragment)
+        if level:
+            name = name.replace(_plain(level.group(1)), "").strip()
+    if not name:
+        return 0
+    spec = sanitise.power_spec(fragment, ref, name)
+    if len(spec) < 20:
+        return 0
+    out.execute(
+        "INSERT OR REPLACE INTO class_feature VALUES (?,?,?,?,?)",
+        (ref, cls, ord_, build, spec),
+    )
+    names[ref] = {"name": name, "flavour": sanitise.flavour(fragment)}
+    return 1
+
+
+def _plain(fragment: str) -> str:
+    from .html import text as _text
+
+    return _text(fragment)
 
 
 def _slug(text: str) -> str:
@@ -970,8 +1109,14 @@ def _cross_reference_rest(
         low = name.lower()
         if len(low) < 3:
             continue
-        if low not in by_name or (ref[:1] == "p" and by_name[low][:1] != "p"):
-            by_name[low] = ref
+        # Both spellings of the possessive. The pages set it as a curly
+        # apostrophe and a spec quotes it the same way, but a lookup and a
+        # printed-name key must meet somewhere, and half the callers here
+        # normalise to `'`.
+        keys = {low, low.replace("\u2019", "'")}
+        for key in keys:
+            if key not in by_name or (ref[:1] == "p" and by_name[key][:1] != "p"):
+                by_name[key] = ref
         # **A name can be a power for one class and a feature for
         # another.** "Arcane Empowerment" is a sorcerer daily *and* the
         # artificer's class feature, and preferring a `p` on a tie sent
@@ -979,7 +1124,8 @@ def _cross_reference_rest(
         # within a kind, so the card's own noun decides -- keep a second
         # index of the `cf:` side and let `_named_powers` pick by it.
         if ref.startswith("cf:"):
-            by_feature[low] = ref
+            for key in keys:
+                by_feature[key] = ref
         if not identifies(low, [ref], rules):
             continue
         words = re.findall(r"[A-Za-z']+", low)
@@ -1032,7 +1178,7 @@ def _cross_reference_rest(
                 if table == "feat":
                     fixed = _label_refs(fixed, by_name)
                     fixed = _associated_refs(fixed, by_name)
-                fixed = _named_powers(fixed, by_name, ref, by_feature)
+                fixed = _named_powers(fixed, by_name, ref, by_feature, rules)
             if fixed != spec:
                 out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
                 changed += 1
@@ -1108,10 +1254,53 @@ _LABEL = re.compile(r"^([A-Z][\w' ]{2,40}?)\s*(?:\([A-Za-z]+\)\s*)?:\s", re.M)
 #: prose, and 134 rows across the corpus carry a marker for want of a
 #: name the database had all along. Measured before the verbs they
 #: wanted were built, which is what `plans/` said to do.
+#:
+#: **The curly apostrophe is in neither `\w` nor `[']`.** The pages set
+#: every possessive with it, so `[\w']` stopped dead in
+#: the middle of the most-cited names in the corpus -- the warlock's
+#: curse, the ranger's quarry, the cleric's lore -- and matched their
+#: second word alone.
+#:
+#: **And the noun is not always "class feature".** The pages write plain
+#: "feature" and, for a race's, "trait"; three words of a four-word
+#: vocabulary were being read.
 _NAMED = re.compile(
-    r"\b([A-Za-z][\w']*(?:\s+[A-Za-z][\w']*){0,3}?)"
+    r"\b([A-Za-z][\w'\u2019]*(?:\s+[A-Za-z][\w'\u2019]*){0,3}?)"
     r"(\s+(?:racial|encounter|daily|at-will|utility|attack))*"
-    r"\s+(power|class feature)\b"
+    r"\s+(power|class feature|feature|trait)\b"
+)
+
+#: The same name on the other side of the noun: "you gain the barbarian
+#: **class feature** *<name>*". Rare -- one row in the corpus asks for it
+#: -- and a name by construction in that position, exactly as a label
+#: before a colon is.
+_AFTER_NOUN = re.compile(
+    r"\b(?:class feature|feature|power)\s+"
+    r"([A-Z][\w'\u2019-]*(?:\s+[A-Z][\w'\u2019-]*){0,3})"
+)
+
+#: A word that may sit inside a title-case name without being capitalised.
+_JOINER = r"(?:of|the|and|is|in|to|a|an)"
+
+#: **A class feature named with no noun after it at all.** "When you use
+#: your *<name>*, you and each ally adjacent to you can shift 1 square"
+#: -- the largest single shape in the `c.class_feature()` queue, and
+#: invisible to every pattern above because there is no *power* and no
+#: *class feature* behind it to anchor on.
+#:
+#: Three things have to hold at once, because none of them is proof by
+#: itself. The run must be **title case throughout** -- the page also
+#: writes "your Charisma modifier", and the lower-case second word is
+#: what says that phrase is not a name. It must be a **whole-phrase
+#: match against the `cf:` index alone**, never `by_name`: the only
+#: thing being claimed here is that a character has a class feature, so
+#: a name whose sole holder is a power or a stat block is not a
+#: candidate. And the run must be believable as a name at all, which is
+#: `sanitise.identifies` -- see `_believable` for where its answer is
+#: taken and the one place it is not.
+_BARE_NAMED = re.compile(
+    rf"\b(?:your|the)\s+"
+    rf"([A-Z][\w'\u2019-]*(?:\s+(?:[A-Z][\w'\u2019-]*|{_JOINER})){{0,4}})"
 )
 
 
@@ -1120,6 +1309,7 @@ def _named_powers(
     by_name: dict[str, str],
     own: str,
     by_feature: dict[str, str] | None = None,
+    rules: set[str] | None = None,
 ) -> str:
     """Swap `<name> power` for `<ref> power`.
 
@@ -1138,28 +1328,125 @@ def _named_powers(
     def swap(m: re.Match) -> str:
         phrase, quals, noun = m.group(1), m.group(2) or "", m.group(3)
         words = phrase.split()
-        for size in range(len(words), 0, -1):
-            tail = " ".join(words[-size:])
-            # The card's own noun picks the kind. "Arcane Empowerment"
-            # is a sorcerer daily and the artificer's class feature, so
-            # a `p`-first tie-break sent two artificer feats at a spell.
-            ref = None
-            if noun == "class feature" and by_feature:
-                ref = by_feature.get(tail.lower())
-            ref = ref or by_name.get(tail.lower())
-            # **Only a `p` or a `cf:`.** `by_name` prefers a power on a
-            # tie, but a name with no character-side counterpart resolves
-            # onto a monster's stat block -- 112 specs were pointing a
-            # feat at a claw. A feat modifies what a character has; it
-            # has never modified a monster's ability.
-            if ref and ref[:1] not in ("p", "c"):
-                continue
-            if ref and not ref.startswith(own):
-                head = " ".join(words[:-size])
-                return f"{head} {ref}{quals} {noun}".strip()
+        qual = quals.split()
+        # **A qualifier word can also be the last word of the name**, and
+        # nothing was trying it. "the sneak attack class feature" parsed
+        # as the phrase "the sneak" plus the qualifier "attack", so the
+        # lookup saw "sneak", "the sneak" and never "sneak attack" -- the
+        # mirror image of the bug the qualifier group was added to fix.
+        # Fold them in from the right, most first, and fall back to the
+        # plain reading.
+        for take in range(len(qual), -1, -1):
+            body = words + qual[:take]
+            rest = " ".join(qual[take:])
+            for size in range(len(body), 0, -1):
+                tail = " ".join(body[-size:])
+                # The card's own noun picks the kind. "Arcane
+                # Empowerment" is a sorcerer daily and the artificer's
+                # class feature, so a `p`-first tie-break sent two
+                # artificer feats at a spell.
+                ref = None
+                if noun != "power" and by_feature:
+                    ref = by_feature.get(_low(tail))
+                ref = ref or by_name.get(_low(tail))
+                # **Only a `p` or a `cf:`.** `by_name` prefers a power on
+                # a tie, but a name with no character-side counterpart
+                # resolves onto a monster's stat block -- 112 specs were
+                # pointing a feat at a claw. A feat modifies what a
+                # character has; it has never modified a monster's
+                # ability.
+                if ref and ref[:1] not in ("p", "c"):
+                    continue
+                if ref and not ref.startswith(own):
+                    head = " ".join(body[:-size])
+                    return " ".join(
+                        w for w in (head, ref, rest, noun) if w
+                    )
         return m.group(0)
 
-    return _NAMED.sub(swap, spec)
+    def after(m: re.Match) -> str:
+        ref = _longest(m.group(1), by_feature or {}, own, prefix=True)
+        return m.group(0).replace(m.group(1), ref, 1) if ref else m.group(0)
+
+    def bare(m: re.Match) -> str:
+        ref = _longest(m.group(1), by_feature or {}, own, prefix=True,
+                       rules=rules)
+        return m.group(0).replace(m.group(1), ref, 1) if ref else m.group(0)
+
+    spec = _NAMED.sub(swap, spec)
+    spec = _AFTER_NOUN.sub(after, spec)
+    return _BARE_NAMED.sub(bare, spec)
+
+
+def _low(name: str) -> str:
+    return name.lower().replace("\u2019", "'")
+
+
+def _believable(run: list[str], name: str, ref: str, rules: set[str]) -> bool:
+    """Is a bare title-case run naming a class feature, or is it words?
+
+    `sanitise.identifies` answers this, and it is asked rather than
+    re-implemented, because a checker that disagrees with the scrubber is
+    how 124 specs shipped a printed name the last time.
+
+    **One clause of its answer is overridden and it is worth saying
+    which.** `identifies` waives a two-word phrase built of two ordinary
+    words, and its own docstring says out loud that the cost is missing a
+    real name of that shape. The class features most cited in the corpus
+    are exactly that shape -- two plain English words, one of them often
+    the class's own noun -- so taking that clause here would refuse the
+    warlock's curse, the paladin's challenge and the rogue's attack,
+    which between them are most of what the queue is asking for.
+
+    What replaces it is the position, and it is the same argument
+    `_label_refs` makes for a colon: a run that is **capitalised
+    throughout** and matches a printed class-feature name **whole** is
+    not a coincidence, because ordinary prose does not capitalise both
+    halves of "your charisma modifier".
+
+    The first clause is kept unchanged: a run that is itself a rules
+    term is mechanics, never a name. And a **single** word gets the full
+    test, because one capitalised word after "your" really is an ability
+    score or a keyword more often than it is a feature.
+    """
+    if len(run) == 1:
+        return sanitise.identifies(name, [ref], rules)
+    return name not in rules
+
+
+def _longest(
+    phrase: str,
+    by_feature: dict[str, str],
+    own: str,
+    prefix: bool = False,
+    rules: set[str] | None = None,
+) -> str:
+    """The longest run of `phrase` that is a class feature's printed name.
+
+    `cf:` only, and that is the monster guard rather than a narrower one:
+    the two positions this serves name a *class feature*, so a name whose
+    only holder is a stat block is not a candidate at all. The other
+    paths reach `by_name`, where a monster can win a tie, and have to
+    refuse an `m` afterwards.
+
+    `rules` turns `sanitise.identifies` on. The caller passes it for the
+    position where the phrase is the whole of the evidence, and omits it
+    where the surrounding words are already proof.
+    """
+    words = phrase.split()
+    for size in range(len(words), 0, -1):
+        run = words[:size] if prefix else words[-size:]
+        if run[-1].islower():
+            continue
+        name = _low(" ".join(run))
+        ref = by_feature.get(name)
+        if not ref or ref.startswith(own) or own.startswith(ref):
+            continue
+        if rules is not None and not _believable(run, name, ref, rules):
+            continue
+        rest = words[size:] if prefix else words[:-size]
+        return " ".join([ref, *rest] if prefix else [*rest, ref])
+    return ""
 
 
 def _label_refs(spec: str, by_name: dict[str, str]) -> str:
