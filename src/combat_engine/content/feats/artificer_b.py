@@ -359,16 +359,19 @@ def f3026(c: Cast) -> None:
 
 
 @power("f3027", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.save(against=)",),
+       reach=PERSONAL, target=SELF, dropped=("c.save(conditions=)",),
        trigger="you use an infusion",
        on=Trigger(PowerUsed, _used_infusion, "you use an infusion"))
 def f3027(c: Cast) -> None:
     """A saving throw only for a target actually carrying one of the two
     named conditions, so the row does nothing to anybody else.
 
-    Which effect the save is rolled against is dropped: `c.save` takes a
-    label fragment and a condition is not one, so on a target carrying
-    both a daze and a burn it may shake off the burn.
+    Which effect the save is rolled against is dropped. `c.save` does
+    take an `against=`, so that is not the gap -- it matches a fragment
+    of the effect's *label*, and a label is the ref of the row that
+    laid it rather than the name of a condition. So on a target
+    carrying both a daze and a burn this may shake off the burn.
+    `c.save(conditions=)` is the thing that would say it.
     """
     for who in c.trigger.targets:
         if c.is_(Condition.DAZED, on=who) or c.is_(Condition.DOMINATED, on=who):

@@ -871,8 +871,7 @@ def f3091(c: Cast) -> None:
     the once-shot bonus is in place for the roll that follows. Spending
     the p1747 use it costs has no verb, so the row is free where the
     card charges."""
-    c.bonus("damage", c.str_mod, on=c.me, until=When.EOT, once=True,
-            kind="power")
+    c.bonus("damage", c.str_mod, on=c.me, until=When.EOT, once=True)
 
 
 @power("f3101", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -720,12 +720,16 @@ def f3214(c: Cast) -> None:
        on=Trigger(DamageApplied, lambda w, me, ev: (
            ev.source == me and distance_between(w, me, ev.target) <= 1
        ), "an adjacent enemy takes damage from you"),
-       dropped=("DamageApplied.detail",))
+       dropped=("c.on_extra_damage()",))
 def f3215(c: Cast) -> None:
-    """The quarry rider is not announced apart from the blow it rides on
-    -- `detail` carries the power ref, not which of its damage lines
-    paid -- so the trigger is every blow you land on an adjacent enemy
-    that is your quarry, which fires more often than printed.
+    """The quarry rider is not announced apart from the blow it rides
+    on. `DamageApplied.detail` does exist and carries the power's ref
+    -- which is why the marker is not for that field but for
+    `c.on_extra_damage()`, the fifteen-row group for exactly this: the
+    class's extra damage is paid inside another row's `c.damage` and
+    nothing says which of its lines paid. So the trigger here is every
+    blow you land on an adjacent quarry, which fires more often than
+    printed.
 
     The 3-at-11th and 4-at-21st steps are paragon and epic; the project
     stops at 10, so the heroic 2 is the whole number."""
@@ -794,8 +798,8 @@ def f3222b(c: Cast) -> None:
     """The bonus is the printed effect; whether raising a defence during
     the interrupt window turns the blow into a miss is the engine's
     business, not the row's."""
-    c.bonus(AC, c.wis_mod, on=c.me, until=When.EOT, kind="power")
-    c.bonus(REF, c.wis_mod, on=c.me, until=When.EOT, kind="power")
+    c.bonus(AC, c.wis_mod, on=c.me, until=When.EOT)
+    c.bonus(REF, c.wis_mod, on=c.me, until=When.EOT)
 
 
 _swap("f3223", "f3223b")
@@ -1104,7 +1108,7 @@ def f3308(c: Cast) -> None:
         if ev.actor != c.me or ev.cost != ActionType.MOVE:
             return
         if _point(c):
-            c.bonus("speed", 2, on=c.me, until=When.EOT, kind="power")
+            c.bonus("speed", 2, on=c.me, until=When.EOT)
 
     c.watch(ActionSpent, hustle, on=c.me, until=When.ENCOUNTER)
 

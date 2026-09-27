@@ -264,6 +264,15 @@ def _cards() -> dict[str, tuple[set[str], bool]]:
                 # never calls a bonus, so it is untyped -- and a row that
                 # also prints a typed bonus has one call of each.
                 or "extra damage" in text
+                # **A penalty replaced by a smaller one is untyped.**
+                # "a -2 penalty to attack rolls (instead of -5)" is
+                # written as the arithmetic difference against the
+                # standing penalty, because nothing waives one clause of
+                # a condition's rules. That difference is a correction
+                # and not a bonus of any type -- but the same card also
+                # prints "+2 feat bonus to Dungeoneering", so without
+                # this the typed half made the untyped half look wrong.
+                or bool(re.search("instead of\\s*[-\u2013]\\s*\\d", text))
             )
             out[ref] = (typed, plain)
     return out

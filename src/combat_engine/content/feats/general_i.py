@@ -843,7 +843,7 @@ def f1437b(c: Cast) -> None:
     and the burst would otherwise pick somebody else."""
     who = c.trigger.actor
     if c.trigger.saved:
-        c.bonus("save", 2, on=who, until=When.ENCOUNTER, once=True, kind="power")
+        c.bonus("save", 2, on=who, until=When.ENCOUNTER, once=True)
     else:
         c.penalty("save", 2, on=who, until=When.ENCOUNTER, once=True)
 

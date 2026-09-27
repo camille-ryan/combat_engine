@@ -1121,7 +1121,7 @@ def f1765b(c: Cast) -> None:
     friend = c.trigger.target
     c.shift(5)
     for defence in ALL_DEFENCES:
-        c.bonus(defence, 3, on=friend, until=When.SONT, kind="power")
+        c.bonus(defence, 3, on=friend, until=When.SONT)
 
 
 _granted("f1766", "f1766b", dropped=SWAP)
