@@ -2943,7 +2943,16 @@ class Cast:
         self.world.bus.emit(SecondWind(actor=who, healed=coming, cost=cost))
         spend_surge(self.world, who)
         self.world.heal(who, who, health.surge_value)
-        self.bonus("ac", 2, until=When.SONT, on=who, kind="untyped")
+        # **All four defences, not just AC.** The printed rule is "+2 to
+        # all defences until the start of your next turn" and this gave
+        # AC alone, so every creature that took a second wind has been
+        # two points easier to hit on Fortitude, Reflex and Will since
+        # the method was written. It also made one feat unwritable in a
+        # second way: a card reading "+1 AC and +3 to the others" would
+        # have to be written against the bug and would go to +5 AC the
+        # day it was fixed.
+        for defence in Defense:
+            self.bonus(defence, 2, until=When.SONT, on=who, kind="untyped")
         return True
 
     def forces(
