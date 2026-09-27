@@ -144,7 +144,7 @@ def p12411(c: Cast) -> None:
     means. `Effects.save` announces the throw before acting on it, so the
     listener is still subscribed when the successful one is read.
     """
-    c.grants_advantage(until=When.EONT, to="allies")
+    c.grants_advantage(until=When.EONT, to="team")
     if not c.strike():
         return
     victim = c.target

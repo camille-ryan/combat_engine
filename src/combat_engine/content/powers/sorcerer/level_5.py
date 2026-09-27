@@ -417,7 +417,7 @@ def p5850(c: Cast) -> None:
 
     def expose(who: int) -> None:
         if who in c.enemies():
-            c.grants_advantage(on=who, to="allies", until=When.EONT)
+            c.grants_advantage(on=who, to="team", until=When.EONT)
 
     for foe in c.in_squares(area, side="enemy"):
         expose(foe)

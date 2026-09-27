@@ -131,7 +131,7 @@ def p13327(c: Cast) -> None:
         return
     for near in c.within(1, of=ev.target, side="any"):
         if near not in (ev.target, c.me):
-            c.grants_advantage(on=near, until=When.EONT, to="allies")
+            c.grants_advantage(on=near, until=When.EONT, to="team")
 
 
 @power(
@@ -177,7 +177,7 @@ def p13329(c: Cast) -> None:
 
     def missed(m: Miss) -> None:
         if m.attacker == foe and m.target == c.me:
-            c.grants_advantage(on=foe, until=When.EONT, to="allies")
+            c.grants_advantage(on=foe, until=When.EONT, to="team")
 
     c.watch(Miss, missed, until=When.EOT, on=c.me, label=c.ref)
 

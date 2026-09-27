@@ -241,6 +241,6 @@ def p13782(c: Cast) -> None:
         if not c.may("take 5 psychic damage to open the enemy up", who=c.me):
             return
         c.flat(5, dtype=DamageType.PSYCHIC, on=c.me)
-        c.grants_advantage(on=foe, until=When.SAVE_ENDS, to="allies")
+        c.grants_advantage(on=foe, until=When.SAVE_ENDS, to="team")
 
     c.watch(DamageApplied, payout, until=When.ENCOUNTER)

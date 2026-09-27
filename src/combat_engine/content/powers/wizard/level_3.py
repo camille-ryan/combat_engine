@@ -591,5 +591,5 @@ def p5804(c: Cast) -> None:
         return
     c.damage("2d6", c.int_mod)
     c.condition(Condition.DAZED, Condition.IMMOBILIZED, until=When.SOTNT)
-    c.grants_advantage(until=When.SOTNT, to="allies")
+    c.grants_advantage(until=When.SOTNT, to="team")
     c.note(f"{c.ref}: the target is also held 2 squares up, and the board is flat")

@@ -188,12 +188,12 @@ def m5019a3(c: Cast) -> None:
     the engine measures.
 
     "Grants combat advantage" with nobody named is the whole of the m5019's
-    side, which is `to="allies"` -- the relation names one beneficiary at a
+    side, which is `to="team"` -- the relation names one beneficiary at a
     time and the method holds them all on one effect.
     """
     if c.strike():
         c.hit()
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

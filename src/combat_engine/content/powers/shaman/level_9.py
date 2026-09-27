@@ -105,7 +105,7 @@ def p3884(c: Cast) -> None:
     if victim is None:
         return
     held = c.condition(Condition.SLOWED, until=When.SAVE_ENDS, on=victim)
-    c.grants_advantage(on=victim, until=When.SAVE_ENDS, to="allies")
+    c.grants_advantage(on=victim, until=When.SAVE_ENDS, to="team")
     if held is None:
         return
 
@@ -115,7 +115,7 @@ def p3884(c: Cast) -> None:
             return
         near = min(pool, key=lambda f: distance_between(c.world, victim, f))
         c.condition(Condition.SLOWED, until=When.SAVE_ENDS, on=near)
-        c.grants_advantage(on=near, until=When.SAVE_ENDS, to="allies")
+        c.grants_advantage(on=near, until=When.SAVE_ENDS, to="team")
 
     held.on_end.append(after)
 

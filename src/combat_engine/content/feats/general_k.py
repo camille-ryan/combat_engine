@@ -521,12 +521,12 @@ def f1938(c: Cast) -> None:
 
 
 @power("f1939", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF)
 def f1939(c: Cast) -> None:
-    """`cf:barbarian-f3` is declared, so the ref is there. `c.grant_row`
-    is still the wrong tool: the feature is a trait, and traits are armed
-    from a snapshot of `Powers.all` taken before this row runs, so a row
-    added here is never armed. Same hold as f1628."""
+    """A trait handed to somebody who does not have it. Armed now that
+    `turns.arm_traits_of` re-reads `Powers.all` between passes; same
+    shape as f1628."""
+    c.grant_row("cf:barbarian-f3")
 
 
 @power("f1839", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1344,9 +1344,9 @@ def f2023b(c: Cast) -> None:
            ev.attacker == me and ev.power == "f2023b"
        ), "you hit with f2023b"))
 def f2024(c: Cast) -> None:
-    """`to="allies"` is one relation per beneficiary held on a single
+    """`to="team"` is one relation per beneficiary held on a single
     effect, so they all end together with the power's own duration."""
-    c.grants_advantage(on=c.trigger.target, to="allies", until=When.EONT)
+    c.grants_advantage(on=c.trigger.target, to="team", until=When.EONT)
 
 
 @power("f2025", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

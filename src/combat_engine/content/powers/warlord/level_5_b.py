@@ -355,7 +355,7 @@ def p10928(c: Cast) -> None:
         extra, until = 5, When.ENCOUNTER
     else:
         c.weakened(until=When.EONT, on=victim)
-        c.grants_advantage(on=victim, to="allies", until=When.EONT)
+        c.grants_advantage(on=victim, to="team", until=When.EONT)
         extra, until = 2, When.EONT
 
     def against(ctx: dict) -> bool:

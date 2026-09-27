@@ -87,8 +87,8 @@ def p10273(c: Cast) -> None:
 )
 def p11060(c: Cast) -> None:
     """"Grants combat advantage" with nobody named means everybody, which is
-    `to="allies"` -- the caster and their side."""
-    c.grants_advantage(until=When.SONT, to="allies")
+    `to="team"` -- the caster and their side."""
+    c.grants_advantage(until=When.SONT, to="team")
 
 
 @power(

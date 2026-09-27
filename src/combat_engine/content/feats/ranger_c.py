@@ -489,7 +489,7 @@ def _shove(c: Cast, pet: int, foe: int) -> None:
 
 def _expose(c: Cast, pet: int, foe: int) -> None:
     """"Grants combat advantage" names nobody, so it is everyone."""
-    c.grants_advantage(on=foe, until=When.EONT, to="allies")
+    c.grants_advantage(on=foe, until=When.EONT, to="team")
 
 
 def _seize(c: Cast, pet: int, foe: int) -> None:

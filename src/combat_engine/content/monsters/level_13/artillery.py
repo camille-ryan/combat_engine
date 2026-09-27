@@ -898,14 +898,14 @@ def m4817a4(c: Cast) -> None:
 
     The die is rolled now and held as a power bonus, because that is what
     "add the result as a power bonus to its attack rolls" is; and the
-    opening it gives away is to everybody, which is `to="allies"` read from
+    opening it gives away is to everybody, which is `to="team"` read from
     the other side -- there is no argument for "everyone", so the enemies
     who will actually swing at it are named by the relation one at a time.
     """
     me = c.me
     rolled = c.roll("1d6")
     c.bonus("attack", rolled, until=When.EONT, on=me, kind="power")
-    c.grants_advantage(until=When.EONT, on=me, to="allies")
+    c.grants_advantage(until=When.EONT, on=me, to="team")
     for foe in sorted(c.enemies()):
         c.grants_advantage(until=When.EONT, on=me, to=foe)
     c.note(f"m4817a4: it swings at +{rolled} and leaves itself open")

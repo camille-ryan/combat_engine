@@ -147,7 +147,7 @@ def p7646(c: Cast) -> None:
 def p7647(c: Cast) -> None:
     if c.strike():
         c.damage("1d8", c.int_mod, dtype=DamageType.LIGHTNING)
-        c.grants_advantage(to="allies", until=When.EONT)
+        c.grants_advantage(to="team", until=When.EONT)
 
 
 @power(

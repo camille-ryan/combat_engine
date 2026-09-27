@@ -405,7 +405,7 @@ def p11606(c: Cast) -> None:
 )
 def p11608(c: Cast) -> None:
     """"Your allies" and not you, so the relations are listed out one per
-    ally rather than taken from `to="allies"`, which includes the caster.
+    ally rather than taken from `to="team"`, which includes the caster.
 
     Not written: the Effect line, which pays out on an attack an ally gained
     from an action point. Nothing in the engine has one. See the report.

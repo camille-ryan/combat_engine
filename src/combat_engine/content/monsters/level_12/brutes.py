@@ -42,7 +42,7 @@ is chosen here instead, every step of it further from the creature that
 landed the blow, which is the printed sentence exactly.
 
 **"It grants combat advantage" is read from the caster's side.**
-`to="allies"` is the *caster's* own side, which is the wrong half of the
+`to="team"` is the *caster's* own side, which is the wrong half of the
 board when the creature granting the opening is the caster. The
 beneficiaries are named one enemy at a time.
 
@@ -176,7 +176,7 @@ def _refuse(c: Cast, who: int, cond: Condition) -> None:
 def _exposed(c: Cast, until: When) -> None:
     """The caster itself grants combat advantage, to everybody who wants it.
 
-    `to="allies"` is the caster's own side, which is exactly the wrong half
+    `to="team"` is the caster's own side, which is exactly the wrong half
     of the board for a printed line about the caster dropping its guard, so
     the beneficiaries are named one enemy at a time.
     """
@@ -1147,7 +1147,7 @@ def m4898a0(c: Cast) -> None:
         return who in c.enemies()
 
     def hold(who: int) -> Effect | None:
-        return c.grants_advantage(on=who, to="allies", until=When.ENCOUNTER)
+        return c.grants_advantage(on=who, to="team", until=When.ENCOUNTER)
 
     _aura(c, 1, eligible, hold)
 

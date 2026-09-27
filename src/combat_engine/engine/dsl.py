@@ -700,7 +700,10 @@ _SYMBOL = re.compile(
     # checkable as a missing method: the tool looks in the registry
     # instead of on `Cast`. Without it such a row had no way to say what
     # it wanted, and two were left looking merely broken.
-    r"|[pmifr]\d+[a-z]?\d*|cf:[\w-]+"
+    # `rt:` is the same case as `cf:` and was left out of it: a racial
+    # trait is a declared row like any other, and a feat riding on one
+    # that is not written yet had no way to name what it waited for.
+    r"|[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+"
 )
 
 
@@ -1423,7 +1426,10 @@ def use(
         _IN_FLIGHT.add((actor, ref))
     try:
         world.bus.emit(
-            PowerResolved(actor=actor, power=ref, targets=list(chosen), rolls=rolls)
+            PowerResolved(
+                actor=actor, power=ref, targets=list(chosen), rolls=rolls,
+                trigger=trigger,
+            )
         )
     finally:
         if fresh:

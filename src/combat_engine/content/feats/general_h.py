@@ -948,12 +948,19 @@ def _rattle_in_cloud(c: Cast, ev: Any) -> None:
 # -- the rows ---------------------------------------------------------------
 
 
-@_trait("f1237", todo=NAMED)
+@_trait("f1237", todo=("c.split_weapon()", "c.on_granted_basic()",
+                       "c.instead_of()"))
 def f1237(c: Cast) -> None:
-    """The one card of the family whose clauses are still printed names:
-    its brackets carry a capitalised class, which the label matcher does
-    not read. All four are about a spiked chain the weapon table does not
-    have either."""
+    """Re-aimed: the bracketed capitalised class no longer defeats the
+    label matcher and all four refs are in the spec, so the naming gap
+    that held this is closed and was never the whole of it.
+
+    Not one of the four clauses is a rider on a hit. Two of them --
+    `p2104`'s and `p87`'s -- ask for one weapon to count as both hands
+    at once, `p4541`'s waits on the attack that row hands an ally, and
+    `p971`'s rewrites the movement its own row prints. All four are
+    also about a weapon the table does not carry, which `exotic.py`
+    states at length and deliberately does not mark."""
 
 
 @_trait("f1296", todo=("c.cover_from()", "c.forgo_attack()"))

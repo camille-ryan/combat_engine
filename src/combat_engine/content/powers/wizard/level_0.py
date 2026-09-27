@@ -301,7 +301,7 @@ def p14285(c: Cast) -> None:
 )
 def p14286(c: Cast) -> None:
     c.damage(0, c.dex_mod, dtype=DamageType.FIRE)
-    c.grants_advantage(until=When.EONT, to="allies")
+    c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

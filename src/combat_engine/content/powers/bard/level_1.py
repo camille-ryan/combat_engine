@@ -205,7 +205,7 @@ def p14453(c: Cast) -> None:
     if foe is None:
         return
     c.flat(5, dtype=DamageType.THUNDER, on=foe)
-    c.grants_advantage(on=foe, to="allies", until=When.EONT)
+    c.grants_advantage(on=foe, to="team", until=When.EONT)
 
 
 @power(
@@ -322,13 +322,13 @@ def p2350(c: Cast) -> None:
     victim = c.target
     if c.strike():
         c.damage(c.w(2), c.cha_mod)
-        c.grants_advantage(on=victim, to="allies", until=When.SAVE_ENDS)
+        c.grants_advantage(on=victim, to="team", until=When.SAVE_ENDS)
     else:
         c.half_damage(c.w(2), c.cha_mod)
 
     def onward(ev: Hit) -> None:
         if ev.attacker == c.me:
-            c.grants_advantage(on=ev.target, to="allies", until=When.EONT)
+            c.grants_advantage(on=ev.target, to="team", until=When.EONT)
 
     c.watch(Hit, onward, until=When.ENCOUNTER, on=c.me, label="p2350")
 

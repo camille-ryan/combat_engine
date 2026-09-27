@@ -511,9 +511,9 @@ def m2852a2(c: Cast) -> None:
 )
 def m2852a3(c: Cast) -> None:
     """No attack roll at all -- the whole printed line is the opening it
-    makes. "Grants combat advantage" names nobody, so it is `to="allies"`,
+    makes. "Grants combat advantage" names nobody, so it is `to="team"`,
     which is this creature and everything on its side."""
-    c.grants_advantage(until=When.EONT, to="allies")
+    c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

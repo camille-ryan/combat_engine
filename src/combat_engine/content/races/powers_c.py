@@ -366,7 +366,7 @@ def p1831(c: Cast) -> None:
     which is every attacker that matters on a two-sided board. Cover is
     taken off the target for everybody; concealment has no such reader."""
     if c.strike():
-        c.grants_advantage(to="allies", until=When.EONT)
+        c.grants_advantage(to="team", until=When.EONT)
         c.no_cover(until=When.EONT)
 
 

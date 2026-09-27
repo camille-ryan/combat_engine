@@ -601,20 +601,26 @@ def f3061(c: Cast) -> None:
 
 
 @power("f1851", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=NAMED)
+       reach=PERSONAL, target=SELF)
 def f1851(c: Cast) -> None:
-    """An attack bonus on one named spirit power. The bonus is ordinary;
-    the brief prints the power's name where its ref belongs, and a name
-    is the one thing this project may not go and look up."""
+    """An attack bonus on one spirit power, whose ref the spec now
+    carries. The attack context is handed `power`, so the gate is the
+    declared row rather than a guess. No type word is printed, so the
+    bonus is untyped."""
+    c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("power") == "p5388")
 
 
 @power("f3051", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=NAMED)
+       reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
 def f3051(c: Cast) -> None:
-    """A damage bonus on the ranged basic attack another spirit power
-    hands an ally. Same naming gap as f1851: without the ref there is
-    nothing to gate on, and guessing which row grants a ranged basic
-    would be reading the name back out of the mechanics."""
+    """A damage bonus on the ranged basic attack `p9732` hands an ally.
+
+    Re-aimed: the ref arrived and was never the hold. `p9732` calls
+    `c.grant_attack(friend, ref=RANGED)` and the shot is rolled inside
+    that call, so the only thing a bonus could gate on is the basic
+    attack's own ref -- which would also pay for every ordinary ranged
+    basic the ally makes, and that is more often than printed."""
 
 
 @power("f1867", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

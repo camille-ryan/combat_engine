@@ -257,7 +257,7 @@ def p11370(c: Cast) -> None:
         extra = c.wis_mod if destruction else 0
         c.damage(c.w(), c.str_mod + extra, dtype=DamageType.THUNDER)
         if destruction:
-            c.grants_advantage(until=When.EONT, to="allies")
+            c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

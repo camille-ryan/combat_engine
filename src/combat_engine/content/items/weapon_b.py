@@ -4228,7 +4228,7 @@ def i1078x1(c: Cast) -> None:
 def i1078p1(c: Cast) -> None:
     """"To all creatures" is as wide as the relation goes: it names one
     beneficiary at a time and `allies` is you and your side."""
-    c.grants_advantage(until=When.SAVE_ENDS, to="allies")
+    c.grants_advantage(until=When.SAVE_ENDS, to="team")
 
 
 @power(

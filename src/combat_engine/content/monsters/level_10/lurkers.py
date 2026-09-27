@@ -891,7 +891,7 @@ def m4990a3(c: Cast) -> None:
     """The opening is offered to its whole side, which is what a printed
     "grants combat advantage" with nobody named means."""
     for foe in sorted(c.within(1, side="enemy")):
-        c.grants_advantage(on=foe, to="allies", until=When.EONT)
+        c.grants_advantage(on=foe, to="team", until=When.EONT)
     c.teleport(3)
 
 

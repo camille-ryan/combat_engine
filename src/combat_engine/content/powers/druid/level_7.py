@@ -137,7 +137,7 @@ def p14513(c: Cast) -> None:
     zone_hold(
         c, zone,
         lambda who: who != c.me,
-        lambda who: c.grants_advantage(on=who, to="allies", until=When.ENCOUNTER),
+        lambda who: c.grants_advantage(on=who, to="team", until=When.ENCOUNTER),
         until=When.EONT,
     )
     burns_at_end(c, zone, fork_mod(c), until=When.EONT)
@@ -318,7 +318,7 @@ def p9661(c: Cast) -> None:
     build the class table does not have."""
     if c.strike():
         c.damage("1d6", c.wis_mod, dtype=DamageType.POISON)
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

@@ -111,7 +111,7 @@ def p13446(c: Cast) -> None:
     c.penalty("attack", 2, on=primary, until=When.EOT)
     for foe in c.within(2, of=primary, side="enemy"):
         if c.strike(on=foe):
-            c.grants_advantage(on=foe, to="allies", until=When.EOTNT)
+            c.grants_advantage(on=foe, to="team", until=When.EOTNT)
             c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=primary)
 
 

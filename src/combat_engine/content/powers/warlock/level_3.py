@@ -400,7 +400,7 @@ def p4068(c: Cast) -> None:
     # first is a leg the class carries, so only that half is asked for.
     if c.strike():
         c.damage("2d6", c.con_mod, dtype=DamageType.ACID)
-        c.grants_advantage(to="allies")
+        c.grants_advantage(to="team")
     elif c.build("infernal"):
         c.grants_advantage()
 

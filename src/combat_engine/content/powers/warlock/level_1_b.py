@@ -208,7 +208,7 @@ def p12887(c: Cast) -> None:
     """Both branches roll the same line, so no `attack_alt` is declared."""
     if c.strike():
         c.damage("1d8", c.cha_mod, dtype=DamageType.NECROTIC)
-        c.grants_advantage(to="allies")
+        c.grants_advantage(to="team")
     # The sorcerer-king rider -- spend your fell might for 1d8 more -- has
     # no build to ask for.
 
@@ -257,7 +257,7 @@ def p12888(c: Cast) -> None:
 def p12889(c: Cast) -> None:
     if c.strike():
         c.damage("2d8", c.cha_mod, dtype=DamageType.FIRE)
-        c.grants_advantage(to="allies", until=When.SAVE_ENDS)
+        c.grants_advantage(to="team", until=When.SAVE_ENDS)
         c.ongoing(5, DamageType.NECROTIC)
     else:
         c.half_damage("2d8", c.cha_mod, dtype=DamageType.FIRE)

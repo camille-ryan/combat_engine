@@ -296,7 +296,7 @@ def p10763(c: Cast) -> None:
 )
 def p10764(c: Cast) -> None:
     c.penalty("attack", 2)
-    c.grants_advantage(to="allies")
+    c.grants_advantage(to="team")
 
 
 @power(

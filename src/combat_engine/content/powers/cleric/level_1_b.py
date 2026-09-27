@@ -400,7 +400,7 @@ def p12410(c: Cast) -> None:
     foe = c.target
     if foe is None:
         return
-    c.grants_advantage(until=When.EONT, to="allies")
+    c.grants_advantage(until=When.EONT, to="team")
     for friend in c.allies():
         c.bonus(
             "damage", c.wis_mod, on=friend, until=When.EONT, kind="power",

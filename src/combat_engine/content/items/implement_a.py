@@ -1068,11 +1068,23 @@ def i2769p1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you hit with an attack using this holy symbol",
-    todo=("spec.power_ref()",),
 )
 def i2772p1(c: Cast) -> None:
-    """An extra use of a class feature is `c.restore_use`, which needs the
-    feature's ref; the brief prints only its name."""
+    """The twin of `i2304p1`, and the marker was aimed at the wrong thing.
+
+    The printed line does not name a *row* at all: the allowance is the
+    `CHANNEL_DIVINITY` group, refused by `dsl._group_spent` once any
+    sibling has been used, so handing a use back is restoring whichever
+    sibling spent it. No ref is wanted and none was ever missing.
+
+    `c.first` because the importer gave this row a target and the effect
+    is about the wielder, not about it."""
+    if not c.first:
+        return
+    spent = c.expended(group=_CHANNEL)
+    pick = c.choose(spent, f"{c.ref}: which expended row comes back") if spent else None
+    if pick is not None:
+        c.restore_use(pick)
 
 
 @power(
@@ -2531,7 +2543,7 @@ def i1983p1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you use your orb of imposition on a creature this orb hit",
-    todo=("spec.power_ref()", "c.amplify_bonus()"),
+    todo=("c.amplify_bonus()",),
 )
 def i1986p1(c: Cast) -> None:
     """Deepens a saving-throw penalty `cf:wizard-arcanist-f0` laid.
@@ -2543,7 +2555,11 @@ def i1986p1(c: Cast) -> None:
     gated on that one effect. Both the effect and the size of the penalty
     are locals in its closure, so adding 2 means editing a modifier
     somebody else laid -- and a second, separate penalty would be gated on
-    nothing and would bite every save the creature made."""
+    nothing and would bite every save the creature made.
+
+    Re-aimed: the brief does give a ref, so `spec.power_ref()` was the
+    wrong thing to be waiting for and kept this row in a queue the fix
+    would never reach. What is missing is the deepening."""
 
 
 @power(

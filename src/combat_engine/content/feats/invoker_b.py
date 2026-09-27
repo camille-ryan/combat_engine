@@ -43,6 +43,7 @@ from combat_engine.engine import (
     ActionType,
     Bloodied,
     Cast,
+    Condition,
     DamageApplied,
     DamageType,
     Hit,
@@ -67,11 +68,6 @@ from combat_engine.engine.query import alive
 #: A class feature the benefit names in prose with no ref -- the covenant's
 #: channelled invocations and its two reactions.
 FEATURE = ("c.class_feature()",)
-#: The covenant cards are declared rows now: `cf:invoker-f1c0` and
-#: `cf:invoker-f1c1`. What a rider on one still cannot read is the event
-#: the card answered -- each card picks its ally or its enemy off its own
-#: `c.trigger`, and `PowerUsed` carries actor, power and targets only.
-TRIGGER = ("PowerUsed.trigger",)
 #: A racial power the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
 #: Nothing announces that a roll was a reroll.
@@ -141,6 +137,30 @@ def _struck(world, ev: Any) -> list[int]:  # noqa: ANN001
     that says so for a whole use at once."""
     hurt = [r.target for r in ev.rolls if getattr(r, "hit", False)]
     return [t for t in dict.fromkeys(hurt) if alive(world, t)]
+
+
+_CARD_A = "cf:invoker-f1c0"
+_CARD_B = "cf:invoker-f1c1"
+
+
+def _card_ally(ev: Any) -> int | None:
+    """The ally `cf:invoker-f1c0` was played for.
+
+    That card is `NO_TARGET` and reads its pair off its own trigger, so
+    `PowerUsed.targets` is empty; the ally is one event down, on the
+    `Hit` the card answered.
+    """
+    return getattr(getattr(ev, "trigger", None), "target", None)
+
+
+def _card_foe(ev: Any) -> int | None:
+    """The enemy off a covenant card's trigger.
+
+    Not `ev.targets`: `cf:invoker-f1c1` declares `target=ONE_CREATURE`
+    and then aims at this creature with `on=`, so the list names whoever
+    the burst happened to pick and never the one the card burned.
+    """
+    return getattr(getattr(ev, "trigger", None), "attacker", None)
 
 
 def _used(ref: str):  # noqa: ANN202
@@ -426,64 +446,112 @@ def f2989(c: Cast) -> None:
 # -- riders on powers the spec names in prose -------------------------------
 
 
-@power("f1506", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=TRIGGER)
+@power("f1506", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:invoker-f1c0",
+       on=Trigger(PowerUsed, _used(_CARD_A), "you use that covenant card"))
 def f1506(c: Cast) -> None:
-    """Intelligence on the damage of the attack a covenant reaction helped.
-    The card is `cf:invoker-f1c0` and is declared, but the attack it helped
-    is the one its own `once=True` bonus is spent on, and that bonus is
-    aimed at the enemy read off the card's trigger. `PowerUsed` does not
-    carry it."""
+    """Intelligence on the damage of the attack that card's bonus helps.
+
+    Written as the damage-side twin of the card's own attack bonus: same
+    enemy, same window, same `once=True`, so the two are spent on the
+    same swing. The damage context carries `target`, which is the whole
+    of the gate this needs."""
+    foe = _card_foe(c.trigger)
+    if foe is None or c.int_mod <= 0:
+        return
+    c.bonus(
+        "damage", c.int_mod, until=When.EONT, on=c.me, once=True,
+        when=lambda ctx: ctx.get("target") == foe,
+    )
 
 
 @power("f1521", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=TRIGGER)
+       reach=PERSONAL, target=SELF, todo=("c.race_option()",))
 def f1521(c: Cast) -> None:
     """Five elemental variants of a bonus to the ally `cf:invoker-f1c0`
-    protected. `c.element` picks the leg; who the ally is lives in the
-    card's trigger, which nothing announces."""
+    protected. Re-aimed: the ally is on the card's trigger and that is
+    carried now. Which of the five legs is current is not -- two of them
+    are not damage types at all, so `c.element` cannot stand in, and
+    `rt:r33-manifestation` carries the same marker."""
 
 
-@power("f1525", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=TRIGGER)
+@power("f1525", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:invoker-f1c0",
+       on=Trigger(PowerUsed, _used(_CARD_A), "you use that covenant card"))
 def f1525(c: Cast) -> None:
-    """A teleport for the ally `cf:invoker-f1c0` protected. Same hold as
-    f1521: the card names the ally and the card's use does not."""
+    """A teleport for the ally `cf:invoker-f1c0` protected."""
+    ally = _card_ally(c.trigger)
+    if ally is not None:
+        c.teleport(2, who=ally)
 
 
-@power("f1549", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=TRIGGER)
+@power("f1549", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:invoker-f1c0",
+       on=Trigger(PowerUsed, _used(_CARD_A), "you use that covenant card"))
 def f1549(c: Cast) -> None:
-    """Concealment for the same ally. Same hold as f1521."""
+    """Concealment for the ally that card was played for."""
+    ally = _card_ally(c.trigger)
+    if ally is not None:
+        c.conceal(on=ally, until=When.EONT)
 
 
-@power("f1748", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=TRIGGER)
+@power("f1748", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:invoker-f1c0",
+       on=Trigger(PowerUsed, _used(_CARD_A), "you use that covenant card"))
 def f1748(c: Cast) -> None:
     """Combat advantage when an attack roll `cf:invoker-f1c0` boosted
-    lands. The bonus is spent inside that card's own closure against an
-    enemy read off its trigger, so there is nothing to match a later hit
-    against."""
+    lands.
+
+    The card's bonus is spent inside its own closure, so the first hit on
+    that enemy inside the card's window is what stands in for "the attack
+    that gained the bonus" -- the two can only differ if the bonus was
+    spent on a miss. Latched by hand rather than with `once=`, which is a
+    bus-level once and would be spent by the first `Hit` of any kind.
+
+    A bare "grants combat advantage" names no beneficiary, so it is the
+    whole side.
+    """
+    foe = _card_foe(c.trigger)
+    if foe is None:
+        return
+    spent = False
+
+    def landed(ev: Hit, who: int = foe) -> None:
+        nonlocal spent
+        if spent or ev.attacker != c.me or ev.target != who:
+            return
+        spent = True
+        c.grants_advantage(on=who, until=When.EONT, to="team")
+
+    c.watch(Hit, landed, until=When.EONT)
 
 
-@power("f2995", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
+@power("f2995", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:invoker-f1c0",
+       on=Trigger(PowerUsed, _used(_CARD_A), "you use that covenant card"))
 def f2995(c: Cast) -> None:
-    """Insubstantial for the ally that covenant reaction answered for.
-
-    `cf:invoker-f1c0` is declared and `PowerUsed` says it was used. What
-    it does not say is what set it off, and the card is `NO_TARGET`, so
-    `ev.targets` is empty -- "the triggering ally" is on the `Hit` the
-    reaction answered and nothing carries it forward."""
+    """Insubstantial for the ally that covenant reaction answered for."""
+    ally = _card_ally(c.trigger)
+    if ally is not None:
+        c.insubstantial(on=ally, until=When.SONT)
 
 
-@power("f2996", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
+@power("f2996", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:invoker-f1c0",
+       on=Trigger(PowerUsed, _used(_CARD_A), "you use that covenant card"))
 def f2996(c: Cast) -> None:
-    """A slide and a mark cleared off the same ally. Same hold as f2995
-    and it is not the feature's ref: `c.slide` and
-    `c.cure(Condition.MARKED)` would both say their half if the
-    triggering ally could be reached."""
+    """A slide and a mark cleared off the same ally."""
+    ally = _card_ally(c.trigger)
+    if ally is None:
+        return
+    c.slide(1, on=ally)
+    c.cure(Condition.MARKED, on=ally)
 
 
 @power("f1510", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -500,14 +568,13 @@ def f1510(c: Cast) -> None:
     f2985 makes of the same row.
 
     "The next" is `once=True`, which ends the grant on the first attack
-    roll against that creature. **Who** is the dropped half: `to=` takes
-    `"me"`, `"allies"` or one id, and `"allies"` puts the invoker in the
-    list -- "your allies but not you" is none of the three, and passing a
-    word it does not know would have quietly meant `"me"`.
+    roll against that creature. "Your allies but not you" is `to="ally"`,
+    which reads as it does on `c.within`; it used to have no spelling and
+    was being written as the caster's whole side.
     """
     for foe in c.trigger.targets:
         if c.is_kind("elemental", foe):
-            c.grants_advantage(on=foe, to="allies", once=True, until=When.EONT)
+            c.grants_advantage(on=foe, to="ally", once=True, until=When.EONT)
 
 
 #: "A fear, cold, or necrotic attack". The fear third is already
@@ -604,14 +671,33 @@ def f1563(c: Cast) -> None:
     c.watch(ForcedMove, shoved, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
-@power("f2003", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=TRIGGER)
+@power("f2003", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:invoker-f1c1",
+       on=Trigger(PowerUsed, _used(_CARD_B), "you use that covenant card"))
 def f2003(c: Cast) -> None:
-    """Extra cold damage and an immobilise on undead `cf:invoker-f1c1`
-    hits. Unlike f1562 this one has to *act* on the victim rather than
-    modify a roll, and the card's victim is the enemy off its trigger --
-    `PowerUsed.targets` is whoever the burst picked, which is somebody
-    else."""
+    """Extra cold damage and an immobilise on the undead `cf:invoker-f1c1`
+    burns.
+
+    Declared on the use so the bloodied state can be read *before* the
+    card lands, and paid out on the resolution so that the card's own
+    radiant and this cold count as one attack for "if this attack
+    bloodies" -- which is the difference between immobilising a creature
+    this blow bloodied and immobilising one that was bloodied already.
+    """
+    foe = _card_foe(c.trigger)
+    if foe is None or not c.is_kind("undead", on=foe):
+        return
+    was = c.bloodied(foe)
+
+    def after(ev: PowerResolved, who: int = foe, before: bool = was) -> None:
+        if ev.actor != c.me or ev.power != _CARD_B:
+            return
+        c.damage("1d6", dtype=DamageType.COLD, on=who)
+        if c.bloodied(who) and not before:
+            c.immobilized(on=who, until=When.EONT)
+
+    c.watch(PowerResolved, after, until=When.EOT, once=True)
 
 
 @power("f2874", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

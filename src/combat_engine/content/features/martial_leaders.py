@@ -540,7 +540,7 @@ def warlord_presence_gamble(c: Cast) -> None:
     the same turn is a second offer, which is what the card says.
 
     "Grants combat advantage to all enemies" is one relation per enemy --
-    `c.grants_advantage(to=)` names a single beneficiary, and `"allies"`
+    `c.grants_advantage(to=)` names a single beneficiary, and `"team"`
     would be the warlord's own side, which is the wrong one.
 
     The free basic attack needs somebody to swing at and the card does not

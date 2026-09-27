@@ -24,11 +24,16 @@ from combat_engine.engine import (
     Cast,
     Condition,
     Hit,
+    PowerUsed,
     Trigger,
     When,
     power,
 )
-from combat_engine.engine.query import allies
+from combat_engine.engine.query import allies, has_combat_advantage
+
+
+def _used_wrath(world, me: int, ev) -> bool:  # noqa: ANN001
+    return ev.actor == me and ev.power == "p1628"
 
 
 def _crit_with_advantage(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -144,14 +149,25 @@ def f750(c: Cast) -> None:
         c.slide(1, on=foe)
 
 
-@power("f767", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
+@power("f767", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1628",
+       on=Trigger(PowerUsed, _used_wrath, "you use that racial power"))
 def f767(c: Cast) -> None:
-    """Re-aimed: the racial power is `p1628` and it is declared, so the
-    trigger is writable. What is not is "combat advantage against **the
-    target**": `p1628` is `target=NO_TARGET` and aims itself at
-    `c.trigger.attacker`, so `PowerUsed.targets` is empty and the event
-    does not carry the attack it was answering."""
+    """`p1628` is `NO_TARGET` and aims itself at the enemy on its own
+    trigger, so "the target" is read there.
+
+    `PowerUsed` fires before the body, which is what makes a damage
+    bonus gated on that row the right shape: it is standing by the time
+    the row rolls. Asking for combat advantage now rather than off a
+    result is correct here -- the triggering blow was *theirs*, so no
+    grant of ours has been spent on it.
+    """
+    foe = getattr(getattr(c.trigger, "trigger", None), "attacker", None)
+    if foe is None or not has_combat_advantage(c.world, c.me, foe):
+        return
+    c.bonus("damage", c.dex_mod, on=c.me, until=When.EOT, once=True,
+            when=lambda ctx: ctx.get("power") == "p1628")
 
 
 @power("f784", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

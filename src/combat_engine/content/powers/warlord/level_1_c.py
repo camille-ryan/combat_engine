@@ -598,7 +598,7 @@ def p4548(c: Cast) -> None:
         c.shift(1)
     if c.strike():
         c.damage(c.w(2), c.str_mod)
-        c.grants_advantage(to="allies", until=When.SONT)
+        c.grants_advantage(to="team", until=When.SONT)
         return
     picked: list[int] = []
     for _ in range(2):

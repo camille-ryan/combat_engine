@@ -40,6 +40,14 @@ class Event:
     def wire(self) -> dict[str, Any]:
         out = {"seq": self.seq, "kind": self.kind, "depth": self.depth}
         out.update(asdict(self))
+        for f in fields(self):
+            # `asdict` recurses, so a carried event -- `PowerUsed.trigger`
+            # -- would inline a whole second event into the save format.
+            # It is already in the log at its own seq; the pointer is the
+            # useful half and it keeps the schema flat.
+            value = getattr(self, f.name)
+            if isinstance(value, Event):
+                out[f.name] = f"{value.kind}#{value.seq}"
         if not self.cancelled:
             out.pop("cancelled", None)
             out.pop("reason", None)
@@ -55,6 +63,13 @@ class Event:
                 continue
             value = getattr(self, f.name)
             if f.default is not MISSING and value == f.default:
+                continue
+            if isinstance(value, Event):
+                # An event carried by another event -- `PowerUsed.trigger`
+                # -- is already in the log in full at its own seq, and
+                # spelling it out again nests a whole repr inside a line.
+                value = f"{value.kind}#{value.seq}"
+                bits.append(f"{f.name}={value}")
                 continue
             bits.append(f"{f.name}={value!r}")
         tail = f"  CANCELLED({self.reason})" if self.cancelled else ""
@@ -258,9 +273,23 @@ class OpportunityWindow(Decision):
 
 @dataclass
 class PowerUsed(Event):
+    """A power has started. `trigger` is what it was used *in answer to*.
+
+    `dsl.use` has always been handed the event a reaction is answering --
+    the body reads it as `c.trigger` -- and threw it away on the emit, so
+    "when an ally's feature fires, do X to the thing that set it off" had
+    nothing to read. `targets` is not that thing and is not a stand-in
+    for it: an immediate action is routinely `NO_TARGET`, or aims itself
+    at a creature off its own trigger, so the two name different
+    creatures exactly when the distinction matters.
+
+    None for an ordinary use -- a power nobody provoked.
+    """
+
     actor: int
     power: str
     targets: list[int]
+    trigger: Any = None
 
 
 @dataclass
@@ -294,12 +323,17 @@ class PowerResolved(Event):
     `rolls` is every `AttackResult` the use produced, in order -- which
     is the thing "reroll every attack roll you made with this power" has
     to be given.
+
+    `trigger` is the same field `PowerUsed` carries and for the same
+    reason; a row that has to see the consequence *and* name what
+    provoked it would otherwise have to watch both events and pair them.
     """
 
     actor: int
     power: str
     targets: list[int]
     rolls: list[Any] = field(default_factory=list)
+    trigger: Any = None
 
 
 @dataclass

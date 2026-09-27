@@ -283,7 +283,7 @@ def p13991(c: Cast) -> None:
             def enter(who: int) -> None:
                 if who in exposed:
                     return
-                held = c.grants_advantage(on=who, until=When.ENCOUNTER, to="allies")
+                held = c.grants_advantage(on=who, until=When.ENCOUNTER, to="team")
                 if held is not None:
                     exposed[who] = held
 

@@ -929,7 +929,7 @@ def m4926a2(c: Cast) -> None:
     if not c.strike():
         return
     c.hit()
-    opening = c.grants_advantage(to="allies", until=When.SONT)
+    opening = c.grants_advantage(to="team", until=When.SONT)
     if opening is None:
         return
     victim = c.target

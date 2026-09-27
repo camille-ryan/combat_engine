@@ -198,7 +198,7 @@ def p14400(c: Cast) -> None:
             if c.strike(on=ev.actor):
                 c.damage("1d8", c.int_mod, dtype=DamageType.COLD, on=ev.actor)
                 c.vulnerable(5, DamageType.COLD, on=ev.actor, until=When.EONT)
-                c.grants_advantage(on=ev.actor, to="allies", until=When.EONT)
+                c.grants_advantage(on=ev.actor, to="team", until=When.EONT)
 
         c.watch(ZoneEntered, spring, until=When.EONT)
 

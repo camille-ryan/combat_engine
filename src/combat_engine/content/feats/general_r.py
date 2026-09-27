@@ -944,7 +944,7 @@ def f3613(c: Cast) -> None:
     so it is the one power strike feat with no marker at all. "Grants
     combat advantage" with nobody named is the whole of my side."""
     if _holding(c, "staff"):
-        c.grants_advantage(on=c.trigger.target, to="allies", until=When.EONT)
+        c.grants_advantage(on=c.trigger.target, to="team", until=When.EONT)
 
 
 # -- the channel divinity pairs ---------------------------------------------
@@ -1016,7 +1016,7 @@ f3678 = _granted("f3678", "f3678b")
        group=CHANNEL_DIVINITY)
 def f3678b(c: Cast) -> None:
     """The bonus is printed "power", so `kind="power"`. "The target grants
-    combat advantage" names no beneficiary, and `to="allies"` would hand
+    combat advantage" names no beneficiary, and `to="team"` would hand
     it to *my* side -- the ally is giving it away to the enemy, so the
     grant is laid once per enemy instead."""
     ally = c.target
@@ -1550,11 +1550,14 @@ def f3659(c: Cast) -> None:
 
 
 @power("f3661", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=NAMED,
+       reach=PERSONAL, target=SELF, dropped=TRAINING,
        proficiency=("w:staff", "w:totem"))
 def f3661(c: Cast) -> None:
-    """`f3628` with a different power, and this one is printed by name
-    rather than by ref, which is the whole difference between them."""
+    """`f3628` with a different power, and the spec now prints that
+    power's ref. `p15852` is declared, so the power half is the same
+    `c.grant_row`. "Once per day" is not a fight's business -- the row
+    carries its own usage and the day is `chargen`'s clock."""
+    c.grant_row("p15852", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3662", level=1, cls="", usage=ENCOUNTER, action=NONE,

@@ -79,7 +79,7 @@ def p2979(c: Cast) -> None:
         elif picked[0] == "psychic damage":
             c.flat(c.cha_mod, dtype=DamageType.PSYCHIC, on=ev.actor)
         else:
-            c.grants_advantage(on=ev.actor, to="allies", until=When.EOTNT)
+            c.grants_advantage(on=ev.actor, to="team", until=When.EOTNT)
 
     def rechoose() -> None:
         picked[0] = c.choose(list(MISFORTUNES), "which misfortune") or picked[0]
@@ -205,7 +205,7 @@ def p5695(c: Cast) -> None:
         c.damage("2d6", c.cha_mod, dtype=DamageType.RADIANT)
     else:
         c.half_damage("2d6", c.cha_mod, dtype=DamageType.RADIANT)
-    c.grants_advantage(to="allies", until=When.SAVE_ENDS)
+    c.grants_advantage(to="team", until=When.SAVE_ENDS)
 
 
 @power(

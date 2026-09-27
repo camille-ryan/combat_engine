@@ -282,7 +282,7 @@ def f3315(c: Cast) -> None:
     """The racial power is a ref, so the trigger is declared even though no
     row carries that id yet. "Allies within the radius" is narrower than
     the whole side, so the grant is laid once per ally by eid rather than
-    once with `to="allies"`."""
+    once with `to="team"`."""
     me = c.me
     near = [a for a in c.within(MANTLE, of=me, side="ally") if a != me]
     for foe in c.trigger.targets:

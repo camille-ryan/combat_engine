@@ -331,7 +331,7 @@ def p12848(c: Cast) -> None:
 def p2106(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(1), c.str_mod)
-        c.grants_advantage(to="allies", until=When.EONT)
+        c.grants_advantage(to="team", until=When.EONT)
 
 
 @power(

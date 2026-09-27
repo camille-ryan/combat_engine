@@ -196,13 +196,13 @@ def f2013(c: Cast) -> None:
        reach=PERSONAL, target=SELF)
 def f2734(c: Cast) -> None:
     """"It grants combat advantage" with nobody named is everyone, which
-    the relation cannot say in one go -- `to="allies"` lays it once per
+    the relation cannot say in one go -- `to="team"` lays it once per
     beneficiary on a single hold so they all end together."""
     me = c.me
 
     def bite(ev: DamageApplied) -> None:
         if ev.source == me and ev.detail == MARK and ev.amount > 0:
-            c.grants_advantage(on=ev.target, until=When.SOTNT, to="allies")
+            c.grants_advantage(on=ev.target, until=When.SOTNT, to="team")
 
     c.watch(DamageApplied, bite, until=When.ENCOUNTER, on=me, label=c.ref)
 
@@ -685,15 +685,17 @@ def f1517(c: Cast) -> None:
         burning_mark(c, on=foe, until=When.SONT)
 
 
-@power("f1543", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
+@power("f1543", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1628",
+       on=Trigger(PowerUsed, _used("p1628"), "you use that racial power"))
 def f1543(c: Cast) -> None:
-    """Re-aimed: the racial power is `p1628`, which is declared, so the
-    naming gap is closed and a different one is left. `p1628` is
-    `target=NO_TARGET` -- it answers an attack and aims itself at
-    `c.trigger.attacker` -- so `PowerUsed.targets` is empty and "the
-    target of that power" has no referent on the event. Same hold
-    `f2854` names."""
+    """The racial power is `NO_TARGET` and aims itself at the enemy on
+    its own trigger, so "the target of that power" is read there and not
+    off `ev.targets`, which is empty."""
+    foe = getattr(getattr(c.trigger, "trigger", None), "attacker", None)
+    if foe is not None:
+        burning_mark(c, on=foe, until=When.SONT)
 
 
 @power("f1560", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

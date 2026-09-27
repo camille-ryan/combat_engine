@@ -672,7 +672,7 @@ def m5027a5(c: Cast) -> None:
     c.teleport(3)
     foe = getattr(c.trigger, "target", None)
     if foe is not None:
-        c.grants_advantage(on=foe, until=When.EONT, to="allies")
+        c.grants_advantage(on=foe, until=When.EONT, to="team")
 
 
 # --------------------------------------------------------------------------

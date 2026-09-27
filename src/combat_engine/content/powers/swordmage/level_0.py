@@ -166,6 +166,6 @@ def p5736(c: Cast) -> None:
             return
         last["round"] = c.world.round
         c.teleport(20, who=victim, to=landing)
-        c.grants_advantage(on=victim, to="allies", until=When.EONT)
+        c.grants_advantage(on=victim, to="team", until=When.EONT)
 
     c.watch(Hit, haul, until=When.ENCOUNTER, on=me, label=f"{c.ref} answer")

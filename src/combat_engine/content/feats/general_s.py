@@ -92,6 +92,19 @@ from combat_engine.engine import (
 from combat_engine.engine.components import Health
 from combat_engine.engine.query import has_combat_advantage, team
 
+
+def _furious_on_p4807(world, me: int, ev) -> bool:  # noqa: ANN001
+    """`p6189`, used in answer to a hit `p4807` landed.
+
+    The pairing is the event the racial power was answering: it is a
+    free action off a `Hit`, and `Hit` names the row that made it.
+    """
+    return (
+        ev.actor == me
+        and ev.power == "p6189"
+        and getattr(getattr(ev, "trigger", None), "power", "") == "p4807"
+    )
+
 #: The monk's flurry, which the class page prints as a power and the
 #: importer gave no ref. Four rows here trigger on it or add a use of it.
 FLURRY = ("c.flurry_of_blows()",)
@@ -188,7 +201,7 @@ def _at(world, eid: int):  # noqa: ANN001, ANN202
 def _grants_ca(c: Cast, who: int, until: When) -> None:
     """"The target grants combat advantage" -- to everyone, not to me.
 
-    `c.grants_advantage` names one beneficiary at a time and `to="allies"`
+    `c.grants_advantage` names one beneficiary at a time and `to="team"`
     means *my* side, which is the wrong side for a creature on it. One
     relation per enemy is what the printed sentence actually says.
     """
@@ -233,7 +246,7 @@ def f3684(c: Cast) -> None:
 
     def granted(ev: Any) -> None:
         if ev.source == c.me and ev.save_ends and ev.target != c.me:
-            c.grants_advantage(on=ev.target, to="allies", until=When.SAVE_ENDS)
+            c.grants_advantage(on=ev.target, to="team", until=When.SAVE_ENDS)
 
     c.watch(EffectApplied, granted, until=When.ENCOUNTER)
 
@@ -786,7 +799,7 @@ def f3736(c: Cast) -> None:
         things = [*c.my_zones(), *c.servants()]
         for foe in c.enemies():
             if any(c.adjacent_to(thing, foe) for thing in things):
-                c.grants_advantage(on=foe, to="allies", until=When.EONT)
+                c.grants_advantage(on=foe, to="team", until=When.EONT)
 
     c.watch(TurnStart, ring, until=When.ENCOUNTER)
 
@@ -1520,8 +1533,15 @@ def f3797(c: Cast) -> None:
 
 
 @power("f3798", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
+       reach=PERSONAL, target=SELF,
+       trigger="you use p6189 with p4807's attack",
+       on=Trigger(PowerResolved, _furious_on_p4807, "you use it with that"))
 def f3798(c: Cast) -> None:
-    """`c.restore_use("p6189")` would hand the use back -- but only when
-    p6189 was spent on p4807's attack, and nothing records what a power
-    was used *with*. Unconditional, this would make it free every time."""
+    """"With p4807's attack" is the `Hit` the racial power answered, and
+    the event names it now.
+
+    On the resolution rather than the use, because `dsl.use` marks the
+    row spent between the two -- handing the use back any earlier gives
+    it back before it is taken.
+    """
+    c.restore_use("p6189")

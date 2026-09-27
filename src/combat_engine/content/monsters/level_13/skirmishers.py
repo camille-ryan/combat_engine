@@ -1598,7 +1598,7 @@ def m4912a4(c: Cast) -> None:
     hold = c.world.effects.apply(
         victim, me, When.SAVE_ENDS, label=_M4912_HELD, ongoing=(10, DamageType.PSYCHIC)
     )
-    open_to = c.grants_advantage(until=When.SAVE_ENDS, on=victim, to="allies")
+    open_to = c.grants_advantage(until=When.SAVE_ENDS, on=victim, to="team")
     if open_to is not None:
         hold.on_end.append(lambda: c.world.effects.end(open_to, "the terror passed"))
 

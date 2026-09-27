@@ -495,7 +495,7 @@ def m4911a2(c: Cast) -> None:
     clock is the victim's own next turn rather than the m4911's."""
     if c.strike():
         c.hit()
-        c.grants_advantage(until=When.EOTNT, to="allies")
+        c.grants_advantage(until=When.EOTNT, to="team")
 
 
 # ==========================================================================

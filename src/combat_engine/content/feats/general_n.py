@@ -650,7 +650,7 @@ def f2103b(c: Cast) -> None:
     carries the difference as `plus=` and the damage line reads the
     larger modifier directly.
 
-    "Grants combat advantage to **all** attackers" is `to="allies"` --
+    "Grants combat advantage to **all** attackers" is `to="team"` --
     the relation names one beneficiary at a time, and my side is who it
     matters to. Picking the pocket is a free-action Thievery check with
     no combat consequence and nowhere to put its result.
@@ -658,7 +658,7 @@ def f2103b(c: Cast) -> None:
     edge = max(0, c.cha_mod - c.dex_mod)
     if c.strike(plus=edge):
         c.damage(c.w(), max(c.dex_mod, c.cha_mod))
-        c.grants_advantage(to="allies", until=When.EONT)
+        c.grants_advantage(to="team", until=When.EONT)
     if c.first:
         c.shift(1)
 
@@ -824,7 +824,7 @@ def f2117b(c: Cast) -> None:
     than granting me one pair of eyes."""
     foe = c.trigger.target
     c.damage("1d6", dtype=DamageType.RADIANT, on=foe)
-    c.grants_advantage(on=foe, to="allies", until=When.EONT)
+    c.grants_advantage(on=foe, to="team", until=When.EONT)
     for who in [c.me, *(a for a in allies(c.world, c.me) if a != c.me)]:
         c.truesight(of=foe, on=who, until=When.EONT)
 
@@ -930,7 +930,7 @@ def f2891b(c: Cast) -> None:
     if fam is None:
         return
     for foe in c.within(3, of=fam, side="enemy"):
-        c.grants_advantage(on=foe, to="allies", until=When.EONT)
+        c.grants_advantage(on=foe, to="team", until=When.EONT)
 
 
 # -- the divine free-action cards -------------------------------------------

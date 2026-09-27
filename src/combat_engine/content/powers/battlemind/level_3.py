@@ -327,7 +327,7 @@ def p2626(c: Cast) -> None:
     if not c.strike():
         return
     c.damage(c.w(2) if spent == 2 else c.w(), c.con_mod)
-    c.grants_advantage(until=When.EONT, to="allies")
+    c.grants_advantage(until=When.EONT, to="team")
     if spent == 2:
         c.immobilized(until=When.EONT)
         return

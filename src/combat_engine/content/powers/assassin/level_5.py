@@ -113,10 +113,10 @@ def p9425(c: Cast) -> None:
     creature, and there is nothing to hold it on. Dropped."""
     if c.strike():
         c.damage("2d6", c.dex_mod, dtype=DamageType.PSYCHIC)
-        c.grants_advantage(until=When.SAVE_ENDS, to="allies")
+        c.grants_advantage(until=When.SAVE_ENDS, to="team")
     else:
         c.half_damage("2d6", c.dex_mod, dtype=DamageType.PSYCHIC)
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

@@ -341,7 +341,7 @@ def p4924(c: Cast) -> None:
     def expose(ev: Hit) -> None:
         if ev.attacker != me or _mine(c, ev.target):
             return
-        c.grants_advantage(on=ev.target, until=When.EONT, to="allies")
+        c.grants_advantage(on=ev.target, until=When.EONT, to="team")
 
     watcher = c.watch(Hit, expose, until=When.ENCOUNTER, on=me, label=f"{c.ref} rage")
     held_by(c, stance, watcher)

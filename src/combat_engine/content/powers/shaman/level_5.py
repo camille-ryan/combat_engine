@@ -310,7 +310,7 @@ def p16501(c: Cast) -> None:
         c.watch(TurnEnd, sting, until=When.EONT, on=c.me)
     if c.strike(from_=c.companion()):
         c.damage("1d10", c.wis_mod, dtype=DamageType.PSYCHIC)
-        c.grants_advantage(until=When.SAVE_ENDS, to="allies")
+        c.grants_advantage(until=When.SAVE_ENDS, to="team")
     if c.last:
         c.dismiss_companion()
 

@@ -1470,7 +1470,7 @@ def m4989a4(c: Cast) -> None:
     leaves them behind and they stay exposed.
     """
     for foe in sorted(c.within(1, side="enemy")):
-        c.grants_advantage(on=foe, until=When.EONT, to="allies")
+        c.grants_advantage(on=foe, until=When.EONT, to="team")
     c.teleport(3)
 
 

@@ -24,12 +24,14 @@ from typing import Any
 
 from combat_engine.content.chargen import LONGSWORD
 from combat_engine.engine import (
+    AC,
     AT_WILL,
     ENCOUNTER,
     PERSONAL,
     SELF,
     ActionType,
     Cast,
+    DamageType,
     Hit,
     Keyword,
     PowerUsed,
@@ -57,6 +59,24 @@ def _used(ref: str):  # noqa: ANN202
     return when
 
 
+#: The virtue three rows here ride on, declared as a card of its own.
+_VIRTUE = "cf:bard-f1s1"
+
+
+def _virtue_pair(c: Cast) -> tuple[int | None, Any]:
+    """The ally that card protected and the defence it was aimed at.
+
+    Both are read off the `Hit` the card answered, exactly as the card
+    reads them -- `PowerUsed.targets` is the card's own pick and `Hit`
+    carries no `vs`, so the defence comes off the declared header.
+    """
+    hit = getattr(c.trigger, "trigger", None)
+    ally = getattr(hit, "target", None)
+    declared = get(getattr(hit, "power", "") or "")
+    defence = declared.attack.vs if declared is not None and declared.attack else AC
+    return ally, defence
+
+
 def _keywords(ref: str, *words: Keyword) -> bool:
     p = get(ref)
     return p is not None and any(w in p.keywords for w in words)
@@ -73,33 +93,55 @@ def _longsword(c: Cast, ev: Any, refs: tuple[str, ...]) -> bool:
 # -- the virtues, which have no ref ----------------------------------------
 
 
-@power("f1135", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
+@power("f1135", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:bard-f1s1",
+       on=Trigger(PowerUsed, _used(_VIRTUE), "you play that virtue"))
 def f1135(c: Cast) -> None:
-    """Lengthens the bonus `cf:bard-f1s1` grants an ally. That row is
-    declared now, so the name is no longer the hold -- it reads the ally
-    and the defence off its own `c.trigger`, and `PowerUsed` announces
-    neither, so there is nothing to lengthen from outside."""
+    """Lengthens the bonus `cf:bard-f1s1` grants an ally.
+
+    Nothing moves an effect's clock, so the longer window is said as a
+    second bonus of the same kind and size: two power bonuses do not
+    add, the larger wins, and the card's own runs out first -- which
+    leaves exactly this one standing for the rest of the ally's next
+    turn. `EOTNT` because the printed clock is the *ally's*.
+
+    The ally and the defence are read the way the card reads them, off
+    the `Hit` it answered.
+    """
+    ally, defence = _virtue_pair(c)
+    if ally is not None:
+        c.bonus(defence, max(c.wis_mod, 1), kind="power",
+                until=When.EOTNT, on=ally)
 
 
-@power("f1152", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
+@power("f1152", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:bard-f1s1",
+       on=Trigger(PowerUsed, _used(_VIRTUE), "you play that virtue"))
 def f1152(c: Cast) -> None:
-    """Raises the same bonus by 2. Two power bonuses do not add, so a
-    second one of the right size would do it -- but the size depends on
-    which defence the triggering enemy attacked, and that is read off
-    `cf:bard-f1s1`'s own trigger, which its use does not carry."""
+    """Raises the same bonus by 2, which is one bigger bonus rather than
+    a second one: two power bonuses do not add and the larger wins, so a
+    +2 laid beside the card's would come to the card's."""
+    ally, defence = _virtue_pair(c)
+    if ally is not None:
+        c.bonus(defence, max(c.wis_mod, 1) + 2, kind="power",
+                until=When.EOT, on=ally)
 
 
-@power("f2892", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
+@power("f2892", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:bard-f1s1",
+       on=Trigger(PowerUsed, _used(_VIRTUE), "you play that virtue"))
 def f2892(c: Cast) -> None:
     """Psychic damage to whatever set the virtue off.
 
-    `cf:bard-f1s1` is declared, so the virtue can be watched -- but the
-    card targets the *ally*, so `ev.targets` hands back the wrong
-    creature, and the enemy this is about is the attacker on the `Hit`
-    the reaction answered. `PowerUsed` does not carry it."""
+    Not `ev.targets`: the card targets the *ally* it protects, and the
+    triggering enemy is the attacker on the `Hit` it answered."""
+    hit = getattr(c.trigger, "trigger", None)
+    foe = getattr(hit, "attacker", None)
+    if foe is not None:
+        c.flat(c.wis_mod, dtype=DamageType.PSYCHIC, on=foe)
 
 
 # -- riders on the heal, which does have a ref -----------------------------

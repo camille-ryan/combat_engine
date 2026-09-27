@@ -177,12 +177,17 @@ def f1143(c: Cast) -> None:
 
 
 @power("f1156", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
+       reach=PERSONAL, target=SELF, todo=("c.on_aegis()",))
 def f1156(c: Cast) -> None:
-    """A rider on "the immediate action effect" of the aegis. The three
-    aegis cards are declared rows, but each prints its immediate action
-    inside its own effect text rather than as a row of its own, so there
-    is no ref for the half this rides on."""
+    """A rider on "the immediate action effect" of the aegis.
+
+    Re-aimed: the naming gap has closed -- the spec prints
+    `cf:swordmage-f1` -- and it was never what stopped this. The three
+    aegis rows `p3322`, `p5736` and `p3323` each roll their punishment
+    inside a closure the minor-action body arms, so using the immediate
+    action emits no `PowerUsed` and no `Hit` that can be told from the
+    aegis row's own. There is nothing to hang this on until that answer
+    announces itself."""
 
 
 @power("f1234", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -278,6 +283,14 @@ def f2795(c: Cast) -> None:
 FLURRY = ("p7448", "p11207", "p13123", "p16131", "p16132")
 
 _USED_FLURRY = "you use your class's level 0 feature row"
+
+
+#: The racial free action `f3326` pairs the flurry with.
+_FURIOUS = "p6189"
+
+
+def _used_paired(world, me: int, ev: PowerUsed) -> bool:  # noqa: ANN001
+    return ev.actor == me and (ev.power == _FURIOUS or ev.power in FLURRY)
 
 
 def _used_my_flurry(world, me: int, ev: PowerUsed) -> bool:  # noqa: ANN001
@@ -406,13 +419,35 @@ def f3320(c: Cast) -> None:
     which is the same absence f3116 names."""
 
 
-@power("f3326", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
+@power("f3326", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p6189 or your class's level 0 feature row",
+       on=Trigger(PowerUsed, _used_paired, "you use one of the pair"))
 def f3326(c: Cast) -> None:
-    """Both halves have to fire off **one** hit, and both are refs now:
-    `p6189` and the five `FLURRY` rows. `PowerUsed` says who used what
-    and not what set it off, so two free actions answering the same blow
-    cannot be told from two answering a blow each."""
+    """Both halves have to fire off **one** hit, and the event says which
+    hit each answered, so "the same hit" is an identity test.
+
+    Declared on either of the pair rather than on one of them, because
+    the order they answer a blow in is not fixed and only the second can
+    see the first in the log. That is also what keeps it to one payout:
+    exactly one of the two firings finds the other already there.
+    """
+    ev = c.trigger
+    hit = getattr(ev, "trigger", None)
+    if hit is None:
+        return
+    want = FLURRY if ev.power == _FURIOUS else (_FURIOUS,)
+    other = next(
+        (e for e in c.world.bus.log
+         if isinstance(e, PowerUsed) and e.actor == c.me and e.power in want
+         and getattr(e, "trigger", None) is hit),
+        None,
+    )
+    if other is None:
+        return
+    flurry = ev if ev.power in FLURRY else other
+    if flurry.targets:
+        c.flat(c.str_mod, on=flurry.targets[0])
 
 
 @power("f3327", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

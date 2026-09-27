@@ -1156,7 +1156,7 @@ def m4804a1(c: Cast) -> None:
         return
     c.hit()
     victim = c.target
-    hold = c.grants_advantage(until=When.SAVE_ENDS, to="allies")
+    hold = c.grants_advantage(until=When.SAVE_ENDS, to="team")
     if victim is None or hold is None:
         return
 

@@ -283,7 +283,7 @@ def p13526(c: Cast) -> None:
     aura_hold(
         c, 1,
         lambda who: who in foes,
-        lambda who: c.grants_advantage(on=who, to="allies", until=When.ENCOUNTER),
+        lambda who: c.grants_advantage(on=who, to="team", until=When.ENCOUNTER),
     )
 
 

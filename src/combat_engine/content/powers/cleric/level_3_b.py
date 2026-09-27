@@ -165,7 +165,7 @@ def p11043(c: Cast) -> None:
 def p12299(c: Cast) -> None:
     if c.strike():
         c.damage("1d8", c.wis_mod + c.cha_mod, dtype=DamageType.PSYCHIC)
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

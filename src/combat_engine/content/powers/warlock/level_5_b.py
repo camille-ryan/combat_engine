@@ -237,7 +237,7 @@ def p13644(c: Cast) -> None:
         )
     else:
         c.half_damage("1d8", c.cha_mod, dtype=DamageType.POISON)
-        c.grants_advantage(to="allies", until=When.SAVE_ENDS)
+        c.grants_advantage(to="team", until=When.SAVE_ENDS)
         c.ongoing(5, DamageType.POISON)
 
 
@@ -485,7 +485,7 @@ def p5915(c: Cast) -> None:
     victim = c.target
     if c.strike():
         c.damage("3d6", c.cha_mod, dtype=DamageType.ACID)
-        c.grants_advantage(to="allies", until=When.SAVE_ENDS)
+        c.grants_advantage(to="team", until=When.SAVE_ENDS)
     else:
         c.half_damage("3d6", c.cha_mod, dtype=DamageType.ACID)
     if victim is None or c.int_mod <= 0:

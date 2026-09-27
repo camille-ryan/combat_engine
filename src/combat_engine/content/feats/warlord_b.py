@@ -58,6 +58,10 @@ from combat_engine.engine.query import allies, distance_between, enemies, team
 
 from .styles import among, hit_with_one_of
 
+
+def _used_wrath(world, me: int, ev) -> bool:  # noqa: ANN001
+    return ev.actor == me and ev.power == "p1628"
+
 #: A row that offers a deal -- a cost for a payoff -- at the moment of an
 #: attack. Nothing in the engine asks that question.
 OPT_IN = ("c.opt_in()",)
@@ -352,7 +356,7 @@ def f2344(c: Cast) -> None:
 
     def on_crit(ev: Any) -> None:
         if _i_crit(c.world, c.me, ev) and _holding(c, "flail", "mace"):
-            c.grants_advantage(on=ev.target, until=When.EONT, to="allies")
+            c.grants_advantage(on=ev.target, until=When.EONT, to="team")
 
     c.watch(Hit, on_crit, on=c.me, until=When.ENCOUNTER)
 
@@ -547,13 +551,21 @@ def f2053(c: Cast) -> None:
     printed for the provocation, not the walk."""
 
 
-@power("f827", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
+@power("f827", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1628",
+       on=Trigger(PowerUsed, _used_wrath, "you use that racial power"))
 def f827(c: Cast) -> None:
-    """Re-aimed: the racial power is `p1628` and it is declared. Its
-    *target* is not on the event -- `p1628` is `target=NO_TARGET` and
-    aims itself at `c.trigger.attacker` -- so `PowerUsed.targets` is
-    empty and there is nobody for the grant to land on."""
+    """`p1628` is `NO_TARGET` and aims itself at the enemy on its own
+    trigger, so "the target" is read there and not off `ev.targets`,
+    which is empty.
+
+    "Your allies" and not you, which is `to="ally"`; the clock is the
+    target's own next turn.
+    """
+    foe = getattr(getattr(c.trigger, "trigger", None), "attacker", None)
+    if foe is not None:
+        c.grants_advantage(on=foe, to="ally", until=When.EOTNT)
 
 
 @power("f1070", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

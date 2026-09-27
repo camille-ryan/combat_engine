@@ -743,7 +743,7 @@ def i847p1(c: Cast) -> None:
         return
     pick = c.choose(near, "grants combat advantage")
     if pick is not None:
-        c.grants_advantage(on=pick, until=When.EONT, to="side")
+        c.grants_advantage(on=pick, until=When.EONT, to="team")
 
 
 @power(
@@ -1449,7 +1449,7 @@ def i1993p1(c: Cast) -> None:
     foe = _struck(c)
     if foe is None:
         return
-    c.grants_advantage(on=foe, until=When.EONT, to="side")
+    c.grants_advantage(on=foe, until=When.EONT, to="team")
     if c.points_spent(c.ref) >= 2:
         c.dazed(on=foe, until=When.EONT)
 
@@ -3051,7 +3051,7 @@ def i630p2(c: Cast) -> None:
     dropped clause, as nothing on the board is lit or unlit."""
     foe = _struck(c)
     if foe is not None:
-        c.grants_advantage(on=foe, until=When.SAVE_ENDS, to="side")
+        c.grants_advantage(on=foe, until=When.SAVE_ENDS, to="team")
 
 
 @power(

@@ -109,13 +109,13 @@ def p5036(c: Cast) -> None:
 )
 def p5037(c: Cast) -> None:
     """"The next creature that attacks it" is as wide as the relation goes in
-    one direction: `GRANTS_CA_TO` names beneficiaries, and `to="allies"` is
+    one direction: `GRANTS_CA_TO` names beneficiaries, and `to="team"` is
     the whole of the druid's side. An enemy swinging at its own would not
     benefit, which the printed line would allow.
     """
     if c.strike():
         c.damage("1d8", c.wis_mod)
-        c.grants_advantage(until=When.EONT, to="allies", once=True)
+        c.grants_advantage(until=When.EONT, to="team", once=True)
 
 
 @power(
@@ -297,6 +297,6 @@ def p9636(c: Cast) -> None:
     zone_hold(
         c, zone,
         lambda who: who in foes,
-        lambda who: c.grants_advantage(on=who, to="allies", until=When.ENCOUNTER),
+        lambda who: c.grants_advantage(on=who, to="team", until=When.ENCOUNTER),
         until=When.EONT,
     )

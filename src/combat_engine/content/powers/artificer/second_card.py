@@ -115,7 +115,7 @@ def p13442b(c: Cast) -> None:
 
     "Grants combat advantage to all attackers" is handed to the caster's
     whole side -- the relation names beneficiaries one at a time and
-    `to="allies"` is as wide as it goes."""
+    `to="team"` is as wide as it goes."""
     ghost = _conjuration(c.world, c.me, "p13442")
     if ghost is None:
         return
@@ -125,7 +125,7 @@ def p13442b(c: Cast) -> None:
         return
     if c.strike(on=foe, from_=ghost):
         c.damage("2d6", c.int_mod, dtype=DamageType.PSYCHIC, on=foe)
-        c.grants_advantage(on=foe, to="allies", until=When.EOTNT)
+        c.grants_advantage(on=foe, to="team", until=When.EOTNT)
 
 
 @power(

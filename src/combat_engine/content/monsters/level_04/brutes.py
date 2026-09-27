@@ -1472,7 +1472,7 @@ def m4802a4(c: Cast) -> None:
 
     def looked_away(ev: AttackDeclared) -> None:
         if ev.attacker == victim and me not in getattr(ev, "among", (ev.target,)):
-            c.grants_advantage(on=victim, until=When.EOTNT, to="allies")
+            c.grants_advantage(on=victim, until=When.EOTNT, to="team")
 
     watching = c.watch(
         AttackDeclared,

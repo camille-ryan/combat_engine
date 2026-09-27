@@ -22,6 +22,7 @@ from combat_engine.engine import (
     Cast,
     Hit,
     Keyword,
+    PowerResolved,
     PowerUsed,
     Trigger,
     When,
@@ -29,13 +30,6 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.dsl import get
 from combat_engine.engine.query import distance_between
-
-#: The two covenant cards are declared rows now -- `cf:invoker-f1c0` and
-#: `cf:invoker-f1c1` -- so none of these is a naming gap any more. What a
-#: rider still cannot read is the event the card was used *against*: each
-#: card picks the ally or the enemy off its own `c.trigger`, and
-#: `PowerUsed` carries actor, power and targets and nothing else.
-TRIGGER = ("PowerUsed.trigger",)
 
 _DEFENCES = (AC, FORT, REF, WILL)
 
@@ -50,6 +44,31 @@ def _from_bloodied(c: Cast):  # noqa: ANN202
 
 def _used_card(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.actor == me and ev.power == "cf:invoker-f1c0"
+
+
+def _used_card_b(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return ev.actor == me and ev.power == "cf:invoker-f1c1"
+
+
+def _struck(ev: Any) -> int | None:
+    """The ally `cf:invoker-f1c0` answered for.
+
+    That card is `NO_TARGET` and reads the pair off its own trigger, so
+    `PowerUsed.targets` is empty and the ally lives one event down:
+    `ev.trigger` is the `Hit`, whose `target` is the ally and whose
+    `attacker` is the enemy.
+    """
+    return getattr(getattr(ev, "trigger", None), "target", None)
+
+
+def _striker(ev: Any) -> int | None:
+    """The enemy off a covenant card's trigger.
+
+    `cf:invoker-f1c1` declares `target=ONE_CREATURE` and then aims at
+    this creature with `on=`, so its `PowerUsed.targets` names whoever
+    the burst happened to pick and never the one the card burned.
+    """
+    return getattr(getattr(ev, "trigger", None), "attacker", None)
 
 
 def _divine_hit_near(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -83,22 +102,43 @@ def f1022(c: Cast) -> None:
     c.bonus("attack", 1, on=c.me, until=When.EONT, kind="feat", once=True)
 
 
-def _feature(ref: str, what: str, todo: tuple[str, ...] = TRIGGER) -> None:
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=todo)
-    def feat(c: Cast) -> None: ...
+@power("f1012", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:invoker-f1c0",
+       on=Trigger(PowerUsed, _used_card, "you use that covenant's card"))
+def f1012(c: Cast) -> None:
+    """"One ally hit by the triggering attack" is the ally that card was
+    played for, and the card names exactly one, so the choice printed
+    here has a single option."""
+    ally = _struck(c.trigger)
+    if ally is not None:
+        c.temp_hp(3 + c.int_mod, on=ally)
 
-    feat.__name__ = ref
-    feat.__doc__ = (
-        f"{what} The card has a ref now; what it has not got is the "
-        "triggering event, which is where the creature this names is picked."
-    )
+
+@power("f1079", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:invoker-f1c1",
+       on=Trigger(PowerResolved, _used_card_b, "you use that covenant's card"))
+def f1079(c: Cast) -> None:
+    """On the resolution rather than the use: the printed line is
+    vulnerability to all *other* damage, and `PowerUsed` fires before the
+    card's own radiant hit, which would then be taken at +2."""
+    foe = _striker(c.trigger)
+    if foe is not None:
+        c.vulnerable(2, on=foe, until=When.EONT)
 
 
-_feature("f1012", "Temporary hit points riding on one covenant's power.")
-_feature("f1079", "Vulnerability riding on a channelled power.")
-_feature("f1488", "A damage type and a save penalty on the same power.",
-         todo=("c.deals(ref=)", *TRIGGER))
+@power("f1488", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.deals(ref=)",),
+       trigger="you use cf:invoker-f1c1",
+       on=Trigger(PowerUsed, _used_card_b, "you use that covenant's card"))
+def f1488(c: Cast) -> None:
+    """The save penalty is written; the damage type is dropped. `c.deals`
+    rewrites what *this creature's* attacks deal for a duration, and the
+    printed line rewrites one named row's line for good."""
+    foe = _striker(c.trigger)
+    if foe is not None:
+        c.penalty("save", 1, on=foe, until=When.EONT)
 
 
 @power("f1491", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

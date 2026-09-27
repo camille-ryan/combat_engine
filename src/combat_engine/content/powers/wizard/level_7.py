@@ -387,7 +387,7 @@ def p13987(c: Cast) -> None:
     def exposed(ev: object) -> None:
         for standing in c.world.zones.occupants(zone):
             if standing != me:
-                c.grants_advantage(on=standing, until=When.EOTNT, to="allies")
+                c.grants_advantage(on=standing, until=When.EOTNT, to="team")
 
     zone_held = c.world.get(zone, Zone)
     if zone_held is not None and zone_held.effect is not None:

@@ -256,7 +256,7 @@ def _vulnerable_radiant(c: Cast, ev: Any) -> None:
 def _grants_to_ally(c: Cast, ev: Any) -> None:
     """"Your next ally who attacks it" -- one grant, spent on the first
     one to take it, which is what `once` is."""
-    c.grants_advantage(on=ev.target, to="allies", until=When.SONT, once=True)
+    c.grants_advantage(on=ev.target, to="team", until=When.SONT, once=True)
 
 
 def _shift_near(c: Cast, ev: Any) -> None:
@@ -1051,14 +1051,13 @@ def f1627(c: Cast) -> None:
 
 @power("f1628", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.borrow_feature()",), proficiency=("w:holy-symbol",))
+       proficiency=("w:holy-symbol",))
 def f1628(c: Cast) -> None:
-    """`cf:cleric-templar-f1` is a declared row, so the feature exists --
-    but `c.grant_row` cannot hand over a *trait*: `turns` arms every
-    `action=NONE` row from a snapshot of `Powers.all` taken before this
-    row runs, so one appended during the arming is never armed. Handing a
-    class feature to another class is the same operation the multiclass
-    feats name. The implement proficiency is in the header already."""
+    """`c.grant_row` can hand over a trait now: `turns.arm_traits_of`
+    re-reads `Powers.all` between passes, so a row appended while it is
+    arming is armed on the next one rather than never. The implement
+    proficiency is in the header already."""
+    c.grant_row("cf:cleric-templar-f1")
 
 
 @power("f1629", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

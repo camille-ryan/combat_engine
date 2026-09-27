@@ -180,8 +180,8 @@ def f2278(c: Cast) -> None:
 def f2184(c: Cast) -> None:
     """`p5037` already grants combat advantage to the druid's side, but
     only to the next attacker; this widens it to every attack for the
-    duration, which is the same `to="allies"` without `once`."""
-    c.grants_advantage(on=c.trigger.target, until=When.EONT, to="allies")
+    duration, which is the same `to="team"` without `once`."""
+    c.grants_advantage(on=c.trigger.target, until=When.EONT, to="team")
 
 
 @power("f2185", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

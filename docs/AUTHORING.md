@@ -165,6 +165,13 @@ that never applies.
   trustworthy there; anything the body *does* is not. If the row turns on
   the consequence rather than the declaration, watch what the body emits
   (`Hit`, `EffectApplied`, `Moved`) instead.
+* **`PowerUsed.trigger` is the event the power was used in answer to**,
+  and `PowerResolved` carries it too. It is `None` for an ordinary use.
+  Reach for it rather than `ev.targets` whenever the row says "the
+  triggering enemy" or "the triggering ally": an immediate action is
+  routinely `NO_TARGET`, or declares `target=ONE_CREATURE` and then aims
+  itself at a creature off its own trigger, so `ev.targets` names
+  somebody it never touched. Twenty-one rows were blocked on this.
 * **`Hit` does not declare `opportunity`.** `resolve.attack` sets it as a
   plain attribute afterwards, so a row must ask
   `getattr(ev, "opportunity", False)`. Same shape as `charge`.

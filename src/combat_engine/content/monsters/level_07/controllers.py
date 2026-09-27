@@ -1065,7 +1065,7 @@ def m4815a1(c: Cast) -> None:
     row is correct and unreachable until something melds."""
     if c.strike():
         c.hit()
-        c.grants_advantage(until=When.SAVE_ENDS, to="allies")
+        c.grants_advantage(until=When.SAVE_ENDS, to="team")
 
 
 @power(
@@ -1180,7 +1180,7 @@ def m4839a0(c: Cast) -> None:
 def m4839a1(c: Cast) -> None:
     if c.strike():
         c.hit()
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

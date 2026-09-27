@@ -439,7 +439,7 @@ def p13806(c: Cast) -> None:
         return
     c.damage(c.w())
     c.grab(on=victim)
-    c.grants_advantage(until=When.EONT, on=victim, to="allies")
+    c.grants_advantage(until=When.EONT, on=victim, to="team")
     hold = c.effect(f"{c.ref} hold", until=When.SUSTAIN, on=victim, sustain=MINOR)
     c.on_sustain(hold, lambda: c.grab(on=victim))
 

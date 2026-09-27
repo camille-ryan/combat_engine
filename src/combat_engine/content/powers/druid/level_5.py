@@ -225,7 +225,7 @@ def p13518(c: Cast) -> None:
     else:
         c.half_damage(c.w(2), c.wis_mod)
     hold = c.condition(Condition.IMMOBILIZED, until=When.SAVE_ENDS)
-    ca = c.grants_advantage(until=When.SAVE_ENDS, to="allies")
+    ca = c.grants_advantage(until=When.SAVE_ENDS, to="team")
     if hold is not None and ca is not None:
         hold.on_end.append(lambda: c.world.effects.end(ca, "the hold ended"))
 

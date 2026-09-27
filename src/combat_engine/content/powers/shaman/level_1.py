@@ -413,7 +413,7 @@ def p3783(c: Cast) -> None:
     if c.strike():
         c.damage("1d8", c.wis_mod)
     for foe in beside(c, "enemy"):
-        c.grants_advantage(on=foe, until=When.EONT, to="allies")
+        c.grants_advantage(on=foe, until=When.EONT, to="team")
     again = c.choose(c.enemies(), "who the second attack is aimed at")
     if again is not None and c.strike(on=again):
         c.damage("1d8", c.wis_mod, on=again)
@@ -719,7 +719,7 @@ def p9734(c: Cast) -> None:
     ]
     mate = c.choose(pool, "who swings")
     if mate is not None and granted_hit(c, mate, victim):
-        c.grants_advantage(on=victim, until=When.EONT, to="allies")
+        c.grants_advantage(on=victim, until=When.EONT, to="team")
 
 
 @power(

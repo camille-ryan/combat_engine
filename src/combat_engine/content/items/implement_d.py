@@ -1386,12 +1386,12 @@ def i2908p1(c: Cast) -> None:
 )
 def i2913p1(c: Cast) -> None:
     """"Grants combat advantage" with nobody named is the whole side, which
-    is `to="allies"`."""
+    is `to="team"`."""
     foe = _struck(c)
     if foe is None:
         return
     c.immobilized(on=foe, until=When.SAVE_ENDS)
-    c.grants_advantage(on=foe, until=When.SAVE_ENDS, to="allies")
+    c.grants_advantage(on=foe, until=When.SAVE_ENDS, to="team")
 
 
 @power(

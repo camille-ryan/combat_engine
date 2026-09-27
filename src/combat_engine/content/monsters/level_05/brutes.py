@@ -991,7 +991,7 @@ def m4709a1(c: Cast) -> None:
     creature's whole side rather than to itself alone."""
     if c.strike():
         c.hit()
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

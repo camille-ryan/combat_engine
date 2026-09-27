@@ -92,10 +92,10 @@ def p11620(c: Cast) -> None:
         return
     if c.strike():
         c.damage(c.w(3), c.str_mod)
-        c.grants_advantage(to="allies", until=When.SAVE_ENDS)
+        c.grants_advantage(to="team", until=When.SAVE_ENDS)
     else:
         c.half_damage(c.w(3), c.str_mod)
-        c.grants_advantage(to="allies", until=When.EONT)
+        c.grants_advantage(to="team", until=When.EONT)
 
 
 @power(
@@ -238,7 +238,7 @@ def p13929(c: Cast) -> None:
             if who in held or who not in c.enemies():
                 return
             granted = c.grants_advantage(
-                on=who, to="allies", until=When.ENCOUNTER
+                on=who, to="team", until=When.ENCOUNTER
             )
             if granted is not None:
                 held[who] = granted

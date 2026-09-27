@@ -122,14 +122,14 @@ def p13301(c: Cast) -> None:
 )
 def p8224(c: Cast) -> None:
     """"The next creature that attacks it" is anybody at all; the relation
-    names one beneficiary each, so `to="allies"` is as wide as it goes.
+    names one beneficiary each, so `to="team"` is as wide as it goes.
     `once=True` is the "next" part.
 
     The level lines widen the target to two and then three creatures. The
     header's count is a number, not a function of level, so the base is
     written and the widening is named in the report.
     """
-    c.grants_advantage(until=When.EONT, to="allies", once=True)
+    c.grants_advantage(until=When.EONT, to="team", once=True)
 
 
 @power(

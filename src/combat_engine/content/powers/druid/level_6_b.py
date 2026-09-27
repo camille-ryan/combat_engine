@@ -184,7 +184,7 @@ def p7393(c: Cast) -> None:
     zone_hold(
         c, near,
         lambda who: who in foes,
-        lambda who: c.grants_advantage(on=who, to="allies", until=When.ENCOUNTER),
+        lambda who: c.grants_advantage(on=who, to="team", until=When.ENCOUNTER),
     )
     c.note(f"{c.ref}: partial concealment inside it, and there is none here")
 

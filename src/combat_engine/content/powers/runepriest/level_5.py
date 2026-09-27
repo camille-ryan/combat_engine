@@ -59,7 +59,7 @@ def p11386(c: Cast) -> None:
         if ev.attacker not in c.enemies():
             return
         if ev.target in inside and ev.target in [c.me, *c.allies()]:
-            c.grants_advantage(on=ev.attacker, until=When.SAVE_ENDS, to="allies")
+            c.grants_advantage(on=ev.attacker, until=When.SAVE_ENDS, to="team")
 
     c.watch(AttackDeclared, expose, until=When.EONT)
 

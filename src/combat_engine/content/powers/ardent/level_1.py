@@ -573,7 +573,7 @@ def p12937(c: Cast) -> None:
         return
     if c.strike():
         c.damage(c.w(), c.cha_mod)
-    hold = c.grants_advantage(until=When.SAVE_ENDS, to="allies")
+    hold = c.grants_advantage(until=When.SAVE_ENDS, to="team")
     if hold is not None:
         hold.on_end.append(lambda: c.flat(10, dtype=DamageType.PSYCHIC, on=victim))
 

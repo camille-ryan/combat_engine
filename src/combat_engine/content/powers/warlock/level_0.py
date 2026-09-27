@@ -538,7 +538,7 @@ def p13964(c: Cast) -> None:
 def p13965(c: Cast) -> None:
     flat = 5 * (1 + (c.level >= 13) + (c.level >= 23))
     c.flat(flat + c.cha_mod, dtype=DamageType.NECROTIC)
-    c.grants_advantage(until=When.EONT, to="allies")
+    c.grants_advantage(until=When.EONT, to="team")
 
 
 # -- the blade of chaos ------------------------------------------------------
@@ -619,7 +619,7 @@ def p16259(c: Cast) -> None:
 def p16260(c: Cast) -> None:
     flat = 5 * (1 + (c.level >= 17) + (c.level >= 27))
     c.flat(flat + c.cha_mod, dtype=DamageType.PSYCHIC)
-    c.grants_advantage(until=When.EONT, to="allies")
+    c.grants_advantage(until=When.EONT, to="team")
 
 
 # -- the last two ------------------------------------------------------------

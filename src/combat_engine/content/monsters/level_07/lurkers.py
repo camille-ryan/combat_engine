@@ -554,11 +554,11 @@ def m4922a1(c: Cast) -> None:
 )
 def m4922a2(c: Cast) -> None:
     """The printed line names no beneficiary, so it is everybody on this
-    creature's side -- `to="allies"`, which is the relation once per ally on
+    creature's side -- `to="team"`, which is the relation once per ally on
     a single effect."""
     if c.strike():
         c.hit()
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

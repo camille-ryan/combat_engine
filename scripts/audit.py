@@ -101,6 +101,9 @@ KNOWN_SILENT = {
     # goes 17 -> 18, and without it 17 -> 17.
     "i1927p1": "gives a channel divinity use back; this caster has spent none",
     "i2304p1": "the same sentence as i1927p1, off a rod rather than a symbol",
+    # Driven by hand too: with a `CHANNEL_DIVINITY` row spent, `Powers.used`
+    # goes 1 -> 0; with nothing spent it touches nothing.
+    "i2772p1": "the same sentence again, off a holy symbol",
     "i3036p1": "its bonus is f650b's, and the board's wielder has no f650b",
     # Targets an undead creature and the board's dummies are not one.
     # Driven by hand against a real undead stat block: a healing surge

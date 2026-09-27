@@ -389,7 +389,7 @@ def p16510(c: Cast) -> None:
         )
     else:
         c.half_damage("2d8", c.wis_mod, dtype=DamageType.NECROTIC)
-        c.grants_advantage(to="allies", until=When.SAVE_ENDS)
+        c.grants_advantage(to="team", until=When.SAVE_ENDS)
 
 
 @power(
@@ -527,7 +527,7 @@ def p7073(c: Cast) -> None:
 def p7075(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(2), c.str_mod, dtype=DamageType.RADIANT)
-        c.grants_advantage(to="allies", until=When.EONT)
+        c.grants_advantage(to="team", until=When.EONT)
 
 
 @power(

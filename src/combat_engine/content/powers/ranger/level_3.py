@@ -465,7 +465,7 @@ def p4384(c: Cast) -> None:
 )
 def p4385(c: Cast) -> None:
     """"You grant combat advantage to all enemies" is the relation once per
-    enemy: it names one beneficiary, and `to="allies"` is the caster's own
+    enemy: it names one beneficiary, and `to="team"` is the caster's own
     side rather than the other one."""
     landed = 0
     for swing in range(2):

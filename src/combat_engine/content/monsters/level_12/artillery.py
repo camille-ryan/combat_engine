@@ -1237,11 +1237,11 @@ def m4938a3(c: Cast) -> None:
     reason that is about the engine rather than the board.
 
     "Grants combat advantage" with nobody named is the whole of the m4938's
-    side, which is `to="allies"`.
+    side, which is `to="team"`.
     """
     if c.strike():
         c.hit()
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

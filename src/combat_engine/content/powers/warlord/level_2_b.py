@@ -405,7 +405,7 @@ def p4550(c: Cast) -> None:
     keywords=MARTIAL,
 )
 def p4551(c: Cast) -> None:
-    """"All your allies" and not you, which `c.grants_advantage(to="allies")`
+    """"All your allies" and not you, which `c.grants_advantage(to="team")`
     would include -- so the relations are listed out, one per ally, on the
     single hold that method would have made.
 

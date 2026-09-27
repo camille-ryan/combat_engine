@@ -334,7 +334,7 @@ def p16233(c: Cast) -> None:
 def p16234(c: Cast) -> None:
     if c.strike():
         c.damage("1d8" if c.level < 21 else "2d8", c.cha_mod, dtype=DamageType.THUNDER)
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

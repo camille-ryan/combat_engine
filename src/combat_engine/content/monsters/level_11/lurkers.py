@@ -255,7 +255,7 @@ def m164a2(c: Cast) -> None:
     """No damage line: the opening is the whole of the hit.
 
     "Grants combat advantage to all attacks" is wider than the relation table
-    can say -- it names one beneficiary at a time -- and `to="allies"` is the
+    can say -- it names one beneficiary at a time -- and `to="team"` is the
     whole of the m164's side, which is every attacker the printed line will
     ever be asked about.
 
@@ -264,7 +264,7 @@ def m164a2(c: Cast) -> None:
     moment of the attack, so there is no state to put a creature into.
     """
     if c.strike():
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
         c.note("m164a2: the target cannot benefit from invisibility or concealment")
 
 

@@ -201,20 +201,28 @@ def f3286(c: Cast) -> None:
 
 
 @power("f2271", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=TRIGGERING)
+       reach=PERSONAL, target=SELF,
+       trigger="you use p10439",
+       on=Trigger(PowerResolved, _used("p10439"), "you take that shift"))
 def f2271(c: Cast) -> None:
-    """Combat advantage against the enemy whose shift set `p10439` off, if
-    the shift ends beside it. `p10439` targets only the caster and
-    `PowerUsed` does not carry the event it is answering, so there is no
-    way to name that enemy from out here."""
+    """Combat advantage against the enemy whose shift set `p10439` off.
+
+    On the resolution, not the use: the condition is where the shift
+    *ends*, and `PowerUsed` fires before the body has moved anybody.
+    The enemy is the `MoveStart` actor the row answered.
+    """
+    foe = getattr(getattr(c.trigger, "trigger", None), "actor", None)
+    if foe is not None and c.adjacent(to=foe):
+        c.grants_advantage(on=foe, to=c.me, until=When.EONT)
 
 
 @power("f3290", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=TRIGGERING + INSTEAD)
+       reach=PERSONAL, target=SELF, todo=INSTEAD)
 def f3290(c: Cast) -> None:
-    """Teleport beside the triggering enemy rather than shifting. Both
-    halves are missing: the enemy for the same reason f2271's is, and the
-    replacement of the printed shift for the same reason f3286's is."""
+    """Teleport beside the triggering enemy rather than shifting. The
+    enemy is readable now -- it is the actor on the row's own trigger --
+    and the replacement of the printed shift is not, for the same reason
+    f3286's is not."""
 
 
 # -- mind spike -------------------------------------------------------------

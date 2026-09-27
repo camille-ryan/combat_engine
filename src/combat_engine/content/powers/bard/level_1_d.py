@@ -211,7 +211,7 @@ def p14456(c: Cast) -> None:
     while_in(
         c,
         zone,
-        lambda who: c.grants_advantage(on=who, to="allies", until=When.ENCOUNTER),
+        lambda who: c.grants_advantage(on=who, to="team", until=When.ENCOUNTER),
         side="enemy",
     )
 

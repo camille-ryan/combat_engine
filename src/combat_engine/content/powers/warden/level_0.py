@@ -41,7 +41,7 @@ def _marked_by_me(world: World, me: int, ev: Event) -> bool:
 def p5093(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(2 if c.level >= 21 else 1), c.str_mod)
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

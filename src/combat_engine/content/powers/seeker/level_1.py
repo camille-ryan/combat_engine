@@ -279,7 +279,7 @@ def p11470(c: Cast) -> None:
         on_enemies_within(
             c,
             zone,
-            lambda who: c.grants_advantage(on=who, to="allies", until=When.EONT),
+            lambda who: c.grants_advantage(on=who, to="team", until=When.EONT),
             until=When.EONT,
         )
 

@@ -149,14 +149,28 @@ class Encounter:
         known = self.world.get(eid, Powers)
         if known is None:
             return
-        for ref in known.all:
-            p = get(ref)
-            # A trait is simply *true*: no action and nothing to wait for.
-            # A no-action row that declares a trigger is a different thing
-            # -- it happens when its trigger does -- and arming it at the
-            # start would fire it once, out of nowhere, and never again.
-            if p is not None and p.action is ActionType.NONE and not p.triggers:
-                use(self.world, eid, ref, spend=True)
+        # **Re-read, because arming can lengthen the list.** `Powers.all`
+        # builds a fresh list, so a ref `c.grant_row` appended while this
+        # loop was walking the old one was never armed -- and a feat whose
+        # whole printed benefit is "you gain class feature X" is exactly
+        # that shape, so it sat inert. Passes rather than an index, so the
+        # first pass keeps the order it has always had and anything handed
+        # over during it is armed after, which is the order it happens in.
+        seen: set[str] = set()
+        while True:
+            fresh = [ref for ref in known.all if ref not in seen]
+            if not fresh:
+                return
+            seen.update(fresh)
+            for ref in fresh:
+                p = get(ref)
+                # A trait is simply *true*: no action and nothing to wait
+                # for. A no-action row that declares a trigger is a
+                # different thing -- it happens when its trigger does --
+                # and arming it at the start would fire it once, out of
+                # nowhere, and never again.
+                if p is not None and p.action is ActionType.NONE and not p.triggers:
+                    use(self.world, eid, ref, spend=True)
 
     def _roll_initiative(self) -> list[int]:
         """Everybody rolls, then the rolls are announced, then they are read.

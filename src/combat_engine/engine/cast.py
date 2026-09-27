@@ -2149,6 +2149,12 @@ class Cast:
         given, so anything printing this had to be left out whole rather
         than half-written.
 
+        **A trait handed over during arming is armed.** It was not:
+        `turns.arm_traits_of` walked one list built before the first row
+        ran, so a feat whose whole benefit is "you gain class feature X"
+        appended a ref nothing ever turned on and sat inert while
+        looking finished. That loop re-reads between passes now.
+
         **Not the tool for a build's own rows.** `chargen.loadout` deals a
         character every level-0 row of its class, so this returns `None`
         for one of those -- the creature already knows it. Three features
@@ -4097,19 +4103,33 @@ class Cast:
         The relation names **one** beneficiary, so anything wider is that
         relation once per creature, held on a single effect so they all end
         together. Four rows had hand-rolled that before this took an
-        argument: `to="allies"` for "you and your allies", and `to=<id>`
+        argument: `to="team"` for "you and your allies", and `to=<id>`
         for "one ally gains combat advantage against the target", which is
         the printed line this method used to say wrong.
+
+        The words are `c.within`'s: **`"ally"` leaves you out** and
+        `"team"` puts you in, so a card reading "each ally" and a card
+        reading "you and each ally" are different arguments here as they
+        are everywhere else. `"allies"` was the old spelling of `"team"`
+        and there was no way at all to say `"ally"`.
+
+        **An unknown word is an error.** Anything this did not recognise
+        fell through to the caster, so `to="ally"` -- the obvious thing to
+        write -- was a row that quietly benefited one creature instead of
+        a side, and four rows written `to="side"` had been doing exactly
+        that. A `KeyError` is the same answer `c.within` gives.
         """
         who = self._who(on)
         if who is None:
             return None
         if isinstance(to, int):
             beneficiaries = [to]
-        elif to == "allies":
-            beneficiaries = [self.me, *self.allies()]
         else:
-            beneficiaries = [self.me]
+            beneficiaries = {
+                "me": [self.me],
+                "ally": self.allies(),
+                "team": [self.me, *self.allies()],
+            }[to]
         granted = self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} advantage",
             relations=[(Relation.GRANTS_CA_TO, who, b) for b in beneficiaries],
@@ -4781,9 +4801,17 @@ class Cast:
         def wanted(who: int) -> bool:
             theirs = side_of(self.world, who)
             mine = side_of(self.world, self.me)
-            if side == "any":
-                return True
-            return theirs is mine if side == "ally" else theirs is not mine
+            # Keyed rather than chained: anything this did not recognise
+            # used to fall through to "enemy", which is the same silent
+            # wrong answer `c.grants_advantage(to=)` was giving.
+            # **`"ally"` is the caster's side *with* the caster**, unlike
+            # `c.within`: these zones all print "you and your allies",
+            # and the question here is team identity, not a pool.
+            return {
+                "any": True,
+                "ally": theirs is mine,
+                "enemy": theirs is not mine,
+            }[side]
 
         def give(who: int) -> None:
             if who in held or not wanted(who):
@@ -4868,7 +4896,10 @@ class Cast:
 
     def used(self) -> None:
         self.world.bus.emit(
-            PowerUsed(actor=self.me, power=self.ref, targets=list(self.targets))
+            PowerUsed(
+                actor=self.me, power=self.ref, targets=list(self.targets),
+                trigger=self.trigger,
+            )
         )
         owner = self._item_owner()
         if owner:

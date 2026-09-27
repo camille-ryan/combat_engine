@@ -597,10 +597,10 @@ def m420a0(c: Cast) -> None:
 )
 def m420a1(c: Cast) -> None:
     """"Grants combat advantage to all of its enemies" is the whole of this
-    creature's side, which is what `to="allies"` names."""
+    creature's side, which is what `to="team"` names."""
     if c.strike():
         c.hit()
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

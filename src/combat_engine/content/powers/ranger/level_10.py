@@ -372,7 +372,7 @@ def p13612(c: Cast) -> None:
     def expose(who: int) -> None:
         if who in exposed or who not in c.enemies():
             return
-        got = c.grants_advantage(on=who, to="allies", until=When.ENCOUNTER)
+        got = c.grants_advantage(on=who, to="team", until=When.ENCOUNTER)
         if got is not None:
             exposed[who] = got
 

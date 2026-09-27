@@ -279,10 +279,10 @@ def p10946(c: Cast) -> None:
         return
     c.damage(c.w(3), c.str_mod)
     victim = c.target
-    hold = c.grants_advantage(until=When.SAVE_ENDS, to="allies")
+    hold = c.grants_advantage(until=When.SAVE_ENDS, to="team")
     if hold is not None:
         hold.on_end.append(
-            lambda: c.grants_advantage(on=victim, until=When.EONT, to="allies")
+            lambda: c.grants_advantage(on=victim, until=When.EONT, to="team")
         )
 
 
@@ -733,7 +733,7 @@ def _held_close(c: Cast, foe: int, until: When) -> None:
     miss line is an ordinary duration and needs none of that."""
     holds = [
         c.slowed(on=foe, until=until),
-        c.grants_advantage(on=foe, until=until, to="allies"),
+        c.grants_advantage(on=foe, until=until, to="team"),
     ]
     if until is not When.ENCOUNTER:
         return

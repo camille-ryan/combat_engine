@@ -1236,7 +1236,7 @@ def i3278p1(c: Cast) -> None:
 def i463p1(c: Cast) -> None:
     if c.strike():
         c.immobilized(until=When.SAVE_ENDS)
-        c.grants_advantage(until=When.SAVE_ENDS, to="side")
+        c.grants_advantage(until=When.SAVE_ENDS, to="team")
         c.penalty("attack", 2, until=When.SAVE_ENDS)
 
 

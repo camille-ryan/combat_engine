@@ -394,7 +394,7 @@ def p12736(c: Cast) -> None:
     if not c.strike() or victim is None:
         return
     c.damage("1d8", c.int_mod, dtype=DamageType.PSYCHIC)
-    _no_opportunity(c, c.grants_advantage(until=When.EONT, to="allies"), victim)
+    _no_opportunity(c, c.grants_advantage(until=When.EONT, to="team"), victim)
 
 
 @power(

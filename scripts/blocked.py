@@ -294,14 +294,14 @@ def _wants_of(wants: str) -> list[str]:
 def _one(token: str, have: dict[str, object]) -> bool:
     """Is this single symbol present, with the parameter it asks for?
 
-    A compendium ref -- `p2365`, `cf:cleric-f0` -- is looked for in the
+    A compendium ref -- `p2365`, `cf:cleric-f0`, `rt:r44-aspects` -- is looked for in the
     registry rather than on the `Cast` surface. A row waiting on another
     row is the same kind of wait as a row waiting on a method, and the
     instrument should go red on the day either arrives.
     """
     import re as _re
 
-    if _re.fullmatch(r"[pmifr]\d+[a-z]?\d*|cf:[\w-]+", token):
+    if _re.fullmatch(r"[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+", token):
         from combat_engine.content import declared
 
         return token in declared()

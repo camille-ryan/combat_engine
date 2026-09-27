@@ -433,7 +433,7 @@ def f3042(c: Cast) -> None:
        trigger="you hit an enemy granting combat advantage to you",
        on=Trigger(Hit, lambda w, me, ev: ev.attacker == me, "you hit"))
 def f3028(c: Cast) -> None:
-    """"Grants combat advantage to all attackers" is `to="allies"`, which
+    """"Grants combat advantage to all attackers" is `to="team"`, which
     is you and your side -- everyone who will attack it in practice.
 
     Advantage is read off the blow rather than asked again, because a
@@ -449,7 +449,7 @@ def f3028(c: Cast) -> None:
         return
     if p.reach.kind != "melee" or not c.had_advantage(c.trigger):
         return
-    c.grants_advantage(on=c.trigger.target, until=When.SONT, to="allies")
+    c.grants_advantage(on=c.trigger.target, until=When.SONT, to="team")
 
 
 @power("f3035", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

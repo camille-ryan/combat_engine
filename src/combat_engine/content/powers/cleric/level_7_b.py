@@ -517,7 +517,7 @@ def p16423(c: Cast) -> None:
     def reread() -> None:
         beside_it = c.adjacent_to(spirit, victim)
         if beside_it and not hold:
-            granted = c.grants_advantage(on=victim, to="allies", until=When.EONT)
+            granted = c.grants_advantage(on=victim, to="team", until=When.EONT)
             if granted is not None:
                 hold.append(granted)
         elif hold and not beside_it:
@@ -745,7 +745,7 @@ def p9986(c: Cast) -> None:
         return
     c.damage(c.w(2), c.str_mod, dtype=DamageType.FIRE)
     if not _used_a_channel(c):
-        c.grants_advantage(to="allies")
+        c.grants_advantage(to="team")
         c.slowed()
         return
     c.mark()

@@ -794,16 +794,20 @@ def f2851(c: Cast) -> None:
 
 @power("f2854", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=("PowerUsed.trigger", *PLAGUE),
+       dropped=PLAGUE,
        trigger="you use p6189",
        on=Trigger(PowerUsed, _used("p6189"), "you use that racial power"))
 def f2854(c: Cast) -> None:
-    """The half measured from you. "Adjacent to the triggering enemy" is
-    dropped: `p6189` answers an enemy's attack and `PowerUsed` carries
-    the targets it chose, not the event it was answering."""
-    for who in c.within(1):
-        if who != c.me:
-            c.flat(2, dtype=DamageType.FIRE, on=who)
+    """Both rings now: `p6189` is `NO_TARGET` and reads the enemy it is
+    about off the `Hit` it answered, so the second ring is measured from
+    there. Neither you nor that enemy is caught."""
+    hit = getattr(c.trigger, "trigger", None)
+    foe = getattr(hit, "target", None)
+    near = set(c.within(1))
+    if foe is not None:
+        near |= set(c.within(1, of=foe))
+    for who in sorted(near - {c.me, foe}):
+        c.flat(2, dtype=DamageType.FIRE, on=who)
 
 
 @power("f2841", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -915,11 +919,12 @@ def f2702b(c: Cast) -> None:
 
 @power("f2699", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.forgo_teleport()", "PowerUsed.trigger"))
+       todo=("c.forgo_teleport()",))
 def f2699(c: Cast) -> None:
-    """Damage to the triggering enemy *instead of* the teleport. Two
-    holds: nothing suppresses a clause of another row, and `f2702b`'s
-    triggering enemy is not carried on the `PowerUsed` this would watch."""
+    """Damage to the triggering enemy *instead of* the teleport. The
+    enemy is readable now -- it is the attacker on the `Hit` `f2702b`
+    answered -- and the whole benefit is the replacement, which nothing
+    says: a clause of another row cannot be suppressed."""
 
 
 @power("f2700", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

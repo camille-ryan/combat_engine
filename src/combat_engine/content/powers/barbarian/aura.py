@@ -155,7 +155,7 @@ def p14420(c: Cast) -> None:
         _dress_the_aura(
             c,
             lambda who: [
-                c.grants_advantage(on=who, to="allies", until=When.ENCOUNTER)
+                c.grants_advantage(on=who, to="team", until=When.ENCOUNTER)
             ],
         )
 

@@ -380,7 +380,7 @@ def p4403(c: Cast) -> None:
         return
     c.damage(c.w(2), c.str_mod)
     if c.is_quarry():
-        c.grants_advantage(to="allies", until=When.EONT)
+        c.grants_advantage(to="team", until=When.EONT)
 
 
 @power(

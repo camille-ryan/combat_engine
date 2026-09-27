@@ -634,4 +634,4 @@ def m4806a6(c: Cast) -> None:
     offered to its whole side -- which is what a printed "grants combat
     advantage" with nobody named means."""
     if c.strike():
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")

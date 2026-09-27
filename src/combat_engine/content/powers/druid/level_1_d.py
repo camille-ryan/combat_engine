@@ -242,7 +242,7 @@ def p13512(c: Cast) -> None:
     aura_hold(
         c, 1,
         lambda who: who in foes,
-        lambda who: c.grants_advantage(on=who, to="allies", until=When.ENCOUNTER),
+        lambda who: c.grants_advantage(on=who, to="team", until=When.ENCOUNTER),
     )
 
 
@@ -299,10 +299,10 @@ def p2794(c: Cast) -> None:
         return
     if not landed:
         c.damage("1d6", c.wis_mod, dtype=DamageType.RADIANT)
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
         return
     hold = c.condition(Condition.SLOWED, until=When.SAVE_ENDS)
-    ca = c.grants_advantage(until=When.SAVE_ENDS, to="allies")
+    ca = c.grants_advantage(until=When.SAVE_ENDS, to="team")
     if hold is None:
         return
     if ca is not None:
@@ -310,7 +310,7 @@ def p2794(c: Cast) -> None:
 
     def after() -> None:
         c.damage("3d6", c.wis_mod, dtype=DamageType.RADIANT, on=victim)
-        c.grants_advantage(on=victim, until=When.EONT, to="allies")
+        c.grants_advantage(on=victim, until=When.EONT, to="team")
 
     hold.on_end.append(after)
 
@@ -385,7 +385,7 @@ def p5044(c: Cast) -> None:
     victim = c.target
     if victim is None:
         return
-    ca = c.grants_advantage(until=When.ENCOUNTER, to="allies")
+    ca = c.grants_advantage(until=When.ENCOUNTER, to="team")
 
     def stirred(ev: MoveEnd) -> None:
         if ev.actor != victim:

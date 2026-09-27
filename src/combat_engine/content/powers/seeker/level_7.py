@@ -83,7 +83,7 @@ def p11482(c: Cast) -> None:
             continue
         if c.attack(c.wis_, FORT, on=foe):
             c.slide(1, on=foe)
-            c.grants_advantage(on=foe, to="allies", until=When.EONT)
+            c.grants_advantage(on=foe, to="team", until=When.EONT)
 
 
 @power(

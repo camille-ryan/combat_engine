@@ -110,7 +110,7 @@ def p6515(c: Cast) -> None:
 def p12865(c: Cast) -> None:
     if c.strike(from_=c.companion()):
         c.damage("1d6", c.wis_mod)
-        c.grants_advantage(until=When.EONT, to="allies")
+        c.grants_advantage(until=When.EONT, to="team")
 
 
 @power(

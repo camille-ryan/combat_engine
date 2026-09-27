@@ -2000,7 +2000,7 @@ def m4988a2(c: Cast) -> None:
     before the blink, which is the order the card reads in and the only order
     in which anybody is still adjacent."""
     for foe in c.within(1, side="enemy"):
-        c.grants_advantage(until=When.EONT, on=foe, to="allies")
+        c.grants_advantage(until=When.EONT, on=foe, to="team")
     c.teleport(2)
 
 

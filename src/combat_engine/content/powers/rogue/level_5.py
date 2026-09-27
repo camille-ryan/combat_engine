@@ -469,7 +469,7 @@ def p2266(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(2), c.dex_mod)
     if c.target is not None:
-        c.grants_advantage(to="allies")
+        c.grants_advantage(to="team")
 
 
 @power(
