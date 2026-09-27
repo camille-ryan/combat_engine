@@ -264,6 +264,10 @@ declare a weapon, a weapon group or a suit of armour.
   once turned a twelve-round win into a thirty-round stalemate.
 * "Critical: +1d6 damage per plus" is a column, not a body. So is the
   enhancement bonus. Both are already applied by `engine/equipment.py`.
+* **A `Level 11:` or `Level 21:` line in a block is out of scope.** The
+  page prints every tier and the project stops at 10, so write the
+  heroic number and ignore the rest. Do not mark it `todo` — it is not a
+  gap, it is paragon.
 
 ### Feats specifically
 
