@@ -85,6 +85,20 @@ def features(
     f["is_action_point"] = float(action.kind == "action_point")
     f["is_hide"] = float(action.kind == "hide")
     f["is_delay"] = float(action.kind == "delay")
+    # **The last six.** Every kind `actions.legal` can produce is named
+    # here now, because an unnamed one scores zero -- which beats ending
+    # a turn at -2 and beats a move that closes nothing -- and so becomes
+    # the idle default rather than being ignored. `shift` was the
+    # dangerous one: `closes_distance` is computed only for `move` and
+    # `run`, so a shift was never aimed, and ties break on `str(action)`,
+    # which picks the lexicographically largest square -- as likely away
+    # from the enemy as toward it.
+    f["is_shift"] = float(action.kind == "shift")
+    f["is_charge"] = float(action.kind == "charge")
+    f["is_sustain"] = float(action.kind == "sustain")
+    f["is_drop"] = float(action.kind == "drop")
+    f["is_item"] = float(action.kind == "item")
+    f["is_instinctive"] = float(action.kind == "instinctive")
     if action.kind == "wield":
         # **Drawing the right weapon was unreachable.** `actions._wielding`
         # offers the minor and `actions` can execute it, but nothing here
@@ -323,6 +337,25 @@ WEIGHTS: dict[str, float] = {
     # unnamed kind would score zero and become the idle action, which is
     # the failure this weight exists to avoid.
     "is_delay": -6.0,
+    # A shift is a move that provokes nothing, so it is worth slightly
+    # more than walking the same square -- but it is one square and is
+    # not aimed, so it must not beat a real move that closes ground.
+    "is_shift": -0.5,
+    # A charge is an attack and earns most of its score through the
+    # attack features, but it loses the flat `is_power` bonus because it
+    # is not a power -- so it is handed back here, or a charge is
+    # systematically six points worse than the same swing standing still
+    # and nothing ever charges.
+    "is_charge": 6.0,
+    # Keeping something alive that is already paid for.
+    "is_sustain": 3.0,
+    # Letting go of a grab, and spending a one-shot: both are situational
+    # and neither should be an idle default.
+    "is_drop": -2.0,
+    "is_item": 1.0,
+    # A summon acting on its own is free value; the action is the
+    # owner's minor, which `_instinctives` has already charged for.
+    "is_instinctive": 5.0,
     # Enough to outweigh `is_power`, so a second stance has to be worth
     # more than an attack before the creature gives up the one it has.
     "swaps_stance": -8.0,
