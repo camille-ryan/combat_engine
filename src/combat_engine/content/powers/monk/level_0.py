@@ -31,6 +31,13 @@ from combat_engine.engine import (
 HIT_ON_MY_TURN = "you hit with an attack during your turn"
 TRIGGERED = Trigger(Hit, by_me, HIT_ON_MY_TURN)
 
+#: The five rows that *are* the class feature, one per printed option. A
+#: monk knows one of them; `p11215` names the feature in both halves of its
+#: card and reads this to tell which row that is on the creature in front
+#: of it. Declared here because this is where they are written down, and a
+#: second list elsewhere would be a second thing to keep in step.
+FLURRIES = ("p7448", "p11207", "p13123", "p16131", "p16132")
+
 
 def _tier(level: int) -> int:
     return 0 if level < 11 else (1 if level < 21 else 2)

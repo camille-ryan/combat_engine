@@ -81,3 +81,32 @@ built from paraphrase.
   `board()`, so changing one changes what every row of that class sees.
 * `replay` will diverge if a feature's numbers change. Read it; a
   corrected feature is a legitimate re-record, an accidental one is not.
+
+## A second gap the import revealed
+
+Features that are *not implemented at all* — no `cf:` ref, no `Feature`
+power row, and **no `docs/blocked.json` entry**, so nothing anywhere
+records them as missing. Confirmed for the avenger: the +3 AC while in
+cloth and unshielded, the three censures, and Channel Divinity.
+
+Counting imported features against `cf:` refs plus `Feature` power rows
+per class does not settle it — the same feature is often both a prose
+entry here and a power card there, so the two overlap. The classes whose
+numbers do not add up and want a read:
+
+| class | imported | `cf:` refs | Feature rows |
+|---|---|---|---|
+| Druid | 4 | 0 | 1 |
+| Bard | 7 | 0 | 2 |
+| Avenger | 4 | 1 | 3 |
+| Runepriest | 3 | 0 | 1 |
+| Warden | 3 | 0 | 2 |
+
+The right instrument is a per-class read, not a count: match each
+imported feature to its implementation or to a `blocked.json` entry, and
+whatever is left over is the answer to "is this class finished".
+
+Worth making that a ninth instrument once the numbers settle, because
+"no row records this as missing" is exactly the failure this whole
+exercise was: the tree looked complete because nothing was tracking the
+absence.

@@ -26,7 +26,6 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     ENCOUNTER,
-    FREE,
     INTERRUPT,
     MINOR,
     NO_TARGET,
@@ -126,13 +125,19 @@ def m264a2(c: Cast) -> None:
     "m264a3",
     level=1,
     usage=AT_WILL,
-    action=FREE,
+    action=ActionType.NONE,
     reach=PERSONAL,
-    target=SELF,
+    target=NO_TARGET,
     keywords=[Keyword.RANGED],
 )
 def m264a3(c: Cast) -> None:
     """Extra damage on a ranged hit against a creature it has the drop on.
+
+    **A trait, and it prints as one** -- the card gives it no action line
+    and no usage line, the way its two siblings here do not either. It was
+    declared a free at-will, so the policy was offered it every turn, took
+    it every turn because a free action costs nothing, and re-armed the
+    watcher: four hundred and seventy-three uses in one recorded fight.
 
     Unlike the strikers' version this has no once-a-round latch, so it is a
     plain watch rather than `features.strikers.extra_damage`. Combat

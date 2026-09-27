@@ -33,7 +33,7 @@ from .dsl import get
 from .events import DamageApplied, Event, OpportunityWindow, PowerUsed
 from .grid import distance
 from .query import alive, distance_between, enemies, is_
-from .types import ActionType, Condition, Team, Usage
+from .types import ActionType, Condition, Keyword, Team, Usage
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -126,6 +126,19 @@ def features(
     f["targets_bloodied"] = nearly
     f["allies_caught"] = friendly
     f["enemies_caught"] = float(len(action.targets)) - friendly
+
+    # Swapping the stance you are already in for a different one. Legal,
+    # and almost always pointless: a stance ends whatever you were in, so
+    # two at-will minor stances scored the same and the fighter alternated
+    # between them for the whole fight -- eighty-three swaps, and a
+    # twelve-round win became a thirty-round stalemate. Nothing in the
+    # policy knew what a stance was. Scored rather than forbidden, because
+    # replacing a stance *is* sometimes right and a fitted policy should
+    # be able to learn when.
+    if action.kind == "power" and action.ref:
+        declared = get(action.ref)
+        if declared is not None and Keyword.STANCE in declared.keywords:
+            f["swaps_stance"] = float(world.effects.stance_of(actor) is not None)
 
     foes = [e for e in enemies(world, actor) if alive(world, e)]
     if foes:
@@ -229,6 +242,9 @@ WEIGHTS: dict[str, float] = {
     "nearest_enemy": -0.1,
     # Worth about one attack, which is what it hands over.
     "provokes_now": -5.0,
+    # Enough to outweigh `is_power`, so a second stance has to be worth
+    # more than an attack before the creature gives up the one it has.
+    "swaps_stance": -8.0,
 }
 
 

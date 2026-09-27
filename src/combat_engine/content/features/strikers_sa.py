@@ -38,7 +38,7 @@ from combat_engine.engine import (
 def _sneak_leg(world: World, eid: int) -> bool:
     """Did this rogue take the leg this tactic is on?"""
     chosen = world.get(eid, Build)
-    return chosen is not None and "sneak" in chosen.choices
+    return chosen is not None and "shadowy" in chosen.choices
 
 
 @power(

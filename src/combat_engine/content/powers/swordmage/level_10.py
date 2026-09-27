@@ -181,3 +181,45 @@ def p3367(c: Cast) -> None:
     until that read a key. `c.no_advantage` shuts all four routes, which is
     what "to any of your enemies" means."""
     c.no_advantage(until=When.EONT)
+
+
+@power(
+    "p3369",
+    level=10,
+    cls="swordmage",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.ARCANE, Keyword.STANCE],
+)
+def p3369(c: Cast) -> None:
+    """The field the class page gives every swordmage, spread over the other
+    three defences.
+
+    Refused for a long while on the grounds that nothing laid the field at
+    all -- true until `cf:swordmage-f2` was written, and the reason this
+    reads that row's own `warding` rather than a number of its own. "Its
+    bonus" is whatever the grip is worth at the moment of the roll, so the
+    same two-modifier shape is repeated here and the larger of the pair
+    wins inside this row's bucket. AC is left alone: the feature already
+    covers it, and a second +1 there would be this row paying twice.
+    """
+    from combat_engine.content.features.defenders_sa import warding
+
+    me, world = c.me, c.world
+    stance = c.stance(label=c.ref)
+
+    def at_least(size: int) -> Any:
+        return lambda _ctx: warding(world, me) >= size
+
+    for what in (FORT, REF, WILL):
+        for size in (1, 3):
+            rider = c.bonus(
+                what, size, on=me, until=When.ENCOUNTER, stacks=False,
+                when=at_least(size),
+            )
+            if rider is not None:
+                stance.on_end.append(
+                    lambda r=rider: c.world.effects.end(r, "stance ended")
+                )

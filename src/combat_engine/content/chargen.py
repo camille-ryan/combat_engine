@@ -313,23 +313,42 @@ class Build:
 
 BUILDS: dict[str, tuple[Build, ...]] = {
     # A -- Strength either way, and the fork is what backs it up.
-    "fighter": (Build("great-weapon", STR, CON), Build("guardian", STR, WIS)),
+    # Six legs, which is what the class page lists. Each names one of the
+    # six printed talents, so `cf:fighter-grip` has something to ask about
+    # and the two that are only a talent are no longer folded into a leg
+    # that does not mean them. The scores are the page's own: where it
+    # offers a choice of tertiary it is not recorded, and where it names no
+    # secondary at all -- the brawling leg -- the second is the ability the
+    # feature that leg is handed actually reads.
+    # The first leg carries a two-handed weapon because its talent is about
+    # holding one; without it the great-weapon half of `cf:fighter-grip`
+    # was unreachable and the leg was a great-weapon fighter with a
+    # longsword.
+    "fighter": (
+        Build("great-weapon", STR, CON, (GREATAXE,)),
+        Build("guardian", STR, WIS),
+        Build("arena", STR, DEX),
+        Build("battlerager", STR, CON),
+        Build("brawling", STR, DEX),
+        Build("tempest", STR, WIS, (SHORTSWORD, SHORTSWORD)),
+    ),
     # V -- the fork is the primary, and the two halves share Wisdom.
     "cleric": (Build("devoted", WIS, CHA), Build("battle", STR, WIS, (MACE,))),
-    # A -- Dexterity either way.
-    # A third leg. Four tactics are printed and two of them fork on
-    # Strength and Charisma; the one that is about going unseen leans on
-    # Wisdom here, which is the ability its own check keys off -- the
-    # printed secondary is not in `game.db` and this is the honest stand-in.
-    # A fourth leg. The last of the four printed tactics trains the rogue in
-    # two heavier weapon groups and leans on Strength like `brawny` does, so
-    # it forks on the weapon rather than on the score; the mace is the one
-    # of the two groups `chargen` has a weapon for.
+    # A -- Dexterity either way, and five legs, which is what the class
+    # page lists. Each names one of the four printed tactics, two of them
+    # sharing one; the page gives a secondary for every leg but the one
+    # that is about going unseen, which leans on Wisdom here because that
+    # is the ability its own check keys off.
+    # The tactic that trains the rogue in two heavier weapon groups carries
+    # the mace, which is the one of the two `chargen` has a weapon for. It
+    # is Charisma rather than Strength on the page, with Strength third --
+    # Strength is what the tactic's own rider reads, not what the leg is.
     "rogue": (
         Build("brawny", DEX, STR),
         Build("trickster", DEX, CHA),
-        Build("sneak", DEX, WIS),
-        Build("ruffian", DEX, STR, (MACE, CROSSBOW)),
+        Build("aerialist", DEX, CHA),
+        Build("shadowy", DEX, WIS),
+        Build("cutthroat", DEX, CHA, (MACE, CROSSBOW)),
     ),
     # A -- Intelligence either way.
     "wizard": (Build("control", INT, WIS), Build("war", INT, DEX)),
@@ -337,9 +356,25 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     "paladin": (Build("avenging", STR, CHA), Build("protecting", CHA, WIS)),
     # V -- two blades or a bow, and they are different weapons as well as
     # different scores.
+    #
+    # Four legs, one per printed fighting style that a row can ask about.
+    # The page's own build sections name the style each one takes, and two
+    # of the four were missing: the style that replaces the shared ranged
+    # bonus with a bonus for running, and the one that trades a feat and a
+    # step of speed for the off hand. Neither had a leg, so
+    # `cf:ranger-running` could only be kept apart from `cf:ranger-nearest`
+    # by sharing a bonus type, and `cf:ranger-style` could not be written.
+    #
+    # The page gives no ability line for either of the two new ones -- it
+    # says only which build each resembles -- so each takes the scores and
+    # the arms of the leg it is described against. The fifth style is the
+    # companion and has no leg: it is blocked on a creature the tree does
+    # not have, and a leg for it would deal a ranger missing its feature.
     "ranger": (
         Build("two-blade", STR, WIS, (SHORTSWORD, SHORTSWORD)),
         Build("archer", DEX, WIS, (LONGBOW, SHORTSWORD)),
+        Build("hunter", DEX, WIS, (LONGBOW, SHORTSWORD)),
+        Build("marauder", STR, WIS, (SHORTSWORD, SHORTSWORD)),
     ),
     # V -- which pact was made. Two more pacts arrived with the later books
     # and each prints a boon row of its own, so each needs a leg for the
@@ -362,7 +397,19 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # V -- which soul. The two share Charisma and differ on the secondary
     # exactly as the derived `second-<ability>` pair did, so the order here
     # keeps the first leg the same character it always was.
+    #
+    # The page prints four sources and these are the two whose feature is
+    # written. The other two have no leg on purpose: see
+    # `cf:sorcerer-soul-rest` in `docs/blocked.json`.
     "sorcerer": (Build("wild", CHA, DEX), Build("dragon", CHA, STR)),
+    # A -- Strength either way, and the fork is which second ability the
+    # rages lean on. The derivation had already found the right pair off
+    # the ability line; what it could not find is what each leg is called,
+    # and the page's build sections name both along with the class feature
+    # each one takes. Two of the four printed builds are here: the other
+    # two give no ability order at all, so a leg for either would be an
+    # invented pair of scores.
+    "barbarian": (Build("rageblood", STR, CON), Build("thaneborn", STR, CHA)),
 }
 
 

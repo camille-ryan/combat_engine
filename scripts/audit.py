@@ -108,6 +108,16 @@ KNOWN_SILENT = {
     # the row passes over every candidate. Driven by hand: an ally set to
     # one surge comes out of it with two.
     "p2861": "its printed target must be down to two surges; nobody here is",
+    # Its printed content is a penalty to the next save against one of the
+    # caster's own save-ends effects, and the caster has laid none: the
+    # harness fires each row once on a fresh board, so nothing it cast is
+    # still standing. Driven by hand with a save-ends effect on an enemy:
+    # -2 to that effect's save alone, 0 to any other, and spent by the one
+    # throw it is for.
+    "cf:wizard-implement": (
+        "penalises a save against one of the caster's own save-ends effects; "
+        "the board carries none of them"
+    ),
     # Escaping a grab, on a board where nothing is holding the caster.
     # Grabbing it in `board()` is not the answer -- `Condition.GRABBED`
     # cannot move, which would make every movement row on every other

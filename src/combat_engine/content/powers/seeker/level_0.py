@@ -24,6 +24,7 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
+from combat_engine.engine.basic import RANGED
 
 from . import PRIMAL, PRIMAL_WEAPON, has_thrown
 
@@ -69,6 +70,28 @@ def p9500(c: Cast) -> None:
     c.slowed(until=When.EONT)
 
 
+def _repeating(c: Cast) -> bool:
+    """Is this use running inside another use of the same row?
+
+    Which is what `p12792` does to this one: it hands the use back and
+    spends it again while the swing that missed is still on the stack. The
+    swing the repeat makes is then the very swing being answered, so the
+    in-flight guard has to stand aside for it -- and only then. Asked of
+    the stack rather than of the row that did it, so nothing here has to
+    know which rows can cause a repeat.
+    """
+    from combat_engine.engine.dsl import running_below
+
+    seen: object = c
+    while True:
+        below = running_below(seen)
+        if below is None or below is seen:
+            return False
+        if below.ref == c.ref:
+            return True
+        seen = below
+
+
 @power(
     "p9501",
     level=0,
@@ -82,13 +105,18 @@ def p9500(c: Cast) -> None:
     on=Trigger(Miss, both(by_me, by_ranged), "you miss with a ranged attack"),
 )
 def p9501(c: Cast) -> None:
-    """The shot is fired from the caster: `c.basic` has no `from_`, so
+    """The shot is fired from the caster: nothing here takes a `from_`, so
     "using that creature's space as the origin square" is dropped and only
     the range it measures -- 5 squares from the creature missed -- is kept.
-    Regaining the power on an action point is not modelled."""
+    Regaining the power on an action point is not modelled.
+
+    The swing goes through `c.grant_attack` rather than `c.basic` for the
+    one thing `c.basic` cannot pass: whether the guard against a row
+    reaching itself applies. It does, every time but the repeat above.
+    """
     missed = getattr(c.trigger, "target", None)
     if missed is None:
         return
     foes = [f for f in c.within(5, of=missed, side="enemy") if c.can_see(f)]
     if foes:
-        c.basic(on=foes[0], ranged=True)
+        c.grant_attack(c.me, on=foes[0], ref=RANGED, reentrant=_repeating(c))

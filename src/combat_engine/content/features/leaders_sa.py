@@ -5,11 +5,9 @@ here -- the Charisma one and the Intelligence one -- exactly as
 `features/strikers.py` lands two of the rogue's four tactics. The other
 four have no leg to ask about.
 
-**Two judgement calls, both numbers.** The healing leg pays the warlord's
-Charisma modifier plus half its level, and the attack leg pays half its
-Intelligence modifier, rounded down but never less than one. Neither
-number has a card -- a class feature has no compendium row -- and both are
-written here rather than guessed at somewhere less visible.
+**Both numbers are the card's.** The healing leg pays one-half the
+warlord's level plus its Charisma modifier; the attack leg pays half its
+Intelligence modifier. Neither is rounded up and neither has a floor.
 """
 
 from __future__ import annotations
@@ -41,10 +39,24 @@ def warlord_presence(c: Cast) -> None:
     """Whichever leg was taken, it fires on an ally's action point.
 
     Both numbers are the card's, not invented: the inspiring leg heals
-    Charisma modifier **plus one-half your level**, and the tactical leg
+    one-half your level + your Charisma modifier, and the tactical leg
     gives half the Intelligence modifier with no minimum. An earlier
     draft floored the second at 1, which is a warlord being paid for a
     stat it dumped.
+
+    **The tactical leg's printed trigger is narrower than what is armed
+    here.** It reads "spends an action point *to make an attack*", and
+    `ActionPointSpent` carries the action type gained and nothing about
+    what is done with it, so the attack half cannot be asked. The bonus is
+    spent by the first attack roll either way, which is where the two
+    readings come back together; a turn that spends a point and then does
+    not swing keeps a bonus it should not have until the end of it.
+
+    **Both legs print "from only one of them" for a party with two of
+    these warlords in it, and neither says it here.** Nothing coordinates
+    two traits armed on two different creatures, and a shared bonus kind
+    would only cover the attack leg -- the heal has no kind to share. A
+    second warlord therefore pays twice.
 
     A trait, so `Encounter._arm_traits` turns it on once. The watcher is
     kept for the whole fight rather than renewed, because the printed line
@@ -63,8 +75,11 @@ def warlord_presence(c: Cast) -> None:
             # ...)` that was here is not on the card: a warlord with an
             # Intelligence of 11 gives nothing, which is the printed
             # consequence of dumping the stat the leg keys off.
+            #
+            # Untyped: the card names no bonus type. It was `power`, which
+            # is the type the *initiative* leader feature prints, not this.
             c.bonus(
-                "attack", c.int_mod // 2, kind="power",
+                "attack", c.int_mod // 2, kind="untyped",
                 on=who, until=When.EOT, once=True,
             )
 

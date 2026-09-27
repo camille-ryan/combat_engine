@@ -913,6 +913,19 @@ def usable(
     no_action = p.action is ActionType.NONE and bool(p.triggers)
     if not dying and not no_action and not can_act(world, actor):
         return False, "cannot act"
+    # **The stance you are already in.** A stance ends whatever you were
+    # in and starts itself, so re-taking the same one is a no-op that
+    # costs a minor -- and nothing refused it, because the policy has no
+    # notion of a stance at all. Given a fighter who could reach one, it
+    # thrashed: eighty-three swaps in a single fight and one row used
+    # eighty-four times, which turned a twelve-round win into a
+    # thirty-round stalemate. The bug predates the two-handed weapon that
+    # exposed it; no fighter the tree dealt could take those rows before.
+    if Keyword.STANCE in p.keywords:
+        standing = world.effects.stance_of(actor)
+        if standing is not None and standing.label == p.ref:
+            return False, "already in this stance"
+
     powers = world.get(actor, Powers)
     if powers is not None:
         if p.ref not in powers.all:

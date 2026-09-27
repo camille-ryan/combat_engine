@@ -26,6 +26,7 @@ from combat_engine.engine import (
     ActionType,
     Build,
     Cast,
+    Gear,
     Keyword,
     When,
     World,
@@ -44,8 +45,14 @@ def on_leg(name: str):  # noqa: ANN201
     return check
 
 
+#: The two weapon groups the fourth rogue tactic trains in. Lives here
+#: rather than beside the row that reads it in `features/strikers.py`,
+#: because that file imports this one and not the other way round.
+RUFFIAN_GROUPS = ("club", "mace")
+
+
 def _rattling_row(ctx: dict[str, Any]) -> bool:
-    """"Attacks with the rattling keyword", as a modifier gate."""
+    """"An attack that has the rattling keyword", as a modifier gate."""
     declared = get(ctx.get("power") or "")
     return declared is not None and Keyword.RATTLING in declared.keywords
 
@@ -59,7 +66,7 @@ def _rattling_row(ctx: dict[str, Any]) -> bool:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    requires=on_leg("ruffian"),
+    requires=on_leg("cutthroat"),
     requires_text="needs the tactic trained in the heavier groups",
 )
 def rogue_tactic_club(c: Cast) -> None:
@@ -72,18 +79,25 @@ def rogue_tactic_club(c: Cast) -> None:
     wants is in that row's `requires` gate, which is the one place the
     question is asked.
 
-    What is left is the rider, and it is a damage rider: an attack modifier
-    keyed off Strength on a Dexterity class would be a reading the rest of
-    the page does not support. Untyped, because a class feature is.
+    What is left is the rider. It is a damage rider -- "add your Strength
+    modifier to the damage roll" -- and it is conditional on *delivering*
+    the attack with one of the two groups, not merely on having the
+    tactic: the printed line says "if you use a club or a mace to deliver
+    an attack that has the rattling keyword". The keyword alone was the
+    whole gate, which paid the rider off a light blade.
     """
+    me, world = c.me, c.world
+
+    def rider(ctx: dict[str, Any]) -> bool:
+        if not _rattling_row(ctx):
+            return False
+        gear = world.get(me, Gear)
+        held = gear.main if gear is not None else None
+        return held is not None and held.group in RUFFIAN_GROUPS
+
     if c.str_mod > 0:
         c.bonus(
-            "damage",
-            c.str_mod,
-            until=When.ENCOUNTER,
-            on=c.me,
-            kind="untyped",
-            when=_rattling_row,
+            "damage", c.str_mod, until=When.ENCOUNTER, on=me, kind="untyped", when=rider
         )
 
 
@@ -120,4 +134,7 @@ def warlord_shield(c: Cast) -> None:
     if c.build("shielding"):
         c.grant_row(_RALLY)
     else:
-        c.forbid(_RALLY, until=When.ENCOUNTER)
+        # `c.forbid` follows `c.target`, and a trait has none -- without
+        # `on=` this took the row away from nobody, so every warlord kept
+        # it whichever leg it was on and the exclusivity was never real.
+        c.forbid(_RALLY, until=When.ENCOUNTER, on=c.me)

@@ -170,6 +170,13 @@ def cleric_surge(c: Cast) -> None:
     A heal with no surge before it -- the second half of the cleric's own
     twice-a-round word, which adds dice on top -- is left alone, which is
     the printed rule and not an oversight.
+
+    **"By using a cleric power that has the healing keyword" is not asked.**
+    `Healed` carries a source, a target and an amount and no power, so the
+    only question available is whether this cleric sourced the heal. That
+    is wider than the card by whatever a cleric restores hit points with
+    that is not one of its own healing rows, which on the present tree is
+    nothing.
     """
     me, extra = c.me, c.wis_mod
     owed: set[int] = set()
@@ -222,17 +229,33 @@ def cleric_rituals(c: Cast) -> None:
     reach=CloseBurst(10),
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    out_of_combat=True,
 )
 def warlord_senses(c: Cast) -> None:
     """A +2 to two skills, for the warlord and anybody who can see and hear it.
 
-    The engine has no skill checks at all, so the whole printed Effect is
-    outside a fight -- `out_of_combat=True` rather than an invented mechanic,
-    which is what the flag is for.
+    The card names Insight and Perception, and `engine/skills.py` reads both
+    off the `skill:<name>` modifier key -- the rogue's own hiding row asks
+    `c.passive("perception")` of every enemy -- so the printed Effect does
+    have somewhere to land. It was declared `out_of_combat` on the grounds
+    that the engine had no skill checks, which stopped being true.
+
+    Untyped: the card names no bonus type.
+
+    **A snapshot, not an aura.** The ten squares are measured once, when
+    `Encounter._arm_traits` runs this, exactly as the initiative leader
+    feature measures its own; an ally that walks into range mid-fight does
+    not pick the bonus up. A zone would follow the warlord, but nothing
+    hangs modifiers on a zone's occupants, so the alternative is not a
+    better reading, only a differently wrong one.
+
+    Hearing is not modelled, so the printed "see and hear" is read as sight.
 
     It is printed as one of three mutually exclusive leader features and
-    `chargen.BUILDS["warlord"]` forks on an ability score rather than on
-    this, so there is no leg to gate it on; the other two are in
-    `docs/blocked.json`.
+    `chargen.BUILDS["warlord"]` has a leg for only one of the three, so
+    there is nothing to gate this on; see `cf:warlord-shield`.
     """
+    for who in c.within(10, side="ally"):
+        if who != c.me and not c.can_see(who):
+            continue
+        c.bonus("skill:insight", 2, until=When.ENCOUNTER, on=who, kind="untyped")
+        c.bonus("skill:perception", 2, until=When.ENCOUNTER, on=who, kind="untyped")

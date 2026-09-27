@@ -1,19 +1,39 @@
 {
   "cf:fighter-opening-stop": {
-    "wants": "nothing -- there is no printed text for this ref",
-    "why": "spec.py returns no such row; the note's c.halt(on=) does describe a real gap (movement.walk asks can_move once, before the first step) but the card cannot be guessed"
+    "wants": "c.halt(on=), plus movement.walk asking whether the mover may still move between steps rather than only before the first one",
+    "why": "the card is imported now and its second sentence is a real clause -- an enemy hit by the opportunity attack stops moving, if a move provoked it -- but the window opens inside walk's loop and step never re-asks can_move, so immobilising the mover there leaves it walking the rest of its path"
   },
   "cf:fighter-talent-rest": {
-    "wants": "Gear to record a free/empty off hand, and proficiency as a thing a feature can grant",
-    "why": "the four remaining talents have no spec of any kind and three of the four turn on exactly those two unmodelled facts, so writing them would be guessing the card"
+    "wants": "a hand key in the attack context (the p7399 gap), Gear recording a free/empty off hand, an armour field on chargen.Build, and improvised weapons",
+    "why": "three of the six talents are left: one turns on wielding an off-hand weapon, one on an empty off hand, and one on improvised weapons and on not wearing heavy armour -- the chassis wears scale and Build cannot say otherwise, so each would be a gate that is false for every fighter in the tree"
   },
-  "cf:ranger-style": {
-    "wants": "legs in chargen.BUILDS[\"ranger\"] for the three styles that carry mechanics -- NOT a feat model; the two feat-only styles are already the two existing legs",
-    "why": "no spec text exists for the three, and one of them is the companion, blocked twice over (see p10594)"
+  "cf:ranger-style-beast": {
+    "wants": "the beast companion (the p10594 gap), and then a leg in chargen.BUILDS[\"ranger\"] for it",
+    "why": "the other four styles are written or are a bonus feat; this one is a second creature on the board that also rewrites the class's extra damage, and a leg with no creature behind it would deal a ranger missing its feature"
+  },
+  "cf:rogue-melee-talent-die": {
+    "wants": "a thrown light blade in chargen, plus c.step_die() -- a modifier that moves a weapon's damage die one size",
+    "why": "the card's first sentence raises the die of a weapon no chassis carries, and nothing in the modifier language steps a die at all, so both halves of the clause are missing rather than one"
+  },
+  "cf:wizard-implement-rest": {
+    "wants": "legs in chargen.BUILDS[\"wizard\"] for the three masteries with none, plus c.store_row(ref) for the one that banks an unprepared encounter power and a summon-time damage hook for the one that pays its summoned creatures",
+    "why": "the page's build sections name a class feature for two builds the tree has no leg for, and a third mastery no build names at all. Each of the three is a real clause -- bank a power, pay a summoning, repeat a missed illusion against a second target -- and none of the three has anything for c.build to answer, so adding a leg first would deal a wizard whose mastery does nothing. The docstring on cf:wizard-implement claimed this file already said so; it did not"
+  },
+  "cf:sorcerer-soul-pierce": {
+    "wants": "c.ignore_resistance(dtype, up_to=), read by resolve.damage before Defences.resist is subtracted",
+    "why": "both written halves of the sorcerer's source end with the same clause -- the caster's arcane powers ignore a target's resistance to the sworn type up to the value of the caster's own -- and resistance is subtracted from a flat number on the target with nothing on the attacker's side consulted, so the clause has nowhere to be read"
+  },
+  "cf:sorcerer-soul-nat20": {
+    "wants": "an event announcing a power use's finished effects (the p10354 gap), carrying the natural roll",
+    "why": "each source ends with a rider on a natural 20 -- and one of them a second on a natural 1 -- that lands after the attack's other effects. AttackRolled is the only event carrying the natural and it fires before the damage, so a slide-and-prone hung there would resolve in the wrong order, and Hit carries no natural at all"
+  },
+  "cf:sorcerer-soul-rest": {
+    "wants": "legs in chargen.BUILDS[\"sorcerer\"] for the two sources that have none, plus a short rest for the phase one of them cycles on",
+    "why": "the page prints four sources and two are written; of the other two, one is a three-phase cycle clocked on a rest the engine does not have, and the other is two resistances at once with an immediate interrupt that trades them for a defence bonus. A leg for either with no feature behind it would deal a sorcerer with no class feature at all"
   },
   "cf:warlord-archer": {
-    "wants": "nothing -- there is no printed text for this ref",
-    "why": "spec.py returns no such row"
+    "wants": "c.attacks_with(ability=)",
+    "why": "spec.py can read the class page now and the card is three clauses: it drops two proficiencies, adds one, and lets a ranged basic attack with a bow roll Strength for the attack and the damage. basic.RANGED fixes its ability in the header and nothing can rewrite it for one creature; a bow on a warlord leg in chargen.BUILDS is wanted too, because no leg carries one and there would be nothing to shoot with"
   },
   "p10354": {
     "wants": "an event announcing a power use's finished set of attack rolls, plus c.reroll_attack(all=True) over it",
@@ -23,17 +43,9 @@
     "wants": "a thrown weapon or a sling in chargen, before c.range_bonus(mult=) is worth adding",
     "why": "every weapon in the table is a mace, bow or crossbow, so a thrown-or-sling gate would be false for every character in the tree"
   },
-  "p11215": {
-    "wants": "a compendium ref for the monk class feature its Trigger and Effect both name, plus c.use_row(ref)",
-    "why": "no monk class feature is declared anywhere, so both halves would name a ref that does not exist; the trigger is writable the moment the ref is"
-  },
   "p11603": {
     "wants": "a compendium ref for the second printed stanza",
     "why": "spec.py folds both stanzas into one entry and the compendium carries no separate id, so c.grant_row has nothing to name"
-  },
-  "p12792": {
-    "wants": "a compendium ref for the seeker class feature, plus c.use_row(ref)",
-    "why": "no seeker class feature content is declared; c.restore_use already covers the regain half"
   },
   "p13887": {
     "wants": "c.link plus link-aware query.distance_between / query.adjacent and a teleport-flavoured step",
@@ -46,10 +58,6 @@
   "p14510": {
     "wants": "a compendium ref for the other druid power its Requirement and Effect both name",
     "why": "no id in the spec and it cannot be identified from this card's mechanics; c.restore_use and c.recast both exist now"
-  },
-  "p3369": {
-    "wants": "the swordmage warding class feature to exist at all, before c.feature_bonus(what) has a number to mirror",
-    "why": "no warding anywhere in the engine, chargen or the swordmage tree, so the row would copy a bonus that is never laid"
   },
   "p3839": {
     "wants": "a plural companion API: dsl.measured_from and dsl.roller each return one eid and must let the shaman pick which spirit an attack is measured and rolled from; c.call_companion must stop relocating when a second is allowed",

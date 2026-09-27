@@ -41,7 +41,10 @@ from combat_engine.engine.events import (
     ForcedMove,
     Hit,
     Miss,
+    PowerUsed,
 )
+
+from .level_0 import FLURRIES
 
 STANCE_KW = [Keyword.STANCE]
 
@@ -259,3 +262,67 @@ def p7458(c: Cast) -> None:
             )
 
     c.watch(DamageApplied, emptied, until=When.EONT, once=True)
+
+
+def _used_a_flurry(world: object, me: int, ev: object) -> bool:
+    """"You use your <class feature> power" -- whichever of the five it is.
+
+    `PowerUsed` names the row, so the question is membership in the set the
+    class page prints; the monk knows exactly one of them.
+    """
+    return getattr(ev, "actor", None) == me and getattr(ev, "power", "") in FLURRIES
+
+
+@power(
+    "p11215",
+    level=2,
+    cls="monk",
+    usage=DAILY,
+    action=FREE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.PSIONIC],
+    trigger="you use your class feature's attack and its trigger resolves",
+    on=Trigger(
+        PowerUsed,
+        _used_a_flurry,
+        "you use your class feature's attack and its trigger resolves",
+    ),
+)
+def p11215(c: Cast) -> None:
+    """Step away and do it again.
+
+    Refused for a long while for naming a class feature nothing had
+    declared. Five rows are that feature -- one per printed option -- and
+    the row does not choose between them: `PowerUsed` says which one the
+    monk just used, which is by definition the one it knows.
+
+    `reentrant=True` is the second use. Without it the once-a-round rider
+    every one of the five carries would refuse the repeat, which is the one
+    thing this row exists to cause.
+
+    **The repeat resolves before the first use's own effects.** `dsl.use`
+    announces a use before running its body, and that announcement is the
+    only event this can trigger on -- nothing says "a power has finished".
+    Both payloads land and the shift happens between them; the printed
+    order is first-then-repeat and here it is repeat-then-first. Written
+    down rather than left to be found, and it is why the triggering hit is
+    fetched off the log: the five read `c.trigger.target` to tell a fresh
+    victim from the one the attack already caught, and handing them this
+    row's own trigger would have told all five that every victim was fresh.
+    """
+    from combat_engine.engine.dsl import use
+
+    ref = getattr(c.trigger, "power", "")
+    if ref not in FLURRIES:
+        return
+    c.shift(max(1, c.speed_of() // 2))
+    struck = next(
+        (
+            ev
+            for ev in reversed(c.world.bus.log)
+            if isinstance(ev, Hit) and ev.attacker == c.me
+        ),
+        None,
+    )
+    use(c.world, c.me, ref, trigger=struck, reentrant=True)

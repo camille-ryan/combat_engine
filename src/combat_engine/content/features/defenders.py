@@ -15,19 +15,15 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
-    AC,
     AT_WILL,
     ENCOUNTER,
     MINOR,
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
-    OPPORTUNITY,
     PERSONAL,
     SELF,
-    STR,
     ActionType,
-    Attack,
     Cast,
     CloseBurst,
     DamageType,
@@ -35,22 +31,20 @@ from combat_engine.engine import (
     Health,
     Keyword,
     Melee,
-    OpportunityWindow,
     Relation,
-    Trigger,
     When,
-    World,
-    distance,
     leaves_me_out,
     power,
 )
 from combat_engine.engine.basic import MELEE
 from combat_engine.engine.dsl import get, use
-from combat_engine.engine.events import AttackDeclared, AttackRolled, Moved
+from combat_engine.engine.events import AttackDeclared, AttackRolled, Hit, Moved
 from combat_engine.engine.query import alive, enemies
-from combat_engine.engine.query import squares as squares_of
 
 from . import CHANNEL_DIVINITY
+
+#: "A melee or a close attack", as the reach kinds the header can carry.
+_MELEE_OR_CLOSE = ("melee", "close_burst", "close_blast")
 
 
 @power(
@@ -160,11 +154,17 @@ def fighter_opening(c: Cast) -> None:
     printed line names no bonus type and a typed one would refuse to stack
     with the weapon's.
 
-    The second sentence -- an enemy hit this way stops moving -- is **not
-    here**; see `docs/blocked.json`. `movement.walk` never asks again whether
-    the creature may still move once the walk has begun, so immobilising it
-    inside the opportunity window leaves it walking the rest of its path.
+    The second sentence -- an enemy hit this way stops moving, if a move
+    provoked the attack -- is **not here**; see `docs/blocked.json`.
+    `movement.walk` asks `can_move` once, before the first step, and `step`
+    never asks again, so immobilising the mover inside the opportunity
+    window leaves it walking the rest of its path.
+
+    One leg takes `cf:fighter-chase` in place of this, and the printed
+    sentence there says so outright.
     """
+    if c.build("brawling"):
+        return
     c.bonus(
         "attack",
         c.wis_mod,
@@ -175,69 +175,41 @@ def fighter_opening(c: Cast) -> None:
     )
 
 
-_AN_OPENING = "an enemy takes an action that gives you an opening"
-
-
-def _my_opening(world: World, me: int, ev: OpportunityWindow) -> bool:
-    """The window is only ever opened for somebody who threatens the provoker.
-
-    `movement.step`, `Cast.provoke` and the ranged-in-melee check all name
-    the responder as `actor`, so "an enemy adjacent to you" is already
-    decided by the time this is asked -- the engine does not open a window
-    for anyone out of reach.
-    """
-    return ev.actor == me and alive(world, ev.provoker)
+#: The row this feature hands over. It is a real level 0 fighter row, so
+#: every fighter `chargen` deals already knows it.
+_AGILITY = "p10469"
 
 
 @power(
     "cf:fighter-chase",
     level=0,
     cls="fighter",
-    usage=AT_WILL,
-    action=OPPORTUNITY,
-    reach=Melee(1),
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
     target=NO_TARGET,
-    keywords=[Keyword.MARTIAL, Keyword.WEAPON],
-    attack=Attack(STR, vs=AC),
-    trigger=_AN_OPENING,
-    on=Trigger(OpportunityWindow, _my_opening, _AN_OPENING),
+    keywords=[Keyword.MARTIAL],
 )
 def fighter_chase(c: Cast) -> None:
-    """Chase the opening down before swinging at it.
+    """The opening one leg takes in place of `cf:fighter-opening`.
 
-    The window names the provoker; the dispatcher would aim a targeted row at
-    `actor`, which is the fighter itself, so the victim is read off the
-    trigger and the header takes no target.
+    The printed feature is a single sentence: it replaces the bonus feature
+    and hands over `p10469`. This row was written as a second copy of that
+    row's body instead -- the shift, the swing and the knockdown, all of it
+    -- so a fighter had the same opportunity attack twice under two refs,
+    and had it whichever leg it was on.
 
-    "You must end the shift closer to the target" is a filter on the
-    destination rather than a distance to cover, so the squares are picked
-    here and named outright -- handed to the mover the fighter would happily
-    shift the wrong way.
-
-    **This and `cf:fighter-opening` replace each other**, and both are
-    declared because the class page lists both. Nothing enforces the choice:
-    neither leg of `chargen.BUILDS["fighter"]` is this fork, so a dealt
-    fighter carries both and is a little stronger at an opening than any
-    printed one. A leg for it would settle it.
+    `chargen.loadout` deals a class every level 0 row it has, so the grant
+    is a no-op for the leg that took this and the exclusivity is the half
+    that has to happen: every other leg loses the row. Same shape as
+    `cf:warlord-shield`, and for the same reason.
     """
-    foe = getattr(c.trigger, "provoker", None)
-    if foe is None:
-        return
-    steps = max(0, c.dex_mod)
-    anchor = min(squares_of(c.world, foe))
-    was = min(distance(sq, anchor) for sq in squares_of(c.world, c.me))
-    if steps:
-        options = sorted(
-            sq
-            for sq in c.world.reachable_squares(c.me, steps)
-            if distance(sq, anchor) < was
-        )
-        where = c.choose(options, "cf:fighter-chase: where to end up") if options else None
-        if where is not None:
-            c.shift(steps, to=where)
-    if c.strike(on=foe):
-        c.damage(c.w(), c.str_mod, on=foe)
-        c.prone(on=foe)
+    if c.build("brawling"):
+        c.grant_row(_AGILITY)
+    else:
+        # `c.forbid` follows `c.target`, and a trait has none -- without
+        # `on=` it takes the row away from nobody and reads as working.
+        c.forbid(_AGILITY, until=When.ENCOUNTER, on=c.me)
 
 
 @power(
@@ -251,35 +223,54 @@ def fighter_chase(c: Cast) -> None:
     keywords=[Keyword.MARTIAL],
 )
 def fighter_grip(c: Cast) -> None:
-    """The fork in how the fighter holds its weapon, worth +1 to hit with it.
+    """Which of the six printed talents this fighter took.
 
-    Six talents are printed and `chargen.BUILDS["fighter"]` carries two legs,
-    so only the two that *are* the legs are written: the one-handed talent and
-    the two-handed one. The other four fork on things no `Build` records --
-    an open off hand, temporary hit points, a second weapon -- and are in
-    `docs/blocked.json` rather than folded into a leg that does not mean them.
+    Every leg of `chargen.BUILDS["fighter"]` is one of them now, so the row
+    asks the leg rather than assuming that a fighter which is not a
+    great-weapon fighter fights one-handed -- four of the six do not.
 
-    Both halves check what is actually in hand, which is the printed
-    Requirement and not a restatement of the build: a great-weapon fighter
-    who has swapped to one hand is not getting this.
+    Three are written. The two weapon talents check what is actually in
+    hand, which is the printed Requirement and not a restatement of the
+    build: a great-weapon fighter who has swapped to one hand is not
+    getting this. The third is the temporary hit points a hit buys.
 
-    **The two-handed half is presently unreachable.** Neither fighter leg in
-    `chargen.BUILDS` names a weapon, so both fall back to the class line's
-    one-hander and `held.two_handed` is never true. The gate is the printed
-    one and is left alone; the leg is what wants fixing.
+    The other three are in `docs/blocked.json`: they turn on an empty off
+    hand, on improvised weapons, and on wearing something lighter than
+    the chassis wears, and `Build` records none of the three.
     """
     me, world = c.me, c.world
-    two_handed = c.build("great-weapon")
 
-    def gate(ctx: dict[str, Any]) -> bool:
+    def with_a_weapon(ctx: dict[str, Any]) -> bool:
         declared = get(str(ctx.get("power", "")))
-        if declared is None or Keyword.WEAPON not in declared.keywords:
-            return False
-        gear = world.get(me, Gear)
-        held = gear.main if gear is not None else None
-        return held is not None and held.two_handed == two_handed
+        return declared is not None and Keyword.WEAPON in declared.keywords
 
-    c.bonus("attack", 1, until=When.ENCOUNTER, on=me, kind="untyped", when=gate)
+    if c.build("great-weapon") or c.build("guardian"):
+        two_handed = c.build("great-weapon")
+
+        def grip(ctx: dict[str, Any]) -> bool:
+            gear = world.get(me, Gear)
+            held = gear.main if gear is not None else None
+            return (
+                with_a_weapon(ctx) and held is not None and held.two_handed == two_handed
+            )
+
+        c.bonus("attack", 1, until=When.ENCOUNTER, on=me, kind="untyped", when=grip)
+        return
+
+    if c.build("battlerager"):
+        # "Plus any temporary hit points normally granted by the power" is
+        # the power's own line and lands on its own; this is the rest of
+        # the sentence. The damage half of the same talent is not written:
+        # it wants light armour or chainmail and the chassis wears scale,
+        # so a gate on it would be false for every fighter in the tree.
+        def on_hit(ev: Hit) -> None:
+            if ev.attacker != me:
+                return
+            dealt = get(ev.power)
+            if dealt is not None and dealt.reach.kind in _MELEE_OR_CLOSE:
+                c.temp_hp(c.con_mod, on=me)
+
+        c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label="cf:fighter-grip")
 
 
 @power(

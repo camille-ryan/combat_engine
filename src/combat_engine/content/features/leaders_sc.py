@@ -15,9 +15,15 @@ word matters only where two bonuses meet, and initiative has no second one
 anywhere in the tree.
 
 Hearing is not modelled, so the printed "see and hear" is read as sight.
+
+**Two other features print "this replaces" against this one**, and
 `chargen.loadout` hands a class every level-0 row it has, so a warlord here
-carries this and `cf:warlord-senses` both; the other is `out_of_combat`, so
-the two never contradict each other in a fight.
+carries all three. Only one of the three has a leg in
+`chargen.BUILDS["warlord"]` -- the shield -- so that is the one case where
+the exclusivity can be said, and it is said here rather than there: a row
+cannot switch another row off, but it can decline to fire.
+`cf:warlord-senses` has no leg and so still overlaps, which is named in its
+own docstring.
 """
 
 from __future__ import annotations
@@ -44,6 +50,8 @@ from combat_engine.engine import (
     keywords=[Keyword.MARTIAL],
 )
 def warlord_initiative(c: Cast) -> None:
+    if c.build("shielding"):
+        return
     c.initiative(2, on=c.me)
     for ally in c.within(10, side="ally"):
         if ally != c.me and c.can_see(ally):
