@@ -296,6 +296,9 @@ def build() -> Report:
     item.races(source, out, report, names)
     item.items(source, out, report, names)
     feat.feats(source, out, report, names)
+    # After both, because a feat's Special line names items and
+    # a set's benefit names feats. Neither index exists earlier.
+    report.crossed += _cross_reference_rest(out, names)
 
     out.execute(
         "INSERT INTO meta (key, value) VALUES (?, ?)",
@@ -737,6 +740,71 @@ def _cross_reference(out: sqlite3.Connection, names: dict[str, dict[str, str]]) 
         if fixed != spec:
             out.execute("UPDATE power SET spec=? WHERE ref=?", (fixed, ref))
             changed += 1
+    return changed
+
+
+def _cross_reference_rest(
+    out: sqlite3.Connection, names: dict[str, dict[str, str]]
+) -> int:
+    """The same swap for items and feats, which name each other constantly.
+
+    `_cross_reference` above is scoped to one class, because a power
+    naming a power from another class is vanishingly rare. Items and
+    feats are the opposite: a feat's Special line is *usually* about
+    another feat, an item set names its members, and an Associated
+    Powers list is nothing but other people's names. Scoped narrowly,
+    almost nothing would be caught.
+
+    So the scope is everything, and the safety comes from the other side:
+    a name is only swapped if it **identifies** -- two words or more, and
+    at least one of them a word the corpus does not treat as ordinary
+    English. That is the same test `scripts/leaks.py` applies, which is
+    what keeps the two halves of this arrangement from drifting apart.
+
+    Indexed by first word rather than tried one at a time. There are
+    twenty-six thousand names and six thousand specs, and the honest
+    version of this loop is a hundred and fifty million substitutions.
+
+    **The test is `sanitise.identifies`, which is the one `leaks.py`
+    reports with.** It used to be a stricter home-made version -- two
+    words and one of them uncommon -- and being stricter is exactly the
+    wrong direction: it skipped the names the checker then found, so 124
+    specs shipped a neighbour's printed name while both halves believed
+    they agreed.
+    """
+    from .sanitise import identifies, scrub, vocabulary
+
+    rules = vocabulary()
+    by_word: dict[str, list[tuple[str, str]]] = {}
+    for ref, entry in names.items():
+        name = (entry.get("name") or "").strip()
+        low = name.lower()
+        if len(low) < 3 or not identifies(low, [ref], rules):
+            continue
+        words = re.findall(r"[A-Za-z']+", low)
+        if words:
+            by_word.setdefault(words[0], []).append((name, ref))
+
+    changed = 0
+    for table in ("power", "monster_power", "class_feature",
+                  "companion", "item", "item_block", "feat", "race"):
+        rows = out.execute(f"SELECT ref, spec FROM {table}").fetchall()
+        for ref, spec in rows:
+            if not spec:
+                continue
+            here = set(re.findall(r"[a-z']+", spec.lower()))
+            others = {
+                name: other
+                for word in here & by_word.keys()
+                for name, other in by_word[word]
+                if other != ref and not other.startswith(ref)
+            }
+            if not others:
+                continue
+            fixed = scrub(spec, others)
+            if fixed != spec:
+                out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
+                changed += 1
     return changed
 
 

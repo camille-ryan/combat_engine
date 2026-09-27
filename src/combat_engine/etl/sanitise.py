@@ -19,8 +19,10 @@ through it, and it does two jobs:
 
 from __future__ import annotations
 
+import contextlib
 import re
 from functools import lru_cache
+from pathlib import Path
 
 from .html import labelled, paragraphs, text
 
@@ -358,3 +360,151 @@ def power_spec(document: str, ref: str, name: str) -> str:
         if line.strip() and not re.match(r"^\s*Update", line, re.I)
     ]
     return scrub("\n".join(kept), {name: ref})
+
+
+# --------------------------------------------------------------------------
+# Is a phrase a *name*, or is it just words?
+#
+# This lives here rather than in `scripts/leaks.py`, where it was written,
+# because two things need the same answer and they must not drift: the
+# checker that reports a leak, and the ETL scrubber that prevents one. They
+# disagreed exactly once, and the disagreement was silent -- the scrubber's
+# test was the stricter, so it skipped the names the checker then reported,
+# and 124 specs went to authors with somebody else's printed name in them.
+# --------------------------------------------------------------------------
+
+#: A one-word name shared by more than this many rows is vocabulary rather
+#: than an identifier, and is not worth reporting.
+COMMON_ENOUGH = 3
+
+#: And a very short word is a coincidence waiting to happen either way.
+SHORTEST = 6
+
+#: Function words. A multi-word match made only of these is a coincidence in
+#: ordinary prose -- there is a power called `Not It`. Closed set, unlike a
+#: list of game names, so it does not need feeding.
+STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "but", "by", "can", "do", "for",
+    "from", "has", "have", "if", "in", "into", "is", "it", "its", "no", "not",
+    "of", "off", "on", "one", "or", "out", "so", "that", "the", "their",
+    "them", "then", "there", "they", "this", "to", "up", "was", "were", "what",
+    "when", "which", "who", "will", "with", "you", "your",
+}
+
+#: Ordinary English that happens to be somebody's printed name.
+#:
+#: The single-word test asks a dictionary -- an invented name is in no
+#: dictionary -- and the multi-word test does not, so any name built from
+#: common words collides with prose that merely contains those words in that
+#: order. Making the multi-word test smarter would suppress real names, since
+#: plenty of them are ordinary words too. An explicit list with a reason each
+#: is the honest version: it says out loud what is being waived.
+#: Emptied once the phrase rule above learned to ask whether any word in a
+#: phrase is actually a word. Both entries that lived here -- "from the
+#: shadows" and "meat shield" -- are now suppressed on their merits.
+ALLOWED: set[str] = set()
+
+
+#: The system word list, where there is one. `builder`, `dispatch` and
+#: `stable` are all published ability names and all ordinary English, and no
+#: amount of counting tells those apart from an invented name -- a
+#: dictionary does it in one lookup. Absent on some machines, hence the fallbacks.
+DICTIONARY = Path("/usr/share/dict/words")
+
+
+def vocabulary() -> set[str]:
+    """Words this script will not call a name.
+
+    Four sources, none of them a list anybody has to keep current:
+
+    * the system dictionary, so ordinary English is ordinary English;
+    * the engine's own enumerations, so a condition added to `types.py` is
+      allowed the moment it exists;
+    * the core rules terms above, which a rules engine has to be able to say;
+    * every word appearing on at least a handful of compendium pages, which
+      covers the game's own vocabulary -- `bloodied` and the like -- that no
+      dictionary has.
+
+    Each is a strict addition, so a machine without the dictionary gets a
+    noisier report rather than a wrong one.
+    """
+    from enum import EnumMeta
+
+    from combat_engine.engine import types
+
+    out = set(RULES_TERMS)
+    if DICTIONARY.exists():
+        out.update(
+            w.strip().lower()
+            for w in DICTIONARY.read_text(errors="ignore").splitlines()
+            if w.strip()
+        )
+    # An older game.db has no such table.
+    with contextlib.suppress(Exception):
+        from .build import game
+
+        out.update(r["word"] for r in game().execute("SELECT word FROM common_word"))
+    for name in dir(types):
+        member = getattr(types, name)
+        if isinstance(member, EnumMeta):
+            for item in member:
+                if isinstance(item.value, str):
+                    out.add(item.value.lower().replace("_", " "))
+                out.add(item.name.lower().replace("_", " "))
+    return out
+
+def identifies(name: str, refs: list[str], rules: set[str]) -> bool:
+    """Does this name point at a particular row, or is it just words?
+
+    The two cases need opposite treatment, which an earlier version of this
+    got wrong in the worst way -- it asked whether every word was ordinary
+    English, and so waved two-word monster names straight through.
+
+    **A phrase is a name.** Both halves of a two-word monster name are often
+    ordinary English, and the pair of them is still a monster. So a multi-word match is reported
+    unless the whole phrase is a rules term, or unless it is made entirely of
+    function words -- there is a published power called `Not It`, and that is
+    what the stop list is for.
+
+    **A lone word is a name only if it is not a word.** `builder` and
+    `stable` are published abilities and also plain English; an invented
+    name is in no dictionary. It must also be long enough, and rare enough among
+    the names, to be worth believing.
+    """
+    if name in rules or name in ALLOWED or _stem(name) in rules:
+        return False
+    if " " in name:
+        # Function words do not count towards the length: "from the
+        # shadows" is one idea, not three, and treating it as three made it
+        # a finding on its own length.
+        words = [w for w in name.split() if w not in STOPWORDS]
+        if not words:
+            return False
+        # A phrase is a name worth reporting when **some word in it is not a
+        # word** -- an invented one -- or when it is long enough that the
+        # collision is not chance. Two ordinary words in a row is chance:
+        # "blink out", "threatening reach", "guarded area" and "poison
+        # weapon" are all published names and all things a rules sentence
+        # says by accident, and reporting them taught the reader to skim.
+        #
+        # The cost is real and worth stating: a genuine two-word name made
+        # of two ordinary words -- "writhing coils" -- is now missed. That
+        # is the trade, and the ETL scrubber is the other line of defence.
+        return len(words) >= 3 or any(
+            w not in rules and _stem(w) not in rules for w in words
+        )
+    return (
+        name not in rules and len(name) >= SHORTEST and len(refs) <= COMMON_ENOUGH
+    )
+
+
+def _stem(word: str) -> str:
+    """Crudely singular. The dictionary has "narrow", not "narrows", and
+    "hunter", not "hunter's" -- and a possessive inside an ordinary phrase
+    is what "another hunter's quarry" is."""
+    for suffix in ("'s", "s'", "es", "s"):
+        if word.endswith(suffix) and len(word) > len(suffix) + 2:
+            return word[: -len(suffix)]
+    return word
+
+
