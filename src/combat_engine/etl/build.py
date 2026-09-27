@@ -119,6 +119,8 @@ class Report:
     powers: int = 0
     classes: int = 0
     features: int = 0
+    seconds: int = 0
+    crossed: int = 0
     names: int = 0
     common: int = 0
     scores: dict[str, float] = field(default_factory=dict)
@@ -131,6 +133,8 @@ class Report:
             f"powers        {self.powers:6d}",
             f"classes       {self.classes:6d}",
             f"features      {self.features:6d}  (class features, new)",
+            f"second cards  {self.seconds:6d}  (a card printed inside another entry)",
+            f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
             f"names         {self.names:6d}  (localization/names.json, gitignored)",
             f"common words  {self.common:6d}  (what leaks.py treats as English)",
             "",
@@ -432,10 +436,7 @@ def _powers(
         f"SELECT * FROM Power WHERE Level <= ? AND Class IN ({marks}) ORDER BY ID",
         (MAX_POWER_LEVEL, *CLASSES),
     )
-    for row in rows:
-        p = power_parser.parse(dict(row), row["Txt"])
-        scores.append(p.score)
-        report.powers += 1
+    def keep(p: power_parser.Power) -> None:
         out.execute(
             "INSERT INTO power VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (
@@ -445,7 +446,55 @@ def _powers(
             ),
         )
         names[p.ref] = {"name": p.name, "flavour": p.flavour}
+
+    for row in rows:
+        p = power_parser.parse(dict(row), row["Txt"])
+        scores.append(p.score)
+        report.powers += 1
+        keep(p)
+        # A second card printed inside the same entry. The compendium files
+        # both under one id, so a row that must *name* the second -- "you
+        # regain the use of that form's attack" -- had nothing to point at,
+        # and three rows were recorded unwritable for want of an id that
+        # could simply be derived from the parent's.
+        for extra in power_parser.parse_extra(dict(row), row["Txt"]):
+            report.seconds += 1
+            keep(extra)
     report.scores["power"] = sum(scores) / max(1, len(scores))
+    report.crossed = _cross_reference(out, names)
+
+
+def _cross_reference(out: sqlite3.Connection, names: dict[str, dict[str, str]]) -> int:
+    """Swap one power's name for its ref wherever another power prints it.
+
+    Monsters have had this since they were imported (`etl/monster.py`);
+    powers never did, so a row whose whole Effect is "you regain the use
+    of <another power>" printed that name to anyone reading the spec --
+    and, worse, gave the person writing it **no ref to name**. Two rows
+    were recorded as unwritable on exactly that.
+
+    Same class and two words minimum. A cross-class reference is
+    vanishingly rare and a one-word power name is very often an ordinary
+    verb; both would trade a real leak for a lot of false ones.
+    """
+    from .sanitise import scrub
+
+    by_class: dict[str, dict[str, str]] = {}
+    for ref, cls in out.execute("SELECT ref, class FROM power"):
+        name = (names.get(ref) or {}).get("name", "")
+        if len(name.split()) > 1:
+            by_class.setdefault(cls, {})[name] = ref
+
+    changed = 0
+    for ref, cls, spec in out.execute("SELECT ref, class, spec FROM power").fetchall():
+        others = {n: r for n, r in by_class.get(cls, {}).items() if r != ref}
+        if not others:
+            continue
+        fixed = scrub(spec, others)
+        if fixed != spec:
+            out.execute("UPDATE power SET spec=? WHERE ref=?", (fixed, ref))
+            changed += 1
+    return changed
 
 
 #: A word used on the pages of at least this many rows is ordinary English.

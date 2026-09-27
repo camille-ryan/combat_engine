@@ -172,13 +172,34 @@ def scrub(
     # regex for each against every spec is twenty-four million
     # substitutions -- a two-second build became minutes. A lowercase
     # substring test rejects all but a handful first.
-    here = out.lower()
+    # **Either apostrophe.** The index holds a straight one and the printed
+    # prose a curly one, so a two-word name with an apostrophe in it never
+    # matched at all -- the name survived into what an agent is shown, and the
+    # row that wanted to *name* that power was recorded as unwritable for
+    # want of a ref it could have had. The pre-filter and the pattern both
+    # have to be flexible or the cheap test rejects it before the regex
+    # ever runs.
+    here = _straight(out.lower())
     for name in sorted(usable, key=len, reverse=True):
-        if name.lower() not in here:
+        if _straight(name.lower()) not in here:
             continue
-        out = re.sub(rf"\b{re.escape(name)}\b", usable[name], out, flags=re.I)
-        here = out.lower()
+        out = re.sub(_apostrophes(name), usable[name], out, flags=re.I)
+        here = _straight(out.lower())
     return out
+
+
+def _straight(text: str) -> str:
+    return text.replace("\u2019", "'")
+
+
+def _apostrophes(name: str) -> str:
+    """One name as a pattern that accepts either apostrophe.
+
+    One pass, not two chained replaces: the second rewrote the curly
+    quote **inside the character class the first had just inserted** and
+    produced a nested one, which matches nothing.
+    """
+    return r"\b" + re.sub(r"['\u2019]", "['\u2019]", re.escape(name)) + r"\b"
 
 
 def flavour(document: str) -> str:

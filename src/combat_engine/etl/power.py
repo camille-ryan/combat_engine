@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 from .html import detail, text
 from .sanitise import flavour as read_flavour
-from .sanitise import power_spec
+from .sanitise import power_spec, scrub
 
 
 @dataclass
@@ -34,10 +34,17 @@ class Power:
     #: For the localisation table only. Never stored in game.db.
     name: str = ""
     flavour: str = ""
+    #: Set on a **second card printed inside another power's entry**. The
+    #: compendium gives such a card no id of its own, so a row that must
+    #: *name* it -- "you regain the use of that form's attack", "the ally
+    #: can use <the second stanza>" -- had nothing to point at, and three
+    #: rows were recorded as unwritable for want of an id that could
+    #: simply be derived.
+    suffix: str = ""
 
     @property
     def ref(self) -> str:
-        return f"p{self.id}"
+        return f"p{self.id}{self.suffix}"
 
     @property
     def score(self) -> float:
@@ -78,6 +85,87 @@ def parse(row: dict, document: str) -> Power:
     _shape(p, body)
     return p
 
+
+
+#: Where one entry's cards are separated. 375 rows carry more than one.
+_CARD = re.compile(r"<h1\b", re.I)
+
+_USAGES = ("at-will", "encounter", "recharge", "daily")
+_ACTION = re.compile(
+    r"\b(standard|move|minor|free|opportunity|no)\s+action"
+    r"|\b(immediate\s+(?:reaction|interrupt))\b",
+    re.I,
+)
+
+
+def parse_extra(row: dict, document: str) -> list[Power]:
+    """The second and later cards printed inside one entry.
+
+    A power that grants another prints both on the same page, and the
+    compendium files them under one id. The text of both was already
+    imported -- what was missing was a **ref for the second**, so
+    `c.restore_use` and `c.grant_row` had nothing to name.
+
+    Suffixed `b`, `c`, ... off the parent, which keeps them sorted beside
+    it and makes the relationship readable at a glance. The parent's own
+    columns are wrong for these -- a standard-action power routinely
+    grants a free-action one -- so usage and action are read off the
+    card's own stat block instead.
+    """
+    body = detail(document)
+    cuts = [m.start() for m in _CARD.finditer(body)]
+    if len(cuts) < 2:
+        return []
+    out: list[Power] = []
+    for n, start in enumerate(cuts[1:], start=1):
+        stop = cuts[n + 1] if n + 1 < len(cuts) else len(body)
+        card = body[start:stop]
+        p = Power(
+            id=row["ID"],
+            cls=(row.get("Class") or "").strip(),
+            level=row.get("Level") or 0,
+            kind=(row.get("Kind") or "").strip(),
+            books=tuple(
+                b.strip() for b in (row.get("Source") or "").split(",") if b.strip()
+            ),
+            suffix=chr(ord("a") + n),
+        )
+        heading = re.search(r"<h1[^>]*>(.*?)</h1>", card, re.S)
+        whole = text(heading.group(1)) if heading else ""
+        # The `<span class="level">` holds "Warden Attack 1"; the name is
+        # whatever is left outside it.
+        level_span = re.search(r'<span class="level">(.*?)</span>', card, re.S)
+        p.name = whole.replace(text(level_span.group(1)), "").strip() if level_span else whole
+
+        flat = text(card).lower()
+        for usage in _USAGES:
+            if usage in flat:
+                p.usage = usage
+                break
+        act = _ACTION.search(flat)
+        if act:
+            p.action = (act.group(1) or act.group(2) or "standard").lower()
+            p.action = re.sub(r"\s+", " ", p.action)
+        p.spec = power_spec(card, p.ref, p.name)
+        # And the **parent's** name, which `power_spec` does not know
+        # about: a second card almost always names the first ("the
+        # <parent> power must be active in order to use this"), and
+        # leaving it printed would hand an agent the one thing it must
+        # never see.
+        parent = (row.get("Name") or "").strip()
+        if parent:
+            p.spec = scrub(p.spec, {parent: f"p{row['ID']}"})
+            # And again allowing an inserted article. Several names are
+            # indexed without a "the" that the prose then writes in the
+            # middle of them, so a whole-phrase swap misses and the name
+            # survives into what an agent is shown. (`leaks.py` caught
+            # this comment naming one of them, which is the check doing
+            # exactly its job.)
+            loose = r"\s+(?:the\s+)?".join(re.escape(w) for w in parent.split())
+            p.spec = re.sub(loose, f"p{row['ID']}", p.spec)
+        _shape(p, card)
+        out.append(p)
+    return out
 
 def _shape(p: Power, body: str) -> None:
     """The range line and the keyword list, off the first powerstat block."""
