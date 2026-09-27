@@ -23,7 +23,7 @@ from .components import (
     Stats,
 )
 from .conditions import rules
-from .grid import Square, between, spread
+from .grid import Square, between, linked_spread, spread
 from .types import Condition, Cover, Defense, Relation, Team
 
 if TYPE_CHECKING:
@@ -203,7 +203,19 @@ def distance_between(world: World, a: int, b: int) -> int:
 
 
 def adjacent(world: World, a: int, b: int) -> bool:
-    return bool(spread(squares(world, a), 1) & squares(world, b))
+    """Next to each other -- **or joined by a link.**
+
+    A link makes two squares adjacent "for movement or making melee
+    attacks", and `Grid.links` was read by `movement.reachable` and
+    nothing else, so the melee half of the printed sentence was silently
+    dropped. The cost is one `dict.get` on a mapping that is empty in
+    every fight where nobody has made a link.
+    """
+    mine = squares(world, a)
+    theirs = squares(world, b)
+    if spread(mine, 1) & theirs:
+        return True
+    return bool(world.grid.links and linked_spread(world.grid.links, mine, 1) & theirs)
 
 
 # -- numbers ----------------------------------------------------------------

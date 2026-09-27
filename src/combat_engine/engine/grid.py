@@ -53,6 +53,26 @@ STEPS: tuple[Square, ...] = (
 )  # fmt: skip
 
 
+def linked_spread(
+    links: dict[Square, frozenset[Square]],
+    squares_: frozenset[Square] | set[Square],
+    radius: int = 1,
+) -> frozenset[Square]:
+    """`spread`, plus wherever a link carries you from what it reaches.
+
+    One hop, which is all the card asks: a pair of squares made adjacent
+    "for movement or making melee attacks" are neighbours, not a corridor
+    to search. `spread` stays pure and ignorant of the world; the links
+    are passed in by the two callers that have them.
+    """
+    out = spread(squares_, radius)
+    if not links:
+        return out
+    return out | frozenset(
+        far for sq in out for far in links.get(sq, ())
+    )
+
+
 def distance(a: Square, b: Square) -> int:
     """Chebyshev: a diagonal step costs the same as a straight one.
 
