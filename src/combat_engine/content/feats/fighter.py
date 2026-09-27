@@ -150,8 +150,9 @@ def f416(c: Cast) -> None:
 @power("f772", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you knock an enemy prone with a flail",
-       on=Trigger(PowerResolved, lambda w, me, ev: ev.actor == me,
-                  "you finish a power"))
+       on=Trigger(PowerResolved, lambda w, me, ev: (
+           ev.actor == me and ev.power != "f772"
+       ), "you finish a power"))
 def f772(c: Cast) -> None:
     """Only when the blow actually put the target down.
 
@@ -159,6 +160,15 @@ def f772(c: Cast) -> None:
     `defenders.py` spells out: `resolve.attack` emits `Hit` from inside
     the body, before the riders land, so a prone test there reads a
     creature that was already down rather than one this flail felled.
+    
+
+    **The predicate excludes this row's own ref.** Declared on
+    `PowerResolved` with `ev.actor == me` alone, the row answers its
+    *own* resolution -- firing is a power use, which resolves, which
+    offers it again -- and the stack goes with it. The traceback
+    surfaces inside `query.can_act`, so it reads as an engine fault
+    rather than a content one. Any row triggered on any use or
+    resolution by its own caster has this shape.
     """
     if not _holding(c, "flail"):
         return

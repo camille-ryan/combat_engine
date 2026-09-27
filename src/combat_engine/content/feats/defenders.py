@@ -130,8 +130,9 @@ def f585(c: Cast) -> None:
 @power("f1827", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you immobilize or slow an enemy with a hammer or mace",
-       on=Trigger(PowerResolved, lambda w, me, ev: ev.actor == me,
-                  "you finish a power"))
+       on=Trigger(PowerResolved, lambda w, me, ev: (
+           ev.actor == me and ev.power != "f1827"
+       ), "you finish a power"))
 def f1827(c: Cast) -> None:
     """Extra damage to whatever this blow held down.
 
@@ -145,6 +146,15 @@ def f1827(c: Cast) -> None:
 
     The weapon is checked in the body rather than the predicate because
     a predicate gets no `Cast`.
+    
+
+    **The predicate excludes this row's own ref.** Declared on
+    `PowerResolved` with `ev.actor == me` alone, the row answers its
+    *own* resolution -- firing is a power use, which resolves, which
+    offers it again -- and the stack goes with it. The traceback
+    surfaces inside `query.can_act`, so it reads as an engine fault
+    rather than a content one. Any row triggered on any use or
+    resolution by its own caster has this shape.
     """
     if not (holding(c.world, c.me, "hammer") or holding(c.world, c.me, "mace")):
         return
