@@ -88,6 +88,10 @@ KNOWN_SILENT = {
     "i3045p1": "cures surprised or unconscious; the board produces neither",
     "i608p1": "its Requirement is being marked, and nobody here marks",
     "i3527p1": "wants an adjacent non-minion killed; the board's deaths are neither",
+    # Targets an undead creature and the board's dummies are not one.
+    # Driven by hand against a real undead stat block: a healing surge
+    # goes and the target takes that much radiant damage.
+    "f1091b": "targets an undead creature; the board fields none",
     "m417a2": (
         "the same sentence as m135a3 -- it restores a destroyed undead minion, "
         "and the board has no dead ally. Verified by hand: with a felled m812 "
