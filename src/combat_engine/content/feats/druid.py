@@ -23,7 +23,22 @@ from combat_engine.engine import (
     When,
     power,
 )
+from combat_engine.engine.components import Initiative
 from combat_engine.engine.dsl import get
+from combat_engine.engine.events import InitiativeRolled
+from combat_engine.engine.query import allies, distance_between
+from combat_engine.engine.triggers import about_me
+
+
+def _rolled(c: Cast):  # noqa: ANN202
+    """How high an ally rolled. `Initiative.rolled` is the die plus its
+    modifiers -- the number the order was sorted on."""
+
+    def key(who: int) -> int:
+        init = c.world.get(who, Initiative)
+        return init.rolled if init is not None else 0
+
+    return key
 
 
 @power("f552", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -86,12 +101,29 @@ def f1018(c: Cast) -> None:
 
 
 @power("f1019", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_initiative(on=)",))
+       reach=PERSONAL, target=SELF,
+       trigger="you roll initiative",
+       on=Trigger(InitiativeRolled, about_me, "you roll initiative"))
 def f1019(c: Cast) -> None:
-    """Lets an **ally** reroll initiative. `c.reroll_initiative` takes an
-    `on=` and would do it -- but the moment is "when you roll
-    initiative", and initiative is rolled by `Encounter.start` before
-    any trait has been armed."""
+    """Lets an **ally** within 5 reroll initiative.
+
+    I first marked this as waiting, reasoning that traits are armed after
+    the opening rolls. They are -- but a row with a printed trigger is
+    not armed as a trait: `triggers.arm` subscribes from the registry and
+    `Encounter.start` calls it *before* `_roll_initiative`, on purpose.
+    Eighteen power rows already answer this event.
+
+    The lowest roller is the one who wants a second chance.
+    """
+    me = c.me
+    near = [
+        a for a in allies(c.world, me)
+        if a != me and distance_between(c.world, me, a) <= 5
+    ]
+    if not near:
+        return
+    slowest = min(near, key=_rolled(c))
+    c.reroll_initiative(on=slowest)
 
 
 @power("f1770", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
