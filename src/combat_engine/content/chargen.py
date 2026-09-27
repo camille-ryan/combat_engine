@@ -35,6 +35,7 @@ from combat_engine.engine import (
     Health,
     Ident,
     Initiative,
+    Magic,
     Mods,
     Movement,
     Position,
@@ -665,6 +666,238 @@ def scores_for(line: ClassLine, build: Build) -> dict[Ability, int]:
     return out
 
 
+#: A race's page, the way `ClassLine` is a class's.
+#:
+#: Every number is read off the `race` table -- the size and the ability
+#: scores are columns, and the speed, the fly speed, the skill bonuses and
+#: the healing-surge step are parsed out of the printed block the way
+#: `content/loader.py` parses a companion's. Nothing here is transcribed:
+#: a hand-typed +2 is a number nothing can check, and a wrong one leaves
+#: every power working and the character quietly wrong.
+@dataclass(frozen=True)
+class RaceLine:
+    ref: str
+    size: Size
+    speed: int
+    #: Extra movement modes and their speeds, e.g. `{"fly": 6}`.
+    modes: dict[str, int]
+    #: The printed word -- "Normal", "Low-light", "Darkvision". **Carried,
+    #: not applied.** This engine keeps no light level and no senses, so
+    #: `c.darkvision()` and `c.low_light()` are symbols several rows in the
+    #: tree are already waiting on. The word is here so the day one lands
+    #: there is somewhere to read it from.
+    vision: str
+    #: The +2s the page always gives.
+    fixed: tuple[Ability, ...]
+    #: The "+2 X **or** +2 Y" pair, of which one is taken. Empty for a race
+    #: whose two bonuses are both fixed.
+    choices: tuple[Ability, ...]
+    #: "+2 History, +2 Intimidate" -> (("history", 2), ("intimidate", 2)).
+    skills: tuple[tuple[str, int], ...]
+    #: The healing surges the race adds or takes away, and it is usually 0.
+    surges: int
+    #: "+2 racial bonus to initiative checks", which three races print.
+    #:
+    #: A **number on the sheet**, not a trait row, because a trait cannot
+    #: reach it: `Encounter.start` rolls initiative and *then* arms traits,
+    #: so a row laying this bonus would lay it on a roll already made. It
+    #: is the same reason the skill bonuses are laid in `spawn`.
+    initiative: int
+    #: The race's own racial powers, by ref.
+    #:
+    #: Read off the `power` table -- `kind='Racial'`, `class=<this race>`,
+    #: `level=0` -- and **not** off the block's prose. Fifteen races name
+    #: their power in words the importer stripped, so a spec-only reading
+    #: found nothing for a third of them; the higher levels are the racial
+    #: *utility* powers a character takes at 2, 6 and 10, which are slots
+    #: and not something the race hands over. The ones the block does name
+    #: come first, because that is the order the page offers them in.
+    powers: tuple[str, ...]
+    #: Is that list a **choice**? Six races print more than one and four of
+    #: those say "choose one of the following" -- and the difference
+    #: matters: one race gets two powers and one gets one of thirteen.
+    one_of: bool
+
+    @property
+    def traits(self) -> list[str]:
+        """The trait rows written for this race, by ref.
+
+        Found by naming rather than listed, for the reason `loadout` draws
+        from the registry: a list beside the rows goes stale the moment one
+        lands. A racial trait is `rt:<race>-<what it does>`, and the dash is
+        part of the prefix so that `r1` does not collect `r10`'s.
+        """
+        import combat_engine.content  # noqa: F401  (registers the rows)
+        from combat_engine.engine.dsl import REGISTRY
+
+        return sorted(r for r in REGISTRY if r.startswith(f"rt:{self.ref}-"))
+
+    def granted(self) -> list[str]:
+        """The rows a character of this race carries into a fight.
+
+        Its traits, and its racial powers -- or **one** of them where the
+        block says to choose, which is the difference between a race that
+        prints two powers and one that prints thirteen manifestations and
+        asks for one.
+        """
+        from combat_engine.engine.dsl import REGISTRY
+
+        written = [p for p in self.powers if p in REGISTRY]
+        return [*self.traits, *(written[:1] if self.one_of else written)]
+
+    def taken(self, build: Build) -> list[Ability]:
+        """Which abilities actually go up, for a character on this leg.
+
+        The fixed ones always, plus the one of the printed pair that the
+        build is built on -- which is the choice a player makes and the
+        only part of the line that is not already decided. A race whose
+        whole line is "+2 to one ability score of your choice" puts it on
+        the primary, for the same reason.
+        """
+        out = list(self.fixed)
+        if self.choices:
+            out.append(
+                next(
+                    (a for a in (build.primary, build.secondary) if a in self.choices),
+                    self.choices[0],
+                )
+            )
+        elif not out:
+            out.append(build.primary)
+        return out
+
+
+_SPEED_LINE = re.compile(r"^Speed\s*:\s*(.+)$", re.M)
+_MODE = re.compile(r"\b(fly|swim|climb|burrow)\s+(\d+)\s+squares", re.I)
+_VISION_LINE = re.compile(r"^Vision\s*:\s*(.+)$", re.M)
+_SKILL_LINE = re.compile(r"^Skill Bonuses\s*:\s*(.+)$", re.M)
+_SKILL = re.compile(r"\+(\d+)\s+([A-Z][a-z]+)")
+#: A power's id, in a sentence that calls it a power. The qualifier is what
+#: keeps a **trait's** label out: a block heading is a bare id on its own
+#: line -- "x_m1031a4 : You gain a +1 racial bonus to attack rolls" -- and
+#: collecting those would deal every character a row that does not exist.
+_RACIAL_POWER = re.compile(r"\b(p\d+|x_m\d+a\d+)\b")
+_MORE_SURGES = re.compile(r"one additional healing surge|healing surges by one", re.I)
+_FEWER_SURGES = re.compile(r"one fewer healing surge", re.I)
+_INITIATIVE = re.compile(r"\+(\d+)\s+racial bonus to initiative", re.I)
+#: "Choose one", in the four spellings the blocks that mean it use. The
+#: wording matters: it separates the race that prints two powers and
+#: means both from the one that prints thirteen and means one.
+_ONE_OF = ("choose one", "your choice of either",
+           "select an option", "choose an option")
+
+
+def _races_from_the_book() -> dict[str, RaceLine]:
+    """The playable races, read off the `race` table.
+
+    Nine of the 55 rows carry no size and no ability scores: they are the
+    **sub-race trait packages** -- "this benefit replaces that one" -- and
+    not races anybody can be. A row with no size is skipped rather than
+    dealt as a race with no numbers at all.
+    """
+    from combat_engine.etl.build import game
+
+    out: dict[str, RaceLine] = {}
+    try:
+        rows = list(game().execute("SELECT * FROM race ORDER BY id"))
+        cards: dict[str, list[str]] = {}
+        for card in game().execute(
+            "SELECT ref, class FROM power "
+            "WHERE kind = 'Racial' AND level = 0 ORDER BY ref"
+        ):
+            cards.setdefault(card["class"], []).append(card["ref"])
+    except Exception:            # no database yet; a character is raceless
+        return out
+
+    for row in rows:
+        if not row["size"]:
+            continue
+        spec = row["spec"] or ""
+        named = [Ability(a) for a in json.loads(row["scores"] or "{}")]
+        # Three scores is always "+2 A, +2 B **or** +2 C" and two is always
+        # both -- checked across all 46 rows, and the JSON keeps the
+        # printed order, so the first of three is the one that is not a
+        # choice.
+        fixed = tuple(named[:1] if len(named) == 3 else named)
+        choices = tuple(named[1:] if len(named) == 3 else ())
+        line = _SPEED_LINE.search(spec)
+        printed = line.group(1) if line else ""
+        found = re.match(r"\s*(\d+)", printed)
+        vision = _VISION_LINE.search(spec)
+        skills = _SKILL_LINE.search(spec)
+        out[row["ref"]] = RaceLine(
+            ref=row["ref"],
+            size=Size(row["size"]),
+            speed=int(found.group(1)) if found else 6,
+            modes={m.lower(): int(n) for m, n in _MODE.findall(printed)},
+            vision=(vision.group(1).strip() if vision else "").removesuffix(" vision"),
+            fixed=fixed,
+            choices=choices,
+            skills=tuple(
+                (name.lower(), int(value))
+                for value, name in _SKILL.findall(skills.group(1) if skills else "")
+            ),
+            surges=sum(
+                1 if _MORE_SURGES.search(ln) else -1
+                for ln in spec.splitlines()
+                if _MORE_SURGES.search(ln) or _FEWER_SURGES.search(ln)
+            ),
+            # Only the character's own. One sub-race grants the bonus to
+            # *allies within 10 squares*, which is a different sentence
+            # and belongs to a row rather than to the sheet.
+            initiative=max(
+                (
+                    int(m.group(1))
+                    for ln in spec.splitlines()
+                    if "allies" not in ln.lower() and (m := _INITIATIVE.search(ln))
+                ),
+                default=0,
+            ),
+            powers=tuple(
+                dict.fromkeys(
+                    [
+                        ref
+                        for ln in spec.splitlines()
+                        if "power" in ln.lower()
+                        for ref in _RACIAL_POWER.findall(ln)
+                        if ref in cards.get(row["ref"], ())
+                    ]
+                    + cards.get(row["ref"], [])
+                )
+            ),
+            one_of=any(word in spec.lower() for word in _ONE_OF),
+        )
+    return out
+
+
+#: The 46 races a character can be, by ref.
+RACES: dict[str, RaceLine] = _races_from_the_book()
+
+#: Deal a race to a `Character` that names none.
+#:
+#: **Off, and it is one line to turn on.** A race is +2 to two ability
+#: scores, a size, a speed and a handful of traits, so dealing one moves
+#: every number on every sheet and with them every roll in every fight --
+#: which is six recorded fixtures diverging at their first attack. The
+#: divergence is expected and harmless and it is also exactly what a real
+#: regression looks like, so re-recording under it would hide one. Flip
+#: this and run `scripts/replay.py record` in the same commit, on purpose,
+#: with nothing else in it.
+DEAL_RACES = False
+
+
+def deal_race(rng: Random) -> str:
+    """A race, drawn like a hand of powers is.
+
+    Uniform over the ones the book prints rather than weighted towards the
+    ones whose scores suit the class. A player picks for flavour at least
+    as often as for the numbers, and a draw that always took the best pair
+    would make every fighter the same two races.
+    """
+    pool = sorted(RACES)
+    return rng.choice(pool) if pool else ""
+
+
 @dataclass
 class Character:
     cls: str
@@ -678,16 +911,17 @@ class Character:
     #: with everything else and arms itself at the top of the fight.
     feats: list[str] = field(default_factory=list)
     #: The race, by ref -- `r3`. Empty means raceless, which is what every
-    #: character has been until now and remains the default.
+    #: character was before `RACES` existed and is still the default.
     #:
-    #: **Not dealt automatically, and that is deliberate.** A race is +2 to
-    #: two ability scores and a handful of traits, and the traits are not
-    #: written yet. Dealing one would change every number on the sheet
-    #: while granting none of the abilities that are supposed to come with
-    #: them -- a character strictly better than the book's, quietly. What
-    #: the field buys today is that `meets` can answer a race prerequisite
-    #: honestly for a character that has one, which is 803 of the 2,536
-    #: heroic feats.
+    #: Naming one is now the whole of it: `spawn` reads its size, speed,
+    #: movement modes, ability scores, skill bonuses and healing surges off
+    #: `RaceLine`, puts its trait rows and its racial power in
+    #: `Powers.known`, and carries `race:<ref>` on `Build.choices` the way
+    #: it carries the warlock's element. `meets` answers a race
+    #: prerequisite off this field, which is 690 of the heroic feats.
+    #:
+    #: See `DEAL_RACES` for why one is not dealt to a character that names
+    #: none.
     race: str = ""
 
     @property
@@ -1014,7 +1248,6 @@ def treasure(who: Character, rng: Random) -> list:
     or light blade" may only be laid on a heavy or light blade the
     character is actually carrying.
     """
-    from combat_engine.engine import Magic
     from combat_engine.etl.build import game
 
     plus = band(who.level)
@@ -1048,17 +1281,50 @@ def treasure(who: Character, rng: Random) -> list:
         if not pool:
             continue
         row = pool[rng.randrange(len(pool))]
-        out.append(
-            Magic(
-                ref=row["ref"],
-                slot="implement" if arm is held and arm is not None else row["slot"],
-                plus=row["plus"],
-                enh_to=enh_to,
-                crit=_crit_dice(row["crit"]),
-                powers=(),
-            )
-        )
+        magic = magic_for(row["ref"], plus=row["plus"])
+        if magic is None:
+            continue
+        if arm is held and arm is not None:
+            magic = replace(magic, slot="implement")
+        out.append(magic)
     return out
+
+
+def magic_for(ref: str, *, plus: int = 0, powers: tuple[str, ...] = ()) -> Magic | None:
+    """One **named** item, as a `Magic` record read off its own columns.
+
+    The same columns `treasure` selects, asked of a ref instead of a slot.
+    Split out because there are two callers now and only one of them is
+    dealing treasure: anything that already knows which item it wants --
+    a power body picking a thing off the floor, `scripts/audit.py`
+    fielding the item a row belongs to -- needs the *printed* slot,
+    `enh_to` and critical rider rather than a guess. Guessing them is not
+    a small error: `enh_to="attack_damage"` on an item whose column says
+    `ac` routes it through `_onto_weapon` instead of `_defence_mods`, so
+    the armour bonus the item exists for is never laid at all.
+
+    `plus` defaults to the bottom rung of the item's ladder, which is the
+    heroic floor, and to 1 for an item with no ladder -- a body reading
+    "equal to the enhancement bonus" wants a number either way.
+    """
+    from combat_engine.etl.build import game
+
+    row = game().execute(
+        "SELECT i.ref, i.slot, i.crit, i.enh_to, "
+        "(SELECT MIN(s.plus) FROM item_step s WHERE s.ref = i.ref) AS plus "
+        "FROM item i WHERE i.ref = ?",
+        (ref,),
+    ).fetchone()
+    if row is None:
+        return None
+    return Magic(
+        ref=row["ref"],
+        slot=row["slot"] or "",
+        plus=plus or row["plus"] or 1,
+        enh_to=row["enh_to"] or "",
+        crit=_crit_dice(row["crit"]),
+        powers=tuple(powers),
+    )
 
 
 def _fits_base(printed: str, arm: Weapon | None, armour: str) -> bool:
@@ -1265,6 +1531,15 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
 
     line = who.line
     build = who.chosen
+    # Its own stream, like the loadout's and the feats', and settled first
+    # because everything below reads it: a race is two ability scores, a
+    # size, a speed, a surge or two and a handful of rows.
+    if DEAL_RACES and not who.race:
+        who = replace(
+            who,
+            race=deal_race(Random(f"{world.rng.seed}:{who.cls}:{build.name}:race")),
+        )
+    race = RACES.get(who.race)
     # **A copy each, always.** `LONGSWORD` and its siblings are module-level
     # singletons, so every fighter ever built shared one object -- and
     # `Cast.decay` reduces a magic weapon's enhancement *in place*. The
@@ -1273,6 +1548,9 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # anywhere would say so.
     carried = [replace(w) for w in (build.weapons or line.weapons)]
     scores = scores_for(line, build)
+    if race is not None:
+        for ability in race.taken(build):
+            scores[ability] = scores.get(ability, 10) + 2
     # Level 4, 8 and so on raise two scores by one. Applied here rather than
     # recorded, so a level 8 character is derivable from its class and level.
     for step in (4, 8):
@@ -1299,26 +1577,44 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # A feat that hands over a card takes one back, and both halves happen
     # here: a `Cast` opens on a board with the hand already dealt.
     powers = power_swap(list(powers), list(feats))
+    # A race's traits and its one racial power are known rows like any
+    # other: a trait arms itself at the top of the fight and a racial
+    # power goes on the action menu, with no machinery of their own.
+    racial = race.granted() if race is not None else []
     # Proficiency is the same kind of sentence, and it has to be settled
     # before the shield is, because what is in the other hand decides
-    # whether there is room for one.
-    belt = outfit(carried, proficiency(list(feats)))
+    # whether there is room for one. A race trains a character in weapons
+    # exactly as a feat does, and says so in the same header field.
+    belt = outfit(carried, proficiency([*feats, *racial]))
     carried_shield = _shield_for(line, carried)
 
     # First level takes the whole Constitution *score*; every level after
     # takes the class's flat step. Surges take the modifier, not the score.
     con = modifier(scores[CON])
     max_hp = line.hp_first + scores[CON] + line.hp_per_level * (who.level - 1)
+    # Heavy armour costs a square whatever the character is, so the race's
+    # printed speed is what the penalty comes off -- a 5-square race in
+    # scale walks 4. Raceless is the 6 it has always been.
+    speed = race.speed if race is not None else 6
 
     eid = world.spawn(
         Ident(ref=who.ref),
-        Position(square=square, size=Size.MEDIUM),
+        Position(square=square, size=race.size if race is not None else Size.MEDIUM),
         Side(team=who.team),
         Stats(level=who.level, scores=scores),
         Defenses(values=defences(replace(line, shield=carried_shield), scores, who.level)),
-        Health(max_hp=max_hp, surges=line.surges + con),
-        Movement(speed=5 if line.armour in ("scale", "plate") else 6),
-        Initiative(bonus=modifier(scores[DEX])),  # level term via scaling
+        Health(
+            max_hp=max_hp,
+            surges=line.surges + con + (race.surges if race is not None else 0),
+        ),
+        Movement(
+            speed=speed - 1 if line.armour in ("scale", "plate") else speed,
+            modes=dict(race.modes) if race is not None else {},
+        ),
+        # Level term via scaling.
+        Initiative(
+            bonus=modifier(scores[DEX]) + (race.initiative if race is not None else 0)
+        ),
         Conditions(),
         Mods(),
         Budget(),
@@ -1327,7 +1623,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         # who is not. A monster leaves this empty -- its ranged attacks are
         # its own printed rows.
         Powers(
-            known=[*powers, *feats],
+            known=[*powers, *feats, *racial],
             ranged="rba",
             owned=spellbook(who.cls, who.level, list(powers), line.spellbook)
             if line.spellbook
@@ -1351,6 +1647,20 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         gear = world.get(eid, Gear)
         gear.weapons += [replace(w) for w in belt]
         gear.stowed |= {w.ref for w in belt}
+    # A racial skill bonus is a sheet number and not a thing that happens
+    # in a fight, so it is laid straight into `Mods` where the armour
+    # penalty and the enhancement bonus already live -- there is no
+    # `Skills` component and `engine/skills.py` reads `skill:<name>` off
+    # exactly this list. A trait row could not say it: a row is armed at
+    # the top of an encounter and a skill check is rolled outside one.
+    if race is not None and race.skills:
+        from combat_engine.engine.components import Mod
+
+        mods = world.get(eid, Mods)
+        for skill, value in race.skills:
+            mods.items.append(
+                Mod(what=f"skill:{skill}", value=value, kind="racial", label=race.ref)
+            )
     if line.power_points:
         world.add(eid, PowerPoints(points=line.power_points, maximum=line.power_points))
     # Gear last, so it has a `Gear` and a `Mods` to write into. Its own
