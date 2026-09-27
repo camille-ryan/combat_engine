@@ -1,10 +1,10 @@
 """Swordmage, level 9, continued.
 
 `p5749` prints two powers under one id: a standard-action swing, and an
-interrupt the stance unlocks. There is only one id, so the interrupt is
-written as the stance's own watch on `Hit` -- the window an interrupt would
-have had, since `Hit` is refusable and `Window.BEFORE` is where it is
-refused.
+interrupt the stance unlocks. The interrupt has a ref of its own after all
+-- `p5749b`, in `second_card.py` -- so this row leaves the stance and the
+parry is offered on `Hit` in `Window.BEFORE`, which is where a `Hit` is
+still refusable.
 """
 
 from __future__ import annotations
@@ -22,12 +22,10 @@ from combat_engine.engine import (
     Cast,
     CloseBlast,
     DamageType,
-    Hit,
     Keyword,
     Melee,
     Ranged,
     When,
-    Window,
     power,
 )
 
@@ -100,34 +98,13 @@ def p4805(c: Cast) -> None:
     attack=Attack(INT, vs=AC),
 )
 def p5749(c: Cast) -> None:
-    """The parry is an Intelligence attack against the enemy's own roll, and
-    it beats the blow rather than reducing it -- so it cancels the `Hit` in
-    the window before the damage is rolled, once a round."""
+    """The parry is `p5749b`, an immediate interrupt of its own gated on this
+    stance, so all this leaves is the stance -- whose label is what that
+    row's Requirement reads. `Encounter.can_spend` keeps the parry to once a
+    round, which the hand-armed version had to count for itself."""
     if c.strike():
         c.damage(c.w(2), c.int_mod)
-    me = c.me
-    stance = c.stance(label=c.ref)
-    last: dict[str, int] = {}
-
-    def parry(ev: Hit) -> None:
-        if ev.attacker == me or last.get("round") == c.world.round:
-            return
-        mate = ev.target
-        if mate == me or mate not in c.allies() or not c.adjacent_to(mate, me):
-            return
-        if ev.attacker not in c.enemies():
-            return
-        result = getattr(ev, "result", None)
-        if result is None or not c.may("parry", who=me):
-            return
-        last["round"] = c.world.round
-        if c.roll("1d20") + c.int_ >= result.total:
-            ev.cancel("turned aside")
-
-    rider = c.watch(
-        Hit, parry, until=When.ENCOUNTER, on=me, window=Window.BEFORE, label=c.ref
-    )
-    stance.on_end.append(lambda: c.world.effects.end(rider, "stance ended"))
+    c.stance(label=c.ref)
 
 
 @power(

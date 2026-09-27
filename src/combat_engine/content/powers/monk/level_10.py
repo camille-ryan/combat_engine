@@ -17,8 +17,6 @@ from combat_engine.engine import (
     DamageType,
     Effect,
     Keyword,
-    Position,
-    Square,
     Trigger,
     When,
     about_me,
@@ -27,10 +25,9 @@ from combat_engine.engine import (
     by_melee,
     get,
     power,
-    spread,
     targets_me,
 )
-from combat_engine.engine.events import DamageRolled, Dropped, Hit, MoveEnd, TurnStart
+from combat_engine.engine.events import DamageRolled, Dropped, Hit, TurnStart
 
 STANCE_KW = [Keyword.STANCE]
 
@@ -46,18 +43,6 @@ ELEMENTS = (
 def _fire(ctx: dict) -> bool:
     p = get(ctx.get("power", ""))
     return p is not None and Keyword.FIRE in p.keywords
-
-
-def _beside(c: Cast, who: int) -> Square | None:
-    pos = c.world.get(who, Position)
-    if pos is None:
-        return None
-    for sq in sorted(spread({pos.square}, 1)):
-        if sq == pos.square:
-            continue
-        if c.world.grid.passable(sq) and c.world.grid.occupant(sq) is None:
-            return sq
-    return None
 
 
 def _ends_with(c: Cast, posture: Effect, held: Effect | None) -> None:
@@ -223,26 +208,12 @@ def p16175(c: Cast) -> None:
     on=Trigger(Hit, both(by_me, by_melee), "you hit an enemy with a melee attack"),
 )
 def p16176(c: Cast) -> None:
-    """The second stat block is an at-will reaction for as long as the mark
-    holds, so it is written into this row as a watch on the marked enemy
-    moving under its own power. Forfeiting next turn's move action has
-    nothing to write to and is dropped."""
     foe = getattr(c.trigger, "target", None)
     if foe is None:
         return
     held = c.mark(on=foe, until=When.ENCOUNTER)
-
-    def chase(ev: MoveEnd) -> None:
-        if ev.actor != foe or ev.kind_ == "forced":
-            return
-        landing = _beside(c, foe)
-        if landing is not None:
-            c.shift(c.speed_of(), to=landing)
-
-    watcher = c.watch(MoveEnd, chase, until=When.ENCOUNTER)
     if held is None:
         return
-    held.on_end.append(lambda: c.world.effects.end(watcher, "mark ended"))
 
     def gone(ev: Dropped) -> None:
         if ev.actor == foe:

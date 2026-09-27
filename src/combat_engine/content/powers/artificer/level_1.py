@@ -136,10 +136,15 @@ def p10190(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.FIRE],
 )
 def p10191(c: Cast) -> None:
-    """The infusion only. The burst it also grants once a round is a separate
-    compendium row and this spec gives it no id of its own, so there is
-    nothing for `c.grant_row` to name."""
-    c.resist(5, DamageType.FIRE, on=c.target, until=When.ENCOUNTER)
+    """The infusion, and the two holds that carry its grant: one on the
+    caster, which is `p10191b`'s Requirement, and one on the infused ally,
+    which is the square that burst is centred on."""
+    ward = c.target
+    if ward is None:
+        return
+    c.resist(5, DamageType.FIRE, on=ward, until=When.ENCOUNTER)
+    c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
+    c.effect(f"{c.ref} anchor", on=ward, until=When.ENCOUNTER)
 
 
 @power(

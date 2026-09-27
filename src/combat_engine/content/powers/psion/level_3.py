@@ -1,7 +1,10 @@
-"""Psion, level 3. Augment 0 throughout; dropped augments are named per row."""
+"""Psion, level 3. Each row buys its augment with `augment`; a clause that
+rewrites the header -- a wider target line, a burst -- is named in the row's
+docstring and recorded in `docs/blocked.json` instead."""
 
 from __future__ import annotations
 
+from combat_engine.content.powers.augment import augment
 from combat_engine.engine import (
     AT_WILL,
     EACH_CREATURE,
@@ -14,6 +17,7 @@ from combat_engine.engine import (
     WILL,
     AreaBurst,
     Attack,
+    AttackRolled,
     Cast,
     DamageType,
     Keyword,
@@ -52,13 +56,15 @@ PSIONIC_PSYCHIC = [Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.PSYCHIC]
 def p11275(c: Cast) -> None:
     """The zone is the target's own square. "Starts its turn adjacent to it"
     is dropped -- widening the zone to the ring would also make entering the
-    ring burn, which the printed line does not say. Augment 1 (the zone is
-    totally obscured) and Augment 2 are dropped."""
+    ring burn, which the printed line does not say. Augment 1 makes the zone
+    totally obscured. Augment 2 is an area burst and is left out."""
+    spent = augment(c, 1)
     where = c.there
     if c.strike():
         c.damage("1d6", c.int_mod, dtype=DamageType.FIRE)
     c.hazard(
-        {where}, c.wis_mod, DamageType.FIRE, until=When.EONT, sustain=None
+        {where}, c.wis_mod, DamageType.FIRE, until=When.EONT, sustain=None,
+        blocks_sight=bool(spent),
     )
 
 
@@ -74,10 +80,18 @@ def p11275(c: Cast) -> None:
     attack=Attack(INT, vs=FORT),
 )
 def p11276(c: Cast) -> None:
-    """Augment 1 (cannot shift) and Augment 2 (bigger dice, prone) dropped."""
+    """Augment 1 roots the target as well. Augment 2 raises the dice and knocks
+    it prone *instead of* slowing it -- its Hit line is written out in full
+    rather than "as above", so the slow is not in it."""
+    spent = augment(c)
     if c.strike():
-        c.damage("1d6", c.int_mod, dtype=DamageType.FORCE)
+        c.damage("1d8" if spent == 2 else "1d6", c.int_mod, dtype=DamageType.FORCE)
+        if spent == 2:
+            c.prone()
+            return
         c.slowed(until=When.EONT)
+        if spent:
+            c.rooted(until=When.EONT)
 
 
 @power(
@@ -92,11 +106,15 @@ def p11276(c: Cast) -> None:
     attack=Attack(INT, vs=WILL),
 )
 def p13317(c: Cast) -> None:
-    """"The next saving throw it makes" is `once=True` on the penalty.
-    Augments 1 and 2 (an attack penalty as well) are dropped."""
+    """"The next saving throw it makes" is `once=True` on the penalty. Both
+    augments add the attack penalty; Augment 2 also raises the dice and drops
+    the `once`, because it penalises saving throws outright rather than one."""
+    spent = augment(c)
     if c.strike():
-        c.damage("1d8", c.int_mod, dtype=DamageType.PSYCHIC)
-        c.penalty("save", 2, until=When.EONT, once=True)
+        c.damage("2d8" if spent == 2 else "1d8", c.int_mod, dtype=DamageType.PSYCHIC)
+        c.penalty("save", 2, until=When.EONT, once=spent != 2)
+        if spent:
+            c.penalty("attack", 2, until=When.EONT)
 
 
 @power(
@@ -113,8 +131,14 @@ def p13317(c: Cast) -> None:
 def p13318(c: Cast) -> None:
     """"Moves more than 2 squares" is measured from where it stood when its
     turn began, so the square it started in has to be caught on `TurnStart`;
-    `MoveEnd` alone only says where it stopped. Augment 1 (fear, and a
-    penalty for standing next to it) and Augment 2 are dropped."""
+    `MoveEnd` alone only says where it stopped.
+
+    Neither augment is written. Augment 1 penalises the attack rolls of
+    enemies *while they stand next to the target*, and nothing scopes a
+    modifier to a zone or an aura -- the four that exist are resistance,
+    cover, granting advantage and difficult terrain. Augment 2 is a second
+    attack against a burst centred on the target, with a target line of its
+    own, and then pins both ends to each other's squares."""
     victim = c.target
     if not c.strike():
         return
@@ -148,8 +172,11 @@ def p13318(c: Cast) -> None:
     attack=Attack(INT, vs=REF),
 )
 def p13319(c: Cast) -> None:
-    """Augment 1 (any move other than a shift) and Augment 2 (up to three
-    targets) are dropped."""
+    """Augment 1 trips the target on any move that is not a shift, which is
+    `MoveEnd.kind_` and nothing else; a shove is left out of it too, since a
+    creature that is pushed has not *made* a move. Augment 2 widens the target
+    line to three creatures and is left out."""
+    spent = augment(c, 1)
     victim = c.target
     if not c.strike():
         return
@@ -164,7 +191,10 @@ def p13319(c: Cast) -> None:
 
     def stopped(ev: MoveEnd) -> None:
         start = began.get("at")
-        if ev.actor == victim and start is not None and distance(start, ev.at) > far:
+        if ev.actor != victim or start is None:
+            return
+        moved = ev.kind_ not in ("shift", "forced")
+        if moved if spent else distance(start, ev.at) > far:
             began.pop("at")
             c.prone(on=victim)
 
@@ -189,9 +219,16 @@ def p13319(c: Cast) -> None:
 )
 def p13320(c: Cast) -> None:
     """Only the conjuration. The opportunity attack made through the anomaly
-    is printed as a second block under this same id, so it has no ref of its
-    own to be declared under."""
-    c.conjure(until=When.EONT, sustain=None)
+    is `p13320b`, which is left out: its reach is measured from the anomaly
+    and a range is measured from the caster, so the row would be refused in
+    exactly the situation it is printed for. Augment 2 is that block's Hit
+    line and goes with it. Augment 1 is on this block: the anomaly becomes
+    something your allies can flank with, which is the modifier
+    `query.flankers` reads."""
+    spent = augment(c, 1)
+    anomaly = c.conjure(until=When.EONT, sustain=None)
+    if anomaly and spent:
+        c.can_flank(on=anomaly, until=When.EONT)
 
 
 @power(
@@ -208,11 +245,13 @@ def p13320(c: Cast) -> None:
 def p8233(c: Cast) -> None:
     """"Adjacent to an enemy" is an enemy of *yours*, so the target is shoved
     next to one of its own and made to swing. If it already stands beside one,
-    no slide is needed. Augments 1 and 2 (a damage bonus, a longer slide and a
-    daze) are dropped."""
+    no slide is needed. Both augments add Charisma to the free swing's damage;
+    Augment 2 slides by Charisma rather than 1 square and dazes the target."""
+    spent = augment(c)
     victim = c.target
     if victim is None or not c.strike():
         return
+    shove = c.cha_mod if spent == 2 else 1
     beside = [e for e in c.within(1, of=victim, side="enemy") if e != victim]
     foe = beside[0] if beside else None
     if foe is None:
@@ -222,11 +261,17 @@ def p8233(c: Cast) -> None:
             pos = c.world.get(cand, Position)
             if pos is None:
                 continue
-            if any(c.slide(1, on=victim, to=sq) for sq in sorted(spread({pos.square}, 1))):
+            spots = sorted(spread({pos.square}, 1))
+            if any(c.slide(shove, on=victim, to=sq) for sq in spots):
                 foe = cand
                 break
     if foe is not None:
-        c.grant_attack(victim, on=foe, attack_bonus=c.cha_mod)
+        c.grant_attack(
+            victim, on=foe, attack_bonus=c.cha_mod,
+            damage_bonus=c.cha_mod if spent else 0,
+        )
+    if spent == 2:
+        c.dazed(until=When.EONT)
 
 
 @power(
@@ -241,8 +286,21 @@ def p8233(c: Cast) -> None:
     attack=Attack(INT, vs=WILL),
 )
 def p8234(c: Cast) -> None:
-    """Augment 1 (penalty equal to Charisma modifier) and Augment 2 are
-    dropped."""
-    if c.strike():
-        c.damage("1d6", c.int_mod, dtype=DamageType.PSYCHIC)
-        c.penalty(FORT, 2, until=When.EONT)
+    """Augment 1 makes the penalty Charisma rather than 2. Augment 2 drops the
+    penalty entirely and pays out on the *next* attack that hits the target's
+    Fortitude -- read off `AttackRolled`, which is the only event carrying
+    which defence was attacked, and `once` because the clause says one."""
+    spent = augment(c)
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage("2d8" if spent == 2 else "1d6", c.int_mod, dtype=DamageType.PSYCHIC)
+    if spent < 2:
+        c.penalty(FORT, c.cha_mod if spent else 2, until=When.EONT)
+        return
+
+    def bit(ev: AttackRolled) -> None:
+        if ev.target == victim and ev.vs is FORT and ev.total >= ev.defence:
+            c.flat(c.cha_mod, on=victim)
+
+    c.watch(AttackRolled, bit, until=When.EONT, on=victim, once=True, label=c.ref)

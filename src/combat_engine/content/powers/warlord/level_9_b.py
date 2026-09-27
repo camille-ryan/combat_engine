@@ -5,10 +5,11 @@ and `c.charge_at` carry the file. Where the printed line is *charge*,
 `c.charge_at(victim, who=friend)` is the one to reach for: it walks the ally
 in and flags the swing, which `c.grant_attack` alone does not.
 
-`p11614`'s second half is a row with no id of its own, so it is written out
-inside the first: a granted swing is that creature's own basic attack, 1[W]
-where the printed line is 2[W], and the missing die is read off the ally's
-own weapon and handed over as a damage bonus -- the reading `p2328` settled.
+`p11614`'s second half has a ref of its own -- `p11614b`, in
+`second_card.py` -- so the swing is handed over by ref rather than
+approximated with a basic attack and a damage bonus, and its 2[W] is the
+ally's own weapon rolled by the ally. The reading `p2328` settled still
+stands for every other granted swing in this file, which has no such ref.
 
 Two durations have no spelling. `p6008`'s hold runs "until it starts its
 turn outside your melee reach", which is kept for the encounter with a
@@ -408,17 +409,28 @@ def _back_off(c: Cast, friend: int, foe: int) -> None:
 def p11614(c: Cast) -> None:
     """Both allies are handled on the first call, because "each target must
     attack a different creature" is a fact about the pair and the body is
-    called once per target."""
+    called once per target.
+
+    The swing itself is `p11614b`, which the ally uses -- so it is handed
+    over rather than approximated with a basic attack, and its own 2[W],
+    ability and shift are read off the ally. `c.grant_row` is needed here
+    where it is not for a second card generally: `chargen.loadout` deals one
+    to whoever holds the parent, and the holder is not the user. The hold is
+    what the row's Requirement reads.
+
+    Nought squares to `_step_in`: the shift is the granted row's own Effect
+    line now, so this only picks who each ally goes for."""
     if not c.first:
         return
     taken: set[int] = set()
     for friend in c.targets:
-        victim = _step_in(c, friend, 3, taken)
+        victim = _step_in(c, friend, 0, taken)
         if victim is None:
             continue
         taken.add(victim)
-        for floored in _granted_hits(c, friend, victim, c.roll(_their_w(c, friend))):
-            c.prone(on=floored)
+        c.effect(c.ref, on=friend, until=When.EOT)
+        c.grant_row(f"{c.ref}b", on=friend, until=When.EOT)
+        c.grant_attack(friend, on=victim, ref=f"{c.ref}b")
 
 
 def _step_in(c: Cast, friend: int, squares_: int, taken: set[int]) -> int | None:

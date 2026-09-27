@@ -43,10 +43,6 @@
     "wants": "a thrown weapon or a sling in chargen, before c.range_bonus(mult=) is worth adding",
     "why": "every weapon in the table is a mace, bow or crossbow, so a thrown-or-sling gate would be false for every character in the tree"
   },
-  "p11603": {
-    "wants": "a compendium ref for the second printed stanza",
-    "why": "spec.py folds both stanzas into one entry and the compendium carries no separate id, so c.grant_row has nothing to name"
-  },
   "p13887": {
     "wants": "c.link plus link-aware query.distance_between / query.adjacent and a teleport-flavoured step",
     "why": "the card makes the two squares adjacent for movement OR melee attacks and calls the crossing teleportation; c.link as built is movement-only, so the row would silently drop the melee half"
@@ -182,5 +178,249 @@
   "cf:artificer-infusions": {
     "wants": "a shared per-encounter allowance of more than one use -- group= counts to one -- and a leg in chargen.BUILDS[\"artificer\"] for the swap the feature offers at character creation",
     "why": "the fourth feature is the budget the three declared infusion rows draw on: two per extended rest, one per round, three from 16th level. Each row is written as its own encounter power with once_per_round instead, which is three times the printed allowance, because group= is a one-per-encounter budget and would be a third of it. The feature also lets one infusion be taken in place of another when the character is made, which is a choose-one over p10187 and p7635 with no leg to answer it"
+  },
+  "p12426b": {
+    "wants": "movement.shift walking its path a square at a time the way walk does, so Moved/EnterSquare announce the squares crossed -- plus a way to open one named creature's space rather than c.phasing, which opens everybody's",
+    "why": "the printed Effect is a 3-square shift that may pass through the spaces of enemies marked by the battlemind, and charges force damage the first time it enters one. movement.shift is a single step to the destination, so there are no intermediate squares and no event announcing one: the damage clause could never fire and the row would be a bare shift wearing two sentences it does not do"
+  },
+  "p13320b": {
+    "wants": "Range(from_=\"conjuration\"), resolved by dsl.measured_from the way from_=\"companion\" already is",
+    "why": "an opportunity attack made through the psion's anomaly: Melee 1 measured from the conjuration, triggered by an enemy starting its turn beside it, sliding that enemy back beside it. The trigger and the slide can both be written; the reach cannot, and dsl._can_land measures from the caster before the body runs -- so the row would be refused in exactly the situation it is printed for, which is the charge trap in a different costume"
+  },
+  "p13339b": {
+    "wants": "Range(from_=\"conjuration\"), plus dsl.aim_points centring a close burst on the caster's own conjuration",
+    "why": "a once-per-round close burst 1 fired from one of the four motes the parent leaves on the board, expending it. A close burst is centred on the creature using it and nothing moves that origin, so the burst would go off around the psion instead of around the mote -- a different set of creatures every time"
+  },
+  "p13462b": {
+    "wants": "the same Range(from_=\"conjuration\") and aim_points",
+    "why": "the card names its own origin outright -- close burst 3 centred on the square the mote occupied -- and there is no way to say it. The detonation stays folded into p13462, which fires it at the start of the psion's next turn from the mote's square"
+  },
+  "p464b": {
+    "wants": "a Cast method letting a parent run a declared row as its printed secondary attack -- c.secondary(ref, origin=<square>) -- plus a reach origin naming the granting power's primary target",
+    "why": "free action, area burst 1 centred on the primary target, with no Requirement, no Trigger and no sustain. Standing alone there is no primary target to centre on, and the parent's printed 'Effect: Make the secondary attack' obliges the parent to make it, which it already does inline"
+  },
+  "p465b": {
+    "wants": "a Cast method letting a parent run a declared row as its printed secondary attack -- c.secondary(ref, origin=<square>) -- plus a reach origin naming the granting power's primary target",
+    "why": "the same shape as p464b, and worse: the secondary is printed inside the parent's Hit line, so it must run after the primary attack resolves. Nothing in the header can say either half"
+  },
+  "p16281b": {
+    "wants": "the same c.secondary(ref, origin=) hook; an ActionType.NONE row with no trigger cannot be offered at all",
+    "why": "'No Action', area burst 2 centred on the primary target, no Requirement and no Trigger. triggers.WINDOW_OF only offers a NONE-action row that declares a trigger; without one it is armed as a trait, which is not what the card is. The parent's 'Effect: Make the secondary attack' already resolves it inline"
+  },
+  "p2622:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is a close burst where the row is a melee attack -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p8227:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is an area burst where the row is a single ranged target -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p8239:augment1": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 1 adds a second target adjacent to the first -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p8239:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is any two targets, and its stronger hit is not written on its own because half a clause is worse than none -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p10281:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is a close burst against each enemy -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p10287:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is a close burst with a zone laid over it -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p10288:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is a close burst with an attack line the unaugmented row does not have -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p10438:augment1": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 1 targets one or two creatures in the burst rather than one -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p11061:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is a close burst against each creature -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p11157:augment1": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 1 lengthens the row's reach for that attack -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p11157:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is a close blast 3 -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p11169:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is a close burst 1 -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p11275:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is an area burst with a zone -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p12419:augment1": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 1 swaps the close blast for a close burst 3 and shoves one enemy rather than each -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p12422:augment1": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 1 lengthens the reach by 1 for that attack -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p12422:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 lengthens the reach by Charisma; its stronger hit is not written alone -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p12935:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is a close burst 1 with a standing damage penalty -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p13027:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is a close burst against each enemy -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p13039:augment1": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 1 lengthens the reach by 1 -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p13041:augment1": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 1 is Melee 5, and its longer pull is not written alone -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p13041:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is Melee 5 with a pull and a prone -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p13052:augment1": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 1 is weapon + 3 reach -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p13052:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is weapon + 3 reach with a pull, not written alone -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p13305:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 is an area burst where the row is a single ranged target -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p13319:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 targets up to three creatures -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p13334:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 widens the close burst from 1 to 2 -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p13318:augment2": {
+    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
+    "why": "Augment 2 makes a secondary area burst centred on the primary target, with a target line and an attack line of its own -- targeting is done before the body is called, so a body cannot honour it"
+  },
+  "p11158:augment1": {
+    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
+    "why": "the aspect's whole content is an augmentation lent to the battlemind's at-will attacks while it stands; nothing hangs a clause on another row's augment, and the same shape is p11165, p11172, p13030 and p13043"
+  },
+  "p11165:augment1": {
+    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
+    "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
+  },
+  "p11172:augment1": {
+    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
+    "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
+  },
+  "p13030:augment1": {
+    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
+    "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
+  },
+  "p13043:augment1": {
+    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
+    "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
+  },
+  "p2622:augment1": {
+    "wants": "a compendium ref for the class-feature attack, as dsl.REGISTRY has none for it",
+    "why": "Augment 1 pays extra damage on a later use of the battlemind's own feature attack, which the spec names in prose with no id beside it"
+  },
+  "p13053:augment1": {
+    "wants": "a compendium ref for the class-feature step power, as dsl.REGISTRY has none for it",
+    "why": "both augments only lengthen the rider on that feature, which the unaugmented row already had to drop for the same reason"
+  },
+  "p13053:augment2": {
+    "wants": "a compendium ref for the class-feature step power, as dsl.REGISTRY has none for it",
+    "why": "Augment 2's teleport is that same rider; its 2[W] is not written alone because half a clause is worse than none"
+  },
+  "p10275:augment1": {
+    "wants": "Effect.keywords, so c.save(against=) can name a charm or a fear effect rather than matching a label substring",
+    "why": "the bonus applies only to a save against a charm or fear effect, and every effect's label is the ref of the row that laid it, so the gate would be false for every charm in the game"
+  },
+  "p12934:augment1": {
+    "wants": "c.revealed(on=) -- clearing Relation.HIDDEN_FROM from the creature being looked at",
+    "why": "the clause strips concealment and invisibility; c.no_cover says the first and only c.see_invisible answers the second, and that sits on whoever is looking rather than on the target"
+  },
+  "p12934:augment2": {
+    "wants": "c.reroll_attack(ev=) -- rerolling an attack read off a passed event rather than off c.trigger",
+    "why": "the reroll is handed to the next ally who misses, which is a watcher, and a watcher has no c.trigger"
+  },
+  "p12947:augment2": {
+    "wants": "c.deals_half(when=) -- half damage narrowed to some of a creature's attacks",
+    "why": "'deals half damage with any attack that is not a basic attack' is Condition.WEAKENED, which query.deals_half reads off the creature rather than off the attack"
+  },
+  "p12958:augment1": {
+    "wants": "c.deals_half(when=) -- half damage narrowed to some of a creature's attacks",
+    "why": "the same gate, on basic attacks this time; its Charisma modifier is not written alone"
+  },
+  "p13318:augment1": {
+    "wants": "c.penalty_in(zone, what, value) -- a modifier scoped to a zone or an aura, as c.resist_in and c.cover_in already are",
+    "why": "enemies take -2 to attack rolls while adjacent to the target, and nothing scopes an attack modifier to a footprint"
+  },
+  "p11104:augment1": {
+    "wants": "dsl.Power.charges chosen per augment, with dsl.use deciding reach from it",
+    "why": "Augment 1 makes the row itself a charge; charges= is read before the body to decide whether the target is in reach at all"
+  },
+  "p11106:augment1": {
+    "wants": "c.must_attack(on=, against=) plus a way to say that enemies provoke from a creature",
+    "why": "'enemies provoke opportunity attacks from the target, and it must make those attacks' needs both halves; c.provoke opens one window for one named attacker and nothing obliges anybody to answer it"
+  },
+  "p13783:augment1": {
+    "wants": "SkillCheck.purpose, so a bonus can be gated to checks made to find hidden creatures",
+    "why": "the clause is +5 to Perception checks made for one reason, and a check carries no reason to gate on, so the bonus would apply to every Perception check the ardent makes"
+  },
+  "p13311:augment1": {
+    "wants": "a third command on dsl.Summon, beyond its standard and opportunity attacks",
+    "why": "Augment 1 gives the servant an opportunity action that makes a Heal check on a dying ally, and Summon declares two attack lines and nothing else"
+  },
+  "p13325:augment1": {
+    "wants": "a rider on dsl.Summon's attack line, so a summoned creature's grab can be applied",
+    "why": "the penalty is to escaping a grab the summon never applies, so the clause could never come up"
+  },
+  "p13051:augment1": {
+    "wants": "Position.squares holding a second, separate square for one creature",
+    "why": "both augments are built on occupying two squares at once, which the unaugmented row already had to drop"
+  },
+  "p13051:augment2": {
+    "wants": "Position.squares holding a second, separate square for one creature",
+    "why": "Augment 2 puts the double five squares away and is the same gap"
+  },
+  "p13303:augment2": {
+    "wants": "augment.augment called on p13303b, the minor-action attack printed under this id",
+    "why": "Augment 2 is that second card's dice, so it belongs to the row that now has its own ref"
+  },
+  "p13320:augment2": {
+    "wants": "augment.augment called on p13320b, the opportunity attack printed under this id",
+    "why": "Augment 2 is that second card's hit line"
+  },
+  "p13331:augment2": {
+    "wants": "augment.augment called on p13331b, the minor-action burst printed under this id",
+    "why": "Augment 2 is that second card's dice"
+  },
+  "p11169:augment1": {
+    "wants": "dsl.Power.basic_for or a header field saying a row may stand in for an opportunity attack",
+    "why": "Augment 1 is the Special that lets the row be used in place of a melee basic attack when making an opportunity attack, which is what a row is used *as* rather than anything its body does"
+  },
+  "p8240:augment1": {
+    "wants": "c.strip_resistance(dtype, on=) -- taking a standing resistance away, which c.resist only adds",
+    "why": "the clause fixes the vulnerability at 5 and then strips the target's psychic resistance; the second half has no method, and writing the first alone would be half a clause"
+  },
+  "p2621:augment1": {
+    "wants": "the card's Augment 1 body in the compendium import, which etl.sanitise.power_spec finds empty",
+    "why": "the imported entry has no Hit line under its Augment 1 heading -- only the Special that belongs to the whole power sits between the two headings -- so there is no clause to write"
   }
 }

@@ -3,10 +3,9 @@
 **The form rows are their first stanza and nothing else.** `p10838`,
 `p10840` and `p10842` each print two: a minor action that assumes a shape,
 and a standard action attack with "Requirement: the form must be active".
-The second is a separate row in the compendium with an id of its own, and
-this spec gives one id per block -- so what is written here is the minor
-action the header describes, with the shape's standing benefits hung on the
-form itself.
+The second has an id of its own -- `p10838b` and its fellows, declared in
+`second_card.py` -- so what is written here is the minor action the header
+describes, with the shape's standing benefits hung on the form itself.
 
 **Two rows enchant a weapon.** Their printed Target is an object, which
 nothing in the engine is, so they are written as the weapon in the druid's

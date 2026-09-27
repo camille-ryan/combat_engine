@@ -1,26 +1,32 @@
 """Ardent, level 7.
 
-All at-will and all augmentable; the base form is written and each docstring
-names the augment clauses dropped with it. Two printed rows are absent: one
+All at-will and all augmentable; each row buys its augment with `augment` and
+names in its docstring whatever is left out. Two printed rows are absent: one
 whose rider is "rolls damage twice and uses the lower roll", and one whose
 Effect is "does not benefit from partial cover or partial concealment".
 """
 
 from __future__ import annotations
 
+from combat_engine.content.powers.augment import augment
 from combat_engine.engine import (
     AC,
     AT_WILL,
     CHA,
+    FORT,
+    MOVE,
     ONE_CREATURE,
+    REF,
     STANDARD,
     WILL,
     Attack,
+    AttackRolled,
     Cast,
     DamageType,
     Hit,
     Keyword,
     Melee,
+    TurnStart,
     When,
     power,
 )
@@ -49,8 +55,10 @@ def _pick(c: Cast, pool: list[int], prompt: str) -> int | None:
 )
 def p10287(c: Cast) -> None:
     """"Against the target's attacks" is a gate on the defence modifier, which
-    `query.defence` is handed the attack context for. Dropped augments: Augment
-    1 widens the bonus to all defences; Augment 2 is a burst with a zone."""
+    `query.defence` is handed the attack context for. Augment 1 widens the
+    bonus to every defence. Augment 2 is a close burst with a zone and is
+    left out."""
+    spent = augment(c, 1)
     victim = c.target
     if victim is None or not c.strike():
         return
@@ -60,9 +68,11 @@ def p10287(c: Cast) -> None:
     def theirs(ctx: dict) -> bool:
         return ctx.get("attacker") == victim
 
+    guarded = (AC, FORT, REF, WILL) if spent else (AC,)
     for who in (c.me, ally):
         if who is not None:
-            c.bonus(AC, 2, on=who, until=When.EONT, when=theirs, kind="power")
+            for d in guarded:
+                c.bonus(d, 2, on=who, until=When.EONT, when=theirs, kind="power")
 
 
 @power(
@@ -76,13 +86,16 @@ def p10287(c: Cast) -> None:
     keywords=[Keyword.PSIONIC],
 )
 def p10288(c: Cast) -> None:
-    """No attack line of its own -- the ally swings. Dropped augments: Augment 1
-    adds +3 damage if the ally has the target marked; Augment 2 makes it a burst
-    with an attack of your own."""
+    """No attack line of its own -- the ally swings. Augment 1 pays +3 damage
+    if that ally is the one marking the target, which `c.marked(by=)` answers.
+    Augment 2 makes the row a close burst with an attack of its own and is
+    left out."""
+    spent = augment(c, 1)
     victim = c.target
     ally = _pick(c, _friends(c, 1), "who swings")
     if victim is None or ally is None:
         return
+    extra = 3 if spent and c.marked(on=victim, by=ally) else 0
 
     def landed(ev: Hit) -> None:
         if ev.attacker == ally and ev.target == victim:
@@ -90,7 +103,7 @@ def p10288(c: Cast) -> None:
             c.shift(1, who=ally)
 
     c.watch(Hit, landed, until=When.EOT, once=True)
-    c.grant_attack(ally, on=victim)
+    c.grant_attack(ally, on=victim, damage_bonus=extra)
 
 
 @power(
@@ -105,14 +118,30 @@ def p10288(c: Cast) -> None:
     attack=Attack(CHA, vs=AC),
 )
 def p11104(c: Cast) -> None:
-    """Dropped augments: Augment 1 lets you shift and then charge with this;
-    Augment 2 sends one or two allies charging."""
+    """Augment 2 sends one or two allies charging something else, paid a
+    Constitution-sized damage bonus for it.
+
+    Augment 1 is not offered: it makes the row itself a charge, and whether a
+    row charges is `charges=` in the header, read before the body runs to
+    decide whether the target is in reach at all. Written in the body it
+    would shift and swing at a creature the targeting had already refused."""
+    spent = augment(c, 2)
+    victim = c.target
     if not c.strike():
         return
     c.damage(c.w(), c.cha_mod)
-    if c.first:
+    if not c.first:
+        return
+    if not spent:
         for ally in _friends(c, 1):
             c.bonus("attack", 1, on=ally, until=When.SONT, kind="power")
+        return
+    quarry = [f for f in c.enemies() if f != victim]
+    for ally in _friends(c, 10)[:2]:
+        prey = _pick(c, quarry, "whom that ally charges")
+        if prey is not None:
+            c.bonus("damage", c.con_mod, on=ally, until=When.EOT, kind="power")
+            c.charge_at(prey, who=ally)
 
 
 @power(
@@ -127,18 +156,34 @@ def p11104(c: Cast) -> None:
     attack=Attack(CHA, vs=AC),
 )
 def p11105(c: Cast) -> None:
-    """Dropped augments: Augment 1 pays a healing surge for a hit on Will;
+    """Augment 1 pays a healing surge instead, and only for a hit on the
+    target's Will -- which defence was attacked is on `AttackRolled` and
+    nowhere else, so the surge is paid from there rather than from `Hit`.
     Augment 2 is 2[W] and pays every ally who hits, not just the next."""
+    spent = augment(c)
     victim = c.target
     if victim is None or not c.strike():
         return
-    c.damage(c.w(), c.cha_mod)
+    c.damage(c.w(2) if spent == 2 else c.w(), c.cha_mod)
 
     def mend(ev: Hit) -> None:
         if ev.target == victim and ev.attacker in c.allies():
-            c.heal(c.con_mod, on=ev.attacker)
+            if spent == 2:
+                if c.may("spend a healing surge", who=ev.attacker):
+                    c.surge(on=ev.attacker)
+            else:
+                c.heal(c.con_mod, on=ev.attacker)
 
-    c.watch(Hit, mend, until=When.SONT, once=True)
+    def mend_on_will(ev: AttackRolled) -> None:
+        if ev.target != victim or ev.vs is not WILL or ev.total < ev.defence:
+            return
+        if ev.attacker in c.allies() and c.may("spend a healing surge", who=ev.attacker):
+            c.surge(on=ev.attacker)
+
+    if spent == 1:
+        c.watch(AttackRolled, mend_on_will, until=When.SONT)
+    else:
+        c.watch(Hit, mend, until=When.EONT if spent else When.SONT, once=spent != 2)
 
 
 @power(
@@ -158,17 +203,26 @@ def p11105(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p11106(c: Cast) -> None:
-    """The damage line carries no weapon dice at all -- just the modifier.
-    Dropped augments: Augment 1 forces the target to take opportunity attacks;
-    Augment 2 is 1[W] and buys two swings instead of one."""
+    """The damage line carries no weapon dice at all -- just the modifier,
+    until Augment 2 adds 1[W] and a second swing.
+
+    Augment 1 is not offered: "enemies provoke opportunity attacks from the
+    target, and it must make those attacks" needs both a provoking rule
+    written from the target's own side and a compulsion to take the window.
+    `c.provoke` opens one window for one named attacker and nothing obliges
+    anybody to answer it."""
+    spent = augment(c, 2)
     victim = c.target
     if victim is None or not c.strike():
         return
-    c.damage(0, c.cha_mod, dtype=DamageType.PSYCHIC)
+    c.damage(c.w() if spent else 0, c.cha_mod, dtype=DamageType.PSYCHIC)
     pool = [x for x in c.within(1, of=victim) if x != victim]
-    who = _pick(c, pool, "whom it turns on")
-    if who is not None:
+    for _ in range(2 if spent else 1):
+        who = _pick(c, pool, "whom it turns on")
+        if who is None:
+            return
         c.grant_attack(victim, on=who)
+        pool = [x for x in pool if x != who]
 
 
 @power(
@@ -184,14 +238,26 @@ def p11106(c: Cast) -> None:
 )
 def p12956(c: Cast) -> None:
     """The Effect is printed before the attack, so it runs before the roll --
-    once, not once per target. Dropped augments: Augment 1 lengthens the shift
-    to your Wisdom modifier; Augment 2 is 2[W] with a standing speed bonus."""
+    once, not once per target. Augment 1 lengthens that shift to your Wisdom
+    modifier. Augment 2 is 2[W] and pays every ally who *starts* a turn near
+    you a speed bonus and a two-square shift, which is why it is a watch on
+    `TurnStart` rather than something handed out now."""
+    spent = augment(c)
     if c.first:
         ally = _pick(c, _friends(c, 1), "who shifts first")
         if ally is not None:
-            c.shift(1, who=ally)
+            c.shift(c.wis_mod if spent == 1 else 1, who=ally)
+        if spent == 2:
+
+            def quickened(ev: TurnStart) -> None:
+                if ev.actor == c.me or ev.actor not in _friends(c, 5):
+                    return
+                c.bonus("speed", 2, on=ev.actor, until=When.EOT, kind="power")
+                c.shift_as(MOVE, 2, on=ev.actor, until=When.EOT)
+
+            c.watch(TurnStart, quickened, until=When.EONT, label=c.ref)
     if c.strike():
-        c.damage(c.w(), c.cha_mod)
+        c.damage(c.w(2) if spent == 2 else c.w(), c.cha_mod)
 
 
 @power(
@@ -206,11 +272,25 @@ def p12956(c: Cast) -> None:
     attack=Attack(CHA, vs=AC),
 )
 def p12957(c: Cast) -> None:
-    """Dropped augments: Augment 1 adds psychic damage the first time the target
-    hits an ally; Augment 2 is 2[W] and grants combat advantage."""
-    if c.strike():
-        c.damage(c.w(), c.cha_mod)
-        c.mark(until=When.EONT)
+    """Augment 1 adds psychic damage the first time the target hits an ally;
+    Augment 2 is 2[W] and opens the target up to whoever stands beside you."""
+    spent = augment(c)
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage(c.w(2) if spent == 2 else c.w(), c.cha_mod)
+    c.mark(until=When.EONT)
+    if spent == 1 and victim is not None:
+
+        def stung(ev: Hit) -> None:
+            if ev.attacker == victim and ev.target in c.allies():
+                c.flat(c.wis_mod, dtype=DamageType.PSYCHIC, on=victim)
+
+        c.watch(Hit, stung, until=When.EONT, once=True, label=c.ref)
+    elif spent == 2 and victim is not None:
+        for ally in c.within(1, side="ally"):
+            if ally != c.me:
+                c.grants_advantage(on=victim, to=ally, until=When.EONT)
 
 
 @power(
@@ -225,11 +305,40 @@ def p12957(c: Cast) -> None:
     attack=Attack(CHA, vs=AC),
 )
 def p12959(c: Cast) -> None:
-    """Dropped augments: Augment 1 heals the ally if it hits with a charge;
-    Augment 2 sends an ally charging outright."""
+    """Augment 1 pays the quickened ally hit points if its charge lands --
+    `Hit` carries `charge` as a plain attribute, so the clause is that and
+    not "any attack". Augment 2 sends an ally charging now instead, with the
+    attack bonus laid as a one-shot modifier because `c.charge_at` takes no
+    bonus of its own."""
+    spent = augment(c)
     if not c.strike():
         return
     c.damage(c.w(), c.cha_mod)
     ally = _pick(c, _friends(c, 5), "who quickens")
-    if ally is not None:
-        c.bonus("speed", 2, on=ally, until=When.EONT, kind="power")
+    if ally is None:
+        return
+    if spent == 2:
+        prey = _pick(c, [f for f in c.enemies() if f != c.target], "whom it charges")
+        if prey is None:
+            return
+        c.bonus("attack", c.con_mod, on=ally, until=When.EOT, kind="power", once=True)
+
+        def rewarded(ev: Hit) -> None:
+            if ev.attacker != ally or not getattr(ev, "charge", False):
+                return
+            for d in (AC, FORT, REF, WILL):
+                c.bonus(d, 2, on=ally, until=When.SONT, kind="power")
+            if c.may("spend a healing surge", who=ally):
+                c.surge(on=ally)
+
+        c.watch(Hit, rewarded, until=When.EOT, once=True, label=c.ref)
+        c.charge_at(prey, who=ally)
+        return
+    c.bonus("speed", 2, on=ally, until=When.EONT, kind="power")
+    if spent == 1:
+
+        def mended(ev: Hit) -> None:
+            if ev.attacker == ally and getattr(ev, "charge", False):
+                c.heal(c.con_mod, on=ally)
+
+        c.watch(Hit, mended, until=When.EONT, once=True, label=c.ref)

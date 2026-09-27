@@ -197,10 +197,9 @@ def p13442(c: Cast) -> None:
     """A conjuration, so creatures move through it -- nothing printed says it
     blocks.
 
-    Its own attack is printed as a second block carrying *this same id*, which
-    the tree cannot hold twice, so that swing is dropped along with the move
-    action that walks the thing and the flanking it grants. What is written is
-    the conjuration arriving beside the enemy that was missed."""
+    Its own attack is `p13442b`, which reads the standing conjuration as its
+    Requirement. The move action that walks the thing and the flanking it
+    grants have no field and are dropped."""
     victim = getattr(c.trigger, "target", None)
     spot = c.world.get(victim, Position) if victim is not None else None
     where = None

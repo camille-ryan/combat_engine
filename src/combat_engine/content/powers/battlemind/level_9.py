@@ -12,23 +12,19 @@ from combat_engine.engine import (
     STANDARD,
     WILL,
     Attack,
-    AttackDeclared,
     Cast,
     DamageType,
     Hit,
     Keyword,
     Melee,
-    SavingThrow,
     UpTo,
     When,
-    Window,
     by_melee,
     power,
     spread,
 )
-from combat_engine.engine.events import MoveStart
 
-from . import PSIONIC_WEAPON, shift_beside, square_of
+from . import PSIONIC_WEAPON
 
 #: "If either attack hits" spans two calls of the body, which is once per
 #: target, so the flag has to live outside it.
@@ -49,7 +45,9 @@ _LANDED: set[int] = set()
 def p11172(c: Cast) -> None:
     """The second way the penalty ends -- the target finishing a turn without
     attacking -- is dropped; a duration is a `When` and there is no way to add
-    a condition to one. The aspect's content is the Augment 1 clause."""
+    a condition to one. The aspect's whole content is its Augment 1, and that
+    clause is bought when some *other* at-will is augmented while the aspect
+    stands -- nothing hangs a clause on another row's augment."""
     if c.strike():
         c.damage(c.w(2), c.con_mod)
         c.penalty("attack", c.wis_mod, until=When.SAVE_ENDS)
@@ -113,9 +111,9 @@ def p11174(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p12426(c: Cast) -> None:
-    """The stance's move-action power shares this id, so it cannot be a second
-    `@power`, and walking through a marked enemy's space is not something
-    `c.shift` can be told to do. Dropped."""
+    """The stance's move-action power is `p12426b`, which is left out: the
+    force damage is owed for a space the shift passes *through*, and a shift
+    is one `step` to its destination with no squares in between."""
     if c.strike():
         c.damage(c.w(3), c.con_mod, dtype=DamageType.FORCE)
     else:
@@ -198,32 +196,21 @@ def p13056(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p13057(c: Cast) -> None:
-    """The zone's opportunity attack shares this id and is folded in as a
-    subscription. It answers in the interrupt window because the printed
-    Effect is "*before* the attack, you shift". The fold loses two things: it
-    costs no opportunity action, and the watch expires at the end of the next
-    turn rather than following the sustained zone."""
+    """The zone's opportunity attack is `p13057b`, declared on its own now
+    that the second printed block has an id and gated on the battlemind
+    standing inside this zone. Folded in here it cost no opportunity action
+    and expired with the next turn rather than following the sustain."""
     if c.strike():
         c.damage(c.w(2), c.con_mod)
     else:
         c.half_damage(c.w(2), c.con_mod)
-    if not c.first:
-        return
-    field = frozenset(spread({c.here}, 2))
-    c.zone(field, label=c.ref, until=When.SUSTAIN, sustain=MINOR)
-
-    def riposte(ev: AttackDeclared) -> None:
-        foe = ev.attacker
-        if foe == c.me or ev.target == c.me or foe not in c.enemies():
-            return
-        if square_of(c, foe) not in field or c.here not in field:
-            return
-        shift_beside(c, max(1, c.speed_of()), foe)
-        if c.strike(on=foe):
-            c.damage(c.w(), c.con_mod, on=foe)
-            c.mark(on=foe, until=When.EONT)
-
-    c.watch(AttackDeclared, riposte, until=When.EONT, on=c.me, window=Window.BEFORE)
+    if c.first:
+        c.zone(
+            frozenset(spread({c.here}, 2)),
+            label=c.ref,
+            until=When.SUSTAIN,
+            sustain=MINOR,
+        )
 
 
 @power(
@@ -268,39 +255,15 @@ def p13059(c: Cast) -> None:
     attack=Attack(CON, vs=WILL),
 )
 def p2636(c: Cast) -> None:
-    """The stance's opportunity attack shares this id and is folded in. The
-    forced failure answers `SavingThrow` in the interrupt window, since the
-    event is announced before it is acted on."""
+    """The stance's opportunity attack is `p2636b`, declared on its own now
+    that the second printed block has an id."""
     if c.strike():
         c.damage(c.w(), c.con_mod)
     else:
         c.half_damage(c.w(), c.con_mod)
     c.ongoing(5, DamageType.PSYCHIC, until=When.SAVE_ENDS)
-    if not c.last:
-        return
-    held = c.stance()
-
-    def riposte(ev: MoveStart) -> None:
-        who = ev.actor
-        if ev.kind_ != "walk" or c.turn_of() != who:
-            return
-        if not c.adjacent(who) or not c.marked(on=who):
-            return
-        if not c.strike(on=who):
-            return
-        c.damage(c.w(), on=who)
-
-        def botch(sv: SavingThrow) -> None:
-            if sv.actor == who:
-                c.unsave(sv)
-
-        c.watch(
-            SavingThrow, botch, until=When.EOT, on=c.me, once=True, window=Window.BEFORE
-        )
-
-    held.subs.append(
-        c.world.bus.on(MoveStart, riposte, owner=c.me, window=Window.BEFORE)
-    )
+    if c.last:
+        c.stance()
 
 
 @power(

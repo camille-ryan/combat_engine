@@ -21,21 +21,40 @@ from __future__ import annotations
 
 from combat_engine.engine import Cast
 
+#: What the most recent use of a row was bought with, by (caster, ref).
+#: Read **while that use is still resolving**: "your unaugmented attacks
+#: deal 1d6 extra" is a rider on a `Hit`, and a `Hit` carries the ref and
+#: nothing about how the row was paid for. `PowerPoints.augmented` answers
+#: a different question -- it is the encounter's running total, so once a
+#: row has been augmented it reads as augmented for the rest of the fight.
+_LAST: dict[tuple[int, str], int] = {}
 
-def augment(c: Cast, most: int = 2) -> int:
+
+def spent_on(who: int, ref: str) -> int:
+    """How many points bought that creature's current use of that row.
+
+    0 for a row nobody augments, which is what "unaugmented" means for the
+    three rows that ask.
+    """
+    return _LAST.get((who, ref), 0)
+
+
+def augment(c: Cast, *offers: int) -> int:
     """Power points spent on this use. 0 is the form printed above Augment 1.
 
-    `most` is the highest augment **the row can honour**, which is not
-    always the highest it prints: a clause that needs a different range or
-    a wider target line cannot be written in a body at all, because
-    targeting happens before the body runs. Those are recorded in
-    `docs/blocked.json` and left out of the offer rather than approximated.
+    `offers` are the augments **the row can honour**, which are not always
+    the ones it prints: a clause needing a different range or a wider
+    target line cannot be written in a body at all, because targeting
+    happens before the body runs. Those are recorded in
+    `docs/blocked.json` and left out of the offer rather than
+    approximated, which is why a row may offer 2 and not 1.
     """
     held = getattr(c, "augment_spend", None)
     if held is not None:
         return held
-    afford = min(most, c.points())
-    picked = c.choose([*range(afford, 0, -1), 0], "power points to augment")
+    afford = sorted((n for n in (offers or (2, 1)) if n <= c.points()), reverse=True)
+    picked = c.choose([*afford, 0], "power points to augment")
     spent = c.spend_points(picked) if picked else 0
     c.augment_spend = spent
+    _LAST[(c.me, c.ref)] = spent
     return spent

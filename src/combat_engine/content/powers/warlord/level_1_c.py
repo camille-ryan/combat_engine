@@ -31,6 +31,7 @@ from combat_engine.engine import (
     INTERRUPT,
     ONE_ALLY,
     ONE_CREATURE,
+    ONE_OTHER_ALLY,
     REACTION,
     REF,
     STANDARD,
@@ -712,3 +713,37 @@ def p7398(c: Cast) -> None:
             ev.amount += extra
 
     c.watch(Healed, more, until=When.EONT, window=Window.BEFORE, on=me, label=c.ref)
+
+
+@power(
+    "p11603",
+    level=1,
+    cls="warlord",
+    usage=DAILY,
+    action=STANDARD,
+    reach=CloseBurst(10),
+    target=ONE_OTHER_ALLY,
+    keywords=MARTIAL_WEAPON,
+)
+def p11603(c: Cast) -> None:
+    """The whole printed Effect is handing a row over. The swing, the shift
+    and the weapon all belong to `p11603b` and all of them are the ally's,
+    so nothing here rolls anything.
+
+    This was left out while the second stanza had no id of its own -- there
+    was nothing for `c.grant_row` to name. `c.grant_row` is needed here
+    where a second card usually does not need it: `chargen.loadout` deals
+    one to whoever holds the parent, and the user is somebody else. The hold
+    under this ref is what that row's Requirement reads, and it sits on the
+    ally for the same reason.
+    """
+    friend = c.target
+    if friend is None:
+        return
+    c.effect(c.ref, on=friend, until=When.EOT)
+    c.grant_row(f"{c.ref}b", on=friend, until=When.EOT)
+    near = sorted(f for f in c.within(1, of=friend, side="enemy"))
+    pool = near or sorted(c.within(10, of=friend, side="enemy"))
+    victim = c.choose(pool, "who that ally goes for") if pool else None
+    if victim is not None:
+        c.grant_attack(friend, on=victim, ref=f"{c.ref}b")

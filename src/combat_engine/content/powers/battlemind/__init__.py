@@ -1,10 +1,12 @@
 """Battlemind. Shared helpers for the class, and one note that covers it.
 
-**Augmentation is not modelled.** Thirty-five of these rows print Augment 1
-and Augment 2 clauses bought with power points, which the engine does not
-have. Each of those is written in its base form -- the effect printed
-before the first Augment line, which is a complete at-will on its own --
-and the clauses that were dropped are named in that row's docstring.
+**Augmentation is a real spend.** The rows that print Augment 1 and
+Augment 2 ask `powers.augment.augment` how many power points this use is
+bought with and branch on the answer. What is still left out is named in
+each row's docstring and recorded in `docs/blocked.json`, and it is almost
+always one shape: a clause that rewrites the **header** -- a longer reach,
+a burst where the base is one target -- which a body cannot honour because
+targeting happens before it is called.
 
 The helpers are here because half the class lands somebody beside somebody
 else, and "a square adjacent to you" is not the square a free-choice

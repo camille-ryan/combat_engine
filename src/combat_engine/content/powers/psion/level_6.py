@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.powers.augment import spent_on
 from combat_engine.engine import (
+    AT_WILL,
     DAILY,
     ENCOUNTER,
     FREE,
@@ -33,6 +35,7 @@ from combat_engine.engine import (
     both,
     by_keyword,
     by_me,
+    get,
     power,
     query,
 )
@@ -42,6 +45,16 @@ PSIONIC = [Keyword.PSIONIC]
 
 def _crit_on_me(world: World, me: int, ev: Any) -> bool:
     return ev.target == me and ev.critical
+
+
+def _unaugmented_at_will(world: World, me: int, ev: Any) -> bool:
+    """"With an unaugmented at-will power", as a predicate.
+
+    `augment.spent_on` is what the use being answered paid; the pool's own
+    `augmented` total says the row was augmented *at some point this
+    encounter*, which is a different sentence and true far too often."""
+    p = get(getattr(ev, "power", ""))
+    return p is not None and p.usage is AT_WILL and not spent_on(me, ev.power)
 
 
 def _my_will(world: World, me: int, ev: Any) -> bool:
@@ -98,14 +111,21 @@ def p11318(c: Cast) -> None:
     trigger="you hit an enemy within 10 squares with a psionic force at-will",
     on=Trigger(
         Hit,
-        both(by_me, by_keyword(Keyword.FORCE), by_keyword(Keyword.PSIONIC)),
-        "you hit an enemy with a psionic force attack",
+        both(
+            by_me,
+            by_keyword(Keyword.FORCE),
+            by_keyword(Keyword.PSIONIC),
+            _unaugmented_at_will,
+        ),
+        "you hit an enemy with an unaugmented psionic force at-will",
     ),
 )
 def p13327(c: Cast) -> None:
-    """"Unaugmented" and "at-will" are not askable of an event, so the trigger
-    is the force-and-psionic part of the sentence; with no power points every
-    psion at-will is unaugmented anyway."""
+    """The whole printed trigger is declared now that an augment is a real
+    spend: "unaugmented" and "at-will" are both askable of the row the `Hit`
+    names. The gate is in the predicate rather than the body because an
+    encounter power is marked used before its body runs, so a body that
+    bowed out would cost the use anyway."""
     ev = c.trigger
     if ev is None:
         return

@@ -19,7 +19,6 @@ from combat_engine.engine import (
     Cast,
     CloseBlast,
     DamageType,
-    Dropped,
     Keyword,
     Melee,
     TurnStart,
@@ -73,12 +72,12 @@ def p11399(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=DIVINE_WEAPON,
     attack=Attack(STR, vs=FORT),
-    attack_alt=Attack(STR, vs=WILL),
 )
 def p11400(c: Cast) -> None:
-    """The second half of this row is a power of its own on the page. It is
-    the alternate attack line here, rolled from a square in the target's
-    space when the target falls, which is what the printed origin means."""
+    """The second half of this row is `p11400b`, and it took the alternate
+    attack line with it. The Effect line is two holds: one on the caster,
+    which is that row's Requirement, and one on the primary target, which is
+    the origin square the printed line names."""
     victim = c.target
     kind = c.choose([DamageType.NECROTIC, DamageType.RADIANT], "which rune")
     kind = kind or DamageType.RADIANT
@@ -88,19 +87,8 @@ def p11400(c: Cast) -> None:
         c.half_damage(c.w(2), c.str_mod, dtype=kind)
     if victim is None:
         return
-
-    def verge(ev: Any, v: int = victim) -> None:
-        if ev.actor != v:
-            return
-        c.branch = 1
-        try:
-            for e in c.within(3, of=v, side="enemy"):
-                if c.strike(on=e, from_=v):
-                    c.dazed(on=e, until=When.SAVE_ENDS)
-        finally:
-            c.branch = 0
-
-    c.watch(Dropped, verge, until=When.ENCOUNTER)
+    c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
+    c.effect(f"{c.ref} origin", on=victim, until=When.ENCOUNTER)
 
 
 @power(

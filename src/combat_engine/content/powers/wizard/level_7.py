@@ -6,11 +6,12 @@ The zone's teeth bite at the start of a turn and nowhere else, so they are a
 catch whoever walks in, which is a clause this row does not print. "Only
 once per turn" comes free with that: there is one turn start per turn.
 
-The rows printed in the later books follow. Two of them fold in a **second
-printed stanza** -- `p13987`'s zone lives exactly as long as its own
-immobilisation, and `p13988`'s reaction is hung on the conjuration it makes,
-so the attack the stanza prints actually happens and stops when the twin does.
-Neither is declared as a second ref: the stanza has no id of its own.
+The rows printed in the later books follow. Two of them print a **second
+stanza**. `p13987`'s zone lives exactly as long as its own immobilisation and
+is folded in, the stanza having no id. `p13988`'s reaction does have one --
+`p13988b`, in `second_card.py` -- so this row makes the twin and leaves a
+hold naming which creature it is a twin of, which is the one thing a
+conjuration does not record.
 
 "Ends its turn in the zone" is **not** what `c.burns` says -- that is entering
 and starting -- so the rows printing it write a `TurnEnd` watch and hang it on
@@ -59,7 +60,6 @@ from combat_engine.engine import (
     spread,
 )
 from combat_engine.engine.components import Conjuration
-from combat_engine.engine.movement import place
 from combat_engine.engine.zones import Zone
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
@@ -410,10 +410,10 @@ def p13987(c: Cast) -> None:
 )
 def p13988(c: Cast) -> None:
     """The twin is an Effect line, so it appears whether or not the first blow
-    landed. The second printed stanza -- the twin vanishing and striking when
-    the target leaves its side or attacks -- is folded in as a pair of watches
-    on the conjuration's own effect, spent once between them, because a stanza
-    with no id of its own cannot be a second row.
+    landed. The second printed stanza -- the twin vanishing and striking -- is
+    `p13988b` now; the hold below is how that row knows which creature the
+    twin was made of, since a conjuration records who made it and not who it
+    is a copy of.
 
     The -2 is gated on adjacency rather than reapplied as the two move, which
     is the one way a modifier can follow a position.
@@ -437,45 +437,7 @@ def p13988(c: Cast) -> None:
         "attack", 2, on=victim, until=When.EONT,
         when=lambda _ctx: c.adjacent_to(twin, victim),
     )
-    spent: list[bool] = []
-
-    def pounce(_ev: object) -> None:
-        stands = c.world.get(victim, Position)
-        if spent or stands is None or c.world.get(twin, Position) is None:
-            return
-        spent.append(True)
-        beside = [
-            sq
-            for sq in sorted(spread(stands.squares, 1))
-            if c.world.grid.passable(sq) and c.world.grid.occupant(sq) is None
-        ]
-        if beside:
-            place(c.world, twin, beside[0])
-        if c.strike(on=victim, from_=twin):
-            c.flat(5 + c.int_mod, dtype=DamageType.PSYCHIC, on=victim)
-            c.dazed(on=victim, until=When.EOTNT)
-        conj = c.world.get(twin, Conjuration)
-        vanish = c.world.effects.live.get(conj.effect) if conj else None
-        if vanish is not None:
-            c.world.effects.end(vanish, "the twin vanished")
-
-    def walked(ev: MoveEnd) -> None:
-        if ev.actor == victim:
-            pounce(ev)
-
-    def swung(ev: AttackDeclared) -> None:
-        if ev.attacker == victim:
-            pounce(ev)
-
-    conj = c.world.get(twin, Conjuration)
-    watching = c.world.effects.live.get(conj.effect) if conj else None
-    if watching is not None:
-        watching.subs.extend(
-            [
-                c.world.bus.on(MoveEnd, walked),
-                c.world.bus.on(AttackDeclared, swung),
-            ]
-        )
+    c.effect(f"{c.ref} twin", on=victim, until=When.EONT)
 
 
 @power(

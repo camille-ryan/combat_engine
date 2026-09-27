@@ -6,9 +6,10 @@ are imported from there rather than written twice.
 
 `p2351` and `p16276` each print a **second stanza** whose Requirement is that
 the first power be active and whose trigger is a creature arriving in the zone
-the first paragraph laid. That is one power in two paragraphs rather than two
-refs, so the zone is built here and the triggered attack hangs on the zone's
-own effect -- it goes when the zone goes.
+the first paragraph laid. `p2351`'s has a ref of its own -- `p2351b`, in
+`second_card.py` -- so this row lays the ice and nothing else. `p16276`'s
+does not, so its zone is built here and the triggered attack hangs on the
+zone's own effect -- it goes when the zone goes.
 
 `p16275` prints an area **wall**, which is not a shape a `Range` can be: the
 printed ten squares are the reach and the run of six is laid in the body.
@@ -82,34 +83,12 @@ ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
     attack=Attack(INT, vs=REF),
 )
 def p2351(c: Cast) -> None:
-    """The second printed stanza is folded in rather than declared as a row
-    of its own: a free action whose Requirement is that this power be active
-    and whose trigger is a creature entering this zone is the same thing as
-    a listener hung on this zone's effect.
-
-    Its miss slides the target two squares and says outright that the
-    movement does not trigger the attack again, which is what the latch is
-    for.
-    """
+    """Only the ice. The second printed stanza -- the free action that trips
+    whoever walks onto it -- is `p2351b` now, gated on this zone standing."""
     area = c.area()
     if not area:
         return
-    zone = c.zone(area, label=c.ref, until=When.ENCOUNTER, difficult=True)
-    busy: set[int] = set()
-
-    def slip(who: int) -> None:
-        if who in busy:
-            return
-        busy.add(who)
-        try:
-            if c.strike(on=who):
-                c.prone(on=who)
-            else:
-                c.slide(2, on=who)
-        finally:
-            busy.discard(who)
-
-    _on_zone(c, zone, slip, entering=True)
+    c.zone(area, label=c.ref, until=When.ENCOUNTER, difficult=True)
 
 
 @power(

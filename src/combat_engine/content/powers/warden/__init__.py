@@ -19,8 +19,8 @@ wrong, and three of the four have no ready-made method that says them.
   starts its turn there" -- and the warden prints three others.
 
 `in_form` is the Requirement line every form's own attack carries. Those
-attacks have no ids of their own in the spec and so are not written; the
-gate is here because the utility that refreshes one does need it.
+attacks are written -- the importer mints each one a ref with a `b` on the
+end -- and they live in `second_card.py`, which is what the gate is for.
 """
 
 from __future__ import annotations

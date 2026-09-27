@@ -373,12 +373,16 @@ def p12504(c: Cast) -> None:
     catches.
 
     Where the slide ends -- next to the beast companion -- has nowhere to go:
-    the companion is not modelled and `c.slide` takes no anchor, so the
-    destination is the mover's decider's, the reading `level_2.py`'s `p923`
-    settled. The trailing beast Effect is dropped whole.
+    `c.slide` takes no anchor, so the destination is the mover's decider's,
+    the reading `level_2.py`'s `p923` settled. Of the trailing Effect, the
+    half that grants `p12504b` is the hold left here under this ref; the
+    other half -- the beast answering with an opportunity action rather than
+    an immediate interrupt -- is a budget the engine keeps and no row can
+    rewrite.
     """
     if c.first:
         c.shift(4)
+        c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
     alone = c.first and c.last
     if c.strike():
         c.damage(c.w(2 if alone else 1), c.str_mod)

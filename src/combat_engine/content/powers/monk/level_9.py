@@ -35,7 +35,7 @@ from combat_engine.engine import (
     power,
     query,
 )
-from combat_engine.engine.events import AttackDeclared, Hit, MoveEnd, TurnStart
+from combat_engine.engine.events import Hit, MoveEnd, TurnStart
 
 IMPLEMENT = [Keyword.IMPLEMENT]
 
@@ -82,9 +82,9 @@ def p11228(c: Cast) -> None:
     attack=Attack(DEX, vs=REF),
 )
 def p11229(c: Cast) -> None:
-    """The follow-up attack has no id of its own, and it is a once-only
-    interrupt on the target swinging, so it is written into this row as a
-    one-shot watch rather than left unreachable."""
+    """The hold on the victim carries no condition: it is there so p11229b,
+    which is printed with no Requirement line and a Trigger reading "the
+    target", has a way to know which creature that is."""
     if c.strike():
         c.damage("2d10", c.dex_mod)
     else:
@@ -98,21 +98,7 @@ def p11229(c: Cast) -> None:
             c.shift(1)
 
     c.watch(MoveEnd, slipped, until=When.EONT)
-    busy: list[int] = []
-
-    def pounce(ev: AttackDeclared) -> None:
-        if busy or ev.attacker != victim:
-            return
-        busy.append(1)
-        try:
-            if c.strike(on=victim):
-                c.damage("2d10", c.dex_mod, on=victim)
-            else:
-                c.half_damage("2d10", c.dex_mod, on=victim)
-        finally:
-            busy.clear()
-
-    c.watch(AttackDeclared, pounce, until=When.ENCOUNTER, once=True)
+    c.effect(c.ref, on=victim, until=When.ENCOUNTER)
 
 
 @power(
@@ -185,9 +171,7 @@ def p13172(c: Cast) -> None:
     keywords=[*IMPLEMENT, Keyword.FIRE, Keyword.STANCE],
 )
 def p13173(c: Cast) -> None:
-    """The stance's second stat block -- a standard-action attack that ends
-    the stance -- has no id of its own in the spec, so only the stance is
-    written. The extra fire damage is typed, so it is a watch rather than a
+    """The extra fire damage is typed, so it is a watch rather than a
     `"damage"` modifier."""
     posture = c.stance()
     held = c.resist(5, DamageType.FIRE, until=When.ENCOUNTER)
@@ -296,11 +280,9 @@ def p16170(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def p16171(c: Cast) -> None:
-    """The form's second stat block -- a standard-action attack usable while
-    it holds -- has no id of its own in the spec. The extra saving throw is
-    written as one save at the top of the turn; `c.save` cannot be pointed
-    at a class of condition, so it takes whichever save-ends effect it
-    finds."""
+    """The extra saving throw is written as one save at the top of the turn;
+    `c.save` cannot be pointed at a class of condition, so it takes whichever
+    save-ends effect it finds."""
     shape = c.form(until=When.ENCOUNTER, label=c.ref)
     for defence in (AC, FORT, REF, WILL):
         held = c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER, kind="power")

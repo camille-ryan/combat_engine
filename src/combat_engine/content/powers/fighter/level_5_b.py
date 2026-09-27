@@ -44,7 +44,7 @@ from combat_engine.engine import (
     leaves_me_out,
     power,
 )
-from combat_engine.engine.events import AttackDeclared, Hit, Miss, MoveEnd
+from combat_engine.engine.events import AttackDeclared, Hit, MoveEnd
 from combat_engine.engine.query import adjacent, allies
 
 from .footwork import ends_when_apart
@@ -115,34 +115,12 @@ def p10153(c: Cast) -> None:
     keywords=[Keyword.MARTIAL, Keyword.STANCE, Keyword.WEAPON],
 )
 def p10493(c: Cast) -> None:
-    """The stance and the riposte it unlocks share one printed id, so they
-    are one row: the sub-power is an at-will immediate reaction, which comes
-    to once a round, and that is the latch the watcher keeps.
-
-    The free hand is the sub-power's Requirement rather than the stance's,
-    so it is asked when the riposte fires and not when the stance is taken.
-    """
-    me = c.me
-    stance = c.stance(label=c.ref)
-    last: dict[str, int] = {}
-
-    def riposte(ev: Miss) -> None:
-        foe = ev.attacker
-        if ev.target != me or not adjacent(c.world, me, foe):
-            return
-        if not by_melee(c.world, me, ev) or last.get("round") == c.world.round:
-            return
-        from .grips import hand_free
-
-        if not hand_free(c.world, me) or not c.may("answer with a fist", who=me):
-            return
-        last["round"] = c.world.round
-        if c.attack(c.str_, AC, on=foe):
-            c.damage(c.w(1), c.str_mod, on=foe)
-            c.grants_advantage(on=foe, to=me, until=When.EONT)
-
-    held = c.watch(Miss, riposte, until=When.ENCOUNTER, on=me, label=c.ref)
-    stance.on_end.append(lambda: c.world.effects.end(held, "stance ended"))
+    """The stance is the whole of this card's first block. The riposte it
+    unlocks is `p10493b`, an at-will immediate reaction whose Requirement is
+    this stance -- so the free hand is asked when the riposte fires rather
+    than when the stance is taken, and once a round comes out of the
+    immediate action's budget rather than a latch kept here."""
+    c.stance(label=c.ref)
 
 
 @power(

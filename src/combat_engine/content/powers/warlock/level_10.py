@@ -35,7 +35,6 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
-    AttackDeclared,
     Cast,
     CloseBurst,
     Condition,
@@ -235,20 +234,11 @@ def p12896(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.TELEPORTATION],
 )
 def p13650(c: Cast) -> None:
-    """The secondary carries no id of its own in the spec, so there is no row
-    to hand over with `c.grant_row`: it is armed here instead, and fires
-    rather than being offered. Once a round, which is what an immediate
-    action costs however at-will it is.
+    """The secondary is `p13650b`, so all this leaves is the hold its
+    Requirement reads. `Encounter.can_spend` is what keeps it to once a
+    round, which is what an immediate action costs however at-will it is.
     """
-    spent = [-1]
-
-    def blink(ev: AttackDeclared) -> None:
-        if ev.target != c.me or spent[0] == c.world.round:
-            return
-        spent[0] = c.world.round
-        c.teleport(3)
-
-    c.watch(AttackDeclared, blink, until=When.ENCOUNTER)
+    c.effect(c.ref, until=When.ENCOUNTER, on=c.me)
 
 
 @power(

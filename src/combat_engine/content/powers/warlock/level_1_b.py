@@ -514,8 +514,8 @@ def p13952(c: Cast) -> None:
     Only the enemies standing there when it arrives are opened up: the
     printed line is a standing property of the square, and re-reading who is
     adjacent each round would need a hold on the conjuration that
-    `c.conjure` does not hand back. The secondary attack printed under it
-    has no ref of its own in the spec and so is not written.
+    `c.conjure` does not hand back. The secondary attack printed under it is
+    `p13952b`, gated on this shadow standing.
     """
     victim = c.target
     if c.strike():

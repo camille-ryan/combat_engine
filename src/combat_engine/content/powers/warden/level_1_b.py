@@ -2,9 +2,8 @@
 
 Each of these ids is the *form* -- a minor action that holds until the
 encounter ends. Every one of them also prints a second stat block, an
-attack usable once while the form is up, and **none of those attacks has an
-id of its own in the spec**, so none is written here. `in_form` is their
-Requirement line, ready for when they do.
+attack usable once while the form is up; those carry the parent's ref with
+a `b` on the end and are in `second_card.py`, gated on `in_form`.
 
 A form is written as a stance: being in one is being in no other, which is
 the only part of "polymorph" the engine has to know, and `c.form` cannot

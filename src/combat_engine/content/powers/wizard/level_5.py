@@ -619,20 +619,13 @@ def p3219(c: Cast) -> None:
 )
 def p4074(c: Cast) -> None:
     """The zone is the origin square alone and the pull is toward it. The
-    second printed stanza is what sustaining does: `c.on_sustain` makes the
-    same pull again, which is the payout half the clock alone would drop.
+    second printed stanza -- the same pull made again -- is `p4074b` now, a
+    minor action of its own gated on this zone standing, so sustaining does
+    only what sustaining does.
     """
     heart = c.origin or c.here
     if c.first:
-        zone = c.zone({heart}, label=c.ref, until=When.SUSTAIN, sustain=MINOR)
-        standing = c.world.get(zone, Zone)
-
-        def again() -> None:
-            for foe in sorted(c.in_squares(spread({heart}, 5), side="enemy")):
-                if c.strike(on=foe):
-                    c.pull(4, on=foe, anchor=heart)
-
-        c.on_sustain(standing.effect if standing is not None else None, again)
+        c.zone({heart}, label=c.ref, until=When.SUSTAIN, sustain=MINOR)
     victim = c.target
     if victim is None or not c.strike():
         return

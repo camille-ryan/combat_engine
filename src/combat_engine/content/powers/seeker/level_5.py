@@ -33,7 +33,7 @@ from combat_engine.engine import (
     When,
     power,
 )
-from combat_engine.engine.events import DamageApplied, Hit, TurnStart, ZoneEntered
+from combat_engine.engine.events import DamageApplied, Hit
 from combat_engine.engine.grid import spread
 from combat_engine.engine.query import squares, team
 
@@ -213,27 +213,10 @@ def p9514(c: Cast) -> None:
     attack=Attack(WIS, vs=REF),
 )
 def p9515(c: Cast) -> None:
-    """The zone's own opportunity attack has no id in the spec, so it is not a
-    row; it is written here as what the zone does, rolling the caster's
-    Wisdom against whoever walks in."""
+    """The zone's own opportunity attack is `p9515b`, a row of its own; the
+    zone, labelled with this ref, is what it asks for and all this one
+    leaves behind."""
     if c.strike():
         c.damage(c.w(), c.wis_mod)
         c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS)
-    zone = c.zone(spread({c.there}, 1), until=When.EONT, difficult=True)
-
-    def snare(who: int) -> None:
-        if who == c.me or team(c.world, who) is team(c.world, c.me):
-            return
-        if c.attack(c.wis_, REF, on=who):
-            c.immobilized(on=who, until=When.SAVE_ENDS)
-
-    def entered(ev: ZoneEntered) -> None:
-        if ev.zone == zone:
-            snare(ev.actor)
-
-    def began(ev: TurnStart) -> None:
-        if ev.actor in c.world.zones.occupants(zone):
-            snare(ev.actor)
-
-    c.watch(ZoneEntered, entered, until=When.EONT)
-    c.watch(TurnStart, began, until=When.EONT)
+    c.zone(spread({c.there}, 1), until=When.EONT, difficult=True)

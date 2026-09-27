@@ -1,12 +1,12 @@
 """Ardent, level 1: the at-will whose rider is an opportunity-attack leash.
 
-Every at-will on this page prints an Augment 1 and an Augment 2 line. The
-engine has no power points, so what is written is the unaugmented line and
-the docstring names the clauses dropped.
+Every at-will on this page prints an Augment 1 and an Augment 2 line, bought
+with power points through `augment`.
 """
 
 from __future__ import annotations
 
+from combat_engine.content.powers.augment import augment
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -41,15 +41,20 @@ def p12932(c: Cast) -> None:
     exception. Enemies of the target are in the loop too, since the printed
     line says any creature.
 
-    Dropped augments: Augment 1 bars its opportunity attacks outright;
-    Augment 2 dazes it instead.
+    Augment 1 is the same loop with the caster left in it, which is what
+    "cannot make opportunity attacks" comes to. Augment 2 drops the leash
+    and dazes instead.
     """
+    spent = augment(c)
     if not c.strike():
         return
     c.damage(c.w(), c.cha_mod)
     victim = c.target
     if victim is None:
         return
+    if spent == 2:
+        c.dazed(until=When.EONT)
+        return
     for other in creatures(c.world):
-        if other != c.me:
+        if other != c.me or spent:
             c.no_provoke(from_=victim, on=other, until=When.EONT)

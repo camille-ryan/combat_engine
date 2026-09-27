@@ -337,10 +337,10 @@ def p12786(c: Cast) -> None:
     requires_text="a bow",
 )
 def p12787(c: Cast) -> None:
-    """The second half -- the minor action that expends the arrow -- has no id
-    of its own in the spec and so is not a row. What is written is the
-    conjuration and its footfall damage; note that a conjuration occupies its
-    square, so in this engine nothing can walk onto the arrow to take it."""
+    """The second half -- the minor action that expends the arrow -- is
+    `p12787b`, and the conjuration under this ref is the whole of what it
+    asks for. What is written here is the shot, the arrow and its footfall
+    damage."""
     if c.strike():
         c.damage(c.w(2), c.wis_mod)
     else:
@@ -527,27 +527,14 @@ def p9506(c: Cast) -> None:
     attack=Attack(WIS, vs=AC),
 )
 def p9507(c: Cast) -> None:
-    """The blooms' own attack has no id in the spec, so it is written inline
-    rather than as a row: it rolls the caster's Wisdom from the bloom's
-    square and the bloom goes when it has swung."""
+    """The blooms' own attack is `p9507b`, an opportunity action of its own;
+    the blooms themselves, labelled with this ref, are what that row looks
+    for and all this one leaves behind."""
     if c.strike():
         c.damage(c.w(), c.wis_mod)
         c.immobilized(until=When.SAVE_ENDS)
     for spot in free_near(c, c.there, 4):
-        bloom = c.conjure(spot, until=When.ENCOUNTER, sustain=None)
-        _bloom_waits(c, bloom, spot)
-
-
-def _bloom_waits(c: Cast, bloom: int, spot: tuple[int, int]) -> None:
-    def stepped(ev: EnterSquare) -> None:
-        if ev.square != spot or ev.actor == c.me:
-            return
-        for foe in c.in_squares(spread({spot}, 1), side="enemy"):
-            if c.attack(c.wis_, FORT, on=foe, from_=bloom):
-                c.flat(c.wis_mod, dtype=DamageType.POISON, on=foe)
-        banish(c, bloom)
-
-    c.watch(EnterSquare, stepped, until=When.ENCOUNTER)
+        c.conjure(spot, until=When.ENCOUNTER, sustain=None)
 
 
 @power(

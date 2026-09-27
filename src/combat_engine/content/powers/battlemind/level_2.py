@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from combat_engine.content.powers.augment import spent_on
 from combat_engine.engine import (
     AT_WILL,
     DAILY,
@@ -15,7 +16,6 @@ from combat_engine.engine import (
     SELF,
     Cast,
     CloseBurst,
-    DamageApplied,
     DamageType,
     Hit,
     Keyword,
@@ -87,13 +87,20 @@ def p11162(c: Cast) -> None:
 )
 def p12421(c: Cast) -> None:
     """Rolled on each hit rather than stored as a flat `c.bonus`, because the
-    extra damage is force and a modifier carries no damage type. Every
-    battlemind row here is unaugmented, so no exclusion is needed."""
+    extra damage is force and a modifier carries no damage type.
+
+    "Unaugmented" is a real exclusion now that the augment clauses are
+    written: `augment.spent_on` is what the use resolving right now paid,
+    where `PowerPoints.augmented` is the encounter's running total and would
+    bar the row for the rest of the fight after one augmented swing."""
 
     def extra(ev: Hit) -> None:
         p = get(ev.power)
-        if ev.attacker == c.me and p is not None and Keyword.PSIONIC in p.keywords:
-            c.flat(c.roll("1d6"), dtype=DamageType.FORCE, on=ev.target)
+        if ev.attacker != c.me or p is None or Keyword.PSIONIC not in p.keywords:
+            return
+        if spent_on(c.me, ev.power):
+            return
+        c.flat(c.roll("1d6"), dtype=DamageType.FORCE, on=ev.target)
 
     c.watch(Hit, extra, until=When.EONT, on=c.me)
 
@@ -165,42 +172,16 @@ def p13036(c: Cast) -> None:
     requires_text="must be bloodied",
 )
 def p13037(c: Cast) -> None:
-    """The stance's own attack shares this id, so it is folded in as a
-    subscription on the stance rather than a second `@power`: once per
-    encounter, a marked enemy that hurts an ally without including me is
-    answered with a basic attack. Folded, it costs no immediate action."""
+    """The stance's own attack is `p13037b`, declared on its own now that the
+    second printed block has an id; what stays here is the stance's standing
+    clause, which flattens whoever the opportunity attack lands on."""
     held = c.stance()
-    spent: list[int] = []
 
     def flatten(ev: Hit) -> None:
         if ev.attacker == c.me and getattr(ev, "opportunity", False):
             c.prone(on=ev.target)
 
-    def answer(ev: DamageApplied) -> None:
-        foe = ev.source
-        if spent or foe is None or ev.target == c.me:
-            return
-        if foe not in c.enemies() or not c.marked(on=foe):
-            return
-        if ev.target not in c.allies():
-            return
-        spent.append(1)
-        landed: list[int] = []
-
-        def seen(hv: Hit) -> None:
-            if hv.attacker == c.me and hv.target == foe:
-                landed.append(1)
-
-        watcher = c.world.bus.on(Hit, seen, owner=c.me)
-        try:
-            c.basic(on=foe)
-        finally:
-            c.world.bus.off(watcher)
-        if landed:
-            c.prone(on=foe)
-
     held.subs.append(c.world.bus.on(Hit, flatten, owner=c.me))
-    held.subs.append(c.world.bus.on(DamageApplied, answer, owner=c.me))
 
 
 @power(

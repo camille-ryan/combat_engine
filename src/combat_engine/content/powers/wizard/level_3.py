@@ -10,10 +10,9 @@ hangs it on the zone's own effect -- `until=When.SUSTAIN` on a `c.watch` makes
 a hold nobody can sustain, and only a zone, an aura, a hazard or a conjuration
 carries a sustain cost.
 
-`p4020` prints a second stanza with its own Requirement and Trigger. It is
-folded into the one row rather than declared as a second ref: the pattern is
-conjured, and the attack the stanza prints hangs on the conjuration's own
-effect, so it actually happens.
+`p4020` prints a second stanza with its own Requirement and Trigger. It has
+a ref of its own -- `p4020b`, in `second_card.py` -- so this row conjures the
+pattern and nothing else, and the stanza is gated on the pattern standing.
 
 **The same `Cast` is reused for every target of one use** -- `index` and
 `target` are reassigned round the loop -- so nothing a body closes over
@@ -481,14 +480,8 @@ def p3218(c: Cast) -> None:
     attack=Attack(INT, vs=WILL),
 )
 def p4020(c: Cast) -> None:
-    """The second printed stanza -- an opportunity action when an enemy starts
-    its turn within 3 squares of the pattern -- is folded in rather than
-    declared as its own ref: it hangs on the conjuration's own effect, so the
-    attack it prints actually happens and stops when the pattern does.
-
-    The pattern rolls the wizard's numbers from its own square, which is what
-    `from_` is for, and the pull is anchored on it rather than on the caster.
-    """
+    """Only the pattern. The opportunity action printed under it is `p4020b`,
+    gated on this conjuration standing."""
     room = [
         sq
         for sq in sorted(spread({c.here}, 10) - {c.here})
@@ -501,24 +494,7 @@ def p4020(c: Cast) -> None:
     where = c.choose(room, f"{c.ref}: where the pattern hangs")
     if where is None:
         return
-    pattern = c.conjure(where, label=c.ref, until=When.EONT)
-    if not pattern:
-        return
-
-    def dawn(ev: TurnStart) -> None:
-        pos = c.world.get(pattern, Position)
-        if ev.ghost or pos is None or ev.actor not in c.enemies():
-            return
-        if ev.actor not in c.in_squares(spread(pos.squares, 3)):
-            return
-        if c.strike(on=ev.actor, from_=pattern):
-            c.pull(3, on=ev.actor, anchor=pos.square)
-            c.slowed(on=ev.actor, until=When.EONT)
-
-    conj = c.world.get(pattern, Conjuration)
-    held = c.world.effects.live.get(conj.effect) if conj else None
-    if held is not None:
-        held.subs.append(c.world.bus.on(TurnStart, dawn))
+    c.conjure(where, label=c.ref, until=When.EONT)
 
 
 @power(

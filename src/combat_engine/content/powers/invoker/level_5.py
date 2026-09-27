@@ -198,9 +198,9 @@ def p2877(c: Cast) -> None:
 )
 def p5192(c: Cast) -> None:
     """The blade occupies its square and moves 5 when sustained, which is
-    what `c.conjure` already means. The second power printed under the same
-    id -- the interrupt that jumps the blade next to an enemy and swings --
-    is a separate row and cannot share this one's id, so it is not here."""
+    what `c.conjure` already means. The interrupt that jumps the blade next
+    to an enemy and swings is `p5192b`, which reads the standing blade as
+    its Requirement."""
     c.conjure(at=c.origin, until=When.SUSTAIN, sustain=MINOR, speed=5)
 
 

@@ -1,9 +1,9 @@
 """Psion, level 0: the class features.
 
-None of the six prints an Augment line, so the rule the rest of the class
-follows -- write Augment 0, name the dropped clauses -- has nothing to do
-here. Three of them move objects, conjure objects or send a sentence, and
-carry `out_of_combat=True` rather than an invented combat effect.
+None of the six prints an Augment line, so the `augment` call the rest of
+the class makes has nothing to do here. Three of them move objects, conjure
+objects or send a sentence, and carry `out_of_combat=True` rather than an
+invented combat effect.
 """
 
 from __future__ import annotations

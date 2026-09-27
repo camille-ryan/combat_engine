@@ -246,25 +246,16 @@ def p14292(c: Cast) -> None:
     group=CHANNEL_DIVINITY,
 )
 def p14293(c: Cast) -> None:
-    """The secondary attack is a No Action burst off the back of the primary,
-    so it is rolled here rather than declared: one printed id, one row.
-    """
+    """The primary attack only. The No Action burst the Effect line orders
+    up is `p14293b`, which triggers off this row resolving."""
     if not c.is_kind("undead"):
         return
-    victim = c.target
     dice = c.w(_weapon_dice(c))
     if c.strike():
         c.damage(dice, c.str_mod, dtype=DamageType.RADIANT)
         c.immobilized(until=When.EONT)
     else:
         c.half_damage(dice, c.str_mod, dtype=DamageType.RADIANT)
-
-    for foe in c.within(3, side="enemy"):
-        if foe == victim or not c.is_kind("undead", on=foe):
-            continue
-        if c.attack(c.str_, WILL, on=foe):
-            c.damage(0, c.cha_mod, dtype=DamageType.RADIANT, on=foe)
-            c.push(3 + c.cha_mod, on=foe)
 
 
 @power(

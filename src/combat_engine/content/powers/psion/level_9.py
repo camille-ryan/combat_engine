@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from combat_engine.content.powers.augment import augment
 from combat_engine.engine import (
     AC,
     DAILY,
@@ -102,10 +103,9 @@ def p11322(c: Cast) -> None:
     attack=Attack(INT, vs=FORT),
 )
 def p13336(c: Cast) -> None:
-    """The immediate reaction the sustained hold unlocks is printed as a second
-    block under this same id, so it has no ref of its own to be declared
-    under. The hold itself is here because it is what a Sustain Minor is
-    spent on."""
+    """The immediate reaction the sustained hold unlocks is `p13336b`, gated
+    on this hold standing. The hold itself is here because it is what a
+    Sustain Minor is spent on."""
     if c.first:
         c.effect(c.ref, on=c.me, until=When.SUSTAIN, sustain=MINOR)
     if c.strike():
@@ -157,9 +157,10 @@ def p13338(c: Cast) -> None:
     attack=Attack(INT, vs=REF),
 )
 def p13339(c: Cast) -> None:
-    """The once-per-round burst fired from a mote is printed as a second block
-    under this same id, so it has no ref of its own -- and with it goes the
-    expending, which is why the motes here last the encounter."""
+    """The once-per-round burst fired from a mote is `p13339b`, which is left
+    out: the burst is centred on the mote and a close burst is centred on the
+    creature using it. With it goes the expending, which is why the motes here
+    last the encounter."""
     if c.first:
         made = 0
         for sq in sorted(c.area()):
@@ -239,14 +240,18 @@ def p8242(c: Cast) -> None:
     ),
 )
 def p13341(c: Cast) -> None:
-    """Augment 0. The prey is a named hold so that the disappearance has
+    """The prey is a named hold so that the disappearance has
     something to read, and the +4 is gated on `opportunity`, which the attack
     context carries.
 
+    Augment 1 marks a second enemy as prey, and the killer only leaves once
+    both are down -- so the watch counts them rather than answering the
+    first.
+
     Dropped: "insubstantial to every attacker but its prey", because
     `c.insubstantial` would halve damage from the prey as well and that is more
-    than the card says; the attack penalty on the standard command; the whole
-    opportunity command; and Augment 1's second prey."""
+    than the card says; the attack penalty on the standard command; and the
+    whole opportunity command."""
     killer = c.summon_inline(get(c.ref).summon, at=c.origin)
     if not killer:
         return
@@ -260,13 +265,21 @@ def p13341(c: Cast) -> None:
             when=lambda ctx: bool(ctx.get("opportunity")),
         )
     near = c.within(1, of=killer, side="enemy")
-    prey = c.choose(near, "which enemy is the killer's prey") if near else None
-    if prey is None:
+    hunted: list[int] = []
+    for _ in range(2 if augment(c, 1) else 1):
+        left = [e for e in near if e not in hunted]
+        prey = c.choose(left, "which enemy is the killer's prey") if left else None
+        if prey is None:
+            break
+        hunted.append(prey)
+        c.effect("prey", on=prey, until=When.ENCOUNTER)
+    if not hunted:
         return
-    c.effect("prey", on=prey, until=When.ENCOUNTER)
 
     def vanish(ev: Dropped) -> None:
-        if ev.actor == prey:
+        if ev.actor in hunted:
+            hunted.remove(ev.actor)
+        if not hunted:
             c.dismiss_companion()
 
     c.watch(Dropped, vanish, until=When.ENCOUNTER)

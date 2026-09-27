@@ -45,7 +45,6 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     TurnEnd,
-    TurnStart,
     UpTo,
     When,
     World,
@@ -53,7 +52,6 @@ from combat_engine.engine import (
     power,
     spread,
 )
-from combat_engine.engine.events import AdjacencyGained
 from combat_engine.engine.query import adjacent, cover_between, hidden_from
 from combat_engine.engine.query import squares as squares_of
 
@@ -232,34 +230,10 @@ def _beside(c: Cast, victim: int, squares_: int) -> bool:
     requires_text="needs a light blade",
 )
 def p10173(c: Cast) -> None:
-    """Two printed triggers on the granted attack -- an enemy *starts its
-    turn* in a square adjacent to you, or *enters* one -- so both are
-    watched. Each is offered as the printed **can**, since an opportunity
-    action is permission rather than obligation.
-    """
-    me = c.me
-    sting = 2 + c.cha_mod if c.build("trickster") else c.cha_mod
-
-    def snap(victim: int) -> None:
-        if not c.may("snap at it", who=me):
-            return
-        if c.attack(c.dex_, REF, on=victim):
-            c.damage(c.w(1), c.dex_mod, on=victim)
-            c.penalty(
-                "attack", sting, on=victim, until=When.EONT,
-                when=lambda ctx: ctx.get("target") == me,
-            )
-
-    def came(ev: AdjacencyGained) -> None:
-        if ev.other == me and ev.mover not in (0, me) and ev.actor in c.enemies():
-            snap(ev.actor)
-
-    def began(ev: TurnStart) -> None:
-        if ev.actor != me and ev.actor in c.enemies() and c.adjacent(ev.actor):
-            snap(ev.actor)
-
-    c.watch(AdjacencyGained, came, until=When.EONT, on=c.me, label=f"{c.ref} steps in")
-    c.watch(TurnStart, began, until=When.EONT, on=c.me, label=f"{c.ref} stands there")
+    """The whole printed block is the grant, and the hold is what carries
+    it: `p10173b` is the opportunity attack, and this hold labelled with
+    this ref is the Requirement it reads."""
+    c.effect(c.ref, on=c.me, until=When.EONT)
 
 
 @power(

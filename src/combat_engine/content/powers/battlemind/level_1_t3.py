@@ -9,6 +9,7 @@ does both -- `durations.Effects.cure` clears the relational ones through
 
 from __future__ import annotations
 
+from combat_engine.content.powers.augment import augment
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -41,10 +42,19 @@ def p13026(c: Cast) -> None:
     follow `c.target`, and here the creature freed is the battlemind, not
     the one it just hit.
 
-    The two Augment lines are dropped -- nothing in the engine holds power
-    points, so there is no number to spend and no way to pick a leg.
+    Augment 1 frees your allies within 5 as well; Augment 2 frees only you
+    and adds immobilised to the list.
     """
-    if c.strike():
-        c.damage(c.w(), c.con_mod)
-        c.cure(Condition.MARKED, Condition.SLOWED, on=c.me)
-        c.immune(Condition.MARKED, Condition.SLOWED, on=c.me, until=When.EONT)
+    spent = augment(c)
+    if not c.strike():
+        return
+    c.damage(c.w(2) if spent == 2 else c.w(), c.con_mod)
+    shrugged = (Condition.MARKED, Condition.SLOWED)
+    if spent == 2:
+        shrugged = (Condition.IMMOBILIZED, *shrugged)
+    freed = [c.me]
+    if spent == 1:
+        freed += [a for a in c.within(5, side="ally") if a != c.me]
+    for who in freed:
+        c.cure(*shrugged, on=who)
+        c.immune(*shrugged, on=who, until=When.EONT)

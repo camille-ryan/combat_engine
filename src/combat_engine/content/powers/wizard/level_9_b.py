@@ -5,14 +5,14 @@ rather than doubling that one's length.
 
 Four things recur and are decided the same way throughout.
 
-**A second printed stanza with no id of its own.** Several of these rows print
-a whole second power -- its own action, its own attack line -- gated on the
-first being active. Where the stanza has a *trigger* or a *sustain* to hang
-from it is folded in, so the attack it prints actually happens. Where it is
-simply "you can use the secondary power as a standard action", there is no
-door: `c.grant_row` lends a row by ref and the stanza has no ref. Those rows
-are written as the stanza that the declared action line describes, with the
-other said out loud in a note.
+**A second printed stanza.** Several of these rows print a whole second
+power -- its own action, its own attack line -- gated on the first being
+active. Each of those stanzas has a ref of its own after all, minted by the
+importer with a letter on the end, and lives in `second_card.py`. What is
+left here is the stanza the declared action line describes, plus whatever
+the second one needs to find: `p12746`'s hold names its victim, and
+`p16288`'s globes are five holds rather than a closure so that both rows
+count the same ones.
 
 **Teeth that are not `c.burns`.** That method is "enters, or starts its turn
 there, once per turn". A row printing "**ends** its turn there", or one biting
@@ -68,7 +68,6 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Miss,
-    Position,
     Ranged,
     Relation,
     Square,
@@ -81,7 +80,6 @@ from combat_engine.engine import (
     power,
     spread,
 )
-from combat_engine.engine.components import Conjuration
 from combat_engine.engine.events import (
     DamageApplied,
     MoveStart,
@@ -165,13 +163,13 @@ def p11037(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.FEAR, Keyword.ILLUSION],
 )
 def p12746(c: Cast) -> None:
-    """The declared row is the minor action: the haunting itself. The second
-    printed stanza is a standard-action attack with no id of its own and no
-    trigger or sustain to hang from, so it is noted rather than invented.
+    """The declared row is the minor action: the haunting itself. The
+    standard-action attack printed under it is `p12746b`, which finds its
+    victim by this hold.
 
     "Another saving throw whenever it is hit by or takes damage from anything
-    else" is a watch on the hold, and the damage this row does not deal is
-    everything, so any `DamageApplied` against it counts.
+    **other than the secondary power**" is a watch on the hold; now that the
+    secondary has a ref, its damage is the one sort that does not count.
     """
     victim = c.target
     if victim is None:
@@ -185,6 +183,8 @@ def p12746(c: Cast) -> None:
             ev.cancel("cannot make opportunity attacks")
 
     def shaken(ev: DamageApplied) -> None:
+        if getattr(ev, "power", "") == f"{c.ref}b":
+            return
         if ev.target == victim and ev.amount > 0 and not held.ended:
             c.world.effects.save(held)
 
@@ -196,7 +196,6 @@ def p12746(c: Cast) -> None:
             c.world.bus.on(DamageApplied, shaken, owner=c.me),
         ]
     )
-    c.note(f"{c.ref}: the second stanza is a standard-action attack with no id of its own")
 
 
 @power(
@@ -488,11 +487,9 @@ def p16285(c: Cast) -> None:
     attack=Attack(INT, vs=REF),
 )
 def p16286(c: Cast) -> None:
-    """The fist is the declared minor action. Its blast is the second printed
-    stanza, an at-will standard action with no id of its own; the one door it
-    has is the sustain the first stanza prints, so `c.on_sustain` swings it --
-    once a round rather than at will, which is a reduction and is said out
-    loud. It does not swing on arrival, which the row does not print either.
+    """The fist is the declared minor action. Its blast is `p16286b`, a
+    standard action of its own gated on this conjuration standing, so the
+    sustain here does only what sustaining does.
 
     Flanking with a conjuration is not something `query.flanked_by` can see:
     it asks which creatures are on which side, and this is not a creature.
@@ -506,33 +503,12 @@ def p16286(c: Cast) -> None:
     # installed the first option is the answer, and the lowest-sorted square
     # on the board is reliably the one nothing is standing near.
     room.sort(key=lambda sq: (-len(c.in_squares(spread({sq}, 2), side="enemy")), sq))
-    fist = c.conjure(
+    c.conjure(
         c.choose(room, f"{c.ref}: where the fist lands"),
         label=c.ref,
         until=When.SUSTAIN,
         sustain=MINOR,
     )
-    if not fist:
-        return
-
-    def punch() -> None:
-        pos = c.world.get(fist, Position)
-        if pos is None:
-            return
-        caught = [
-            foe
-            for foe in sorted(c.enemies())
-            if foe in c.in_squares(spread(pos.squares, 2))
-        ]
-        for foe in caught:
-            if c.strike(on=foe, from_=fist):
-                c.damage("3d6", c.int_mod, on=foe)
-                c.prone(on=foe)
-
-    conj = c.world.get(fist, Conjuration)
-    held = c.world.effects.live.get(conj.effect) if conj else None
-    c.on_sustain(held, punch)
-    c.note(f"{c.ref}: the blast is at will, and the sustain is the only door it has")
 
 
 @power(
@@ -547,21 +523,27 @@ def p16286(c: Cast) -> None:
 )
 def p16288(c: Cast) -> None:
     """The declared row is the globes and what standing next to them costs.
-    The second printed stanza -- a minor-action bolt that spends one globe --
-    has no id of its own and no trigger or sustain to hang from, so nothing
-    ever spends a globe here and the retaliation stays at its full five.
+    The bolt that spends one is `p16288b`.
+
+    Each globe is a hold of its own rather than a number in a closure,
+    because the two rows have to agree on the count and a closure is
+    reachable from only one of them. Distinct labels, so nothing merges
+    five holds into one.
     """
     me = c.me
-    globes = [5]
+    for n in range(5):
+        c.effect(f"{c.ref} globe {n}", until=When.ENCOUNTER, on=me)
 
     def scorch(ev: Hit) -> None:
-        if ev.target != me or globes[0] <= 0:
+        left = sum(
+            1 for eff in c.world.effects.of(me) if eff.label.startswith(f"{c.ref} globe")
+        )
+        if ev.target != me or left <= 0:
             return
         if c.adjacent(to=ev.attacker):
-            c.flat(3 * globes[0], dtype=DamageType.FIRE, on=ev.attacker)
+            c.flat(3 * left, dtype=DamageType.FIRE, on=ev.attacker)
 
     c.watch(Hit, scorch, until=When.ENCOUNTER, on=me, label=c.ref)
-    c.note(f"{c.ref}: the bolt that spends a globe is a second stanza with no id")
 
 
 @power(

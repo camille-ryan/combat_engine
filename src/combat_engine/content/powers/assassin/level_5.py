@@ -133,8 +133,8 @@ def p9425(c: Cast) -> None:
 def p9426(c: Cast) -> None:
     """The duplicate is a conjuration because the printed line insists it
     occupies its space and can be flanked with. Its own minor-action attack
-    has no id of its own and its damage line turns on shrouds, so it is not
-    written; the "allies cannot flank with it" clause has no field either."""
+    is `p9426b`, which reads the standing duplicate as its Requirement; the
+    "allies cannot flank with it" clause has no field."""
     victim = c.target
     if victim is None:
         return

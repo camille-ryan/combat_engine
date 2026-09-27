@@ -17,7 +17,6 @@ from combat_engine.engine import (
     AreaBurst,
     Cast,
     CloseBurst,
-    DamageApplied,
     Hit,
     InitiativeRolled,
     Keyword,
@@ -66,21 +65,10 @@ def p12455(c: Cast) -> None:
 )
 def p12564(c: Cast) -> None:
     """The lightly obscured half needs a concealment verb there is none of.
-    The zone is still laid down, because the row's second power -- the free
-    action that pulls you back into it when you are hurt -- is hung on it, and
-    that half is written as a watch rather than as a second row, the spec
-    giving both halves the same id."""
-    area = c.area()
-    c.zone(area, label=c.ref, until=When.SUSTAIN, sustain=MINOR)
-
-    def bolt_home(ev: DamageApplied) -> None:
-        if ev.target != c.me:
-            return
-        free = [s for s in area if not c.in_squares([s])]
-        if free:
-            c.teleport(5, to=sorted(free)[0])
-
-    c.watch(DamageApplied, bolt_home, until=When.ENCOUNTER)
+    The zone itself is the whole of what can be written here, and it is what
+    `p12564b` -- the free action that pulls you back into it when you are
+    hurt -- reads as its Requirement."""
+    c.zone(c.area(), label=c.ref, until=When.SUSTAIN, sustain=MINOR)
 
 
 @power(

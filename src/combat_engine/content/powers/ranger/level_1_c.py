@@ -117,11 +117,14 @@ def _reroll_next_attack(c: Cast) -> None:
 )
 def p12501(c: Cast) -> None:
     """The Effect -- a second row the beast companion may be commanded to
-    use -- is not written: there is no companion to command."""
+    use -- is `p12501b`, and the hold left here under this ref is the
+    printed Requirement that row asks for."""
     if c.strike():
         c.damage(c.w(2), c.str_mod)
     else:
         c.half_damage(c.w(2), c.str_mod)
+    if c.first:
+        c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

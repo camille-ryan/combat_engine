@@ -1,7 +1,8 @@
 """Warden, level 9: the guardian forms.
 
-As at level 1, each id is the form and not the attack the form unlocks --
-those attacks carry no id of their own in the spec. Several forms also
+As at level 1, each id is the form and not the attack the form unlocks;
+that attack is the same ref with a `b` on the end and is in
+`second_card.py`, gated on `in_form`. Several forms also
 grant an action ("you can use your second wind as a minor action", "you
 can fly your speed as a move action"), which is a row being handed out and
 so needs a ref to hand out; those clauses are left rather than guessed at.

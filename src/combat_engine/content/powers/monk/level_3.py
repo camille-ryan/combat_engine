@@ -1,4 +1,8 @@
-"""Monk, level 3: encounter attacks, all of them two-part disciplines."""
+"""Monk, level 3: encounter attacks, all of them two-part disciplines.
+
+Only the attack half is here. The second block costs its own action and
+lives in `second_card_1.py` under its own ref.
+"""
 
 from __future__ import annotations
 
@@ -23,7 +27,7 @@ from combat_engine.engine import (
     When,
     power,
 )
-from combat_engine.engine.events import DamageApplied, Miss
+from combat_engine.engine.events import DamageApplied
 
 IMPLEMENT = [Keyword.IMPLEMENT]
 
@@ -41,14 +45,11 @@ IMPLEMENT = [Keyword.IMPLEMENT]
 )
 def p11216(c: Cast) -> None:
     """`c.save` follows the target, so the monk's own saving throw has to
-    name itself. The speed bonus printed on the move half is dropped: it is
-    measured per attack suffered mid-move, which nothing counts."""
+    name itself."""
     if c.strike():
         c.damage("2d10", c.dex_mod)
         if c.save(on=c.me, bonus=c.wis_mod):
             c.flat(c.wis_mod)
-    if c.last:
-        c.move(c.speed_of() + 2)
 
 
 @power(
@@ -66,10 +67,6 @@ def p11218(c: Cast) -> None:
     if c.strike():
         c.damage("2d8", c.dex_mod)
         c.prone()
-    if c.last:
-        if c.str_mod > 0:
-            c.resist(c.str_mod, until=When.EONT)
-        c.shift(2)
 
 
 @power(
@@ -92,13 +89,6 @@ def p13146(c: Cast) -> None:
     if c.strike():
         c.damage("1d8", c.dex_mod)
         c.damage("1d8", 0, dtype=DamageType.PSYCHIC)
-    if not c.last:
-        return
-    near = c.within(1, side="other")
-    if near:
-        partner = c.choose(near, "swap places with")
-        if partner is not None:
-            c.swap(partner)
 
 
 @power(
@@ -126,8 +116,6 @@ def p13148(c: Cast) -> None:
             c.flat(3 + c.str_mod, dtype=DamageType.THUNDER, on=victim)
 
         c.watch(DamageApplied, echo, until=When.SONT, once=True)
-    if c.last:
-        c.move(c.speed_of() + 2)
 
 
 @power(
@@ -146,14 +134,6 @@ def p13150(c: Cast) -> None:
         c.damage("2d10", c.dex_mod)
         armed = c.wielding("light blade") or c.wielding("spear")
         c.slide(c.con_mod if armed else 2)
-    if not c.last:
-        return
-    near = c.within(1, side="other")
-    if near:
-        anchor = c.choose(near, "jump to a square beside")
-        if anchor is not None:
-            c.no_provoke(until=When.EOT)
-            c.run_at(anchor)
 
 
 @power(
@@ -177,9 +157,6 @@ def p13152(c: Cast) -> None:
             c.prone()
         armed = c.wielding("mace") or c.wielding("staff")
         c.bonus(AC, c.con_mod if armed else 2, on=c.me, until=When.EONT, kind="power")
-    if c.last:
-        c.no_provoke(until=When.EOT)
-        c.move(c.speed_of())
 
 
 @power(
@@ -197,8 +174,6 @@ def p13223(c: Cast) -> None:
     if c.strike():
         c.damage("2d10", c.dex_mod)
         c.push(3)
-    if c.last:
-        c.shift(1)
 
 
 @power(
@@ -221,11 +196,6 @@ def p15984(c: Cast) -> None:
     if not c.last:
         return
     c.shift(3)
-    near = c.within(1, side="other")
-    if near:
-        partner = c.choose(near, "swap places with")
-        if partner is not None:
-            c.swap(partner)
 
 
 @power(
@@ -244,10 +214,6 @@ def p16150(c: Cast) -> None:
         c.damage("2d8", c.dex_mod)
         for defence in (AC, FORT, REF, WILL):
             c.penalty(defence, 2, until=When.EONT)
-    if c.last:
-        c.shift(1)
-        c.bonus(AC, 2, on=c.me, until=When.EONT, kind="power")
-        c.bonus(FORT, 2, on=c.me, until=When.EONT, kind="power")
 
 
 @power(
@@ -262,8 +228,6 @@ def p16150(c: Cast) -> None:
     attack=Attack(DEX, vs=REF),
 )
 def p16152(c: Cast) -> None:
-    """Partial concealment is written as the +2 it is worth to the monk's
-    defences, for the length of the movement it is printed on."""
     if c.strike():
         c.damage("2d8", c.dex_mod)
         victim = c.target
@@ -280,11 +244,6 @@ def p16152(c: Cast) -> None:
                     c.flat(burn, dtype=DamageType.FIRE, on=foe)
 
         c.watch(DamageApplied, bloom, until=When.SONT, once=True)
-    if not c.last:
-        return
-    for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 2, on=c.me, until=When.EOT, kind="concealment")
-    c.move(c.speed_of() + 2)
 
 
 @power(
@@ -302,9 +261,6 @@ def p16154(c: Cast) -> None:
     if c.strike():
         c.damage("2d6", c.dex_mod, dtype=DamageType.COLD)
         c.immobilized(until=When.EONT)
-    if c.last:
-        c.immobilized(on=c.me, until=When.SONT)
-        c.resist(3 + c.str_mod, until=When.SONT)
 
 
 @power(
@@ -326,16 +282,6 @@ def p7459(c: Cast) -> None:
         c.damage("2d8", c.dex_mod)
         if press:
             c.flat(press)
-    if not c.last:
-        return
-
-    def fumbled(ev: Miss) -> None:
-        if ev.target == c.me and getattr(ev, "opportunity", False):
-            c.grants_advantage(on=ev.attacker, to="me", until=When.EOT)
-
-    hold = c.watch(Miss, fumbled, until=When.EOT)
-    c.move(c.speed_of() + 2)
-    c.world.effects.end(hold, "movement over")
 
 
 @power(
@@ -357,11 +303,3 @@ def p7460(c: Cast) -> None:
             unlucky = c.choose(splash, "who catches the echo")
             if unlucky is not None:
                 c.damage("1d10", 0, dtype=DamageType.THUNDER, on=unlucky)
-    if not c.last:
-        return
-    near = c.within(1, side="enemy")
-    if near:
-        ignored = c.choose(near, "whose reach to slip")
-        if ignored is not None:
-            c.no_provoke(from_=ignored, until=When.EOT)
-    c.move(c.speed_of() + 2)

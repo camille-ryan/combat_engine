@@ -50,9 +50,13 @@ from . import enemies_starting_in, holding_a_melee_weapon, one_ally
 )
 def p10197(c: Cast) -> None:
     """The Special line is `from_=`: the shot is measured and rolled from the
-    ally's square. The teleport the Effect also grants for the encounter is a
-    separate compendium row and this spec gives it no id."""
+    ally's square. The teleport the Effect grants for the encounter is
+    `p10197b`; the two holds are its Requirement and the record of which
+    ally was chosen, which nothing else keeps."""
     ally = one_ally(c, c.within(5, side="ally"), "whose square the shot comes from")
+    if c.first and ally is not None:
+        c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
+        c.effect(f"{c.ref} anchor", on=ally, until=When.ENCOUNTER)
     if c.strike(from_=ally):
         c.damage(c.w(3), c.int_mod, dtype=DamageType.FORCE)
         c.push(1 + c.wis_mod)
@@ -72,12 +76,15 @@ def p10197(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.THUNDER],
 )
 def p10199(c: Cast) -> None:
-    """The infusion and its retort. The burst it also grants once a round is
-    a separate compendium row with no id in this spec."""
+    """The infusion and its retort. The burst it grants once a round is
+    `p10199b`; the two holds are its Requirement and the square it is
+    centred on."""
     ward = c.target
     if ward is None:
         return
     c.resist(5, DamageType.THUNDER, on=ward, until=When.ENCOUNTER)
+    c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
+    c.effect(f"{c.ref} anchor", on=ward, until=When.ENCOUNTER)
 
     def jolt(ev: TurnEnd) -> None:
         if ev.ghost or ev.actor not in c.enemies():

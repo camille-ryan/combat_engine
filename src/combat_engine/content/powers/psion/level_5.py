@@ -102,13 +102,19 @@ def p11316(c: Cast) -> None:
     keywords=PSIONIC_FORCE,
 )
 def p13322(c: Cast) -> None:
-    """The spheres themselves are a hold, because the only thing they do while
-    they last is the +2. The once-per-round attack that expends one is printed
-    as a second block under this same id, so it has no ref to be declared
-    under, and with it goes the expending."""
-    c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
+    """One hold per sphere, because `p13322b` expends them one at a time and
+    a single hold could not be counted down. The +2 is gated on at least one
+    of them still spinning rather than held for the encounter, which is the
+    printed "while you have at least one" -- and it goes out by itself when
+    the fourth is spent."""
+    for _ in range(4):
+        c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
+
+    def spinning(ctx: dict) -> bool:
+        return any(eff.label == c.ref for eff in c.world.effects.of(c.me))
+
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER)
+        c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER, when=spinning)
 
 
 @power(
@@ -240,11 +246,14 @@ def p8236(c: Cast) -> None:
     ),
 )
 def p13325(c: Cast) -> None:
-    """Augment 0. +4 to AC and +2 to Reflex only, so the two are handed out in
+    """+4 to AC and +2 to Reflex only, so the two are handed out in
     the body -- `Summon.defences` is one offset across all four.
 
-    Dropped: the grab on the standard command, the whole opportunity command
-    with its ongoing poison, and Augment 1's penalty to escaping the grab."""
+    Dropped: the grab on the standard command -- `Summon` declares an attack
+    and a damage line and has nowhere to put a rider -- and the whole
+    opportunity command with its ongoing poison. Augment 1 goes with the
+    grab: a penalty to escaping a hold nothing ever applies would be a
+    clause that can never come up."""
     stinger = c.summon_inline(get(c.ref).summon, at=c.origin)
     if stinger:
         c.bonus(AC, 4, on=stinger, until=When.ENCOUNTER)

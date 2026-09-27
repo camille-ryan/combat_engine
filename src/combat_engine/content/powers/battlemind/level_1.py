@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.powers.augment import augment
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -24,13 +25,14 @@ from combat_engine.engine import (
     Melee,
     Moved,
     MoveEnd,
+    Position,
     TurnEnd,
     UpTo,
     When,
-    Window,
     power,
+    spread,
 )
-from combat_engine.engine.events import MoveStart
+from combat_engine.engine.query import creatures
 
 from . import PSIONIC_WEAPON, teleport_beside
 
@@ -81,11 +83,16 @@ def p10442(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p11156(c: Cast) -> None:
-    """Base form. Augment 1 (fire resistance 5 + Wisdom instead) and Augment 2
-    (2[W]) are dropped: no power points."""
+    """Augment 1 trades resistance to everything for a larger one to fire
+    alone; Augment 2 raises the dice and leaves the Effect as printed."""
+    spent = augment(c)
     if c.strike():
-        c.damage(c.w(), c.con_mod)
-    if c.first and c.wis_mod > 0:
+        c.damage(c.w(2) if spent == 2 else c.w(), c.con_mod)
+    if not c.first:
+        return
+    if spent == 1:
+        c.resist(5 + c.wis_mod, DamageType.FIRE, until=When.EONT)
+    elif c.wis_mod > 0:
         c.resist(c.wis_mod, until=When.EONT)
 
 
@@ -101,8 +108,9 @@ def p11156(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p11157(c: Cast) -> None:
-    """Base form. Augment 1 (+1 reach) and Augment 2 (a blast against each
-    enemy in it) are dropped: no power points."""
+    """Neither augment is written: Augment 1 lengthens the row's reach for
+    that attack and Augment 2 makes it a close blast, and both are the
+    header, measured before the body is called."""
     if c.strike():
         c.damage(c.w(), c.con_mod)
         c.push(1)
@@ -120,9 +128,11 @@ def p11157(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p11158(c: Cast) -> None:
-    """The aspect is a hold with no content of its own -- everything it grants
-    is the Augment 1 clause (temporary hit points, and Wisdom extra damage on
-    an augmented at-will), which is dropped for want of power points."""
+    """The aspect is a hold with no content of its own: everything it grants
+    is its Augment 1, and that clause is bought when some *other* row is
+    augmented -- "while in this aspect you can use the following augmentation
+    with your at-will attack powers". Nothing lets one row add an offer to
+    another row's augment, so it is left out."""
     if c.strike():
         c.damage(c.w(2), c.con_mod)
     else:
@@ -176,11 +186,14 @@ def p11160(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p12419(c: Cast) -> None:
-    """Base form. Augment 1 (a burst, and only one enemy shoved) and Augment 2
-    (prone as well) are dropped: no power points."""
+    """Augment 2 knocks the target prone and leaves the blast alone.
+    Augment 1 swaps the blast for a close burst and is left out."""
+    spent = augment(c, 2)
     if not c.strike():
         return
     c.damage(c.w(), c.con_mod, dtype=DamageType.FORCE)
+    if spent:
+        c.prone()
     blast = c.area()
     caught = c.in_squares(blast, side="enemy") if blast else c.within(3, side="enemy")
     for other in caught:
@@ -225,18 +238,28 @@ def p12420(c: Cast) -> None:
     attack=Attack(CON, vs=REF),
 )
 def p13025(c: Cast) -> None:
-    """Base form. Augment 1 (the same on a shift to a square beside an ally)
-    and Augment 2 (2[W]) are dropped: no power points."""
+    """Augment 1 adds a second way to set the recoil off -- shifting to a
+    square beside one of your allies, which is `MoveEnd.kind_` and a
+    position read where the shift ended. Augment 2 only raises the dice."""
+    spent = augment(c)
     victim = c.target
     if victim is None or not c.strike():
         return
-    c.damage(c.w(), c.con_mod, dtype=DamageType.LIGHTNING)
+    c.damage(c.w(2) if spent == 2 else c.w(), c.con_mod, dtype=DamageType.LIGHTNING)
 
     def recoil(ev: Hit) -> None:
         if ev.attacker == victim and ev.target in c.allies():
             c.flat(c.con_mod, dtype=DamageType.LIGHTNING, on=victim)
 
+    def sidled(ev: MoveEnd) -> None:
+        if ev.actor != victim or ev.kind_ != "shift":
+            return
+        if any(c.adjacent_to(a, victim) for a in c.allies() if a != c.me):
+            c.flat(c.con_mod, dtype=DamageType.LIGHTNING, on=victim)
+
     c.watch(Hit, recoil, until=When.SONT, on=victim)
+    if spent == 1:
+        c.watch(MoveEnd, sidled, until=When.SONT, on=victim)
 
 
 @power(
@@ -251,12 +274,22 @@ def p13025(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p13027(c: Cast) -> None:
-    """Base form. Augment 1 (mark an enemy beside the target too) and Augment 2
-    (a burst, with an attack penalty) are dropped: no power points."""
+    """Augment 1 marks one enemy standing beside the target as well. Augment 2
+    makes the row a close burst and is left out."""
+    spent = augment(c, 1)
+    victim = c.target
     if c.strike():
         alone = len(c.targets) == 1
         c.damage(c.w() if alone else 0, c.con_mod, dtype=DamageType.PSYCHIC)
         c.mark(until=When.EONT)
+        if spent and victim is not None:
+            beside = [
+                f for f in c.within(1, of=victim, side="enemy")
+                if f != victim and f not in c.targets
+            ]
+            other = c.choose(sorted(beside), "who else is marked") if beside else None
+            if other is not None:
+                c.mark(until=When.EONT, on=other)
 
 
 @power(
@@ -271,11 +304,27 @@ def p13027(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p13028(c: Cast) -> None:
-    """Base form. Augment 1 and 2 turn the step into a teleport; both are
-    dropped for want of power points."""
-    if c.strike():
-        c.damage(c.w(), c.con_mod)
+    """Both augments turn the step into a teleport -- Augment 1 of one square,
+    Augment 2 of any distance, so long as it ends beside the target. The
+    Teleportation keyword both augments add is not declared: the header is
+    data read before the augment is bought, so it would be on the row for
+    the unaugmented use too."""
+    spent = augment(c)
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage(c.w(2) if spent == 2 else c.w(), c.con_mod)
+    if not spent or victim is None:
         c.shift(1)
+        return
+    if spent == 2:
+        teleport_beside(c, c.me, victim)
+        return
+    at = c.world.get(victim, Position)
+    if at is not None:
+        for sq in sorted(spread({at.square}, 1)):
+            if c.teleport(1, to=sq):
+                break
 
 
 @power(
@@ -316,8 +365,10 @@ def p13029(c: Cast) -> None:
     attack=Attack(CON, vs=FORT),
 )
 def p13030(c: Cast) -> None:
-    """The aspect's resist 5 cold is its whole unaugmented content; the
-    Augment 1 clause (adjacent enemies slowed) is dropped."""
+    """The aspect's resist 5 cold is its whole unaugmented content. Its
+    Augment 1 is not an augment of *this* row at all: it is an extra clause
+    the aspect lends to any augmented battlemind at-will, and nothing hangs
+    a clause on another row's augment."""
     if c.strike():
         c.damage(c.w(), c.con_mod, dtype=DamageType.COLD)
         c.push(1)
@@ -408,13 +459,21 @@ def p13032(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p2621(c: Cast) -> None:
-    """Base form. Augment 1 (use it for an opportunity attack) and Augment 2
-    (blinded) are dropped. The penalty is counted when the blow lands rather
-    than recounted per roll -- a modifier holds a number, not a sum."""
+    """Augment 2 blinds instead of penalising. The penalty is counted when the
+    blow lands rather than recounted per roll -- a modifier holds a number,
+    not a sum.
+
+    Augment 1 is not offered, and not because of anything here: the imported
+    card has no Hit line under its Augment 1 heading, only the Special that
+    belongs to the whole power, so there is no clause to write."""
+    spent = augment(c, 2)
     victim = c.target
     if victim is None or not c.strike():
         return
     c.damage(c.w(), c.con_mod)
+    if spent:
+        c.blinded(until=When.EONT)
+        return
     crowd = len([a for a in c.within(1, of=victim, side="ally") if a != c.me])
     if crowd:
         c.penalty("attack", crowd, until=When.EONT)
@@ -432,8 +491,11 @@ def p2621(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p2622(c: Cast) -> None:
-    """Base form. Augment 1 (extra damage on a later mind spike) and Augment 2
-    (a burst) are dropped: no power points."""
+    """Neither augment is written. Augment 1 pays extra damage on a later use
+    of the battlemind's own class-feature attack, and that row is named in
+    prose with no ref beside it, so there is nothing to watch for. Augment 2
+    turns the row into a close burst, which is a header the body cannot
+    rewrite."""
     if c.strike():
         c.damage(c.w(), c.con_mod)
         c.mark(until=When.EONT)
@@ -451,33 +513,17 @@ def p2622(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p2623(c: Cast) -> None:
-    """The stance's own attack shares this row's id, so it cannot be a second
-    `@power`; it is armed as a subscription hung on the stance, which ends
-    with it. `MoveStart.kind_` tells a walk from a shift, and it is
-    the right end of the move: an opportunity attack interrupts, and by
-    `MoveEnd` the enemy is no longer adjacent, so the check would be false
-    exactly when the row should fire. The fold costs no opportunity action,
-    which is the one thing it loses."""
+    """The stance's own attack is `p2623b`, which has an id of its own now
+    that the importer mints one per printed block. It is declared there and
+    gated on this stance standing, rather than folded in here as a
+    subscription -- folded, it cost no opportunity action, which is the whole
+    price the card puts on it."""
     if c.strike():
         c.damage(c.w(3), c.con_mod)
     else:
         c.half_damage(c.w(3), c.con_mod)
-    if not c.last:
-        return
-    held = c.stance()
-
-    def riposte(ev: MoveStart) -> None:
-        who = ev.actor
-        if ev.kind_ != "walk" or c.turn_of() != who:
-            return
-        if not c.adjacent(who) or not c.marked(on=who):
-            return
-        if c.strike(on=who):
-            c.damage(c.w(2), c.con_mod, on=who)
-
-    held.subs.append(
-        c.world.bus.on(MoveStart, riposte, owner=c.me, window=Window.BEFORE)
-    )
+    if c.last:
+        c.stance()
 
 
 @power(
@@ -492,8 +538,23 @@ def p2623(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p2628(c: Cast) -> None:
-    """Base form. Augment 1 (loses threatening reach) and Augment 2 (no
-    opportunity attacks at all) are dropped: no power points."""
-    if c.strike():
-        c.damage(c.w(), c.con_mod, dtype=DamageType.PSYCHIC)
-        c.penalty("attack", 5, until=When.EONT, when=_vs_opportunity)
+    """Augment 1 takes the target's threatening reach away, which is a
+    penalty cancelling whatever `"reach"` it is carrying -- `c.threatens` can
+    only raise it. Augment 2 stops its opportunity attacks outright, which is
+    the immunity handed to every creature on the board, the caster included:
+    nobody's move gives it an opening."""
+    spent = augment(c)
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage(c.w(2) if spent == 2 else c.w(), c.con_mod, dtype=DamageType.PSYCHIC)
+    if spent == 2:
+        if victim is not None:
+            for other in creatures(c.world):
+                c.no_provoke(from_=victim, on=other, until=When.EONT)
+        return
+    c.penalty("attack", 5, until=When.EONT, when=_vs_opportunity)
+    if spent and victim is not None:
+        held = c.total("reach", victim)
+        if held:
+            c.penalty("reach", held, until=When.EONT)

@@ -242,25 +242,10 @@ def p10166(c: Cast) -> None:
     requires_text="needs a light blade",
 )
 def p10167(c: Cast) -> None:
-    """The stance and the interrupt it grants are printed as two cards under
-    one id, and the registry holds one row per id -- so the swing is folded
-    into the stance and offered as the printed **can** each time it comes up.
-
-    The listener hangs on the stance's own effect rather than on a clock of
-    its own, so taking another stance takes the riposte with it.
-    """
-    stance = c.stance()
-    me = c.me
-
-    def riposte(ev: AttackDeclared) -> None:
-        if ev.target != me or ev.attacker == me or not c.adjacent(ev.attacker):
-            return
-        if not c.may("strike back", who=me):
-            return
-        if c.attack(c.dex_, REF, on=ev.attacker):
-            c.damage(c.w(1), c.dex_mod, on=ev.attacker)
-
-    stance.subs.append(c.world.bus.on(AttackDeclared, riposte, owner=me))
+    """The stance is the whole of this block. The interrupt it grants is
+    `p10167b`, whose Requirement is this stance -- so taking another stance
+    takes the riposte away with it, the stance being the gate."""
+    c.stance()
 
 
 @power(

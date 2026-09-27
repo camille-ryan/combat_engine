@@ -8,12 +8,13 @@ Two of them print "Special: this power can be used as a melee basic attack",
 which has nowhere to go -- see the note in `level_1.py`.
 
 `p9634` prints a second stanza: an opportunity action at range 10 against a
-target that takes a provoking action. It is folded in here rather than
-declared as a second ref, the way `wizard/level_3.py:p4020` folds its own.
-The engine opens an opportunity window only for creatures standing in reach,
-so a window ten squares away never opens; what the row watches instead is
-**somebody else's** window opening against the target, which is the board's
-own record that the target did something provoking.
+target that takes a provoking action. It is `p9634b`, declared in
+`second_card.py`, and all this row leaves behind is the pair of holds that
+one reads -- the printed Requirement, and which creature was set alight.
+The window it answers is **somebody else's**: the engine opens one only for
+a creature standing in reach, so no window ten squares away is ever the
+druid's own, and another creature's is the board's record that the target
+did something provoking.
 """
 
 from __future__ import annotations
@@ -35,7 +36,6 @@ from combat_engine.engine import (
     Melee,
     Moved,
     MoveEnd,
-    OpportunityWindow,
     Ranged,
     When,
     power,
@@ -255,30 +255,18 @@ def p7411(c: Cast) -> None:
     attack=Attack(WIS, vs=REF),
 )
 def p9634(c: Cast) -> None:
-    """The second stanza is folded in; see the module note for why it hangs
-    on somebody else's opportunity window rather than on the druid's own.
-
-    Latched to one swing per round, which is what "an opportunity action"
-    costs and what a watch does not otherwise charge.
-    """
+    """The second stanza is `p9634b`, a row of its own costing an opportunity
+    action. What is left here is the window it needs: a hold on the caster,
+    which is the printed "must be activated", and one on the creature struck,
+    which is how the attack knows whose opening it may answer."""
     if not c.strike():
         return
     c.damage("1d8", c.wis_mod, dtype=DamageType.FIRE)
     victim = c.target
     if victim is None:
         return
-    swung: list[int] = []
-
-    def opening(ev: OpportunityWindow) -> None:
-        if ev.provoker != victim or swung[-1:] == [c.world.round]:
-            return
-        swung.append(c.world.round)
-        if c.attack(c.wis_, REF, on=victim):
-            c.damage("1d8", c.wis_mod, dtype=DamageType.FIRE, on=victim)
-
-    c.watch(
-        OpportunityWindow, opening, until=When.SONT, on=c.me, label=f"{c.ref} again"
-    )
+    c.effect(c.ref, on=c.me, until=When.SONT)
+    c.effect(c.ref, on=victim, until=When.SONT)
 
 
 @power(

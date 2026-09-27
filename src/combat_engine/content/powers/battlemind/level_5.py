@@ -21,14 +21,11 @@ from combat_engine.engine import (
     Melee,
     Ranged,
     Trigger,
-    TurnEnd,
     TurnStart,
     When,
-    Window,
     power,
     targets_me,
 )
-from combat_engine.engine.events import MoveStart
 
 from . import shift_beside
 
@@ -45,8 +42,11 @@ from . import shift_beside
     attack=Attack(CON, vs=AC),
 )
 def p11165(c: Cast) -> None:
-    """The aspect holds nothing of its own -- resist 5 and the Wisdom rider
-    are the Augment 1 clause, dropped for want of power points."""
+    """The aspect holds nothing of its own: resist 5 and the Wisdom rider are
+    its Augment 1, and that clause is bought when some *other* row is
+    augmented -- "while in this aspect you can use the following augmentation
+    with your at-will attack powers". Nothing lets one row add an offer to
+    another row's augment, so it is left out."""
     if c.strike():
         c.damage(c.w(), c.con_mod)
         c.prone()
@@ -126,8 +126,10 @@ def p12423(c: Cast) -> None:
     attack=Attack(CON, vs=WILL),
 )
 def p13043(c: Cast) -> None:
-    """The aspect's Intimidate bonus is not a combat effect and its
-    augmentation is the Augment 1 clause, so the hold carries nothing."""
+    """The aspect's Intimidate bonus is not a combat effect, and its
+    Augment 1 is a clause lent to *another* row's augment -- an at-will
+    augmented while the aspect stands. Nothing hangs a clause on another
+    row's augment, so the hold carries nothing."""
     if c.strike():
         c.damage(c.w(), c.con_mod)
         c.damage("1d12", dtype=DamageType.PSYCHIC)
@@ -226,37 +228,15 @@ def p13046(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p2629(c: Cast) -> None:
-    """The stance's opportunity attack shares this id and is folded in as a
-    subscription hung on the stance. `MoveStart.kind_` separates a walk from a
-    shift, and it is the right end of the move: by `MoveEnd` the enemy has
-    already left and the adjacency check would be false."""
+    """The stance's opportunity attack is `p2629b`, declared on its own now
+    that the second printed block has an id, and gated on this stance
+    standing rather than folded in here."""
     if c.strike():
         c.damage(c.w(2), c.con_mod)
     else:
         c.half_damage(c.w(2), c.con_mod)
-    if not c.last:
-        return
-    held = c.stance()
-
-    def riposte(ev: MoveStart) -> None:
-        who = ev.actor
-        if ev.kind_ != "walk" or c.turn_of() != who:
-            return
-        if not c.adjacent(who) or not c.marked(on=who):
-            return
-        if not c.strike(on=who):
-            return
-        c.damage(c.w(), c.con_mod, on=who)
-
-        def reel(end: TurnEnd) -> None:
-            if end.actor == who and c.may("pull it back", who=c.me):
-                c.pull(c.speed_of(who), on=who)
-
-        c.watch(TurnEnd, reel, until=When.EOTNT, on=c.me)
-
-    held.subs.append(
-        c.world.bus.on(MoveStart, riposte, owner=c.me, window=Window.BEFORE)
-    )
+    if c.last:
+        c.stance()
 
 
 @power(

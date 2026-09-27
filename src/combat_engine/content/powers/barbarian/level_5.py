@@ -304,11 +304,10 @@ def p4831(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p4832(c: Cast) -> None:
-    """The free-action attack printed beneath this one carries no id of its
-    own, so there is no row to declare and no ref for `c.grant_row`; it is a
-    deliberate attack rather than a reaction, so it is not armed here either.
-    Named in the report.
-    """
+    """The free-action attack printed beneath this one is `p4832b`, which
+    reads this rage as its Requirement. Nothing is armed here: it is a
+    deliberate attack rather than a reaction, so it belongs on the turn
+    menu."""
     if c.strike():
         c.damage(c.w(2), c.str_mod, dtype=DamageType.THUNDER)
         c.dazed(until=When.SAVE_ENDS)

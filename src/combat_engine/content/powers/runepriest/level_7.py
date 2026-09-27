@@ -58,10 +58,9 @@ def _rune(c: Cast, which: str) -> bool:
     attack=Attack(STR, vs=REF),
 )
 def p11394(c: Cast) -> None:
-    """The second half of this row is a power in its own right on the page,
-    with its own id; here it is the same attack line rolled from a square in
-    the target's space -- `from_` -- when the target attacks. Its own rune
-    clause is read then, by which time the state has switched."""
+    """The second half of this row is `p11394b`. The Hit line's grant is two
+    holds: one on the caster, which is that row's Requirement, and one on
+    the primary target, which is the origin square the printed line names."""
     victim = c.target
     destruction = _rune(c, _DESTRUCTION)
     if not c.strike() or victim is None:
@@ -69,18 +68,8 @@ def p11394(c: Cast) -> None:
     c.damage(c.w(), c.str_mod, dtype=DamageType.LIGHTNING)
     if destruction:
         c.flat(c.con_mod, dtype=DamageType.LIGHTNING)
-
-    def crack(ev: Any, v: int = victim) -> None:
-        protection = _in_rune(c, _PROTECTION)
-        for e in c.within(1, of=v, side="enemy"):
-            if e == v:
-                continue
-            if c.strike(on=e, from_=v):
-                c.damage(0, c.str_mod, dtype=DamageType.LIGHTNING, on=e)
-                if protection:
-                    c.slide(2, on=e)
-
-    c.on_attack(crack, by=victim, until=When.EONT, once=True)
+    c.effect(c.ref, on=c.me, until=When.EONT)
+    c.effect(f"{c.ref} origin", on=victim, until=When.EONT)
 
 
 @power(

@@ -262,14 +262,14 @@ def p9766(c: Cast) -> None:
     keywords=PRIMAL,
 )
 def p12532(c: Cast) -> None:
-    """The printed second block is a standard-action attack the change of
-    shape grants at will, and a row the engine can offer has to have an id
-    of its own -- this one has none -- so the transformation is what can be
-    written."""
+    """The printed second block is `p12532b`, the standard-action attack the
+    change of shape grants at will. What is written here is the
+    transformation and the hold under this ref that gates it."""
     spirit = c.companion()
     if spirit is None:
         return
     c.resist(5, on=spirit, until=When.ENCOUNTER)
+    c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

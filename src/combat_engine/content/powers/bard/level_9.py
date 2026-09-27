@@ -38,24 +38,12 @@ def _no_opportunities(c: Cast, victim: int, until: When) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=ARCANE_IMPLEMENT,
-    attack=Attack(CHA, vs=WILL),
 )
 def p2977(c: Cast) -> None:
-    """The row and the at-will it turns on share one id, so they are one row:
-    the hold is what the minor action buys and the swing is a watch on it,
-    which is the only place the opportunity attack it prints can live."""
-    held = c.effect(c.ref, until=When.SUSTAIN, on=c.me, sustain=MINOR)
-
-    def snap(ev: TurnStart) -> None:
-        if ev.ghost or held.ended or ev.actor not in c.enemies():
-            return
-        if gap(c, c.me, ev.actor) > 3:
-            return
-        if c.strike(on=ev.actor):
-            c.damage(0, c.cha_mod, on=ev.actor)
-            c.rooted(on=ev.actor, until=When.EONT)
-
-    c.watch(TurnStart, snap, until=When.ENCOUNTER, on=c.me, label="p2977")
+    """The hold is the whole of what the minor action buys. The opportunity
+    attack printed beside it is `p2977b`, which reads this hold as its
+    Requirement -- the attack line went with it."""
+    c.effect(c.ref, until=When.SUSTAIN, on=c.me, sustain=MINOR)
 
 
 @power(

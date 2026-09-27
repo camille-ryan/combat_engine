@@ -1,11 +1,9 @@
 """Monk, level 1 (first half).
 
 Most of these print **two** stat blocks under one id: a standard-action
-attack and a separate move-action Effect. One id is one row here, so the
-body does both halves, in the printed order -- which for a few of them puts
-the movement *first*. The move half is an Effect, so it happens whether or
-not the attack landed, and it is guarded with `c.first`/`c.last` so a
-multi-target row moves once rather than once per victim.
+attack and a separate move-action Effect. Only the attack is here; the
+second block costs its own action and lives in `second_card_1.py` under its
+own ref.
 
 There is no `Keyword.PSIONIC`, so the discipline keyword is dropped from
 every header; the implement and damage-type keywords are all that survive.
@@ -28,7 +26,6 @@ from combat_engine.engine import (
     REF,
     SELF,
     STANDARD,
-    WILL,
     Attack,
     Cast,
     CloseBlast,
@@ -103,8 +100,6 @@ def p11208(c: Cast) -> None:
                 "damage", c.str_mod, on=c.me, until=When.EONT, once=True,
                 when=lambda ctx, v=victim: ctx.get("target") == v,
             )
-    if c.last:
-        c.move(c.speed_of())
 
 
 @power(
@@ -119,16 +114,11 @@ def p11208(c: Cast) -> None:
     attack=Attack(DEX, vs=FORT),
 )
 def p11210(c: Cast) -> None:
-    """Flight is granted for the turn and then walked; falling is not
-    modelled, so the "if you don't land" clause is dropped."""
     if c.strike():
         c.damage("2d8", c.dex_mod, dtype=DamageType.THUNDER)
         for foe in c.within(1, of=c.target, side="enemy"):
             if foe != c.target:
                 c.flat(c.str_mod, dtype=DamageType.THUNDER, on=foe)
-    if c.last:
-        c.mode("fly", c.speed_of(), until=When.EOT)
-        c.move(c.speed_of())
 
 
 @power(
@@ -235,10 +225,6 @@ def p13124(c: Cast) -> None:
             c.flat(c.con_mod, on=ev.other)
 
         c.watch(AdjacencyGained, nip, until=When.SONT)
-    if c.last:
-        c.shift(1)
-        for d in (AC, FORT, REF, WILL):
-            c.bonus(d, 1, on=c.me, until=When.SONT, kind="power")
 
 
 @power(
@@ -253,15 +239,8 @@ def p13124(c: Cast) -> None:
     attack=Attack(DEX, vs=REF),
 )
 def p13126(c: Cast) -> None:
-    """"You are no longer marked" has no method of its own, so the marks
-    standing on the monk are ended one by one."""
     if c.strike():
         c.damage("1d8", c.dex_mod)
-    if c.last:
-        for eff in list(c.world.effects.of(c.me)):
-            if Condition.MARKED in eff.conditions:
-                c.world.effects.end(eff, c.ref)
-        c.move(c.speed_of() + 2)
 
 
 @power(
@@ -282,9 +261,6 @@ def p13128(c: Cast) -> None:
         c.damage("2d8", c.dex_mod)
         if c.str_mod > 0:
             c.penalty(AC, c.str_mod, until=When.EONT)
-    if c.last:
-        c.mode("fly", c.speed_of(), until=When.EOT)
-        c.move(c.speed_of())
 
 
 @power(
@@ -309,13 +285,6 @@ def p13130(c: Cast) -> None:
                 c.slide(c.wis_mod, on=ev.actor)
 
         c.watch(TurnEnd, shove, until=When.SONT)
-    if c.last:
-        for d in (AC, FORT, REF, WILL):
-            c.bonus(
-                d, 2, on=c.me, until=When.SONT, kind="power",
-                when=lambda ctx: bool(ctx.get("opportunity")),
-            )
-        c.move(c.speed_of())
 
 
 @power(
@@ -331,8 +300,7 @@ def p13130(c: Cast) -> None:
 )
 def p13132(c: Cast) -> None:
     """The secondary attack is against a different defence, so it is rolled
-    off the primary line by hand. The jump half is written as the movement
-    it is; the Athletics check itself has no combat consequence."""
+    off the primary line by hand."""
     if not c.first:
         return
     if c.strike():
@@ -348,7 +316,6 @@ def p13132(c: Cast) -> None:
             for foe in c.within(1, of=second, side="enemy"):
                 if foe != second:
                     c.push(1, on=foe, anchor=anchor)
-    c.move(c.speed_of())
 
 
 @power(
@@ -382,12 +349,6 @@ def p13134(c: Cast) -> None:
                 c.flat(c.con_mod, on=ev.attacker)
 
         c.watch(Hit, riposte, until=When.SONT)
-    if c.last:
-        near = c.within(1, side="other")
-        if near:
-            partner = c.choose(near)
-            if partner is not None:
-                c.swap(partner)
 
 
 @power(
@@ -407,8 +368,6 @@ def p13136(c: Cast) -> None:
         if c.wielding("mace") or c.wielding("staff"):
             c.flat(c.con_mod)
         c.slowed(until=When.EONT)
-    if c.last:
-        c.shift(2)
 
 
 @power(
@@ -506,9 +465,7 @@ def p13140(c: Cast) -> None:
 )
 def p13141(c: Cast) -> None:
     """There is no immunity method, so "cannot be dazed or stunned" is
-    written as shrugging the condition off the instant it lands. The
-    stance's second stat block -- a standard-action attack -- has no id of
-    its own in the spec, so it is not written."""
+    written as shrugging the condition off the instant it lands."""
     posture = c.stance()
 
     def shrug(ev: ConditionApplied) -> None:
@@ -540,8 +497,6 @@ def p13219(c: Cast) -> None:
             "attack", 2, until=When.EONT,
             when=lambda ctx: ctx.get("target") == c.me,
         )
-    if c.last:
-        c.shift(1)
 
 
 @power(
@@ -569,7 +524,6 @@ def p13221(c: Cast) -> None:
             landed += 1
     if landed:
         c.shift(landed)
-    c.shift(1)
 
 
 @power(
@@ -600,4 +554,3 @@ def p16141(c: Cast) -> None:
             c.flat(2 + c.cha_mod, dtype=DamageType.FIRE, on=ev.actor)
 
     c.watch(TurnStart, sear, until=When.SONT)
-    c.shift(2)

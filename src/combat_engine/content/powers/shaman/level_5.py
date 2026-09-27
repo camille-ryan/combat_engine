@@ -53,28 +53,20 @@ SPIRIT_MELEE = Melee(1, from_="companion")
     reach=CloseBurst(5),
     target=ONE_ALLY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.FIRE],
-    attack=Attack(WIS, vs=REF),
 )
 def p3877(c: Cast) -> None:
-    """The printed second half is a separate immediate interrupt that only
-    exists while this is up. There is no verb for "you may now use that
-    row", so the retaliation is armed here instead: the attack line in the
-    header is the interrupt's, rolled from the watch."""
+    """The printed second half is `p3877b`, an immediate interrupt of its
+    own. This block has no attack line -- both the roll and the fire belong
+    to that one -- and what it leaves behind is the pair of holds that row
+    reads: the printed Requirement on the shaman, and which ally is
+    warded."""
     mate = c.target
     if mate is None:
         return
     c.temp_hp(10, on=mate)
     c.resist(5, DamageType.FIRE, on=mate, until=When.ENCOUNTER)
-
-    def punish(ev: Any) -> None:
-        if ev.target != mate or ev.attacker not in c.enemies():
-            return
-        if not by_melee(c.world, c.me, ev):
-            return
-        if c.strike(on=ev.attacker):
-            c.damage("2d6", c.wis_mod, dtype=DamageType.FIRE, on=ev.attacker)
-
-    c.watch(Hit, punish, until=When.ENCOUNTER, on=c.me)
+    c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
+    c.effect(c.ref, on=mate, until=When.ENCOUNTER)
 
 
 @power(
@@ -274,23 +266,11 @@ def p12529(c: Cast) -> None:
     attack=Attack(WIS, vs=FORT),
 )
 def p12871(c: Cast) -> None:
-    """The second printed block is an opportunity action that exists only
-    while the zone does. There is no verb for "you may now use that row",
-    so it is armed here off an enemy's turn ending in the zone and rolled
-    with this row's own attack line."""
+    """The second printed block is `p12871b`, an opportunity action that
+    exists only while the zone does -- and the zone, labelled with this ref,
+    is the whole of what that row asks for."""
     if c.first:
-        wind = c.zone(c.area(), until=When.EONT)
-
-        def howl(ev: Any) -> None:
-            foe = getattr(ev, "actor", None)
-            if foe not in c.enemies():
-                return
-            if foe not in c.world.zones.occupants(wind):
-                return
-            if c.strike(on=foe):
-                c.slide(3, on=foe)
-
-        c.watch(TurnEnd, howl, until=When.EONT, on=c.me)
+        c.zone(c.area(), until=When.EONT)
     if c.strike(from_=c.companion()):
         c.damage("2d6", c.wis_mod)
         c.slide(3)

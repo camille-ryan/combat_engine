@@ -23,6 +23,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from combat_engine.content.powers.cards import active
 from combat_engine.engine import (
     AT_WILL,
     MINOR,
@@ -62,6 +63,24 @@ def out_of_beast_form(world: World, eid: int) -> bool:
     return not in_beast_form(world, eid)
 
 
+def in_form(ref: str) -> Callable[[World, int], bool]:
+    """"Requirement: the p#### power must be active", on a shape's own attack.
+
+    `cards.active` alone reads the wrong thing here. Every shape wears the
+    one label, so the hold that tells them apart is the one the assuming row
+    leaves behind under its own ref -- and being in beast form at all is
+    asked as well, so the attack is recognisable as a beast form power by
+    `beast_row` like any other.
+    """
+    behind = active(ref)
+
+    def check(world: World, eid: int) -> bool:
+        return in_beast_form(world, eid) and behind(world, eid)
+
+    check.beast_form = True  # type: ignore[attr-defined]
+    return check
+
+
 def beast_row(ctx: dict[str, Any]) -> bool:
     """Is the row rolling this one of the beast form ones?
 
@@ -71,7 +90,9 @@ def beast_row(ctx: dict[str, Any]) -> bool:
     damage context, so one gate serves both.
     """
     p = get(ctx.get("power", "") or "")
-    return p is not None and p.requires is in_beast_form
+    if p is None:
+        return False
+    return p.requires is in_beast_form or getattr(p.requires, "beast_form", False)
 
 
 def take_beast_form(
@@ -80,17 +101,24 @@ def take_beast_form(
     conditions: Iterable[Condition] = (),
     modes: dict[str, int] | None = None,
 ) -> Effect:
-    """Assume beast form, ending whichever shape was already worn."""
+    """Assume beast form, ending whichever shape was already worn.
+
+    The row that assumed it also leaves its own ref behind, because the
+    attack printed beside a shape asks for *that* shape by name and one
+    shared label cannot answer. It ends when the shape does.
+    """
     for effect in list(c.world.effects.of(c.me)):
         if effect.label == BEAST:
             c.world.effects.end(effect, "wild shape again")
-    return c.form(
+    shape = c.form(
         conditions=conditions,
         modes=modes,
         until=When.ENCOUNTER,
         revert=ActionType.MINOR,
         label=BEAST,
     )
+    ends_with(c, shape, c.effect(c.ref, on=c.me, until=When.ENCOUNTER))
+    return shape
 
 
 def current_form(c: Cast) -> Effect | None:

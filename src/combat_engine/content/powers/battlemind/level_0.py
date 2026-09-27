@@ -89,7 +89,8 @@ def _first_turn(world: World, me: int, ev: TurnStart) -> bool:
     keywords=PSIONIC,
 )
 def p10438(c: Cast) -> None:
-    """Base form. Augment 1 (one or two targets) is dropped: no power points.
+    """Augment 1 is a wider target line -- one or two creatures in the burst
+    -- and targeting happens before the body runs, so it is left out.
     "Until you use this power again" is left to the mark's own duration --
     nothing can reach back and end the mark the last use laid."""
     c.mark(until=When.ENCOUNTER)

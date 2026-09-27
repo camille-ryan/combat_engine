@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from combat_engine.content.powers.augment import spent_on
 from combat_engine.engine import (
     DAILY,
     MINOR,
@@ -28,20 +29,17 @@ from combat_engine.engine import (
 def p12424(c: Cast) -> None:
     """Temporary hit points equal to the points that augmented the hit.
 
-    `c.spend_points` records the spend against the row's own ref, which is
-    what joins it to a hit that happens later -- the augment is declared
-    when the power is used and the stance pays out when it lands.
-
-    Every psionic row in the tree is written at Augment 0 today, so this
-    pays nothing until the augment clauses are written; it is not the
-    stance that is missing anything. Driven by hand with two points spent
-    on a row, the hit hands over two temporary hit points.
+    The spend and the hit are separate moments, and what joins them is the
+    row's ref. `augment.spent_on` is what the use landing right now paid;
+    `c.points_spent` is the encounter's running total against that ref, so
+    once a row had been augmented every later hit with it -- augmented or
+    not -- would have paid out, and the payment would have grown.
     """
     c.stance(label="p12424")
     me = c.me
 
     def landed(ev: Hit) -> None:
-        spent = c.points_spent(ev.power)
+        spent = spent_on(me, ev.power)
         if ev.attacker == me and spent:
             c.temp_hp(spent, on=me)
 

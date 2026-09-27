@@ -209,8 +209,8 @@ def p16263(c: Cast) -> None:
     rolls a d6 to add or remove a tentacle -- a conjuration cannot be made
     from inside a sustain handler, so sustaining simply keeps the pair.
 
-    The secondary attack printed beneath has no id of its own in the spec,
-    so there is no row to declare and it is not written.
+    The secondary attack printed beneath is `p16263b`, gated on a tentacle
+    still standing.
     """
     room = sorted(
         sq
@@ -219,6 +219,11 @@ def p16263(c: Cast) -> None:
     )
     if not room:
         return
+    # Ranked by what each square's aura would catch. Unranked, the lowest
+    # square on the board wins, which is reliably the one nothing stands
+    # near -- so the tentacles bit nobody and `p16263b` could reach nobody
+    # through them.
+    room.sort(key=lambda sq: (-len(c.in_squares(spread({sq}, 1), side="enemy")), sq))
     arms = [
         c.conjure(
             at=where,

@@ -11,7 +11,6 @@ from combat_engine.engine import (
     AC,
     DAILY,
     ENCOUNTER,
-    FORT,
     FREE,
     INTERRUPT,
     MINOR,
@@ -20,7 +19,6 @@ from combat_engine.engine import (
     REACTION,
     REF,
     SELF,
-    WILL,
     AttackDeclared,
     Cast,
     Health,
@@ -36,7 +34,6 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.events import (
-    AdjacencyGained,
     DamageApplied,
     ForcedMove,
     Hit,
@@ -177,26 +174,9 @@ def p16146(c: Cast) -> None:
     keywords=STANCE_KW,
 )
 def p16147(c: Cast) -> None:
-    """The stance's second stat block is an at-will interrupt on an enemy
-    stepping up, so it is written into the stance as a standing watch
-    rather than left as an unreachable second row. The Perception bonus is
-    narrative and is not written."""
-    posture = c.stance()
-
-    def step_off(ev: AdjacencyGained) -> None:
-        if ev.actor != c.me or ev.mover in (0, c.me):
-            return
-        foe = ev.other
-        if foe not in c.enemies():
-            return
-        c.shift(1)
-        for defence in (AC, FORT, REF, WILL):
-            c.bonus(
-                defence, 2, on=c.me, until=When.EOT,
-                when=lambda ctx, f=foe: ctx.get("attacker") == f, kind="power")
-
-    hold = c.watch(AdjacencyGained, step_off, until=When.ENCOUNTER)
-    posture.on_end.append(lambda: c.world.effects.end(hold, "stance ended"))
+    """The stance's second stat block is a row of its own, gated on this
+    one being up. The Perception bonus is narrative and is not written."""
+    c.stance()
 
 
 @power(

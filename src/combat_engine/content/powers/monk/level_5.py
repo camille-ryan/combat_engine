@@ -24,7 +24,6 @@ from combat_engine.engine import (
     CloseBlast,
     Condition,
     DamageType,
-    Defense,
     Keyword,
     Melee,
     Ranged,
@@ -36,18 +35,9 @@ from combat_engine.engine import (
     hits_me,
     power,
 )
-from combat_engine.engine.events import AttackDeclared, Hit, Moved, TurnEnd
+from combat_engine.engine.events import Hit, Moved, TurnEnd
 
 IMPLEMENT = [Keyword.IMPLEMENT]
-
-
-def _swing(c: Cast, vs: Defense, on: int) -> bool:
-    """This row's own attack line, rolled against a different defence."""
-    line = get(c.ref).attack
-    if line is None:
-        return False
-    bonus = line.bonus_for(c.world, c.me, c.ref, c.branch)
-    return bool(c.attack(bonus, vs, on=on).hit)
 
 
 def _melee(ctx: dict) -> bool:
@@ -130,9 +120,6 @@ def p11221(c: Cast) -> None:
     keywords=[*IMPLEMENT, Keyword.STANCE],
 )
 def p13154(c: Cast) -> None:
-    """The stance's second stat block -- a standard-action attack that ends
-    the stance -- has no id of its own in the spec, so only the stance is
-    written."""
     posture = c.stance()
     held = c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=_melee, kind="power")
     if held is not None:
@@ -261,34 +248,12 @@ def p15986(c: Cast) -> None:
     attack=Attack(DEX, vs=FORT),
 )
 def p16156(c: Cast) -> None:
-    """The stance's second stat block is an at-will interrupt on an adjacent
-    enemy attacking, so it is written into the stance as a standing watch.
-    A latch stops the counter-attack answering itself."""
     if c.strike():
         c.damage("2d6", c.dex_mod)
     else:
         c.half_damage("2d6", c.dex_mod)
-    if not c.last:
-        return
-    posture = c.stance(conditions=[Condition.SLOWED])
-    busy: list[int] = []
-
-    def counter(ev: AttackDeclared) -> None:
-        foe = ev.attacker
-        if busy or foe == c.me or foe not in c.enemies() or not c.adjacent(foe):
-            return
-        busy.append(1)
-        try:
-            if _swing(c, REF, foe):
-                c.damage("1d8", c.dex_mod, on=foe)
-                c.prone(on=foe)
-            else:
-                c.grants_advantage(on=c.me, to=foe, until=When.SONT)
-        finally:
-            busy.clear()
-
-    hold = c.on_attack(counter, until=When.ENCOUNTER)
-    posture.on_end.append(lambda: c.world.effects.end(hold, "stance ended"))
+    if c.last:
+        c.stance(conditions=[Condition.SLOWED])
 
 
 @power(

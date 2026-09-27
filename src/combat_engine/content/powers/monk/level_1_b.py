@@ -1,13 +1,13 @@
 """Monk, level 1 (second half).
 
-Same shape as `level_1.py`: one id, two printed stat blocks, the move half
-written into the same body in the printed order.
+Same shape as `level_1.py`: one id, two printed stat blocks. Only the
+attack half is here -- the move half costs its own action and lives in
+`second_card_1.py` under its own ref.
 """
 
 from __future__ import annotations
 
 from combat_engine.engine import (
-    AC,
     AT_WILL,
     DAILY,
     DEX,
@@ -24,7 +24,6 @@ from combat_engine.engine import (
     Cast,
     CloseBlast,
     CloseBurst,
-    Condition,
     DamageType,
     Effect,
     Keyword,
@@ -66,8 +65,7 @@ def _ends_with(c: Cast, posture: Effect, held: Effect | None) -> None:
 )
 def p16133(c: Cast) -> None:
     """The extra fire damage is typed, which a `"damage"` modifier cannot
-    be, so it is a watch on the monk's own melee hits. The opportunity
-    riposte only lives for the movement it is printed on."""
+    be, so it is a watch on the monk's own melee hits."""
     if c.strike():
         c.damage("1d8", c.dex_mod)
 
@@ -76,16 +74,6 @@ def p16133(c: Cast) -> None:
                 c.flat(c.cha_mod, dtype=DamageType.FIRE, on=ev.target)
 
         c.watch(Hit, burn, until=When.EONT)
-    if not c.last:
-        return
-
-    def scald(ev: Hit) -> None:
-        if ev.target == c.me and getattr(ev, "opportunity", False):
-            c.flat(2 + c.cha_mod, dtype=DamageType.FIRE, on=ev.attacker)
-
-    hold = c.watch(Hit, scald, until=When.EOT)
-    c.move(c.speed_of())
-    c.world.effects.end(hold, "movement over")
 
 
 @power(
@@ -100,16 +88,10 @@ def p16133(c: Cast) -> None:
     attack=Attack(DEX, vs=FORT),
 )
 def p16135(c: Cast) -> None:
-    """Shifting through enemy squares is phasing, granted for the turn."""
     if c.strike():
         c.damage("1d8", c.dex_mod)
         if c.may("slide the target 1 square", who=c.me):
             c.slide(1)
-    if c.last:
-        steps = max(0, c.str_mod // 2)
-        if steps:
-            c.phasing(until=When.EOT)
-            c.shift(steps)
 
 
 @power(
@@ -127,15 +109,6 @@ def p16137(c: Cast) -> None:
     if c.strike():
         c.damage("1d10", c.dex_mod)
         c.push(max(0, c.str_mod // 2))
-    if not c.last:
-        return
-    c.shift(1)
-
-    def floor(ev: Hit) -> None:
-        if ev.target == c.me and c.adjacent(ev.attacker):
-            c.prone(on=ev.attacker)
-
-    c.watch(Hit, floor, until=When.SONT, once=True)
 
 
 @power(
@@ -154,9 +127,6 @@ def p16139(c: Cast) -> None:
         c.damage("1d8", c.dex_mod)
     if c.may("slide the target 1 square", who=c.me):
         c.slide(1)
-    if c.last:
-        c.ignores_difficult(until=When.EOT)
-        c.move(c.speed_of())
 
 
 @power(
@@ -320,8 +290,6 @@ def p7449(c: Cast) -> None:
         c.damage("1d10", c.dex_mod)
         if owed:
             c.flat(c.wis_mod)
-    if c.last:
-        c.move(c.speed_of() + 2)
 
 
 @power(
@@ -339,14 +307,6 @@ def p7450(c: Cast) -> None:
     if c.strike():
         c.damage("1d6", c.dex_mod)
         c.prone()
-    if not c.last:
-        return
-    options = [a for a in c.within(1, side="ally") if a != c.me]
-    options += [f for f in c.within(1, side="enemy") if c.is_(Condition.PRONE, on=f)]
-    if options:
-        partner = c.choose(options, "swap places with")
-        if partner is not None:
-            c.swap(partner)
 
 
 @power(
@@ -363,8 +323,6 @@ def p7450(c: Cast) -> None:
 def p7452(c: Cast) -> None:
     if c.can_see() and c.strike():
         c.damage("1d8", c.dex_mod)
-    if c.last:
-        c.shift(2)
 
 
 @power(
@@ -387,15 +345,6 @@ def p7453(c: Cast) -> None:
             mark = c.choose(victims, "whom the target swings at")
             if mark is not None:
                 c.grant_attack(c.target, on=mark, attack_bonus=c.wis_mod)
-    if not c.last:
-        return
-    c.ignores_difficult(until=When.EOT)
-    for d in (AC, FORT, REF, WILL):
-        c.bonus(
-            d, c.wis_mod, on=c.me, until=When.EOT, kind="power",
-            when=lambda ctx: bool(ctx.get("opportunity")),
-        )
-    c.move(c.speed_of() + 2)
 
 
 @power(
@@ -417,12 +366,6 @@ def p7454(c: Cast) -> None:
         c.damage("2d10", c.dex_mod)
         if untouched:
             c.flat(c.roll("1d10"))
-    if not c.last:
-        return
-    near = c.within(1, side="enemy")
-    if near:
-        c.no_provoke(from_=near[0], until=When.EOT)
-    c.move(c.speed_of() + 2)
 
 
 @power(
@@ -496,10 +439,6 @@ def p7456(c: Cast) -> None:
     attack=Attack(DEX, vs=FORT),
 )
 def p7535(c: Cast) -> None:
-    """The move half is a running jump: written as the movement, since the
-    Athletics check itself has no combat consequence."""
     if c.strike():
         c.damage("1d10", c.dex_mod)
         c.push(1)
-    if c.last:
-        c.move(c.speed_of())

@@ -12,11 +12,11 @@ can ..."** is a save-ends effect carrying a `sustain_cost`, which
 -- the arrangement `level_5.py`'s own docstring sets out -- with
 `c.on_sustain` as the payout half.
 
-**A secondary power printed beneath a primary** carries no id of its own in
-the spec, so there is no row to declare and no ref for `c.grant_row`. Where
-its whole content is a reaction it is armed here as a watch on the effect
-the primary leaves, which fires it rather than offering it; where it is a
-deliberate attack it is not written, and is named in the report.
+**A secondary power printed beneath a primary** has a ref of its own after
+all -- the importer mints one with a letter on the end -- and those live in
+`second_card.py`. So a primary leaves only what it puts on the board, and
+the secondary is offered with the action and trigger it prints rather than
+armed here as a watch that fires without asking.
 """
 
 from __future__ import annotations
@@ -38,7 +38,6 @@ from combat_engine.engine import (
     WILL,
     AreaBurst,
     Attack,
-    AttackDeclared,
     Cast,
     CloseBlast,
     Condition,
@@ -52,7 +51,6 @@ from combat_engine.engine import (
     Ranged,
     TurnStart,
     When,
-    ZoneEntered,
     get,
     power,
 )
@@ -200,11 +198,11 @@ def p12892(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.RADIANT],
 )
 def p13642(c: Cast) -> None:
-    """The ward is the primary; the secondary printed under it is a reaction
-    with no id of its own, so it is armed rather than offered -- it answers
-    every adjacent enemy that attacks, where the printed line would let the
-    holder decline. The shield bonus is its own `kind`, which is how it
-    fails to stack with a real shield.
+    """The ward is the primary; the reaction printed under it is `p13642b`,
+    offered rather than armed now that it has a ref, which is what lets the
+    holder decline it. The shield bonus is its own `kind`, which is how it
+    fails to stack with a real shield. The hold this leaves carries the
+    row's own name, which is what the secondary's Requirement reads.
     """
     c.world.effects.apply(
         c.me,
@@ -216,12 +214,6 @@ def p13642(c: Cast) -> None:
             (c.me, Mod(what="ref", value=2, kind="shield", label=c.ref)),
         ],
     )
-
-    def flare(ev: AttackDeclared) -> None:
-        if ev.target == c.me and c.adjacent(ev.attacker):
-            c.flat(5 + c.cha_mod, dtype=DamageType.RADIANT, on=ev.attacker)
-
-    c.watch(AttackDeclared, flare, until=When.ENCOUNTER)
 
 
 @power(
@@ -302,11 +294,9 @@ def p13882(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p13883(c: Cast) -> None:
-    """The secondary is an opportunity attack on whoever walks into the zone,
-    and has no id of its own -- so it is armed off `ZoneEntered` and rolls
-    longhand. "Or ends its turn there" is the half that is not written:
-    `ZoneEntered` fires on arrival and there is no matching turn-end event
-    for a zone's occupants.
+    """The secondary is `p13883b`, an opportunity attack of its own gated on
+    this zone standing -- including the "or ends its turn there" half, which
+    was unwritten here for want of an event and is asked of `TurnEnd`.
     """
     if c.target is not None:
         if c.strike():
@@ -319,25 +309,7 @@ def p13883(c: Cast) -> None:
     area = c.area()
     if not area:
         return
-    gloom = c.zone(area, label=c.ref, until=When.ENCOUNTER)
-
-    def snatch(ev: ZoneEntered) -> None:
-        if ev.zone != gloom or ev.actor not in c.enemies():
-            return
-        if not c.attack(c.cha_, REF, on=ev.actor):
-            return
-        c.flat(5 + c.cha_mod, dtype=DamageType.NECROTIC, on=ev.actor)
-        if c.is_(Condition.SLOWED, ev.actor):
-            c.condition(
-                Condition.IMMOBILIZED,
-                until=When.SAVE_ENDS,
-                on=ev.actor,
-                ongoing=(10, DamageType.NECROTIC),
-            )
-        else:
-            c.slowed(until=When.SAVE_ENDS, on=ev.actor)
-
-    c.watch(ZoneEntered, snatch, until=When.ENCOUNTER)
+    c.zone(area, label=c.ref, until=When.ENCOUNTER)
 
 
 @power(

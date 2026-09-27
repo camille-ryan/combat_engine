@@ -1,13 +1,15 @@
 """Psion, level 1.
 
-Every augmentable row here is written at **Augment 0** -- the effect printed
-before the first Augment line, which is a complete at-will on its own. The
-engine has no power points, so the augment clauses are named in each
-docstring rather than folded in or guessed at.
+The augmentable rows here ask `augment` how many power points this use is
+bought with and branch on the answer. A clause that rewrites the **header**
+-- a wider target line, a burst where the base is a single target -- is the
+one shape a body cannot honour, because targeting happens before the body
+runs; those are named in the docstring and recorded in `docs/blocked.json`.
 """
 
 from __future__ import annotations
 
+from combat_engine.content.powers.augment import augment
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -23,6 +25,7 @@ from combat_engine.engine import (
     WILL,
     AreaBurst,
     Attack,
+    AttackDeclared,
     Cast,
     Damage,
     DamageType,
@@ -34,6 +37,7 @@ from combat_engine.engine import (
     Summon,
     TurnStart,
     When,
+    Window,
     get,
     power,
     spread,
@@ -56,11 +60,16 @@ PSIONIC_PSYCHIC = [Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.PSYCHIC]
     attack=Attack(INT, vs=FORT),
 )
 def p11269(c: Cast) -> None:
-    """Augment 1 (push equal to Wisdom modifier) and Augment 2 (extra Wisdom
-    damage plus prone) are dropped: no power points."""
+    """Augment 1 pushes the target by Wisdom instead of 1 square; the enemies
+    beside you are pushed 1 either way. Augment 2 adds Wisdom to the damage and
+    knocks the target prone."""
+    spent = augment(c)
     if c.strike():
-        c.damage("1d8", c.int_mod, dtype=DamageType.FORCE)
-        c.push(1)
+        extra = c.wis_mod if spent == 2 else 0
+        c.damage("1d8", c.int_mod + extra, dtype=DamageType.FORCE)
+        if spent == 2:
+            c.prone()
+        c.push(c.wis_mod if spent == 1 else 1)
         for foe in c.within(1, of=c.me, side="enemy"):
             if foe != c.target:
                 c.push(1, on=foe)
@@ -78,14 +87,15 @@ def p11269(c: Cast) -> None:
     attack=Attack(INT, vs=REF),
 )
 def p11270(c: Cast) -> None:
-    """Augments 1 and 2 (bigger dice, pull equal to Wisdom modifier) dropped.
+    """Both augments raise the dice and pull by Wisdom rather than 1 square.
 
     The printed Special -- usable unaugmented as a ranged basic attack -- has
     no header field to declare it, so it is not said here either.
     """
+    spent = augment(c)
     if c.strike():
-        c.damage("1d8", c.int_mod, dtype=DamageType.FORCE)
-        c.pull(1)
+        c.damage(("1d8", "1d10", "2d10")[spent], c.int_mod, dtype=DamageType.FORCE)
+        c.pull(1 if spent == 0 else c.wis_mod)
 
 
 @power(
@@ -157,13 +167,19 @@ def p11272(c: Cast) -> None:
     attack=Attack(INT, vs=FORT),
 )
 def p13302(c: Cast) -> None:
-    """Augment 1 (enemies only) and Augment 2 (bigger dice, and the target may
-    land back inside the burst) are dropped."""
+    """Both augments narrow the burst to enemies, which a body can honour by
+    leaving anybody else alone -- a *narrower* target line is the one kind the
+    header does not have to be rewritten for. Augment 2 also raises the dice
+    and lets the target land inside the burst rather than only outside it."""
+    spent = augment(c)
     victim = c.target
+    if spent and victim not in c.enemies():
+        return
     if c.strike():
-        c.damage("1d6", c.int_mod)
+        c.damage("2d6" if spent == 2 else "1d6", c.int_mod)
         burst = c.area()
-        for sq in sorted(spread(burst, 1) - burst):
+        ring = spread(burst, 1) if spent == 2 else spread(burst, 1) - burst
+        for sq in sorted(ring):
             if c.teleport(3, who=victim, to=sq):
                 break
 
@@ -184,14 +200,17 @@ def p13302(c: Cast) -> None:
     ],
 )
 def p13303(c: Cast) -> None:
-    """Three clauses are dropped. "Any enemy that enters the shard's space"
+    """Two clauses are dropped. "Any enemy that enters the shard's space"
     cannot happen: `c.conjure` occupies its square, so a zone laid over that
     one square would never have anybody in it -- a dead clause rather than a
-    weak one. The minor-action attack made *through* the shard is printed as a
-    second block under this same id and so has no ref of its own. Augment 1
-    (moving the shard 5 squares) needs power points.
+    weak one. The minor-action attack made through the shard is `p13303b`,
+    which the importer now gives a ref of its own; Augment 2 is that block's
+    dice, so it belongs to that row rather than this one.
+
+    Augment 1 is the shard's speed: `speed=` is how far its creator may move
+    it with a move action, which is exactly what the clause grants.
     """
-    c.conjure(until=When.EONT, sustain=None)
+    c.conjure(until=When.EONT, sustain=None, speed=5 if augment(c, 1) else 0)
 
 
 @power(
@@ -206,11 +225,14 @@ def p13303(c: Cast) -> None:
     attack=Attack(INT, vs=WILL),
 )
 def p13305(c: Cast) -> None:
-    """Augment 1 (the target also cannot shift) is dropped; the printed
-    Augment 2 line in the spec is a bare Target line with no effect."""
+    """Augment 1 roots the target as well. Augment 2 makes the row an area
+    burst, which the body cannot do, and is left out."""
+    spent = augment(c, 1)
     if c.strike():
         c.damage("1d8", c.int_mod, dtype=DamageType.PSYCHIC)
         c.slowed(until=When.EONT)
+        if spent:
+            c.rooted(until=When.EONT)
 
 
 @power(
@@ -226,8 +248,8 @@ def p13305(c: Cast) -> None:
 )
 def p13308(c: Cast) -> None:
     """The once-per-round secondary -- slide the held target 10 squares and
-    attack somebody it passes -- is printed as a second block under this same
-    id, so there is no ref to declare it under. Only the primary is here."""
+    attack somebody it passes -- is `p13308b`, gated on this hold standing on
+    somebody. Only the primary is here."""
     if c.strike():
         c.immobilized(until=When.SAVE_ENDS)
     else:
@@ -320,11 +342,16 @@ def p13312(c: Cast) -> None:
     attack=Attack(INT, vs=REF),
 )
 def p13462(c: Cast) -> None:
-    """The second block is a No Action that follows automatically at the start
-    of your next turn, so it is folded in here rather than left for a ref that
-    does not exist. The mote is not despawned when it goes off -- its own
-    duration takes it away at the end of that turn instead. Augments 1 and 2
-    (a pull toward the centre, bigger dice) are dropped."""
+    """The second block is `p13462b`, a No Action whose burst is centred on
+    the square the mote occupied -- a close burst is centred on the creature
+    using it, so the row is left out and the detonation stays folded in here.
+    The mote is not despawned when it goes off -- its own duration takes it
+    away at the end of that turn instead.
+
+    The augment is bought when the mote is conjured and spends itself a turn
+    later, when the burst goes off: Augment 1 drags one of the creatures it
+    caught toward the mote's square, Augment 2 raises the dice."""
+    spent = augment(c)
     mote = c.conjure(until=When.EONT, sustain=None, aura=1)
     if not mote:
         return
@@ -339,13 +366,18 @@ def p13462(c: Cast) -> None:
         if ev.actor in c.in_squares(spread({pos.square}, 1), side="any"):
             c.slowed(on=ev.actor, until=When.EOT)
 
+    dragged = [False]
+
     def detonate(ev: TurnStart) -> None:
         pos = where()
         if pos is None or ev.actor != c.me:
             return
         for who in c.in_squares(spread({pos.square}, 3), side="any"):
             if c.strike(on=who):
-                c.damage("1d6", c.int_mod, dtype=DamageType.LIGHTNING, on=who)
+                dice = "2d6" if spent == 2 else "1d6"
+                c.damage(dice, c.int_mod, dtype=DamageType.LIGHTNING, on=who)
+                if spent == 1 and not dragged[0]:
+                    dragged[0] = c.pull(1, on=who, anchor=pos.square) > 0
 
     c.watch(TurnStart, creep, until=When.EONT, label=c.ref)
     c.watch(TurnStart, detonate, until=When.EONT, label=c.ref)
@@ -363,11 +395,27 @@ def p13462(c: Cast) -> None:
     attack=Attack(INT, vs=WILL),
 )
 def p8226(c: Cast) -> None:
-    """Augment 1 (no opportunity attacks) and Augment 2 (bigger dice, penalty
-    equal to Charisma modifier) are dropped."""
+    """Augment 2 raises the dice and makes the penalty Charisma rather than 2.
+
+    Augment 1 stops the target making opportunity attacks, which no method
+    says: `c.cannot_attack` bars every attack. `AttackDeclared` carries
+    `opportunity` as a plain attribute, so refusing the declaration when that
+    is set is the whole clause and nothing wider."""
+    spent = augment(c)
+    victim = c.target
     if c.strike():
-        c.damage("1d6", c.int_mod, dtype=DamageType.PSYCHIC)
-        c.penalty("attack", 2, until=When.EONT)
+        c.damage("2d6" if spent == 2 else "1d6", c.int_mod, dtype=DamageType.PSYCHIC)
+        c.penalty("attack", c.cha_mod if spent == 2 else 2, until=When.EONT)
+        if spent == 1 and victim is not None:
+
+            def refuse(ev: AttackDeclared) -> None:
+                if ev.attacker == victim and getattr(ev, "opportunity", False):
+                    ev.cancel("cannot make opportunity attacks")
+
+            c.watch(
+                AttackDeclared, refuse, until=When.EONT, window=Window.BEFORE,
+                on=victim, label=c.ref,
+            )
 
 
 @power(
@@ -382,10 +430,12 @@ def p8226(c: Cast) -> None:
     attack=Attack(INT, vs=WILL),
 )
 def p8227(c: Cast) -> None:
-    """Augment 1 (the invisibility lasts a turn longer) is dropped."""
+    """Augment 1 holds the invisibility a turn longer. Augment 2 makes the row
+    an area burst, which the body cannot do, and is left out."""
+    spent = augment(c, 1)
     if c.strike():
         c.damage("1d6", c.int_mod, dtype=DamageType.PSYCHIC)
-        c.invisible(to=c.target, on=c.me, until=When.SONT)
+        c.invisible(to=c.target, on=c.me, until=When.EONT if spent else When.SONT)
 
 
 @power(
@@ -400,11 +450,17 @@ def p8227(c: Cast) -> None:
     attack=Attack(INT, vs=WILL),
 )
 def p8228(c: Cast) -> None:
-    """Augments 1 and 2 (penalties to Will, then to all defences) are dropped,
-    as is the Special that makes the unaugmented form a ranged basic attack --
-    there is no header field for that."""
+    """Augment 1 is a penalty to Will equal to Charisma; Augment 2 raises the
+    dice and puts that penalty on every defence. The Special that makes the
+    unaugmented form a ranged basic attack still has no header field."""
+    spent = augment(c)
     if c.strike():
-        c.damage("1d10", c.int_mod, dtype=DamageType.PSYCHIC)
+        c.damage("2d10" if spent == 2 else "1d10", c.int_mod, dtype=DamageType.PSYCHIC)
+        if spent == 1:
+            c.penalty(WILL, c.cha_mod, until=When.EONT)
+        elif spent == 2:
+            for d in (AC, FORT, REF, WILL):
+                c.penalty(d, c.cha_mod, until=When.EONT)
 
 
 @power(
@@ -469,6 +525,7 @@ def p8230(c: Cast) -> None:
     ),
 )
 def p13311(c: Cast) -> None:
-    """Augment 0, as everywhere in this class. Augment 1 gives the servant a
-    further command and is dropped with the rest of the augment clauses."""
+    """Augment 1 gives the servant a third command -- an opportunity action
+    that makes a Heal check on a dying ally. `Summon` declares a standard and
+    an opportunity attack and nothing else, so there is nowhere to put it."""
     c.summon_inline(get(c.ref).summon, at=c.origin)
