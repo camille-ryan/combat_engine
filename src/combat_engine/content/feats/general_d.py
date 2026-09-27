@@ -93,13 +93,19 @@ def f801(c: Cast) -> None:
 @power("f802", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f802(c: Cast) -> None:
-    """A plain "+5 bonus", so untyped. Against two named conditions, which
-    the save context reaches by the effect's label."""
+    """A plain "+5 bonus", so untyped, against two named conditions.
+
+    **The save-modifier context has no `against`.** It carries `actor`,
+    `effect`, `label`, `conditions`, `ongoing`, `dtype` and now
+    `keywords`; `against` is on the *event*, not the context, so this
+    gate was silently false in every fight. The conditions are what the
+    card narrows on and `conditions` is the key that holds them.
+    """
     c.bonus(
         "save", 5, on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: any(
-            w in str(ctx.get("against", "")).lower()
-            for w in ("slowed", "immobilized")
+            str(x.value) in ("slowed", "immobilized")
+            for x in ctx.get("conditions", ())
         ),
     )
 
@@ -205,10 +211,15 @@ def f943b(c: Cast) -> None:
 @power("f945", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f945(c: Cast) -> None:
-    """Two feat bonuses against the same two printed effect families, read
-    off the label the effect carries."""
-    charm_or_fear = lambda ctx: any(  # noqa: E731
-        w in str(ctx.get("against", "")).lower() for w in ("charm", "fear")
+    """Two feat bonuses against the same two printed effect families.
+
+    Charm and fear are *keywords*, not conditions, and the context now
+    carries them -- derived by `durations.keywords_of` from the row
+    that laid the effect. This used to read `ctx["against"]`, which the
+    context has never had.
+    """
+    charm_or_fear = lambda ctx: bool(  # noqa: E731
+        {Keyword.CHARM, Keyword.FEAR} & set(ctx.get("keywords", ()))
     )
     c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
             when=charm_or_fear)

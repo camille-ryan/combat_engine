@@ -510,12 +510,28 @@ class Encounter:
             return
         health = self.world.need(ev.actor, Health)
         roll = self.world.rng.d20()
-        saved = roll.total >= 10
-        # Read back, like every other saving throw. A death save is the
-        # one somebody is most likely to print a rider on.
+        # **`bonus=0` was written straight in**, so `c.bonus("save", ...)`
+        # was unreadable here while `Effects.roll_saves` has always read
+        # it -- a death save was the one throw in the game no modifier
+        # could reach, and it is the one most rows print a bonus to. Four
+        # rows across three feat files were laying one into the void.
+        #
+        # `against="death"` goes into the context as the label, so
+        # "a +2 bonus to death saving throws" is a gate rather than a
+        # blanket save bonus.
+        from .components import Mods
+
+        mods = self.world.get(ev.actor, Mods)
+        bonus = mods.total(
+            "save",
+            {"actor": ev.actor, "label": "death", "conditions": frozenset(),
+             "ongoing": False, "dtype": None, "keywords": frozenset()},
+        ) if mods is not None and mods.items else 0
+        saved = roll.total + bonus >= 10
         rolled = self.world.bus.emit(
             SavingThrow(
-                actor=ev.actor, against="death", natural=roll.total, bonus=0, saved=saved
+                actor=ev.actor, against="death", natural=roll.total,
+                bonus=bonus, saved=saved,
             )
         )
         saved = rolled.saved
