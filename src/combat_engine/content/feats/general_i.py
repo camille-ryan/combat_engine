@@ -83,6 +83,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.components import Gear, Health
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.grid import spread
 from combat_engine.engine.query import (
     distance_between,
@@ -110,6 +111,23 @@ Clause = Callable[[Cast, Any], None]
 
 
 # -- the machines -----------------------------------------------------------
+
+
+def _save_against(c: Cast, who: int, *words: Keyword) -> bool:
+    """One saving throw against a hold whose source row printed one of
+    these keywords.
+
+    `c.save(against=)` picks by label fragment, and a keyword is not one --
+    but an effect's label is the ref of the row that laid it, so
+    `durations.keywords_of` turns "a charm effect" into the label to ask
+    for. Without this the throw takes whichever save-ends hold comes first,
+    which may well be a burn.
+    """
+    wanted = set(words)
+    for eff in c.world.effects.of(who):
+        if eff.when is When.SAVE_ENDS and wanted & keywords_of(eff.label):
+            return c.save(on=who, against=eff.label)
+    return False
 
 
 def _granted(ref: str, card: str):  # noqa: ANN202
@@ -688,15 +706,18 @@ _granted("f1407", "f1407b")
 
 @power("f1407b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=CloseBurst(3), target=EACH_ALLY, keywords=DIVINE,
-       group=CHANNEL_DIVINITY, dropped=("query.keywords_of(effect)",))
+       group=CHANNEL_DIVINITY)
 def f1407b(c: Cast) -> None:
-    """The save and its payout play. The narrowing to a charm, fear or
-    psychic effect is dropped: those are keywords on the hold rather than
-    conditions, `c.save(against=)` matches a label fragment and an
-    effect's label is its source ref, so a word like "charm" there would
-    be silently false in every fight."""
-    if c.save(on=c.target):
-        c.temp_hp(c.cha_mod, on=c.target)
+    """The narrowing to a charm, fear or psychic effect plays now. Those
+    are keywords on the row that laid the hold rather than conditions on
+    the hold itself, and an effect's label is that row's ref -- so
+    `keywords_of` picks the right hold and `c.save(against=)` rolls
+    against it by label."""
+    who = c.target
+    if who is not None and _save_against(
+        c, who, Keyword.CHARM, Keyword.FEAR, Keyword.PSYCHIC
+    ):
+        c.temp_hp(c.cha_mod, on=who)
 
 
 _granted("f1409", "f1409b")

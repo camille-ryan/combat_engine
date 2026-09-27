@@ -495,12 +495,18 @@ def f1698(c: Cast) -> None:
 
 @power("f1699", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("conditions.Rules.halve_speed",))
+       dropped=("c.ignore_squeeze_penalty()",))
 def f1699(c: Cast) -> None:
     """Squeezing is a condition whose rules carry `attack=-5` and
     `halve_speed`, so the printed "-2 instead of -5" is a +3 laid against
-    the standing penalty rather than a replacement. The speed half has no
-    counterpart: nothing waives one clause of a condition's rules."""
+    the standing penalty rather than a replacement.
+
+    `conditions.Rules.halve_speed` is not the gap -- it is the field that
+    imposes the penalty, and it is read in `query.speed`. The gap is the
+    lifting of it: `query.speed` halves *after* it totals the `speed`
+    modifiers, so no bonus a row can lay survives the division, and there
+    is no way to waive one clause of a condition's rules. That is what
+    i942x1 and i2541x1 are already waiting on under the same name."""
     me = c.me
     c.bonus("attack", 3, on=me, until=When.ENCOUNTER,
             when=lambda ctx: c.is_(Condition.SQUEEZING, on=me))

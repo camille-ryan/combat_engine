@@ -888,12 +888,14 @@ def i1288p1(c: Cast) -> None:
 
 
 @power("i1529x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("query.keywords_of(effect)", "c.on_second_wind()"))
+       reach=PERSONAL, target=SELF, dropped=("c.on_second_wind()",))
 def i1529x1(c: Cast) -> None:
-    """Both halves are unsayable. A saving throw knows the effect but not
-    the power that laid it, so "against fear" has no gate; and a second
-    wind announces only the surge it spends, which any healing row does."""
+    """The save bonus plays: "against fear effects" is a gate on the
+    keywords of the row that laid the hold. No type word on the card, so
+    untyped. The temporary hit points are dropped -- a second wind
+    announces only the surge it spends, which any healing row does."""
+    c.bonus("save", c.enhancement, on=c.me, until=When.ENCOUNTER,
+            when=_save_keywords(Keyword.FEAR))
 
 
 @power("i1558p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
@@ -954,11 +956,14 @@ def i1877x1(c: Cast) -> None:
 
 
 @power("i1911x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.keywords_of(effect)",))
+       reach=PERSONAL, target=SELF)
 def i1911x1(c: Cast) -> None:
-    """The resistance stands; the save bonus is dropped, because the save
-    context carries the effect and not the power that laid it."""
+    """The resistance stands, and the save bonus is now narrowed to the
+    three printed keywords -- `keywords_of` reads them off the ref of the
+    row that laid the hold. `c.resist` is the caster's by default."""
     c.resist(5, DamageType.PSYCHIC)
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_save_keywords(Keyword.CHARM, Keyword.FEAR, Keyword.PSYCHIC))
 
 
 @power("i2094x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -2576,21 +2581,25 @@ def i1067p1(c: Cast) -> None:
 
 
 @power("i1353x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("query.keywords_of(effect)",))
+       reach=PERSONAL, target=SELF)
 def i1353x1(c: Cast) -> None:
-    """A saving throw knows the hold and not the power that laid it, so
-    "against fear" has nothing to read."""
+    """"A bonus ... equal to the armor's enhancement bonus" prints no type
+    word, so untyped. The narrowing is the keywords of the row that laid
+    the hold, which the saving-throw context now carries."""
+    c.bonus("save", c.enhancement, on=c.me, until=When.ENCOUNTER,
+            when=_save_keywords(Keyword.FEAR))
 
 
 @power("i1353p1", level=9, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="a fear power hits you with a save-ends effect",
-       on=Trigger(EffectApplied, _save_ends_on_me, "a save-ends effect lands"),
-       dropped=("query.keywords_of(effect)",))
+       on=Trigger(EffectApplied, _fear_save_ends_on_me,
+                  "a fear effect a save can end lands on you"))
 def i1353p1(c: Cast) -> None:
-    """The fear half of the trigger is dropped, so the row answers any
-    save-ends hold; both printed effects still land."""
-    c.save(on=c.me, bonus=5)
+    """The save is rolled against the hold that triggered the row, by its
+    label: without `against=` it takes whichever save-ends effect it finds
+    first, which may be the burn rather than the fear."""
+    c.save(on=c.me, bonus=5, against=getattr(c.trigger, "label", "") or "")
     _defences(c, 2, on=c.me, until=When.EONT, kind="power")
 
 
@@ -2643,10 +2652,20 @@ def i1708p1(c: Cast) -> None:
 
 @power("i1751p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
        reach=Ranged(10), target=ONE_CREATURE,
-       dropped=("query.ground(world, square)",))
+       dropped=("query.footing(world, square)",))
 def i1751p1(c: Cast) -> None:
-    """"Standing on soil or sand" is a property of the square, and the
-    map carries terrain only as difficulty."""
+    """"Standing on soil or sand" is a property of the square the target
+    is in. `query.ground` was the wrong name twice over: what exists is
+    `falling.ground(world, eid)`, which settles a creature onto the floor
+    of its square and answers how far it fell, and it is about a creature
+    rather than a square.
+
+    What the board carries per square is `Grid.blocking`, `Grid.elevation`
+    and `Grid.difficult` -- and `difficult` is a word for rough going
+    ("mud", "rubble"), so plain soil never appears in it and reading it
+    here would gate the row on a map nothing draws. The missing thing is
+    what a square is *made of*, asked the way `query.light_level(world,
+    square)` is asked."""
     c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS)
 
 
@@ -2831,11 +2850,19 @@ def i852p1(c: Cast) -> None:
 
 @power("i1223p1", level=10, cls=ITEM, usage=AT_WILL, action=STANDARD,
        reach=PERSONAL, target=SELF,
-       dropped=("query.invisible(world, eid)",))
+       requires=lambda world, eid: bool(query.hidden_from(world, eid)),
+       requires_text="must be invisible")
 def i1223p1(c: Cast) -> None:
-    """The Requirement is dropped rather than the effect: nothing asks
-    whether a creature is currently unseen, only `c.is_hidden`, which is
-    a different question."""
+    """The Requirement is an entry gate, not a guard in the body, so a
+    creature nobody has lost sight of is never offered a row that would
+    only re-lay what it has.
+
+    `c.is_hidden` is not a different question after all -- `c.invisible`
+    and `c.hide` both hold the same `Relation.HIDDEN_FROM`, so
+    `query.hidden_from` is who cannot see you however you went unseen,
+    which is what "you must be invisible" asks. Read as the free function
+    because a `requires=` gate is handed `(world, eid)` and has no
+    `Cast`."""
     c.invisible(on=c.me, until=When.EONT)
 
 

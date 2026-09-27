@@ -680,13 +680,21 @@ def i3468p1(c: Cast) -> None:
 
 
 @power("i3548p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.deals_half(when=)",))
+       reach=PERSONAL, target=SELF)
 def i3548p1(c: Cast) -> None:
-    """Insubstantial halves what you take; the printed drawback -- your
-    own attacks deal half damage too, force and psychic excepted -- has
-    nothing to set."""
+    """Insubstantial halves what you take. The printed drawback -- your own
+    attacks deal half damage too -- is `Condition.WEAKENED`: its whole rule
+    is `weakened=True`, which `resolve.deal_damage` reads to halve what the
+    creature deals, so the condition is the clause rather than a name for
+    something else.
+
+    "Except those that deal force or psychic damage" is said of both halves
+    and is carried by neither: `Rules.insubstantial` and `Rules.weakened`
+    are both flat, so the exception is out at the same fidelity on the way
+    in as on the way out."""
     c.insubstantial(on=c.me, until=When.EONT)
     c.phasing(on=c.me, until=When.EONT)
+    c.weakened(on=c.me, until=When.EONT)
 
 
 @power("i3576p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,

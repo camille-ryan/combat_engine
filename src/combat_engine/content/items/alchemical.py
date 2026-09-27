@@ -68,6 +68,7 @@ from combat_engine.engine import (
     Position,
     Ranged,
     Square,
+    Stats,
     When,
     ZoneEntered,
     get,
@@ -232,15 +233,37 @@ def i472p1(c: Cast) -> None:
 
 
 @power("i521p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("query.level()",))
+       reach=PERSONAL, target=SELF)
 def i521p1(c: Cast) -> None:
-    """"Against poisons" is now sayable -- the save context carries the
-    keywords of the row that laid the hold. "From a source of 10th level
-    or lower" is the half still missing: a gate is handed the context and
-    no world, so the source's level cannot be looked up, and the database
-    has monsters above 10 so it is not a clause that is always true."""
-    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER,
-            when=lambda ctx: Keyword.POISON in ctx["keywords"])
+    """"Against poisons" is the keywords of the row that laid the hold,
+    which the save context carries.
+
+    "From a source of 10th level or lower" is the other half, and the gate
+    is not handed the world -- but it does not need to be, because `c` is
+    in scope and `ctx["effect"]` is the `Effect` itself, whose `source` is
+    the creature that laid it. Its level is read off `Stats` the way every
+    other row that wants a level reads it.
+
+    The keyword is tested first and short-circuits, which is what keeps
+    this safe on the death-save context in `turns.py`: that one carries an
+    empty `keywords` and no `effect` at all, so the `.get` is never
+    reached. An unknown source counts as *not* under the cap rather than
+    over it -- the wrong default here would pay the bonus against every
+    poison in the game, which is more than the card prints, not less.
+
+    Level 11 and level 21 raise the cap to 20 and 30. Those are rungs of
+    the ladder, and a rung is a column."""
+    cap = 10
+
+    def weak_poison(ctx: dict[str, Any]) -> bool:
+        if Keyword.POISON not in ctx["keywords"]:
+            return False
+        effect = ctx.get("effect")
+        source = getattr(effect, "source", None)
+        stats = c.world.get(source, Stats) if source is not None else None
+        return stats is not None and stats.level <= cap
+
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, when=weak_poison)
 
 
 @power("i898p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,

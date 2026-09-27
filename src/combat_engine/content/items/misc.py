@@ -118,6 +118,7 @@ from combat_engine.engine import (
     spread,
     targets_me,
 )
+from combat_engine.engine.durations import keywords_of
 
 ITEM = "item"
 
@@ -221,6 +222,18 @@ def _crit_ctx(ctx: dict[str, Any]) -> bool:
 
 def _ranged_ctx(ctx: dict[str, Any]) -> bool:
     return bool(ctx.get("ranged"))
+
+
+def _save_keywords(*words: Keyword) -> Callable[[dict[str, Any]], bool]:
+    """Save gate: the row that laid the hold printed one of these words.
+    `Effects.save` builds the context with `durations.keywords_of`, which
+    reads them off the label -- that row's ref."""
+    wanted = set(words)
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return bool(wanted & set(ctx.get("keywords", ())))
+
+    return gate
 
 
 def _on_second_wind(c: Cast, fn: Callable[[], None]) -> None:
@@ -925,11 +938,22 @@ def i3366p1(c: Cast) -> None:
 
 
 @power("i3378p1", level=3, cls=ITEM, usage=ENCOUNTER, action=MOVE,
-       reach=PERSONAL, target=SELF, dropped=("c.redirect()",))
+       reach=PERSONAL, target=SELF, dropped=("c.redirect(recheck=)",))
 def i3378p1(c: Cast) -> None:
-    """The redirect is printed as a reaction to a *miss*, and `c.redirect`
-    only works from inside the interrupt window of an attack that is still
-    live. The free-hand requirement is read off what is in hand."""
+    """`c.redirect` exists, and it is still the wrong tool here, so the
+    marker names the argument rather than the verb.
+
+    It moves a *live* result: `ev.target` and `result.target`, read back by
+    the body that is still resolving. By the time a `Miss` is announced the
+    comparison against a defence has already been made and `resolve.attack`
+    only re-announces when `result.hit` flips -- so pointing a miss at a new
+    creature moves the announcement and nothing else. Redirecting a resolved
+    attack means re-reading the roll against the new target's defence, which
+    is the argument this wants. (It is also printed as an immediate
+    reaction, so the half would hang off `c.watch(Miss, ...)`, where
+    `c.trigger` is None and `c.redirect` has nothing to move either way.)
+
+    The free-hand requirement is read off what is in hand."""
     if len(c.held()) < 2:
         for d in (AC, FORT, REF, WILL):
             c.bonus(d, 4, on=c.me, until=When.EONT, kind="power",
@@ -1258,24 +1282,38 @@ def i1629x1(c: Cast) -> None:
 
 
 @power("i1850x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF)
 def i1850x1(c: Cast) -> None:
-    """The resistance is exact; a saving throw does not report the
-    keywords of what it is against, so "fear or charm" goes unasked."""
+    """Both halves are exact now: the saving-throw context carries the
+    keywords of the row that laid the hold, so "fear or charm" is a gate
+    rather than a bonus against everything."""
     c.resist(5, DamageType.PSYCHIC, on=c.me, until=When.ENCOUNTER)
-    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item")
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_save_keywords(Keyword.FEAR, Keyword.CHARM))
+
+
+def _fear_or_charm_on_me(world: World, me: int, ev: EffectApplied) -> bool:
+    """A hold laid on me by a row printing fear or charm. The label is that
+    row's ref, which is what `keywords_of` reads."""
+    return (
+        ev.target == me
+        and ev.save_ends
+        and bool(
+            {Keyword.FEAR, Keyword.CHARM} & keywords_of(ev.label or "")
+        )
+    )
 
 
 @power("i1850p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
        trigger="you are subject to a fear or charm effect",
-       on=Trigger(EffectApplied, targets_me, "an effect lands on you"),
-       dropped=("query.keywords_of(effect)",))
+       on=Trigger(EffectApplied, _fear_or_charm_on_me,
+                  "a fear or charm effect lands on you"))
 def i1850p1(c: Cast) -> None:
-    """An effect does not carry the keywords of the power that laid it, so
-    the row answers any save-ends effect rather than the two named."""
-    if getattr(c.trigger, "save_ends", False):
-        c.save(on=c.me)
+    """The save is rolled against the triggering hold by its label: without
+    `against=` it takes whichever save-ends effect comes first, which may
+    be a burn rather than the charm the card is answering."""
+    c.save(on=c.me, against=getattr(c.trigger, "label", "") or "")
 
 
 @power("i3039x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -2414,11 +2452,13 @@ def i1716x1(c: Cast) -> None:
 
 
 @power("i2173x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("SavingThrow.keywords",))
+       reach=PERSONAL, target=SELF)
 def i2173x1(c: Cast) -> None:
-    """Untyped: the card prints a bare "+2 bonus". A save does not report
-    what it is against, so "charm or fear" goes unasked."""
-    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER)
+    """Untyped: the card prints a bare "+2 bonus". "Charm or fear" is the
+    keywords of the row that laid the hold, which the saving-throw context
+    now carries."""
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER,
+            when=_save_keywords(Keyword.CHARM, Keyword.FEAR))
 
 
 @power("i2173p1", level=9, cls=ITEM, usage=DAILY, action=INTERRUPT,

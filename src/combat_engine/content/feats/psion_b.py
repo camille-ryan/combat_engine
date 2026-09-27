@@ -350,11 +350,15 @@ def f2588(c: Cast) -> None:
 
 
 @power("f2608", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("dsl.Power",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def f2608(c: Cast) -> None:
-    """Makes sustaining `p11267` a free action. `p11267` has no sustain to
-    cheapen: its target is an object, the engine has none, and the row is
-    declared `out_of_combat=True`. What the feat edits is header data."""
+    """Makes sustaining `p11267` a free action. `dsl.Power` is not the gap
+    -- it is the header dataclass, it exists, and it carries
+    `sustain_cost`. The gap was never in the engine: `p11267` lifts an
+    object of twenty pounds or less, the engine has no objects, and the row
+    it edits is itself declared `out_of_combat=True`. A feat that cheapens
+    the upkeep of a power with no combat consequence has none either, so it
+    is deliberately inert rather than unfinished."""
 
 
 @power("f3172", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

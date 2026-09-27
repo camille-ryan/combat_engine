@@ -752,13 +752,17 @@ def i2330p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("query.keywords_of(effect)",),
 )
 def i2586x1(c: Cast) -> None:
-    """The save context carries the effect's label and no keywords, so
-    "against charm effects and fear effects" cannot be narrowed and the
-    bonus is paid on every saving throw."""
-    c.bonus("save", c.enhancement, kind="item", on=c.me, until=When.ENCOUNTER)
+    """The save context carries the keywords of the row that laid the hold
+    -- `durations.keywords_of` off its label -- so "against charm effects
+    and fear effects" is a gate rather than a bonus on every throw."""
+    c.bonus(
+        "save", c.enhancement, kind="item", on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: bool(
+            {Keyword.CHARM, Keyword.FEAR} & set(ctx.get("keywords", ()))
+        ),
+    )
 
 
 @power(

@@ -101,6 +101,7 @@ from combat_engine.engine import (
     query,
     targets_me,
 )
+from combat_engine.engine.durations import keywords_of
 
 ITEM = "item"
 
@@ -944,13 +945,27 @@ def i499p1(c: Cast) -> None:
 
 
 @power("i502x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.keywords_of(effect)",))
+       reach=PERSONAL, target=SELF)
 def i502x1(c: Cast) -> None:
-    """The save penalty wants "a charm effect I imposed"; `EffectApplied`
-    names no power and the save context names no keywords, so there is no
-    way to tell my charms from my other holds."""
+    """"A charm effect I imposed" is askable now: `EffectApplied` names the
+    source, and its label is the ref of the row that laid the hold, which
+    `keywords_of` turns back into keywords.
+
+    `once=True` on a `save` modifier is spent by the holder's next saving
+    throw -- the one branch of `c.bonus` that watches `SavingThrow` -- so
+    "the first saving throw" is the duration rather than a counter."""
     c.bonus("skill:bluff", 2, on=c.me, until=When.ENCOUNTER, kind="item")
     c.bonus("skill:diplomacy", 2, on=c.me, until=When.ENCOUNTER, kind="item")
+
+    def charmed(ev: EffectApplied) -> None:
+        label = ev.label or ""
+        if (ev.source != c.me or not ev.save_ends
+                or Keyword.CHARM not in keywords_of(label)):
+            return
+        c.penalty("save", 2, on=ev.target, until=When.ENCOUNTER,
+                  once=True, when=_labelled(label))
+
+    c.watch(EffectApplied, charmed, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i502p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,

@@ -84,9 +84,11 @@ from combat_engine.engine import (
     by_melee,
     get,
     power,
+    query,
     targets_me,
 )
 from combat_engine.engine.components import Mods
+from combat_engine.engine.durations import keywords_of
 
 ITEM = "item"
 
@@ -442,19 +444,34 @@ def i938x1(c: Cast) -> None:
     """Telepathy is a way of talking."""
 
 
+def _fear_on_ally(world: World, me: int, ev: EffectApplied) -> bool:
+    """A save-ends hold laid on an ally by a row printing fear.
+    `EffectApplied.label` is that row's ref, which is what `keywords_of`
+    reads back."""
+    return (
+        ev.save_ends
+        and ev.target != me
+        and query.team(world, ev.target) == query.team(world, me)
+        and Keyword.FEAR in keywords_of(ev.label or "")
+    )
+
+
 @power("i938p1", level=5, cls=ITEM, usage=DAILY, action=REACTION,
        reach=Ranged(10), target=ONE_CREATURE,
        trigger="an ally is hit by a fear effect that a save can end",
-       on=Trigger(EffectApplied,
-                  lambda world, me, ev: ev.save_ends and ev.target != me,
-                  "an ally takes a save-ends effect"),
-       dropped=("query.keywords_of(effect)",))
+       on=Trigger(EffectApplied, _fear_on_ally,
+                  "an ally takes a save-ends fear effect"),
+       dropped=("c.race_of()",))
 def i938p1(c: Cast) -> None:
-    """An effect knows what it holds and not which power laid it, so
-    "a fear effect" has no gate and every save-ends hold answers."""
+    """The fear half of the trigger now plays, and the save is rolled
+    against the triggering hold by its label rather than against whichever
+    save-ends effect the ally happens to be carrying first.
+
+    "A **living construct** ally" is dropped: nothing reads another
+    creature's race, so any ally answers."""
     who = getattr(c.trigger, "target", None)
     if who is not None:
-        c.save(on=who)
+        c.save(on=who, against=getattr(c.trigger, "label", "") or "")
 
 
 # -- level 6 ----------------------------------------------------------------
