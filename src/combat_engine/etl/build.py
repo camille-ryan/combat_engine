@@ -29,9 +29,9 @@ from functools import lru_cache
 from html import unescape
 from pathlib import Path
 
+from . import feat, item, sanitise
 from . import monster as monster_parser
 from . import power as power_parser
-from . import sanitise
 
 ROOT = Path(__file__).resolve().parents[3]
 SOURCE = ROOT / "compendium.sqlite"
@@ -129,6 +129,68 @@ CREATE TABLE class_feature (
   ref TEXT PRIMARY KEY, class TEXT, ord INTEGER, build TEXT, spec TEXT
 );
 CREATE INDEX class_feature_class ON class_feature(class, ord);
+
+-- Magic items. **One row per compendium entry, not per rung of its
+-- ladder.** Most heroic items are printed as a family -- `Lvl 1 +1 / Lvl 6
+-- +2 / Lvl 11 +3` -- and 863 of them have two rungs inside heroic alone.
+-- Their rules text is identical at every rung, so a row per rung would
+-- mean 863 duplicated hand-written functions, a work list half again as
+-- long with nothing new in it, and two refs that must never disagree.
+-- Which rung you are holding is three numbers, and numbers load from the
+-- database by standing rule.
+--
+-- `base` is the printed base-item restriction, `Weapon: Heavy blade or
+-- light blade`. It is the whole reason a magic item is not a new weapon:
+-- the item says which existing weapons it may be laid on top of.
+CREATE TABLE item (
+  ref TEXT PRIMARY KEY, id INTEGER, category TEXT, slot TEXT, rarity TEXT,
+  base_level INTEGER, scaling INTEGER, base TEXT, enh_to TEXT, crit TEXT,
+  books TEXT, spec TEXT, score REAL
+);
+CREATE INDEX item_level ON item(base_level, category);
+
+-- Every rung the ladder prints: which level it appears at, what plus it
+-- is, what it costs. This is what treasure-by-level queries.
+CREATE TABLE item_step (
+  ref TEXT, level INTEGER, plus INTEGER, cost INTEGER,
+  PRIMARY KEY (ref, level)
+);
+CREATE INDEX item_step_level ON item_step(level);
+
+-- One Property or one Power off an item's page. **This is the unit of
+-- work**, not the item: 1,877 heroic items carry 2,294 of these between
+-- them and 106 items have more than one Power. Without a ref each,
+-- `coverage.py` cannot see a half-written item.
+CREATE TABLE item_block (
+  ref TEXT PRIMARY KEY, item_ref TEXT, idx INTEGER, kind TEXT,
+  usage TEXT, action TEXT, keywords TEXT, spec TEXT
+);
+CREATE INDEX item_block_owner ON item_block(item_ref);
+
+-- Feats. `prereq` is a JSON expression tree of atoms and never prose --
+-- see `feat.py`, and note that `unparsed` counts the atoms that could not
+-- be structured rather than keeping their text, because the text is a
+-- deity's name as often as not.
+CREATE TABLE feat (
+  ref TEXT PRIMARY KEY, id INTEGER, tier TEXT, min_level INTEGER,
+  prereq TEXT, unparsed INTEGER, books TEXT, spec TEXT
+);
+CREATE INDEX feat_tier ON feat(tier, min_level);
+
+-- Races, which nothing in the engine has ever had. 690 of 1,675 heroic
+-- feats gate on one, and the racial powers are already in `power` -- the
+-- compendium files them under the race in its Class column.
+CREATE TABLE race (
+  ref TEXT PRIMARY KEY, id INTEGER, size TEXT, spec TEXT
+);
+
+-- A prerequisite clause that is a printed name rather than a mechanic: a
+-- race, a deity, a regional background. Keyed on a **global** dictionary
+-- of clause texts rather than per feat, so that answering "must worship
+-- <name>" once answers all ten feats that ask it.
+CREATE TABLE prereq_term (
+  ref TEXT PRIMARY KEY, kind TEXT, uses INTEGER
+);
 """
 
 
@@ -143,6 +205,15 @@ class Report:
     crossed: int = 0
     companions: int = 0
     build_powers: int = 0
+    items: int = 0
+    item_blocks: int = 0
+    item_steps: int = 0
+    sets_skipped: int = 0
+    feats: int = 0
+    feat_cards: int = 0
+    races: int = 0
+    terms: int = 0
+    unparsed: int = 0
     names: int = 0
     common: int = 0
     scores: dict[str, float] = field(default_factory=dict)
@@ -159,6 +230,15 @@ class Report:
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
             f"companions    {self.companions:6d}  (familiars and beasts, new)",
             f"build powers  {self.build_powers:6d}  (which build lists which row)",
+            f"items         {self.items:6d}  (heroic magic items)",
+            f"  blocks      {self.item_blocks:6d}  (a Property or a Power: the work unit)",
+            f"  ladder rungs{self.item_steps:6d}  (level, plus and price)",
+            f"  sets skipped{self.sets_skipped:6d}  (their members are their own rows)",
+            f"feats         {self.feats:6d}",
+            f"  power cards {self.feat_cards:6d}  (a feat that prints a whole power)",
+            f"  unparsed    {self.unparsed:6d}  (prerequisite clauses left opaque)",
+            f"races         {self.races:6d}",
+            f"prereq terms  {self.terms:6d}  (a printed name a prerequisite asks for)",
             f"names         {self.names:6d}  (localization/names.json, gitignored)",
             f"common words  {self.common:6d}  (what leaks.py treats as English)",
             "",
@@ -208,6 +288,11 @@ def build() -> Report:
     report.features = _features(source, out, names)
     report.companions = _companions(source, out, names)
     report.build_powers = _build_powers(source, out, names)
+    # Races first: a feat's prerequisite names one and must store a ref.
+    # Items before feats for the same reason, one step further out.
+    item.races(source, out, report, names)
+    item.items(source, out, report, names)
+    feat.feats(source, out, report, names)
 
     out.execute(
         "INSERT INTO meta (key, value) VALUES (?, ?)",
@@ -634,12 +719,18 @@ def _common_words(
     use a word answers that from the data, so no hand-kept list of exceptions
     has to be fed forever.
 
-    The corpus is every monster and power page in full, names and prose
-    included, and not the sanitised specs -- a stat block's mechanics almost
-    never say "skeleton", while the pages plainly do.
+    The corpus is every monster, power, item and feat page in full, names
+    and prose included, and not the sanitised specs -- a stat block's
+    mechanics almost never say "skeleton", while the pages plainly do.
+
+    **Items and feats are in the corpus for the same reason monsters are.**
+    Their vocabulary -- scabbard, bracers, baldric, reliquary, gauntlets --
+    appears nowhere in the monster and power pages, so without them not one
+    of those words is "ordinary English" and `leaks.py` reports every
+    occurrence anywhere in the tree as a printed name.
     """
     seen: Counter[str] = Counter()
-    for table in ("Monster", "Power"):
+    for table in ("Monster", "Power", "Item", "Feat"):
         for row in source.execute(f"SELECT PlainTxt FROM {table}"):
             seen.update(_vocabulary([row[0]]))
     rows = [(w, n) for w, n in seen.items() if n >= COMMON_IN]

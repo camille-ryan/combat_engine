@@ -9,6 +9,7 @@ All eight Player's Handbook classes, to level 10.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field, replace
 from random import Random
@@ -47,6 +48,7 @@ from combat_engine.engine import (
     World,
 )
 from combat_engine.engine import Build as BuildState
+from combat_engine.engine.equipment import equip
 from combat_engine.engine.movement import place
 from combat_engine.engine.types import Usage
 
@@ -578,6 +580,10 @@ class Character:
     team: Team = Team.PC
     #: Which leg of the fork. Empty takes the first the class lists.
     build: str = ""
+    #: The feats taken, by ref. Empty means "deal me some", the same as
+    #: `powers`. A feat is an ordinary row, so it lands in `Powers.known`
+    #: with everything else and arms itself at the top of the fight.
+    feats: list[str] = field(default_factory=list)
 
     @property
     def chosen(self) -> Build:
@@ -677,6 +683,195 @@ def loadout(
             chosen.append(spare.pop(0))
         out += sorted(chosen)
     return out + sorted(r for ref in out for r in riders.get(ref, []))
+
+
+def feat_slots(level: int) -> int:
+    """How many feats a character of this level has taken.
+
+    One at first level and one more at every even level after, which is
+    six by level 10. A human takes one more at first level; there is no
+    race in the engine yet, so there is no human to give it to, and the
+    line is not written until there is.
+    """
+    return 1 + level // 2
+
+
+def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
+    """Does this character satisfy a printed prerequisite?
+
+    A **build-time** question, which is why it is here and not a
+    `Power.requires`: that one is asked mid-fight of a creature on a
+    board, and "you must be a fighter" is not a thing that changes
+    between rounds.
+
+    The tree is `etl/feat.py`'s, and every atom it cannot answer is
+    answered **False**. That is the honest direction: a feat whose gate
+    the engine cannot read is one nobody can be shown to qualify for, and
+    handing it out anyway would give characters feats they have not
+    earned and hide the gap. 690 of the 1,675 heroic feats gate on a race
+    and are unreachable this way until there is one -- which is the
+    number that makes a race worth building, and it should stay visible.
+    """
+    if not node:
+        return True
+    if "all" in node:
+        return all(meets(n, who, powers) for n in node["all"])
+    if "any" in node:
+        return any(meets(n, who, powers) for n in node["any"])
+    if "class" in node:
+        return node["class"] == who.cls
+    if "level" in node:
+        return who.level >= node["level"]
+    if "ability" in node:
+        scores = scores_for(who.line, who.chosen)
+        return scores.get(Ability(node["ability"]), 10) >= node["min"]
+    if "ref" in node:
+        return node["ref"] in powers
+    if "weapon_prof" in node:
+        wanted = node["weapon_prof"].lower()
+        return any(
+            wanted in (w.group, w.category, w.ref.removeprefix("w:").replace("-", " "))
+            for w in who.line.weapons
+        )
+    # race, term, skill, source: nothing on a character answers them yet.
+    return False
+
+
+def feats_for(
+    cls: str, level: int = 1, build: Build | None = None,
+    rng: Random | None = None, powers: list[str] | None = None,
+) -> list[str]:
+    """The feats this character has taken, drawn like its powers are.
+
+    Only feats that are **written** and whose prerequisite this character
+    **meets**, so the draw cannot hand out a row that does nothing or one
+    the book would not allow. Taken one at a time rather than sampled, so
+    that a feat naming another feat as its prerequisite can be taken in
+    the same career as the one it needs.
+    """
+    import combat_engine.content  # noqa: F401  (registers the rows)
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.etl.build import game
+
+    pick = rng or Random(0)
+    who = Character(cls=cls, level=level, build=(build.name if build else ""))
+    held = list(powers or [])
+    gates = {
+        r["ref"]: json.loads(r["prereq"]) if r["prereq"] else None
+        for r in game().execute("SELECT ref, prereq FROM feat")
+    }
+    pool = sorted(ref for ref in gates if ref in REGISTRY and not REGISTRY[ref].todo)
+
+    taken: list[str] = []
+    for _ in range(feat_slots(level)):
+        legal = [r for r in pool if r not in taken and meets(gates[r], who, held + taken)]
+        if not legal:
+            break
+        taken.append(pick.choice(legal))
+    return sorted(taken)
+
+
+#: What the printed maths assumes you are holding. Enhancement runs in
+#: five-level bands, and 4e's own advice is blunt about the floor: by the
+#: end of level 5 everyone needs a +1 weapon, +1 armour and a +1 neck
+#: item, and a +2 of each by level 10. Monster defences are set against
+#: exactly that, so a party without it runs one to two points cold all
+#: through heroic -- which `engine/scaling.py` cannot see, because it
+#: models the *level* term on both sides and the *item* term on neither.
+def band(level: int) -> int:
+    """The enhancement bonus a character of this level is assumed to have."""
+    return max(1, min(6, (level + 4) // 5))
+
+
+def treasure(who: Character, rng: Random) -> list:
+    """The three items the maths assumes, as `Magic` records.
+
+    A weapon or an implement depending on what the class attacks with, a
+    suit of armour, and something round the neck. Not a parcel table: the
+    parcel rule is about what a party *finds* over a level of play, and
+    what the arithmetic depends on is much simpler and much tighter.
+
+    The base-item restriction is honoured rather than ignored, which is
+    the owner's rule in force -- an item that says "Weapon: heavy blade
+    or light blade" may only be laid on a heavy or light blade the
+    character is actually carrying.
+    """
+    from combat_engine.engine import Magic
+    from combat_engine.etl.build import game
+
+    plus = band(who.level)
+    carried = list(who.chosen.weapons or who.line.weapons)
+    swung = next((w for w in carried if w.group != "implement"), None)
+    held = next((w for w in carried if w.group == "implement"), None)
+    # **Both, for a class that carries both.** A cleric attacks with a
+    # mace on some rows and a holy symbol on most, and giving it only one
+    # magic arm leaves half its card running a band cold -- which is
+    # exactly the invisible shortfall this whole function exists to close.
+    # The printed advice agrees: a weapon *and* an implement are separate
+    # lines on the same list of what everybody needs.
+    wanted = [("ac", None), ("defences", None)]
+    for arm in (held, swung):
+        if arm is not None:
+            wanted.insert(0, ("attack_damage", arm))
+
+    out = []
+    for enh_to, arm in wanted:
+        pool = [
+            row
+            for row in game().execute(
+                "SELECT i.ref, i.slot, i.base, i.crit, s.plus FROM item i "
+                "JOIN item_step s ON s.ref = i.ref "
+                "WHERE i.enh_to = ? AND s.plus = ? AND s.level <= ? "
+                "ORDER BY i.ref",
+                (enh_to, plus, who.level + 1),
+            )
+            if _fits_base(row["base"], arm, who.line.armour)
+        ]
+        if not pool:
+            continue
+        row = pool[rng.randrange(len(pool))]
+        out.append(
+            Magic(
+                ref=row["ref"],
+                slot="implement" if arm is held and arm is not None else row["slot"],
+                plus=row["plus"],
+                enh_to=enh_to,
+                crit=_crit_dice(row["crit"]),
+                powers=(),
+            )
+        )
+    return out
+
+
+def _fits_base(printed: str, arm: Weapon | None, armour: str) -> bool:
+    """Does this item go on what the character is actually carrying?
+
+    An empty restriction goes on anything. Otherwise the printed line
+    names base items -- "Heavy blade or light blade", "Chain, scale or
+    plate" -- and the answer is whether one of them is the group, the
+    category or the armour the character has. This is the whole of what
+    makes a magic weapon "a longsword with properties" rather than a new
+    weapon: the item says which longswords it may be.
+    """
+    named = [n.lower() for n in json.loads(printed or "[]")]
+    if not named or "any" in named:
+        return True
+    if arm is not None:
+        mine = {arm.group, arm.category, *arm.properties}
+        return any(n in mine for n in named)
+    return armour.lower() in named or any(armour.lower() in n for n in named)
+
+
+def _crit_dice(printed: str) -> str:
+    """The dice out of "+1d6 damage per plus".
+
+    Only the dice: "per plus" is the multiplier and `equipment` applies
+    it, and the damage type is dropped because a crit rider that types
+    its damage is rare enough to be an item's own written block rather
+    than something read off a column.
+    """
+    found = re.search(r"(\d+d\d+)", printed or "")
+    return found.group(1) if found else ""
 
 
 def spellbook(cls: str, level: int, prepared: list[str], held: int = 2) -> list[str]:
@@ -876,6 +1071,14 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     powers = who.powers or loadout(
         who.cls, who.level, build, Random(f"{world.rng.seed}:{who.cls}:{build.name}")
     )
+    # Its own stream, like the loadout's and for the same reason: dealing
+    # a character's feats must not move the dice the fight is about to
+    # roll, or adding one would change every later roll in the game.
+    feats = who.feats or feats_for(
+        who.cls, who.level, build,
+        Random(f"{world.rng.seed}:{who.cls}:{build.name}:feats"),
+        list(powers),
+    )
 
     # First level takes the whole Constitution *score*; every level after
     # takes the class's flat step. Surges take the modifier, not the score.
@@ -899,7 +1102,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         # who is not. A monster leaves this empty -- its ranged attacks are
         # its own printed rows.
         Powers(
-            known=list(powers),
+            known=[*powers, *feats],
             ranged="rba",
             owned=spellbook(who.cls, who.level, list(powers), line.spellbook)
             if line.spellbook
@@ -917,6 +1120,10 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     )
     if line.power_points:
         world.add(eid, PowerPoints(points=line.power_points, maximum=line.power_points))
+    # Gear last, so it has a `Gear` and a `Mods` to write into. Its own
+    # stream again -- dealing treasure must not move the fight's dice.
+    for magic in treasure(who, Random(f"{world.rng.seed}:{who.ref}:{who.level}:gear")):
+        equip(world, eid, magic)
     place(world, eid, square)
     return eid
 
