@@ -168,6 +168,16 @@ that never applies.
 * **`Hit` does not declare `opportunity`.** `resolve.attack` sets it as a
   plain attribute afterwards, so a row must ask
   `getattr(ev, "opportunity", False)`. Same shape as `charge`.
+* **`c.grant_action` understands `shift` and `stand`, and silently eats
+  anything else.** Its own docstring says so: another value "is carried,
+  costs nothing and does nothing". "You can escape a grab as a minor
+  action" written with it is a finished-looking row that never does
+  anything. That clause is a `dropped=`, not a `c.grant_action`.
+* **A bonus's `kind` is the word the card prints in front of "bonus".**
+  Not a guess, not a default, and not the class's name. Two of the same
+  kind do not stack and the larger wins, so a wrong one is a number that
+  is quietly too small in every fight. A plain "+1 bonus" with no type
+  word is **untyped** — leave `kind=` off.
 
 ### The vocabulary, beyond the basics
 
@@ -273,20 +283,33 @@ declare a weapon, a weapon group or a suit of armour.
 
 * **A feat is an ordinary row**, almost always a trait:
   `action=ActionType.NONE` with no trigger, armed once at the start of the
-  fight. `Mod(kind="feat")` is the bonus type.
+  fight.
+* **`kind=` is whatever word the card prints in front of "bonus", and
+  nothing else.** "A +2 feat bonus" is `kind="feat"`; "a +1 shield bonus"
+  is `kind="shield"`; a plain "+1 bonus" with no type word is **untyped**,
+  which is `c.bonus(...)` with no `kind=` at all. Only 9 of the first 80
+  general feats printed the word "feat". Defaulting to it would have made
+  eight untyped bonuses non-stacking and two typed ones the wrong type,
+  in every fight, invisibly.
+* **A feat that grants a power is a pair**: the feat's own ref, whose
+  entire printed benefit is "you gain the `fNNNb` power", and the card
+  `fNNNb` beside it. Write the card as an ordinary row and the parent as
+  `c.grant_row("fNNNb")`. Both are in your brief; write both.
 * **The prerequisite is not yours to write.** It is a column, parsed into a
   structured gate, and `chargen.meets` enforces it when the character is
   built. `Power.requires` is the wrong tool: that one is asked mid-fight of
   a creature on a board, and "you must be a fighter" does not change
   between rounds. Write the Benefit and nothing else.
-* Your brief prints the gate as `requires: dex>=13`. A clause it shows as
-  `q17` is one the engine cannot yet express — **that is not your problem
-  to solve and not a reason to skip the feat**; the Benefit is still worth
-  writing.
-* The commonest shape by far is a rider on another row: "when you use
-  *X*…". Declare it as `on=Trigger(PowerUsed, …)` against the ref the spec
-  gives you, and read the note above about `PowerUsed` firing *before* the
-  body.
+* Your brief prints the gate above the benefit: `requires: dex>=13`,
+  `has f173`, `has cf:cleric-templar-f0`, `trained acrobatics`,
+  `proficient leather armor`, `level>=4`, joined with `&` and `|`. A
+  clause shown as `q17` is one the engine cannot yet express, and
+  `unparsed: 2` counts how many of those the gate has. **None of it is
+  yours to write and none of it is a reason to skip the feat** — the
+  Benefit is still worth writing whatever the gate says.
+* A common shape is a rider on another row: "when you use *X*…". Declare
+  it as `on=Trigger(PowerUsed, …)` against the ref the spec gives you,
+  and read the note above about `PowerUsed` firing *before* the body.
 * A feat whose whole benefit is a skill bonus or a ritual is
   `out_of_combat=True` with an empty body, like a cantrip that lights a
   torch. That is a finished row, not a skipped one.
@@ -342,6 +365,38 @@ What that buys, and why it is not a stub:
   issue grouped by the symbol each wants.
 * **It goes red when the gap closes.** `todo.py` fails the moment a named
   symbol exists, and fails if markers pass a tenth of the tree.
+
+### When you can say *most* of it
+
+The commonest case, and `todo=` is the wrong tool for it. A feat reading
+"+2 damage when you charge, and +2 to bull rush attempts" has a first half
+the engine can say and a second half it cannot. Marking the whole row
+`todo` refuses it in play and throws the working half away.
+
+So there is a second field, and it is the one you will reach for more
+often:
+
+```python
+@power("f9", ..., dropped=("c.bull_rush()",))
+def f9(c: Cast) -> None:
+    """The bull rush half is dropped; nothing grants a bonus to one."""
+    c.bonus("damage", 2, when=lambda ctx: ctx["charge"])
+```
+
+* **`todo=`** — nothing here works. The row is **refused in play**.
+* **`dropped=`** — the row works and one named clause is missing. The row
+  **is offered and does its job.**
+
+Both take symbols, both are counted partial and never done, both are named
+by the audit, both hold their issue open, and both go red the day the
+symbol arrives. The only difference is whether the row plays.
+
+**Do not drop a clause silently in a docstring.** That was the old habit
+and it is the exact failure this project is built to hunt: the row looks
+finished, the count says finished, and a printed sentence is quietly gone.
+A docstring is not queryable; `dropped=` is.
+
+Setting both on one row is refused at import — they say opposite things.
 
 Still put it in your final report, naming the symbol and what it should do.
 

@@ -306,7 +306,13 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
         # whoever can hold it. `rba` is a ranged basic attack and no fighter
         # build owns a bow, so fielding one refused the row for a reason
         # that says nothing about the row.
-        cls = declared.cls or (
+        # **`cls="item"` is not a class.** A magic item is a base item with
+        # properties laid on top, so its rows belong to whoever is holding
+        # it -- and boarding one as a character class put `"item"` straight
+        # into `chargen.CLASSES` and raised, which is every row of the
+        # weapon slot.
+        carried = declared.cls == "item"
+        cls = (not carried and declared.cls) or (
             "ranger" if declared.reach.kind in ("ranged", "area_burst") else "fighter"
         )
         # Its class features come too. A row that triggers on a *cursed*
@@ -322,6 +328,19 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
             ),
             (6, 8),
         )
+        # The item itself, at the bottom rung of its ladder, so that a body
+        # reading "equal to the enhancement bonus" has a number to read and
+        # `Weapon.item` says which magic the carried weapon is. The columns
+        # are `game.db`'s; +1 and "1d6" are the heroic floor, which is what
+        # an audit wants -- the row, not the rung.
+        if carried:
+            from combat_engine.engine.components import Magic
+            from combat_engine.engine.equipment import equip
+
+            equip(world, caster, Magic(
+                ref=ref.split("x")[0].split("p")[0], slot="weapon", plus=1,
+                enh_to="attack_damage", crit="1d6", powers=(ref,),
+            ))
         foe_team = Team.ENEMY
 
     from combat_engine.engine import Health
@@ -1323,6 +1342,13 @@ def main() -> int:
             # lets a class look finished by declaring that it is not.
             partial.append((ref, p.todo))
             continue
+        if p.dropped:
+            # A row that works with one clause missing. Unlike `todo` it
+            # **is** fired, because the part that works has to be checked
+            # like anything else -- but it is reported beside the `todo`
+            # rows rather than counted done, because the clause that is
+            # gone is gone whether or not the rest of it passes.
+            partial.append((ref, p.dropped))
         if p.out_of_combat:
             # Declared inert. A cantrip that lights a torch is not a silent
             # power, it is a power with nothing to say in a fight.

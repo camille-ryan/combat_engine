@@ -59,7 +59,9 @@ def main() -> int:
     from combat_engine.content import declared
 
     rows = declared()
-    marked = {ref: p.todo for ref, p in sorted(rows.items()) if p.todo}
+    marked = {
+        ref: p.unfinished for ref, p in sorted(rows.items()) if p.unfinished
+    }
     have = _surface()
 
     arrived: dict[str, list[str]] = defaultdict(list)

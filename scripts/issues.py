@@ -166,7 +166,7 @@ def _coverage() -> tuple[dict, dict, dict, dict]:
     """What is done, absent, and written-but-unfinished, per bucket."""
     db = game()
     rows = declared()
-    done = {ref for ref, p in rows.items() if not p.todo}
+    done = {ref for ref, p in rows.items() if not p.unfinished}
 
     missing: dict[object, set[str]] = defaultdict(set)
     marked: dict[object, dict[str, tuple[str, ...]]] = defaultdict(dict)
@@ -180,7 +180,7 @@ def _coverage() -> tuple[dict, dict, dict, dict]:
         if r["ref"] in done:
             cell[0] += 1
         elif r["ref"] in rows:
-            marked[key][r["ref"]] = rows[r["ref"]].todo
+            marked[key][r["ref"]] = rows[r["ref"]].unfinished
         else:
             missing[key].add(r["ref"])
 
@@ -194,7 +194,7 @@ def _coverage() -> tuple[dict, dict, dict, dict]:
         if r["ref"] in done:
             cell[0] += 1
         elif r["ref"] in rows:
-            marked[r["level"]][r["ref"]] = rows[r["ref"]].todo
+            marked[r["level"]][r["ref"]] = rows[r["ref"]].unfinished
         else:
             missing[r["level"]].add(r["ref"])
 

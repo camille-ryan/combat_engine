@@ -479,6 +479,27 @@ class Power:
     #: the arrangement: it is exactly as inert in play as the absence it
     #: replaced, and says what it is waiting for.
     todo: tuple[str, ...] = ()
+    #: A clause of this row that could not be written, where the rest of
+    #: it could.
+    #:
+    #: The common case, and `todo=` was the wrong tool for it. A feat
+    #: reading "+2 damage on a charge and +2 to bull rush attempts" has a
+    #: first half the engine can say and a second half it cannot; marking
+    #: the row `todo` refuses the whole thing in play and throws the
+    #: working half away, so an author is pushed towards dropping the
+    #: clause quietly in a docstring instead -- which is the silently-false
+    #: failure this project exists to hunt, wearing a comment.
+    #:
+    #: So: `todo` means *nothing* here works and the row is refused.
+    #: `dropped` means the row works and one named thing is missing. Both
+    #: are symbols, both count as partial, both hold an issue open, both
+    #: go red when the symbol arrives. Only `todo` makes the row inert.
+    dropped: tuple[str, ...] = ()
+
+    @property
+    def unfinished(self) -> tuple[str, ...]:
+        """Everything this row is waiting for, whichever way it is waiting."""
+        return self.todo + self.dropped
 
     @property
     def is_attack(self) -> bool:
@@ -673,6 +694,7 @@ def power(
     out_of_combat: bool = False,
     summon: Summon | None = None,
     todo: Iterable[str] = (),
+    dropped: Iterable[str] = (),
 ) -> Callable[[Body], Body]:
     """Declare one power or one monster ability.
 
@@ -680,8 +702,8 @@ def power(
     second ability. Never a name: the engine has no use for one, and the
     agent that wrote this function was never shown it.
     """
-    todo = tuple(todo)
-    for want in todo:
+    todo, dropped = tuple(todo), tuple(dropped)
+    for want in (*todo, *dropped):
         if not _SYMBOL.fullmatch(want.strip()):
             raise ValueError(
                 f"{ref}: todo={want!r} is prose. Name the symbol you wanted "
@@ -694,6 +716,9 @@ def power(
         # counted as fine by `audit.py`'s inert branch and never looked at
         # again, which is the exact hole the marker exists to close.
         raise ValueError(f"{ref}: out_of_combat and todo cannot both be set")
+    if todo and dropped:
+        # One says nothing here works, the other says the rest of it does.
+        raise ValueError(f"{ref}: todo and dropped cannot both be set")
 
     def wrap(body: Body) -> Body:
         if ref in REGISTRY:
@@ -727,6 +752,7 @@ def power(
             out_of_combat=out_of_combat,
             summon=summon,
             todo=todo,
+            dropped=dropped,
         )
         return body
 

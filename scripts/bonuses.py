@@ -188,11 +188,18 @@ def _cards() -> dict[str, tuple[set[str], bool]]:
     from combat_engine.etl.build import game
 
     out: dict[str, tuple[set[str], bool]] = {}
-    # Both tables. A monster ability prints a bonus type as readily as a
-    # power does and its text lives in `monster_power`; reading only
-    # `power` left 165 calls looking like they had no card when most of
-    # them had one in the other table.
-    for table in ("power", "monster_power"):
+    # **Every table that holds a spec.** A monster ability prints a bonus
+    # type as readily as a power does and its text lives in
+    # `monster_power`; reading only `power` left 165 calls looking like
+    # they had no card when most of them had one in the other table.
+    #
+    # Items and feats were the same mistake made a second time, and it
+    # was worse: the first wave of 80 feats made 63 `c.bonus` calls and
+    # this instrument said nothing at all about any of them -- not
+    # "disagrees", not "no card", nothing. A checker that is silent about
+    # a whole corpus reads exactly like a checker that approves of it.
+    for table in ("power", "monster_power", "class_feature",
+                  "item", "item_block", "feat"):
         for ref, spec in game().execute(f"select ref, spec from {table}"):
             text = (spec or "").lower()
             typed = {t for t in TYPES if re.search(rf"\b{t}\s+bonus\b", text)}

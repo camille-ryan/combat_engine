@@ -82,8 +82,8 @@ def main() -> int:
     args = ap.parse_args()
 
     rows = declared()
-    done = {ref for ref, p in rows.items() if not p.todo}
-    partial = {ref: p.todo for ref, p in rows.items() if p.todo}
+    done = {ref for ref, p in rows.items() if not p.unfinished}
+    partial = {ref: p.unfinished for ref, p in rows.items() if p.unfinished}
     db = game()
 
     kind = "monsters" if args.monsters else args.kind

@@ -52,7 +52,11 @@ def main() -> int:
     args = ap.parse_args()
 
     rows = _declared()
-    marked = [(ref, tuple(p.todo)) for ref, p in sorted(rows.items()) if p.todo]
+    marked = [
+        (ref, tuple(p.unfinished))
+        for ref, p in sorted(rows.items())
+        if p.unfinished
+    ]
     entries = json.loads(BLOCKED.read_text()) if BLOCKED.exists() else {}
 
     if args.group or args.refs:

@@ -4047,6 +4047,46 @@ class Cast:
             label=label or f"{self.ref} on attack",
         )
 
+    def regeneration(
+        self,
+        amount: int,
+        *,
+        until: When = When.ENCOUNTER,
+        on: int | None = None,
+        while_bloodied: bool = False,
+    ) -> Effect:
+        """Heal this much at the start of each of that creature's turns.
+
+        Written out by hand in eight files before this existed -- the same
+        `TurnStart` watcher, the same `ev.ghost` guard, the same
+        `ev.actor == me` test, eight times -- and `docs/AUTHORING.md` said
+        regeneration was in the vocabulary while `grep` found one comment.
+
+        `while_bloodied` is the commoner printed form of the two: a
+        regenerating monster usually only does it while hurt.
+
+        **`ev.ghost` matters.** A ghost turn is the engine looking ahead,
+        not a turn happening, and healing on one pays out for free every
+        time a policy thinks about the board.
+        """
+        who = self._who(on) if on is not None else self.me
+        if who is None:
+            return None  # type: ignore[return-value]
+
+        def tick(ev: Any) -> None:
+            if ev.actor != who or ev.ghost:
+                return
+            if while_bloodied and not self.bloodied(on=who):
+                return
+            self.heal(amount, on=who)
+
+        from .events import TurnStart
+
+        return self.watch(
+            TurnStart, tick, until=until, on=who,
+            label=f"{self.ref} regeneration",
+        )
+
     def watch(
         self,
         event: type[Event],
