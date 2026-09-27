@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 from .components import Gear, Health, Mod, Mods, Position, Stats
 from .durations import Effect, When
-from .events import Event, Note, PowerUsed
+from .events import Event, ItemPowerUsed, Note, PowerUsed
 from .grid import Square, spread
 from .grid import distance as _distance
 from .movement import forced, shift, teleport, walk
@@ -4398,6 +4398,28 @@ class Cast:
         self.world.bus.emit(
             PowerUsed(actor=self.me, power=self.ref, targets=list(self.targets))
         )
+        owner = self._item_owner()
+        if owner:
+            self.world.bus.emit(
+                ItemPowerUsed(actor=self.me, power=self.ref, item=owner)
+            )
+
+    def _item_owner(self) -> str:
+        """The magic item this row came off, if it came off one.
+
+        An item's rows are ordinary rows in `Powers.known`; what makes
+        this one an *item* power is that something the creature is
+        carrying lists it. Asked of the gear rather than of the ref's
+        spelling, because a ref is an id and reading meaning out of its
+        letters is how the next rename becomes a silent bug.
+        """
+        gear = self.world.get(self.me, Gear)
+        if gear is None:
+            return ""
+        for magic in gear.worn.values():
+            if self.ref in magic.powers:
+                return magic.ref
+        return ""
 
     # -- reading modifiers back ---------------------------------------------
 

@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 from .actions import Action, legal, perform
-from .components import Health, Side
+from .components import Gear, Health, Side
 from .dsl import get
 from .events import DamageApplied, Event, OpportunityWindow, PowerUsed
 from .grid import distance
@@ -99,6 +99,16 @@ def features(
     f["is_drop"] = float(action.kind == "drop")
     f["is_item"] = float(action.kind == "item")
     f["is_instinctive"] = float(action.kind == "instinctive")
+    # Named on the day it was added, rather than six weeks later when
+    # somebody notices the AI kneeling to collect litter instead of
+    # fighting. That is what an unnamed kind does.
+    f["is_pick_up"] = float(action.kind == "pick_up")
+    if action.kind == "pick_up":
+        # Worth doing only when it is *your* weapon on the floor, which
+        # is the situation it exists for -- a creature that has just been
+        # disarmed. Otherwise it is a minor spent on clutter.
+        gear = world.get(actor, Gear)
+        f["pick_up_disarmed"] = float(gear is not None and not gear.held)
     if action.kind == "wield":
         # **Drawing the right weapon was unreachable.** `actions._wielding`
         # offers the minor and `actions` can execute it, but nothing here
@@ -353,6 +363,12 @@ WEIGHTS: dict[str, float] = {
     # and neither should be an idle default.
     "is_drop": -2.0,
     "is_item": 1.0,
+    # Bending down in a fight, which is worth it only when you are
+    # standing there empty-handed -- so the flat cost is real and
+    # `pick_up_disarmed` is what pays for it, the same shape as
+    # `is_wield` and `wield_reaches`.
+    "is_pick_up": -5.0,
+    "pick_up_disarmed": 12.0,
     # A summon acting on its own is free value; the action is the
     # owner's minor, which `_instinctives` has already charged for.
     "is_instinctive": 5.0,

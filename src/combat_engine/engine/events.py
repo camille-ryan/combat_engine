@@ -264,6 +264,23 @@ class PowerUsed(Event):
 
 
 @dataclass
+class ItemPowerUsed(Event):
+    """A magic item's own power fired, and which item it belongs to.
+
+    Its own class rather than a field on `PowerUsed`, which would have
+    been free to add -- `Event.wire()` is `asdict`. But `triggers.arm`
+    subscribes per event class, so a field would wake every listener of
+    every power use to ask a question that is almost always no. Three of
+    the artificer's four class-page features hang on this, and they are
+    the only readers there will ever be many of.
+    """
+
+    actor: int
+    power: str
+    item: str
+
+
+@dataclass
 class PowerResolved(Event):
     """A power has **finished**. `PowerUsed` says one has started.
 

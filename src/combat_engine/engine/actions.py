@@ -93,6 +93,7 @@ def legal(
     out.extend(_sustaining(world, encounter, actor))
     out.extend(_dropping(world, encounter, actor))
     out.extend(_wielding(world, encounter, actor))
+    out.extend(_picking_up(world, encounter, actor))
     out.extend(_spending(world, encounter, actor))
     out.extend(_action_points(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
@@ -620,6 +621,35 @@ def _spending(world: World, encounter: Encounter, actor: int) -> list[Action]:
     return out
 
 
+def _picking_up(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Taking something up off the floor. A minor action, as printed.
+
+    `Cast.disarm` has always dropped a weapon into a square as an `Item`
+    with `owner=0`, `uses=0` and no `spend` -- which makes it invisible to
+    `_spending`, the only thing that ever looked at an `Item`. So a
+    disarmed weapon lay there permanently and nothing in the game could
+    reach it, including the creature it had just been taken from.
+    `docs/blocked.json`'s `cf:swordmage-f0` is the printed line that
+    noticed: calling a bonded blade back to hand had no state to change.
+    """
+    from .components import Item, Position
+    from .query import squares
+
+    out: list[Action] = []
+    cost = ActionType.MINOR
+    if not encounter.can_spend(actor, cost):
+        return out
+    here = squares(world, actor)
+    for eid, item in sorted(world.each(Item)):
+        if item.owner or item.weapon is None:
+            continue
+        where = world.get(eid, Position)
+        if where is None or where.square not in here:
+            continue
+        out.append(Action(kind="pick_up", cost=cost, subject=eid, ref=item.ref))
+    return out
+
+
 def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
     out: list[Action] = []
     if is_(world, actor, Condition.PRONE) and not is_(world, actor, Condition.PINNED):
@@ -798,6 +828,19 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             return False
         gear.wield(gear.weapons[action.subject])
         world.bus.emit(Note(text=f"{actor} takes up {gear.weapons[action.subject].ref}"))
+        return True
+
+    if action.kind == "pick_up":
+        from .components import Gear, Item
+
+        item = world.get(action.subject or -1, Item)
+        gear = world.get(actor, Gear)
+        if item is None or item.owner or item.weapon is None or gear is None:
+            return False
+        gear.weapons.append(item.weapon)
+        gear.wield(item.weapon)
+        world.despawn(action.subject)
+        world.bus.emit(Note(text=f"{actor} picks up {item.weapon.ref}"))
         return True
 
     if action.kind == "item":

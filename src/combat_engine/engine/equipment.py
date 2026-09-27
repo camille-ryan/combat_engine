@@ -55,10 +55,15 @@ def equip(world, eid: int, magic: Magic, *, onto: str = "") -> None:  # noqa: AN
     if gear is None:
         return
 
+    # `worn` records **every** magic item on the creature, including the
+    # one that is a weapon. The weapon additionally carries the bonus,
+    # because that is where the attack roll looks -- but "what magic is
+    # this creature carrying" has to have one answer, or the rows an item
+    # grants belong to no item and `ItemPowerUsed` has nothing to name.
+    gear.worn[magic.slot or magic.ref] = magic
     if magic.enh_to == "attack_damage":
         _onto_weapon(gear, magic, onto)
     else:
-        gear.worn[magic.slot or magic.ref] = magic
         _defence_mods(world, eid, magic)
 
     _crit_rider(world, eid, magic)
