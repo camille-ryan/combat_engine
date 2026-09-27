@@ -153,6 +153,13 @@ def _group_in(c: Cast, *groups: str) -> bool:
     return gear is not None and any(w.group in groups for w in gear.held)
 
 
+def _ref_in(c: Cast, *refs: str) -> bool:
+    """A card naming weapons rather than a group. Several here do, and
+    the weapon table keys on exactly this ref."""
+    gear = _gear(c)
+    return gear is not None and any(w.ref in refs for w in gear.held)
+
+
 def _armour(c: Cast) -> str:
     gear = _gear(c)
     return gear.armour if gear is not None else ""
@@ -169,6 +176,18 @@ def _i_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 
 def _i_crit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.attacker == me and ev.critical
+
+
+def _my_opportunity_hammer(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """`Hit` does not declare `opportunity` -- `resolve.attack` sets it
+    afterwards as a plain attribute -- so it is read with `getattr`."""
+    gear = world.get(me, Gear)
+    return (
+        ev.attacker == me
+        and getattr(ev, "opportunity", False)
+        and gear is not None
+        and any(w.group == "hammer" for w in gear.held)
+    )
 
 
 def _i_am_bloodied(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -1014,18 +1033,22 @@ def f2595(c: Cast) -> None:
 
 
 @power("f2596", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("chargen.POLEARM",))
+       reach=PERSONAL, target=SELF)
 def f2596(c: Cast) -> None:
-    """The staff half. Polearm is a printed weapon group this engine does
-    not carry -- the set is axe, bow, crossbow, heavy blade, implement,
-    light blade, mace, spear, staff, unarmed -- so it is dropped rather
-    than folded into spear, which would widen the feat."""
+    """Both halves. Polearm is a printed group the weapon table carries,
+    and `chargen` now deals one, so the clause is asked rather than
+    folded into spear -- which would have widened the feat over every
+    shortspear in the game."""
     me = c.me
 
     def staffed(ctx: dict[str, Any]) -> bool:
         gear = _gear(c)
         arm = gear.main if gear is not None else None
-        return arm is not None and arm.group == "staff" and arm.two_handed
+        return (
+            arm is not None
+            and arm.group in ("staff", "polearm")
+            and arm.two_handed
+        )
 
     for defence in (AC, REF):
         c.bonus(
@@ -1034,13 +1057,16 @@ def f2596(c: Cast) -> None:
         )
 
 
-@power("f2597", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.HAMMER",))
+@power("f2597", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you hit with an opportunity attack using a hammer",
+       on=Trigger(Hit, _my_opportunity_hammer, "you hit on an opportunity"))
 def f2597(c: Cast) -> None:
-    """Hammer is not one of this engine's weapon groups, and the whole
-    benefit is gated on wielding one. `general_f.f69` gates on
-    `group == "hammer"` and is therefore false in every fight -- see the
-    report."""
+    """Hammer is a printed group the weapon table carries and `chargen`
+    now deals. `AT_WILL` because the card prints no limit, and an
+    encounter budget on "whenever you hit" would spend the whole feat on
+    the first opportunity of the fight."""
+    c.push(1, on=c.trigger.target)
 
 
 @power("f2598", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1197,11 +1223,12 @@ def f2785(c: Cast) -> None:
 
 
 @power("f2793", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=(*PROFICIENCY, *REROLL))
+       reach=PERSONAL, target=SELF, dropped=REROLL,
+       proficiency=("w:spear", "w:shortbow"))
 def f2793(c: Cast) -> None:
-    """The mounted damage half plays. Spears and shortbows are the spear
-    and bow groups -- the closest this engine says it -- and the
-    proficiency grant and the mount's reroll are both dropped."""
+    """The mounted damage half plays, and the grant is header data.
+    Spears and shortbows are the spear and bow groups -- the closest this
+    engine says it -- and the mount's reroll is what is left."""
     me = c.me
     c.bonus(
         "damage", 2, on=me, until=When.ENCOUNTER, kind="feat",
@@ -1212,11 +1239,20 @@ def f2793(c: Cast) -> None:
 
 @power("f2794", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.FALCHION", *PROFICIENCY))
+       proficiency=("w:scimitar", "w:falchion"),
+       dropped=("chargen.DOUBLE_SCIMITAR",))
 def f2794(c: Cast) -> None:
-    """Three named weapons rather than a group, and the damage bonus is
-    gated on them. Gating on heavy blade instead would hand the bonus to
-    every longsword in the game."""
+    """Three named weapons rather than a group, and the weapon table
+    carries two of them by ref -- so the bonus is gated exactly rather
+    than on heavy blade, which would hand it to every longsword in the
+    game. Heroic tier, so +2.
+
+    Dropped: the double scimitar. It is a double weapon and a `Weapon`
+    has one end, so `chargen` deals none."""
+    c.bonus(
+        "damage", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
+        when=lambda ctx: _ref_in(c, "w:scimitar", "w:falchion"),
+    )
 
 
 @power("f2611", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1790,7 +1826,7 @@ def f2607(c: Cast) -> None:
 
 @power("f2609", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.POLEARM", "c.flank_from(square)"))
+       todo=("c.flank_from(square)",))
 def f2609(c: Cast) -> None:
     """Polearm is not a group this engine carries, and "you are
     considered to occupy that square for flanking" wants a creature to
@@ -1841,22 +1877,26 @@ def f2624(c: Cast) -> None:
 
 
 @power("f2783", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROFICIENCY)
+       reach=PERSONAL, target=SELF, out_of_combat=True,
+       proficiency=("w:battleaxe", "w:handaxe", "w:warhammer",
+                    "w:throwing-hammer"))
 def f2783(c: Cast) -> None:
     """Four named weapons and nothing else. The whole benefit is the
-    grant, so there is no second half to keep."""
+    grant, it lands when the character is built, and nothing is left for
+    a fight -- which is what `out_of_combat` says."""
 
 
 @power("f2870", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(*PROFICIENCY, "chargen.HAMMER"))
+       proficiency=("w:warhammer", "w:battleaxe", "w:war-pick"))
 def f2870(c: Cast) -> None:
-    """The implement half plays for axes, which is a group this engine
-    has. Hammers and picks are not, and the proficiency grant belongs to
-    `chargen` -- `c.as_implement` writes the fact onto the weapon in
-    hand, which is what the printed sentence is about."""
+    """All three groups now, and the grant is header data. `c.as_implement`
+    writes the fact onto the weapon in hand, which is what the printed
+    sentence is about."""
     gear = _gear(c)
-    if gear is not None and any(w.group == "axe" for w in gear.held):
+    if gear is not None and any(
+        w.group in ("axe", "hammer", "pick") for w in gear.held
+    ):
         c.as_implement(on=c.me)
 
 
@@ -1895,9 +1935,9 @@ def f2726(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        todo=("c.forgo_healing()",))
 def f2868(c: Cast) -> None:
-    """Second wind is an action rather than a power: `actions` offers it
-    and `Cast.second_wind` runs it, so it announces nothing a trigger can
-    answer, and the trade needs the healing given up as well."""
+    """`SecondWind` is the moment. What is left is the trade: nothing
+    refuses the hit points `Cast.second_wind` puts back, and without that
+    the ally is paid for free."""
 
 
 @power("f2845", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

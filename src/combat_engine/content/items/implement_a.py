@@ -22,8 +22,11 @@ Four gaps account for most of the markers, and each is named with the
 symbol it wants rather than approximated:
 
 * **`spec.power_ref()`** -- the brief prints a prose power name where a ref
-  belongs ("as the wizard's scorching burst power"), and a name is the one
-  thing this project may not go and look up. Twenty-six blocks.
+  belongs, and a name is the one thing this project may not go and look up.
+  Thirteen blocks, down from twenty-six: the label matcher now reads a
+  bracketed class, so most of "as the <class>'s <name> power" resolves and
+  `_as_row` says the rest. The example that used to stand here was itself a
+  printed name and has been taken out.
 * **`c.as_weapon()`** -- the mirror of `c.as_implement`: a rod that is also
   a mace.
 * **`c.power_range()`** -- lengthen another power's printed range.
@@ -1620,11 +1623,12 @@ def i1298x1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.IMPLEMENT],
-    todo=("spec.power_ref()",),
 )
 def i1298p1(c: Cast) -> None:
-    """"As the <class>'s <name> power" -- `c.grant_attack(c.me, ref=...)`
-    says it, and the brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p1166")
 
 
 @power(
@@ -1692,10 +1696,12 @@ def i1345x1(c: Cast) -> None:
     reach=Ranged(20),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.FORCE, Keyword.IMPLEMENT],
-    todo=("spec.power_ref()",),
 )
 def i1345p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p463")
 
 
 @power(
@@ -1747,10 +1753,12 @@ def i1534x1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.FORCE, Keyword.IMPLEMENT],
-    todo=("spec.power_ref()",),
 )
 def i1534p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p1458")
 
 
 @power(
@@ -1899,10 +1907,12 @@ def i1738x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("spec.power_ref()",),
 )
 def i1738p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p12732")
 
 
 @power(
@@ -1928,10 +1938,12 @@ def i1821x1(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.FORCE, Keyword.IMPLEMENT],
-    todo=("spec.power_ref()",),
 )
 def i1821p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p1164")
 
 
 @power(
@@ -1958,10 +1970,12 @@ def i1822x1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.FEAR, Keyword.IMPLEMENT, Keyword.RADIANT],
-    todo=("spec.power_ref()",),
 )
 def i1822p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p1457")
 
 
 @power(
@@ -1986,10 +2000,12 @@ def i1823x1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
-    todo=("spec.power_ref()",),
 )
 def i1823p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p1333")
 
 
 @power(
@@ -2052,10 +2068,12 @@ def i1826x1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.IMPLEMENT],
-    todo=("spec.power_ref()",),
 )
 def i1826p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p1458")
 
 
 @power(
@@ -2065,10 +2083,21 @@ def i1826p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
 )
 def i1828x1(c: Cast) -> None:
-    """A push on one named power's damage, and the ref is prose."""
+    """The ref is given now, so the push is writable.
+
+    Hung on `Hit` rather than on `PowerUsed`: the use is announced before
+    the body runs, so a push laid there would happen before the damage
+    the printed line waits for. "Used through this wand" cannot be gated,
+    as the file's opening note says, so it is written always-on."""
+    me = c.me
+
+    def shove(ev: Hit) -> None:
+        if ev.attacker == me and ev.power == "p463":
+            c.push(1, on=ev.target)
+
+    c.watch(Hit, shove, until=When.ENCOUNTER)
 
 
 @power(
@@ -2079,10 +2108,12 @@ def i1828x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(20),
     target=ONE_CREATURE,
-    todo=("spec.power_ref()",),
 )
 def i1828p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p463")
 
 
 @power(
@@ -2108,10 +2139,12 @@ def i1831x1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.IMPLEMENT],
-    todo=("spec.power_ref()",),
 )
 def i1831p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p1167")
 
 
 @power(
@@ -2121,11 +2154,14 @@ def i1831p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
+    todo=("Hit.origin",),
 )
 def i1832x1(c: Cast) -> None:
-    """Extra damage in one named power's origin square. `c.origin` is the
-    square an area was aimed at, so only the ref is missing."""
+    """The ref is given now; the origin square is not, and the earlier
+    note on this row was wrong. `c.origin` is *this* row's own aim, and a
+    watcher on another row's `Hit` is handed `attacker`, `target`,
+    `power`, `critical` and `branch` -- the square the burst was centred
+    on is nowhere on the event."""
 
 
 @power(
@@ -2137,10 +2173,12 @@ def i1832x1(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.IMPLEMENT],
-    todo=("spec.power_ref()",),
 )
 def i1832p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p1166")
 
 
 @power(
@@ -2179,10 +2217,13 @@ def i1836p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
+    todo=("c.class_feature()",),
 )
 def i1927p1(c: Cast) -> None:
-    """`c.restore_use` is the verb; the class feature's ref is prose."""
+    """`c.restore_use` is the verb and the brief now names the feature by
+    ref -- but `cf:paladin-f0` is declared nowhere in the tree, so there
+    is no row whose use could be handed back. The old marker named the
+    naming gap, which has closed; the hold is the undeclared feature."""
 
 
 @power(
@@ -2609,11 +2650,11 @@ def i2296x1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you hit with a divine attack power using this rod",
-    todo=("spec.power_ref()",),
+    todo=("c.class_feature()",),
 )
 def i2304p1(c: Cast) -> None:
-    """An extra use of a class feature is `c.restore_use`, and the
-    feature's ref is prose in the brief."""
+    """Same hold as i1927p1: the brief now prints `cf:paladin-f0`, and
+    nothing in the tree declares it, so `c.restore_use` has no row."""
 
 
 @power(
@@ -2787,11 +2828,13 @@ def i2626x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
+    todo=("c.use_power()", "c.on_sustain(group=)"),
 )
 def i2627x1(c: Cast) -> None:
-    """Multiplies one named conjuration and folds its sustains into one
-    action. The ref is prose in the brief."""
+    """The ref is given now, and neither half of the sentence follows from
+    it. Conjuring the named row several times is running that row from
+    inside this one; folding several sustains into one minor action is a
+    second thing, since `c.on_sustain` holds one effect at a time."""
 
 
 @power(
@@ -3196,10 +3239,12 @@ def i3019x1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.IMPLEMENT],
-    todo=("spec.power_ref()",),
 )
 def i3019p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p1167")
 
 
 @power(
@@ -3264,10 +3309,12 @@ def i3026x1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.FEAR, Keyword.IMPLEMENT, Keyword.RADIANT],
-    todo=("spec.power_ref()",),
 )
 def i3026p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p1457")
 
 
 @power(
@@ -3279,10 +3326,12 @@ def i3026p1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.NECROTIC],
-    todo=("spec.power_ref()",),
 )
 def i3027p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p416")
 
 
 @power(
@@ -3314,10 +3363,12 @@ def i3030x1(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.FORCE, Keyword.IMPLEMENT],
-    todo=("spec.power_ref()",),
 )
 def i3030p1(c: Cast) -> None:
-    """The brief gives a prose name instead of a ref."""
+    """"As the <class>'s <name> power" with the ref given: the item's
+    row hands the swing straight to the named row rather than restating
+    it."""
+    _as_row(c, "p1164")
 
 
 @power(

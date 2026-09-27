@@ -541,11 +541,11 @@ def f2354(c: Cast) -> None:
 
 @power("f2405", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.SLING", "c.counts_as(property=)"))
+       todo=("c.counts_as(property=)", "Weapon.proficiency"))
 def f2405(c: Cast) -> None:
-    """Rewrites a weapon's own numbers: a better proficiency bonus and
-    the high-crit property. `chargen` carries no sling, so there is
-    nothing to rewrite, and `Weapon.properties` is a frozen set read
+    """The sling exists now; what does not is any way to rewrite the
+    weapon a character is holding. Both clauses are that -- a better
+    proficiency bonus and the high-crit property -- and `Weapon` is read
     off the item rather than off the wielder."""
 
 

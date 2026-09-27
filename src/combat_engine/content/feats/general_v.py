@@ -664,7 +664,8 @@ def f3499(c: Cast) -> None:
 
 @power("f3500", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.counts_as(group=)", *PROFICIENCY, *FEATURE))
+       todo=("c.counts_as(group=)", *FEATURE),
+       proficiency=("w:quarterstaff",))
 def f3500(c: Cast) -> None:
     """Three things settled when the character is built: a proficiency, two
     class features widened to a weapon they do not name, and a staff read
@@ -1159,11 +1160,13 @@ def f3540(c: Cast) -> None:
 
 
 @power("f3541", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.power_ref()", *INSTEAD))
+       reach=PERSONAL, target=SELF, todo=("Summon.from_block()", *INSTEAD))
 def f3541(c: Cast) -> None:
-    """`x10_13` is not declared anywhere, so there is nothing for
-    `c.summon` to put on the board -- and swapping it for the creature
-    `p13744`'s own body summons needs a hold on that body."""
+    """Every name on this card is a ref, so the naming marker was pointing
+    at a gap that is not there. `x10_13` is a summon block nothing
+    declares, so `c.summon` has nothing to put on the board -- and
+    swapping it for the creature `p13744`'s own body summons needs a hold
+    on that body."""
 
 
 # -- channel divinity -------------------------------------------------------

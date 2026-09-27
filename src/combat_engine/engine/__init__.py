@@ -55,6 +55,7 @@ from .dsl import (
     Power,
     Ranged,
     Summon,
+    Swap,
     Target,
     UpTo,
     Wall,

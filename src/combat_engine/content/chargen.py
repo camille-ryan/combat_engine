@@ -174,6 +174,88 @@ LONGSPEAR = Weapon(ref="w:longspear", category="military", damage="1d10", profic
 UNARMED = Weapon(ref="w:unarmed", category="simple", damage="1d8", proficiency=3, group="unarmed")
 STAFF = Weapon(ref="w:staff", damage="1d8", proficiency=0, group="implement")
 TOTEM = Weapon(ref="w:totem", damage="1d4", proficiency=0, group="implement")
+#: The last two implements nothing was carrying. Declared rather than
+#: derived for the reason the five above are: an implement prints no
+#: damage die and no proficiency bonus, so there is no stat line to load.
+WAND = Weapon(ref="w:wand", damage="1d4", proficiency=0, group="implement")
+KI_FOCUS = Weapon(ref="w:ki-focus", damage="1d4", proficiency=0, group="implement")
+
+IMPLEMENTS = {w.ref: w for w in (ROD, ORB, HOLY_SYMBOL, STAFF, TOTEM, WAND, KI_FOCUS)}
+
+
+def _printed_weapons() -> dict[str, Weapon]:
+    """Every base weapon the book prints, by ref, off the `weapon` table.
+
+    The sixteen constants above were transcribed by hand and are left
+    alone: three chassis are built on their exact `properties`, and a
+    `group` that moved underneath them would change what every gated row
+    reads. Everything new is derived instead, for the reason the
+    seventeen derived classes are -- a hand-typed damage die is a number
+    nothing can check, and a wrong one leaves every power working and the
+    character quietly weaker.
+
+    A weapon filed under two printed groups keeps the first as its
+    `group` and carries the rest as properties, which is where
+    `_fits_base` already looks: a khopesh is an axe that a heavy-blade
+    item may still be laid on.
+    """
+    from combat_engine.etl.build import game
+
+    out: dict[str, Weapon] = {}
+    try:
+        rows = list(game().execute("SELECT * FROM weapon"))
+    except Exception:            # no database yet; the sixteen still work
+        return out
+    for row in rows:
+        out[row["ref"]] = Weapon(
+            ref=row["ref"],
+            category=row["category"],
+            damage=row["damage"],
+            proficiency=row["proficiency"],
+            reach=row["reach"],
+            # A thrown melee weapon is not a ranged one: a dagger has a
+            # printed range and is still swung, and `Gear.ranged` picking
+            # it up would hand a rogue a ranged basic attack it does not
+            # have. `melee` is the page's own word for the difference.
+            ranged=(
+                (row["range_short"], row["range_long"])
+                if row["range_short"] and not row["melee"]
+                else None
+            ),
+            group=row["grp"],
+            properties=frozenset([*json.loads(row["properties"] or "[]"), row["hands"]]),
+        )
+    return out
+
+
+PRINTED: dict[str, Weapon] = _printed_weapons()
+
+#: The arms the chassis dealt none of, and that a printed benefit names.
+#:
+#: Named for the **group** where the sentence is "you gain proficiency
+#: with all hammers" and the engine needs one weapon to stand for the
+#: line, and for the weapon where the card names a weapon. One per line,
+#: the way `_arms` deals one per proficiency line: a character holds one
+#: thing, and a second hammer would only be a second way to be the same.
+HAMMER = PRINTED.get("w:warhammer")
+POLEARM = PRINTED.get("w:halberd")
+FLAIL = PRINTED.get("w:flail")
+PICK = PRINTED.get("w:war-pick")
+AXE = PRINTED.get("w:battleaxe")
+SPEAR = PRINTED.get("w:spear")
+FALCHION = PRINTED.get("w:falchion")
+SHORTBOW = PRINTED.get("w:shortbow")
+SLING = PRINTED.get("w:sling")
+BASTARD_SWORD = PRINTED.get("w:bastard-sword")
+SPIKED_CHAIN = PRINTED.get("w:spiked-chain")
+SCIMITAR = PRINTED.get("w:scimitar")
+SICKLE = PRINTED.get("w:sickle")
+SCYTHE = PRINTED.get("w:scythe")
+BLOWGUN = PRINTED.get("w:blowgun")
+GARROTE = PRINTED.get("w:garrote")
+BOLA = PRINTED.get("w:bola")
+NET = PRINTED.get("w:net")
+WHIP = PRINTED.get("w:whip")
 
 
 def _from_the_book() -> dict[str, ClassLine]:
@@ -807,6 +889,120 @@ def feats_for(
     return sorted(taken)
 
 
+def proficiency(feats: list[str]) -> list[Weapon]:
+    """The arms a character's feats let it carry, beyond its chassis.
+
+    "You gain proficiency with all spears" is a **build-time** sentence
+    and nothing a `Cast` can answer: the fight opens with the gear
+    already in hand, so the clause has no moment to happen in. The feat
+    says which base items it opens up in its own header --
+    `proficiency=("w:warhammer",)` -- and this is what reads them, the
+    way `feats_for` reads the registry rather than keeping a list beside
+    it that would go stale.
+
+    A ref nothing carries yields nothing rather than raising. That is the
+    honest direction: the row keeps its marker and `blocked.py` keeps
+    saying so, where a silent invention would look finished.
+    """
+    from combat_engine.engine.dsl import REGISTRY
+
+    out: dict[str, Weapon] = {}
+    for ref in feats:
+        declared = REGISTRY.get(ref)
+        for want in getattr(declared, "proficiency", ()) or ():
+            arm = PRINTED.get(want) or IMPLEMENTS.get(want)
+            if arm is not None:
+                out.setdefault(arm.ref, arm)
+    return list(out.values())
+
+
+def _role(w: Weapon) -> str:
+    """What job a weapon is carried for: casting, shooting or swinging."""
+    if w.group == "implement":
+        return "implement"
+    return "ranged" if w.ranged else "melee"
+
+
+def _swing(w: Weapon) -> float:
+    """Roughly what one blow with it is worth, for choosing between two.
+
+    Proficiency bonus plus the average of the damage die, which is the
+    whole of what separates one base weapon from another once the group
+    no longer matters.
+    """
+    count, _, faces = w.damage.partition("d")
+    return w.proficiency + int(count or 1) * (int(faces or 1) + 1) / 2
+
+
+def outfit(carried: list[Weapon], granted: list[Weapon]) -> list[Weapon]:
+    """What the character ends up holding, and what goes on its belt.
+
+    A proficiency grant is not a spare weapon in a sack: nobody spends a
+    feat on hammers and then keeps swinging a sword. So a granted arm
+    takes the place of the chassis's own when it is the better of the two
+    for the same job, and the one it displaces goes on the belt.
+
+    Held and owned are kept apart on purpose. `_shield_for` counts melee
+    weapons to decide whether a hand is free, and `Gear.two_weapon` reads
+    the same list, so a hammer merely *owned* would silently take a
+    fighter's shield away and turn every "wielding two melee weapons"
+    Requirement true.
+
+    Returns the belt; `carried` is edited in place.
+    """
+    belt: list[Weapon] = []
+    for arm in granted:
+        if any(w.ref == arm.ref for w in carried):
+            continue
+        same = [w for w in carried if _role(w) == _role(arm)]
+        if not same:
+            # Nothing of that kind at all, so there is no grip to spoil.
+            carried.append(arm)
+            continue
+        best = max(same, key=_swing)
+        if _swing(arm) > _swing(best):
+            carried[carried.index(best)] = arm
+            belt.append(best)
+        else:
+            belt.append(arm)
+    return belt
+
+
+def power_swap(powers: list[str], feats: list[str]) -> list[str]:
+    """The hand that is left after the feats that trade a card for one.
+
+    "You can swap one of your 3rd-level or higher encounter attack powers
+    for this one" is an exchange made when the character is built. The
+    card arrives with the feat -- its body hands it over -- and this is
+    the other half: something goes back.
+
+    The **lowest** qualifying power goes, which is the one a player gives
+    up, and ties break by ref so that the same seed deals the same
+    character twice. A feat whose trade finds nothing to take costs
+    nothing, which is what happens to a character too junior to have one.
+    """
+    from combat_engine.engine.dsl import REGISTRY
+
+    out = list(powers)
+    for ref in feats:
+        trade = getattr(REGISTRY.get(ref), "swap", None)
+        if trade is None:
+            continue
+        pool = [
+            p
+            for p in out
+            if (row := REGISTRY.get(p)) is not None
+            and row.level >= trade.level
+            and (trade.usage is None or row.usage is trade.usage)
+            # A utility is a row with nothing to attack with, which is how
+            # `spellbook` tells the two apart as well.
+            and (row.attack is None) is trade.utility
+        ]
+        if pool:
+            out.remove(min(pool, key=lambda p: (REGISTRY[p].level, p)))
+    return out
+
+
 #: What the printed maths assumes you are holding. Enhancement runs in
 #: five-level bands, and 4e's own advice is blunt about the floor: by the
 #: end of level 5 everyone needs a +1 weapon, +1 armour and a +1 neck
@@ -1090,7 +1286,6 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # sword in the game, in this fight and every later one, and nothing
     # anywhere would say so.
     carried = [replace(w) for w in (build.weapons or line.weapons)]
-    carried_shield = _shield_for(line, carried)
     scores = scores_for(line, build)
     # Level 4, 8 and so on raise two scores by one. Applied here rather than
     # recorded, so a level 8 character is derivable from its class and level.
@@ -1115,6 +1310,14 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         Random(f"{world.rng.seed}:{who.cls}:{build.name}:feats"),
         list(powers), who.race,
     )
+    # A feat that hands over a card takes one back, and both halves happen
+    # here: a `Cast` opens on a board with the hand already dealt.
+    powers = power_swap(list(powers), list(feats))
+    # Proficiency is the same kind of sentence, and it has to be settled
+    # before the shield is, because what is in the other hand decides
+    # whether there is room for one.
+    belt = outfit(carried, proficiency(list(feats)))
+    carried_shield = _shield_for(line, carried)
 
     # First level takes the whole Constitution *score*; every level after
     # takes the class's flat step. Surges take the modifier, not the score.
@@ -1154,6 +1357,14 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
             armour=line.armour,
         ),
     )
+    # Owned, not held. `Gear.__post_init__` works the grip out from an
+    # empty `stowed`, so what a feat let the character carry but not swing
+    # is added afterwards -- adding it above would have it counted as a
+    # hand in use.
+    if belt:
+        gear = world.get(eid, Gear)
+        gear.weapons += [replace(w) for w in belt]
+        gear.stowed |= {w.ref for w in belt}
     if line.power_points:
         world.add(eid, PowerPoints(points=line.power_points, maximum=line.power_points))
     # Gear last, so it has a `Gear` and a `Mods` to write into. Its own

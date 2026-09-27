@@ -443,10 +443,11 @@ def f3698(c: Cast) -> None:
 
 @power("f3699", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.proficiency()", "c.class_feature()"))
+       todo=("c.class_feature()",), proficiency=("w:ki-focus",))
 def f3699(c: Cast) -> None:
-    """Skill training, a class feature and a proficiency: three things
-    settled when the character is built and none of them sayable here."""
+    """The ki focus is header data `chargen` reads at build time and the
+    training is not a fight. The class feature is named in prose, which
+    is the one thing left."""
 
 
 @power("f3700", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -479,11 +480,26 @@ def f3702(c: Cast) -> None:
 
 @power("f3703", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.POLEARM", "chargen.proficiency()"))
+       proficiency=("w:glaive", "w:halberd"))
 def f3703(c: Cast) -> None:
-    """Glaives and halberds are the polearm group, which this engine does
-    not carry -- so both the proficiency and the slide that depends on
-    holding one have nothing to hang on."""
+    """Both halves. Polearm is a printed group the weapon table carries
+    and `chargen` now deals, so the slide has something to hang on. It
+    rides on a `Hit` rather than a declared trigger because a row with a
+    printed Trigger is kept out of the action menu, and this one has no
+    per-fight limit to spend."""
+    me = c.me
+
+    def struck(ev: Any) -> None:
+        row = get(ev.power)
+        if (
+            ev.attacker == me
+            and row is not None
+            and row.usage.name == "AT_WILL"
+            and _holding(c, "polearm")
+        ):
+            c.slide(1, on=ev.target)
+
+    c.watch(Hit, struck, until=When.ENCOUNTER)
 
 
 @power("f3704", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -765,7 +781,8 @@ def f3736(c: Cast) -> None:
 
 
 @power("f3738", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=PROFICIENCY)
+       reach=PERSONAL, target=SELF,
+       proficiency=("w:orb", "w:rod", "w:staff", "w:wand"))
 def f3738(c: Cast) -> None:
     """Heroic tier, so +1. "Any weapon or implement with which you have
     proficiency" is everything the creature can actually swing, so the
@@ -1093,7 +1110,7 @@ def f3764(c: Cast) -> None:
 
 @power("f3766", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.no_provoke(when=)", *PROFICIENCY))
+       todo=("c.no_provoke(when=)",))
 def f3766(c: Cast) -> None:
     """`Gear` has hands, not limbs, and already lets two one-handers be
     held at once -- so what is left of the printed line is the ranged
@@ -1102,7 +1119,7 @@ def f3766(c: Cast) -> None:
 
 @power("f3767", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.no_provoke(when=)", *PROFICIENCY))
+       todo=("c.no_provoke(when=)",))
 def f3767(c: Cast) -> None:
     """The thrown-weapon twin of `f3766`, and the same two gaps."""
 
@@ -1247,19 +1264,21 @@ def f3778(c: Cast) -> None:
 
 
 @power("f3779", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROFICIENCY)
+       reach=PERSONAL, target=SELF, todo=("chargen.armor_proficiency()",))
 def f3779(c: Cast) -> None:
     """Shield proficiency and the check penalty for wearing one are both
-    settled when the character is built."""
+    settled when the character is built, and a shield is a different
+    column from a weapon: `ClassLine.shield` is a number, so there is
+    nowhere for a shield a character merely *may* carry to be written."""
 
 
 @power("f3780", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("chargen.FLAIL", *PROFICIENCY))
+       reach=PERSONAL, target=SELF, proficiency=("w:flail", "w:spear"))
 def f3780(c: Cast) -> None:
-    """Spear is a group and flail is not, so half the printed weapons can
-    be asked about and half cannot. Heroic tier, so +2."""
+    """Both groups now: flail is one the weapon table carries and
+    `chargen` deals. Heroic tier, so +2."""
     c.bonus("damage", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
-            when=lambda ctx: _holding(c, "spear"))
+            when=lambda ctx: _holding(c, "spear", "flail"))
 
 
 @power("f3781", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1380,11 +1399,17 @@ def f3793(c: Cast) -> None:
 
 @power("f3794", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*WEAPON_REF, *PROFICIENCY, "c.counts_as(property=)"))
+       dropped=("c.counts_as(property=)",),
+       proficiency=("w:sickle", "w:scythe"))
 def f3794(c: Cast) -> None:
-    """Sickle and scythe are neither of them a group and the spec gives no
-    ref for either, so the damage bonus cannot be narrowed and the high
-    crit property has no weapon to land on."""
+    """Neither is a group, but both are rows in the weapon table, so the
+    bonus is gated on the ref. Heroic tier, so +2.
+
+    Dropped: "you treat the scythe as having the high crit property".
+    `Weapon.properties` is read off the weapon and nothing writes to the
+    one in hand."""
+    c.bonus("damage", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: _holding_ref(c, "w:sickle", "w:scythe"))
 
 
 f3795 = _grants("f3795", "f3795b")

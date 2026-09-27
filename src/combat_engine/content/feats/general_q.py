@@ -68,6 +68,7 @@ from combat_engine.engine import (
     Melee,
     Ranged,
     SecondWind,
+    Swap,
     Trigger,
     UpTo,
     Usage,
@@ -126,11 +127,17 @@ def _wielding(what: str):  # noqa: ANN202
     return gate
 
 
-def _swap(ref: str, card: str) -> None:
-    """The parent half of a swap chain: the card, and nothing else."""
+def _swap(ref: str, card: str, trade: Swap) -> None:
+    """The parent half of a swap chain: the card, and what it costs.
+
+    Both halves of the printed exchange. The body hands the card over;
+    `trade` is what goes back, and `chargen.power_swap` takes it when the
+    character is built -- which is where a swap happens, a fight opening
+    with the hand already dealt.
+    """
 
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, dropped=SWAP)
+           reach=PERSONAL, target=SELF, swap=trade)
     def parent(c: Cast) -> None:
         c.grant_row(card, on=c.me, until=When.ENCOUNTER)
 
@@ -272,7 +279,7 @@ def f3183(c: Cast) -> None:
     """Widens the push of a power named only in words."""
 
 
-_swap("f3184", "f3184b")
+_swap("f3184", "f3184b", Swap(6, utility=True))
 
 
 @power("f3184b", level=1, cls="", usage=ENCOUNTER, action=MOVE,
@@ -294,7 +301,7 @@ def f3184b(c: Cast) -> None:
         c.pull(gone, on=foe)
 
 
-_swap("f3185", "f3185b")
+_swap("f3185", "f3185b", Swap(3, Usage.ENCOUNTER))
 
 
 @power("f3185b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
@@ -331,7 +338,7 @@ def f3185c(c: Cast) -> None:
         c.prone(on=foe)
 
 
-_swap("f3186", "f3186b")
+_swap("f3186", "f3186b", Swap(9, Usage.DAILY))
 
 
 @power("f3186b", level=1, cls="", usage=DAILY, action=STANDARD,
@@ -394,7 +401,7 @@ def f3191(c: Cast) -> None:
     """Adds prone to a push a power named only in words deals out."""
 
 
-_swap("f3192", "f3192b")
+_swap("f3192", "f3192b", Swap(6, utility=True))
 
 
 @power("f3192b", level=1, cls="", usage=DAILY, action=MINOR,
@@ -414,7 +421,7 @@ def f3192b(c: Cast) -> None:
     c.watch(Hit, bite, on=c.me, until=When.STANCE)
 
 
-_swap("f3193", "f3193b")
+_swap("f3193", "f3193b", Swap(3, Usage.ENCOUNTER))
 
 
 @power("f3193b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
@@ -434,7 +441,7 @@ def f3193b(c: Cast) -> None:
             c.damage(c.w(dice, hand="off"), c.str_mod, on=who)
 
 
-_swap("f3194", "f3194b")
+_swap("f3194", "f3194b", Swap(9, Usage.DAILY))
 
 
 @power("f3194b", level=1, cls="", usage=DAILY, action=STANDARD,
@@ -538,7 +545,7 @@ def f3204(c: Cast) -> None:
     """A free shift hung on a power named only in words."""
 
 
-_swap("f3206", "f3206b")
+_swap("f3206", "f3206b", Swap(6, utility=True))
 
 
 @power("f3206b", level=1, cls="", usage=ENCOUNTER, action=FREE,
@@ -555,7 +562,7 @@ def f3206b(c: Cast) -> None:
     c.shift(3)
 
 
-_swap("f3207", "f3207b")
+_swap("f3207", "f3207b", Swap(3, Usage.ENCOUNTER))
 
 
 @power("f3207b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
@@ -570,7 +577,7 @@ def f3207b(c: Cast) -> None:
         c.prone()
 
 
-_swap("f3208", "f3208b")
+_swap("f3208", "f3208b", Swap(9, Usage.DAILY))
 
 
 @power("f3208b", level=1, cls="", usage=DAILY, action=STANDARD,
@@ -626,7 +633,7 @@ def f3210(c: Cast) -> None:
     _on_hit_with(c, _F3210, cover)
 
 
-_swap("f3211", "f3211b")
+_swap("f3211", "f3211b", Swap(6, utility=True))
 
 
 @power("f3211b", level=1, cls="", usage=ENCOUNTER, action=FREE,
@@ -649,7 +656,7 @@ def f3211b(c: Cast) -> None:
     c.bonus(REF, 2, on=c.me, until=When.EONT, kind="power", when=theirs)
 
 
-_swap("f3212", "f3212b")
+_swap("f3212", "f3212b", Swap(3, Usage.ENCOUNTER))
 
 
 @power("f3212b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
@@ -671,7 +678,7 @@ def f3212b(c: Cast) -> None:
     c.shift(max(1, c.speed_of() // 2))
 
 
-_swap("f3213", "f3213b")
+_swap("f3213", "f3213b", Swap(9, Usage.DAILY))
 
 
 @power("f3213b", level=1, cls="", usage=DAILY, action=STANDARD,
@@ -805,7 +812,7 @@ def f3221(c: Cast) -> None:
     c.grants_advantage(on=c.trigger.target, to=c.me, until=When.EONT)
 
 
-_swap("f3222", "f3222b")
+_swap("f3222", "f3222b", Swap(6, utility=True))
 
 
 @power("f3222b", level=1, cls="", usage=ENCOUNTER, action=INTERRUPT,
@@ -823,7 +830,7 @@ def f3222b(c: Cast) -> None:
     c.bonus(REF, c.wis_mod, on=c.me, until=When.EOT)
 
 
-_swap("f3223", "f3223b")
+_swap("f3223", "f3223b", Swap(3, Usage.ENCOUNTER))
 
 
 @power("f3223b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
@@ -852,7 +859,7 @@ def f3223b(c: Cast) -> None:
         c.slide(1, on=second)
 
 
-_swap("f3224", "f3224b")
+_swap("f3224", "f3224b", Swap(9, Usage.DAILY))
 
 
 @power("f3224b", level=1, cls="", usage=DAILY, action=STANDARD,

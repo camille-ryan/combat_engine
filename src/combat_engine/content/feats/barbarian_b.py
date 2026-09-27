@@ -229,9 +229,9 @@ def f2705(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        todo=("Keyword.RAGE",))
 def f2885(c: Cast) -> None:
-    """Extra hit points from a second wind taken while raging. Neither
-    half is announced: `c.second_wind` emits a surge and a defence
-    bonus with nothing saying which row asked."""
+    """Extra hit points from a second wind taken while raging.
+    `SecondWind` is the moment now; nothing says a barbarian is raging,
+    which is the half still missing."""
 
 
 # -- class features named in prose -----------------------------------------

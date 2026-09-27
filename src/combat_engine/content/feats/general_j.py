@@ -1023,31 +1023,34 @@ def f1627(c: Cast) -> None:
 
 @power("f1628", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.class_feature()", *PROFICIENCY))
+       todo=("c.class_feature()",), proficiency=("w:holy-symbol",))
 def f1628(c: Cast) -> None:
     """Skill training, one class feature of another class, and an
-    implement grant. The feature is named in prose; what a character may
-    pick up is settled when it is built."""
+    implement grant. The implement is header data `chargen` reads at
+    build time; the feature is named in prose and is the one gap."""
 
 
 @power("f1629", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROFICIENCY)
+       reach=PERSONAL, target=SELF, out_of_combat=True,
+       proficiency=("w:rod", "w:staff"))
 def f1629(c: Cast) -> None:
-    """The training and the ritual feature are not a fight; the implement
-    grant is, and it is a build-time column rather than a `Cast`."""
+    """The training and the ritual feature are not a fight, and the
+    implement grant lands when the character is built. Nothing is left
+    for a board, which is what `out_of_combat` says."""
 
 
 @power("f1630", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=PROFICIENCY)
+       reach=PERSONAL, target=SELF, proficiency=("w:holy-symbol",))
 def f1630(c: Cast) -> None:
     """The power half plays: this one is given by ref, so it is an
     ordinary grant. How long it lasts is the granted row's own business.
-    Dropped: the implement grant, which is settled at build time."""
+    The implement grant is settled at build time, off the header."""
     c.grant_row("p3069", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1631", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*BORROW, *PROFICIENCY))
+       reach=PERSONAL, target=SELF, todo=BORROW,
+       proficiency=("w:holy-symbol",))
 def f1631(c: Cast) -> None:
     """The same shape as f1630 with the power named in prose instead of
     by ref, which is the whole difference between the two."""

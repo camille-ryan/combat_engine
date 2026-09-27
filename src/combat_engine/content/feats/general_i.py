@@ -1274,19 +1274,16 @@ def f1410(c: Cast) -> None:
 
 
 @power("f1411", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("chargen.proficiency()", "spec.weapon_ref()"))
+       reach=PERSONAL, target=SELF, todo=("spec.weapon_ref()",))
 def f1411(c: Cast) -> None:
-    """Proficiency and damage with three named weapons. Neither half can
-    be said: what a character may pick up is settled in `chargen`, and the
-    weapons reach the spec as printed names rather than refs -- none of
-    the three is a weapon group, so a gate on one would be silently false
-    forever."""
+    """Proficiency and damage with three named weapons. `chargen` can
+    deal a weapon now, but only by ref, and the three reach the spec as
+    printed names -- so there is nothing to name in the grant and nothing
+    for the damage bonus to gate on."""
 
 
 @power("f1415", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("chargen.proficiency()", "spec.weapon_ref()"))
+       reach=PERSONAL, target=SELF, todo=("spec.weapon_ref()",))
 def f1415(c: Cast) -> None:
     """Two more named weapons, blocked the same way as f1411."""
 

@@ -80,9 +80,11 @@ from combat_engine.engine import (
     SavingThrow,
     Size,
     SurgeSpent,
+    Swap,
     Target,
     Trigger,
     TurnStart,
+    Usage,
     When,
     about_me,
     both,
@@ -199,6 +201,12 @@ def _keywords(ref: str) -> frozenset:
 def _reach_kind(ref: str) -> str:
     p = get(ref)
     return p.reach.kind if p is not None and p.reach is not None else ""
+
+
+def _ref_in(c: Cast, *refs: str) -> bool:
+    """A card naming weapons rather than a group; the table keys on ref."""
+    gear = c.world.get(c.me, Gear)
+    return gear is not None and any(w.ref in refs for w in gear.held)
 
 
 def _group_in(c: Cast, *groups: str) -> bool:
@@ -627,7 +635,7 @@ def f2433(c: Cast) -> None:
 # -- the skill-swap cards ---------------------------------------------------
 
 
-_granted("f2103", "f2103b", dropped=SWAP)
+_granted("f2103", "f2103b", swap=Swap(3, Usage.ENCOUNTER))
 
 
 @power("f2103b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
@@ -651,7 +659,7 @@ def f2103b(c: Cast) -> None:
         c.shift(1)
 
 
-_granted("f2104", "f2104b", dropped=SWAP)
+_granted("f2104", "f2104b", swap=Swap(6, utility=True))
 
 
 @power("f2104b", level=1, cls="", usage=ENCOUNTER, action=MOVE,
@@ -667,7 +675,7 @@ def f2104b(c: Cast) -> None:
     c.shift(1)
 
 
-_granted("f2105", "f2105b", dropped=SWAP)
+_granted("f2105", "f2105b", swap=Swap(9, Usage.DAILY))
 
 
 @power("f2105b", level=1, cls="", usage=DAILY, action=STANDARD,
@@ -696,7 +704,7 @@ def f2105b(c: Cast) -> None:
     c.shift(c.speed_of())
 
 
-_granted("f2106", "f2106b", dropped=SWAP)
+_granted("f2106", "f2106b", swap=Swap(3, Usage.ENCOUNTER))
 
 
 @power("f2106b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
@@ -730,7 +738,7 @@ def f2106b(c: Cast) -> None:
     c.watch(DamageApplied, topple, on=c.me, until=When.EONT, once=True)
 
 
-_granted("f2107", "f2107b", dropped=SWAP)
+_granted("f2107", "f2107b", swap=Swap(6, utility=True))
 
 
 @power("f2107b", level=1, cls="", usage=ENCOUNTER,
@@ -751,7 +759,7 @@ def f2107b(c: Cast) -> None:
     c.grants_advantage(on=c.trigger.attacker, until=When.EONT)
 
 
-_granted("f2108", "f2108b", dropped=SWAP)
+_granted("f2108", "f2108b", swap=Swap(9, Usage.DAILY))
 
 
 @power("f2108b", level=1, cls="", usage=DAILY, action=STANDARD,
@@ -797,7 +805,7 @@ def f2108b(c: Cast) -> None:
     c.watch(Hit, follow_up, on=me, until=When.ENCOUNTER)
 
 
-_granted("f2117", "f2117b", dropped=(*SWAP, "c.light()"))
+_granted("f2117", "f2117b", swap=Swap(2, utility=True), dropped=("c.light()",))
 
 
 @power("f2117b", level=1, cls="", usage=ENCOUNTER, action=FREE,
@@ -817,7 +825,7 @@ def f2117b(c: Cast) -> None:
         c.truesight(of=foe, on=who, until=When.EONT)
 
 
-_granted("f2151", "f2151b", dropped=SWAP)
+_granted("f2151", "f2151b", swap=Swap(6, utility=True))
 
 
 @power("f2151b", level=1, cls="", usage=DAILY, action=FREE,
@@ -828,7 +836,7 @@ def f2151b(c: Cast) -> None:
     damage die" nor "reroll any 1 or 2" has anywhere to stand."""
 
 
-_granted("f2152", "f2152b", dropped=SWAP)
+_granted("f2152", "f2152b", swap=Swap(6, utility=True))
 
 
 @power("f2152b", level=1, cls="", usage=DAILY, action=FREE,
@@ -849,7 +857,7 @@ def f2152b(c: Cast) -> None:
         c.push(5, on=who)
 
 
-_granted("f2153", "f2153b", dropped=SWAP)
+_granted("f2153", "f2153b", swap=Swap(6, utility=True))
 
 
 @power("f2153b", level=1, cls="", usage=DAILY, action=FREE,
@@ -869,7 +877,7 @@ def f2153b(c: Cast) -> None:
             c.prone(on=roll.target)
 
 
-_granted("f2154", "f2154b", dropped=SWAP)
+_granted("f2154", "f2154b", swap=Swap(9, utility=True))
 
 
 @power("f2154b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
@@ -879,7 +887,7 @@ def f2154b(c: Cast) -> None:
     neither can be bypassed by an attacker today."""
 
 
-_granted("f2155", "f2155b", dropped=SWAP)
+_granted("f2155", "f2155b", swap=Swap(6, utility=True))
 
 
 @power("f2155b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
@@ -901,7 +909,7 @@ def f2155b(c: Cast) -> None:
     c.watch(Miss, missed, on=me, until=When.EONT, once=True)
 
 
-_granted("f2891", "f2891b", dropped=SWAP)
+_granted("f2891", "f2891b", swap=Swap(6, utility=True))
 
 
 @power("f2891b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
@@ -1081,7 +1089,7 @@ def f2129c(c: Cast) -> None:
               when=lambda ctx: ctx.get("target") == me)
 
 
-_granted("f2130", "f2130b", dropped=SWAP)
+_granted("f2130", "f2130b", swap=Swap(2, utility=True))
 
 
 @power("f2130b", level=1, cls="", usage=DAILY, action=FREE,
@@ -1149,11 +1157,10 @@ def f2156(c: Cast) -> None:
 
 
 @power("f2157", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=PROFICIENCY)
+       reach=PERSONAL, target=SELF, proficiency=("w:short-sword",))
 def f2157(c: Cast) -> None:
-    """Light blade is one of the ten groups the engine carries, so the
-    damage half is exact. The proficiency grant is settled in `chargen`
-    and a character that cannot hold one never meets the gate."""
+    """Light blade is a group the engine carries, so the damage half is
+    exact, and the grant is header data `chargen` reads at build time."""
     me = c.me
     c.bonus("damage", 2, on=me, until=When.ENCOUNTER, kind="feat",
             when=lambda ctx: _group_in(c, "light blade"))
@@ -1192,9 +1199,10 @@ def f2160(c: Cast) -> None:
 @power("f2161", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.forgo_defences()",))
 def f2161(c: Cast) -> None:
-    """Trades what second wind grants for concealment. Second wind is an
-    action rather than a power and announces nothing, so there is no
-    moment at which to make the trade."""
+    """Trades what second wind grants for concealment. `SecondWind` is
+    the moment, but the trade needs the +2 to defences given up, and
+    nothing refuses what `Cast.second_wind` lays -- an untyped bonus on
+    top would add to it rather than replace it."""
 
 
 # -- the martial tail -------------------------------------------------------
@@ -1322,8 +1330,8 @@ def f2452(c: Cast) -> None:
 @power("f2457", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.forgo_defences()",))
 def f2457(c: Cast) -> None:
-    """Forgoes what second wind grants for an attack bonus. Nothing
-    announces a second wind, so there is no moment to trade at."""
+    """Same gap as f2161: the moment is there now, and giving up the
+    defence bonus `Cast.second_wind` lays is not."""
 
 
 @power("f2458", level=1, cls="", usage=ENCOUNTER,
@@ -1440,7 +1448,7 @@ def f2097(c: Cast) -> None:
 
 @power("f2099", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.SHORTBOW", "Weapon.brutal"))
+       todo=("Weapon.brutal", "c.weapon_range()"))
 def f2099(c: Cast) -> None:
     """Both halves are about one named weapon. Bow is a group and
     shortbow is not, and brutal is a weapon property nothing carries."""
@@ -1590,7 +1598,8 @@ def f2149(c: Cast) -> None:
 
 @power("f2241", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(*PROFICIENCY, "chargen.skill_training()"))
+       dropped=("chargen.skill_training()",),
+       proficiency=("w:ki-focus",))
 def f2241(c: Cast) -> None:
     """The power is a ref, so the middle clause is the one that plays.
     Skill training and what a character may wield are both settled when
@@ -1613,42 +1622,57 @@ def f2290(c: Cast) -> None:
 
 @power("f2301", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*PROFICIENCY, "chargen.FALCHION"))
+       proficiency=("w:khopesh", "w:scourge", "w:sickle", "w:scythe",
+                    "w:scimitar", "w:falchion"))
 def f2301(c: Cast) -> None:
-    """Six named weapons rather than a group. Gating the damage bonus on
-    "heavy blade" would hand it to every longsword as well, which is a
-    number quietly too generous in every fight."""
+    """Six named weapons rather than a group, and the weapon table carries
+    all six by ref -- so the bonus is gated exactly. Gating on heavy blade
+    would have handed it to every longsword as well, a number quietly too
+    generous in every fight. Heroic tier, so +2."""
+    c.bonus(
+        "damage", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
+        when=lambda ctx: _ref_in(
+            c, "w:khopesh", "w:scourge", "w:sickle", "w:scythe",
+            "w:scimitar", "w:falchion",
+        ),
+    )
 
 
 @power("f2420", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*PROFICIENCY, "chargen.HAMMER"))
+       proficiency=("w:warhammer", "w:war-pick"))
 def f2420(c: Cast) -> None:
-    """Hammers and picks are printed groups this engine does not carry,
-    so a gate on one is false forever."""
+    """Hammer and pick are printed groups the weapon table carries and
+    `chargen` now deals, so the gate is asked. Heroic tier, so +2."""
+    c.bonus(
+        "damage", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
+        when=lambda ctx: _group_in(c, "hammer", "pick"),
+    )
 
 
 @power("f2441", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, todo=("chargen.retrain_on_rest()",))
 def f2441(c: Cast) -> None:
-    """Swaps a daily between extended rests. Entirely build-time, and
-    the row it names is a placeholder rather than a ref."""
+    """Not the one-way trade `chargen.power_swap` applies: this one
+    exchanges two powers the character already knows, back and forth,
+    once per extended rest. Nothing models a rest as a moment at which
+    a hand is re-dealt."""
 
 
 @power("f2443", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, todo=("chargen.retrain_on_rest()",))
 def f2443(c: Cast) -> None:
     """Same as f2441 for a utility power."""
 
 
 @power("f2445", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, todo=("chargen.retrain_on_rest()",))
 def f2445(c: Cast) -> None:
     """Same as f2441 for an at-will."""
 
 
 @power("f2446", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, todo=("chargen.retrain_on_rest()",))
 def f2446(c: Cast) -> None:
     """Same as f2441 for an encounter power."""
 
@@ -1690,11 +1714,17 @@ def f2893(c: Cast) -> None:
 
 @power("f2894", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*PROFICIENCY, "chargen.SHORTBOW"))
+       proficiency=("w:shortbow",))
 def f2894(c: Cast) -> None:
-    """Three clauses about one named weapon. Bow is a group and shortbow
-    is not, so the damage bonus cannot be narrowed to the right one and
-    `c.as_implement` has nothing to aim at."""
+    """All three clauses. The weapon table keys on the ref, so the bonus
+    is narrowed to the shortbow rather than widened to the bow group --
+    which would have paid a longbow as well. Heroic tier, so +1."""
+    me = c.me
+    holding = lambda ctx: _ref_in(c, "w:shortbow")  # noqa: E731
+    if _ref_in(c, "w:shortbow"):
+        c.as_implement(on=me)
+    c.bonus("damage", 1, on=me, until=When.ENCOUNTER, kind="feat",
+            when=holding)
 
 
 @power("f2897", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -256,12 +256,12 @@ def f2264(c: Cast) -> None:
 
 @power("f2795", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.FALCHION", "Weapon.double"))
+       todo=("c.raise_bonus(ref)",), proficiency=("w:falchion",))
 def f2795(c: Cast) -> None:
-    """The whole benefit is gated on two weapons the chassis does not
-    deal. Written anyway, the grip test would be false in every fight and
-    the row would look finished -- which is the failure this marker
-    exists for. The double one also wants a property nothing models."""
+    """The falchion is a row in the weapon table now, so the grip test is
+    real. What is not is the benefit: it *raises another row's* AC bonus
+    from +1 to +2, and nothing edits a bonus another card laid. Laying a
+    second +1 would come to +1 forever, the two being the same kind."""
 
 
 # -- monk -------------------------------------------------------------------

@@ -833,9 +833,9 @@ def f2861(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        todo=("c.chosen_weapon_group()",))
 def f3181(c: Cast) -> None:
-    """Two gaps. Second wind is an action rather than a power, so it
-    announces nothing a trigger can answer; and "your arena weapons" is
-    a set chosen at build time that nothing stores."""
+    """`SecondWind` is the moment now. "Your arena weapons" is a set
+    chosen at build time that nothing stores, and it is the whole of what
+    the bonus applies to."""
 
 
 @power("f3202", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

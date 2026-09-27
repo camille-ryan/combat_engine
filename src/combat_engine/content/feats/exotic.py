@@ -24,11 +24,13 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     DAILY,
     EACH_CREATURE,
     ENCOUNTER,
     FORT,
     MINOR,
+    NO_TARGET,
     ONE_CREATURE,
     PERSONAL,
     REF,
@@ -40,15 +42,30 @@ from combat_engine.engine import (
     Cast,
     CloseBurst,
     Condition,
+    Hit,
     Keyword,
     Melee,
     Ranged,
+    Trigger,
     When,
     power,
 )
 from combat_engine.engine.query import holding
 
 WEAPON = [Keyword.WEAPON]
+
+
+def _hit_with(what: str):  # noqa: ANN202
+    """A hit landed with one named weapon, for a feat's own rider."""
+
+    def when(world, me: int, ev) -> bool:  # noqa: ANN001
+        return ev.attacker == me and bool(holding(world, me, what))
+
+    return when
+
+
+_hit_with_a_net = _hit_with("net")
+_hit_with_a_whip = _hit_with("whip")
 
 
 def _wielding(what: str):  # noqa: ANN202
@@ -82,10 +99,13 @@ def _swap(ref: str, card: str):  # noqa: ANN202
 
 
 @power("f959", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.BOLA",))
+       reach=PERSONAL, target=SELF, todo=("c.forgo_damage()",),
+       proficiency=("w:bola",))
 def f959(c: Cast) -> None:
-    """Proficiency with a weapon that does not exist, and a trade of
-    damage for a condition after the roll has landed."""
+    """The weapon exists now and `chargen` deals it. What is left is the
+    shape of the rider: the immobilise is bought by giving the damage up,
+    and the critical's knockdown rides inside that same choice, so
+    neither half can be laid without the trade."""
 
 
 _swap("f960", "f960b")
@@ -137,11 +157,16 @@ def f962b(c: Cast) -> None:
 # -- the net ----------------------------------------------------------------
 
 
-@power("f963", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.NET",))
+@power("f963", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you hit with a weapon attack using a net",
+       on=Trigger(Hit, _hit_with_a_net, "you hit with a net"),
+       proficiency=("w:net",))
 def f963(c: Cast) -> None:
-    """Proficiency with a weapon that does not exist, and a rider on
-    hitting with it."""
+    """Both halves. `AT_WILL` because the card prints no limit, and an
+    encounter budget on "when you hit" would spend the feat on the first
+    blow of the fight."""
+    c.condition(Condition.SLOWED, on=c.trigger.target, until=When.EONT)
 
 
 _swap("f964", "f964b")
@@ -191,11 +216,19 @@ def f966b(c: Cast) -> None:
 # -- the whip ---------------------------------------------------------------
 
 
-@power("f967", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.WHIP",))
+@power("f967", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you hit a target with a whip",
+       on=Trigger(Hit, _hit_with_a_whip, "you hit with a whip"),
+       once_per_round=True, dropped=("c.penalty(against=)",))
 def f967(c: Cast) -> None:
-    """Proficiency with a weapon that does not exist, and a once-a-round
-    penalty on hitting with it."""
+    """The penalty plays and "once per round" is the header's own field.
+
+    Dropped: "against a target of your choice". A penalty is laid on the
+    creature taking it and nothing narrows one to the attacks it makes
+    against one particular enemy, so this is the whole of its attack
+    rolls -- wider than the card, and said so rather than left silent."""
+    c.penalty("attack", 2, on=c.trigger.target, until=When.EONT)
 
 
 _swap("f968", "f968b")

@@ -404,15 +404,11 @@ def f472(c: Cast) -> None:
 
 
 @power("f64", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=PROFICIENCY)
+       reach=PERSONAL, target=SELF, proficiency=("w:spear",))
 def f64(c: Cast) -> None:
-    """The damage half plays; the proficiency grant is dropped.
-
-    Which weapon groups a character may pick up is settled by its
-    chassis in `chargen`, and a `Cast` runs on a board with the gear
-    already in hand. Writing the damage bonus without the grant is the
-    right half to keep: a character that cannot hold a spear simply
-    never meets the gate.
+    """Both halves now. The grant is header data `chargen` reads when the
+    character is built, and one ref stands for the whole printed group
+    the way the chassis deals one weapon per proficiency line.
     """
     me = c.me
     c.bonus(
@@ -427,21 +423,19 @@ def f64(c: Cast) -> None:
 
 @power("f69", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("chargen.proficiency()", "chargen.HAMMER"))
+       proficiency=("w:battleaxe", "w:warhammer"))
 def f69(c: Cast) -> None:
     """Same shape as f64, for axes and hammers.
 
-    **"hammer" is not one of this engine's weapon groups.** The set is
-    axe, bow, crossbow, heavy blade, implement, light blade, mace,
-    spear, staff and unarmed, so that arm of the gate was false in
-    every fight and the row paid only on axes. `chargen` hands out no
-    hammer at all, which is the gap rather than the group name -- the
-    axe half plays and the hammer half is named.
+    Hammer *is* a printed group and the weapon table carries it; what
+    the engine had was no hammer to hand anybody, so the arm of the gate
+    reading it was false in every fight. The grant is what makes it
+    true, and both halves of the card are written.
     """
     me = c.me
     c.bonus(
         "damage", 2, on=me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: _wielding_group(c, "axe"),
+        when=lambda ctx: _wielding_group(c, "axe", "hammer"),
     )
 
 

@@ -671,13 +671,13 @@ def f2081(c: Cast) -> None:
 
 @power("f2194", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.forgo_heal()",))
+       todo=("c.forgo_healing()",))
 def f2194(c: Cast) -> None:
     """Regain nothing from a second wind and take a +2 to attacks, saves
-    and damage instead. Second wind is an action rather than a power and
-    announces only the surge any healing spends, and declining the
-    healing is the same gap f2081 names. The errata's deletion of
-    defences from the list is already reflected: they are not written."""
+    and damage instead. `SecondWind` is the moment; declining the healing
+    is the same gap f2081 names, and it is the whole row. The errata's
+    deletion of defences from the list is already reflected: they are not
+    written."""
 
 
 @power("f2195", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

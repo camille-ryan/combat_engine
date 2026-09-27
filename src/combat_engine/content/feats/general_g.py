@@ -294,11 +294,11 @@ def f934(c: Cast) -> None:
 
 
 @power("f1004", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=PROFICIENCY)
+       reach=PERSONAL, target=SELF, proficiency=("w:greataxe",))
 def f1004(c: Cast) -> None:
-    """The damage half plays; the proficiency grant is dropped, as `f64`
-    and `f69` drop the same sentence. A character that cannot hold the
-    weapon simply never meets the gate."""
+    """Both halves, as `f64` and `f69` now write the same sentence. One
+    military two-handed weapon stands for the whole printed line, which
+    is what the chassis does with a proficiency line of its own."""
     me = c.me
 
     def two_handed(ctx: dict[str, Any]) -> bool:
@@ -509,15 +509,14 @@ def f1060(c: Cast) -> None:
 
 
 @power("f1122", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=PROFICIENCY,
+       reach=PERSONAL, target=SELF,
        trigger="you hit with p1831",
        on=Trigger(Hit, _hit_with("p1831"), "you hit with that racial power"))
 def f1122(c: Cast) -> None:
-    """Twice the enhancement of the magic implement in hand. Whether that
-    implement is one *your arcane class* may use is a proficiency
-    question settled when the character is built, and is the dropped
-    half -- a character holding an implement it cannot use never gets
-    here in play."""
+    """Twice the enhancement of the magic implement in hand. Whether it
+    is one *your arcane class* may use needs nothing here: `chargen`
+    deals a character only what it may carry, so anything in hand
+    already answers the clause."""
     magic = [w.enhancement for w in c.held(what="magic") if w.enhancement]
     if magic:
         c.flat(2 * max(magic), on=c.trigger.target)
@@ -983,12 +982,14 @@ def f922(c: Cast) -> None:
 
 
 @power("f1115", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROFICIENCY)
+       reach=PERSONAL, target=SELF, out_of_combat=True,
+       proficiency=("w:wand",))
 def f1115(c: Cast) -> None:
-    """The whole benefit is "you can now use that kind of implement",
-    which is settled by the chassis when the character is built. Unlike
-    `f64` there is no second half to keep, so this is a `todo` rather
-    than a `dropped`."""
+    """The whole benefit is "you can now use that kind of implement", and
+    it lands when the character is built. Nothing is left for a fight,
+    which is what `out_of_combat` says. The second sentence is about an
+    implement that is *also a weapon*; a wand is not one, so it has no
+    subject here."""
 
 
 @power("f1125", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

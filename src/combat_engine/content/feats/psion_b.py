@@ -181,11 +181,18 @@ def f3300(c: Cast) -> None:
 
 
 @power("f3291", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF, dropped=("p2473", "c.bonus(dtype=)",))
 def f3291(c: Cast) -> None:
     """Standing inside a zone of one's own is asked per damage roll, since
     the psion walks in and out of it. The extra 3 is psychic and a damage
-    modifier carries no type, so that word is the half that is missing."""
+    modifier carries no type, so that word is one half that is missing.
+
+    **`p2473` is declared nowhere in the tree.** The zone this gates on
+    therefore never exists, so the gate is false in every fight and the
+    row pays nothing. Marked rather than left looking finished: a ref
+    is a symbol `blocked.py` resolves against the registry, so this
+    goes red the day that power is written.
+    """
     me = c.me
 
     def inside(ctx: dict[str, Any]) -> bool:

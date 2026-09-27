@@ -192,6 +192,23 @@ CREATE TABLE race (
 CREATE TABLE prereq_term (
   ref TEXT PRIMARY KEY, kind TEXT, uses INTEGER
 );
+
+-- The base weapons. Every `Weapon` constant in `chargen` was transcribed
+-- by hand off a page, and a hand-typed damage die or proficiency bonus is
+-- a number nothing can check -- every power would still work and the
+-- character would quietly be wrong. Seventeen printed weapon groups are
+-- in here, of which `chargen` used to deal ten, so "you gain proficiency
+-- with all flails" was false because the engine had no flail rather than
+-- because it had no rule.
+--
+-- `ref` is `w:<slug>`, which is what `Weapon.ref` already carried and what
+-- a printed base-item restriction is matched against.
+CREATE TABLE weapon (
+  ref TEXT PRIMARY KEY, id INTEGER, category TEXT, hands TEXT,
+  melee INTEGER, damage TEXT, proficiency INTEGER, grp TEXT,
+  reach INTEGER, range_short INTEGER, range_long INTEGER, properties TEXT
+);
+CREATE INDEX weapon_group ON weapon(grp, category);
 """
 
 
@@ -201,6 +218,7 @@ class Report:
     abilities: int = 0
     powers: int = 0
     classes: int = 0
+    weapons: int = 0
     features: int = 0
     seconds: int = 0
     crossed: int = 0
@@ -228,6 +246,7 @@ class Report:
             f"  abilities   {self.abilities:6d}",
             f"powers        {self.powers:6d}",
             f"classes       {self.classes:6d}",
+            f"weapons       {self.weapons:6d}  (base weapons, numbers off the page)",
             f"features      {self.features:6d}  (class features, new)",
             f"second cards  {self.seconds:6d}  (a card printed inside another entry)",
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
@@ -290,6 +309,7 @@ def build() -> Report:
     _monsters(source, out, report, names)
     _powers(source, out, report, names)
     report.classes = _classes(source, out)
+    report.weapons = _weapons(source, out)
     report.features = _features(source, out, names)
     report.companions = _companions(source, out, names)
     report.build_powers = _build_powers(source, out, names)
@@ -482,6 +502,86 @@ def _classes(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
         written += 1
     return written
 
+
+#: "Military two-handed melee weapon", and the shapes the double weapons
+#: and the garrote print instead -- "Superior double melee weapon",
+#: "Superior two-handed weapon". The middle word is how many hands, which
+#: is not always one of the two obvious answers.
+_ARM = re.compile(
+    r"^(Simple|Military|Superior|Improvised)\s+([\w-]+)"
+    r"(?:\s+(melee|ranged))?\s+weapon\s*$",
+    re.I | re.M,
+)
+_DAMAGE = re.compile(r"^Damage\s*:\s*(\d+d\d+)", re.M)
+_PROFICIENT = re.compile(r"^Proficient\s*:\s*\+?(\d+)", re.M)
+_RANGE = re.compile(r"^Range\s*:\s*(\d+)\s*/\s*(\d+)", re.M)
+_SECTION = re.compile(
+    r"^(Properties|Group)\s*:\s*\n(.*?)(?=\n(?:Properties|Group)\s*:|\nPublished|\Z)",
+    re.S | re.M,
+)
+#: An entry inside one of those two sections: the term, then its glossary
+#: paragraph in brackets. The paragraph is the publisher's prose and is
+#: thrown away -- only the term is a mechanical fact.
+_TERM = re.compile(r"([A-Z][A-Za-z\u2019' -]*?)\s*\(", re.M)
+
+
+def _slug(name: str) -> str:
+    """"Short sword" -> "short-sword", which is the ref `chargen` already used."""
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def _weapons(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
+    """The base weapons, off the equipment pages.
+
+    A base weapon is four numbers and two lists -- damage die, proficiency
+    bonus, reach, range, properties, group -- and `chargen` had sixteen of
+    them typed in by hand. That was tolerable while the ten groups it dealt
+    were the only ones any row asked about, and stopped being so the moment
+    a feat said "you gain proficiency with all flails": the clause was
+    false because nothing in the engine was a flail, which reads exactly
+    like a rule that does not work.
+
+    Identified by the Proficient line, which every weapon prints and no
+    other piece of equipment does. Implements are deliberately not here:
+    an orb has no damage die and no proficiency bonus, so there is no stat
+    line to load and `chargen` declares them itself.
+    """
+    written = 0
+    for row in source.execute(
+        "SELECT ID, Name, PlainTxt FROM Item "
+        "WHERE Category IN ('Weapon', 'Equipment') ORDER BY ID"
+    ):
+        text = row["PlainTxt"] or ""
+        arm = _ARM.search(text)
+        damage = _DAMAGE.search(text)
+        proficient = _PROFICIENT.search(text)
+        if not (arm and damage and proficient):
+            continue
+        sections = {kind.lower(): body for kind, body in _SECTION.findall(text)}
+        groups = [g.strip().lower() for g in _TERM.findall(sections.get("group", ""))]
+        properties = [
+            p.strip().lower() for p in _TERM.findall(sections.get("properties", ""))
+        ]
+        ranged = _RANGE.search(text)
+        out.execute(
+            "INSERT OR REPLACE INTO weapon VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                f"w:{_slug(row['Name'])}",
+                row["ID"],
+                arm.group(1).lower(),
+                arm.group(2).lower(),
+                int((arm.group(3) or "melee").lower() == "melee"),
+                damage.group(1),
+                int(proficient.group(1)),
+                groups[0] if groups else "",
+                2 if "reach" in properties else 1,
+                int(ranged.group(1)) if ranged else None,
+                int(ranged.group(2)) if ranged else None,
+                json.dumps(properties + groups[1:]),
+            ),
+        )
+        written += 1
+    return written
 
 
 #: A feature heading inside the class-features section: the page sets each
@@ -925,7 +1025,7 @@ def _cross_reference_rest(
 #: each -- and the bracket was all that stopped the pattern matching.
 #: 39 of the 41 such labels resolve, and the 82 rows carrying
 #: `spec.power_ref()` were waiting on exactly this.
-_LABEL = re.compile(r"^([A-Z][\w' ]{2,40}?)\s*(?:\([a-z]+\)\s*)?:\s", re.M)
+_LABEL = re.compile(r"^([A-Z][\w' ]{2,40}?)\s*(?:\([A-Za-z]+\)\s*)?:\s", re.M)
 
 
 #: "the wizard's **scorching burst** power", "you regain the use of your

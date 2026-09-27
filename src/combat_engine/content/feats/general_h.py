@@ -30,11 +30,13 @@ strangling cards pay out rather than dropping their payout clause.
 so "against ongoing necrotic damage" and "against charm or fear effects"
 are both sayable -- f1230, f1241, f1260 and f1328 all narrow this way.
 
-**The Associated Powers rows here are all prose.** Where the spec does
-print a ref -- p1061, p620, p997, p1063 -- the clause hung on it reaches
-inside another row's granted attack or its miss, so even those are not
-hangable. Each carries `spec.power_ref()` and whatever second symbol
-its ref'd clause wanted.
+**The Associated Powers rows here are no longer prose.** The label
+matcher reads a bracketed class now, so thirteen of the fourteen cards
+name their exploits by ref and eight of them have a clause that can be
+hung. `exploits._riders` is the machine for that shape and they use it.
+The six that stay marked are re-aimed at what the clause actually wants
+-- only f1237, whose brackets carry a capitalised class, is still
+waiting on a name.
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.feats.exotic import _swap
+from combat_engine.content.feats.exploits import _riders
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -71,6 +74,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Miss,
+    PowerUsed,
     Ranged,
     SurgeSpent,
     Trigger,
@@ -174,11 +178,12 @@ def _dtype_of(ref: str) -> DamageType:
 # -- the multiclass feats ---------------------------------------------------
 
 
-@_trait("f1218", todo=(*BORROW, *PROFICIENCY))
+@_trait("f1218", todo=BORROW, proficiency=("w:wand",))
 def f1218(c: Cast) -> None:
     """Skill training, another class's feature named in prose, and that
-    class's implements. The training is not a fight and the other two
-    are the two markers."""
+    class's implements. The implements are header data `chargen` reads
+    at build time; the training is not a fight; the feature is the one
+    marker left."""
 
 
 @_trait("f1219", todo=BORROW)
@@ -186,11 +191,12 @@ def f1219(c: Cast) -> None:
     """Two more features of the same class, both named in prose."""
 
 
-@_trait("f1220", todo=(*BORROW, *PROFICIENCY))
+@_trait("f1220", todo=BORROW, proficiency=("w:longsword",))
 def f1220(c: Cast) -> None:
     """The spec prints a ref for the feature -- and `cf:swordmage-f0` is
     not declared anywhere in the tree, so the grant has nothing to hand
-    over. Same hold as the prose ones, from the other side."""
+    over. That class's implement is a blade, which is why the grant is
+    a weapon rather than one of the seven implements."""
 
 
 @_trait("f1221", todo=BORROW)
@@ -221,7 +227,7 @@ def f1223(c: Cast) -> None:
     )
 
 
-@_trait("f1224", dropped=PROFICIENCY)
+@_trait("f1224", proficiency=("w:dagger", "w:staff"))
 def f1224(c: Cast) -> None:
     """"Choose a damage type" is a build choice. `c.element` is the one
     place a chassis records one, and where it has none the choice is put
@@ -234,7 +240,7 @@ def f1224(c: Cast) -> None:
 
 @power("f1225", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=Ranged(10), target=ONE_CREATURE,
-       dropped=("c.curse_damage()", "chargen.proficiency()"))
+       dropped=("c.curse_damage()",), proficiency=("w:rod", "w:wand"))
 def f1225(c: Cast) -> None:
     """The one row here that costs an action. `c.curse` is an ordinary
     relational verb -- two cursers on a board read their own -- so the
@@ -410,11 +416,13 @@ def f1270(c: Cast) -> None:
 # here unofferable rather than merely unequipped.
 
 
-@_trait("f1252", todo=(*PROFICIENCY, "Weapon.double"))
+@_trait("f1252", todo=("Weapon.double",),
+        proficiency=("w:spiked-chain",))
 def f1252(c: Cast) -> None:
-    """Proficiency with a weapon the table does not have, and then four
-    sentences of weapon data about it -- two ends, two groups, two
-    properties. All of it is a row in the weapon table, not a body."""
+    """The proficiency lands: the weapon table carries this one and
+    `chargen` deals it. What is left is the four sentences that make it a
+    *double* weapon -- two ends, two groups, two properties -- and a
+    `Weapon` has one of each."""
 
 
 _swap("f1253", "f1253b")
@@ -481,12 +489,12 @@ def f1255b(c: Cast) -> None:
     c.on_sustain(hold, lambda: c.damage(c.w(), on=victim))
 
 
-@_trait("f1277", todo=(*PROFICIENCY, "c.weapon_range()"))
+@_trait("f1277", todo=("c.weapon_range()",),
+        proficiency=("w:blowgun",))
 def f1277(c: Cast) -> None:
-    """Proficiency with a weapon the table does not have, a free-action
-    reload, a longer range and the high crit property -- every clause is
-    weapon data. The rogue rider is a class feature reading the same
-    absent weapon."""
+    """The proficiency lands. What is left is the clauses that rewrite
+    the weapon itself -- a free-action reload, a longer range, the high
+    crit property -- and nothing edits a `Weapon` in place."""
 
 
 _swap("f1276", "f1276b")
@@ -546,11 +554,12 @@ def f1279b(c: Cast) -> None:
         c.dazed(until=When.SAVE_ENDS)
 
 
-@_trait("f1288", todo=PROFICIENCY)
+@_trait("f1288", todo=("c.escape()",), proficiency=("w:garrote",))
 def f1288(c: Cast) -> None:
-    """Proficiency with a weapon the table does not have, and three
-    clauses that all begin "when you use a garrote". Nothing is true
-    without the weapon."""
+    """The proficiency lands. The three clauses beneath it are all about
+    a grab that is being *escaped from* -- a penalty to the escape, and
+    advantage for each turn the grab is maintained -- and nothing
+    announces an escape attempt for either to hang on."""
 
 
 _swap("f1289", "f1289b")
@@ -788,93 +797,282 @@ def f1295b(c: Cast) -> None:
 
 # -- the Associated Powers family -------------------------------------------
 #
-# Every clause in every one of these names its power in prose. Where the
-# spec does resolve a ref, the clause hung on it reaches into an ally's
-# granted attack, a miss, or another row's targeting -- so the ref buys
-# nothing and each row names the second symbol its clause wanted too.
+# One printed shape: a line of preamble, then a clause per named exploit.
+# `exploits._riders` is the machine -- a trait arming one `Hit` watcher,
+# the clause picked by which power fired -- and every row here with a
+# hangable clause uses it. Three things decided which clauses those were.
+#
+# **"The melee version of this exploit" is askable.** `resolve.attack`
+# sets `branch` on the `Hit` as a plain attribute and `Power.reach_of`
+# says which range that half printed, so a rider on a melee-or-ranged row
+# tells the two apart instead of paying out on both.
+#
+# **A row's second swing cannot be told from its first.** The riposte four
+# of these cards ride on is rolled longhand inside its own body, so its
+# `Hit` carries the same `power` as the opening attack and a rider hung
+# there would pay twice. Those clauses are `c.on_riposte()`.
+#
+# **A clause that is not about hitting does not belong on `Hit`.** f1302's
+# two writable clauses are about *the target of* the exploit, hit or not,
+# so that row is written by hand on `PowerUsed` -- which is announced
+# before the body and carries `targets`, both of which suit it.
+
+#: The four holds f1300's clauses name together.
+_HELD_FAST = (
+    Condition.IMMOBILIZED,
+    Condition.RESTRAINED,
+    Condition.STUNNED,
+    Condition.UNCONSCIOUS,
+)
+
+#: The four creature types every clause of f1298 names together.
+_NAMED_KINDS = ("demon", "drow", "orc", "spider")
+
+
+def _melee_half(ev: Any) -> bool:
+    """Was this the melee half of a melee-or-ranged row?
+
+    `resolve.attack` hangs `branch` on the `Hit` after emitting it, the
+    same way it hangs `opportunity` and `charge`, so it wants a
+    `getattr`. A single-range row answers off branch 0, which is its one
+    range -- so this is also simply "was it a melee attack".
+    """
+    p = get(getattr(ev, "power", ""))
+    return p is not None and p.reach_of(getattr(ev, "branch", 0)).kind == "melee"
+
+
+def _surprise_round(c: Cast) -> bool:
+    """`Encounter.start` lays `Condition.SURPRISED` on whoever was caught
+    and lifts every one of them when the round ends, so an enemy still
+    holding it *is* the surprise round. The encounter's own `_surprise`
+    flag is private and there is no query for it."""
+    return any(c.is_(Condition.SURPRISED, on=foe) for foe in c.enemies())
+
+
+# -- the clauses ------------------------------------------------------------
+
+
+def _slow_if_open(c: Cast, ev: Any) -> None:
+    if _melee_half(ev) and c.had_advantage(ev):
+        c.slowed(on=ev.target, until=When.EONT)
+
+
+def _slide_if_open(c: Cast, ev: Any) -> None:
+    if _melee_half(ev) and c.had_advantage(ev):
+        c.slide(1, on=ev.target)
+
+
+def _is_named_kind(c: Cast, who: int) -> bool:
+    return any(c.is_kind(word, on=who) for word in _NAMED_KINDS)
+
+
+def _temp_hp_off_kind(c: Cast, ev: Any) -> None:
+    if c.int_mod > 0 and _is_named_kind(c, ev.target):
+        c.temp_hp(c.int_mod, on=c.me)
+
+
+def _extra_off_kind(c: Cast, ev: Any) -> None:
+    if c.int_mod > 0 and _is_named_kind(c, ev.target):
+        c.flat(c.int_mod, on=ev.target)
+
+
+def _ongoing_if_alone(c: Cast, ev: Any) -> None:
+    foe = ev.target
+    if c.wis_mod <= 0:
+        return
+    if any(other != foe for other in c.within(1, of=foe, side="enemy")):
+        return
+    c.ongoing(c.wis_mod, on=foe)
+
+
+def _extra_if_held(c: Cast, ev: Any) -> None:
+    if c.con_mod > 0 and any(c.is_(hold, on=ev.target) for hold in _HELD_FAST):
+        c.flat(c.con_mod, on=ev.target)
+
+
+def _mark_the_hit(c: Cast, ev: Any) -> None:
+    c.mark(on=ev.target)
+
+
+def _advantage_in_surprise(c: Cast, ev: Any) -> None:
+    if _surprise_round(c):
+        c.grants_advantage(on=ev.target, until=When.EONT, to="me")
+
+
+def _extra_in_surprise(c: Cast, ev: Any) -> None:
+    if not _surprise_round(c):
+        return
+    c.flat(c.str_mod if _melee_half(ev) else c.dex_mod, on=ev.target)
+
+
+# -- the rows ---------------------------------------------------------------
 
 
 @_trait("f1237", todo=NAMED)
 def f1237(c: Cast) -> None:
-    """Four clauses, four prose names, all of them about a spiked chain
-    the weapon table does not have either."""
+    """The one card of the family whose clauses are still printed names:
+    its brackets carry a capitalised class, which the label matcher does
+    not read. All four are about a spiked chain the weapon table does not
+    have either."""
 
 
-@_trait("f1296", todo=NAMED)
+@_trait("f1296", todo=("c.cover_from()", "c.forgo_attack()"))
 def f1296(c: Cast) -> None:
-    """Two clauses about staying hidden through a ranged attack."""
+    """Both refs resolve now and neither clause turns on the hit. The
+    first is a free Stealth check made *before* a ranged attack, on
+    condition of having moved into an obscured space or gained cover --
+    and nothing asks what cover a creature has. The second withdraws the
+    second of a two-attack row to stay hidden, which no verb does to a
+    row that is already swinging."""
 
 
-@_trait("f1297", todo=NAMED)
-def f1297(c: Cast) -> None:
-    """Four clauses, each a small rider on hitting a creature that grants
-    combat advantage."""
+# p1000's clause slows *instead of* the push its row prints, and the
+# ranger's beast clause is the one name here the matcher still misses.
+_riders("f1297", {
+    "p917": _slow_if_open,
+    "p2248": _slide_if_open,
+}, dropped=(*NAMED, "c.instead_of()"))
+
+# p1061 adds to the attack roll of the basic attack that row hands an
+# ally; p653's clause rides the riposte, which shares its row's `Hit`.
+_riders("f1298", {
+    "p2099": _temp_hp_off_kind,
+    "p87": _extra_off_kind,
+}, dropped=("c.on_granted_basic()", "c.on_riposte()"))
+
+# p315 is the granted-attack hold again, p653 the riposte, and the
+# ranger's beast clause is still a printed name.
+_riders("f1299", {
+    "p992": _ongoing_if_alone,
+}, dropped=(*NAMED, "c.on_granted_basic()", "c.on_riposte()"))
+
+# p997's clause pays out **on a miss**, which a rider hung on `Hit` never
+# sees; p1061 is the granted attack again.
+_riders("f1300", {
+    "p917": _extra_if_held,
+    "p704": _extra_if_held,
+}, dropped=("c.on_granted_basic()", "c.on_miss(ref)"))
 
 
-@_trait("f1298", todo=(*NAMED, "c.on_granted_basic()"))
-def f1298(c: Cast) -> None:
-    """Three prose names and p1061, whose clause adds to the attack roll
-    of the basic attack that row hands an ally -- a roll made inside
-    another row with nothing announcing it."""
-
-
-@_trait("f1299", todo=NAMED)
-def f1299(c: Cast) -> None:
-    """Four clauses, each turning a modifier into ongoing damage."""
-
-
-@_trait("f1300", todo=(*NAMED, "c.on_miss(ref)"))
-def f1300(c: Cast) -> None:
-    """Two prose names, p1061 with the same granted-attack hold as f1298,
-    and p997 whose clause pays out **on a miss** -- which is the other
-    half of the hold, since a rider hung on `Hit` never sees one."""
-
-
-@_trait("f1301", todo=NAMED)
+@_trait("f1301", todo=("c.instead_of()",))
 def f1301(c: Cast) -> None:
-    """Two clauses trading a printed shift for a longer move."""
+    """Both refs resolve. Both clauses rewrite the movement their row
+    already prints -- a shift traded for a move, and a move allowed only
+    if the row's own optional move was declined -- and that choice is
+    made inside the other body with nothing announcing it."""
 
 
-@_trait("f1302", todo=NAMED)
+@_trait("f1302", dropped=("c.instead_of()", "query.provoked_by()"))
 def f1302(c: Cast) -> None:
-    """Four clauses, each a defence bonus against one named creature or
-    against the openings a printed movement gives."""
+    """Two of the four clauses are the same sentence on two rows: a
+    defence bonus against *the target of* the exploit, which does not
+    wait for a hit. So this row is written by hand on `PowerUsed` rather
+    than through `_riders` -- the use is announced before the body and
+    carries `targets`, and hanging it on `Hit` would pay out on hits
+    only, which is less often than printed.
+
+    "Against that enemy" is a `when=` on the attacker, which the defence
+    query is handed. No type word is printed, so the bonus is untyped.
+
+    Dropped: p971's clause lengthens the move its row prints, and
+    p1505's covers only the opportunity attacks *that* movement provokes
+    -- gating on `opportunity` alone would also pay for the openings a
+    ranged attack gives, which is more often than printed.
+    """
+    me = c.me
+    guarded = {"p4541", "p2620"}
+
+    def on_use(ev: Any) -> None:
+        if ev.actor != me or ev.power not in guarded or c.cha_mod <= 0:
+            return
+        for foe in ev.targets:
+            for defence in (AC, FORT, REF, WILL):
+                c.bonus(
+                    defence, c.cha_mod, on=me, until=When.SONT,
+                    when=lambda ctx, foe=foe: ctx.get("attacker") == foe,
+                )
+
+    c.watch(PowerUsed, on_use, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1303", todo=NAMED)
+@_trait("f1303", todo=("c.as_basic(ref)", "c.instead_of()", "c.no_provoke(when=)"))
 def f1303(c: Cast) -> None:
-    """Three prose names and p620, whose clause widens which ally that
-    row may pick -- targeting inside another row, not a rider on it."""
+    """All four refs resolve and none of the clauses is a rider. Two put
+    an exploit in the place of the melee basic a charge swings; one
+    rewrites the movement its row prints; one widens which ally p620 may
+    pick, which is that row's targeting rather than anything hung on it.
+    """
 
 
-@_trait("f1304", todo=NAMED)
-def f1304(c: Cast) -> None:
-    """Four clauses, all attack penalties on a named row's target."""
+# p4541's clause waits on the basic attack that row hands an ally, p653's
+# on the riposte, and p87's on both of its two attacks landing.
+_riders("f1304", {
+    "p992": _mark_the_hit,
+}, dropped=("c.on_granted_basic()", "c.on_riposte()", "c.hit_twice()"))
 
-
-@_trait("f1305", todo=NAMED)
+@_trait("f1305", todo=("p2473", "c.move_zone(with_me=)", "c.zone_exempt()"))
 def f1305(c: Cast) -> None:
-    """Every clause is about `p2473`'s zone, which is now a ref -- but
-    three of the four exploits the clauses ride on are still prose
-    names, and p620's clause reaches inside that row's own targeting."""
+    """Every ref on this card resolves, and every clause is still false.
+    All four are about the zone `p2473` lays, and **`p2473` is declared
+    nowhere in the tree** -- three files already read a zone whose label
+    carries that ref and none of them can ever find one. Written against
+    it, the two splash clauses would be silently false forever, which is
+    the failure this project exists to catch, so they are not written.
+
+    The other two clauses want a zone that follows its owner and a named
+    ally exempted from it, neither of which has a verb.
+    """
+
+# p2105 and p4542 both put the exploit in the place of a charge's melee
+# basic attack, which is the same hold f1303 carries.
+_riders("f1306", {
+    "p2248": _advantage_in_surprise,
+    "p87": _extra_in_surprise,
+}, dropped=("c.as_basic(ref)",))
 
 
-@_trait("f1306", todo=NAMED)
-def f1306(c: Cast) -> None:
-    """Four clauses about the surprise round. `Condition.SURPRISED`
-    exists, so the round is askable; the powers are not."""
-
-
-@_trait("f1307", todo=(*NAMED, "c.on_shift_away()"))
+@_trait("f1307", todo=("c.apply_poison()", "c.on_shift_away()", "c.instead_of()"))
 def f1307(c: Cast) -> None:
-    """Three prose names and p1063, whose clause waits for the target to
-    shift after the fact -- the same hold four other rows carry."""
+    """All four refs resolve. Three clauses are about a poison applied to
+    a weapon and the secondary attack it makes, which is not modelled;
+    the fourth waits for the target to shift after the fact, the hold
+    four other rows in the tree already carry."""
 
 
-@_trait("f1308", todo=(*NAMED, "c.on_granted_basic()"))
+@_trait("f1308", dropped=("c.as_basic(ref)", "c.on_granted_basic()",
+                          "c.on_riposte()"))
 def f1308(c: Cast) -> None:
-    """Three prose names and p1061 again, handing combat advantage to the
-    ally for the basic attack that row grants."""
+    """Written by hand rather than through `_riders`: p4368's clause needs
+    a memory of what happened on somebody else's turn, which a table of
+    clauses has nowhere to keep.
+
+    "During that enemy's turn" is `c.turn_of`, so an enemy's immediate
+    action against me does not arm it. "During your next turn" is the
+    round it was armed in or the one after, which is what "next turn"
+    comes to whichever side of me the enemy acts on.
+
+    Dropped: p2620 puts the exploit in the place of a class feature's
+    melee basic, p1061 hands an ally combat advantage for the attack it
+    grants, and p653's clause rides the riposte, whose `Hit` carries the
+    same `power` as the opening swing.
+    """
+    me = c.me
+    #: enemy -> the round in which it hit me or my beast, on its own turn.
+    stung: dict[int, int] = {}
+
+    def watch_hits(ev: Hit) -> None:
+        mine = {me, c.beast()} - {None}
+        if ev.target in mine and ev.attacker not in mine:
+            if c.turn_of() == ev.attacker:
+                stung[ev.attacker] = c.world.round
+            return
+        if ev.attacker != me or ev.power != "p4368" or c.wis_mod <= 0:
+            return
+        armed = stung.get(ev.target)
+        if armed is not None and c.world.round <= armed + 1:
+            c.flat(c.wis_mod, on=ev.target)
+
+    c.watch(Hit, watch_hits, on=me, until=When.ENCOUNTER)
 
 
 # -- the fellowship family --------------------------------------------------

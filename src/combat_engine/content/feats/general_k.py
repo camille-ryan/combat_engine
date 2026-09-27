@@ -81,8 +81,10 @@ from combat_engine.engine import (
     SavingThrow,
     SecondWind,
     SkillCheck,
+    Swap,
     Trigger,
     TurnStart,
+    Usage,
     Wall,
     When,
     about_me,
@@ -345,12 +347,13 @@ def f1697(c: Cast) -> None:
 
 @power("f1704", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("SkillCheck.target", "chargen.SHORT_SWORD"))
+       todo=("SkillCheck.target",), proficiency=("w:short-sword",))
 def f1704(c: Cast) -> None:
-    """Both halves are blind. `SkillCheck` says who rolled and against
-    what skill but not who it was aimed at, so "that enemy" has no
-    referent; and the damage bonus is for one named weapon, which is a
-    build-time item rather than a group this row can gate on."""
+    """The grant and the damage half are both writable now -- the weapon
+    table keys on the ref -- but the advantage half is the whole reason
+    the row is offered, and `SkillCheck` says who rolled and against what
+    skill without saying who it was aimed at. "That enemy" has no
+    referent, so the row stays refused rather than paying half."""
 
 
 @power("f1751", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -622,10 +625,11 @@ def f1721(c: Cast) -> None:
 
 
 @power("f1772", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=PROFICIENCY)
+       reach=PERSONAL, target=SELF, proficiency=("w:bastard-sword",))
 def f1772(c: Cast) -> None:
-    """The damage half plays; which weapons a character may pick up is
-    its chassis's business, and a `Cast` runs with the gear in hand."""
+    """The damage half plays and the grant is header data. One superior
+    heavy blade stands for the printed list, which is that group plus
+    two weapons already in it."""
     me = c.me
     c.bonus("damage", 2, on=me, until=When.ENCOUNTER, kind="feat",
             when=lambda ctx: _wielding_group(c, "heavy blade"))
@@ -982,7 +986,7 @@ def f2014b(c: Cast) -> None:
         c.teleport(3, who=friend)
 
 
-_granted("f1713", "f1713b", dropped=SWAP)
+_granted("f1713", "f1713b", swap=Swap(16, utility=True))
 
 
 @power("f1713b", level=1, cls="", usage=DAILY, action=STANDARD,
@@ -1080,7 +1084,7 @@ def f1763b(c: Cast) -> None:
         c.penalty("attack", 2, until=When.EONT, once=True)
 
 
-_granted("f1760", "f1760b", dropped=SWAP)
+_granted("f1760", "f1760b", swap=Swap(3, Usage.ENCOUNTER))
 
 
 @power("f1760b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
@@ -1105,7 +1109,7 @@ def f1760b(c: Cast) -> None:
     c.watch(AttackDeclared, riposte, on=c.me, until=When.EONT, once=True)
 
 
-_granted("f1761", "f1761b", dropped=SWAP)
+_granted("f1761", "f1761b", swap=Swap(3, Usage.ENCOUNTER))
 
 
 @power("f1761b", level=1, cls="", usage=ENCOUNTER, action=REACTION,
@@ -1129,7 +1133,7 @@ def f1761b(c: Cast) -> None:
         c.surge(on=hurt)
 
 
-_granted("f1764", "f1764b", dropped=SWAP)
+_granted("f1764", "f1764b", swap=Swap(9, Usage.DAILY))
 
 
 @power("f1764b", level=1, cls="", usage=DAILY, action=STANDARD,
@@ -1176,7 +1180,7 @@ def f1764b(c: Cast) -> None:
     c.watch(DamageApplied, aid, on=c.me, until=When.ENCOUNTER)
 
 
-_granted("f1765", "f1765b", dropped=SWAP)
+_granted("f1765", "f1765b", swap=Swap(6, utility=True))
 
 
 @power("f1765b", level=1, cls="", usage=ENCOUNTER, action=INTERRUPT,
@@ -1198,7 +1202,7 @@ def f1765b(c: Cast) -> None:
         c.bonus(defence, 3, on=friend, until=When.SONT)
 
 
-_granted("f1766", "f1766b", dropped=SWAP)
+_granted("f1766", "f1766b", swap=Swap(9, Usage.DAILY))
 
 
 @power("f1766b", level=1, cls="", usage=DAILY, action=FREE,
@@ -1220,7 +1224,7 @@ def f1766b(c: Cast) -> None:
                    damage_bonus=c.roll("1d10"))
 
 
-_granted("f1767", "f1767b", dropped=SWAP)
+_granted("f1767", "f1767b", swap=Swap(6, utility=True))
 
 
 @power("f1767b", level=1, cls="", usage=DAILY, action=REACTION,

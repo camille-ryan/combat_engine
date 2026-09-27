@@ -125,9 +125,14 @@ def holding(world: World, eid: int, what: str = "") -> list[Any]:
     if what == "magic":
         return [w for w in out if w.enhancement > 0]
     if what:
+        # By ref as well as by group. A card naming one weapon -- "you
+        # must be wielding a whip" -- has no group to ask for: a whip is
+        # filed under flail, and so are thirteen other things.
+        named = f"w:{what.replace(' ', '-')}"
         return [
             w for w in out
             if what in w.properties or w.group == what or w.category == what
+            or w.ref == named
         ]
     return out
 

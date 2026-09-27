@@ -77,8 +77,10 @@ from combat_engine.engine import (
     SecondWind,
     SkillCheck,
     SurgeSpent,
+    Swap,
     Trigger,
     TurnStart,
+    Usage,
     When,
     about_me,
     get,
@@ -159,6 +161,13 @@ def _granted(ref: str, card: str, **kw: Any):  # noqa: ANN202
     return parent
 
 
+def _implement(c: Cast, *refs: str) -> bool:
+    """Which implement, by ref. The seven share one group, so `_group`
+    cannot tell a wand from an orb and these cards name exactly one."""
+    gear = c.world.get(c.me, Gear)
+    return gear is not None and any(w.ref in refs for w in gear.held)
+
+
 def _weapon_attack(c: Cast, *groups: str):  # noqa: ANN202
     """"Weapon attack rolls you make with an X", as an attack-context gate."""
 
@@ -209,12 +218,13 @@ def f2901b(c: Cast) -> None:
 
 @power("f2902", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("chargen.proficiency()", "c.change_dice()",
-                "chargen.power_swap()"))
+       proficiency=("w:blowgun",), swap=Swap(1, Usage.AT_WILL),
+       dropped=("c.change_dice()",))
 def f2902(c: Cast) -> None:
-    """The card is handed over, which is the half that plays. The other
-    three clauses are all build-time: what the character may pick up,
-    what dice that weapon rolls, and which at-will it is traded for."""
+    """The card is handed over here and the two build-time clauses are
+    header data: the blowgun `chargen` deals, and the at-will it is
+    traded for. What is left is the die that weapon rolls, which is a
+    field on the `Weapon` and not a thing a row edits."""
     c.grant_row("f2902b", on=c.me, until=When.ENCOUNTER)
 
 
@@ -251,13 +261,16 @@ def f2903b(c: Cast) -> None:
 
 @power("f2904", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("chargen.proficiency()", "chargen.power_swap()"))
+       proficiency=("w:net",), swap=Swap(1, Usage.AT_WILL))
 def f2904(c: Cast) -> None:
-    """The +1 is printed for attacks made *with the net*, which is not
-    one of this engine's weapon groups, so it rides with the proficiency
-    grant rather than being written against a gate that is always
-    false."""
-    c.grant_row("f2904b", on=c.me, until=When.ENCOUNTER)
+    """All three clauses. The weapon table keys on the ref, so the +1 is
+    narrowed to the net rather than widened to the flail group it is
+    filed under -- which would have paid a spiked chain as well."""
+    me = c.me
+    c.grant_row("f2904b", on=me, until=When.ENCOUNTER)
+    c.bonus("attack", 1, on=me, until=When.ENCOUNTER,
+            when=lambda ctx: _keyworded(ctx, Keyword.WEAPON)
+            and _implement(c, "w:net"))
 
 
 @power("f2904b", level=1, cls="", usage=AT_WILL, action=STANDARD,
@@ -302,7 +315,7 @@ def f2905b(c: Cast) -> None:
 
 
 @power("f2906", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=SWAP)
+       reach=PERSONAL, target=SELF, swap=Swap(1, Usage.AT_WILL))
 def f2906(c: Cast) -> None:
     """A standing modifier and a granted card on one row, which is fine:
     the grant is a line of the body, not a trigger. Being mounted is
@@ -343,7 +356,7 @@ def f2907b(c: Cast) -> None:
 
 
 @power("f2908", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=SWAP)
+       reach=PERSONAL, target=SELF, swap=Swap(1, Usage.AT_WILL))
 def f2908(c: Cast) -> None:
     """The extra die is hung on `ActionPointSpent` rather than declared,
     because the row also hands over a card -- a declared trigger would
@@ -502,7 +515,7 @@ def f2955(c: Cast) -> None:
     c.cannot_be_flanked(on=c.me, until=When.EONT)
 
 
-_granted("f2956", "f2956b", dropped=SWAP)
+_granted("f2956", "f2956b", swap=Swap(6, utility=True))
 
 
 @power("f2956b", level=6, cls="", usage=ENCOUNTER, action=FREE,
@@ -771,7 +784,7 @@ def f3064(c: Cast) -> None:
     fight."""
 
 
-_granted("f3065", "f3065b", dropped=SWAP)
+_granted("f3065", "f3065b", swap=Swap(3, Usage.ENCOUNTER))
 
 
 @power("f3065b", level=3, cls="", usage=ENCOUNTER, action=STANDARD,
@@ -791,7 +804,7 @@ def f3065b(c: Cast) -> None:
         c.insubstantial(on=c.me, until=When.EONT)
 
 
-_granted("f3066", "f3066b", dropped=SWAP)
+_granted("f3066", "f3066b", swap=Swap(6, utility=True))
 
 
 @power("f3066b", level=6, cls="", usage=ENCOUNTER, action=MINOR,
@@ -805,7 +818,7 @@ def f3066b(c: Cast) -> None:
     c.teleport(10)
 
 
-_granted("f3067", "f3067b", dropped=SWAP)
+_granted("f3067", "f3067b", swap=Swap(9, Usage.DAILY))
 
 
 @power("f3067b", level=9, cls="", usage=DAILY, action=STANDARD,
@@ -1103,17 +1116,17 @@ def f3122(c: Cast) -> None:
 
 
 @power("f3123", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("chargen.HAMMER",))
+       reach=PERSONAL, target=SELF)
 def f3123(c: Cast) -> None:
-    """Hammer is not one of this engine's ten weapon groups, so both
-    clauses pay only on maces. `c.forces` is the printed "+1 to the
-    number of squares you push or slide", and it is keyed on the
-    shover."""
+    """Hammer is a printed group the weapon table carries and `chargen`
+    now deals, so both clauses pay on either weapon. `c.forces` is the
+    printed "+1 to the number of squares you push or slide", and it is
+    keyed on the shover."""
     me = c.me
-    maced = lambda ctx: _group(c, "mace")  # noqa: E731
+    armed = lambda ctx: _group(c, "mace", "hammer")  # noqa: E731
     c.bonus("attack", 1, on=me, until=When.ENCOUNTER, kind="feat",
-            when=_weapon_attack(c, "mace"))
-    c.forces(1, on=me, until=When.ENCOUNTER, when=maced)
+            when=_weapon_attack(c, "mace", "hammer"))
+    c.forces(1, on=me, until=When.ENCOUNTER, when=armed)
 
 
 @power("f3124", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1369,11 +1382,17 @@ def f3145(c: Cast) -> None:
 
 
 @power("f3146", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.ORB",))
+       reach=PERSONAL, target=SELF, proficiency=("w:orb",))
 def f3146(c: Cast) -> None:
-    """Orb is not one of this engine's weapon groups -- staff is the only
-    implement with a group of its own -- so both clauses are gated on
-    something that is false in every fight."""
+    """Both clauses. The implements share one group, so the gate is on
+    the ref -- gating on `"implement"` would pay every rod and wand as
+    well. Heroic tier, so +1 each."""
+    me = c.me
+    orbed = lambda ctx: _implement(c, "w:orb")  # noqa: E731
+    c.bonus("attack", 1, on=me, until=When.ENCOUNTER, kind="feat",
+            when=lambda ctx: _keyworded(ctx, Keyword.IMPLEMENT)
+            and _implement(c, "w:orb"))
+    c.forces(1, on=me, until=When.ENCOUNTER, when=orbed)
 
 
 @power("f3147", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1389,10 +1408,18 @@ def f3148(c: Cast) -> None:
 
 
 @power("f3149", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.SLING",))
+       reach=PERSONAL, target=SELF, proficiency=("w:sling",),
+       dropped=("c.no_provoke(when=)",))
 def f3149(c: Cast) -> None:
-    """Sling is not one of this engine's weapon groups; bow and crossbow
-    are the two ranged ones. Both clauses hang on holding one."""
+    """Sling is a printed group the weapon table carries and `chargen`
+    now deals, so the attack bonus plays. Heroic tier, so +1.
+
+    Dropped: "you don't provoke opportunity attacks". `c.no_provoke` is
+    all-or-nothing on the creature and cannot be narrowed to the attacks
+    made with one weapon, and turning it on whole would take every
+    ranged attack the character makes out of the opportunity window."""
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
+            when=_weapon_attack(c, "sling"))
 
 
 @power("f3150", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1488,10 +1515,16 @@ def f3156(c: Cast) -> None:
 
 
 @power("f3157", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.WAND",))
+       reach=PERSONAL, target=SELF, proficiency=("w:wand",))
 def f3157(c: Cast) -> None:
-    """Wand is not one of this engine's weapon groups. Same gap as the
-    orb feat above."""
+    """Both clauses, gated on the ref for the reason `f3146` is. Heroic
+    tier, so +1, and `c.ignore_cover` is the second sentence whole --
+    partial and superior are the only two kinds there are."""
+    me = c.me
+    c.bonus("attack", 1, on=me, until=When.ENCOUNTER, kind="feat",
+            when=lambda ctx: _keyworded(ctx, Keyword.IMPLEMENT)
+            and _implement(c, "w:wand"))
+    c.ignore_cover(on=me, until=When.ENCOUNTER)
 
 
 # -- the augmentable batch --------------------------------------------------

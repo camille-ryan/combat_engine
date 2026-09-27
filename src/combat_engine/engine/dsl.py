@@ -395,6 +395,25 @@ class Damage:
         return f"{self.dice}{tail}{kind} damage"
 
 
+@dataclass(frozen=True)
+class Swap:
+    """The power a feat takes back in exchange for the card it hands over.
+
+    Printed as "you can swap one of your 3rd-level **or higher** encounter
+    attack powers for this one", so `level` is a floor and not a match.
+    `utility` is the other half of the sentence and `Usage` alone cannot
+    say it: a 3rd-level encounter *attack* power and a 2nd-level *utility*
+    are both `ENCOUNTER`, and the printed line always distinguishes them.
+    """
+
+    level: int
+    #: `None` for a utility, which is the one the printed line does not
+    #: narrow: "one 6th-level or higher utility power" takes an at-will,
+    #: an encounter or a daily, and only the attack lines name a usage.
+    usage: Usage | None = None
+    utility: bool = False
+
+
 @dataclass
 class Power:
     ref: str
@@ -495,6 +514,19 @@ class Power:
     #: are symbols, both count as partial, both hold an issue open, both
     #: go red when the symbol arrives. Only `todo` makes the row inert.
     dropped: tuple[str, ...] = ()
+    #: Base items this row lets a character carry, by weapon ref --
+    #: `("w:warhammer",)`. **Build-time data, never run.** "You gain
+    #: proficiency with all hammers" cannot be a body: a `Cast` opens on a
+    #: board with the gear already in hand, so the sentence has no moment
+    #: to happen in. `chargen.proficiency` reads this when the character is
+    #: made, and one ref stands for a whole printed group the way
+    #: `chargen._arms` deals one weapon per proficiency line.
+    proficiency: tuple[str, ...] = ()
+    #: What taking this row costs, for a feat printed "you can swap one of
+    #: your 3rd-level or higher encounter attack powers for this one". The
+    #: card is handed over by the body; this is the half that goes back,
+    #: and `chargen.power_swap` is what applies it.
+    swap: Swap | None = None
 
     @property
     def unfinished(self) -> tuple[str, ...]:
@@ -702,6 +734,8 @@ def power(
     summon: Summon | None = None,
     todo: Iterable[str] = (),
     dropped: Iterable[str] = (),
+    proficiency: Iterable[str] = (),
+    swap: Swap | None = None,
 ) -> Callable[[Body], Body]:
     """Declare one power or one monster ability.
 
@@ -760,6 +794,8 @@ def power(
             summon=summon,
             todo=todo,
             dropped=dropped,
+            proficiency=tuple(proficiency),
+            swap=swap,
         )
         return body
 

@@ -110,6 +110,8 @@ SWAP = ("chargen.power_swap()",)
 #: Which weapons and implements a character may pick up, and which
 #: skills it is trained in, are both build-time columns.
 PROFICIENCY = ("chargen.proficiency()",)
+#: A suit of armour or a shield, which is not the same column.
+ARMOUR = ("chargen.armor_proficiency()",)
 TRAINING = ("chargen.skill_training()",)
 #: Dim light and darkness are not states of a square this engine keeps.
 LOW_LIGHT = ("c.low_light()",)
@@ -152,6 +154,14 @@ def _holding(c: Cast, *groups: str) -> bool:
 def _main(c: Cast) -> Any:
     gear = c.world.get(c.me, Gear)
     return gear.main if gear is not None else None
+
+
+def _wielding(c: Cast, *refs: str) -> bool:
+    """Which implement, by ref. The seven share one group, so `_holding`
+    cannot tell a wand from a totem and every one of these cards names
+    exactly one."""
+    gear = c.world.get(c.me, Gear)
+    return gear is not None and any(w.ref in refs for w in gear.held)
 
 
 # -- reading an event -------------------------------------------------------
@@ -269,16 +279,22 @@ def _i_bloodied_them(world: Any, me: int, ev: Any) -> bool:
 
 
 def _proficiency(ref: str):  # noqa: ANN202
-    """A feat whose entire printed benefit is a proficiency."""
+    """A feat whose entire printed benefit is an armour proficiency.
+
+    Re-aimed: `chargen.proficiency` answers weapons and implements, and
+    a suit of armour is a different column -- `ClassLine.armour` is one
+    string and `ClassLine.shield` is a number, so there is nowhere for a
+    second suit a character *may* wear to be written down.
+    """
 
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=NONE,
-           reach=PERSONAL, target=SELF, todo=PROFICIENCY)
+           reach=PERSONAL, target=SELF, todo=ARMOUR)
     def row(c: Cast) -> None:
         pass
 
     row.__name__ = ref
     row.__doc__ = (
-        "What a character may pick up is settled by `chargen` when it is "
+        "What a character may wear is settled by `chargen` when it is "
         "built, and the benefit is nothing else."
     )
     return row
@@ -410,19 +426,38 @@ def f3564(c: Cast) -> None:
 
 
 @power("f3565", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=HOLY_SYMBOL)
+       reach=PERSONAL, target=SELF,
+       proficiency=("w:holy-symbol",), dropped=("c.deny_advantage()",))
 def f3565(c: Cast) -> None:
-    """Both halves are gated on the implement being a holy symbol, and
-    `Weapon.group` is `"implement"` with nothing under it. Gating on the
-    group instead would hand the bonus to every orb, rod and wand."""
+    """The attack bonus plays -- heroic tier, so +1.
 
+    Dropped: "your enemies cannot gain combat advantage against you until
+    the start of your next turn". Nothing refuses an advantage that has
+    already been earned by flanking or by a condition; `c.no_cover` is
+    the nearest thing and it is about cover."""
+    c.bonus("attack", 1, kind="feat", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: _wielding(c, "w:holy-symbol"))
 
 @power("f3566", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=KI_FOCUS)
+       reach=PERSONAL, target=SELF,
+       proficiency=("w:ki-focus",))
 def f3566(c: Cast) -> None:
-    """Same gap as `f3565`, and a ki focus is the harder half of it: it
-    is worn rather than held, and rides on the weapon already in hand."""
+    """Both halves. Heroic tier, so +1 each, and the damage half is gated
+    on the target being bloodied rather than on the caster."""
+    me = c.me
 
+    def bloodied_foe(ctx: dict[str, Any]) -> bool:
+        who = _victim(ctx)
+        return (
+            _wielding(c, "w:ki-focus")
+            and who is not None
+            and c.bloodied(on=who)
+        )
+
+    c.bonus("attack", 1, kind="feat", on=me, until=When.ENCOUNTER,
+            when=lambda ctx: _wielding(c, "w:ki-focus"))
+    c.bonus("damage", 1, kind="feat", on=me, until=When.ENCOUNTER,
+            when=bloodied_foe)
 
 @power("f3567", level=1, cls="", usage=AT_WILL, action=NONE,
        reach=PERSONAL, target=NO_TARGET,
@@ -459,9 +494,9 @@ def f3568(c: Cast) -> None:
 @power("f3569", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF, todo=LOW_LIGHT)
 def f3569(c: Cast) -> None:
-    """Two gaps, and either alone would sink the row: second wind is an
-    action rather than a power and announces nothing a rider can answer,
-    and the light in a square is not a thing the grid keeps."""
+    """`SecondWind` says the second wind happened; the light in a square
+    is still not a thing the grid keeps, and the whole benefit is gated on
+    it."""
 
 
 @power("f3570", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -592,9 +627,11 @@ def f3581(c: Cast) -> None:
 
 
 @power("f3582", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, todo=("chargen.power_choice()",))
 def f3582(c: Cast) -> None:
-    """A use of one row traded for a power of the character's choice."""
+    """Not a swap: what goes back is one *use* of a row rather than the
+    row, and what comes the other way is "a power of your choice" rather
+    than a card. `Swap` names a card's price; this names neither end."""
 
 
 @power("f3583", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -605,9 +642,12 @@ def f3583(c: Cast) -> None:
 
 
 @power("f3584", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, swap=Swap(1, Usage.ENCOUNTER))
 def f3584(c: Cast) -> None:
-    """Loses a known encounter power to gain `p12668`."""
+    """Loses a known encounter power to gain `p12668`. `chargen` takes
+    the one that goes back when the character is built; the body hands
+    the card over."""
+    c.grant_row("p12668", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3585", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -631,9 +671,10 @@ def f3587(c: Cast) -> None:
 
 
 @power("f3588", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, todo=("chargen.power_choice()",))
 def f3588(c: Cast) -> None:
-    """A use of `p12710` traded for a rogue encounter power."""
+    """`f3582` for the rogue's row, and the same two ends: a use rather
+    than a power, and a choice rather than a card."""
 
 
 @power("f3589", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -656,9 +697,10 @@ def f3591(c: Cast) -> None:
 
 
 @power("f3592", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, swap=Swap(1, Usage.ENCOUNTER))
 def f3592(c: Cast) -> None:
     """Loses a known rogue encounter power to gain `p12710`."""
+    c.grant_row("p12710", on=c.me, until=When.ENCOUNTER)
 
 
 # -- the water, and the armour proficiencies --------------------------------
@@ -713,23 +755,42 @@ def f3602(c: Cast) -> None:
 
 
 @power("f3603", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FLAIL)
+       reach=PERSONAL, target=SELF, dropped=("c.instead_of_slide()",))
 def f3603(c: Cast) -> None:
-    """Flail is not one of this engine's weapon groups -- the set is axe,
-    bow, crossbow, heavy blade, implement, light blade, mace, spear,
-    staff, unarmed -- and both halves are gated on wielding one."""
+    """Flail is a printed group the weapon table carries and `chargen`
+    now deals, so the attack bonus plays. Heroic tier, so +1.
+
+    Dropped: "when the attack lets you slide the target, you can knock it
+    prone instead". Nothing offers a choice at the moment another row's
+    slide is about to happen, and knocking prone *as well* would be a
+    second condition the card does not give."""
+    c.bonus("attack", 1, kind="feat", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: _holding(c, "flail"))
 
 
-@power("f3604", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FLAIL)
+@power("f3604", level=1, cls="", usage=AT_WILL, action=NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="your power strike damages a target and you wield a flail",
+       on=Trigger(DamageApplied, _power_strike_landed, "power strike lands"),
+       dropped=(*DICE, "c.provoke_on_stand()"))
 def f3604(c: Cast) -> None:
-    """The same missing group, and the whole benefit sits behind it."""
+    """`f3612` with a flail, and the same two holds it has: the price --
+    "the extra damage is reduced by 1[W]" -- is asked after the dice are
+    rolled and spent, and nothing makes standing up provoke."""
+    if _holding(c, "flail"):
+        c.prone(on=c.trigger.target)
 
 
-@power("f3605", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=HAMMER)
+@power("f3605", level=1, cls="", usage=AT_WILL, action=NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="your power strike damages a target and you wield a hammer",
+       on=Trigger(DamageApplied, _power_strike_landed, "power strike lands"),
+       dropped=DICE)
 def f3605(c: Cast) -> None:
-    """Hammer is not one of this engine's weapon groups either."""
+    """`f3612` with a hammer and a daze. The price is the same one that
+    row drops: by the time the blow names its ref the dice are rolled."""
+    if _holding(c, "hammer"):
+        c.condition(Condition.DAZED, on=c.trigger.target, until=When.EONT)
 
 
 @power("f3606", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -769,24 +830,58 @@ def f3608(c: Cast) -> None:
 
 
 @power("f3609", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=PICK)
+       reach=PERSONAL, target=SELF)
 def f3609(c: Cast) -> None:
-    """Pick is not one of this engine's weapon groups, and both halves
-    are gated on wielding one."""
+    """Pick is a printed group the weapon table carries and `chargen` now
+    deals. Heroic tier, so +1 each. The damage half is gated on the
+    target being the larger creature, which is a comparison on `Size`."""
+    me = c.me
+
+    def bigger(ctx: dict[str, Any]) -> bool:
+        who = _victim(ctx)
+        return (
+            _holding(c, "pick")
+            and who is not None
+            and c.size_of(who) > c.size_of(me)
+        )
+
+    c.bonus("attack", 1, kind="feat", on=me, until=When.ENCOUNTER,
+            when=lambda ctx: _holding(c, "pick"))
+    c.bonus("damage", 1, kind="feat", on=me, until=When.ENCOUNTER,
+            when=bigger)
 
 
 @power("f3610", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=PICK)
+       reach=PERSONAL, target=SELF, todo=("DamageApplied.natural",))
 def f3610(c: Cast) -> None:
-    """The same missing group. `c.maximise` would say the payout if there
-    were a pick to gate it on."""
+    """The group is there now and `c.maximise` says the payout. What
+    cannot be said is the condition on it: the row fires off the damage
+    power strike deals, and that event does not carry the attack roll
+    that earned it, so "if your attack roll was 18-20" has nothing to
+    read."""
 
 
 @power("f3611", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=POLEARM)
+       reach=PERSONAL, target=SELF)
 def f3611(c: Cast) -> None:
-    """Polearm is not one of this engine's weapon groups. Folding it into
-    spear would widen the feat over every shortspear in the game."""
+    """Polearm is a printed group the weapon table carries and `chargen`
+    now deals, so it is asked rather than folded into spear -- which
+    would have widened the feat over every shortspear in the game. The
+    defence half is a plain bonus gated on the attack being a charge,
+    which the attack context does carry."""
+    me = c.me
+
+    def two_handed_polearm(ctx: dict[str, Any]) -> bool:
+        arm = _main(c)
+        return (
+            arm is not None and arm.group == "polearm" and arm.two_handed
+            and bool(ctx.get("charge"))
+        )
+
+    c.bonus("attack", 1, kind="feat", on=me, until=When.ENCOUNTER,
+            when=lambda ctx: _holding(c, "polearm"))
+    for where in ALL_DEFENCES:
+        c.bonus(where, 2, on=me, until=When.ENCOUNTER, when=two_handed_polearm)
 
 
 @power("f3612", level=1, cls="", usage=AT_WILL, action=NONE,
@@ -915,18 +1010,18 @@ def f3678b(c: Cast) -> None:
 
 @power("f3615", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(*PROFICIENCY, *TRAINING, *KI_FOCUS))
+       dropped=TRAINING, proficiency=("w:ki-focus",))
 def f3615(c: Cast) -> None:
-    """The extra damage plays, held to once a fight by `once=True`. It is
-    gated on a one-handed weapon, which is a property the table carries;
-    the garrote, the blowgun and the shortbow the card also names are not
-    in the table at all, so those three arms of the clause are lost with
-    the ki focus proficiency."""
+    """The extra damage plays, held to once a fight by `once=True`. All
+    four arms of the gate can be asked now: one-handed is a property the
+    weapon table carries, and the garrote, the blowgun and the shortbow
+    are three rows in it."""
     me = c.me
+    _NAMED_ARMS = ("w:garrote", "w:blowgun", "w:shortbow")
 
     def one_handed(ctx: dict[str, Any]) -> bool:
         arm = _main(c)
-        return arm is not None and not arm.two_handed
+        return (arm is not None and not arm.two_handed) or _wielding(c, *_NAMED_ARMS)
 
     c.bonus(
         "damage", 0, dice="1d8", on=me, until=When.ENCOUNTER, once=True,
@@ -935,7 +1030,8 @@ def f3615(c: Cast) -> None:
 
 
 @power("f3616", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=(*SWAP, "c.apply_poison()"))
+       reach=PERSONAL, target=SELF,
+       todo=("chargen.power_choice()", "c.apply_poison()"))
 def f3616(c: Cast) -> None:
     """A daily power chosen at build time, paid for with a vial of poison
     that is prepared during an extended rest. Both ends are `chargen`."""
@@ -954,7 +1050,7 @@ def f3617(c: Cast) -> None:
            Hit, _i_hit_with_a_weapon_with_advantage,
            "you hit an enemy granting you combat advantage",
        ),
-       dropped=(*NAMED, *PROFICIENCY, *TRAINING))
+       dropped=(*NAMED, *TRAINING), proficiency=("w:holy-symbol",))
 def f3618(c: Cast) -> None:
     """"Once per encounter" is the row's own `ENCOUNTER` budget -- a
     triggered `action=NONE` row spends a use every time it fires, which
@@ -978,7 +1074,8 @@ def f3619(c: Cast) -> None:
 
 
 @power("f3620", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=(*SWAP, *NAMED))
+       reach=PERSONAL, target=SELF, todo=NAMED,
+       swap=Swap(1, Usage.ENCOUNTER))
 def f3620(c: Cast) -> None:
     """Loses a known encounter power for one the brief names in prose."""
 
@@ -1060,7 +1157,8 @@ def f3625(c: Cast) -> None:
 
 
 @power("f3626", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=(*FEATURE, *PROFICIENCY))
+       reach=PERSONAL, target=SELF, todo=FEATURE,
+       proficiency=("w:holy-symbol", "w:ki-focus"))
 def f3626(c: Cast) -> None:
     """Three class features named in prose, with the surge pool they cost
     named beside them. Nothing here is a thing a `Cast` can lay."""
@@ -1074,7 +1172,8 @@ def f3627(c: Cast) -> None:
 
 
 @power("f3628", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=(*PROFICIENCY, *TRAINING))
+       reach=PERSONAL, target=SELF, dropped=TRAINING,
+       proficiency=("w:staff", "w:totem"))
 def f3628(c: Cast) -> None:
     """`p1455` is a ref and the row is declared, so the power half is an
     ordinary `c.grant_row`. "Once per day" is not a fight's business --
@@ -1084,7 +1183,7 @@ def f3628(c: Cast) -> None:
 
 @power("f3629", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(*NAMED, *PROFICIENCY, *TRAINING))
+       dropped=(*NAMED, *TRAINING), proficiency=("w:holy-symbol",))
 def f3629(c: Cast) -> None:
     """`p12660` is a ref and is declared. The second power is printed by
     name only, so there is nothing for a second `c.grant_row`."""
@@ -1092,7 +1191,8 @@ def f3629(c: Cast) -> None:
 
 
 @power("f3630", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=(*SWAP, *FEATURE))
+       reach=PERSONAL, target=SELF, todo=FEATURE,
+       swap=Swap(1, Usage.AT_WILL))
 def f3630(c: Cast) -> None:
     """An at-will traded for one of the powers a class feature grants, and
     the feature is named in prose."""
@@ -1111,7 +1211,8 @@ def f3632(c: Cast) -> None:
 
 
 @power("f3633", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=("c.pact_boon()", *PROFICIENCY))
+       reach=PERSONAL, target=SELF, todo=("c.pact_boon()",),
+       proficiency=("w:rod", "w:wand"))
 def f3633(c: Cast) -> None:
     """A pact boon chosen at build time, and the two powers it carries."""
 
@@ -1170,10 +1271,23 @@ def f3638(c: Cast) -> None:
 
 
 @power("f3639", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=KI_FOCUS)
+       reach=PERSONAL, target=SELF,
+       proficiency=("w:ki-focus",))
 def f3639(c: Cast) -> None:
-    """Gated on the implement being a ki focus, which has no group."""
+    """Both halves of the gate are askable now: the ki focus is a weapon
+    `chargen` deals, and the power source is a keyword on the row that is
+    swinging. Heroic tier, so +2."""
 
+    def shadow_through_the_focus(ctx: dict[str, Any]) -> bool:
+        row = get(ctx.get("power", ""))
+        return (
+            row is not None
+            and Keyword.SHADOW in row.keywords
+            and _wielding(c, "w:ki-focus")
+        )
+
+    c.bonus("damage", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
+            when=shadow_through_the_focus)
 
 @power("f3640", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
@@ -1185,11 +1299,17 @@ def f3640(c: Cast) -> None:
 
 
 @power("f3641", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=(*HAMMER, *PROFICIENCY))
+       reach=PERSONAL, target=SELF, dropped=("c.make_thrown()",),
+       proficiency=("w:warhammer",))
 def f3641(c: Cast) -> None:
-    """A warhammer is a hammer, and hammer is not a group this engine
-    carries, so `c.as_implement` and `c.make_thrown` have nothing to
-    take hold of."""
+    """The implement half plays: `c.as_implement` writes the fact onto
+    the weapon in hand, and hammer is a group the weapon table carries.
+
+    Dropped: "treat the warhammer as a heavy thrown weapon with a range
+    of 6/12". A weapon's range is a field on the `Weapon`, and nothing
+    writes one onto the thing being held."""
+    if _holding(c, "hammer"):
+        c.as_implement(on=c.me)
 
 
 # -- the familiar, the barbarian and the druid ------------------------------
@@ -1384,7 +1504,8 @@ def f3659(c: Cast) -> None:
 
 
 @power("f3661", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=(*NAMED, *PROFICIENCY, *TRAINING))
+       reach=PERSONAL, target=SELF, todo=NAMED,
+       proficiency=("w:staff", "w:totem"))
 def f3661(c: Cast) -> None:
     """`f3628` with a different power, and this one is printed by name
     rather than by ref, which is the whole difference between them."""
@@ -1427,7 +1548,7 @@ def f3663(c: Cast) -> None:
 
 @power("f3664", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(*PROFICIENCY, *TRAINING, "c.uses_per_day()"))
+       dropped=(*TRAINING, "c.uses_per_day()"), proficiency=("w:wand",))
 def f3664(c: Cast) -> None:
     """Hands over the card printed beside it rather than `f3668b`, which
     is the same card on the other feat's page. The day's limit on the
@@ -1501,11 +1622,17 @@ def f3670(c: Cast) -> None:
 
 
 @power("f3671", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=TOTEM)
+       reach=PERSONAL, target=SELF,
+       proficiency=("w:totem",), dropped=("c.ignore_concealment()",))
 def f3671(c: Cast) -> None:
-    """Both halves are gated on the implement being a totem, and
-    `Weapon.group` is `"implement"` with nothing under it."""
-
+    """The attack bonus plays -- heroic tier, so +1. `c.ignore_cover`
+    takes the cover half; partial concealment is a separate thing this
+    engine does not let a row wave away."""
+    me = c.me
+    holding = lambda ctx: _wielding(c, "w:totem")  # noqa: E731
+    c.bonus("attack", 1, kind="feat", on=me, until=When.ENCOUNTER,
+            when=holding)
+    c.ignore_cover(on=me, until=When.ENCOUNTER)
 
 @power("f3672", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF)
@@ -1547,7 +1674,8 @@ def f3674(c: Cast) -> None:
 
 
 @power("f3675", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=(*PROFICIENCY, *TRAINING))
+       reach=PERSONAL, target=SELF, dropped=TRAINING,
+       proficiency=("w:orb", "w:staff", "w:wand"))
 def f3675(c: Cast) -> None:
     """Hands over the card printed beside it, which is `p15850` reprinted
     on the feat's page."""
@@ -1575,8 +1703,9 @@ def f3679(c: Cast) -> None:
 @power("f3680", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF, todo=LOW_LIGHT)
 def f3680(c: Cast) -> None:
-    """Both halves are gated on the light in a square, and the second
-    wants second wind to announce itself as well."""
+    """Both halves are gated on the light in a square, which the grid
+    does not keep. The second wind is announced now; the darkness is not
+    askable."""
 
 
 @power("f3682", level=1, cls="", usage=AT_WILL, action=NONE,
