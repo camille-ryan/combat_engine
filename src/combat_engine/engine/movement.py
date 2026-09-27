@@ -39,6 +39,7 @@ from .events import (
     Moved,
     MoveEnd,
     MoveStart,
+    Note,
     OpportunityWindow,
 )
 from .grid import Square, distance, footprint, neighbours, spread
@@ -61,8 +62,19 @@ def place(world: World, eid: int, square: Square) -> None:
     """Put a creature on the board without any of this firing. Setup only."""
     pos = world.need(eid, Position)
     pos.square = square
+    # An explicit footprint is about *where a thing was laid*, so putting
+    # it somewhere else discards it. `place` means "at this square, at
+    # this size"; keeping the old spans would have `Position.squares`
+    # name the squares it used to fill.
+    pos.spans = frozenset()
     world.grid.lift(eid)
-    world.grid.place(eid, footprint(square, pos.size))
+    if not world.grid.place(eid, footprint(square, pos.size)):
+        # Somebody is already indexed there. `grid.place` refuses rather
+        # than overwriting -- overwriting *unindexes* the sitting tenant
+        # -- so without this the newcomer stands in a square the grid
+        # does not know it is in, and cover, blocking and occupancy all
+        # read the wrong answer until it next moves.
+        world.bus.emit(Note(text=f"{eid} placed on an occupied square {square}"))
 
 
 def _neighbours(world: World, eid: int) -> set[int]:
@@ -87,7 +99,18 @@ def step(
     pos = world.get(eid, Position)
     if pos is None:
         return False
-    target = footprint(to, pos.size)
+    # **An explicit footprint travels with the thing.** `step` recomputed
+    # `footprint(to, size)` and never touched `spans`, so a five-square
+    # wall that was slid kept naming its old five squares to cover,
+    # line of effect, flanking and targeting while occupying one new
+    # square in the index -- the two disagreed in both directions at
+    # once. A `Barrier` carries `Health`, so it is in the target pool and
+    # any burst that pushes can reach it.
+    if pos.spans:
+        dx, dy = to[0] - pos.square[0], to[1] - pos.square[1]
+        target = frozenset((x + dx, y + dy) for x, y in pos.spans)
+    else:
+        target = footprint(to, pos.size)
     # `through` is trampling and melding: entering a square somebody else is
     # standing in. Terrain still blocks, which is what `overhead` already
     # means to `_clear`.
@@ -135,6 +158,8 @@ def step(
 
     world.grid.lift(eid)
     pos.square = to
+    if pos.spans:
+        pos.spans = target
     if not _occupied(world, eid, target):
         # Overhead and directly above somebody: stay out of the occupancy
         # index until `settle` puts the creature down at the end of its turn.
@@ -158,7 +183,11 @@ def step(
         if seat is not None and seat.square != to:
             world.grid.lift(passenger)
             seat.square = to
-            world.grid.place(passenger, footprint(to, seat.size))
+            # Deliberately **not** indexed: the mount was put in these
+            # squares a moment ago, so `grid.place` would refuse anyway
+            # and a rider is a sharer like a flyer overhead. Saying so
+            # here stops it reading as a write that silently failed.
+            del seat
             carried = Moved(actor=passenger, from_=from_, to=to)
             carried.kind_ = kind
             world.bus.emit(carried)

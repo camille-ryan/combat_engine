@@ -235,7 +235,7 @@ class Grid:
     def occupant(self, sq: Square) -> int | None:
         return self.occupants.get(sq)
 
-    def place(self, eid: int, squares: frozenset[Square]) -> None:
+    def place(self, eid: int, squares: frozenset[Square]) -> bool:
         """Index a creature's squares. **Never overwrites somebody else.**
 
         The index holds one occupant per square, and `lift` only deletes
@@ -248,10 +248,21 @@ class Grid:
         somebody, and a creature melded with its target -- and both already
         rely on the second one staying out of the index until it settles.
         Refusing the write here makes that the rule rather than a habit.
+
+        **Returns whether every square was taken.** Refusing silently is
+        right for the sharers, who expect it, and wrong for a caller that
+        does not -- and there was no way to tell the two apart, so a
+        character spawned onto an occupied square came out `Position`-
+        present and index-absent with nothing said. The sharers ignore the
+        result; the setup path checks it.
         """
+        taken = True
         for sq in squares:
             if self.occupants.get(sq, eid) == eid:
                 self.occupants[sq] = eid
+            else:
+                taken = False
+        return taken
 
     def lift(self, eid: int) -> None:
         for sq in [s for s, who in self.occupants.items() if who == eid]:

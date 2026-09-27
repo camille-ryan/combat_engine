@@ -56,6 +56,18 @@ class Range:
     #: and warlord, and a row that can only hold one of them is declared
     #: half-right with nothing to say so.
     alt: Range | None = None
+    #: "Ranged weapon" -- the range is **the wielded weapon's**, not a
+    #: number on the card. 110 rows print it and every one of them was
+    #: given an invented fixed size instead: 20 on seventy-four, 10 on
+    #: thirty-one, 5 on five. A ranger with a longbow was shooting 10
+    #: squares where the weapon reaches 20, and `Weapon.ranged`'s second
+    #: number -- the long range -- had no reader anywhere in the tree, so
+    #: `resolve._long_range` could charge its -2 only for shots the
+    #: targeting had already refused.
+    #:
+    #: `size` stays as the fallback for a creature holding nothing that
+    #: shoots, which is what a monster's improvised throw comes to.
+    by_weapon: bool = False
     #: Whose square the range is measured from, when it is not the caster's.
     #: `"companion"` is the shaman's whole attack line -- "Melee spirit 1" --
     #: and 48 of its rows are that and nothing else. `c.strike(from_=)`
@@ -689,10 +701,29 @@ def area_of(
         # up and what `c.wall` picks its run of squares out of.
         out = spread(mine, r.within)
     elif r.kind in ("melee", "ranged"):
-        out = spread(mine, r.size)
+        out = spread(mine, _reach_of(world, actor, r))
     else:
         out = frozenset(mine)
     return frozenset(sq for sq in out if world.grid.inside(sq))
+
+
+def _reach_of(world: World, actor: int, r: Range) -> int:
+    """How far this range actually carries.
+
+    For a weapon range that is the **long** range, because a shot past
+    the normal one is legal and merely takes the -2 that
+    `resolve._long_range` charges. Capping the offer at the normal range
+    made that penalty unreachable: the target was refused before it could
+    be charged, so the whole of `_long_range` was dead code.
+    """
+    if not r.by_weapon:
+        return r.size
+    from .components import Gear
+
+    gear = world.get(actor, Gear)
+    shot = getattr(gear, "ranged", None) if gear else None
+    reach = getattr(shot, "ranged", None) if shot else None
+    return max(reach[1], r.size) if reach else r.size
 
 
 def _stretched(

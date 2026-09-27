@@ -116,7 +116,23 @@ class Health:
 
     @property
     def dying_at(self) -> int:
-        """Below this and the creature is dead outright."""
+        """Below this and the creature is dead outright.
+
+        **Derived, so raising `max_hp` lowers the death floor
+        retroactively** -- and `query.alive` is `hp > dying_at`, with no
+        memory of having died. An `on_end` callback that restores an
+        original ceiling therefore makes `alive` answer True for a
+        creature whose `Died` has already been emitted, because
+        `Effects.bereave` runs *inside* `resolve._die`, after the
+        announcement. `Cast.reanimate` is the only thing doing that today
+        and guards itself with `if alive(...)`; anything else that edits
+        `max_hp` under a duration has to do the same.
+
+        Not solved with a sticky `dead` flag on purpose: `alive` is read
+        in dozens of places and every revival path would have to clear
+        it, so a heal that missed one would leave a healed creature dead
+        forever -- a commoner failure than the rare one it prevents.
+        """
         return -(self.max_hp // 2)
 
 
