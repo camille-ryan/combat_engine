@@ -463,6 +463,35 @@ class Cast:
                 return effect.ended
         return False
 
+    def reroll_save(self, *, bonus: int = 0, keep: str = "new") -> bool:
+        """Roll the **triggering** saving throw again. Returns the new result.
+
+        `SavingThrow` is announced before it is acted on and its `saved` is
+        read back -- its own docstring says that exists so "reroll it" has
+        somewhere to go -- but nothing ever went there, and five feats in
+        one batch print exactly that line. Written as a verb rather than
+        as five rows reaching into the event, because five hand-written
+        versions is five chances to forget that `bonus` is already
+        totalled and add the modifier twice.
+
+        `keep` is `new`, `best` or `worst`, matching `c.reroll_attack`.
+        The printed lines differ on this and the difference matters: one
+        says "use the new result even if it is worse" and another says
+        "use whichever you prefer".
+        """
+        ev = self.trigger
+        if ev is None or not hasattr(ev, "saved"):
+            return False
+        again = self.world.rng.roll("1d20").total
+        if keep == "best":
+            again = max(again, ev.natural)
+        elif keep == "worst":
+            again = min(again, ev.natural)
+        ev.natural = again
+        ev.bonus += bonus
+        ev.saved = again + ev.bonus >= 10
+        return ev.saved
+
     def surge_value(self, of: int | None = None) -> int:
         """A quarter of that creature's maximum, which is what a surge heals.
 
