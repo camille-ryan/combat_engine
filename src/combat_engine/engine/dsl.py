@@ -1350,9 +1350,27 @@ def use(
     # attack roll a use made had only the last one to look at.
     from .events import PowerResolved
 
-    world.bus.emit(
-        PowerResolved(actor=actor, power=ref, targets=list(chosen), rolls=rolls)
-    )
+    # **Still holding the in-flight mark.** The guard above refuses to run
+    # a row that is already running, and the `finally` releases it one
+    # line before this emit -- so a row declared on `PowerResolved` and
+    # triggered by its own caster answered its *own* resolution: firing
+    # is a use, which resolves, which offers it again. The traceback
+    # surfaced inside `query.can_act`, so it read as an engine fault
+    # rather than a content one, and it accounted for thirty rows.
+    #
+    # Re-taken around the emit rather than moved inside the `try`,
+    # because the release has to stay in a `finally`: a body that raises
+    # must not leave the mark standing, or the row is refused for the
+    # rest of the fight and looks merely unused.
+    if fresh:
+        _IN_FLIGHT.add((actor, ref))
+    try:
+        world.bus.emit(
+            PowerResolved(actor=actor, power=ref, targets=list(chosen), rolls=rolls)
+        )
+    finally:
+        if fresh:
+            _IN_FLIGHT.discard((actor, ref))
 
     # Reliable: a daily that misses everything is not spent. The keyword was
     # declared and nothing read it, so the two fighter dailies that carry it
