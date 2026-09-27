@@ -933,9 +933,20 @@ def _cross_reference_rest(
     specs shipped a neighbour's printed name while both halves believed
     they agreed.
     """
-    from .sanitise import identifies, scrub, vocabulary
+    from .sanitise import identifies, scrub, set_races, vocabulary
 
     rules = vocabulary()
+    # Which names are races', for `identifies` and for `_racial_labels`
+    # below -- one set, so the checker and the scrubber cannot hold
+    # different opinions about what a race is called. Handed over rather
+    # than read back, because the table it would read is the one this
+    # build is in the middle of writing.
+    by_race: dict[str, str] = {}
+    for (ref,) in out.execute("SELECT ref FROM race"):
+        name = ((names.get(ref) or {}).get("name") or "").strip()
+        if len(name) > 2:
+            by_race[name.lower()] = ref
+    set_races(frozenset(by_race))
     by_word: dict[str, list[tuple[str, str]]] = {}
     # Every name, whether or not it "identifies" -- `_label_refs` needs
     # the ones the general test waives.
@@ -976,6 +987,11 @@ def _cross_reference_rest(
             if not spec:
                 continue
             here = set(re.findall(r"[a-z']+", spec.lower()))
+            # The race a racial card names, **before anything else and
+            # outside the `others` guard below**: that guard skips a row
+            # naming nothing, and a racial card's level line is usually
+            # the only printed name it has.
+            fixed = _racial_labels(spec, by_race)
             # **A monster's ability never belongs in a character's
             # spec.** `by_word` holds every name, and several monster
             # abilities share a name with a class power this build does
@@ -1004,17 +1020,61 @@ def _cross_reference_rest(
                         other = f"x_{other}"
                         names.setdefault(other, {"name": name})
                     others[name] = other
-            if not others:
-                continue
-            fixed = scrub(spec, others)
-            if table == "feat":
-                fixed = _label_refs(fixed, by_name)
-                fixed = _associated_refs(fixed, by_name)
-            fixed = _named_powers(fixed, by_name, ref, by_feature)
+            if others:
+                fixed = scrub(fixed, others)
+                if table == "feat":
+                    fixed = _label_refs(fixed, by_name)
+                    fixed = _associated_refs(fixed, by_name)
+                fixed = _named_powers(fixed, by_name, ref, by_feature)
             if fixed != spec:
                 out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
                 changed += 1
     return changed
+
+
+def _racial_labels(spec: str, by_race: dict[str, str]) -> str:
+    """Swap the race named on a racial card's level line for its ref.
+
+    Every racial power prints one -- `<r20> Racial Power` where a class
+    power prints `Fighter Attack 1` -- and 82 of them reached authors
+    with the race's printed name in them. Not all of them: a race whose
+    name is invented and long was already swapped by the general pass
+    above, because `identifies` believes a one-word name that is in no
+    dictionary. The races named after an ordinary English word are in
+    the dictionary and were waived, so the same line read two different
+    ways depending on what the race happened to be called.
+
+    Position is what settles it, as it does in `_label_refs`: directly
+    before the word *racial* the word is a race and not a creature type.
+    Everywhere else it **must not be swapped** -- `is_kind("<type>")` is
+    a sentence the engine has to be able to write, and a monster's own
+    type word is deliberately kept out of the scrubber.
+
+    Which positions those are is `sanitise.named_races`, and it is asked
+    rather than repeated here: `identifies` reads the same function to
+    decide whether to report one, and a checker that disagrees with the
+    scrubber is how 124 specs shipped a printed name the last time.
+
+    An `r` ref, which the guards in `_named_powers` and `_label_refs`
+    would refuse. They refuse it rightly: those two positions name a
+    *power*, and only a `p` or a `cf:` is one. This position names a
+    race.
+    """
+    if not by_race:
+        return spec
+    out: list[str] = []
+    last = 0
+    for start, end, name in sanitise.named_races(spec):
+        ref = by_race.get(name.lower())
+        if not ref:
+            continue
+        out.append(spec[last:start])
+        out.append(ref)
+        last = end
+    if not out:
+        return spec
+    out.append(spec[last:])
+    return "".join(out)
 
 
 #: `Sly Flourish : If you score a critical hit ...` -- a feat's Associated

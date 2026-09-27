@@ -34,6 +34,13 @@ instead: **a word used as a name by many different rows is vocabulary, not a
 name.** `Bite` names hundreds of stat blocks and identifies none of them; an
 invented-sounding one names a single row. Nothing to maintain, and it adapts on its own to
 whichever build of the compendium you have.
+
+**A race's name is the exception to that**, and needs the line it sits on
+to be told apart. `Elf`, `Human`, `Drow` and `Goblin` are races, are
+dictionary words, and are also the type word a stat block prints -- so the
+rule above waives all of them, and 82 racial cards printed their race's
+name to authors with nothing saying so. See `names_a_race` in
+`etl/sanitise.py` for where the line decides.
 """
 
 from __future__ import annotations
@@ -114,7 +121,7 @@ def specs() -> int:
                     # belongs to `p289` and may say so.
                     if any(r.startswith(ref) or ref.startswith(r) for r in refs):
                         continue
-                    if _identifies(name, refs, rules):
+                    if _identifies(name, refs, rules, line):
                         found.append((table, ref, name, refs))
                         break
                 else:
@@ -166,7 +173,7 @@ def main() -> int:
             continue
         for n, line in enumerate(lines, 1):
             for name, refs in _hits(line, index):
-                where = findings if _identifies(name, refs, rules) else quiet
+                where = findings if _identifies(name, refs, rules, line) else quiet
                 where.append((path.relative_to(ROOT), n, name, refs))
 
     for path, n, name, refs in findings:

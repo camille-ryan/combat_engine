@@ -453,7 +453,121 @@ def vocabulary() -> set[str]:
                 out.add(item.name.lower().replace("_", " "))
     return out
 
-def identifies(name: str, refs: list[str], rules: set[str]) -> bool:
+#: Every name a race holds, lowercased.
+#:
+#: A race's name is the one printed name that is also a **type word**. The
+#: engine asks `is_kind("<type>")`, a monster's own kind is kept out of the
+#: scrubber on purpose (`etl/monster.py`), and "the <type> shifts 1 square"
+#: is a rules sentence rather than a name. So the set cannot simply be
+#: reported wherever it appears -- see `names_a_race` for the one position
+#: where the word is a name rather than a type.
+#:
+#: Injected by the build, which is writing the very table a reader would
+#: otherwise have to read -- the same reason `monster.set_common` exists.
+#: `scripts/leaks.py` reads it off the finished database instead.
+_RACES: frozenset[str] | None = None
+
+
+def set_races(names: frozenset[str]) -> None:
+    """Tell the sanitiser which names are races', during a build."""
+    global _RACES
+    _RACES = frozenset(n.strip().lower() for n in names if len(n.strip()) > 2)
+
+
+def races() -> frozenset[str]:
+    """Every race's printed name, from the build or from `game.db`."""
+    if _RACES is not None:
+        return _RACES
+    found: set[str] = set()
+    # No database, no names file, or an older one with no `race` table.
+    with contextlib.suppress(Exception):
+        from .build import game, localisation
+
+        names = localisation()
+        for (ref,) in game().execute("SELECT ref FROM race"):
+            name = (names.get(ref, {}).get("name") or "").strip().lower()
+            if len(name) > 2:
+                found.add(name)
+    return frozenset(found)
+
+
+#: What follows a race's name when the name is a *name*: the level line
+#: every racial card prints above its keywords -- `<r20> Racial Power`,
+#: `<r52> Racial Utility 6` -- and the same phrase inside a feat, "you use
+#: your <r2> racial power".
+_RACIAL = re.compile(r"\s+racial\s+[a-z]", re.I)
+
+#: And a prerequisite clause that is nothing but a race: `Requirement:
+#: <r16>, cf:paladin-f0 class feature`. A whole clause, so "you must be
+#: an <r4>" -- prose that happens to sit on the same line -- is not one.
+_CLAUSE = re.compile(
+    r"(?i)^\s*(?:requirements?|prerequisites?)\s*:\s*(?:[^,;]*[,;]\s*)*$"
+)
+_CLAUSE_END = re.compile(r"\s*(?:[,;.]|$)")
+
+
+@lru_cache(maxsize=4)
+def _race_pattern(names: frozenset[str]) -> re.Pattern[str] | None:
+    """Every race's name as one alternation, longest first.
+
+    Longest first so a two-word race is matched whole rather than left as
+    its second word with the first still standing in front of it. Hyphens
+    count as word characters at the edges, so the second half of a
+    hyphenated race is not matched on its own.
+    """
+    if not names:
+        return None
+    alts = "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+    return re.compile(rf"(?<![\w'-])(?:{alts})(?![\w'-])", re.I)
+
+
+def named_races(context: str) -> list[tuple[int, int, str]]:
+    """Every span of this text where a race's name is being used as a name.
+
+    **One rule with one implementation, because two things ask it.**
+    `identifies` asks whether a match is worth reporting and
+    `build._racial_labels` asks what to replace; if they ever answered
+    differently the checker would report a leak the scrubber refuses to
+    fix, or -- far worse -- stay quiet about one it never fixed.
+
+    The word alone cannot answer it. Half the races are named after an
+    ordinary English word, and every one of those words is also the type
+    a stat block prints beside its numbers -- the word `is_kind` is
+    given, which the engine has to be able to say. Reporting the set flat
+    cost 91 findings across the tree and 358 spec rows, and not one of
+    them was a leak.
+
+    Two positions admit nothing but a name, which is `_named_powers`'
+    argument one step over: directly before the word *racial*, and alone
+    in a prerequisite clause.
+    """
+    pattern = _race_pattern(races())
+    if pattern is None or not context:
+        return []
+    found: list[tuple[int, int, str]] = []
+    for m in pattern.finditer(context):
+        if _RACIAL.match(context, m.end()):
+            found.append((m.start(), m.end(), m.group(0)))
+            continue
+        start = context.rfind("\n", 0, m.start()) + 1
+        end = context.find("\n", m.end())
+        line = context[start:] if end < 0 else context[start:end]
+        if _CLAUSE.match(line[: m.start() - start]) and _CLAUSE_END.match(
+            line[m.end() - start :]
+        ):
+            found.append((m.start(), m.end(), m.group(0)))
+    return found
+
+
+def names_a_race(name: str, context: str) -> bool:
+    """Is this word naming a race, or is it a creature's type?"""
+    low = name.lower()
+    return any(text.lower() == low for _, _, text in named_races(context))
+
+
+def identifies(
+    name: str, refs: list[str], rules: set[str], context: str = ""
+) -> bool:
     """Does this name point at a particular row, or is it just words?
 
     The two cases need opposite treatment, which an earlier version of this
@@ -470,7 +584,15 @@ def identifies(name: str, refs: list[str], rules: set[str]) -> bool:
     `stable` are published abilities and also plain English; an invented
     name is in no dictionary. It must also be long enough, and rare enough among
     the names, to be worth believing.
+
+    **Except a race's, where the line says it is one.** A race's name is
+    one word and usually an ordinary one, so every test below waves it
+    through -- and 82 racial cards were printing `<r20> Racial Power`
+    with the race spelled out, and nothing reporting it. `context` is the line the name was
+    found on, and `names_a_race` is what reads it.
     """
+    if names_a_race(name, context):
+        return True
     if name in rules or name in ALLOWED or _stem(name) in rules:
         return False
     if " " in name:
