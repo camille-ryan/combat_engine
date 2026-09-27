@@ -576,7 +576,21 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # The page prints four sources and these are the two whose feature is
     # written. The other two have no leg on purpose: see
     # `cf:sorcerer-soul-rest` in `docs/blocked.json`.
-    "sorcerer": (Build("wild", CHA, DEX), Build("dragon", CHA, STR)),
+    #
+    # The four after them are the second feature set the class page prints,
+    # which is a different pair of abilities -- Charisma over Constitution --
+    # and one leg per elemental specialty, because the specialty is a single
+    # choice that fixes the damage type the whole build is sworn to. They are
+    # last so that a row leaning on Dexterity or Strength still audits on the
+    # leg it always did. `features/sorcerer.py` reads them.
+    "sorcerer": (
+        Build("wild", CHA, DEX),
+        Build("dragon", CHA, STR),
+        Build("air", CHA, CON, element=DamageType.LIGHTNING),
+        Build("earth", CHA, CON, element=DamageType.ACID),
+        Build("fire", CHA, CON, element=DamageType.FIRE),
+        Build("water", CHA, CON, element=DamageType.COLD),
+    ),
     # A -- Strength either way, and the fork is which second ability the
     # rages lean on. The derivation had already found the right pair off
     # the ability line; what it could not find is what each leg is called,
