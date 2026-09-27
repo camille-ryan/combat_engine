@@ -34,6 +34,7 @@ from combat_engine.engine import (
 from combat_engine.engine.monster_math import PRESETS as MATHS
 from combat_engine.engine.query import alive, creatures
 from combat_engine.engine.scaling import PRESETS
+from combat_engine.engine.turns import extended_rest, short_rest
 
 #: Which four classes take the field. What each of them *knows* is worked
 #: out from the registry rather than listed, because a hand-written list goes
@@ -151,6 +152,13 @@ def main() -> int:
         "advantage and can do nothing on the first round, which is the only "
         "way a rogue ever opens a fight with a sneak attack",
     )
+    ap.add_argument(
+        "--rest",
+        choices=("none", "short", "extended"),
+        help="take a rest before the fight, which is the only way a daily "
+        "power differs from an encounter one: a World never outlived a "
+        "single fight, so nothing ever had to tell them apart",
+    )
     args = ap.parse_args()
 
     world, encounter = build(args.seed, args.level, args.scaling, args.monster_math)
@@ -164,6 +172,10 @@ def main() -> int:
 
         losing = Team.PC if args.surprise == "party" else Team.ENEMY
         caught = [c for c in combatants(world) if team(world, c) is losing]
+    if args.rest == "short":
+        short_rest(world)
+    elif args.rest == "extended":
+        extended_rest(world)
     encounter.start(caught)
     while not encounter.finished and world.round <= args.rounds:
         actor = world.turn

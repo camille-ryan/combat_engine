@@ -101,6 +101,10 @@ class Health:
     surges: int = 0
     #: Failed death saves. Three and the creature is dead.
     failures: int = 0
+    #: The surge pool an extended rest refills to. Recorded when the
+    #: creature is built, because `surges` is spent down during the day
+    #: and nothing else remembers what it started with.
+    max_surges: int = 0
     #: **A monster dies at 0.** Only a character keeps fighting into the
     #: negatives and only a character rolls death saves. Without this
     #: every monster inherited the player's floor and was still alive at
@@ -112,6 +116,8 @@ class Health:
     def __post_init__(self) -> None:
         if self.hp == 0:
             self.hp = self.max_hp
+        if self.max_surges == 0:
+            self.max_surges = self.surges
 
     @property
     def bloodied(self) -> bool:

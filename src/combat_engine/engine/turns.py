@@ -505,8 +505,17 @@ class Encounter:
             pass  # the turn ends normally; `advance` skips the dead
 
 
-def refresh_encounter_powers(world: World) -> None:
-    """Short rest: encounter powers come back, daily ones do not."""
+def short_rest(world: World) -> None:
+    """Five minutes: encounter powers come back, daily ones do not.
+
+    **This had no callers.** It was written, correct, and unreachable,
+    which is why "a number of times per day" and "once per encounter"
+    were the same sentence to this engine: a `World` never outlived one
+    fight, so nothing ever had to tell a daily from an encounter power.
+
+    Healing surges are *spent* over a short rest to get hit points back;
+    the pool itself does not refill. That is `Cast.surge`, not this.
+    """
     from .dsl import get
 
     for _, powers in world.each(Powers):
@@ -514,6 +523,34 @@ def refresh_encounter_powers(world: World) -> None:
             declared = get(ref)
             if declared is None or declared.usage is not Usage.DAILY:
                 powers.restore(ref)
+
+
+def extended_rest(world: World) -> None:
+    """Six hours: everything comes back.
+
+    Every power, every healing surge, and full hit points -- and action
+    points do **not** carry over: the rule is that you lose any unspent
+    ones and start the day with one, which is the only part of the
+    action-point economy that was never modelled because nothing could
+    ever end a day.
+    """
+    from .components import ActionPoints, Health
+
+    for _, powers in world.each(Powers):
+        powers.used.clear()
+        powers.last_round.clear()
+        powers.recharging.clear()
+        powers.forbidden.clear()
+    for _, health in world.each(Health):
+        health.hp = health.max_hp
+        health.temp = 0
+        health.failures = 0
+        health.surges = health.max_surges
+    for _, points in world.each(ActionPoints):
+        points.points = 1
+        points.free = 0
+        points.spent = 0
+        points.spent_round = -1
 
 
 def _uncommanded(world: World, owner: int) -> None:
