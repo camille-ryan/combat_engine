@@ -47,12 +47,20 @@ def main() -> int:
         default="Player's Handbook",
         help="only powers printed in this book; empty string for any",
     )
+    ap.add_argument(
+        "--features",
+        action="store_true",
+        help="the class features of --class, which live on the class page",
+    )
     ap.add_argument("--all", action="store_true", help="include rows already declared")
     ap.add_argument("--limit", type=int, default=0, help="stop after this many rows")
     args = ap.parse_args()
 
     db = game()
     declared = _declared()
+
+    if args.features:
+        return _features(db, args.cls)
 
     refs: list[str] = list(args.refs)
     if args.cls or args.level:
@@ -79,6 +87,36 @@ def main() -> int:
 
     if shown == 0:
         print("# nothing to write -- every row asked for is already declared")
+    return 0
+
+
+def _features(db, cls: str | None) -> int:  # noqa: ANN001
+    """Every class feature's printed text, which nothing could ask for.
+
+    The features were never imported -- `class` carried the chassis
+    numbers and nothing else -- so `spec.py` answered "no such row" for
+    every `cf:` ref, and each one read as a feature with no printed text
+    rather than one nobody had loaded. What got written instead was the
+    paraphrase in `docs/blocked.json`, or a guess.
+
+    Listed per class rather than per ref because the tree's `cf:` refs are
+    hand-chosen descriptions and these are numbered by page order; the two
+    are matched by reading, which is the point.
+    """
+    rows = db.execute(
+        "SELECT ref, class, build, spec FROM class_feature"
+        + (" WHERE lower(class)=?" if cls else "")
+        + " ORDER BY class, build, ord",
+        (cls.lower(),) if cls else (),
+    ).fetchall()
+    if not rows:
+        print(f"# no class features for {cls or 'any class'}", file=sys.stderr)
+        return 1
+    for row in rows:
+        build = f" ({row['build']})" if row["build"] else ""
+        print(f"### {row['ref']}   {row['class']}{build}")
+        print(row["spec"])
+        print()
     return 0
 
 

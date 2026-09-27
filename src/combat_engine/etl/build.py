@@ -95,6 +95,20 @@ CREATE TABLE class (
   defences TEXT, armour TEXT, weapons TEXT, implements TEXT,
   abilities TEXT
 );
+
+-- The features themselves, which `class` above never carried. Only the
+-- chassis numbers were read off the page, so every `cf:` ref in the tree
+-- was written from a paraphrase or guessed outright -- and `spec.py`
+-- answered "no such row" for all of them, which read as "this feature
+-- has no printed text" rather than "nobody imported it".
+--
+-- Keyed by page order rather than by name: the name is trademarked and
+-- lives in `localization/names.json` with every other printed name, so a
+-- ref can be written into tracked source and `leaks.py` stays honest.
+CREATE TABLE class_feature (
+  ref TEXT PRIMARY KEY, class TEXT, ord INTEGER, build TEXT, spec TEXT
+);
+CREATE INDEX class_feature_class ON class_feature(class, ord);
 """
 
 
@@ -104,6 +118,7 @@ class Report:
     abilities: int = 0
     powers: int = 0
     classes: int = 0
+    features: int = 0
     names: int = 0
     common: int = 0
     scores: dict[str, float] = field(default_factory=dict)
@@ -115,6 +130,7 @@ class Report:
             f"  abilities   {self.abilities:6d}",
             f"powers        {self.powers:6d}",
             f"classes       {self.classes:6d}",
+            f"features      {self.features:6d}  (class features, new)",
             f"names         {self.names:6d}  (localization/names.json, gitignored)",
             f"common words  {self.common:6d}  (what leaks.py treats as English)",
             "",
@@ -154,6 +170,7 @@ def build() -> Report:
     _monsters(source, out, report, names)
     _powers(source, out, report, names)
     report.classes = _classes(source, out)
+    report.features = _features(source, out, names)
     _common_words(source, out, report)
 
     out.execute(
@@ -321,6 +338,87 @@ def _classes(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
         written += 1
     return written
 
+
+
+#: A feature heading inside the class-features section: the page sets each
+#: in bold capitals. Lower-case bold is a *sub-option* of the feature above
+#: it ("Centered Breath" under MONASTIC TRADITION), which is why the case
+#: matters and a bare `<b>` would run them together.
+_TRAILING_ESSAY = re.compile(
+    r"<br\s*/?>\s*<br\s*/?>\s*[A-Z][A-Z0-9 \u2019'&/-]{6,}\s*<br"
+)
+
+_FEATURE_HEAD = re.compile(r"<b>\s*([A-Z][A-Z0-9 \u2019'&/-]{3,60}?)\s*</b>")
+
+
+def _features(source: sqlite3.Connection, out: sqlite3.Connection,
+              names: dict[str, dict[str, str]]) -> int:
+    """Every class feature's printed rules text, off the class page.
+
+    `_classes` above reads the same pages and keeps only the chassis
+    numbers, so the features were dropped on the floor -- and because
+    `spec.py` had nothing to answer with, every `cf:` ref in the tree was
+    written from a paraphrase in `docs/blocked.json` or guessed. Five
+    classes have no `Feature` power row at all, so for those it was
+    guesswork all the way down.
+
+    **Every build, not just the earliest printing.** `_classes` keeps one
+    row per class on the grounds that later books amend rather than
+    replace; that is right for hit points and wrong for features, because
+    a build *is* a different set of them.
+    """
+    written = 0
+    wanted = {c.lower() for c in CLASSES}
+    for row in source.execute(
+        "SELECT Name, Txt FROM Class ORDER BY Name"
+    ):
+        name = row["Name"] or ""
+        bare = name.split("(")[0].strip()
+        if name.lower().startswith("hybrid") or bare.lower() not in wanted:
+            continue
+        build = name.partition("(")[2].rstrip(")").strip()
+        html = row["Txt"] or ""
+        # The section is its own heading. Anything before it is the
+        # chassis and the build summaries; anything after is prose about
+        # deities and party role.
+        start = re.search(r"<h3[^>]*>[^<]*CLASS FEATURES[^<]*</h3>", html, re.I)
+        if start is None:
+            continue
+        rest = html[start.end():]
+        end = re.search(r"<h3[^>]*>", rest)
+        section = rest[: end.start()] if end else rest
+        heads = list(_FEATURE_HEAD.finditer(section))
+        for i, m in enumerate(heads):
+            stop = heads[i + 1].start() if i + 1 < len(heads) else len(section)
+            body = section[m.end(): stop]
+            # A feature that *is* a power is already a `Feature` row in
+            # `power`, embedded here as its own card. Keep the prose that
+            # introduces it and drop the card, so the two do not disagree.
+            body = re.sub(r"<h1\b.*", "", body, flags=re.S)
+            # The page ends the feature list with a bare uppercase run --
+            # no tag at all, just `<br/><br/>SWORDMAGE OVERVIEW<br/>` --
+            # so the last feature of every class swallowed the essay about
+            # deities and party role that follows it.
+            body = _TRAILING_ESSAY.split(body, 1)[0]
+            from .html import text as _text
+
+            spec = " ".join(_text(body).split())
+            if len(spec) < 20:
+                continue
+            ref = f"cf:{bare.lower()}-f{i}" if not build else (
+                f"cf:{bare.lower()}-{_slug(build)}-f{i}"
+            )
+            out.execute(
+                "INSERT OR REPLACE INTO class_feature VALUES (?,?,?,?,?)",
+                (ref, bare, i, build, spec),
+            )
+            names[ref] = {"name": m.group(1).title()}
+            written += 1
+    return written
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 def _powers(
     source: sqlite3.Connection,
