@@ -139,9 +139,12 @@ def f1798(c: Cast) -> None:
 
     `usage=ENCOUNTER` is the printed "once per encounter"; the body
     counts nothing itself.
+
+    `PowerUsed.targets` is a *list*, not a `target`. Reading the
+    singular through `getattr` would have made this row silently do
+    nothing.
     """
-    foe = getattr(c.trigger, "target", None)
-    if foe is not None:
+    for foe in c.trigger.targets:
         c.shroud(on=foe)
 
 
@@ -208,9 +211,11 @@ def f2230(c: Cast) -> None:
     gated on having *invoked* the shrouds on that blow, and nothing
     announces the invoking.
     """
-    victim = getattr(c.trigger, "target", None)
-    if victim is None:
-        return
+    # `Dropped.actor` is the creature that fell. There is no `target` on
+    # this event, and reading one through `getattr` would have made the
+    # row silently do nothing -- which is the failure shape this project
+    # is built to hunt, so it is named here rather than left to be found.
+    victim = c.trigger.actor
     c.temp_hp(5 + c.shrouds(victim), on=c.me)
 
 
@@ -519,8 +524,8 @@ def f2818(c: Cast) -> None:
     """Upgrades what another *feat's* granted card does to a shrouded
     target. `f2023b` is a ref like any other, which is the whole point
     of minting a card for a feat that grants one."""
-    foe = getattr(c.trigger, "target", None)
-    if foe is None or not c.shrouds(foe):
-        return
-    c.grants_advantage(on=foe, until=When.EONT)
-    c.immobilized(on=foe, until=When.EONT)
+    for foe in c.trigger.targets:
+        if not c.shrouds(foe):
+            continue
+        c.grants_advantage(on=foe, until=When.EONT)
+        c.immobilized(on=foe, until=When.EONT)
