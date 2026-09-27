@@ -69,7 +69,7 @@ def f3526(c: Cast) -> None:
     initiative, which decides who goes first -- so the row is written
     for that and the skills are left where every other skill bonus in
     this file is left."""
-    c.bonus("initiative", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+    c.initiative(2, on=c.me)
 
 
 @power("f1072", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

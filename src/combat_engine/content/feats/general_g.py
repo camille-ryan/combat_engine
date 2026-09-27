@@ -14,7 +14,7 @@ arrives as a **name** and nowhere else carries `c.on_racial_power()`.
 
 Three smaller families come out of this batch.
 
-*"While you are under the effect of your <racial power>"* is six rows.
+*"While you are under the effect of your <racial power>"* is five rows.
 Nothing asks which row laid an effect that is standing on a creature,
 so they carry `c.effects_on()`.
 
@@ -26,7 +26,7 @@ marker `f974` carries for the same reason.
 
 And `c.bonus("initiative", ...)` is not a thing: `c.initiative`'s own
 docstring says the component is read before the d20 and a modifier is
-never consulted. The three rows here that print an initiative bonus
+never consulted. The two rows here that print an initiative bonus
 call `c.initiative` instead.
 """
 
@@ -121,6 +121,14 @@ def _has(ctx: dict[str, Any], *wanted: Keyword) -> bool:
 
 def _undead(c: Cast, who: int | None) -> bool:
     return who is not None and c.is_kind("undead", on=who)
+
+
+def _holding_somebody(world, eid: int) -> bool:  # noqa: ANN001
+    """"Target: one creature you have grabbed." A `requires=` is handed
+    `(world, eid)` and no `Cast`, so the relation is read directly."""
+    from combat_engine.engine import Relation
+
+    return bool(world.relations.targets(Relation.GRABBED_BY, eid))
 
 
 # -- resistances, which `c.resist` adds to rather than replaces -------------
@@ -665,19 +673,19 @@ def f1103(c: Cast) -> None:
 @power("f1103b", level=1, cls="", usage=ENCOUNTER, action=ActionType.STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.HEALING],
        attack=Attack(Ability.STR, vs=FORT, plus=2),
+       requires=_holding_somebody,
+       requires_text="you must have a creature grabbed",
        dropped=("c.ability_for(ref)",))
 def f1103b(c: Cast) -> None:
-    """"One living creature you have grabbed" is asked of the grab
-    relation, since `Target.holding` filters on what the *target* is
-    carrying rather than on who is holding it.
+    """"One living creature you have grabbed" is a Requirement rather
+    than a guard in the body: `Target.holding` filters on what the
+    *target* is carrying, not on who is holding it, and a body that
+    returns early looks exactly like a row that does nothing.
 
     The printed three-way choice of attacking ability is a build choice
     nothing records, so the header writes Strength and the choice is the
     dropped half.
     """
-    foe = c.target
-    if foe is None or foe not in c.grabbing():
-        return
     if c.strike().hit:
         c.damage("1d4", c.con_mod)
         if c.may("spend a healing surge", who=c.me):

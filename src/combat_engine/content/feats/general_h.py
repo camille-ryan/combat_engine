@@ -366,13 +366,18 @@ def f1261(c: Cast) -> None:
 def f1346(c: Cast) -> None:
     """Two clauses and only one of them prints a type word. The swap is
     written as the arithmetic difference between the two modifiers,
-    untyped, so it cannot collide with the +2; the +2 is the feat bonus
-    the card names."""
+    added to the +2 the card names -- one adjustment rather than two,
+    because the order is moved rather than a modifier laid.
+
+    `c.initiative`, not `c.bonus("initiative", ...)`. `Initiative.bonus`
+    is summed before the d20 and `Mods` is never consulted, so the
+    modifier spelling sits in the table and no roll ever reads it --
+    seven rows across four files were inert that way. `c.initiative`
+    moves the creature in the order after the fact, which is the only
+    thing a trait can do about a roll already made.
+    """
     me = c.me
-    c.bonus("initiative", 2, on=me, until=When.ENCOUNTER, kind="feat")
-    swap = c.wis_mod - c.dex_mod
-    if swap:
-        c.bonus("initiative", swap, on=me, until=When.ENCOUNTER)
+    c.initiative(2 + (c.wis_mod - c.dex_mod), on=me)
 
 
 @_trait("f1256", todo=("c.opportunity_instead()",))
@@ -880,8 +885,7 @@ def f1308(c: Cast) -> None:
 
 @_trait("f1325")
 def f1325(c: Cast) -> None:
-    c.bonus("initiative", _fellowship(c, 2), on=c.me, until=When.ENCOUNTER,
-            kind="feat")
+    c.initiative(_fellowship(c, 2), on=c.me)
 
 
 @_trait("f1327")

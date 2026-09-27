@@ -87,7 +87,7 @@ def f801(c: Cast) -> None:
     minor" needs a duration that ends when that turn does, and
     `c.shift_as` holds until a stance replaces it -- which would hand the
     character a free shift every round for the rest of the fight."""
-    c.bonus("initiative", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+    c.initiative(2, on=c.me)
 
 
 @power("f802", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -231,7 +231,7 @@ def f1678(c: Cast) -> None:
         c.no_provoke(from_=foe, on=me, until=When.EONT)
 
 
-@power("f1774", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1774", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2475",
        on=Trigger(PowerUsed, _used("p2475"), "you use that racial power"))
@@ -249,7 +249,7 @@ def f1774(c: Cast) -> None:
     c.watch(Hit, sidestep, on=me, until=When.EONT)
 
 
-@power("f1776", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1776", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2475",
        on=Trigger(PowerUsed, _used("p2475"), "you use that racial power"))
@@ -264,7 +264,7 @@ def f1776(c: Cast) -> None:
                       when=lambda ctx: ctx.get("target") != me)
 
 
-@power("f1847", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1847", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2483",
        on=Trigger(PowerResolved, _resolved("p2483"), "you use that power"),
@@ -278,7 +278,7 @@ def f1847(c: Cast) -> None:
     c.regeneration(2, on=c.me, until=When.ENCOUNTER)
 
 
-@power("f1849", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1849", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use m5139a3",
        on=Trigger(PowerResolved, _resolved("m5139a3"), "you use that power"),
@@ -296,7 +296,7 @@ def f1849(c: Cast) -> None:
         c.resist(5, pick, on=c.me, until=When.ENCOUNTER)
 
 
-@power("f1859", level=1, cls="", usage=ENCOUNTER, action=REACTION,
+@power("f1859", level=1, cls="", usage=AT_WILL, action=REACTION,
        reach=PERSONAL, target=NO_TARGET,
        trigger="an enemy damages you",
        on=Trigger(DamageApplied, lambda w, me, ev: (
@@ -711,7 +711,7 @@ def f1860(c: Cast) -> None:
 # -- triggered rows ---------------------------------------------------------
 
 
-@power("f1703", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1703", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="an ally within 3 squares drops to 0 hit points or fewer",
        on=Trigger(Dropped, lambda w, me, ev: (
@@ -726,7 +726,7 @@ def f1703(c: Cast) -> None:
     c.temp_hp(5, on=c.me)
 
 
-@power("f1714", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1714", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you succeed on a saving throw",
        on=Trigger(SavingThrow, lambda w, me, ev: (
@@ -742,7 +742,7 @@ def f1714(c: Cast) -> None:
         c.bonus("save", 4, on=friend, until=When.SONT, once=True)
 
 
-@power("f1717", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1717", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you spend an action point",
        on=Trigger(ActionPointSpent, lambda w, me, ev: (
@@ -756,20 +756,26 @@ def f1717(c: Cast) -> None:
 
 
 @power("f1837", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, uses=1,
-       trigger="you are bloodied",
-       on=Trigger(Bloodied, lambda w, me, ev: ev.actor == me,
-                  "you are bloodied"))
+       reach=PERSONAL, target=SELF)
 def f1837(c: Cast) -> None:
-    """`uses=1` is "the first time during an encounter"; the skill half
-    of the feat is not a fight. `Bloodied` carries `actor` alone, which
-    is all this needs."""
-    for who in (c.me, *_near_allies(c, 10)):
-        for defence in ALL_DEFENCES:
-            c.bonus(defence, 1, on=who, until=When.EONT)
+    """A trait with a watch rather than a declared trigger. "The first
+    time you are bloodied during an encounter" is `once=True` on the
+    watch, which is spent only when the handler actually does something;
+    a declared `ENCOUNTER` trigger would be spent by the first firing
+    whether it paid out or not. The skill half is not a fight."""
+    me = c.me
+
+    def rally(ev: Any) -> None:
+        if ev.actor != me:
+            return
+        for who in (me, *_near_allies(c, 10)):
+            for defence in ALL_DEFENCES:
+                c.bonus(defence, 1, on=who, until=When.EONT)
+
+    c.watch(Bloodied, rally, on=me, until=When.ENCOUNTER, once=True)
 
 
-@power("f1850", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1850", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you bloody a creature",
        on=Trigger(DamageApplied, lambda w, me, ev: (
@@ -786,19 +792,23 @@ def f1850(c: Cast) -> None:
 
 
 @power("f1870", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, uses=1,
-       trigger="you are bloodied",
-       on=Trigger(Bloodied, lambda w, me, ev: ev.actor == me,
-                  "you are bloodied"),
-       dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
 def f1870(c: Cast) -> None:
-    """`dice=` on a bonus is the extra-damage-die shape. The type is
-    dropped: a damage modifier carries a number and no type, so the die
-    lands as untyped rather than as whatever the racial power chose."""
-    c.bonus("damage", 0, dice="1d8", on=c.me, until=When.EONT)
+    """Same shape as f1837: a trait whose once-per-encounter half is
+    `once=True` on the watch. `dice=` on a bonus is the extra-damage-die
+    shape. The type is dropped -- a damage modifier carries a number and
+    no type, so the die lands untyped rather than as whatever the racial
+    power chose."""
+    me = c.me
+
+    def flare(ev: Any) -> None:
+        if ev.actor == me:
+            c.bonus("damage", 0, dice="1d8", on=me, until=When.EONT)
+
+    c.watch(Bloodied, flare, on=me, until=When.ENCOUNTER, once=True)
 
 
-@power("f1871", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1871", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you daze or stun an enemy",
        on=Trigger(ConditionApplied, lambda w, me, ev: (
@@ -827,7 +837,7 @@ def f1940(c: Cast) -> None:
     c.save(on=c.me)
 
 
-@power("f1979", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f1979", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you fall",
        on=Trigger(Fell, lambda w, me, ev: ev.actor == me, "you fall"))
@@ -1193,7 +1203,7 @@ def f2023b(c: Cast) -> None:
     c.effect(c.ref, on=victim, until=When.EONT)
 
 
-@power("f2024", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2024", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit a target with f2023b",
        on=Trigger(Hit, lambda w, me, ev: (

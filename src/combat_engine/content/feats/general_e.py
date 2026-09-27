@@ -111,8 +111,20 @@ def f1032(c: Cast) -> None:
        reach=PERSONAL, target=SELF)
 def f1033(c: Cast) -> None:
     """Rolling a check twice is narrative; the initiative bonus is not,
-    and it is the reason this is not an `out_of_combat` row."""
-    c.bonus("initiative", 3, on=c.me, until=When.ENCOUNTER, kind="feat")
+    and it is the reason this is not an `out_of_combat` row.
+
+    **`c.bonus("initiative", ...)` is read by nothing.**
+    `Initiative.bonus` is summed before the d20 and `Mods` is never
+    consulted, which `c.initiative`'s own docstring says outright -- so
+    the modifier I laid here sat in the table and no roll ever saw it.
+    `c.initiative` moves the creature in the order after the fact,
+    which is the only thing that can say this from a trait.
+
+    A trait is armed *after* the opening rolls, so this lands as an
+    adjustment rather than a bonus -- the same arrangement `f288` and
+    `f2055` make.
+    """
+    c.initiative(3, on=c.me)
 
 
 @power("f1016", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -138,12 +150,16 @@ def f969(c: Cast) -> None:
 
 
 @power("f969b", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.WEAPON],
-       todo=("c.threaten_at(reach)",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.WEAPON])
 def f969b(c: Cast) -> None:
-    """Opens an opportunity window at the whip's reach rather than at
-    adjacency. `c.provoke` opens one for a named pair; what is missing
-    is changing the distance at which this character threatens."""
+    """Threaten at the whip's reach rather than at adjacency.
+
+    I marked this `c.threaten_at(reach)`. **`c.threatens` exists** and
+    is that verb -- "it can make opportunity attacks against enemies
+    within 2 squares" is its docstring's own example, and it is held as
+    a modifier so a reach weapon can raise it.
+    """
+    c.threatens(2, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f970", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

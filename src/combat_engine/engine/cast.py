@@ -444,9 +444,14 @@ class Cast:
             from .events import SavingThrow
 
             natural = self.world.rng.roll("1d20").total
+            from .durations import keywords_of
+
+            label = against or self.ref
             plus = bonus + self.total(
-                "save", who, {"actor": who, "label": against or self.ref,
-                              "conditions": frozenset(), "ongoing": False}
+                "save", who, {"actor": who, "label": label,
+                              "conditions": frozenset(), "ongoing": False,
+                              "dtype": None,
+                              "keywords": keywords_of(label)}
             )
             ev = self.world.bus.emit(
                 SavingThrow(

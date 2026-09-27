@@ -108,6 +108,28 @@ class Effect:
         return f"e{self.id}[{', '.join(bits)}]"
 
 
+def keywords_of(label: str) -> frozenset:
+    """The keywords of the row that laid an effect, read off its label.
+
+    `Effect` carries no keywords, and giving it some would mean every
+    site that lays one passing them down. It does not have to: an
+    effect's label is the ref of the row that laid it -- `c.effect`,
+    `c.bonus` and `c.condition` all stamp it -- and the row knows its
+    own keywords.
+
+    So "a +2 bonus to saving throws against **charm** effects" is
+    answerable today, and eighteen rows were carrying
+    `SavingThrow.keywords` for want of the lookup. A label that is not
+    a ref, or a ref no longer declared, answers the empty set rather
+    than raising: a made-up label is a row saying the effect is its
+    own, not a row making a claim about keywords.
+    """
+    from .dsl import get
+
+    p = get(label.split()[0]) if label else None
+    return p.keywords if p is not None else frozenset()
+
+
 class Effects:
     """Every live effect, and the turn boundaries that end them."""
 
@@ -493,6 +515,11 @@ class Effects:
             "conditions": frozenset(eff.conditions),
             "ongoing": eff.ongoing is not None,
             "dtype": eff.ongoing[1] if eff.ongoing else None,
+            # Read off the row that laid it -- see `keywords_of`. The
+            # printed lines that want this say "against charm effects",
+            # "against poison", "against fear", and there were eighteen
+            # of them marked for a field `Effect` does not carry.
+            "keywords": keywords_of(eff.label),
         }
         bonus = eff.save_mod + (holder.total("save", ctx) if holder else 0)
         roll = self.world.rng.d20()

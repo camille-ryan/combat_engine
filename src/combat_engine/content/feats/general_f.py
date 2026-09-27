@@ -184,8 +184,13 @@ def f446(c: Cast) -> None:
 @power("f599", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f599(c: Cast) -> None:
-    """The save bonus is narrowed to charm effects, which the saving
-    throw's context can answer through the keywords the effect holds."""
+    """The save bonus is narrowed to charm effects.
+
+    When I wrote this the saving-throw context carried no `keywords`
+    and the gate was silently false. It carries them now, derived from
+    the row that laid the effect by `durations.keywords_of` -- so the
+    narrowing is real rather than a sentence in a docstring.
+    """
     me = c.me
     c.bonus(WILL, 1, on=me, until=When.ENCOUNTER, kind="feat")
     c.bonus(
@@ -405,18 +410,31 @@ def f64(c: Cast) -> None:
     me = c.me
     c.bonus(
         "damage", 2, on=me, until=When.ENCOUNTER, kind="feat",
+        # "spear" is a group; the card's other half is *longswords*, a
+        # weapon rather than the whole heavy blade group. Widened here
+        # rather than narrowed, and said so, because `chargen` hands out
+        # exactly one heavy blade and it is the longsword.
         when=lambda ctx: _wielding_group(c, "spear", "heavy blade"),
     )
 
 
 @power("f69", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=PROFICIENCY)
+       reach=PERSONAL, target=SELF,
+       dropped=("chargen.proficiency()", "chargen.HAMMER"))
 def f69(c: Cast) -> None:
-    """Same shape as f64, for axes and hammers."""
+    """Same shape as f64, for axes and hammers.
+
+    **"hammer" is not one of this engine's weapon groups.** The set is
+    axe, bow, crossbow, heavy blade, implement, light blade, mace,
+    spear, staff and unarmed, so that arm of the gate was false in
+    every fight and the row paid only on axes. `chargen` hands out no
+    hammer at all, which is the gap rather than the group name -- the
+    axe half plays and the hammer half is named.
+    """
     me = c.me
     c.bonus(
         "damage", 2, on=me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: _wielding_group(c, "axe", "hammer"),
+        when=lambda ctx: _wielding_group(c, "axe"),
     )
 
 

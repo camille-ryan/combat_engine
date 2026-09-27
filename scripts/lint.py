@@ -26,6 +26,7 @@ static walks and cost a fraction of a second between them.
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 import sys
 from collections import Counter
@@ -43,6 +44,17 @@ def main() -> int:
         print(f"{where}: {name} is defined {n} times -- the last one wins")
     faults += len(dupes)
 
+    for where, key in _unread_modifiers():
+        print(
+            f"{where}: c.bonus({key!r}, ...) -- nothing reads that key,"
+            f" so the modifier is laid and never consulted"
+        )
+        faults += 1
+
+    for ref, why in _spent_once_a_fight():
+        print(f"{ref}: {why}")
+        faults += 1
+
     for ref, pred, event, has in _dead_triggers():
         print(
             f"{ref}: `{pred}` reads a field {event} does not have"
@@ -54,6 +66,118 @@ def main() -> int:
         print(f"\n{faults} structural fault(s).")
         return 1
     return done.returncode
+
+
+#: Modifier keys that look like a bonus and are read by nothing.
+#:
+#: `initiative` is the whole list so far and it cost seven rows across
+#: four files. `Initiative.bonus` is summed before the d20 and `Mods` is
+#: never consulted, so `c.bonus("initiative", 2)` sits in the table and
+#: no roll ever sees it -- while reading exactly like every other bonus
+#: in the corpus. `c.initiative` is the verb, and it moves the creature
+#: in the order after the roll, which is the only thing a trait armed
+#: after the opening rolls can do.
+#:
+#: A key belongs here when the engine has a *verb* for the thing and no
+#: reader for the modifier. A key nothing implements at all is a gap and
+#: belongs in a `todo=`, not here.
+UNREAD_MODIFIER_KEYS = {"initiative": "c.initiative(amount, on=)"}
+
+
+def _unread_modifiers() -> list[tuple[str, str]]:
+    """`c.bonus` calls whose key no part of the engine reads."""
+    out = []
+    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if getattr(node.func, "attr", None) not in ("bonus", "penalty"):
+                continue
+            if not node.args or not isinstance(node.args[0], ast.Constant):
+                continue
+            key = node.args[0].value
+            if key in UNREAD_MODIFIER_KEYS:
+                rel = path.relative_to(ROOT)
+                out.append((f"{rel}:{node.lineno}", key))
+    return out
+
+
+#: A card that really does limit itself says so in one of these ways.
+_PRINTED_LIMIT = re.compile(
+    r"once per (encounter|day)"
+    r"|once a (day|fight)"
+    r"|only once"
+    # "**The first time** you make an attack roll **during each
+    # encounter**" is the same limit said the long way round, and it is
+    # how several cards print it. Without this the check called two
+    # correct rows wrong, which is the failure mode that gets a checker
+    # ignored.
+    r"|the first time .{0,80}?(each|an|this) encounter",
+    re.I | re.S,
+)
+
+
+def _spent_once_a_fight() -> list[tuple[str, str]]:
+    """Triggered traits declared `ENCOUNTER` whose card prints no limit.
+
+    **A triggered `action=NONE` row spends a use every time it fires.**
+    `triggers._answers` asks `dsl.usable` before offering a row, and an
+    `ENCOUNTER` row is expended after one use -- so a feat reading
+    "whenever you hit" answered once a fight and was inert for the rest
+    of it. Two content waves found this independently on the same
+    afternoon, having each watched a row do nothing from round two.
+
+    It is invisible to every other instrument: the row fires, the audit
+    sees it fire, and the second firing that never comes is not an
+    event anybody is looking for.
+
+    **Feats only.** A power card and an item's Power block print their
+    own usage line -- "Encounter", "Daily" -- so `ENCOUNTER` there is
+    the card speaking and is right. A feat prints no usage line at all,
+    which is why the field is an authoring choice on a feat and a
+    transcription everywhere else. Scoped wider this check reported 205
+    faults and most of them were correct rows.
+
+    The card decides. 167 of the 169 rows declared this way printed no
+    limit at all, so the default was simply wrong; the two that print
+    one are correct and must stay. A trait with **no** trigger is not
+    checked -- `Encounter._arm_traits` casts it once by design, and
+    `ENCOUNTER` is what stops it being re-armed.
+    """
+    import sqlite3
+
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import ActionType
+    from combat_engine.engine.dsl import REGISTRY
+
+    db = ROOT / "data" / "game.db"
+    if not db.exists():
+        return []
+    con = sqlite3.connect(db)
+    spec = dict(con.execute("SELECT ref, spec FROM feat"))
+    spec.update(con.execute("SELECT ref, spec FROM item_block"))
+
+    out = []
+    for ref, p in REGISTRY.items():
+        if not ref.startswith("f") or not ref[1:2].isdigit():
+            continue
+        if not p.triggers or p.action is not ActionType.NONE:
+            continue
+        if p.usage.name != "ENCOUNTER" or p.unfinished:
+            continue
+        text = spec.get(ref) or spec.get(ref.rstrip("b")) or ""
+        if _PRINTED_LIMIT.search(text):
+            continue
+        out.append((
+            ref,
+            "a triggered trait declared ENCOUNTER is spent on its first "
+            "firing, and this card prints no limit -- use AT_WILL",
+        ))
+    return out
 
 
 #: What each ready-made predicate reads off the event it is handed. Only the
