@@ -41,7 +41,7 @@ from combat_engine.engine.events import (
     ForcedMove,
     Hit,
     Miss,
-    PowerUsed,
+    PowerResolved,
 )
 
 from .level_0 import FLURRIES
@@ -267,8 +267,8 @@ def p7458(c: Cast) -> None:
 def _used_a_flurry(world: object, me: int, ev: object) -> bool:
     """"You use your <class feature> power" -- whichever of the five it is.
 
-    `PowerUsed` names the row, so the question is membership in the set the
-    class page prints; the monk knows exactly one of them.
+    `PowerResolved` names the row, so the question is membership in the
+    set the class page prints; the monk knows exactly one of them.
     """
     return getattr(ev, "actor", None) == me and getattr(ev, "power", "") in FLURRIES
 
@@ -284,7 +284,7 @@ def _used_a_flurry(world: object, me: int, ev: object) -> bool:
     keywords=[Keyword.PSIONIC],
     trigger="you use your class feature's attack and its trigger resolves",
     on=Trigger(
-        PowerUsed,
+        PowerResolved,
         _used_a_flurry,
         "you use your class feature's attack and its trigger resolves",
     ),
@@ -294,22 +294,24 @@ def p11215(c: Cast) -> None:
 
     Refused for a long while for naming a class feature nothing had
     declared. Five rows are that feature -- one per printed option -- and
-    the row does not choose between them: `PowerUsed` says which one the
+    the row does not choose between them: the event says which one the
     monk just used, which is by definition the one it knows.
 
     `reentrant=True` is the second use. Without it the once-a-round rider
     every one of the five carries would refuse the repeat, which is the one
     thing this row exists to cause.
 
-    **The repeat resolves before the first use's own effects.** `dsl.use`
-    announces a use before running its body, and that announcement is the
-    only event this can trigger on -- nothing says "a power has finished".
-    Both payloads land and the shift happens between them; the printed
-    order is first-then-repeat and here it is repeat-then-first. Written
-    down rather than left to be found, and it is why the triggering hit is
-    fetched off the log: the five read `c.trigger.target` to tell a fresh
-    victim from the one the attack already caught, and handing them this
-    row's own trigger would have told all five that every victim was fresh.
+    Triggered on `PowerResolved`, so the repeat really does come second.
+    It used to answer `PowerUsed`, which `dsl.use` announces *before*
+    running the body -- the only event available at the time -- and the
+    printed order of first-then-repeat came out repeat-then-first. The
+    card's own wording is the giveaway: "and resolve the effects of the
+    power that triggered it".
+
+    The triggering hit is still fetched off the log rather than handed on
+    as `c.trigger`: the five read `c.trigger.target` to tell a fresh
+    victim from the one the attack already caught, and giving them this
+    row's own trigger would tell all five that every victim was fresh.
     """
     from combat_engine.engine.dsl import use
 

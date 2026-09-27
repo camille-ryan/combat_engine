@@ -1179,10 +1179,10 @@ def use(
     fresh = (actor, ref) not in _IN_FLIGHT
     _IN_FLIGHT.add((actor, ref))
     _RUNNING.append(cast)
+    rolls: list[Any] = []
     try:
         if not chosen:
             p.body(cast)
-            return True
         landed = False
         # By index rather than by iterator: `chosen` is `cast.targets`, and a
         # row answering this one may lengthen it while it is being walked.
@@ -1196,11 +1196,24 @@ def use(
             cast.target = t
             cast.result = None
             p.body(cast)
+            if cast.result is not None:
+                rolls.append(cast.result)
             landed = landed or bool(cast.result and cast.result.hit)
     finally:
         _RUNNING.pop()
         if fresh:
             _IN_FLIGHT.discard((actor, ref))
+
+    # **The use is over.** `PowerUsed` was announced before the body ran,
+    # which is right for "when you use a power" and wrong for anything
+    # reading a consequence -- a row repeating another resolved its
+    # repeat before the first one's effects, and a row wanting every
+    # attack roll a use made had only the last one to look at.
+    from .events import PowerResolved
+
+    world.bus.emit(
+        PowerResolved(actor=actor, power=ref, targets=list(chosen), rolls=rolls)
+    )
 
     # Reliable: a daily that misses everything is not spent. The keyword was
     # declared and nothing read it, so the two fighter dailies that carry it

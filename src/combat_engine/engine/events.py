@@ -264,6 +264,28 @@ class PowerUsed(Event):
 
 
 @dataclass
+class PowerResolved(Event):
+    """A power has **finished**. `PowerUsed` says one has started.
+
+    `dsl.use` announces the start before running the body, which is the
+    right moment for "when you use a power" and the wrong one for
+    everything that reads a consequence. Nothing said a use was over, so
+    a row repeating another resolved its repeat *before* the first one's
+    effects, and a row wanting the whole set of attack rolls a use made
+    had only the last.
+
+    `rolls` is every `AttackResult` the use produced, in order -- which
+    is the thing "reroll every attack roll you made with this power" has
+    to be given.
+    """
+
+    actor: int
+    power: str
+    targets: list[int]
+    rolls: list[Any] = field(default_factory=list)
+
+
+@dataclass
 class AttackDeclared(Decision):
     attacker: int
     target: int
