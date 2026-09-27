@@ -96,6 +96,7 @@ def legal(
     out.extend(_spending(world, encounter, actor))
     out.extend(_action_points(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
+    out.extend(_delaying(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
     return out
 
@@ -147,6 +148,32 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
 
 
 
+
+
+def _delaying(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Waiting for a better moment. Offered only before anything else.
+
+    "This option must be taken before any other actions in a turn", so
+    the budget has to be untouched -- and a creature that has already
+    swung cannot un-swing to go later. Delaying past somebody is a whole
+    turn rather than a position, which is why the slot travels.
+    """
+    from .components import Budget
+
+    budget = world.get(actor, Budget)
+    if budget is None or world.turn != actor:
+        return []
+    if (budget.standard, budget.move, budget.minor) != (1, 1, 1):
+        return []
+    later = [
+        e
+        for e in encounter.order[encounter.index + 1:]
+        if e != actor and alive(world, e)
+    ]
+    return [
+        Action(kind="delay", cost=ActionType.NONE, subject=e, targets=(e,))
+        for e in later
+    ]
 
 def _hiding(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """Going unseen. A minor action, and only where you could be missed.
@@ -685,6 +712,9 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
     if action.kind == "move":
         walk(world, actor, list(action.path))
         return True
+
+    if action.kind == "delay":
+        return encounter.delay_until(actor, action.subject or actor)
 
     if action.kind == "hide":
         from .cast import Cast

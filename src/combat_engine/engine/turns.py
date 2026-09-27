@@ -344,6 +344,28 @@ class Encounter:
         self.world.bus.emit(TurnEnd(actor=eid, round=self.world.round))
         self.world.turn = None
 
+    def delay_until(self, eid: int, after: int) -> bool:
+        """Move a creature's slot to just behind another's.
+
+        Delaying is not an action; it is a change to the order, taken
+        *instead* of acting and only before anything else this turn.
+        The slot travels with the creature, so what it delays past is a
+        whole turn and not merely a position.
+
+        The cursor steps back with the removal, because the creature
+        that was next has just slid down into the index the delayer
+        vacated -- without that, `advance` skips it and one creature
+        loses a turn for somebody else's decision.
+        """
+        if eid == after or eid not in self.order or after not in self.order:
+            return False
+        here = self.order.index(eid)
+        self.order.pop(here)
+        self.order.insert(self.order.index(after) + 1, eid)
+        if self.started and here <= self.index:
+            self.index -= 1
+        return True
+
     def advance(self) -> int | None:
         """End the current turn and begin the next living creature's.
 

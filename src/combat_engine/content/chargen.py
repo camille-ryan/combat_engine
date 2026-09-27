@@ -604,6 +604,22 @@ class Character:
 SLOTS = ((Usage.AT_WILL, 2), (Usage.ENCOUNTER, 1), (Usage.DAILY, 1))
 
 
+def second_card(ref: str) -> str:
+    """The row this one is printed beside, or "" if it is not a second card.
+
+    Three hundred and seventy-five compendium entries print two stat blocks
+    under one id, and the importer mints the second a ref of its own with a
+    letter on the end -- `p5106b` -- because the parent's columns are wrong
+    for it. Those are not separate choices: the card comes whole, so the
+    second block rides along with the first rather than competing with it
+    for a slot. Dealt from the pool instead, a monk could be handed two
+    movement techniques and nothing to attack with.
+    """
+    from combat_engine.engine.dsl import REGISTRY
+
+    return ref[:-1] if ref[-1:].isalpha() and ref[:-1] in REGISTRY else ""
+
+
 def loadout(
     cls: str, level: int = 1, build: Build | None = None, rng: Random | None = None
 ) -> list[str]:
@@ -628,6 +644,12 @@ def loadout(
     pick = rng or Random(0)
     build = build or build_of(cls)
     mine = [p for p in REGISTRY.values() if p.cls == cls]
+    riders: dict[str, list[str]] = {}
+    for p in list(mine):
+        printed_beside = second_card(p.ref)
+        if printed_beside:
+            riders.setdefault(printed_beside, []).append(p.ref)
+            mine.remove(p)
 
     out = sorted(p.ref for p in mine if p.level == 0)
     # Not already dealt: a class whose heal is itself a level-0 row was
@@ -646,7 +668,7 @@ def loadout(
         while len(chosen) < count and spare:
             chosen.append(spare.pop(0))
         out += sorted(chosen)
-    return out
+    return out + sorted(r for ref in out for r in riders.get(ref, []))
 
 
 def spellbook(cls: str, level: int, prepared: list[str], held: int = 2) -> list[str]:
@@ -675,6 +697,8 @@ def spellbook(cls: str, level: int, prepared: list[str], held: int = 2) -> list[
             # A utility is a row with nothing to attack with; an encounter
             # *attack* power is a slot the book has no say over.
             and (slot is Usage.DAILY or p.attack is None)
+            # A second stat block is not a power to prepare on its own.
+            and not second_card(p.ref)
         ]
         # The character's own level first. A swap is "another power of the
         # same level", so a book stocked from the bottom of the list has
