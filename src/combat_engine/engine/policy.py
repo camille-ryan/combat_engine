@@ -81,6 +81,8 @@ def features(
     # A run is a move that gives the enemy combat advantage, so it is
     # worth strictly less than walking the same way.
     f["is_run"] = float(action.kind == "run")
+    # Named, like every other kind, because an unnamed one scores zero.
+    f["is_action_point"] = float(action.kind == "action_point")
     if action.kind == "wield":
         # **Drawing the right weapon was unreachable.** `actions._wielding`
         # offers the minor and `actions` can execute it, but nothing here
@@ -305,6 +307,11 @@ WEIGHTS: dict[str, float] = {
     # every enemy combat advantage until your next turn. Worth it only
     # when `closes_distance` is large enough to pay for that.
     "is_run": -3.0,
+    # A whole extra action for a free one, and it is only offered when the
+    # turn has nothing left -- so the alternative really is ending. Worth
+    # more than ending a turn and less than a good attack, because the
+    # point is gone for the rest of the fight either way.
+    "is_action_point": 4.0,
     # Enough to outweigh `is_power`, so a second stance has to be worth
     # more than an attack before the creature gives up the one it has.
     "swaps_stance": -8.0,

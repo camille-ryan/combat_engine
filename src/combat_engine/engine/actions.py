@@ -94,6 +94,7 @@ def legal(
     out.extend(_dropping(world, encounter, actor))
     out.extend(_wielding(world, encounter, actor))
     out.extend(_spending(world, encounter, actor))
+    out.extend(_action_points(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
     return out
 
@@ -125,6 +126,40 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
         out.extend(_aimings(world, actor, ref))
     return out
 
+
+
+def _action_points(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Spending an action point for an extra action.
+
+    **The rule, checked rather than remembered:** a free action, once per
+    encounter, buying one additional action, and the spender chooses
+    whether that is a standard, a move or a minor.
+
+    Everything below this was already built -- the pool, the two separate
+    limits, the round stamp `resolve.attack` reads so that "an attack made
+    with an action point" is a gate, and `Cast.action_point` itself. What
+    did not exist was any way to reach it, so in a whole fight not one
+    point had ever been spent. The third mechanic found this session
+    modelled end to end with no menu entry.
+    """
+    from .components import ActionPoints
+
+    pool = world.get(actor, ActionPoints)
+    if pool is None or pool.available <= 0:
+        return []
+    # **One a round, whoever you are.** Only a solo can reach this -- it
+    # is the one thing with two points -- and the rule is that it may
+    # still spend just one per round.
+    if pool.spent_round == world.round:
+        return []
+    # Offered whenever there is one to spend. Holding it back until the
+    # turn is otherwise empty is a judgement about *when* it is worth
+    # using, and that belongs to the policy -- `legal` says what the
+    # rules allow, and the rules allow it at any point in your turn.
+    return [
+        Action(kind="action_point", cost=ActionType.FREE, subject=i, ref=which.value)
+        for i, which in enumerate((ActionType.STANDARD, ActionType.MOVE, ActionType.MINOR))
+    ]
 
 def _recast_key(ref: str, cost: ActionType) -> str:
     return f"{ref} as {cost.value}"
@@ -600,6 +635,13 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
     if action.kind == "move":
         walk(world, actor, list(action.path))
         return True
+
+    if action.kind == "action_point":
+        from .cast import Cast
+
+        return Cast(world=world, me=actor, ref="action point").action_point(
+            ActionType(action.ref or "standard")
+        )
 
     if action.kind == "run":
         walk(world, actor, list(action.path), kind="run")

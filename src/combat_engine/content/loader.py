@@ -18,6 +18,7 @@ from combat_engine.engine import (
     REF,
     WILL,
     Ability,
+    ActionPoints,
     Budget,
     Conditions,
     Defences,
@@ -134,6 +135,16 @@ def spawn(world: World, ref: str, square: tuple[int, int], *, team: Team = Team.
             dies_at_zero=True,
         ),
         Movement(speed=row["speed"], modes=modes),
+        # **Action points, by rank.** An elite has one a fight and a solo
+        # two; an ordinary monster has none at all, which is why this is
+        # only added for the two that do. A solo may still spend only one
+        # in a round, which `_action_points` enforces off `spent_round`.
+        *(
+            [ActionPoints(points=2 if row["solo"] else 1,
+                          limit=2 if row["solo"] else 1)]
+            if (row["elite"] or row["solo"])
+            else []
+        ),
         Defences(resist=resist, vulnerable=vulnerable, immune=immune),
         Initiative(bonus=row["initiative"] - printed, scale="monster"),
         Conditions(),
