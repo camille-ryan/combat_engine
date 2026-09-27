@@ -72,6 +72,11 @@ ROOT = Path(__file__).resolve().parents[1]
 #: could not fire was none of those things.
 KNOWN_SILENT = {
     "m135a3": "targets a destroyed undead ally; the board has none",
+    # Gives back the use of one named sibling row, and the harness fires
+    # each row once on a fresh board -- so that sibling has never been
+    # spent and there is nothing to give back. Driven by hand: with
+    # `Powers.used["f960b"] = 1` the count goes back to 0.
+    "f961b": "restores a sibling row nobody has spent on this board",
     "m417a2": (
         "the same sentence as m135a3 -- it restores a destroyed undead minion, "
         "and the board has no dead ally. Verified by hand: with a felled m812 "

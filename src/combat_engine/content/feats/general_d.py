@@ -258,14 +258,6 @@ def f951(c: Cast) -> None:
     own die and properties. `Weapon` is one set of numbers."""
 
 
-@power("f959", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.forgo_damage()",))
-def f959(c: Cast) -> None:
-    """Proficiency with a weapon the chassis does not carry, and a trade
-    of damage for a condition that nothing lets a row make after the roll
-    has landed."""
-
-
 @power("f910", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
 def f910(c: Cast) -> None:
