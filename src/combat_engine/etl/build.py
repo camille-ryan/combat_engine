@@ -910,7 +910,13 @@ def _cross_reference_rest(
 
 #: `Sly Flourish : If you score a critical hit ...` -- a feat's Associated
 #: Powers list, one clause per power, keyed by the power's printed name.
-_LABEL = re.compile(r"^([A-Z][\w' ]{2,40}?)\s*:\s", re.M)
+#: **And the same label with its class in brackets.** `Deft Strike
+#: (rogue): If you move into an obscured space...` is the identical
+#: construction -- a feat listing the powers it modifies, one clause
+#: each -- and the bracket was all that stopped the pattern matching.
+#: 39 of the 41 such labels resolve, and the 82 rows carrying
+#: `spec.power_ref()` were waiting on exactly this.
+_LABEL = re.compile(r"^([A-Z][\w' ]{2,40}?)\s*(?:\([a-z]+\)\s*)?:\s", re.M)
 
 
 #: "the wizard's **scorching burst** power", "you regain the use of your
