@@ -1097,13 +1097,23 @@ def _cross_reference_rest(
     # Every name, whether or not it "identifies" -- `_label_refs` needs
     # the ones the general test waives.
     #
-    # **A power wins a tie.** Several class powers share a name with a
-    # monster ability, and the monsters are imported first, so taking
-    # whichever ref arrived first pointed five of a feat's Associated
-    # Powers clauses at a stat block. A feat modifies the powers a
-    # character has; it has never modified a monster's claw.
+    # **A power wins a tie, and a class feature beats a stat block.**
+    # Several class powers share a name with a monster ability, and the
+    # monsters are imported first, so taking whichever ref arrived first
+    # pointed five of a feat's Associated Powers clauses at a stat
+    # block. A feat modifies the powers a character has; it has never
+    # modified a monster's claw.
+    #
+    # **Preferring only a `p` was half of that.** Where no power held
+    # the name the monster still arrived first and still won, and every
+    # caller then threw the answer away for not being character-side --
+    # so a class feature the index could have named was refused
+    # instead. `Inspiring Presence` is a warlord build and also an
+    # ability of one stat block, and that is why four warlord powers
+    # printed the build's name to an author.
     by_name: dict[str, str] = {}
     by_feature: dict[str, str] = {}
+    held: dict[str, list[str]] = {}
     for ref, entry in names.items():
         name = (entry.get("name") or "").strip()
         low = name.lower()
@@ -1115,7 +1125,7 @@ def _cross_reference_rest(
         # normalise to `'`.
         keys = {low, low.replace("\u2019", "'")}
         for key in keys:
-            if key not in by_name or (ref[:1] == "p" and by_name[key][:1] != "p"):
+            if _rank(ref) > _rank(by_name.get(key, "")):
                 by_name[key] = ref
         # **A name can be a power for one class and a feature for
         # another.** "Arcane Empowerment" is a sorcerer daily *and* the
@@ -1123,14 +1133,64 @@ def _cross_reference_rest(
         # two artificer feats at the sorcerer's spell. Names are unique
         # within a kind, so the card's own noun decides -- keep a second
         # index of the `cf:` side and let `_named_powers` pick by it.
+        #
+        # **And a name can be a feature of several classes at once.**
+        # Four divine classes print `Channel Divinity`, five classes
+        # print `Ritual Casting`, three print `Psionic Augmentation`.
+        # Both indexes are single-valued, so whichever class was
+        # imported first won, and 213 rows that are not avenger rows --
+        # cleric, paladin, invoker, runepriest -- were told they use
+        # the avenger's feature. `cf:invoker-f1s0`'s own spec said "you
+        # gain the `cf:avenger-f2` power". Keep every holder and let
+        # `_pick` choose by the citing row's class.
         if ref.startswith("cf:"):
             for key in keys:
-                by_feature[key] = ref
+                held.setdefault(key, []).append(ref)
         if not identifies(low, [ref], rules):
             continue
         words = re.findall(r"[A-Za-z']+", low)
         if words:
             by_word.setdefault(words[0], []).append((name, ref))
+
+    # A name one class holds resolves as it always did. A name several
+    # hold becomes an **alternatives list**, `a/b/c`, which `_pick`
+    # narrows to one using the citing row's class and otherwise leaves
+    # whole. Leaving it whole is the honest answer and not a fallback:
+    # `Channel Divinity` on a divine feat any of four classes may take
+    # really does mean any of the four, which is exactly what those
+    # feats' own `prereq` already says.
+    for key, refs in held.items():
+        # **Only a cross-class tie is a tie.** A class that offers the
+        # same feature to two of its builds has it in the index twice --
+        # `cf:warlock-f4` and `cf:warlock-f4c0` -- and that is one
+        # feature, not a choice: the shortest ref is the undivided one
+        # the builds share. Listing both would make 34 specs read as
+        # though the warlock's curse were two different things.
+        classes: dict[str, str] = {}
+        for one in sorted(set(refs), key=lambda r: (len(r), r)):
+            classes.setdefault(re.sub(r"-f\d.*$", "", one[3:]), one)
+        ref = ("/".join(sorted(classes.values())) if len(classes) > 1
+               else next(iter(classes.values())))
+        by_feature[key] = ref
+        # `by_name` prefers a `p` on a tie and is right to; but where it
+        # settled on one of several `cf:` rows it made the same wrong
+        # choice, so it takes the list too.
+        if by_name.get(key, "").startswith("cf:"):
+            by_name[key] = ref
+
+    # **Which class is speaking.** The disambiguator was there all
+    # along: a class feature's ref names its class, a power's row
+    # stores it, and a feat's gate usually states it. A feat's sub-rows
+    # -- `f278b`, the power a feat grants -- inherit their parent's.
+    speaker: dict[str, str] = {}
+    for table in ("power", "class_feature"):
+        for ref, cls in out.execute(f"SELECT ref, class FROM {table}"):
+            if cls:
+                speaker[ref] = cls.lower()
+    for ref, prereq in out.execute("SELECT ref, prereq FROM feat"):
+        found = re.findall(r'"class"\s*:\s*"([a-z-]+)"', prereq or "")
+        if len(set(found)) == 1:
+            speaker[ref] = found[0]
 
     changed = 0
     for table in ("power", "monster_power", "class_feature",
@@ -1173,12 +1233,28 @@ def _cross_reference_rest(
                         other = f"x_{other}"
                         names.setdefault(other, {"name": name})
                     others[name] = other
+            cls = speaker.get(ref) or speaker.get(re.sub(r"[a-z]\d*$", "", ref), "")
+            # **The clause label is not a feat's construction.** It was
+            # found on a feat and the pass was written where it was
+            # found, and so 331 rows kept a printed name for want of
+            # being asked. A power's build riders -- `Star Pact:`,
+            # `Brutal Scoundrel:`, `Covenant of Wrath:` -- are the same
+            # thing exactly: one clause per build, keyed by the build's
+            # printed name, in a list the card prints. So are a race's
+            # traits and a zone's modes.
+            #
+            # **Outside the `others` guard**, for the reason
+            # `_racial_labels` is: that guard skips a row whose spec
+            # names nothing `identifies` believes, and a build name is
+            # two ordinary words -- `star pact`, `iron soul` -- which is
+            # precisely what `identifies` waives. The rows this serves
+            # are the ones it was skipping.
+            fixed = _label_refs(fixed, by_name, cls, lone=table == "feat")
             if others:
                 fixed = scrub(fixed, others)
                 if table == "feat":
-                    fixed = _label_refs(fixed, by_name)
                     fixed = _associated_refs(fixed, by_name)
-                fixed = _named_powers(fixed, by_name, ref, by_feature, rules)
+                fixed = _named_powers(fixed, by_name, ref, by_feature, rules, cls)
             if fixed != spec:
                 out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
                 changed += 1
@@ -1238,7 +1314,21 @@ def _racial_labels(spec: str, by_race: dict[str, str]) -> str:
 #: each -- and the bracket was all that stopped the pattern matching.
 #: 39 of the 41 such labels resolve, and the 82 rows carrying
 #: `spec.power_ref()` were waiting on exactly this.
-_LABEL = re.compile(r"^([A-Z][\w' ]{2,40}?)\s*(?:\([A-Za-z]+\)\s*)?:\s", re.M)
+#: **The curly apostrophe is in neither `\w` nor `[']`**, the same hole
+#: `_NAMED`'s docstring calls out and fixes there. The pages set every
+#: possessive with it, so this pattern stopped dead in the middle of
+#: `Hunter's Quarry :` and every other label whose name owns something,
+#: and those are among the most-cited names in the corpus.
+#:
+#: **And a pattern that can cross it is only half the fix.** `by_name`'s
+#: keys come from `names.json`, which stores the ASCII apostrophe, so the
+#: curly-to-ASCII normalisation only ever ran on the key side. The lookup
+#: side has to run it too, which is what `_low` is for -- `_named_powers`
+#: has always called it and this pass called a bare `.lower()`, so the
+#: two spellings never met.
+_LABEL = re.compile(
+    r"^([A-Z][\w'\u2019 ]{2,40}?)\s*(?:\([A-Za-z]+\)\s*)?:\s", re.M
+)
 
 
 #: "the wizard's **scorching burst** power", "you regain the use of your
@@ -1304,12 +1394,66 @@ _BARE_NAMED = re.compile(
 )
 
 
+#: The verbs that take a power for an object. A closed list, because the
+#: whole of the guard below is the position and a position is only
+#: evidence if the word that makes it is one of a few.
+#:
+#: Every one of these says *do the thing the row is named after*: you
+#: **use** a power, **cast** it, **augment** it, **expend** it, **deal**
+#: its damage, **replace** it with another. None of them takes an
+#: abstract noun for an object in this corpus's register.
+_CITES = (
+    r"use[sd]?|using|cast|casts|casting|augment[s]?|augmented|augmenting"
+    r"|invoke[sd]?|invoking|expend[s]?|expended|expending"
+    r"|replace[sd]?|replacing|regain[s]?|regained|regaining"
+    r"|deal[s]?|dealt|dealing|sustain[s]?|sustained|sustaining"
+    r"|activate[sd]?|activating|trigger[s]?|triggered"
+)
+
+#: A determiner may stand between the verb and the name -- "use **your**
+#: fey step", "augment **the** hand of blight" -- and is not part of it.
+_THE = r"(?:your|the|a|an|this|that|its|his|her|their|each|one)"
+
+#: **A power named as the object of a verb, with no noun behind it.** The
+#: commonest citation form in the corpus and the one none of the three
+#: patterns above can see: "when you cast *magic missile*", "whenever you
+#: deal *sneak attack* damage", "when you augment *hand of blight*",
+#: "Trigger: You use *shadow step*". Lower case, so `_BARE_NAMED`'s
+#: title-case test refuses it; no *power* or *class feature* behind it, so
+#: `_NAMED` never starts.
+#:
+#: **And the bare possessive**, which is the same claim with the verb left
+#: out: "your *oath of enmity* ends", "the bonus your *inspiring presence*
+#: grants". `your` is taken and `the` is not: a character's possessive
+#: says the thing belongs to them, which is what a power does, while
+#: `the` in running prose introduces an ordinary noun phrase far more
+#: often than it introduces a name.
+#:
+#: **And the two prepositions that take one.** "when you hit a creature
+#: with *dire radiance*", "a bonus from *divine fortune*" -- the power is
+#: the instrument rather than the object, and the sentence is saying the
+#: same thing. No other preposition is here: *with* and *from* name what
+#: an effect came out of, where *to*, *of*, *on* and *in* take an
+#: ordinary noun far more often than they take a power.
+#:
+#: **Case-insensitive on the trigger and only there.** A sentence
+#: beginning "Your divine challenge remains in effect" is the commonest
+#: single miss this pattern had, because `your` is capitalised at a full
+#: stop. The name itself is matched case-blind either way -- the index is
+#: keyed on lower case -- so nothing is loosened by it.
+_CITED = re.compile(
+    rf"\b(?i:(?:{_CITES})\s+(?:{_THE}\s+)?|(?:with|from)\s+(?:{_THE}\s+)?|your\s+)"
+    rf"([A-Za-z][\w'\u2019-]*(?:\s+[A-Za-z][\w'\u2019-]*){{0,4}})"
+)
+
+
 def _named_powers(
     spec: str,
     by_name: dict[str, str],
     own: str,
     by_feature: dict[str, str] | None = None,
     rules: set[str] | None = None,
+    cls: str = "",
 ) -> str:
     """Swap `<name> power` for `<ref> power`.
 
@@ -1348,7 +1492,7 @@ def _named_powers(
                 ref = None
                 if noun != "power" and by_feature:
                     ref = by_feature.get(_low(tail))
-                ref = ref or by_name.get(_low(tail))
+                ref = _pick(ref or by_name.get(_low(tail)) or "", cls)
                 # **Only a `p` or a `cf:`.** `by_name` prefers a power on
                 # a tie, but a name with no character-side counterpart
                 # resolves onto a monster's stat block -- 112 specs were
@@ -1365,21 +1509,108 @@ def _named_powers(
         return m.group(0)
 
     def after(m: re.Match) -> str:
-        ref = _longest(m.group(1), by_feature or {}, own, prefix=True)
+        ref = _longest(m.group(1), by_feature or {}, own, cls, prefix=True)
         return m.group(0).replace(m.group(1), ref, 1) if ref else m.group(0)
 
     def bare(m: re.Match) -> str:
-        ref = _longest(m.group(1), by_feature or {}, own, prefix=True,
+        ref = _longest(m.group(1), by_feature or {}, own, cls, prefix=True,
                        rules=rules)
+        return m.group(0).replace(m.group(1), ref, 1) if ref else m.group(0)
+
+    def cited(m: re.Match) -> str:
+        ref = _cited_name(m.group(1), by_name, own, rules or set(), cls)
         return m.group(0).replace(m.group(1), ref, 1) if ref else m.group(0)
 
     spec = _NAMED.sub(swap, spec)
     spec = _AFTER_NOUN.sub(after, spec)
-    return _BARE_NAMED.sub(bare, spec)
+    spec = _BARE_NAMED.sub(bare, spec)
+    return _CITED.sub(cited, spec)
+
+
+def _cited_name(
+    phrase: str, by_name: dict[str, str], own: str, rules: set[str],
+    cls: str = "",
+) -> str:
+    """The longest prefix of `phrase` that is a cited power's printed name.
+
+    **The guard is the position plus two words, and nothing else is
+    waived.** `sanitise.identifies` would refuse most of what this
+    resolves, for the reason its own docstring gives: two ordinary
+    English words in a row are a coincidence in running prose. Directly
+    after *cast*, *augment*, *expend* or *deal* they are not running
+    prose -- they are that verb's object, and the only objects these
+    verbs take are powers. It is the same argument `_label_refs` makes
+    for a colon and `_believable` makes for title case, one position
+    along.
+
+    The rest of `identifies` still applies, because its other clauses
+    are about the phrase and not about where it was found:
+    `sanitise.cited` is those clauses, asked rather than restated here.
+
+    **Only a `p` or a `cf:`.** `by_name` prefers a power on a tie, but a
+    name with no character-side holder resolves onto a stat block, and a
+    character does not cast a monster's claw -- the guard the other three
+    paths carry.
+    """
+    words = phrase.split()
+    for size in range(len(words), 1, -1):
+        name = _low(" ".join(words[:size]))
+        ref = _pick(by_name.get(name) or "", cls)
+        if not ref or ref[:1] not in ("p", "c"):
+            continue
+        if ref.startswith(own) or own.startswith(ref):
+            continue
+        if not sanitise.cited(name, rules):
+            continue
+        return " ".join([ref, *words[size:]])
+    return ""
+
+
+def _rank(ref: str) -> int:
+    """How much `by_name` wants this row when several share a name.
+
+    A power first, then a class feature, then anything else. The
+    callers all refuse a row that is neither, so the order is not a
+    preference but the difference between an answer and none.
+    """
+    if ref[:1] == "p":
+        return 3
+    if ref.startswith("cf:"):
+        return 2
+    return 1 if ref else 0
 
 
 def _low(name: str) -> str:
     return name.lower().replace("\u2019", "'")
+
+
+def _pick(ref: str, cls: str) -> str:
+    """One holder out of an alternatives list, by who is speaking.
+
+    A class-feature name held by several classes is indexed as `a/b/c`
+    rather than as whichever class happened to be imported first --
+    see `crossref`. This is where the list is narrowed.
+
+    **The citing row's own class is the disambiguator and it was there
+    all along.** A cleric feat that says "your Channel Divinity" means
+    the cleric's, and the row knows it is a cleric row. A build's slug
+    is a prefix of its class's -- `cf:cleric-templar-f0` for a row whose
+    class reads `cleric` -- so one test covers both.
+
+    **A list that cannot be narrowed stays a list.** It is not a
+    failure: a divine feat any of four classes may take really does
+    cite any of the four, and those feats' own `prereq` already says so
+    in as many words. A single ref there would be a wrong one, and a
+    wrong ref is worse than a wide one -- it looks settled, and an
+    author writes against it.
+    """
+    if "/" not in ref:
+        return ref
+    if cls:
+        for one in ref.split("/"):
+            if one == f"cf:{cls}" or one.startswith(f"cf:{cls}-"):
+                return one
+    return ref
 
 
 def _believable(run: list[str], name: str, ref: str, rules: set[str]) -> bool:
@@ -1418,6 +1649,7 @@ def _longest(
     phrase: str,
     by_feature: dict[str, str],
     own: str,
+    cls: str = "",
     prefix: bool = False,
     rules: set[str] | None = None,
 ) -> str:
@@ -1439,7 +1671,7 @@ def _longest(
         if run[-1].islower():
             continue
         name = _low(" ".join(run))
-        ref = by_feature.get(name)
+        ref = _pick(by_feature.get(name) or "", cls)
         if not ref or ref.startswith(own) or own.startswith(ref):
             continue
         if rules is not None and not _believable(run, name, ref, rules):
@@ -1449,7 +1681,9 @@ def _longest(
     return ""
 
 
-def _label_refs(spec: str, by_name: dict[str, str]) -> str:
+def _label_refs(
+    spec: str, by_name: dict[str, str], cls: str = "", lone: bool = True
+) -> str:
     """Swap the label of an Associated-Powers clause for its ref.
 
     Done outside `identifies` on purpose, and this is the one place that
@@ -1467,7 +1701,19 @@ def _label_refs(spec: str, by_name: dict[str, str]) -> str:
     """
 
     def swap(m: re.Match) -> str:
-        ref = by_name.get(m.group(1).lower())
+        label = _low(m.group(1))
+        # **One word is not enough outside a feat's list.** That list
+        # has a heading saying its members are powers; a power card, a
+        # race and an item block print their labelled clauses with no
+        # such heading, and a one-word label there is a mode rather than
+        # a name far more often than not -- `Darkness:` naming what a
+        # zone does, `Badger:` naming a shape. Both resolve, and both
+        # would be a lie. Two words is where the position starts to be
+        # proof, which is the line `sanitise.cited` draws.
+        if not lone and len([w for w in label.split()
+                             if w not in sanitise.STOPWORDS]) < 2:
+            return m.group(0)
+        ref = _pick(by_name.get(label) or "", cls)
         # **Only a `p` or a `cf:`.** `by_name` prefers a power on a tie,
         # but a name with no character-side counterpart resolves onto a
         # monster's stat block -- and a feat modifies the powers a
@@ -1526,7 +1772,11 @@ def _associated_refs(spec: str, by_name: dict[str, str]) -> str:
             if _IS_REF.match(head):
                 refs.append(head)
                 continue
-            ref = by_name.get(head.lower())
+            # `_low`, not `.lower()`: the list prints `Hunter's Quarry`
+            # with a curly apostrophe and `by_name`'s keys carry the
+            # ASCII one, so the two spellings only meet if the lookup
+            # side normalises as well as the key side.
+            ref = by_name.get(_low(head))
             # **Only a `p`.** `by_name` prefers a power on a tie, but a
             # paragon power that shares its name with a monster ability
             # has no heroic `p` to prefer -- so the tie-break silently

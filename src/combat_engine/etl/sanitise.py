@@ -620,6 +620,37 @@ def identifies(
     )
 
 
+def cited(name: str, rules: set[str] | frozenset[str]) -> bool:
+    """Can this phrase be a power's name where the position already says
+    one is?
+
+    `identifies` asks whether a phrase found in running prose is a name.
+    The callers of this one have already answered that from the
+    *position* -- a label before a colon, a run in title case, the object
+    of *cast* -- and need only the clauses of `identifies` that are about
+    the phrase itself, because those hold wherever it was found:
+
+    * a phrase that is itself a rules term is mechanics, never a name;
+    * a phrase of nothing but function words is a coincidence, which is
+      what the stop list is for -- there is a power called `Not It` and
+      "whether or not it has" is not a citation of it;
+    * one word is not enough. `identifies` is strictest about a lone
+      word for good reason, and no position in this corpus is strong
+      enough to overrule it.
+
+    What is deliberately **not** asked is the length clause: two
+    ordinary English words in a row are a coincidence in running prose
+    and are not a coincidence in these positions, which is the whole
+    reason the callers exist.
+
+    Kept beside `identifies` rather than in the ETL so that the checker
+    and the scrubber cannot come to hold different opinions.
+    """
+    if name in rules or _stem(name) in rules:
+        return False
+    return len([w for w in name.split() if w not in STOPWORDS]) >= 2
+
+
 def _stem(word: str) -> str:
     """Crudely singular. The dictionary has "narrow", not "narrows", and
     "hunter", not "hunter's" -- and a possessive inside an ordinary phrase
