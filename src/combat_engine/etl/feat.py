@@ -51,10 +51,23 @@ from .sanitise import RULES_TERMS, flavour, mechanical, power_spec, scrub
 _CARD = re.compile(r'<h1[^>]*class="[a-z-]*power"', re.I)
 _HEAD = re.compile(r"<h1\b")
 
-#: The three lines that are not the Benefit. The tier is its own column, the
-#: prerequisite is the tree, and the footer is about the page.
+#: The three lines that are not the Benefit. The tier is its own column,
+#: the prerequisite is the tree, and the footer is about the page.
 _FURNITURE = re.compile(
     r"^(?:(?:heroic|paragon|epic)\s+tier$|prerequisite\b|published in\b)", re.I
+)
+
+#: The compendium's own errata apparatus, which is about a *previous
+#: printing* of the paragraph above it rather than about the feat.
+#: `power_spec` already drops `Update`; the feat pages use five more
+#: words for the same thing.
+#:
+#: Unlike the furniture above, a match here takes **the rest of its
+#: paragraph** with it. Dropping only the heading leaves the instruction
+#: behind, and an author reads a note about editing a sentence as though
+#: it were a rule.
+_ERRATA = re.compile(
+    r"^(?:update|updated|addition|errata|change|correction)\b", re.I
 )
 
 #: The long forms the pages also print. The short ones come off the enum.
@@ -228,14 +241,26 @@ def _benefit(head: str, ref: str, name: str) -> str:
     `<p class="flavor">` separated by `<br/>`, so `html.labelled` sees a
     single blob with one label on the front of it and `power_spec` would
     drop the lot. Splitting the paragraph's own lines is what reads it.
+
+    An errata heading takes **the rest of its paragraph** with it, where
+    the tier and the prerequisite take only themselves. The heading is
+    followed by the instruction it introduces -- add a word to the second
+    sentence, and so on -- and dropping the heading alone leaves an author
+    reading an edit to the paragraph above as though it were a rule.
     """
-    lines = [
-        line
-        for cls, para in paragraphs(head)
-        if "publishedIn" not in cls
-        for line in text(para).split("\n")
-        if line.strip() and not _FURNITURE.match(line.strip())
-    ]
+    lines: list[str] = []
+    for cls, para in paragraphs(head):
+        if "publishedIn" in cls:
+            continue
+        for line in text(para).split("\n"):
+            bare = line.strip()
+            if not bare:
+                continue
+            if _ERRATA.match(bare):
+                break
+            if _FURNITURE.match(bare):
+                continue
+            lines.append(line)
     return scrub("\n".join(lines), {name: ref})
 
 
