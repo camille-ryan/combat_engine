@@ -95,6 +95,13 @@ from combat_engine.engine.query import allies, distance_between, enemies, team
 
 #: A racial power or trait the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
+#: The thirteen racial powers of `r33`, one per elemental
+#: manifestation. A character takes one of them.
+R33 = (
+    "p1766", "p1767", "p1769", "p1770", "p1828",
+    "p10043", "p10044", "p10045", "p10046",
+    "p14073", "p14074", "p14075", "p14076",
+)
 #: Nothing announces that a roll was a reroll, so a rider on one cannot
 #: find its moment.
 REROLL = ("c.on_reroll()",)
@@ -123,6 +130,15 @@ def _best(c: Cast) -> int:
 def _used(ref: str):  # noqa: ANN202
     def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
         return ev.actor == me and ev.power == ref
+
+    return when
+
+
+def _used_any(*refs: str):  # noqa: ANN202
+    """"A <race> racial power", where the race prints more than one."""
+
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.power in refs
 
     return when
 
@@ -332,10 +348,12 @@ def f1670(c: Cast) -> None:
 
 
 @power("f1674", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, todo=("c.extend_shift()",))
 def f1674(c: Cast) -> None:
-    """Lengthens the shift a racial power grants. The power is named in
-    prose, so there is no ref to hang a trigger on."""
+    """Re-aimed: the row it rides on is `rt:r18-shifting-fortunes`, which
+    is declared, so the naming gap is closed. What is left is that
+    nothing lengthens the shift *another named row* makes -- `c.shift`
+    here would be a second, separate shift. Same hold `f2600` carries."""
 
 
 @power("f1697", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -368,16 +386,25 @@ def f1751(c: Cast) -> None:
 
 
 @power("f1773", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, todo=("Moved.power",))
 def f1773(c: Cast) -> None:
-    """Marks at the end of a shift a prose-named racial power makes."""
+    """Re-aimed: `rt:r18-shifting-fortunes` is the row and it is
+    declared. The mark is laid "at the end of your shift", and the shift
+    is that row's -- but `Moved` carries `actor`, `from_`, `to` and
+    `kind_` and never says which row moved the creature, so there is no
+    way to tell the trait's shift from any other. Arming on `SecondWind`
+    beside the trait would fire in an undefined order against the shift
+    the mark is measured from."""
 
 
 @power("f1832", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, todo=("c.ignore_concealment()",))
 def f1832(c: Cast) -> None:
-    """Waives the concealment penalty for whoever a racial *trait*
-    covers. Nothing records who that is."""
+    """Re-aimed: `rt:r4-group-perception` is declared and lays an aura,
+    so "each ally affected by it" is now the creatures standing in that
+    aura. What is missing is the benefit -- nothing waives the -2 for
+    attacking a concealed enemy, and `c.grants_in` takes no `when=` to
+    gate one on concealment. `p1831` and `f3671` want the same verb."""
 
 
 @power("f1835", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -404,11 +431,17 @@ def f1836(c: Cast) -> None:
     what is missing is any way to say which dice another row rolls."""
 
 
-@power("f1848", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL, "chargen.race_choice()"))
+@power("f1848", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       dropped=("chargen.race_choice()",),
+       trigger="you use a r33 racial power",
+       on=Trigger(PowerUsed, _used_any(*R33), "you use a r33 racial power"))
 def f1848(c: Cast) -> None:
-    """"A racial power" as a class of rows rather than one named ref, and
-    a count of elemental manifestations that is a build choice."""
+    """The race's thirteen powers are declared, so "a r33 racial power"
+    is a list of refs. Dropped: the extra 5 for a second elemental
+    manifestation, which is a build choice nothing records. The 11th and
+    21st level steps are out of scope."""
+    c.temp_hp(5, on=c.me)
 
 
 @power("f1854", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -488,9 +521,12 @@ def f1938(c: Cast) -> None:
 
 
 @power("f1939", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
 def f1939(c: Cast) -> None:
-    """Grants a class feature outright, and features are not rows."""
+    """`cf:barbarian-f3` is declared, so the ref is there. `c.grant_row`
+    is still the wrong tool: the feature is a trait, and traits are armed
+    from a snapshot of `Powers.all` taken before this row runs, so a row
+    added here is never armed. Same hold as f1628."""
 
 
 @power("f1839", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -736,13 +772,28 @@ def f2037(c: Cast) -> None:
 
 
 @power("f2095", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=RACIAL)
+       reach=PERSONAL, target=SELF)
 def f2095(c: Cast) -> None:
-    """The Will bonus plays. Widening a racial feature's bonus to cover
-    saving throws needs that feature's ref, and it is prose."""
+    """The widening half is writable now: `rt:r5-fear-save` is declared
+    and lays +5 `kind="racial"` on saves whose effect carries the fear
+    keyword, so the same bonus under the same kind covers the two extra
+    cases the card adds. Two of a kind do not stack and the larger wins,
+    which is right -- one save is never both.
+
+    The save context carries `keywords`, `ongoing` and `dtype`, which is
+    the whole of "charm effects and ongoing psychic damage".
+    """
     me = c.me
     c.bonus(WILL, 1, on=me, until=When.ENCOUNTER, kind="feat",
             when=lambda ctx: c.bloodied(on=me))
+
+    def charm_or_psychic(ctx: dict[str, Any]) -> bool:
+        if Keyword.CHARM in ctx.get("keywords", frozenset()):
+            return True
+        return bool(ctx.get("ongoing")) and ctx.get("dtype") is DamageType.PSYCHIC
+
+    c.bonus("save", 5, on=me, until=When.ENCOUNTER, kind="racial",
+            when=charm_or_psychic)
 
 
 @power("f1771", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -38,6 +38,7 @@ from typing import Any
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     EACH_ALLY,
     EACH_ENEMY,
     ENCOUNTER,
@@ -1258,19 +1259,33 @@ def f1406(c: Cast) -> None:
     )
 
 
-@power("f1408", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_racial_power()",))
+def _used_racial(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """The two racial powers the gate's race pair hands out."""
+    return ev.actor == me and ev.power in ("p2483", "p2484")
+
+
+@power("f1408", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use p2483 or p2484",
+       on=Trigger(PowerUsed, _used_racial, "you use that racial power"))
 def f1408(c: Cast) -> None:
-    """Skill bonuses that last as long as a racial power does. The power
-    is named in prose with no ref, so there is nothing to watch and no
-    duration to tie the bonus to."""
+    """The gate's race is the pair `r27` and `r30`, whose racial powers
+    are `p2483` and `p2484` -- both declared. "Until the racial power
+    ends" is the end of the encounter: that is how long each of the two
+    holds its own effects."""
+    for skill in ("acrobatics", "athletics"):
+        c.bonus(f"skill:{skill}", 5, on=c.me, until=When.ENCOUNTER,
+                kind="feat")
 
 
-@power("f1410", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_racial_power()",))
+@power("f1410", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use p2483 or p2484",
+       on=Trigger(PowerUsed, _used_racial, "you use that racial power"))
 def f1410(c: Cast) -> None:
-    """Temporary hit points whenever the same prose-named racial power is
-    used. Same absence as f1408."""
+    """Same pair of refs as f1408. The 11th and 21st level steps are out
+    of scope."""
+    c.temp_hp(5, on=c.me)
 
 
 @power("f1411", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

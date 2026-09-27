@@ -306,18 +306,62 @@ def f3278(c: Cast) -> None:
 
 @power("f2786", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       todo=("c.on_racial_power()", "c.zone(side=)"))
+       todo=("c.zone(side=)",))
 def f2786(c: Cast) -> None:
-    """Two gaps. The power it rides is named in prose with no ref, and the
-    effect is difficult terrain that only the targets suffer -- a zone's
-    rough going is the ground's property and has no side."""
+    """Re-aimed. The row it rides is the class feature `cf:ardent-f0c1`,
+    which the prerequisite names by ref -- not a racial power at all,
+    and not the naming gap this was marked for. What is left is the
+    effect: difficult terrain that only the power's targets suffer, and
+    a zone's rough going is the ground's property and has no side."""
+
+
+#: The racial trait this rides on is a declared row and its whole body is
+#: an aura filed under its own ref, so "an ally benefiting from it" is a
+#: membership question rather than a printed name.
+_GROUP_DIPLOMACY = "rt:r6-group-diplomacy"
+
+
+def _ally_in_my_trait_aura(world: Any, me: int, ev: Any) -> bool:
+    """An ally of mine, standing in the aura that trait laid.
+
+    `Cast.in_my_aura` is the same question and a predicate is handed no
+    `Cast`, so the zone table is read directly -- the aura is filed under
+    the trait's own ref, which is what keeps this off any other aura the
+    ardent is carrying.
+    """
+    who = getattr(ev, "actor", None)
+    if who is None or who == me or team(world, who) is not team(world, me):
+        return False
+    return any(
+        z.aura
+        and z.owner == me
+        and _GROUP_DIPLOMACY in (z.label or "")
+        and who in world.zones.occupants(zid)
+        for zid, z in world.zones.all()
+    )
 
 
 @power("f3115", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, todo=FEATURE)
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="an ally benefiting from your racial trait uses a second wind",
+       on=Trigger(SecondWind, _ally_in_my_trait_aura,
+                  "an ally you are covering takes a second wind"))
 def f3115(c: Cast) -> None:
-    """Which allies a racial trait is covering is prose with no ref, so
-    there is no set to pay. The second wind itself is now announced."""
+    """The trait is a row and it lays an aura, so "an ally benefiting from
+    it" is answerable.
+
+    `rt:r6-group-diplomacy` is declared in `features/racial.py` and its
+    whole body is `c.grants_in(c.aura(10, label=<its ref>), ...)`, which
+    is why the label is the thing to ask for -- `c.in_my_aura` narrows to
+    one aura, and this character may be standing in several of its own.
+
+    `SecondWind` is announced before the surge is spent, which does not
+    matter here: nothing read is about hit points. The 11th and 21st
+    steps are paragon and epic.
+    """
+    who = getattr(c.trigger, "actor", None)
+    if who is not None:
+        c.temp_hp(3, on=who)
 
 
 @power("f3328", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

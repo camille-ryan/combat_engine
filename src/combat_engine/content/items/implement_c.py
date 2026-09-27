@@ -402,13 +402,17 @@ def i744p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.class_feature()",),
+    dropped=("c.borrow_feature()",),
 )
 def i859x1(c: Cast) -> None:
     """The bonus and the vulnerability are one bargain, so the second is
-    armed off the hit that pays the first. The star-pact and Wild Magic
-    exemptions are a class feature nothing can ask after, so the bargain is
-    charged to everybody."""
+    armed off the hit that pays the first.
+
+    The exemptions are dropped. Having a class feature *is* askable now --
+    `Powers.known` is the list -- but the one the card names by ref,
+    `cf:sorcerer-f0s3`, is a ref no row in the tree declares, and the
+    star pact is one of `cf:warlock-f1`'s legs with nothing naming which.
+    So the bargain is charged to everybody."""
     c.bonus(
         "damage",
         c.enhancement,
@@ -2028,11 +2032,36 @@ def i2719p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.class_feature()",),
+    dropped=("spec.power_ref()",),
 )
 def i2806x1(c: Cast) -> None:
-    """Divine challenge and divine sanction are class features rather than
-    rows, and their damage is not announced as theirs."""
+    """The challenge half lands.
+
+    Divine challenge is `p805`, a declared row, and the bite it takes when
+    the marked creature attacks somebody else goes through `c.flat`, which
+    stamps the casting row's ref onto the blow -- so `DamageApplied.detail`
+    is where the victim, the radiant damage and the row that dealt it
+    arrive together. Read off `detail` rather than off `Hit`, because the
+    mark's damage is not an attack and produces no `Hit` at all.
+
+    No loop: the extra helping is dealt by this row and carries this row's
+    ref, not `p805`'s.
+
+    **Divine sanction is dropped.** It is the same arrangement, laid by
+    `powers/paladin/marks.burning_mark` on behalf of two dozen different
+    rows, and each of those stamps its own ref onto the blow. The card
+    names the sanction and no ref, and the set of rows that lay one is
+    recorded nowhere, so there is no `detail` to test against."""
+    me, plus = c.me, c.enhancement
+
+    def bitten(ev: DamageApplied) -> None:
+        if ev.source != me or ev.dtype is not DamageType.RADIANT:
+            return
+        if getattr(ev, "detail", "") != "p805" or plus <= 0:
+            return
+        c.flat(plus, dtype=DamageType.RADIANT, on=ev.target)
+
+    c.watch(DamageApplied, bitten, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(

@@ -92,8 +92,9 @@ from combat_engine.engine import (
 from combat_engine.engine.components import Health
 from combat_engine.engine.query import has_combat_advantage, team
 
-#: A class feature the benefit names in prose, with no `cf:` ref to read.
-FEATURE = ("c.class_feature()",)
+#: The monk's flurry, which the class page prints as a power and the
+#: importer gave no ref. Four rows here trigger on it or add a use of it.
+FLURRY = ("c.flurry_of_blows()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
 #: The elemental companion, which is a creature the *feat* grants and the
@@ -427,28 +428,36 @@ def f3696b(c: Cast) -> None:
 
 
 @power("f3697", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=FLURRY)
 def f3697(c: Cast) -> None:
-    """A second use of a class feature named in prose. There is no ref for
-    it, so there is nothing to hand a use back to."""
+    """A second use of the monk's flurry in a turn the action point
+    bought. The prerequisite resolves `cf:monk-f1` -- the unarmed strike
+    -- but the flurry itself is neither that row nor any other: it is a
+    power the class page prints and the importer never gave a ref, which
+    is the same hold five item rows carry."""
 
 
 @power("f3698", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.attack_ability()", "c.class_feature()"))
+       todo=("c.attack_ability()", *FLURRY))
 def f3698(c: Cast) -> None:
     """Dexterity in place of Strength for a basic attack is a swap of the
-    ability the header declares, and the flurry half is the same unnamed
-    feature."""
+    ability the header declares. The prerequisite names `cf:monk-f1` and
+    that row is declared, so "your monk unarmed strike" is reachable; the
+    flurry the second sentence retriggers is not a row at all."""
 
 
 @power("f3699", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.class_feature()",), proficiency=("w:ki-focus",))
+       todo=("spec.weapon_ref()",), proficiency=("w:ki-focus",))
 def f3699(c: Cast) -> None:
     """The ki focus is header data `chargen` reads at build time and the
-    training is not a fight. The class feature is named in prose, which
-    is the one thing left."""
+    training is not a fight. The feature it hands over is `cf:monk-f1`,
+    which is declared -- and declared `todo` itself, because the feature
+    *is* a weapon and `w:unarmed`'s off-hand property and free-hand
+    requirement are fields on a weapon row nothing declares. Granting
+    that row here would hand over a card refused in play, so the gap this
+    waits on is the one `cf:monk-f1` waits on."""
 
 
 @power("f3700", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -461,19 +470,20 @@ def f3700(c: Cast) -> None:
 
 @power("f3701", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.class_feature()", "c.cover_from()"))
+       todo=("c.cover_from()", *FLURRY))
 def f3701(c: Cast) -> None:
     """Partial cover against one sort of attack and not another is a
     narrowing `c.no_cover`'s mirror does not have, and the trigger is the
-    same unnamed feature."""
+    flurry, which has no ref."""
 
 
 @power("f3702", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.class_feature()", "spec.weapon_ref()"))
+       todo=(*FLURRY, "spec.weapon_ref()"))
 def f3702(c: Cast) -> None:
     """A sickle is not one of the ten weapon groups and the spec gives no
-    ref for it, so "while you are wielding a sickle" cannot be asked."""
+    ref for it, so "while you are wielding a sickle" cannot be asked --
+    and the power it would change the outcome of has no ref either."""
 
 
 # -- runepriest -------------------------------------------------------------
@@ -1245,14 +1255,18 @@ def f3777(c: Cast) -> None:
 
 
 @power("f3778", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_racial_power()",))
+       reach=PERSONAL, target=SELF, dropped=("c.end_effect()",))
 def f3778(c: Cast) -> None:
     """A point of everything for the beast, while it stands beside you.
 
     "Feat bonus", printed, so `kind="feat"`. Read `c.beast()` inside the
     gate: the beast can be killed and called again and a captured id goes
-    quietly stale. Dropped is the first sentence, which spends a racial
-    row that is not in the tree."""
+    quietly stale.
+
+    Dropped, and re-aimed: `p2478` is declared, so the first sentence
+    has a row to hang on -- but ending a save-ends effect outright is
+    not rolling a saving throw, and only the roll can be asked for.
+    `p2478` itself carries the same marker for the same sentence."""
     pet = c.beast()
     if pet is None:
         return
@@ -1283,9 +1297,13 @@ def f3780(c: Cast) -> None:
 
 
 @power("f3781", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("TempHP.power",))
 def f3781(c: Cast) -> None:
-    """Triggered by a class feature the spec names in prose only."""
+    """`cf:bard-f1s2` is a ref the prerequisite prints, and no row carries
+    it: `cf:bard-f1` writes that virtue inline on its `second-con` leg.
+    What it does is lay temporary hit points, and `TempHP` carries a
+    source, a target and an amount and no power -- so "when you use your
+    `cf:bard-f1s2`" cannot be told from any other pool the bard lays."""
 
 
 @power("f3782", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1348,11 +1366,12 @@ def f3787(c: Cast) -> None:
 
 
 @power("f3788", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("c.racial_row()",))
 def f3788(c: Cast) -> None:
     """`engine/equipment.py` puts no speed penalty on heavy armour, so the
-    first clause has nothing to cancel; what is left is an altitude limit
-    on a class feature the spec names in prose."""
+    first clause has nothing to cancel. What is left is an altitude limit
+    on a *racial* trait, not a class feature: the race's traits were never
+    imported, so there is no `rt:` row here to raise a ceiling on."""
 
 
 @power("f3789", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1377,10 +1396,13 @@ def f3790(c: Cast) -> None:
 
 
 @power("f3791", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("events.ShortRested",))
 def f3791(c: Cast) -> None:
-    """A daily use of a class feature. Daily budgets are not kept here and
-    the feature has no ref to count against."""
+    """`cf:artificer-f0` is declared, so the feature this adds a use to
+    has a row. Its own marker is the reason this one cannot move: the
+    per-day allowance is granted and spent inside a rest, `turns
+    .short_rest` emits nothing, and a use added to a pool nothing fills
+    has nowhere to go."""
 
 
 @power("f3792", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1391,11 +1413,16 @@ def f3792(c: Cast) -> None:
 
 @power("f3793", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.class_feature()", "c.extra_target()"))
+       todo=("c.extra_target()",))
 def f3793(c: Cast) -> None:
-    """A penalty on a feature with no ref, and widening another row's
-    target line -- `c.add_target` adds one to the power being cast, not to
-    a power somebody will cast later."""
+    """The first clause has nothing to cancel. `rt:r69-quick-fix` is
+    declared and declared deliberately inert -- the checks it covers are
+    not made in a fight and cost no action there -- so the -4 this feat
+    lifts is never laid.
+
+    What is left is widening `p16660`'s target line, and `c.add_target`
+    adds one to the power being cast, not to a power somebody will cast
+    later."""
 
 
 @power("f3794", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

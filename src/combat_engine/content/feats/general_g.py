@@ -42,6 +42,7 @@ from combat_engine.engine import (
     DAILY,
     ENCOUNTER,
     FORT,
+    NO_TARGET,
     ONE_CREATURE,
     PERSONAL,
     REF,
@@ -85,6 +86,14 @@ from combat_engine.engine.query import (
 
 #: A racial power the benefit line names in prose and no gate pins.
 RACIAL = ("c.on_racial_power()",)
+#: The thirteen racial powers of `r33`, one per elemental
+#: manifestation. A character takes one, so "the racial power
+#: associated with your manifestation" is whichever of these it uses.
+R33 = (
+    "p1766", "p1767", "p1769", "p1770", "p1828",
+    "p10043", "p10044", "p10045", "p10046",
+    "p14073", "p14074", "p14075", "p14076",
+)
 #: Nothing announces that a roll is a reroll, so a rider on one cannot
 #: find its moment. `f216` and `f217` carry the same.
 REROLL = ("c.on_reroll()",)
@@ -955,21 +964,48 @@ def f1136(c: Cast) -> None:
     power's effect. Same gap as f624."""
 
 
-# -- a racial power that arrives only as a name -----------------------------
+# -- the racial powers of r33, which are declared now -----------------------
 
 
-@power("f925", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+def _used_any(*refs: str):  # noqa: ANN202
+    """`PowerUsed` names its subject `actor`, which `by_me` never reads."""
+
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.power in refs
+
+    return when
+
+
+def _arcane(ctx: dict[str, Any]) -> bool:
+    """Both the attack and the damage context carry `power`."""
+    row = get(ctx.get("power") or "")
+    return row is not None and Keyword.ARCANE in row.keywords
+
+
+@power("f925", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use a r33 racial power",
+       on=Trigger(PowerUsed, _used_any(*R33), "you use a r33 racial power"))
 def f925(c: Cast) -> None:
-    """Temporary hit points whenever *any* power of a race is used
-    successfully. The gate names the race and no row."""
+    """The race's thirteen powers are declared, so "a r33 racial power"
+    is a list of refs. "Successfully" is read as using it: `PowerUsed`
+    is announced above the body, and none of the thirteen rolls an
+    attack that could fail. The choice of modifier is the best of the
+    three, which is the one a player takes."""
+    c.temp_hp(5 + max(c.str_mod, c.con_mod, c.dex_mod), on=c.me)
 
 
-@power("f1131", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f1131", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use a r33 racial power",
+       on=Trigger(PowerUsed, _used_any(*R33), "you use a r33 racial power"))
 def f1131(c: Cast) -> None:
-    """Rides on "the racial power associated with your elemental
-    manifestation" -- a race, a build choice, and no ref between them."""
+    """A character takes one manifestation, so "the racial power
+    associated with your manifestation" is whichever of the race's
+    thirteen it has. No type word in front of either bonus, so both are
+    untyped. The 11th and 21st level steps are out of scope."""
+    c.bonus("attack", 1, on=c.me, until=When.EONT, when=_arcane)
+    c.bonus("damage", 2, on=c.me, until=When.EONT, when=_arcane)
 
 
 # -- rerolls, which nothing announces ---------------------------------------
@@ -1132,10 +1168,19 @@ def f1021(c: Cast) -> None:
 
 
 @power("f1099", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.opt_in()", *FEATURE))
+       reach=PERSONAL, target=SELF,
+       dropped=("c.opt_in()", "spec.power_ref()"))
 def f1099(c: Cast) -> None:
-    """Both clauses are "you can forgo X to instead Y", one of them on a
-    class feature named in prose. The Intimidate bonus is a check."""
+    """The skill bonus is the half that plays, so the row is offered rather
+    than refused: it was marked `todo` whole and threw a working clause
+    away.
+
+    Both riders are "you can forgo X to instead Y", which nothing offers,
+    and the second of them hangs on a feature the spec names in prose with
+    no ref. A plain "+2 bonus" with the word "bonus" and no type in front
+    of it, so untyped.
+    """
+    c.bonus("skill:intimidate", 2, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1098", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1151,13 +1196,14 @@ def f1098(c: Cast) -> None:
 
 @power("f1101", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.surge_value(bonus=)", "c.class_feature()",
-             "c.on_granted_attack()", "c.on_miss(ref)"))
+       todo=("c.surge_value(bonus=)", "c.on_granted_attack()",
+             "c.on_miss(ref)"))
 def f1101(c: Cast) -> None:
-    """Four clauses, four different gaps. `Health.surge_value` is a
-    quarter of maximum computed on read, so nothing raises it; one
-    clause is gated on a class feature named in prose; one adds to an
-    attack another row grants; and one pays out on a named row's miss."""
+    """A surge-value bump and four riders. No class feature is named here
+    at all -- every power the benefit rides on is given by ref -- so the
+    marker that claimed one was wrong. What is genuinely missing is the
+    surge value, the attack a row grants an ally, and a hook on one named
+    row missing."""
 
 
 @power("f1063", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

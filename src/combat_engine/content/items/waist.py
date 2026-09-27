@@ -259,16 +259,23 @@ def i654x1(c: Cast) -> None:
 @power("i3523x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
 def i3523x1(c: Cast) -> None:
-    """The regeneration this raises belongs to a named class feature, and a
-    row cannot reach one: `c.regeneration` would lay a second, separate
-    heal rather than adding to the feature's."""
+    """The regeneration this raises belongs to a class feature the card
+    names in prose, of a class the importer never brought in -- no `cf:`
+    ref in the card and no row behind one. Even given both, `c.regeneration`
+    lays a second, separate heal rather than adding to the feature's."""
 
 
 @power("i640x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("TempHP.power",))
 def i640x1(c: Cast) -> None:
-    """The temporary hit points come from a named class feature; nothing
-    announces one paying out, so there is nothing to add to."""
+    """`cf:barbarian-f1s0` is a ref the card prints and no row carries:
+    `cf:barbarian-f1` writes that option inline, on its `rageblood` leg,
+    and the temporary hit points come off a `Dropped` handler there.
+
+    Even with a row it would not be enough. `TempHP` carries a source, a
+    target and an amount and no power, so a pool this feature laid cannot
+    be told from any other, and temporary hit points do not add -- a
+    second, larger pool laid from here would replace rather than raise."""
 
 
 @power("i657x1", level=3, cls=ITEM, action=ActionType.NONE,

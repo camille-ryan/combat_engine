@@ -259,7 +259,7 @@ def p2347(c: Cast) -> None:
     victim = c.target
     c.damage("1d6", c.cha_mod)
     c.slide(2, on=victim)
-    swing = 1 + c.int_mod if c.build("second-int") else 2
+    swing = 1 + c.int_mod if c.build("f1s0") else 2
     mates = c.within(1, of=victim, side="ally")
     pick = c.choose(mates, "who takes the free melee basic attack", optional=True)
     if pick is not None:

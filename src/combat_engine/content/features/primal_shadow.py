@@ -108,7 +108,7 @@ def ardent_mantle_elation(c: Cast) -> None:
     modifiers on a zone's occupants, so the five squares are measured once
     when `Encounter._arm_traits` runs this.
     """
-    if not c.build("second-con"):
+    if not c.build("f0s1"):
         return
     nearby = c.within(5, side="team")
     if c.con_mod > 0:
@@ -134,23 +134,20 @@ def ardent_mantle_elation(c: Cast) -> None:
     reach=CloseBurst(5),
     target=NO_TARGET,
     keywords=PSIONIC,
-    dropped=("chargen.BUILDS",),
 )
 def ardent_mantle_impulse(c: Cast) -> None:
-    """The third mantle, and the class has two legs for three mantles.
+    """The third mantle, on the third leg.
 
-    It reads Constitution, like the second one, so it is gated on the same
-    leg and an ardent who takes that leg wears both. That is the dropped
-    clause: the exclusivity, not the benefit. The two mantles' damage
-    bonuses are of different kinds -- this one prints "power", the other
-    prints no type word at all -- so they add, which is what makes the
-    missing leg worth marking rather than shrugging at.
+    It reads Constitution, like the second one, and used to share that
+    leg -- so an ardent wore both, and their damage bonuses are of
+    different kinds ("power" here, untyped there) and therefore added.
+    A leg per mantle is what stops that.
 
     "Until the end of his or her turn" is `EOTNT`: an opportunity attack is
     taken on somebody else's turn, so the ally whose damage this is has no
     turn running and the sentence means their next one.
     """
-    if not c.build("second-con"):
+    if not c.build("f0s2"):
         return
     me = c.me
 
@@ -461,20 +458,22 @@ def assassin_shrouds(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=SHADOW,
-    todo=("c.no_encounter_attacks()", "chargen.BUILDS"),
+    todo=("c.no_encounter_attacks()",),
 )
 def assassin_night_stalker(c: Cast) -> None:
-    """The second guild method, and neither half of it can be said.
+    """The second guild method: it has a leg now, and still no way to pay.
 
     The grant is a no-op: `p13799` is a level-0 row of the class and
     `chargen.loadout` has already dealt it. The loss -- every encounter
     attack power in the class -- would be a hand-listed set of refs that
     goes stale the moment a level lands, and a half-written version leaves
-    an assassin holding the powers its method says it never learned.
-    `chargen.BUILDS` has two legs for three methods and both are spoken
-    for, so there is not even a leg to hang the trade on. This is the
-    `cf:assassin-training-guild` entry, which now has a ref.
+    an assassin holding the powers its method says it never learned. So
+    the row is still refused: the whole of it is the trade, and only one
+    side of the trade can be written.
     """
+    if not c.build("f1s1"):
+        return
+    c.grant_row("p13799")
 
 
 @power(
@@ -500,7 +499,7 @@ def assassin_hidden_blade(c: Cast) -> None:
     a corpse beside the target is not company. Untyped -- the card prints
     no type word.
     """
-    if not c.build("second-cha") or c.cha_mod <= 0:
+    if not c.build("f1s2") or c.cha_mod <= 0:
         return
 
     def alone(ctx: dict[str, Any]) -> bool:

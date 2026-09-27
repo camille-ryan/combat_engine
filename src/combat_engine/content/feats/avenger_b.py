@@ -319,10 +319,15 @@ def f1523(c: Cast) -> None:
 
 
 @power("f1555", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, todo=("c.in_form()",))
 def f1555(c: Cast) -> None:
-    """Combat advantage from wearing the sworn enemy's face. Same naming
-    gap as f1523, and nothing models a disguise either."""
+    """Re-aimed: the racial power is `p2472` and it is declared, so the
+    naming gap is closed. What it is declared as is the problem --
+    `out_of_combat=True`, because its whole printed effect is an
+    appearance and a Bluff check, so it is never offered in a fight and
+    never announces a use. And the clause is not "you use it" but
+    "whose face you are wearing", which is the shape question 14 other
+    rows want."""
 
 
 @power("f1768", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -365,11 +370,11 @@ def f1716(c: Cast) -> None:
 
 
 @power("f1724", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("c.instead_of()",))
 def f1724(c: Cast) -> None:
-    """Swaps a pull for a slide inside a class feature's own body. The
-    feature is named in prose with no ref, and even with one the forced
-    movement is chosen inside it."""
+    """Swaps the pull `p5330` prints for a slide. The row is a ref and is
+    declared; the pull happens inside its own body and nothing declines
+    one clause of a row that is already running."""
 
 
 # -- the granted card ------------------------------------------------------

@@ -113,8 +113,27 @@ def _feature(ref: str, what: str) -> None:
     feat.__doc__ = f"{what} The feature is named in prose with no ref."
 
 
-_feature("f292", "Raises a pact feature's bonus to a d20 roll.")
-_feature("f293", "Lengthens a pact feature's teleport.")
+def _boon(ref: str, what: str) -> None:
+    """A pact boon, raised or lengthened from outside the row that pays it.
+
+    Both legs have refs now and both are declared: the prerequisites name
+    `cf:warlock-f1s5` and `cf:warlock-f1s2`, the first pays through
+    `cf:warlock-f1c10` and the second through `cf:warlock-f1`'s own
+    `Dropped` watch. Neither number is reachable -- one is an argument to
+    `c.bonus` inside a card, the other a literal inside a closure -- and
+    that is `c.on_pact_boon()`, which nine rows already name. It is not
+    the feature, and it never was.
+    """
+    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+           reach=PERSONAL, target=SELF, todo=("c.on_pact_boon()",))
+    def feat(c: Cast) -> None: ...
+
+    feat.__name__ = ref
+    feat.__doc__ = f"{what} {_boon.__doc__}"
+
+
+_boon("f292", "Raises a pact boon's bonus to a d20 roll.")
+_boon("f293", "Lengthens a pact boon's teleport.")
 
 
 @power("f291", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

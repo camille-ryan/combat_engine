@@ -135,14 +135,16 @@ def f1500(c: Cast) -> None:
 
 
 @power("f1087", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
 def f1087(c: Cast) -> None:
-    """Rides on a class feature named in prose with no ref, and on having
-    taken its bonus for this particular attack."""
+    """Extra radiant against undead on an attack one class feature
+    boosted. The prerequisite is an unparsed clause and the feature is
+    named in prose, so there is no ref to watch for -- and the bonus it
+    asks about is spent inside that feature."""
 
 
 @power("f1089", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
 def f1089(c: Cast) -> None:
-    """Rides on missing with a class feature named in prose with no
-    ref."""
+    """A push on a miss with one class feature. Prerequisite unparsed and
+    the feature named in prose: no ref to hang a `Miss` on."""

@@ -101,6 +101,15 @@ from combat_engine.engine.query import defence, distance_between, team, unseen_b
 #: A racial power or class feature the benefit names in prose, with no
 #: ref behind it for a trigger to hang on.
 RACIAL = ("c.on_racial_power()",)
+#: The thirteen racial powers of `r33`, one per elemental
+#: manifestation. A character takes one of them.
+R33 = (
+    "p1766", "p1767", "p1769", "p1770", "p1828",
+    "p10043", "p10044", "p10045", "p10046",
+    "p14073", "p14074", "p14075", "p14076",
+)
+#: The three racial powers of `r44`, which the page offers as a choice.
+R44 = ("p7441", "p7442", "p7443")
 #: A class feature named in prose, and another class's feature likewise.
 FEATURE = ("c.class_feature()",)
 BORROW = ("c.borrow_feature()",)
@@ -167,6 +176,15 @@ def _wielding(c: Cast, *refs: str) -> bool:
 
 
 # -- reading an event -------------------------------------------------------
+
+
+def _used_any(*refs: str):  # noqa: ANN202
+    """"A <race> racial power", where the race prints more than one."""
+
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.power in refs
+
+    return when
 
 
 def _used(ref: str):  # noqa: ANN202
@@ -606,12 +624,23 @@ def f3579(c: Cast) -> None:
     c.weakened(on=c.trigger.target, until=When.EONT)
 
 
-@power("f3580", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f3580", level=1, cls="", usage=AT_WILL, action=NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use a r33 racial power",
+       on=Trigger(PowerUsed, _used_any(*R33), "you use a r33 racial power"))
 def f3580(c: Cast) -> None:
-    """The gate names `q132`-style clauses the parser cannot express and
-    the benefit names its racial power in prose, so there is no ref for a
-    `PowerUsed` trigger to match."""
+    """The race's thirteen powers are declared and a character takes one
+    of them, so the manifestation the gate names is whichever of these
+    it uses. The defence context is handed `power`, so "against melee
+    and ranged attacks" is a gate on the shape of the row coming in."""
+
+    def melee_or_ranged(ctx: dict[str, Any]) -> bool:
+        row = get(ctx.get("power") or "")
+        kind = row.reach.kind if row is not None and row.reach is not None else ""
+        return kind in ("melee", "ranged", "melee_or_ranged")
+
+    for which in (AC, FORT, REF, WILL):
+        c.bonus(which, 2, on=c.me, until=When.EONT, when=melee_or_ranged)
 
 
 @power("f3581", level=1, cls="", usage=AT_WILL, action=NONE,
@@ -653,21 +682,26 @@ def f3584(c: Cast) -> None:
 
 
 @power("f3585", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=BORROW)
 def f3585(c: Cast) -> None:
-    """Trades `cf:wizard-arcanist-f0` for a school benefit. The ref is
-    printed and the row behind it is declared nowhere, so `c.grant_row`
-    has nothing to hand over either."""
+    """Trades `cf:wizard-arcanist-f0` for a school benefit.
+
+    The half this feat *costs* is writable now -- that row is declared,
+    and `c.forbid` takes it away for the fight. The half it pays is a
+    school benefit the brief prints in prose with no ref, so writing the
+    cost alone would leave a wizard strictly worse off than one who never
+    took the feat. Both halves or neither."""
 
 
 @power("f3586", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=BORROW)
 def f3586(c: Cast) -> None:
-    """The second step of the `f3585` chain, and the same gap."""
+    """The second step of the `f3585` chain: no cost, and the same
+    unnamed school benefit to pay."""
 
 
 @power("f3587", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=BORROW)
 def f3587(c: Cast) -> None:
     """The third step of the `f3585` chain, and the same gap."""
 
@@ -680,20 +714,21 @@ def f3588(c: Cast) -> None:
 
 
 @power("f3589", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=BORROW)
 def f3589(c: Cast) -> None:
-    """Trades `cf:cleric-templar-f1` for a domain feature chosen from a
-    list the brief prints in prose."""
+    """Trades `cf:cleric-templar-f1` -- a declared row -- for a domain
+    feature chosen from a list the brief prints in prose. Same shape as
+    `f3585`: the cost is sayable and the benefit is not."""
 
 
 @power("f3590", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=BORROW)
 def f3590(c: Cast) -> None:
     """The second step of the `f3589` chain, and the same gap."""
 
 
 @power("f3591", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=BORROW)
 def f3591(c: Cast) -> None:
     """The third step of the `f3589` chain, and the same gap."""
 
@@ -1193,11 +1228,14 @@ def f3629(c: Cast) -> None:
 
 
 @power("f3630", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE,
+       reach=PERSONAL, target=SELF, todo=NAMED,
        swap=Swap(1, Usage.AT_WILL))
 def f3630(c: Cast) -> None:
-    """An at-will traded for one of the powers a class feature grants, and
-    the feature is named in prose."""
+    """An at-will traded for one of the powers a class feature grants.
+    `f3620` above is the same sentence: what the row needs handed to it is
+    a *power* ref, and the brief prints neither the feature's nor its
+    grants'. Which rows belong to a feature is recorded nowhere even where
+    the feature does have a ref."""
 
 
 @power("f3631", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -1586,12 +1624,15 @@ f3668b = _skald_aura("f3668b")
 
 
 @power("f3665", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=AreaBurst(1, 5), target=NO_TARGET, dropped=RACIAL)
+       reach=AreaBurst(1, 5), target=NO_TARGET,
+       dropped=("c.expend_row()",))
 def f3665(c: Cast) -> None:
-    """The terrain plays. What is dropped is the price -- a use of a
-    racial power the benefit names in prose, with no ref behind it, so
-    the row is free where the card charges for it. "For your enemies" is
-    the zone plus `c.ignores_difficult_in`, which is exactly that."""
+    """The terrain plays. Re-aimed: the racial powers are `r44`'s three
+    declared refs now, so the price is no longer nameless -- what is
+    missing is a verb that spends a use of a row this one does not
+    cast. `c.forbid` takes the card away for the encounter, which is a
+    larger thing than losing one of its uses. "For your enemies" is the
+    zone plus `c.ignores_difficult_in`, which is exactly that."""
     zone = c.zone(c.area(), label=c.ref, until=When.EONT, difficult=True)
     c.ignores_difficult_in(zone, side="ally")
 
@@ -1665,12 +1706,17 @@ def f3672(c: Cast) -> None:
 
 
 @power("f3673", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=(*RACIAL, "c.reach_bonus()"))
+       reach=PERSONAL, target=SELF, dropped=("c.reach_bonus()",))
 def f3673(c: Cast) -> None:
-    """The Acrobatics bonus plays. The reach half wants two things at
-    once: a racial power named in prose to hang on, and a way to lengthen
-    a melee reach, which `c.threatens` does for opportunity attacks and
-    for nothing else."""
+    """The Acrobatics bonus plays. Re-aimed: `r44`'s three powers are
+    declared, so the trigger half is no longer the gap -- what is left
+    is lengthening a melee reach, which `c.threatens` does for
+    opportunity attacks and for nothing else.
+
+    Written as a trait rather than a trigger because the skill bonus is
+    a standing modifier: declared `on=Trigger(PowerUsed, ...)` the body
+    would run only on the racial use and the +2 would never be laid.
+    """
     c.bonus("skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 

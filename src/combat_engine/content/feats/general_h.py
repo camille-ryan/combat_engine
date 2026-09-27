@@ -398,11 +398,13 @@ def f1256(c: Cast) -> None:
     window is spent on, and alchemical items are not modelled."""
 
 
-@_trait("f1259", todo=("c.on_racial_power()",))
+@_trait("f1259", todo=("c.use_power()",))
 def f1259(c: Cast) -> None:
-    """Changes what action a racial power costs and when it may be used.
-    The power is named in prose, and an action cost is header data the
-    menu reads before anything runs."""
+    """Re-aimed: the racial power is `p1449` and it is declared, so the
+    naming gap is closed. What is left is a row *using* another row --
+    and using it at a different action cost, in answer to a condition.
+    `c.recast` adds a cheaper menu entry and carries no trigger, so it
+    would offer the teleport at will rather than when grabbed."""
 
 
 @_trait("f1270", todo=("c.grants_ca_to(ally)",))

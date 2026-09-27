@@ -12,9 +12,11 @@ objects or send a sentence -- and two feats ride those. `p8225` announces
 a `PowerUsed` whatever else it does, so the riders work; `p11267` has no
 sustain to make cheaper, which is header data and blocks one row.
 
-`cf:psion-focus` is the discipline focus, and it is not in the tree at all
--- `chargen.BUILDS` in `docs/blocked.json`. The two feats whose entire
-benefit is about the powers it grants name that symbol and nothing else.
+`cf:psion-focus` is the discipline focus, and it has a leg per option in
+`chargen.BUILDS["psion"]` now -- so which two cards a psion's focus
+granted is answerable, and `f1632` is written against it. `f3398` still
+is not: it is a **second** focus alongside the first, and a character
+takes one leg and stays on it.
 """
 
 from __future__ import annotations
@@ -54,6 +56,14 @@ CLOUD = "p2473"
 
 #: The discipline focus is a build the chassis does not deal.
 BUILDS = ("chargen.BUILDS",)
+
+#: The two cards each discipline focus hands over, by the leg that takes
+#: it. Read off `features/psionic.py`, which is what grants them.
+FOCUS_ROWS = {
+    "f0s0": ("p13300", "p13301"),
+    "f0s1": ("p11267", "p11268"),
+    "f0s2": ("p8224", "p8225"),
+}
 
 
 def _used(ref: str):  # noqa: ANN202
@@ -327,19 +337,45 @@ def f3324(c: Cast) -> None:
 # -- the ones with nothing to hang on --------------------------------------
 
 
-@power("f1632", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BUILDS)
+@power("f1632", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f1632(c: Cast) -> None:
-    """A second use of each power the discipline focus grants. The focus
-    is one of six legs the chassis does not deal, so there are no rows to
-    hand a use back to."""
+    """A second use of each of the two cards the discipline focus grants.
+
+    Which two they are is the leg, and `chargen.BUILDS["psion"]` has one
+    per printed focus now, so the pair is looked up rather than guessed.
+
+    Written as a refund rather than as a second charge: nothing raises a
+    row's per-encounter allowance, and `c.restore_use` is what hands a
+    spent use back. One refund per card, latched, which is exactly "twice
+    per encounter" -- a third use finds the latch spent.
+
+    `PowerUsed` is announced before the body runs, and that is what this
+    wants: the use has been counted by then, which is the moment there is
+    something to give back.
+    """
+    me = c.me
+    mine = next((refs for leg, refs in FOCUS_ROWS.items() if c.build(leg)), ())
+    if not mine:
+        return
+    spent: set[str] = set()
+
+    def refund(ev: PowerUsed) -> None:
+        if ev.actor != me or ev.power not in mine or ev.power in spent:
+            return
+        spent.add(ev.power)
+        c.restore_use(ev.power, on=me)
+
+    c.watch(PowerUsed, refund, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f3398", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=BUILDS)
 def f3398(c: Cast) -> None:
-    """A second discipline focus, its powers usable as dailies. Same gap
-    as f1632, one leg further out."""
+    """A second discipline focus, its powers usable as dailies. A leg per
+    focus exists now and f1632 is written against it, but a character
+    takes one leg and stays on it -- so there is nothing that records a
+    second one alongside the first."""
 
 
 @power("f2588", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

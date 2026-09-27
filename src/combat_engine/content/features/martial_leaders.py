@@ -186,7 +186,7 @@ def artificer_transfer(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE_HEAL,
-    todo=(_REST, "chargen.BUILDS"),
+    todo=(_REST, "chargen.power_choice()"),
 )
 def artificer_infusions(c: Cast) -> None:
     """The budget the class's three infusion cards draw on, and the swap
@@ -198,8 +198,11 @@ def artificer_infusions(c: Cast) -> None:
     the printed one, so `p4128`, `p7635` and `p10187` each carry their own
     `once_per_round` instead -- which is three separate allowances rather
     than one shared one, and this row is the thing that is missing.
-    `chargen.BUILDS` is the other half: taking one card in place of another
-    is a leg, and the artificer has none.
+    The other half is the swap the page offers when the character is made
+    -- one card taken in place of another. That is not an ability leg and
+    `chargen.BUILDS` was the wrong symbol for it: a `Build` records which
+    secondary a fork leans on and carries no card list.
+    `chargen.power_choice()` is what the sorcerer's own swap already names.
     """
 
 
@@ -229,12 +232,10 @@ def _enemy_hits_nearby_ally(world: World, me: int, ev: Any) -> bool:
     keywords=ARCANE,
     trigger="an enemy hits one ally within 5 squares of you",
     on=Trigger(Hit, _enemy_hits_nearby_ally, "an enemy hits a nearby ally"),
-    dropped=("chargen.BUILDS",),
 )
 def bard_virtue_valour(c: Cast) -> None:
     """The third of the three printed virtues, and the only one `cf:bard-f1`
-    does not already write -- that row takes the two that key off the
-    derived `second-int` and `second-con` legs.
+    does not already write -- that row takes the other two.
 
     It is also the only one of the three that is a card rather than a
     standing trait: an immediate action with a printed once-per-encounter
@@ -250,11 +251,15 @@ def bard_virtue_valour(c: Cast) -> None:
     triggering ally is read off the event rather than chosen, because the
     card names it; `c.target` is the fallback when there is no trigger.
 
-    `chargen.BUILDS["bard"]` has only the two derived legs and Wisdom is
-    neither, so nothing enforces the choose-one against the other two
-    virtues: a bard holds this as well as the one its leg took. That is the
-    dropped clause, and `docs/blocked.json` has it as `cf:bard-f1-rest`.
+    `chargen.BUILDS["bard"]` carries a leg per virtue now, named for the
+    option's own ref, so the choose-one is enforced: a bard on either of
+    the other two legs never holds this card. It is asked in the body
+    rather than as `requires=`, because a trigger's predicate runs before
+    `requires` is consulted and a row that can never fire should say so in
+    the one place the audit reads.
     """
+    if not c.build("f1s1"):
+        return
     ev = c.trigger
     who = getattr(ev, "target", None) or c.target
     if who is None:
@@ -480,10 +485,13 @@ def warlord_archer(c: Cast) -> None:
     Two are proficiency, which nothing models in either direction -- the
     row drops two and adds one. The third rewrites which ability a ranged
     basic attack rolls, and `basic.RANGED` fixes that in its own header
-    where no modifier can reach it. `chargen.BUILDS` is wanted as well: no
-    warlord leg carries a bow, so even a working rewrite would have nothing
-    to shoot with. `docs/blocked.json` records the same under
-    `cf:warlord-archer`.
+    where no modifier can reach it. `chargen.BUILDS` is wanted as well and
+    **adding legs does not supply it**: the class's six legs are already
+    spent on the six options of a different printed fork, and a character
+    takes one leg and stays on it, so an archer leg would make this choice
+    exclusive with a commanding presence, which the page does not. What is
+    wanted is a second fork per class. `docs/blocked.json` records the
+    same under `cf:warlord-archer`.
     """
 
 

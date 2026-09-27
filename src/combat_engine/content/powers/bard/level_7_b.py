@@ -198,7 +198,7 @@ def p4997(c: Cast) -> None:
     if not c.strike():
         return
     c.damage("2d8", c.cha_mod, dtype=DamageType.THUNDER)
-    bite = 4 + c.int_mod if c.build("second-int") else 5
+    bite = 4 + c.int_mod if c.build("f1s0") else 5
     c.penalty(
         "attack", bite, until=When.EONT,
         when=lambda ctx: bool(ctx.get("opportunity")),
@@ -228,5 +228,5 @@ def p4998(c: Cast) -> None:
     spot = free_near(c, square_of(c, victim), skip=frozenset({square_of(c, pick) or (0, 0)}))
     if spot is not None:
         c.slide(2, on=pick, to=spot)
-    if c.build("second-con") and c.con_mod > 0:
+    if c.build("f1s2") and c.con_mod > 0:
         c.bonus(AC, c.con_mod, on=pick, until=When.EONT, kind="power")

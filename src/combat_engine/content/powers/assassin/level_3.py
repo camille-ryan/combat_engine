@@ -46,7 +46,7 @@ def p9419(c: Cast) -> None:
         return
     if c.strike():
         c.damage(c.w(), c.dex_mod)
-        plus = c.cha_mod if c.build("second-cha") else 0
+        plus = c.cha_mod if c.build("f1s2") else 0
 
         def lash(ev: TurnEnd) -> None:
             if ev.actor == victim or ev.actor not in c.enemies():
@@ -122,7 +122,7 @@ def p9422(c: Cast) -> None:
         return
     if c.strike():
         c.damage(c.w(2), c.dex_mod)
-        step = 3 if c.build("second-con") else 2
+        step = 3 if c.build("f1s0") else 2
         c.slide(step, on=victim)
 
         def jerked(ev: Hit) -> None:

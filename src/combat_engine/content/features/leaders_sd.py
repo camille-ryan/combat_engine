@@ -137,7 +137,7 @@ def runepriest_rune(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    requires=on_leg("second-con"),
+    requires=on_leg("f2s2"),
     requires_text="needs the tradition this belongs to",
 )
 def runepriest_tradition(c: Cast) -> None:

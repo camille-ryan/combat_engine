@@ -356,17 +356,15 @@ def f2292(c: Cast) -> None:
 
 
 @power("f2030", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*FEATURE, "c.use_power()"))
+       reach=PERSONAL, target=SELF, todo=("cf:wizard-arcanist-f0c3", "c.use_power()"))
 def f2030(c: Cast) -> None:
-    """A free second swing from a granted card when a feature-modified
-    roll misses. Two holds: the feature is named in prose with no ref,
-    so nothing marks the roll it touched, and a row using another row
-    is the gap eleven item blocks also want."""
+    """A free `f2023b` on a miss with one arcanist option. The option has
+    a ref and no row, so nothing marks which misses it modified."""
 
 
 @power("f2034", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("cf:wizard-arcanist-f0c1", "c.counts_as(kind=)"))
 def f2034(c: Cast) -> None:
-    """Makes a granted card count as an at-will for one class feature's
-    purposes. The card is a ref; the feature is prose, and what it does
-    with the at-wills it sees is inside it."""
+    """Treats `f2023b` as an at-will wizard spell for one arcanist option.
+    That option has a ref and no row, and nothing makes a row count as a
+    different sort."""

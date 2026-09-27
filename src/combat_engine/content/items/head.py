@@ -869,11 +869,18 @@ def i631x1(c: Cast) -> None:
     _skills(c, 2, "nature")
 
 
-@power("i979x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_racial_power()",))
+@power("i979x1", level=9, cls=ITEM, usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use p1628",
+       on=Trigger(PowerUsed,
+                  lambda world, me, ev: ev.actor == me and ev.power == "p1628",
+                  "you use that racial power"))
 def i979x1(c: Cast) -> None:
-    """The trigger is the use of one named racial power and nothing
-    announces a racial use as such."""
+    """The racial power is `p1628`, which is declared, so the property
+    is an ordinary rider on `PowerUsed`. "Your next attack" is `once=`:
+    the bonus is spent by the first roll that could use it rather than
+    inside the gate. The level 19 step is out of scope."""
+    c.bonus("damage", c.cha_mod // 2, on=c.me, until=When.EONT, once=True)
 
 
 # -- level 10 ---------------------------------------------------------------

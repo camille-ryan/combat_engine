@@ -30,6 +30,7 @@ from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
     PERSONAL,
+    REF,
     SELF,
     ActionPointSpent,
     ActionType,
@@ -620,14 +621,17 @@ _WOLF = "comp:8"
 
 
 @power("f804", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_racial_power()",))
+       reach=PERSONAL, target=SELF, dropped=("c.use_power()",))
 def f804(c: Cast) -> None:
     """The beast is harder to catch on the way past.
 
     The defence side of the attack context is the rich one -- it is handed
     `opportunity` -- so this is a gate that answers rather than a bonus
-    that is always on. Dropped: spending a racial row on the beast's
-    behalf, and that row is not in the tree.
+    that is always on.
+
+    Dropped, and re-aimed: `p1452` is declared now, so the row has a
+    name. What is missing is one row *using* another -- and on somebody
+    else's behalf at that, which `c.grant_row` does not say either.
     """
     pet = c.beast()
     if pet is not None:
@@ -683,17 +687,25 @@ def f828(c: Cast) -> None:
 
 @power("f1240", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.on_death_save()", "c.on_racial_power()"))
+       dropped=("c.on_death_save()", "c.instead_of()"))
 def f1240(c: Cast) -> None:
-    """Two clauses of four.
+    """Three clauses of four.
 
     The saving-throw context carries the conditions being saved against,
     so "against the unconscious condition" is a real gate. The origin is
     a swap rather than an addition -- the companion's stat block prints
-    one already -- which is what `instead_of` is for. Dropped: the
-    death-saving-throw half, which does not go through the same roll,
-    and the teleport rider on a racial row that is not in the tree. The
-    Stealth bonus is a skill and belongs to no fight.
+    one already -- which is what `instead_of` is for. The Stealth bonus
+    is a skill and belongs to no fight.
+
+    The teleport rider is written now: `p2482` is declared, and "the
+    same distance that you teleport" is that row's own 3. A `c.watch`
+    rather than a declared trigger, because the row lays standing
+    modifiers as well and a triggered row never lays those.
+
+    Dropped: the death-saving-throw half, which does not go through the
+    same roll, and "you choose which one of you is insubstantial" --
+    `p2482` makes its own caster insubstantial in its body and nothing
+    suppresses a clause of the row that triggered this one.
     """
     pet = c.beast()
     if pet is None:
@@ -704,12 +716,45 @@ def f1240(c: Cast) -> None:
         when=lambda ctx: Condition.UNCONSCIOUS in ctx.get("conditions", ()),
     )
 
+    def along(ev: Any) -> None:
+        if ev.power != "p2482":
+            return
+        with_me = c.beast()
+        if with_me is not None:
+            c.teleport(3, who=with_me)
+
+    c.watch(PowerUsed, along, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} along")
+
 
 @power("f1381", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_racial_power()",))
+       reach=PERSONAL, target=SELF)
 def f1381(c: Cast) -> None:
-    """The beast shares the effect of either of two racial rows. Neither
-    row is in the tree, so there is no effect to share."""
+    """`p2483` and `p2484` are declared, so "the benefit of the power's
+    effect" is a known pair of holds rather than a name.
+
+    Restated rather than borrowed: `c.as_though_hit_by` runs the
+    borrowed body with its own caster as the subject, so it would buff
+    the ranger a second time and never the beast. The numbers here are
+    the two rows', repeated for the one creature the card adds.
+
+    A trait with a `c.watch`, because two racial rows have to be told
+    apart and either may be the one the character owns.
+    """
+    def share(ev: Any) -> None:
+        pet = c.beast()
+        if pet is None:
+            return
+        if ev.power == "p2483":
+            c.bonus("damage", 2, on=pet, until=When.ENCOUNTER)
+            c.regeneration(2, until=When.ENCOUNTER, on=pet, while_bloodied=True)
+        elif ev.power == "p2484":
+            c.bonus("speed", 2, on=pet, until=When.ENCOUNTER)
+            c.bonus(AC, 1, on=pet, until=When.ENCOUNTER)
+            c.bonus(REF, 1, on=pet, until=When.ENCOUNTER)
+
+    c.watch(PowerUsed, share, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} share")
 
 
 @power("f1718", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

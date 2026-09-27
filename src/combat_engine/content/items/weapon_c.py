@@ -1863,11 +1863,26 @@ def i1184p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.class_feature()",),
 )
 def i1340x1(c: Cast) -> None:
-    """Rides on a class feature having paid out. `c.sneak_damage` gives the
-    dice and nothing says whether they were dealt on this hit."""
+    """`cf:rogue-scoundrel-f4` is declared, and it pays out through
+    `features.strikers.extra_damage`, which adds `c.total("<the feature's
+    ref> damage")` on top of its dice. That modifier key exists precisely
+    so a build feature can raise the number -- the helper's own docstring
+    says closing over the dice alone left nothing for one to reach -- so
+    an item that raises it says the printed sentence exactly, and says it
+    only on the hit the feature actually pays out on.
+
+    Untyped: the card prints no word before "add".
+
+    "With this weapon" is not a gate, which is this file's standing
+    reading -- the damage context carries no weapon and the character
+    holds the item for as long as the property is armed.
+    """
+    c.bonus(
+        "cf:rogue-scoundrel-f4 damage", c.cha_mod,
+        on=c.me, until=When.ENCOUNTER, kind="untyped",
+    )
 
 
 @power(
@@ -2155,12 +2170,20 @@ def i3055p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.class_feature()",),
+    todo=("c.extra_damage(applies=)",),
 )
 def i3096x1(c: Cast) -> None:
-    """Lifts a once-a-round restriction on a class feature. `c.sneak_damage`
-    hands over the dice and the restriction is counted somewhere no row can
-    reach."""
+    """Lifts the once-a-turn latch on `cf:rogue-scoundrel-f4`.
+
+    The feature is declared and its *size* is reachable -- `i1340x1` above
+    raises it through the `"<ref> damage"` key. Its **latch** is not: a
+    `paid` dict in `features.strikers.extra_damage`'s closure, keyed on
+    the round and the initiative slot, with nothing to clear or bypass it.
+
+    Paying a second helping from here instead would double up rather than
+    guarantee one: on a critical the feature's own `Hit` watcher fires
+    too, and if it has not yet paid this turn the rogue would collect
+    twice. Which of the two watchers runs first is not ordered."""
 
 
 @power(

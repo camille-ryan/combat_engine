@@ -46,6 +46,7 @@ from combat_engine.engine import (
     Moved,
     PowerUsed,
     Summoned,
+    TempHP,
     Trigger,
     When,
     power,
@@ -87,9 +88,9 @@ def _used_infusion(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.actor == me and ev.power in INFUSIONS
 
 
-def _feature(ref: str, what: str) -> None:
+def _feature(ref: str, what: str, todo: tuple[str, ...] = FEATURE) -> None:
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=FEATURE)
+           reach=PERSONAL, target=SELF, todo=todo)
     def feat(c: Cast) -> None: ...
 
     feat.__name__ = ref
@@ -525,13 +526,110 @@ def f3043(c: Cast) -> None:
     c.watch(Moved, stepped, until=When.ENCOUNTER, on=me, label="f3043")
 
 
-# -- the eight that ride on a feature with no row ---------------------------
+# -- riders on the feature that pays an ally temporary hit points -----------
 
-_feature("f2110", "Doubles the attack bonus one feature banks in a weapon.")
-_feature("f3029", "Damage to an enemy beside an ally that feature helped.")
-_feature("f3030", "A defence bonus beside the feature's temporary hit points.")
-_feature("f3031", "Resistance for you when that feature pays an ally.")
-_feature("f3036", "An initiative bonus for whoever carries the banked charge.")
-_feature("f3039", "A free shift beside the feature's temporary hit points.")
-_feature("f3040", "Extra fire damage beside the same temporary hit points.")
-_feature("f3044", "Lends a racial power's benefit to the charge's wielder.")
+
+def _paid_an_ally(c: Cast, ev: TempHP) -> int | None:
+    """The ally `cf:artificer-f1` has just handed temporary hit points to.
+
+    That feature is the artificer's one route from itself to an ally's
+    temporary hit points -- it watches `ItemPowerUsed` and pays the ally
+    that used the item -- so source, side and "not me" is the printed
+    sentence rather than an approximation of it. `TempHP` names no row,
+    which is the one thing this cannot ask.
+    """
+    if ev.source != c.me or ev.target == c.me:
+        return None
+    return ev.target if ev.target in c.allies() else None
+
+
+@power("f3030", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f3030(c: Cast) -> None:
+    """A trait armed once, watching the feature pay out.
+
+    Untyped: the card prints no word in front of "bonus". "Until the
+    start of his or her next turn" is `When.SOTNT` held on the ally, so
+    the window is the ally's turn and not the artificer's.
+    """
+    def paid(ev: TempHP) -> None:
+        who = _paid_an_ally(c, ev)
+        if who is None:
+            return
+        for defence in (AC, FORT, REF, WILL):
+            c.bonus(defence, 2, on=who, until=When.SOTNT)
+
+    c.watch(TempHP, paid, until=When.ENCOUNTER, on=c.me, label="f3030")
+
+
+@power("f3031", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f3031(c: Cast) -> None:
+    """The payout is the artificer's, not the ally's: `c.resist` follows
+    the caster already, and `on=c.me` says so anyway."""
+    def paid(ev: TempHP) -> None:
+        if _paid_an_ally(c, ev) is not None:
+            c.resist(2, on=c.me, until=When.EONT)
+
+    c.watch(TempHP, paid, until=When.ENCOUNTER, on=c.me, label="f3031")
+
+
+@power("f3039", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f3039(c: Cast) -> None:
+    """"As a free action" is the ally's to spend and nothing bills it, so
+    the step is simply taken -- `c.shift` takes `who`, not `on`."""
+    def paid(ev: TempHP) -> None:
+        who = _paid_an_ally(c, ev)
+        if who is not None:
+            c.shift(1, who=who)
+
+    c.watch(TempHP, paid, until=When.ENCOUNTER, on=c.me, label="f3039")
+
+
+@power("f3040", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("c.bonus(dtype=)",))
+def f3040(c: Cast) -> None:
+    """The size of the bonus is written and its **type** is dropped: the
+    card adds fire damage and a damage modifier carries no damage type,
+    so what lands is the right number of untyped damage. Writing it as
+    the artificer's own fire damage would put it on the wrong creature.
+    """
+    def paid(ev: TempHP) -> None:
+        who = _paid_an_ally(c, ev)
+        if who is None or c.cha_mod <= 0:
+            return
+        c.bonus("damage", c.cha_mod, on=who, until=When.EOTNT)
+
+    c.watch(TempHP, paid, until=When.ENCOUNTER, on=c.me, label="f3040")
+
+
+# -- the four that ride on the charge banked in a weapon --------------------
+
+
+def _banked(ref: str, what: str) -> None:
+    """`cf:artificer-f0s0` is declared now, and refused in play.
+
+    The feature banks a +2 to one attack roll, spent as a free action
+    *after* the roll -- and that is the half its own row carries
+    `c.boost_roll()` for. Nothing lays the charge, so nothing is
+    "benefiting from" it and these four have no subject; the feature
+    being named in prose was never what stopped them.
+    """
+    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+           reach=PERSONAL, target=SELF, todo=("c.boost_roll()",))
+    def feat(c: Cast) -> None: ...
+
+    feat.__name__ = ref
+    feat.__doc__ = f"{what} {_banked.__doc__}"
+
+
+#: `cf:artificer-f0` is a declared row, so this is not a naming gap -- the
+#: +2 it banks is the thing nothing lays, which is what its own sub-option
+#: waits on too.
+_feature("f2110", "Doubles the attack bonus one feature banks in a weapon.",
+         todo=("c.boost_roll()",))
+_banked("f3029", "Damage to an enemy beside an ally that charge helped.")
+_banked("f3036", "An initiative bonus for whoever carries the banked charge.")
+_banked("f3044", "Lends a racial power's benefit to the charge's wielder.")

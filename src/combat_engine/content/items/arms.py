@@ -83,6 +83,7 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.components import Gear as _Gear
+from combat_engine.engine.components import Powers as _Powers
 
 ITEM = "item"
 
@@ -863,11 +864,27 @@ def i2875p2(c: Cast) -> None:
 
 
 @power("i3036p1", level=6, cls=ITEM, usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(1), target=NO_TARGET,
-       todo=("c.class_feature()",))
+       reach=CloseBurst(1), target=NO_TARGET)
 def i3036p1(c: Cast) -> None:
-    """The size of the bonus is the value of a named class feature, and
-    nothing reports what a feature is currently worth."""
+    """`f650b` is a declared row, and what it is worth is a two-line rule
+    rather than a stored number: +3 AC with a hand free, +1 otherwise.
+    Nothing reads back a modifier already laid -- that is `Mods.applied()`
+    and it is somebody else's marker -- so the rule is asked again here of
+    the same gear rather than the answer being fetched.
+
+    Gated on actually having the feature: a wearer who does not gets
+    nothing, which is what "your f650b class feature" says.
+
+    "Each ally adjacent to you" excludes the wearer, which is what
+    `side="ally"` means as of today."""
+    known = c.world.get(c.me, _Powers)
+    if known is None or "f650b" not in known.known:
+        return
+    gear = c.world.get(c.me, _Gear)
+    held = list(gear.held) if gear else []
+    free = len(held) == 1 and not held[0].two_handed and not gear.shield
+    for friend in c.within(1, side="ally"):
+        c.bonus(AC, 3 if free else 1, on=friend, until=When.EONT, kind="power")
 
 
 @power("i783x1", level=6, cls=ITEM, action=ActionType.NONE,

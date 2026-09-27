@@ -111,7 +111,7 @@ def f1720(c: Cast) -> None:
 
 
 @power("f1009", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("cf:barbarian-f1s0",))
 def f1009(c: Cast) -> None:
     """Raises the temporary hit points a class feature pays. Named in
     prose with no ref."""

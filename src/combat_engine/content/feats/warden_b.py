@@ -42,6 +42,7 @@ from typing import Any
 from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
+    NO_TARGET,
     PERSONAL,
     SELF,
     ActionType,
@@ -68,8 +69,21 @@ from combat_engine.engine.triggers import about_me
 
 #: A class feature named in prose with no ref.
 FEATURE = ("c.class_feature()",)
+#: "Instead of": a printed swap for half of what a class feature does.
+#: The features have refs now, so the hold is the operation and not the
+#: name -- nothing declines one clause of a row that is already running.
+INSTEAD = ("c.instead_of()",)
 #: A racial power the benefit line names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
+#: The two racial powers of `r1`, of which a character takes one.
+R1 = ("p1448", "p12577")
+#: The thirteen racial powers of `r33`, one per elemental
+#: manifestation. A character takes one of them.
+R33 = (
+    "p1766", "p1767", "p1769", "p1770", "p1828",
+    "p10043", "p10044", "p10045", "p10046",
+    "p14073", "p14074", "p14075", "p14076",
+)
 #: "While you are under the effect of your <ref> power" -- the power is a
 #: ref, but nothing records that one of its holds is standing on you.
 BENEFIT = ("c.benefits_from()",)
@@ -334,11 +348,31 @@ def f1830(c: Cast) -> None:
 
 
 @power("f1846", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f1846(c: Cast) -> None:
-    """A saving throw for a *second* ally, which reads the first one off
-    a class feature named in prose with no ref. Writing the first would be
-    writing the feature rather than the feat."""
+    """A saving throw for a *second* ally when the second wind lands.
+
+    Only the throw: the surge is `cf:warden-f1s1`'s half and that row is
+    written. Which ally it chose is decided inside its own body and nothing
+    announces it, so the pool offered here is every ally within 5 and the
+    overlap is left standing rather than faked away.
+
+    `side="ally"` already leaves the warden out; the explicit test is the
+    one that row learned to keep.
+
+    Printed as "you can", so it is offered and declining is an answer.
+    """
+    me = c.me
+    near = sorted(
+        (a for a in c.within(5, side="ally") if a != me),
+        key=lambda a: -c.missing(on=a),
+    )
+    friend = c.choose(near, f"{c.ref}: who else makes a saving throw",
+                      optional=True)
+    if friend is not None:
+        c.save(on=friend)
 
 
 @power("f1886", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -356,13 +390,15 @@ def f1886(c: Cast) -> None:
 
 
 @power("f2556", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=FEATURE,
+       reach=PERSONAL, target=SELF, dropped=INSTEAD,
        trigger="you use your second wind",
        on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f2556(c: Cast) -> None:
     """The shift is sayable. What it is printed as an alternative *to* --
-    sliding every enemy you have marked -- is a class feature the tree does
-    not have, so nothing is being given up for it."""
+    `cf:warden-f1s2` sliding every enemy you have marked -- is a declared
+    row now, so this is no longer a naming gap: the slide happens inside
+    that row's own body and nothing declines half of what a feature
+    does."""
     if c.con_mod > 0:
         c.shift(c.con_mod)
 
@@ -380,11 +416,11 @@ def f2558(c: Cast) -> None:
 
 
 @power("f1874", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=INSTEAD)
 def f1874(c: Cast) -> None:
-    """Swaps a slide for a push inside a build's own rider. The build leg
-    is named in prose with no ref, and even with one the forced movement
-    is chosen inside it -- the same pair the avenger's f1724 named."""
+    """Swaps a slide for a push inside `cf:warden-f1s2`. That row is
+    declared now, so the ref is no longer the hold -- the forced movement
+    is issued from inside its body and nothing takes one back."""
 
 
 # -- the saving throw the class gets at the start of its turn ---------------
@@ -486,19 +522,41 @@ def f1853(c: Cast) -> None:
 
 
 @power("f1946", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF)
 def f1946(c: Cast) -> None:
-    """An attack bonus for one named racial power against marked
-    creatures. Same naming gap as f1853, and it is the gate rather than
-    the bonus that wants the ref."""
+    """The race's powers are declared, so the gate is a pair of refs.
+    A standing modifier and not a trigger: the attack context carries
+    `power` and `target`, which is the whole of "with that power against
+    creatures marked by you"."""
+    me = c.me
+
+    def breath_at_my_mark(ctx: dict[str, Any]) -> bool:
+        victim = ctx.get("target")
+        return (
+            ctx.get("power") in R1
+            and victim is not None
+            and c.marked(on=victim, by=me)
+        )
+
+    c.bonus("attack", 1, on=me, until=When.ENCOUNTER, kind="feat",
+            when=breath_at_my_mark)
 
 
 @power("f1947", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use a r33 racial power",
+       on=Trigger(PowerUsed,
+                  lambda world, me, ev: ev.actor == me and ev.power in R33,
+                  "you use a r33 racial power"))
 def f1947(c: Cast) -> None:
-    """A damage bonus against marked creatures after using the encounter
-    power a racial build choice carries. Neither the choice nor the power
-    it settles has a ref."""
+    """The race's thirteen powers are declared and a character takes one
+    of them, so the build choice no longer stands between the row and
+    its moment. The damage context carries `target`, so the mark is a
+    gate it can answer. The 11th and 21st steps are out of scope."""
+    me = c.me
+    c.bonus("damage", 2, on=me, until=When.EONT,
+            when=lambda ctx: (v := ctx.get("target")) is not None
+            and c.marked(on=v, by=me))
 
 
 @power("f1945", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

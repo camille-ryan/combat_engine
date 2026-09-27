@@ -355,11 +355,16 @@ def f387(c: Cast) -> None:
 
 @power("f602", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_granted_basic()", "c.class_feature()"))
+       todo=("c.on_granted_basic()", "c.race_option()"))
 def f602(c: Cast) -> None:
     """Damage of a type chosen by a racial manifestation, on a basic
-    attack a class feature granted. Both halves are gaps and they are
-    the two that turn up most often in this corpus."""
+    attack a class feature granted.
+
+    The manifestation is `rt:r33-manifestation`, which is a declared row
+    -- and that row's own marker says why this one cannot read it:
+    thirteen manifestations, one choice, recorded nowhere. So the damage
+    type has no source, and the granted swing still announces itself as
+    an ordinary basic attack."""
 
 
 @power("f604", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -370,22 +375,31 @@ def f604(c: Cast) -> None:
     race on a character to hold one."""
 
 
-# -- the bard's virtues, named in prose -------------------------------------
+# -- the bard's virtues -----------------------------------------------------
+#
+# The prerequisites name `cf:bard-f1s0` and `cf:bard-f1s2` by ref, and
+# neither is a row: `cf:bard-f1` writes both of those virtues *inline*,
+# forking on the derived `second-int` and `second-con` legs, and only the
+# third virtue got a row of its own (`cf:bard-f1s1`). So the feature is
+# reachable as a name and not as a moment.
 
 
 @power("f469", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("c.on_feature_power()",))
 def f469(c: Cast) -> None:
-    """Rides on a class feature that slides an ally. The feature is
-    named in prose with no ref, which is the same gap eleven other rows
-    carry."""
+    """Rides on the virtue that slides an ally. That slide is one
+    `c.slide` among many inside `cf:bard-f1`'s `Miss` handler, and
+    `Forced` names who moved and not which row moved them, so there is
+    no moment to answer."""
 
 
 @power("f470", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("TempHP.power",))
 def f470(c: Cast) -> None:
-    """Rides on a class feature that grants temporary hit points. Same
-    gap as f469."""
+    """Rides on the virtue that grants temporary hit points. `TempHP`
+    carries a source, a target and an amount and no power, so "with your
+    `cf:bard-f1s2`" cannot be told from any other pool the bard lays --
+    and the bard lays several."""
 
 
 @power("f472", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

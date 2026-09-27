@@ -103,6 +103,13 @@ from combat_engine.engine.query import concealment_of, creatures, is_, team, uns
 FEATURE = ("c.class_feature()",)
 #: A racial power named by its race rather than by a ref.
 RACIAL_POWER = ("c.on_racial_power()",)
+#: "The aspect of nature you are manifesting" -- `rt:r44-aspects` is a
+#: declared row and it is refused in play: which of the three a character
+#: has chosen is a build decision with nowhere to write it down, which is
+#: the marker that row carries itself.
+ASPECT = ("c.race_option()",)
+#: The three racial powers of `r44`, which the page offers as a choice.
+R44 = ("p7441", "p7442", "p7443")
 #: A power traded for another at build time.
 SWAP = ("chargen.power_swap()",)
 #: Which weapons a character may pick up is settled when it is built.
@@ -163,6 +170,20 @@ def _used(ref: str):  # noqa: ANN202
         return ev.actor == me and ev.power == ref
 
     return when
+
+
+def _used_any(*refs: str):  # noqa: ANN202
+    """"A <race> racial power", where the race prints more than one."""
+
+    def when(world: Any, me: int, ev: Any) -> bool:
+        return ev.actor == me and ev.power in refs
+
+    return when
+
+
+def _shape(ref: str) -> str:
+    p = get(ref)
+    return p.reach.kind if p is not None and p.reach is not None else ""
 
 
 def _hit_with(ref: str):  # noqa: ANN202
@@ -678,12 +699,18 @@ def f3499(c: Cast) -> None:
 
 @power("f3500", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.counts_as(group=)", *FEATURE),
+       todo=("c.counts_as(group=)",),
        proficiency=("w:quarterstaff",))
 def f3500(c: Cast) -> None:
-    """Three things settled when the character is built: a proficiency, two
-    class features widened to a weapon they do not name, and a staff read
-    as a light blade by the rows that ask what is in hand."""
+    """One absence, three times over.
+
+    Both features are declared rows and neither is the hold:
+    `cf:rogue-scoundrel-f4` carries a `requires=` that asks for a light
+    blade, a crossbow or a sling, and `cf:rogue-scoundrel-f1s3` is
+    already waiting on this same symbol. Widening either to a staff,
+    and letting the rows that print "requires a light blade" accept
+    one, is the same missing thing: nothing says a weapon counts as a
+    group it is not in. The proficiency is a column and is declared."""
 
 
 def _proned_by_me(world: Any, me: int, ev: Any) -> bool:
@@ -1067,35 +1094,108 @@ def f3529b(c: Cast) -> None:
 
 
 @power("f3530", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*FEATURE, "c.resist(once=)"))
+       reach=PERSONAL, target=SELF, todo=(*ASPECT, "c.resist(once=)"))
 def f3530(c: Cast) -> None:
-    """"Whenever you choose an aspect of nature" names a class feature in
-    prose with no ref, and resistance that is spent by the first hit that
-    reads it is a shape `c.resist` has no flag for."""
+    """"Whenever you choose an aspect of nature" is `rt:r44-aspects` --
+    a declared racial trait, and one that is refused in play because
+    nothing records which aspect was chosen or when. So there is no
+    moment to hang this on; and resistance spent by the first hit that
+    reads it is a shape `c.resist` has no flag for either."""
 
 
 @power("f3531", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL_POWER, *FEATURE))
+       reach=PERSONAL, target=NO_TARGET, dropped=ASPECT,
+       trigger="you use a r44 racial power",
+       on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3531(c: Cast) -> None:
-    """A racial power named by its race and an aspect named in prose."""
+    """The race's three powers are declared, so the trigger is a list of
+    refs. `ForcedMove` is a `Decision`, so `Window.BEFORE` is the
+    interrupt window in which "you can ignore the forced movement" is
+    still true -- by `Moved` the shove has happened. `once=True` is the
+    printed "the first time".
+
+    Dropped: "if you are in the aspect of the elements", a class feature
+    named in prose with no ref. The 11th and 21st steps are out of scope.
+    """
+    me = c.me
+
+    def dodge(ev: Any) -> None:
+        if ev.target != me:
+            return
+        ev.cancel()
+        c.shift(1)
+        near = [x for x in c.within(1) if x != me]
+        if near:
+            c.flat(c.wis_mod, dtype=DamageType.COLD, on=near[0])
+
+    c.watch(ForcedMove, dodge, window=Window.BEFORE, once=True,
+            until=When.SONT, on=me, label=f"{c.ref} dodge")
 
 
 @power("f3532", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL_POWER, *FEATURE))
+       reach=PERSONAL, target=NO_TARGET, dropped=ASPECT,
+       trigger="you use a r44 racial power",
+       on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3532(c: Cast) -> None:
-    """`f3531` with lightning and a close or area attack."""
+    """"Targets you" is `AttackDeclared`, which names one `target` --
+    the close-or-area half is asked of the row that is being used, the
+    way `p7441` asks it. Dropped: the aspect clause, a class feature in
+    prose."""
+    me = c.me
+
+    def sting(ev: Any) -> None:
+        if ev.target != me:
+            return
+        if _shape(ev.power) not in ("close_burst", "close_blast", "area_burst"):
+            return
+        c.flat(c.wis_mod, dtype=DamageType.LIGHTNING, on=ev.attacker)
+
+    c.watch(AttackDeclared, sting, once=True, until=When.SONT, on=me,
+            label=f"{c.ref} sting")
 
 
 @power("f3533", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL_POWER, *FEATURE))
+       reach=PERSONAL, target=NO_TARGET,
+       dropped=(*ASPECT, "c.bonus(dtype=)"),
+       trigger="you use a r44 racial power",
+       on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3533(c: Cast) -> None:
-    """`f3531` with thunder on the caster's own opportunity attacks."""
+    """The damage context carries `opportunity`, so the narrowing is a
+    gate rather than a guess at which row an opportunity attack is, and
+    `Hit` carries the same as a plain attribute rather than a field.
+
+    Two dropped clauses. The aspect; and the **type** of the extra
+    damage -- `c.bonus` takes no `dtype`, which is the absence thirty-one
+    rows already name, so what lands is two points of untyped damage on
+    an opportunity attack rather than two of thunder.
+    """
+    me = c.me
+    opportune = lambda ctx: bool(ctx.get("opportunity"))  # noqa: E731
+    c.bonus("damage", 2, on=me, until=When.SONT, when=opportune)
+
+    def shove(ev: Any) -> None:
+        if ev.attacker == me and getattr(ev, "opportunity", False):
+            c.push(1, on=ev.target)
+
+    c.watch(Hit, shove, until=When.SONT, on=me, label=f"{c.ref} push")
 
 
 @power("f3534", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL_POWER, *FEATURE))
+       reach=PERSONAL, target=NO_TARGET, dropped=ASPECT,
+       trigger="you use a r44 racial power",
+       on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3534(c: Cast) -> None:
-    """`f3531` with fire on the first melee attack that lands."""
+    """The melee half is read off the row that hit; `Hit` names it.
+    Dropped: the aspect clause."""
+    me = c.me
+
+    def burn(ev: Any) -> None:
+        if ev.target != me or _shape(ev.power) != "melee":
+            return
+        c.flat(c.wis_mod, dtype=DamageType.FIRE, on=ev.attacker)
+
+    c.watch(Hit, burn, once=True, until=When.SONT, on=me,
+            label=f"{c.ref} burn")
 
 
 @power("f3535", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

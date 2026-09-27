@@ -203,7 +203,7 @@ def p2785(c: Cast) -> None:
     if not c.strike():
         return
     c.damage(c.w(2), c.cha_mod)
-    swing = 1 + c.con_mod if c.build("second-con") else 2
+    swing = 1 + c.con_mod if c.build("f1s2") else 2
     for mate in c.within(5, side="ally"):
         if mate != c.me:
             c.bonus(
@@ -252,7 +252,7 @@ def p4991(c: Cast) -> None:
         return
     victim = c.target
     c.damage(c.w(), c.cha_mod)
-    extra = 1 + c.int_mod if c.build("second-int") else 2
+    extra = 1 + c.int_mod if c.build("f1s0") else 2
     for mate in c.within(5, side="ally"):
         if mate != c.me:
             c.bonus(

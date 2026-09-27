@@ -17,16 +17,21 @@ exactly two legs per class, one per secondary. So the leg a rider asks about
 is the leg whose secondary that rider spends, and the rows here ask the same
 question the level 1 rows already ask.
 
-Where a class prints **more** options than it has secondaries -- two more for
-the druid, three more for the shaman, one more for the runepriest -- the
-extra ones have no leg and are in `docs/blocked.json` rather than folded into
-a leg that does not mean them.
+Where a class printed **more** options than it had secondaries -- two more
+for the druid, three more for the shaman, one more for the runepriest --
+`chargen.BUILDS` now carries a leg per printed option, named for that
+option's own ref. So the druid asks `c.build("f1s0")` where it used to ask
+`c.build("second-con")`, and all four aspects are told apart.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from combat_engine.content.chargen import LIGHT
 from combat_engine.content.features.builds import on_leg
+from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.engine import (
     AC,
     ENCOUNTER,
@@ -56,6 +61,40 @@ def out_of_heavy_armour(c: Cast, who: int | None = None) -> bool:
     return gear is not None and gear.armour in LIGHT
 
 
+#: "Melee attacks and ranged attacks", which is three of the reach kinds
+#: short of everything: a close burst is neither, and the card names only
+#: the two. The damage context carries `power` and no `attacker`, so the
+#: reach is read off the declared row, which is where `reach.kind` lives.
+_STRUCK = ("melee", "ranged")
+
+
+def _struck_in_form(c: Cast) -> Callable[[dict[str, Any]], bool]:
+    """The gate the beast-form aspect reduces damage behind."""
+    me, world = c.me, c.world
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        if not in_beast_form(world, me):
+            return False
+        dealt = get(ctx.get("power") or "")
+        return dealt is not None and dealt.reach.kind in _STRUCK
+
+    return gate
+
+
+#: The four keywords the fourth aspect names.
+_ELEMENTS = (Keyword.COLD, Keyword.FIRE, Keyword.LIGHTNING, Keyword.THUNDER)
+
+
+def _elemental_druid_row(ctx: dict[str, Any]) -> bool:
+    """"Druid attack powers ... with the cold, fire, lightning or thunder
+    keywords." The class is asked off the row rather than assumed: a druid
+    holding a racial or a feat card gets no bonus from this aspect."""
+    rolling = get(ctx.get("power") or "")
+    if rolling is None or rolling.cls != "druid" or rolling.attack is None:
+        return False
+    return any(k in rolling.keywords for k in _ELEMENTS)
+
+
 @power(
     "cf:druid-f1",
     level=0,
@@ -69,17 +108,11 @@ def out_of_heavy_armour(c: Cast, who: int | None = None) -> bool:
 def druid_aspect(c: Cast) -> None:
     """Which aspect of the beast this druid manifests.
 
-    Four are printed and `chargen.BUILDS["druid"]` carries the two derived
-    legs, one per secondary. The two written here are the two the legs mean:
-    the class's own riders spend Dexterity for one aspect and Constitution
-    for another, and `chargen`'s comment on the derived legs names the same
-    pair. The other two are `cf:druid-aspect-rest` in `docs/blocked.json` --
-    one reduces melee and ranged damage by a Constitution modifier, which is
-    the *same* secondary as the aspect already written, and the other is an
-    attack bonus keyed to no ability at all, so neither leg can be asked
-    which of the two it is.
+    Four are printed and `chargen.BUILDS["druid"]` now carries four legs,
+    one per printed option and named for its ref, so all four are written
+    here and each refuses itself on the three it is not.
 
-    Both halves are gated on staying out of heavy armour, which is the
+    Every one of them is gated on staying out of heavy armour, which is the
     printed Requirement on all four. A druid wears hide, so the gate is true
     today; it is asked anyway rather than assumed, because it is the card's
     own sentence and a row elsewhere can change what is worn.
@@ -87,16 +120,33 @@ def druid_aspect(c: Cast) -> None:
     The armour is read **once**, when the trait is armed, for the same
     reason `cf:warlord-marshal-f2` measures its ten squares once: nothing
     re-arms a trait when equipment changes.
+
+    **The fourth aspect asks beast form inside the gate, not outside it.**
+    A druid is in its humanoid shape when traits are armed, so measuring it
+    here would switch the reduction off for the whole fight; the damage
+    context is consulted at the moment damage lands, which is when the
+    printed "while you are in beast form" is asked.
     """
     if not out_of_heavy_armour(c):
         return
 
-    if c.build("second-dex"):
+    if c.build("f1s1"):
         # "+1 bonus to your speed." No bonus type is printed, so untyped.
         c.bonus("speed", 1, until=When.ENCOUNTER, on=c.me, kind="untyped")
         return
 
-    if not c.build("second-con"):
+    if c.build("f1s2"):
+        if c.con_mod > 0:
+            c.resist(c.con_mod, until=When.ENCOUNTER, on=c.me, when=_struck_in_form(c))
+        return
+
+    if c.build("f1s3"):
+        # "Druid attack powers ... that have the cold, fire, lightning, or
+        # thunder keywords." Untyped: the card prints no type word.
+        c.bonus("attack", 1, until=When.ENCOUNTER, on=c.me, when=_elemental_druid_row)
+        return
+
+    if not c.build("f1s0"):
         return
 
     # "You can use your Constitution modifier in place of your Dexterity or

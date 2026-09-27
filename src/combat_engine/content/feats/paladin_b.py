@@ -209,12 +209,14 @@ def f2734(c: Cast) -> None:
 
 @power("f2909", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.class_feature()", "c.feature_ability()"))
+       todo=("c.ability_for(ref)",))
 def f2909(c: Cast) -> None:
-    """Swaps which ability modifier the two marks pay out from. The
-    second mark is named in prose and has no ref at all; the first has
-    one, and it still cannot be said, because the number is worked out
-    inside `p805`'s own closure and nothing reaches into it."""
+    """Swaps which ability modifier the two marks pay out from.
+
+    `cf:paladin-f1` is declared and names `p805` outright, so the
+    feature is not the hold. The number is worked out inside `p805`'s
+    own closure and nothing tells a named row to roll a different
+    ability -- the gap eighteen rows already name."""
 
 
 # -- what a marked creature owes -------------------------------------------
@@ -684,9 +686,14 @@ def f1517(c: Cast) -> None:
 
 
 @power("f1543", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
 def f1543(c: Cast) -> None:
-    """Same shape as f1517 against a single target, and the same gap."""
+    """Re-aimed: the racial power is `p1628`, which is declared, so the
+    naming gap is closed and a different one is left. `p1628` is
+    `target=NO_TARGET` -- it answers an attack and aims itself at
+    `c.trigger.attacker` -- so `PowerUsed.targets` is empty and "the
+    target of that power" has no referent on the event. Same hold
+    `f2854` names."""
 
 
 @power("f1560", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

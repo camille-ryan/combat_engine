@@ -487,25 +487,19 @@ def f2291(c: Cast) -> None:
 
 
 @power("f1166", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PACT_BOON + FEATURE)
+       reach=PERSONAL, target=SELF, todo=("c.on_pact_boon()",))
 def f1166(c: Cast) -> None:
-    """Swaps which vestige is active when the boon fires. Both halves are
-    missing: nothing announces a boon, and a vestige is a class feature
-    named in prose with no ref and no state anywhere in the engine."""
+    """Swaps the active vestige when the pact boon fires.
+    `cf:warlock-f1s6` is declared, so the feature is not the hold -- the
+    boon is, as it is for the eight other rows naming it."""
 
 
 @power("f2035", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PACT_BOON + FEATURE)
+       reach=PERSONAL, target=SELF, todo=("c.on_pact_boon()", "cf:warlock-f4c0"))
 def f2035(c: Cast) -> None:
-    """Adds a vestige, whose boon slides a second cursed creature when a
-    cursed one drops.
-
-    The payout alone would be writable -- `Trigger(Dropped,
-    cursed_by_me)` plus `c.slide` -- but writing it would arm a boon
-    that is only supposed to pay while that vestige is the active one,
-    and nothing holds which vestige is active. A permanently-live boon
-    is not the printed row, so this is marked rather than approximated.
-    """
+    """Adds a vestige with its own pact boon and augment. The boon hook is
+    the standing gap; the curse the boon reads, `cf:warlock-f4c0`, has a
+    ref and no row."""
 
 
 @power("f1358", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

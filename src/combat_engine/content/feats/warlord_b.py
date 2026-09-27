@@ -548,10 +548,12 @@ def f2053(c: Cast) -> None:
 
 
 @power("f827", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
 def f827(c: Cast) -> None:
-    """A racial power's target grants combat advantage to your allies.
-    The power is named in prose with no ref."""
+    """Re-aimed: the racial power is `p1628` and it is declared. Its
+    *target* is not on the event -- `p1628` is `target=NO_TARGET` and
+    aims itself at `c.trigger.attacker` -- so `PowerUsed.targets` is
+    empty and there is nobody for the grant to land on."""
 
 
 @power("f1070", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

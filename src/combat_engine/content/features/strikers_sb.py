@@ -253,7 +253,10 @@ def avenger_censure(c: Cast) -> None:
     printed sentence, which is why it is said here.
 
     The third option counts allies standing next to the sworn enemy and
-    reads no ability at all. See `docs/blocked.json`.
+    reads no ability at all, which is why it could not be told apart from
+    either of the other two while the legs were derived. It has a leg of
+    its own now, and `cf:avenger-f1s2` in `features/primal_divine.py`
+    gates on it.
 
     Both bonuses are untyped and so both stack, which is what the second
     one's "this bonus is cumulative" says outright. The gate asks who the
@@ -346,7 +349,7 @@ def assassin_training(c: Cast) -> None:
     limitation of this row.
     """
     me = c.me
-    if not c.build("second-con"):
+    if not c.build("f1s0"):
         return
     # `c.forbid` follows `c.target`, and a trait has none.
     c.forbid(_EXECUTIONER_ROW, until=When.ENCOUNTER, on=me)
@@ -409,5 +412,5 @@ def monk_tradition(c: Cast) -> None:
     has five of them in the tree and two named traditions, so four of the
     five cannot be assigned to a leg at all. `docs/blocked.json` carries it.
     """
-    if c.build("second-wis"):
+    if c.build("f0s0"):
         c.bonus(FORT, 1 + _tier(c.level), until=When.ENCOUNTER, on=c.me, kind="untyped")

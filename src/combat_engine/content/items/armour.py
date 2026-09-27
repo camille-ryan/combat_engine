@@ -2968,10 +2968,24 @@ def i1729x1(c: Cast) -> None:
 
 
 @power("i2444x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("c.effects_on()",))
 def i2444x1(c: Cast) -> None:
-    """The gate is concealment from one particular class feature, and
-    nothing says where concealment came from."""
+    """Both refs the card prints now resolve, and the row is still held.
+
+    The payout half is sayable: "affected by your `cf:warlock-f4c0`" is
+    the warlock's curse, `c.cursed(foe)` asks it, and
+    `c.grants_advantage(on=foe, to=me)` lays the answer -- except that
+    `cf:warlock-f4c0` is a ref no row declares; the curse in the tree is
+    `cf:warlock-f4`.
+
+    The gate is the harder half and is the one this waits on.
+    `cf:warlock-f3` is declared and grants concealment three squares out
+    from where the turn began, but concealment is a modifier with no
+    source recorded and no way to ask whether a creature has one, so
+    "while you have concealment **from that feature**" cannot be
+    distinguished from concealment out of a spell, a zone or the dark.
+    Without it the property would hand out combat advantage against every
+    cursed enemy all fight."""
 
 
 @power("i3043p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,

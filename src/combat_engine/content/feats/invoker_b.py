@@ -49,6 +49,7 @@ from combat_engine.engine import (
     Keyword,
     Miss,
     PowerUsed,
+    Size,
     Summoned,
     Trigger,
     TurnEnd,
@@ -60,12 +61,17 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
-from combat_engine.engine.events import PowerResolved
+from combat_engine.engine.events import ForcedMove, PowerResolved
 from combat_engine.engine.query import alive
 
 #: A class feature the benefit names in prose with no ref -- the covenant's
 #: channelled invocations and its two reactions.
 FEATURE = ("c.class_feature()",)
+#: The covenant cards are declared rows now: `cf:invoker-f1c0` and
+#: `cf:invoker-f1c1`. What a rider on one still cannot read is the event
+#: the card answered -- each card picks its ally or its enemy off its own
+#: `c.trigger`, and `PowerUsed` carries actor, power and targets only.
+TRIGGER = ("PowerUsed.trigger",)
 #: A racial power the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
 #: Nothing announces that a roll was a reroll.
@@ -421,101 +427,204 @@ def f2989(c: Cast) -> None:
 
 
 @power("f1506", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=TRIGGER)
 def f1506(c: Cast) -> None:
     """Intelligence on the damage of the attack a covenant reaction helped.
-    The spec's `m5994a3` is a monster ability the importer's name index
-    landed on, not this feature -- so the feature is still an unresolved
-    name."""
+    The card is `cf:invoker-f1c0` and is declared, but the attack it helped
+    is the one its own `once=True` bonus is spent on, and that bonus is
+    aimed at the enemy read off the card's trigger. `PowerUsed` does not
+    carry it."""
 
 
 @power("f1521", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=TRIGGER)
 def f1521(c: Cast) -> None:
-    """Five elemental variants of a bonus to the ally the same covenant
-    reaction protected. Same unresolved name as f1506; `c.element` would
-    pick the leg once there were something to hang it on."""
+    """Five elemental variants of a bonus to the ally `cf:invoker-f1c0`
+    protected. `c.element` picks the leg; who the ally is lives in the
+    card's trigger, which nothing announces."""
 
 
 @power("f1525", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=TRIGGER)
 def f1525(c: Cast) -> None:
-    """A teleport for the ally that covenant reaction protected. Same
-    unresolved name as f1506."""
+    """A teleport for the ally `cf:invoker-f1c0` protected. Same hold as
+    f1521: the card names the ally and the card's use does not."""
 
 
 @power("f1549", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=TRIGGER)
 def f1549(c: Cast) -> None:
-    """Concealment for the same ally. Same unresolved name as f1506."""
+    """Concealment for the same ally. Same hold as f1521."""
 
 
 @power("f1748", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=TRIGGER)
 def f1748(c: Cast) -> None:
-    """Combat advantage when an attack roll that covenant reaction boosted
-    lands. Named in prose, and the boost it asks about is chosen inside the
-    feature's own body."""
+    """Combat advantage when an attack roll `cf:invoker-f1c0` boosted
+    lands. The bonus is spent inside that card's own closure against an
+    enemy read off its trigger, so there is nothing to match a later hit
+    against."""
 
 
 @power("f2995", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
 def f2995(c: Cast) -> None:
     """Insubstantial for the ally that covenant reaction answered for.
-    Named in prose with no ref."""
+
+    `cf:invoker-f1c0` is declared and `PowerUsed` says it was used. What
+    it does not say is what set it off, and the card is `NO_TARGET`, so
+    `ev.targets` is empty -- "the triggering ally" is on the `Hit` the
+    reaction answered and nothing carries it forward."""
 
 
 @power("f2996", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
 def f2996(c: Cast) -> None:
-    """A slide and a mark cleared off the same ally. Same naming gap as
-    f2995; `c.cure(Condition.MARKED)` would say the second half."""
+    """A slide and a mark cleared off the same ally. Same hold as f2995
+    and it is not the feature's ref: `c.slide` and
+    `c.cure(Condition.MARKED)` would both say their half if the
+    triggering ally could be reached."""
 
 
-@power("f1510", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+@power("f1510", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=NARROW_CA,
+       trigger="you use p7150",
+       on=Trigger(PowerUsed, _used("p7150"), "you use that invocation"))
 def f1510(c: Cast) -> None:
-    """Combat advantage for the next ally against an elemental creature the
-    covenant's channelled invocation hit. `c.is_kind("elemental")` and
-    `c.grants_advantage(to="ally")` both say their half -- the invocation
-    is named in prose, and only f2985's prerequisite gives a ref for it."""
+    """The invocation is `p7150` and the spec says so outright, so this is
+    an ordinary rider now.
+
+    `p7150` rolls no attack -- every enemy in the blast takes its effect --
+    so "hit" is read as "targeted", and `PowerUsed.targets` is the set,
+    chosen before the body and therefore trustworthy there. Same reading
+    f2985 makes of the same row.
+
+    "The next" is `once=True`, which ends the grant on the first attack
+    roll against that creature. **Who** is the dropped half: `to=` takes
+    `"me"`, `"allies"` or one id, and `"allies"` puts the invoker in the
+    list -- "your allies but not you" is none of the three, and passing a
+    word it does not know would have quietly meant `"me"`.
+    """
+    for foe in c.trigger.targets:
+        if c.is_kind("elemental", foe):
+            c.grants_advantage(on=foe, to="allies", once=True, until=When.EONT)
 
 
-@power("f2006", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+#: "A fear, cold, or necrotic attack". The fear third is already
+#: `p7150`'s own printed clause, so only the two new ones are laid here --
+#: including fear would push twice for one blow.
+_ALSO = (Keyword.COLD, Keyword.NECROTIC)
+
+
+@power("f2006", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p7150",
+       on=Trigger(PowerUsed, _used("p7150"), "you use that invocation"))
 def f2006(c: Cast) -> None:
-    """A push whenever a creature under that same channelled invocation is
-    hit by a fear, cold or necrotic attack. Same naming gap as f1510."""
+    """Widens the push `p7150` already prints for fear attacks to cold and
+    necrotic ones.
+
+    "Under the effect of p7150" is its target list, which the row is handed
+    before the body runs; the watch expires with the effect it tracks, at
+    the end of the caster's next turn.
+
+    Fear is deliberately left out of `_ALSO`: the invocation pushes for it
+    itself, and listing it here would push twice.
+    """
+    me = c.me
+    under = set(c.trigger.targets)
+
+    def struck(ev: Hit) -> None:
+        if ev.target not in under:
+            return
+        p = get(ev.power)
+        if p is None or not any(k in p.keywords for k in _ALSO):
+            return
+        c.push(1, on=ev.target)
+
+    c.watch(Hit, struck, until=When.EONT, on=me, label=c.ref)
+
+
+#: Size has no ordering of its own -- the value is the word, and the
+#: footprint is a property that collapses Tiny, Small and Medium together.
+#: Declaration order is the ladder.
+_SIZE_ORDER = {s: i for i, s in enumerate(Size)}
 
 
 @power("f1562", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF)
 def f1562(c: Cast) -> None:
-    """Wisdom on the damage of the wrath covenant's reaction against a
-    larger enemy. `c.size_of` is there; the reaction is named in prose and
-    no prerequisite gives its ref."""
+    """Wisdom on the damage `cf:invoker-f1c1` deals a larger enemy.
+
+    The card burns its victim with `c.flat`, which goes through
+    `deal_damage` and so through the damage modifiers -- and that context
+    carries `power` and `target`, which is exactly the pair this needs. So
+    the rider is one gated bonus on the caster rather than anything reached
+    into the card, and it does not need the card's trigger.
+
+    `Size` is a `StrEnum` with no ordering, so the ladder is its
+    declaration order.
+    """
+    me = c.me
+    mine = _SIZE_ORDER.get(c.size_of(me), 0)
+    if c.wis_mod <= 0:
+        return
+
+    def bigger(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("target")
+        return (
+            ctx.get("power") == "cf:invoker-f1c1"
+            and who is not None
+            and _SIZE_ORDER.get(c.size_of(who), 0) > mine
+        )
+
+    c.bonus("damage", c.wis_mod, until=When.ENCOUNTER, on=me, when=bigger)
 
 
 @power("f1563", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF)
 def f1563(c: Cast) -> None:
-    """Prone after that reaction's push. Same naming gap as f1562, and the
-    push happens inside the feature's own body."""
+    """Prone after `cf:invoker-f1c1`'s push.
+
+    The push is inside that card's body, but it is not private: `c.push`
+    hands its own ref to `ForcedMove`, so the shove announces which row
+    made it and the victim comes with it. No other event does -- `Moved`
+    carries `kind_` and no power.
+
+    Printed as a choice, so it is offered.
+    """
+    me = c.me
+
+    def shoved(ev: ForcedMove) -> None:
+        if ev.source != me or getattr(ev, "power", "") != "cf:invoker-f1c1":
+            return
+        if c.may("knock the pushed target prone", who=me):
+            c.prone(on=ev.target)
+
+    c.watch(ForcedMove, shoved, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2003", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=TRIGGER)
 def f2003(c: Cast) -> None:
-    """Extra cold damage and an immobilise on undead the same reaction
-    hits. Same naming gap as f1562."""
+    """Extra cold damage and an immobilise on undead `cf:invoker-f1c1`
+    hits. Unlike f1562 this one has to *act* on the victim rather than
+    modify a roll, and the card's victim is the enemy off its trigger --
+    `PowerUsed.targets` is whoever the burst picked, which is somebody
+    else."""
 
 
 @power("f2874", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
 def f2874(c: Cast) -> None:
     """Widens what sets that reaction off, from being hit yourself to an
-    ally within 5 squares being hit. Its trigger is written inside the
-    feature, which has no ref -- so there is nothing to widen."""
+    ally within 5 squares being hit.
+
+    `cf:invoker-f1c1` is a declared row and its trigger is a declared
+    `Trigger`, so the feature is no longer what this waits on. What is
+    missing is a row reaching another row: nothing uses one, and nothing
+    adds a second window to one that is already printed. The same
+    absence f3041 names."""
 
 
 @power("f2987", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -676,12 +785,12 @@ def f1538(c: Cast) -> None:
 
 
 @power("f2983", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(RACIAL[0], COUNTS_AS))
+       reach=PERSONAL, target=SELF, todo=(COUNTS_AS,))
 def f2983(c: Cast) -> None:
-    """Makes a racial power count as a divine encounter attack so the
-    covenant manifestation reads it. The power is named in prose, and
-    `cf:invoker-f1` asks the header fields of the resolved row --
-    nothing overrides those from outside. The skill bonus is a column."""
+    """Re-aimed: the racial power is `p1448` and it is declared, so the
+    name is no longer the gap. `cf:invoker-f1` asks the header fields of
+    the resolved row and nothing overrides those from outside, which is
+    the one thing still missing. The skill bonus is a column."""
 
 
 @power("f2177", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -6,12 +6,13 @@ each one against the ref that carries it; what follows is what is left.
 
 **The four sources.** `cf:sorcerer-f0s0` .. `f0s3` are the sub-options of
 `cf:sorcerer-f0`, which `powers/sorcerer/souls.py` writes: it dispatches on
-the two legs `chargen.BUILDS["sorcerer"]` had and implements both in full.
-Those two children say nothing their parent has not already said -- one of
-them would have laid a second +2 to AC on being bloodied, on top of the
-parent's -- so neither is here. The other two are the pair
-`cf:sorcerer-soul-rest` in `docs/blocked.json` describes, they have no leg,
-and they are the two that are written, marked, and refused in play.
+two of the legs in `chargen.BUILDS["sorcerer"]` and implements both in
+full. Those two children say nothing their parent has not already said --
+one of them would have laid a second +2 to AC on being bloodied, on top of
+the parent's -- so neither is here. Of the other two, the third source has
+a leg now and plays with its unsayable clauses named; the first is still
+`cf:sorcerer-soul-rest` and still refused, because the phase it cycles on
+is clocked on a rest nothing announces.
 
 **The elementalist.** `cf:sorcerer-elementalist-*` is a whole second set of
 class features, and `docs/blocked.json` recorded it as unwritable for one
@@ -49,6 +50,7 @@ from combat_engine.engine import (
     ActionType,
     Build,
     Cast,
+    DamageType,
     Gear,
     Hit,
     Keyword,
@@ -155,17 +157,39 @@ def sorcerer_f0s0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    todo=("chargen.BUILDS", "c.ignore_resistance()"),
+    dropped=(
+        "c.ignore_resistance()",
+        "c.trade_resistance()",
+        "cf:sorcerer-soul-nat20",
+    ),
 )
 def sorcerer_f0s2(c: Cast) -> None:
-    """The source that holds two resistances at once, and has no leg.
+    """The third source: a damage modifier and two resistances at once.
 
-    `cf:sorcerer-soul-rest` again. Two of its three clauses are writable --
-    the pair of resistances, and the immediate interrupt that trades them
-    for a +4 power bonus to all defences -- but they cannot arm without a
-    leg to arm on, and the third ends on a natural 20 after the attack's
-    other effects, which is `cf:sorcerer-soul-nat20`.
+    It has a leg now -- `chargen.BUILDS["sorcerer"]` carries one per
+    printed source but the first, which is still `cf:sorcerer-soul-rest`
+    -- so the two writable clauses arm and the rest is named.
+
+    The damage half is gated on the row being arcane rather than laid
+    flat, the way `cf:sorcerer-elementalist-f0` gates its own: a sorcerer
+    swinging a mace is not casting. The paragon steps are out of scope.
+
+    Three clauses are dropped. Arcane powers ignoring a target's
+    resistance up to this one's value has no modifier to be; the printed
+    trade -- ending the resistance as an immediate interrupt for a +4
+    power bonus to all defences -- is an immediate action printed inside a
+    trait, with no card ref of its own for `c.grant_row` to hand over; and
+    the natural-20 rider is `cf:sorcerer-soul-nat20`.
     """
+    if not c.build("f0s2"):
+        return
+    if c.dex_mod > 0:
+        c.bonus(
+            "damage", c.dex_mod, until=When.ENCOUNTER, on=c.me,
+            when=_arcane_power,
+        )
+    for kind in (DamageType.THUNDER, DamageType.LIGHTNING):
+        c.resist(5, kind, until=When.ENCOUNTER, on=c.me)
 
 
 # -- the elementalist ------------------------------------------------------

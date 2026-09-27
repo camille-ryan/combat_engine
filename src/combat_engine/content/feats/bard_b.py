@@ -74,24 +74,32 @@ def _longsword(c: Cast, ev: Any, refs: tuple[str, ...]) -> bool:
 
 
 @power("f1135", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
 def f1135(c: Cast) -> None:
-    """Lengthens the defence bonus one virtue hands an ally. The virtue
-    is named in prose with no ref, and even with one the duration is
-    chosen inside its own body."""
+    """Lengthens the bonus `cf:bard-f1s1` grants an ally. That row is
+    declared now, so the name is no longer the hold -- it reads the ally
+    and the defence off its own `c.trigger`, and `PowerUsed` announces
+    neither, so there is nothing to lengthen from outside."""
 
 
 @power("f1152", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
 def f1152(c: Cast) -> None:
-    """Adds 2 to the same bonus. Same naming gap as f1135."""
+    """Raises the same bonus by 2. Two power bonuses do not add, so a
+    second one of the right size would do it -- but the size depends on
+    which defence the triggering enemy attacked, and that is read off
+    `cf:bard-f1s1`'s own trigger, which its use does not carry."""
 
 
 @power("f2892", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
 def f2892(c: Cast) -> None:
-    """Psychic damage to whatever set the virtue off. The virtue has no
-    ref, so there is nothing to watch and no triggering enemy to read."""
+    """Psychic damage to whatever set the virtue off.
+
+    `cf:bard-f1s1` is declared, so the virtue can be watched -- but the
+    card targets the *ally*, so `ev.targets` hands back the wrong
+    creature, and the enemy this is about is the attacker on the `Hit`
+    the reaction answered. `PowerUsed` does not carry it."""
 
 
 # -- riders on the heal, which does have a ref -----------------------------

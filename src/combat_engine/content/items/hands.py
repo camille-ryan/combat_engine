@@ -536,15 +536,22 @@ def i1756p1(c: Cast) -> None:
 
 
 @power("i2134x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("c.on_feature_power()",))
 def i2134x1(c: Cast) -> None:
-    """Nothing marks an attack as coming from a named class feature."""
+    """`cf:barbarian-f3` is declared now, and that is what shows the hold
+    is not a naming one. The feature's whole payout is `c.basic(on=...)`
+    inside its own `Hit` handler: the swing it buys announces itself as an
+    ordinary basic attack, with nothing on the event, the row or the
+    damage context saying which feature paid for it. "Attacks from your
+    `cf:barbarian-f3`" is therefore not a set a gate can test."""
 
 
 @power("i2134p1", level=6, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("c.on_feature_power()",))
 def i2134p1(c: Cast) -> None:
-    """Same gap: the trigger is a class feature nothing announces."""
+    """Same gap as `i2134x1`: the trigger is a hit with the swing
+    `cf:barbarian-f3` bought, and that swing is indistinguishable from any
+    other basic attack."""
 
 
 @power("i2168x1", level=6, cls=ITEM, action=ActionType.NONE,

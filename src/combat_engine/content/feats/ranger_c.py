@@ -32,9 +32,11 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AC,
     AT_WILL,
     ENCOUNTER,
     PERSONAL,
+    REF,
     SELF,
     ActionType,
     Cast,
@@ -540,10 +542,27 @@ _leash("f2474", "What the beast hits is slowed and swings wide.", _stagger)
 
 
 @power("f2464", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_racial_power()",))
+       reach=PERSONAL, target=SELF)
 def f2464(c: Cast) -> None:
-    """The beast shares whichever of two racial rows was used. Neither is
-    in the tree, so there is nothing to share."""
+    """`p2483` and `p2484` are declared, so "also benefits from" has a
+    pair of holds behind it. Restated rather than borrowed, for the
+    reason `ranger_b.f1381` gives: `c.as_though_hit_by` runs the copied
+    body with its own caster as the subject and would never reach the
+    beast. Same card from the other page."""
+    def share(ev: Any) -> None:
+        pet = c.beast()
+        if pet is None:
+            return
+        if ev.power == "p2483":
+            c.bonus("damage", 2, on=pet, until=When.ENCOUNTER)
+            c.regeneration(2, until=When.ENCOUNTER, on=pet, while_bloodied=True)
+        elif ev.power == "p2484":
+            c.bonus("speed", 2, on=pet, until=When.ENCOUNTER)
+            c.bonus(AC, 1, on=pet, until=When.ENCOUNTER)
+            c.bonus(REF, 1, on=pet, until=When.ENCOUNTER)
+
+    c.watch(PowerUsed, share, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} share")
 
 
 @power("f2967", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

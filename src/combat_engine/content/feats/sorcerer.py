@@ -70,16 +70,16 @@ def f1155(c: Cast) -> None:
 
 
 @power("f1001", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("cf:sorcerer-f0s3",))
 def f1001(c: Cast) -> None:
-    """Rolls twice on a class feature's damage-type table. The feature
-    is named in prose and the table is not modelled."""
+    """Two rolls for the damage type one source rolls at an extended
+    rest. The source has a ref and no row, so there is no roll to make
+    twice."""
 
 
 @power("f1008", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("cf:sorcerer-f0s1",))
 def f1008(c: Cast) -> None:
-    """Raises the resistance a class feature grants. Same feature family
-    as f1001, named in prose, and `chargen.BUILDS` has no leg for it --
-    which `docs/blocked.json` already records as
-    `cf:sorcerer-soul-rest`."""
+    """+2 to the resistance one source grants. The source has a ref and
+    no row: resistances of a type do not add, so laying a second one from
+    here would replace the feature rather than raise it."""

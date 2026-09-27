@@ -155,7 +155,7 @@ def p9408(c: Cast) -> None:
     if c.strike():
         c.damage("2d8", c.dex_mod, dtype=DamageType.PSYCHIC)
         c.grants_advantage(until=When.EONT)
-        if c.build("second-cha") and c.cha_mod > 0:
+        if c.build("f1s2") and c.cha_mod > 0:
             c.bonus(
                 "damage",
                 c.cha_mod,
@@ -197,7 +197,7 @@ def p9409(c: Cast) -> None:
 )
 def p9410(c: Cast) -> None:
     if c.strike():
-        extra = c.con_mod if c.build("second-con") else 0
+        extra = c.con_mod if c.build("f1s0") else 0
         c.damage(c.w(2), c.dex_mod + extra)
         c.slowed(until=When.EONT)
 

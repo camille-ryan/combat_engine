@@ -82,8 +82,12 @@ from combat_engine.engine.components import Health
 from combat_engine.engine.events import PowerUsed
 from combat_engine.engine.query import alive, allies, distance_between, holding, team
 
-#: A racial power the benefit names in prose rather than by ref.
-RACIAL = ("c.on_racial_power()",)
+#: The `rt:r6-dilettante` choice: a 1st-level at-will borrowed from
+#: another class, picked when the character is built and recorded
+#: nowhere. Same symbol `features/racial._option` carries.
+RACE_OPTION = ("c.race_option()",)
+#: The three racial powers of `r44`, which the page offers as a choice.
+R44 = ("p7441", "p7442", "p7443")
 #: Nothing announces that a roll was a reroll.
 REROLL = ("c.on_reroll()",)
 #: Which weapons a character may pick up is settled when it is built.
@@ -122,6 +126,15 @@ def _used(ref: str):  # noqa: ANN202
 
     def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
         return ev.actor == me and ev.power == ref
+
+    return when
+
+
+def _used_any(*refs: str):  # noqa: ANN202
+    """"A <race> racial power", where the race prints more than one."""
+
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.power in refs
 
     return when
 
@@ -611,18 +624,33 @@ def f2460(c: Cast) -> None:
     )
 
 
-@power("f2583", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f2583", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use a r44 racial power",
+       on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f2583(c: Cast) -> None:
-    """Temporary hit points when a racial power is used with an ally
-    near. "A r44 racial power" is a race, not a ref."""
+    """"A r44 racial power" is a race and the race's three are declared,
+    so the trigger names them. `side="ally"` leaves the caster out,
+    which is what "an ally is within 2 squares of you" means."""
+    if c.within(2, side="ally"):
+        c.temp_hp(3 + max(c.con_mod, c.wis_mod), on=c.me)
 
 
-@power("f2584", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f2584", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use a r44 racial power",
+       on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f2584(c: Cast) -> None:
-    """Same gap as f2583; the payout -- your surge heals an unconscious
-    ally -- is `c.spend_surge` and `c.surge` and would be two lines."""
+    """Your surge, their hit points: `c.spend_surge` defaults to the
+    caster and the healing is the *ally's* surge value, which is what
+    "as if he or she had spent a healing surge" prints."""
+    down = [
+        a for a in c.allies()
+        if c.can_see(a) and c.is_(Condition.UNCONSCIOUS, on=a)
+    ]
+    who = c.choose(down, "which ally")
+    if who is not None and c.spend_surge():
+        c.heal(c.surge_value(of=who), on=who)
 
 
 @power("f2600", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -670,21 +698,23 @@ def f2842(c: Cast) -> None:
 
 @power("f2871", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*RACIAL, "c.attack_ability()"))
+       todo=(*RACE_OPTION, "c.attack_ability()"))
 def f2871(c: Cast) -> None:
-    """Swaps which ability a racial trait's borrowed power attacks with.
-    The power is chosen at build time and named in prose, and nothing
-    rewrites one row's attack line for one character."""
+    """Swaps which ability the `rt:r6-dilettante` power attacks with.
+    Racial powers are declared now; this one is not among them. The card
+    is a 1st-level at-will borrowed from another class and the choice is
+    recorded nowhere. Nothing rewrites one row's attack line either."""
 
 
 @power("f2873", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, todo=RACE_OPTION)
 def f2873(c: Cast) -> None:
-    """A mark on hitting with the racial trait's borrowed power."""
+    """A mark on hitting with the `rt:r6-dilettante` power. Which row
+    that is, is the build choice nothing records."""
 
 
 @power("f2875", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, todo=RACE_OPTION)
 def f2875(c: Cast) -> None:
     """Uses that borrowed power as a melee basic attack on a charge or
     an opportunity attack. `c.as_basic` says that now; what is still
@@ -694,16 +724,17 @@ def f2875(c: Cast) -> None:
 
 
 @power("f2877", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACIAL, "c.deals(ref=)"))
+       reach=PERSONAL, target=SELF, todo=(*RACE_OPTION, "c.deals(ref=)"))
 def f2877(c: Cast) -> None:
     """Radiant damage from that borrowed power. `c.deals` overrides what
     a creature's *weapon* rolls and has no way to name a row."""
 
 
 @power("f2879", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, todo=RACE_OPTION)
 def f2879(c: Cast) -> None:
-    """Extra healing after hitting with the borrowed power."""
+    """Extra healing after hitting with the `rt:r6-dilettante` power,
+    which is the build choice nothing records."""
 
 
 @power("f2753", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1605,14 +1636,21 @@ def f2876(c: Cast) -> None:
 
 @power("f2781", level=1, cls="", usage=ENCOUNTER, action=FREE,
        reach=CloseBurst(1), target=NO_TARGET,
-       dropped=("c.class_feature()",),
+       dropped=("c.instead_of()",),
        trigger="you drop to 0 hit points or fewer",
        on=Trigger(Dropped, _i_dropped, "you drop"))
 def f2781(c: Cast) -> None:
     """A death throe: `Dropped` names its subject `actor` and carries no
-    target. "Instead of the attack Ferocity grants you" is dropped --
-    that racial trait is named in prose with no ref, so there is nothing
-    to take away."""
+    target.
+
+    "Instead of the attack that trait grants you" is dropped, and the
+    trait is no longer why. `rt:r24-ferocity` is a declared row now and
+    `c.forbid` would take it away -- but it is an immediate interrupt
+    and this is a free action, so `triggers` gathers and resolves it a
+    whole window earlier. By the time this body could forbid it, it has
+    already swung. Nothing suppresses a row answering the same event in
+    an earlier window, which is the absence ten rows already name.
+    """
     c.penalty("attack", 2, on=c.me, until=When.EOT)
     for foe in c.enemies():
         if c.adjacent(to=foe):

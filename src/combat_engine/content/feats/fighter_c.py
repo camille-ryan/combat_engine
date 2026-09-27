@@ -707,11 +707,11 @@ def f2472(c: Cast) -> None:
 
 
 @power("f2475", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
 def f2475(c: Cast) -> None:
-    """Widens which weapons a named class feature covers. Which weapons
-    it covers is written into that feature's own body and nothing reads
-    it back, let alone rewrites it."""
+    """Makes one class feature apply to both weapon styles. Same unparsed
+    prerequisite as f1970 and the same prose name; widening the feature
+    needs the feature first."""
 
 
 @power("f2791", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

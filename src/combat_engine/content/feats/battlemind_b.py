@@ -360,17 +360,27 @@ def f3299(c: Cast) -> None:
 
 
 @power("f3304", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("c.race_option()",))
 def f3304(c: Cast) -> None:
-    """Three riders, one per aspect of a racial feature named in prose with
-    no ref and no row. Which aspect is current is the question, and nothing
-    answers it."""
+    """Three riders, one per aspect, and the three rows they hang off --
+    `p10438`, `p10439`, `p10440` -- are all declared and named in the
+    prerequisite.
+
+    The aspect is `rt:r44-aspects`, a declared racial trait that is
+    itself refused in play: the page makes a player record one of three
+    and there is nowhere to write it down. Which aspect is current is
+    the whole question and that row carries the same marker."""
 
 
 @power("f3322", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, todo=POINTS + FEATURE)
+       reach=PERSONAL, target=NO_TARGET,
+       todo=(*POINTS, "c.telepathy()"))
 def f3322(c: Cast) -> None:
-    """Two gaps. Spending power points emits a `Note` and no event, so
-    "the first time you drop to 0" has nothing to watch; and the range is
-    a racial telepathy named in prose, which is not a number anything
-    carries."""
+    """Two gaps and the feature is neither.
+
+    Spending power points emits a `Note` and no event, so "the first
+    time you drop to 0" has nothing to watch. The range is the race's
+    telepathy: `rt:r46-telepathy` is a declared row and it is declared
+    `out_of_combat` -- deliberately inert, because the trait is a way of
+    talking -- so the radius this sentence measures in is not a number
+    anything on the board carries."""

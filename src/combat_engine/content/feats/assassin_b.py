@@ -36,10 +36,12 @@ from typing import Any
 from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
+    NO_TARGET,
     PERSONAL,
     SELF,
     ActionType,
     Cast,
+    Condition,
     DamageType,
     Dropped,
     Hit,
@@ -632,9 +634,33 @@ def _racial(ref: str, what: str, *, wants: tuple[str, ...] = RACIAL) -> None:
     feat.__doc__ = f"{what} The racial power is named in prose with no ref."
 
 
-_racial("f1808", "A shroud when a racial trait's borrowed power is used.")
-_racial("f2813", "Combat advantage from a target that has not yet acted.")
-_racial("f2817", "A named racial power spent to get shade form back.")
+#: The `rt:r6-dilettante` choice: an at-will borrowed from another
+#: class, picked when the character is built and recorded nowhere. The
+#: same symbol `features/racial._option` carries.
+RACE_OPTION = ("c.race_option()",)
+
+_racial("f1808", "A shroud when a racial trait's borrowed power is used.",
+        wants=RACE_OPTION)
+_racial("f2817", "A named racial power spent to get shade form back.",
+        wants=("c.expend_row()",))
+
+
+@power("f2813", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use p9400",
+       on=Trigger(PowerUsed,
+                  lambda world, me, ev: ev.actor == me and ev.power == "p9400",
+                  "you use that power"))
+def f2813(c: Cast) -> None:
+    """Nothing racial about the benefit -- the race is the gate and
+    `p9400` is the row, which is a ref. "Has not yet acted in the
+    encounter" is the surprised condition, which the surprise round lays
+    and the creature's first turn clears. `p9400` is `ONE_CREATURE`, so
+    the targets are chosen before the body and `PowerUsed.targets` is
+    the set the card means."""
+    for foe in c.trigger.targets:
+        if c.is_(Condition.SURPRISED, on=foe):
+            c.grants_advantage(on=foe, to=c.me, until=When.SONT)
 
 
 # -- the rest ---------------------------------------------------------------
@@ -671,12 +697,37 @@ def f2814(c: Cast) -> None:
     half and would not make the row playable on its own."""
 
 
-@power("f2816", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+#: The other class's level 0 feature row, printed once per tradition. A
+#: character has exactly one of the five; `powers/monk/level_6_b.py` is
+#: where the set comes from.
+_FLURRY = ("p7448", "p11207", "p13123", "p16131", "p16132")
+
+_USED_FLURRY = "you use the other class's level 0 feature row"
+
+
+def _used_my_flurry(world, me: int, ev: PowerUsed) -> bool:  # noqa: ANN001
+    return ev.actor == me and ev.power in _FLURRY
+
+
+@power("f2816", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger=_USED_FLURRY,
+       on=Trigger(PowerUsed, _used_my_flurry, _USED_FLURRY))
 def f2816(c: Cast) -> None:
-    """Extra damage per shroud from a class feature named in prose. The
-    shroud half is ordinary; Flurry of Blows has no ref, which is the
-    same gap four monk feats carry."""
+    """"The target of your `p9400` power" is asked as "a creature
+    carrying your shrouds", which is the same set: `p9400` moves every
+    shroud off the old creature when it is used on a new one, so at most
+    one target is ever carrying any.
+
+    `c.flat` rather than a damage modifier -- the amount is per shroud
+    and belongs to this one blow. `PowerUsed` is announced before the
+    body runs and that is safe here: targets are chosen first and
+    nothing the feature's body does is read.
+    """
+    for foe in getattr(c.trigger, "targets", ()) or ():
+        count = c.shrouds(on=foe)
+        if count:
+            c.flat(count, on=foe)
 
 
 @power("f2818", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

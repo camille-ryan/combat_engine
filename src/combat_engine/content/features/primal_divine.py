@@ -139,10 +139,10 @@ def avenger_censure_crowd(c: Cast) -> None:
 
     This is the arm `cf:avenger-f1` names in its docstring and leaves out.
     The other two are told apart by the ability each reads, and this one
-    reads no ability at all, so there is no leg in `chargen.BUILDS`
-    ["avenger"] to gate it on -- ungated it arms for every avenger
-    alongside whichever arm the leg took, which is wrong and needs a third
-    leg. That is in the report; it is not fixable from here.
+    reads no ability at all -- so it needed a leg of its own rather than a
+    secondary to share, and `chargen.BUILDS["avenger"]` now has one. Until
+    it did, this armed for every avenger alongside whichever arm the leg
+    took, which is two censures on one character.
 
     "For each ally adjacent to that target" is a count taken when the damage
     is rolled, and `c.bonus` takes a number decided when it is laid. So the
@@ -155,6 +155,8 @@ def avenger_censure_crowd(c: Cast) -> None:
     re-swear mid-fight and a closure would keep paying out against whoever
     was sworn first.
     """
+    if not c.build("unity"):
+        return
     me, world = c.me, c.world
     each = 1 + _tier(c.level)
 

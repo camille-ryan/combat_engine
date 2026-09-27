@@ -13,12 +13,16 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     ENCOUNTER,
+    FORT,
     PERSONAL,
+    REF,
     SELF,
+    WILL,
     ActionType,
     Cast,
     Hit,
     Keyword,
+    PowerUsed,
     Trigger,
     When,
     power,
@@ -26,7 +30,26 @@ from combat_engine.engine import (
 from combat_engine.engine.dsl import get
 from combat_engine.engine.query import distance_between
 
-FEATURE = ("c.class_feature()",)
+#: The two covenant cards are declared rows now -- `cf:invoker-f1c0` and
+#: `cf:invoker-f1c1` -- so none of these is a naming gap any more. What a
+#: rider still cannot read is the event the card was used *against*: each
+#: card picks the ally or the enemy off its own `c.trigger`, and
+#: `PowerUsed` carries actor, power and targets and nothing else.
+TRIGGER = ("PowerUsed.trigger",)
+
+_DEFENCES = (AC, FORT, REF, WILL)
+
+
+def _from_bloodied(c: Cast):  # noqa: ANN202
+    def gate(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("attacker")
+        return who is not None and c.bloodied(who)
+
+    return gate
+
+
+def _used_card(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return ev.actor == me and ev.power == "cf:invoker-f1c0"
 
 
 def _divine_hit_near(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -60,19 +83,43 @@ def f1022(c: Cast) -> None:
     c.bonus("attack", 1, on=c.me, until=When.EONT, kind="feat", once=True)
 
 
-def _feature(ref: str, what: str) -> None:
+def _feature(ref: str, what: str, todo: tuple[str, ...] = TRIGGER) -> None:
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=FEATURE)
+           reach=PERSONAL, target=SELF, todo=todo)
     def feat(c: Cast) -> None: ...
 
     feat.__name__ = ref
-    feat.__doc__ = f"{what} Named in prose with no ref."
+    feat.__doc__ = (
+        f"{what} The card has a ref now; what it has not got is the "
+        "triggering event, which is where the creature this names is picked."
+    )
 
 
 _feature("f1012", "Temporary hit points riding on one covenant's power.")
-_feature("f1491", "A defence bonus riding on the same covenant's power.")
 _feature("f1079", "Vulnerability riding on a channelled power.")
-_feature("f1488", "A damage type and a save penalty on the same power.")
+_feature("f1488", "A damage type and a save penalty on the same power.",
+         todo=("c.deals(ref=)", *TRIGGER))
+
+
+@power("f1491", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:invoker-f1c0",
+       on=Trigger(PowerUsed, _used_card, "you use that covenant's card"))
+def f1491(c: Cast) -> None:
+    """The one rider on that card that never needs the card's own trigger:
+    the bonus lands on the caster's neighbours rather than on anybody the
+    card picked, so `PowerUsed` alone says enough.
+
+    "Against attacks made by bloodied creatures" is a gate on the *defence*
+    context, which carries `attacker`. The damage context does not; this is
+    a defence, and that side is the rich one.
+
+    A plain "+1 bonus" with no type word printed, so untyped.
+    """
+    for friend in c.within(2, side="ally"):
+        for defence in _DEFENCES:
+            c.bonus(defence, 1, until=When.ENCOUNTER, on=friend,
+                    when=_from_bloodied(c))
 
 
 @power("f1239", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

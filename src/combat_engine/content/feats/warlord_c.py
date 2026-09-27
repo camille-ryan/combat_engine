@@ -66,6 +66,14 @@ from combat_engine.engine.types import Forced
 FEATURE = ("c.class_feature()",)
 #: A racial power named in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
+#: The thirteen racial powers of `r33`, one per elemental
+#: manifestation. A character takes one of them, so a rider printed for
+#: two of the thirteen can only ever meet the one this character has.
+R33 = (
+    "p1766", "p1767", "p1769", "p1770", "p1828",
+    "p10043", "p10044", "p10045", "p10046",
+    "p14073", "p14074", "p14075", "p14076",
+)
 #: **A standing clause and a triggered one on the same card.** The
 #: dispatcher only reaches a no-action row when its declared trigger
 #: fires, so a row that also has to be *true* from the start of the
@@ -503,15 +511,18 @@ def f2431(c: Cast) -> None:
         c.bonus("attack", 1, on=who, until=When.EONT, once=True)
 
 
-@power("f2414", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=RACIAL,
-       trigger="you hit with p1766",
+@power("f2414", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with a r33 racial power",
        on=Trigger(Hit, lambda w, me, ev: (
-           ev.attacker == me and ev.power == "p1766"
+           ev.attacker == me and ev.power in R33
        ), "you hit with your racial power"))
 def f2414(c: Cast) -> None:
-    """The feat names two racial powers and only one of them is a ref.
-    The ref half plays; the half named in prose is dropped."""
+    """The feat names two of the race's powers and both are refs now --
+    `p1766` and one the spec gives only as a word. Widened to the race's
+    thirteen, which costs nothing: a character has one manifestation and
+    so one of the thirteen, and the gate requires it be one of the two
+    this card is printed for."""
     me, foe = c.me, c.trigger.target
     for friend in [a for a in allies(c.world, me) if a != me]:
         c.bonus(
@@ -573,12 +584,12 @@ def f2424(c: Cast) -> None:
 
 
 @power("f2430", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("c.instead_of()",))
 def f2430(c: Cast) -> None:
-    """Trades one leader presence's defence bonus for a larger one to a
-    single defence. The feature is named in prose with no ref, which is
-    what the opaque term in this feat's own prerequisite records from
-    the other side."""
+    """Lets an ally trade the all-defences bonus `cf:warlord-marshal-f4s1`
+    gives for a bigger one on a single defence. That row is declared, so
+    the name is not the hold: the bonus is laid from inside it and
+    nothing hands one back."""
 
 
 @power("f2435", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

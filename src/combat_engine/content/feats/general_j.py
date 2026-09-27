@@ -100,6 +100,13 @@ EACH_OTHER_ALLY = Target("other_ally", 99, everyone=True)
 
 #: A racial power the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
+#: The thirteen racial powers of `r33`, one per elemental
+#: manifestation. A character takes one of them.
+R33 = (
+    "p1766", "p1767", "p1769", "p1770", "p1828",
+    "p10043", "p10044", "p10045", "p10046",
+    "p14073", "p14074", "p14075", "p14076",
+)
 #: The Associated Powers list is missing from the card, so the rider has
 #: nothing to hang on.
 NO_LIST = ("feat.associated_powers",)
@@ -178,6 +185,15 @@ def _cd_used(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 def _used(ref: str):  # noqa: ANN202
     def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
         return ev.actor == me and ev.power == ref
+
+    return when
+
+
+def _used_any(*refs: str):  # noqa: ANN202
+    """"A <race> racial power", where the race prints more than one."""
+
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.power in refs
 
     return when
 
@@ -818,12 +834,20 @@ def f1513(c: Cast) -> None:
     c.save(on=c.me)
 
 
-@power("f1519", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("chargen.race_choice()", *RACIAL))
+@power("f1519", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use a r33 racial power",
+       on=Trigger(PowerUsed, _used_any(*R33), "you use a r33 racial power"))
 def f1519(c: Cast) -> None:
-    """Rides on whichever racial power a build choice picked out. The
-    choice is not recorded anywhere and the power has no ref."""
+    """The race's thirteen powers are declared and a character takes
+    one, so "the racial power associated with your manifestation" is
+    whichever of these it uses -- the unrecorded choice no longer stands
+    between the row and its moment. `side="ally"` leaves the caster out,
+    so the offer is you or one of them."""
+    near = [a for a in c.within(5, side="ally") if c.can_see(a)]
+    who = c.choose([c.me, *near], "who gains the temporary hit points")
+    if who is not None:
+        c.temp_hp(c.str_mod, on=who)
 
 
 @power("f1529", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1027,11 +1051,14 @@ def f1627(c: Cast) -> None:
 
 @power("f1628", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.class_feature()",), proficiency=("w:holy-symbol",))
+       todo=("c.borrow_feature()",), proficiency=("w:holy-symbol",))
 def f1628(c: Cast) -> None:
-    """Skill training, one class feature of another class, and an
-    implement grant. The implement is header data `chargen` reads at
-    build time; the feature is named in prose and is the one gap."""
+    """`cf:cleric-templar-f1` is a declared row, so the feature exists --
+    but `c.grant_row` cannot hand over a *trait*: `turns` arms every
+    `action=NONE` row from a snapshot of `Powers.all` taken before this
+    row runs, so one appended during the arming is never armed. Handing a
+    class feature to another class is the same operation the multiclass
+    feats name. The implement proficiency is in the header already."""
 
 
 @power("f1629", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

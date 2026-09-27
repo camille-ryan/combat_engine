@@ -30,8 +30,10 @@ from combat_engine.engine import (
     SELF,
     WILL,
     ActionType,
+    Bloodied,
     Cast,
     DamageApplied,
+    DamageType,
     Hit,
     Keyword,
     PowerUsed,
@@ -41,7 +43,11 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Health
 from combat_engine.engine.dsl import get
-from combat_engine.engine.query import distance_between
+from combat_engine.engine.query import distance_between, team
+
+
+def _took_the_charge(world, me: int, ev: object) -> bool:  # noqa: ANN001
+    return ev.actor == me and ev.power == "p4809"
 
 #: Rage is not a state anything holds: the class's daily attack rows
 #: carry no keyword declaring it. `cf:barbarian-rage` waits on the same.
@@ -54,6 +60,13 @@ THROWN = ("c.make_thrown()", "c.weapon_range()")
 #: An attack somebody's class feature handed out is announced as an
 #: ordinary basic attack, with nothing recording where it came from.
 GRANTED = ("c.on_granted_basic()",)
+#: "Instead of": a printed swap for something a class feature does inside
+#: its own body. The feature has a ref now; declining half of what it does
+#: is the operation nothing has.
+INSTEAD = ("c.instead_of()",)
+#: `Bloodied` still names nobody as its cause, so "your attack bloodies an
+#: enemy" answers any enemy being bloodied. The features carry the same.
+BLOODIED_BY = ("Bloodied.source",)
 
 _DEFENCES = (AC, FORT, REF, WILL)
 
@@ -244,27 +257,76 @@ def f2885(c: Cast) -> None:
 # -- class features named in prose -----------------------------------------
 
 
-@power("f1834", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+@power("f1834", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p4809",
+       on=Trigger(PowerUsed, _took_the_charge, "you take that free charge"))
 def f1834(c: Cast) -> None:
-    """A push on the charge one class feature grants. The feature is
-    prose, and even with a ref the charge it hands out is announced as
-    an ordinary charge."""
+    """The prerequisite's feature hands over `p4809`, and that row's whole
+    printed effect is "you charge an enemy" -- so the charge this rides on
+    is the one it is about to make.
+
+    The swing itself is announced under the basic attack's ref, not under
+    `p4809`, so the hit is matched on `charge` and narrowed by the window
+    instead: the watch is laid when `p4809` is used and dies with the turn,
+    and a hand-rolled latch spends it on the first charging hit rather than
+    on the first hit of any kind -- `c.watch(once=True)` would be spent by
+    an event that did not match.
+    """
+    me = c.me
+    spent: list[int] = []
+
+    def landed(ev: Hit) -> None:
+        if spent or ev.attacker != me or not getattr(ev, "charge", False):
+            return
+        spent.append(1)
+        c.push(1, on=ev.target)
+
+    c.watch(Hit, landed, until=When.EOT, on=me, label=c.ref)
 
 
 @power("f1878", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=INSTEAD)
 def f1878(c: Cast) -> None:
-    """Lengthens the shift a build's class feature grants. Named in
-    prose, and the distance is chosen inside that feature's own body --
-    the same gap `f786` and `f1527` name as `c.extend_move()`."""
+    """Lengthens the shift `cf:barbarian-f1s3` grants. That feature is a
+    declared row now, so this is no longer a naming gap -- but the 2 is a
+    literal inside its own closure and the shift is offered from there, so
+    there is nothing outside it to lengthen."""
 
 
 @power("f1880", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, dropped=BLOODIED_BY)
 def f1880(c: Cast) -> None:
-    """Raises the thunder damage a class feature deals. Named in prose
-    with no ref."""
+    """Five more thunder off the same bloodying `cf:barbarian-f1s2` answers.
+
+    Laid as its own burn on the same event rather than reached into the
+    feature: the feature's amount is a literal in its closure. That makes
+    two thunder instances where the card prints one, which differs only
+    against thunder resistance.
+
+    The once-a-round latch is keyed on the world's round exactly as the
+    feature keys its own, so the two fire together and never apart. The
+    leg is not asked again -- `chargen.meets` has already checked the
+    feature is held, and the feature checks the leg.
+
+    Dropped for the same reason the feature drops it: `Bloodied` names no
+    source, so this answers any enemy being bloodied rather than only the
+    ones this barbarian bloodied.
+    """
+    me = c.me
+    paid: dict[int, int] = {}
+
+    def on_bloodied(ev: Bloodied) -> None:
+        victim = ev.actor
+        if victim == me or team(c.world, victim) is team(c.world, me):
+            return
+        if paid.get(me) == c.world.round:
+            return
+        paid[me] = c.world.round
+        for foe in c.within(1, side="enemy"):
+            c.flat(5, dtype=DamageType.THUNDER, on=foe)
+
+    c.watch(Bloodied, on_bloodied, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2707", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

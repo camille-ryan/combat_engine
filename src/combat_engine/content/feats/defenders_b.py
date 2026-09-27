@@ -4,10 +4,12 @@ Four short lists in one file because three of them are four or five rows
 long. Two gaps run through the whole thing and neither is new:
 
 * **The class feature that announces nothing.** The swordmage's aegis
-  punishes an attacker from inside a `c.watch` callback, the monk's Flurry
-  of Blows is named in prose with no ref, and the runepriest counts its own
-  feats by a category the engine has no column for. A feat hanging off any
-  of those has nothing to declare a trigger against.
+  punishes an attacker from inside a `c.watch` callback, and the runepriest
+  counts its own feats by a category the engine has no column for. A feat
+  hanging off either has nothing to declare a trigger against. **The monk's
+  is no longer one of them**: its feature is five declared rows, one per
+  tradition, and `FLURRY` below names them -- so the monk feats here are
+  held by what they do to that use, not by finding it.
 * **The distance written into somebody else's body.** A teleport's range
   and the five squares `p9501` measures are constants inside those rows;
   nothing reaches in to add one.
@@ -144,13 +146,13 @@ def f1141(c: Cast) -> None:
 
 @power("f1142", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.class_feature()", "chargen.race_choice()"))
+       todo=("c.effects_on()", "chargen.race_choice()"))
 def f1142(c: Cast) -> None:
-    """Two clauses, two absences. `warding()` returns 0 while unconscious
-    -- that is the printed default this feat lifts -- and it is computed
-    inside the feature rather than laid as a modifier, so nothing reaches
-    in to drop the clause. The resistance the second half adds to is a
-    racial trait, and there is no race on a character to carry one."""
+    """Both halves name refs now -- `f650b` for the warding and `p2274`
+    for the racial trait -- so the class feature is not the hold.
+    Reading how much AC `f650b` is currently granting is: nothing lists
+    the effects standing on a creature, let alone one row's share of a
+    total. The race half stays as it was."""
 
 
 @power("f1143", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -175,11 +177,12 @@ def f1143(c: Cast) -> None:
 
 
 @power("f1156", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
 def f1156(c: Cast) -> None:
-    """Pays out when the aegis punishment fires. All three aegis rows do
-    that from inside a `c.watch` callback, which emits nothing a trigger
-    can answer, and `cf:swordmage-f1` has no row of its own."""
+    """A rider on "the immediate action effect" of the aegis. The three
+    aegis cards are declared rows, but each prints its immediate action
+    inside its own effect text rather than as a row of its own, so there
+    is no ref for the half this rides on."""
 
 
 @power("f1234", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -265,22 +268,50 @@ def f2795(c: Cast) -> None:
 
 
 # -- monk -------------------------------------------------------------------
+#
+# **The feature these hang on is five rows and all five are written.** The
+# class prints one card per tradition and a monk carries whichever its
+# tradition dealt, so a row about "the feature" is declared against the
+# set -- which is what `powers/monk/level_6_b.py` already does, and where
+# this tuple comes from.
+
+FLURRY = ("p7448", "p11207", "p13123", "p16131", "p16132")
+
+_USED_FLURRY = "you use your class's level 0 feature row"
+
+
+def _used_my_flurry(world, me: int, ev: PowerUsed) -> bool:  # noqa: ANN001
+    return ev.actor == me and ev.power in FLURRY
 
 
 @power("f3171", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.class_feature()", "c.forgo_damage()", "c.ignore_resistance()"))
+       todo=("c.forgo_damage()", "c.ignore_resistance()"))
 def f3171(c: Cast) -> None:
-    """Three absences in one sentence: the feature is named in prose, a
-    row cannot decline its own damage, and stripping a creature's
-    resistance is not a thing `c.resist` can be told to undo."""
+    """The feature is `FLURRY` and no longer the hold. Two absences are
+    left and both are the trade this row is: a row cannot decline its own
+    damage, and stripping a creature's resistance is not a thing
+    `c.resist` can be told to undo."""
 
 
-@power("f3205", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+@power("f3205", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger=_USED_FLURRY,
+       on=Trigger(PowerUsed, _used_my_flurry, _USED_FLURRY))
 def f3205(c: Cast) -> None:
-    """Extra damage to one target of the class feature. Same gap as the
-    four rows in `defenders.py`: the feature has no ref."""
+    """`c.flat` and not a damage bonus: two points that arrive whatever
+    the feature rolls, and a modifier on "damage" would also be picked up
+    by every other attack in the turn.
+
+    `PowerUsed` is announced before the body runs, and that is safe here
+    -- targets are chosen first, so `ev.targets` is trustworthy, and
+    nothing about the feature's own damage is read. At heroic the card
+    has one target; "one of the power's targets" takes the first of
+    however many there are.
+    """
+    aimed = [t for t in (getattr(c.trigger, "targets", ()) or ()) if t is not None]
+    if aimed:
+        c.flat(2, on=aimed[0])
 
 
 def _my_daily_power(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -359,10 +390,12 @@ def f3318(c: Cast) -> None:
 
 
 @power("f3319", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("c.retarget()",))
 def f3319(c: Cast) -> None:
-    """Swaps one target of the class feature for a distant one. The
-    weapon half is readable; the feature it retargets is not."""
+    """Swaps one target of the feature for a distant one. The feature is
+    `FLURRY` and the weapon half is readable; what is missing is taking a
+    target off a use that has already chosen them -- `c.add_target` puts
+    one on and there is no other half."""
 
 
 @power("f3320", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -374,10 +407,12 @@ def f3320(c: Cast) -> None:
 
 
 @power("f3326", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
 def f3326(c: Cast) -> None:
-    """Both halves have to fire off one hit. p6189 is a ref and could be
-    watched; the class feature it has to coincide with is not."""
+    """Both halves have to fire off **one** hit, and both are refs now:
+    `p6189` and the five `FLURRY` rows. `PowerUsed` says who used what
+    and not what set it off, so two free actions answering the same blow
+    cannot be told from two answering a blow each."""
 
 
 @power("f3327", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -390,10 +425,12 @@ def f3327(c: Cast) -> None:
 
 
 @power("f3401", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("c.instead_of()",))
 def f3401(c: Cast) -> None:
-    """Trades the class feature's normal effect for a penalty. The
-    penalty is one line; what it is traded against has no ref."""
+    """Trades the feature's normal effect for a penalty. The feature is
+    `FLURRY` and the penalty is one line; what has no verb is the trade
+    -- nothing suppresses the effect of a row that is being used, so
+    writing the penalty alone would hand out both halves."""
 
 
 # -- seeker -----------------------------------------------------------------

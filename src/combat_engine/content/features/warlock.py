@@ -14,11 +14,10 @@ sentence twice. Granting the at-will is the half nothing else says --
 not have the one its leg says it always has. `cf:warlock-f0` grants its
 card for that same reason.
 
-Four legs have an entry in `chargen.BUILDS["warlock"]` and gate on it with
-`c.build`. The other three have nothing to ask, so they carry
-`todo=("chargen.BUILDS",)` rather than handing their pact to every warlock
-in the game; each body is still written behind the gate it will want, so
-that the day the leg lands the marker is all that comes off.
+All seven legs have an entry in `chargen.BUILDS["warlock"]` now and gate
+on it with `c.build`. Three of them were written behind a gate no leg
+answered and marked `todo=("chargen.BUILDS",)`; the legs landed, so the
+marker came off and the bodies were already right.
 
 **Ten of the refs in this batch are not here.** The importer mints a ref
 for every card printed on the class page, and most of those cards already
@@ -30,6 +29,7 @@ already carry them are in the report.
 
 from __future__ import annotations
 
+from combat_engine.content.features.builds import on_leg
 from combat_engine.content.features.strikers import extra_damage
 from combat_engine.engine import (
     AT_WILL,
@@ -161,14 +161,14 @@ def warlock_f1s3(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("chargen.BUILDS", "c.fell_might()"),
+    dropped=("c.fell_might()",),
 )
 def warlock_f1s4(c: Cast) -> None:
-    """No leg answers this pact, so the row is refused rather than handing
-    its at-will to every warlock. The boon is a second missing thing: a
-    once-per-encounter charge, declared before the attack roll of whatever
-    power it enhances, and nothing holds a resource across uses or lets a
-    power be augmented from outside its own card.
+    """The at-will is granted; the boon is the clause that is dropped.
+
+    That boon is a once-per-encounter charge, declared before the attack
+    roll of whatever power it enhances, and nothing holds a resource
+    across uses or lets a power be augmented from outside its own card.
     """
     if not c.build("sorcerer-king"):
         return
@@ -184,12 +184,11 @@ def warlock_f1s4(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("chargen.BUILDS",),
 )
 def warlock_f1s5(c: Cast) -> None:
     """Both halves are rows and both are written -- the at-will has a
-    compendium entry and the boon is below. Only the leg that says which
-    warlock has them is missing."""
+    compendium entry and the boon is below -- and the leg that says which
+    warlock has them now exists."""
     if not c.build("star"):
         return
     c.grant_row("p1457")
@@ -205,13 +204,16 @@ def warlock_f1s5(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("chargen.BUILDS", "c.active_vestige()"),
+    dropped=("c.active_vestige()",),
 )
 def warlock_f1s6(c: Cast) -> None:
-    """This leg is a choice within a choice: which of the two remnants it
-    bargained with is active is picked after a rest and changed mid-fight
-    by certain dailies, and the at-will and the boon both read it. Nothing
-    holds that state, so neither half can be told from the other.
+    """The leg exists; the choice *within* the leg does not.
+
+    Which of the two remnants this warlock bargained with is active is
+    picked after a rest and changed mid-fight by certain dailies, and the
+    at-will and the boon both read it. Nothing holds that state, so the
+    two rows are handed over and neither can tell which remnant it is
+    speaking for.
     """
     if not c.build("vestige"):
         return
@@ -233,19 +235,22 @@ def warlock_f1s6(c: Cast) -> None:
     keywords=[Keyword.ARCANE],
     trigger=_A_CURSED_ENEMY_FALLS,
     on=Trigger(Dropped, cursed_by_me, _A_CURSED_ENEMY_FALLS),
-    dropped=("chargen.BUILDS", "c.bonus('d20')"),
+    requires=on_leg("star"),
+    requires_text="needs the pact that prints it",
+    dropped=("c.bonus('d20')",),
 )
 def warlock_f1c10(c: Cast) -> None:
     """A bonus to one roll, kept until it is spent: `once=True` is exactly
     "if you don't use this bonus by the end of your turn, it is lost", and
     an untyped one stacks, which is the printed "cumulative".
 
-    Two things are dropped. The bonus is printed for **any** d20 -- a save,
+    The printed Prerequisite is the pact, and it is a leg now, so it is
+    asked in the header like the other boons'.
+
+    One thing is dropped. The bonus is printed for **any** d20 -- a save,
     a skill check, an ability check -- and a modifier is laid against one
     named roll, so the attack roll is the one it is laid against; three
     drops therefore buy three single attack rolls rather than one at +3.
-    And no leg names this pact, so the Prerequisite cannot be gated the way
-    the two boons with a leg are.
     """
     c.bonus("attack", 1, until=When.EONT, on=c.me, once=True)
 
@@ -300,7 +305,9 @@ def warlock_f1c11(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE],
-    todo=("c.active_vestige()", "chargen.BUILDS"),
+    requires=on_leg("vestige"),
+    requires_text="needs the pact that prints it",
+    todo=("c.active_vestige()",),
 )
 def warlock_f1c12(c: Cast) -> None:
     """One row holding one boon per remnant, and which one pays is whichever

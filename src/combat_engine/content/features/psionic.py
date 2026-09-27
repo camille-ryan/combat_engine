@@ -14,16 +14,18 @@ which is the symbol eight earlier waves named and issue #170 tracks. Both
 parent rows carry it as `todo=`, because without it there is nothing else in
 them at all.
 
-The other shape that recurs here is a **choice with no leg to stand on**.
-The monk prints five traditions, the psion three disciplines and the
-battlemind four options, and `chargen.BUILDS` has none of them: all three
-classes fall through to the generated `second-<ability>` pair. So a
-sub-option row hands over the card it names -- which is honest work, and the
-row plays -- and the half it cannot say is the *exclusivity*, because taking
-one option should take the other four away. That clause is
-`dropped=("chargen.BUILDS",)` on every one of them rather than a guess at
-which leg is which: guessing makes a row unreachable on every build, which
-is worse than a monk holding four cards too many.
+The other shape that recurs here is a **choice**, and it now has legs to
+stand on. The monk prints five traditions, the psion three disciplines and
+the battlemind four options; `chargen.BUILDS` carries one leg per option,
+named for that option's own ref, so each sub-option row opens by asking
+`c.build` whether this character took it. That is the *exclusivity* the
+three pages print and that every one of these rows used to drop: taking
+one option now takes the other four away.
+
+The two parent rows are left holding nothing. Their whole printed content
+was the word *one*, which the children's gates say between them, so both
+are `out_of_combat=True` -- deliberately inert, in the sense
+`docs/AUTHORING.md` gives the flag, rather than unwritten.
 
 `chargen.loadout` deals a class every level 0 row it has, so `c.grant_row`
 on a card the character already knows is a no-op in practice. It is still
@@ -54,11 +56,6 @@ PSIONIC = [Keyword.PSIONIC]
 #: The augment machinery, named the way the rest of the tree names it so
 #: `todo.py` groups these two with the other fifty.
 AUGMENT = ("dsl.use(augment=)",)
-
-#: "Choose one of these options", with nothing in `chargen.BUILDS` to
-#: choose between. See the module docstring.
-EXCLUSIVE = ("chargen.BUILDS",)
-
 
 # -- battlemind -------------------------------------------------------------
 
@@ -116,15 +113,14 @@ def battlemind_three_powers(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    todo=EXCLUSIVE,
+    out_of_combat=True,
 )
 def battlemind_option(c: Cast) -> None:
     """The header of a four-way choice, and the choice is all it is.
 
-    Its four children carry the content. What belongs to the parent is the
-    word *one* -- a battlemind has exactly one of them -- and that needs a
-    leg in `chargen.BUILDS` to hang on. There is none, so the parent says
-    nothing rather than saying something false.
+    Its four children carry the content, and each of them now refuses
+    itself on the three legs it is not for, which is the word *one* said
+    where it can be read. Nothing is left for the parent to do.
     """
 
 
@@ -137,11 +133,12 @@ def battlemind_option(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    dropped=EXCLUSIVE,
 )
 def battlemind_option_resilience(c: Cast) -> None:
     """One of the four options, and its whole content is the card it names,
     which is already written in `powers/battlemind/level_0.py`."""
+    if not c.build("f2s0"):
+        return
     c.grant_row("p11155", on=c.me, until=When.ENCOUNTER)
 
 
@@ -154,9 +151,10 @@ def battlemind_option_resilience(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    dropped=EXCLUSIVE,
 )
 def battlemind_option_strike(c: Cast) -> None:
+    if not c.build("f2s1"):
+        return
     c.grant_row("p13024", on=c.me, until=When.ENCOUNTER)
 
 
@@ -169,9 +167,10 @@ def battlemind_option_strike(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    dropped=EXCLUSIVE,
 )
 def battlemind_option_speed(c: Cast) -> None:
+    if not c.build("f2s2"):
+        return
     c.grant_row("p10441", on=c.me, until=When.ENCOUNTER)
 
 
@@ -184,9 +183,10 @@ def battlemind_option_speed(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    dropped=EXCLUSIVE,
 )
 def battlemind_option_focus(c: Cast) -> None:
+    if not c.build("f2s3"):
+        return
     c.grant_row("p12418", on=c.me, until=When.ENCOUNTER)
 
 
@@ -206,7 +206,6 @@ def battlemind_option_focus(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    dropped=EXCLUSIVE,
 )
 def monk_tradition_centred(c: Cast) -> None:
     """The hand-over, and only the hand-over.
@@ -218,6 +217,8 @@ def monk_tradition_centred(c: Cast) -> None:
     visible duplicate. The parent carries what it carries; this row carries
     the card the parent explicitly does not assign.
     """
+    if not c.build("f0s0"):
+        return
     c.grant_row("p7448", on=c.me, until=When.ENCOUNTER)
 
 
@@ -230,7 +231,6 @@ def monk_tradition_centred(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ELEMENTAL, Keyword.FIRE, Keyword.PSIONIC],
-    dropped=EXCLUSIVE,
 )
 def monk_tradition_wind(c: Cast) -> None:
     """"If you already have fire resistance equal to or higher than this,
@@ -242,6 +242,8 @@ def monk_tradition_wind(c: Cast) -> None:
     resisting 10 gains 2 and ends on 12; one resisting 3 gains 2 and ends
     on 5, which is "you gain resist 5" and not 8.
     """
+    if not c.build("f0s1"):
+        return
     held = c.world.get(c.me, Defences)
     standing = held.resist.get(DamageType.FIRE, 0) if held is not None else 0
     c.resist(2 if standing >= 5 else 5 - standing, DamageType.FIRE, on=c.me)
@@ -257,7 +259,6 @@ def monk_tradition_wind(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ELEMENTAL, Keyword.PSIONIC],
-    dropped=EXCLUSIVE,
 )
 def monk_tradition_tide(c: Cast) -> None:
     """Two clauses about being shoved, and they need different tools.
@@ -272,6 +273,8 @@ def monk_tradition_tide(c: Cast) -> None:
     plain attribute, which is the only place the three forced kinds can be
     told from a walk.
     """
+    if not c.build("f0s2"):
+        return
     me = c.me
     c.grant_row("p16132", on=me, until=When.ENCOUNTER)
     c.resist_forced(1, on=me, until=When.ENCOUNTER)
@@ -295,7 +298,6 @@ def monk_tradition_tide(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    dropped=EXCLUSIVE,
 )
 def monk_tradition_iron(c: Cast) -> None:
     """`kind="shield"` because that is the word the card prints in front of
@@ -308,6 +310,8 @@ def monk_tradition_iron(c: Cast) -> None:
     says, and it is normally *off* -- `chargen` arms a monk with
     `w:unarmed`, which is the one weapon this excludes.
     """
+    if not c.build("f0s3"):
+        return
     c.bonus(
         AC, 1, on=c.me, until=When.ENCOUNTER, kind="shield",
         when=lambda _ctx: not c.wielding("unarmed"),
@@ -324,13 +328,14 @@ def monk_tradition_iron(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    dropped=EXCLUSIVE,
 )
 def monk_tradition_stone(c: Cast) -> None:
     """Untyped: the card prints "+1 bonus" with no type word in front of it.
     The paragon steps are out of scope. `cf:monk-f0` lays a Fortitude step
     and no Will one, so unlike the first tradition this half is the child's
     to write."""
+    if not c.build("f0s4"):
+        return
     c.grant_row("p11207", on=c.me, until=When.ENCOUNTER)
     c.bonus(WILL, 1, on=c.me, until=When.ENCOUNTER)
 
@@ -373,12 +378,12 @@ def monk_unarmed_strike(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    todo=EXCLUSIVE,
+    out_of_combat=True,
 )
 def psion_discipline(c: Cast) -> None:
     """"Choose one of these options", and the options are the children.
     Same shape as `cf:battlemind-f2`: the word *one* is the parent's whole
-    content and there is no leg in `chargen.BUILDS` to hang it on."""
+    content and each child says it now."""
 
 
 @power(
@@ -390,11 +395,12 @@ def psion_discipline(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION, Keyword.PSIONIC],
-    dropped=EXCLUSIVE,
 )
 def psion_discipline_shaper(c: Cast) -> None:
     """One of the three disciplines; each hands over two cards, both of
     which are already written in `powers/psion/level_0.py`."""
+    if not c.build("f0s0"):
+        return
     for ref in ("p13300", "p13301"):
         c.grant_row(ref, on=c.me, until=When.ENCOUNTER)
 
@@ -408,9 +414,10 @@ def psion_discipline_shaper(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    dropped=EXCLUSIVE,
 )
 def psion_discipline_telekinetic(c: Cast) -> None:
+    if not c.build("f0s1"):
+        return
     for ref in ("p11267", "p11268"):
         c.grant_row(ref, on=c.me, until=When.ENCOUNTER)
 
@@ -424,9 +431,10 @@ def psion_discipline_telekinetic(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    dropped=EXCLUSIVE,
 )
 def psion_discipline_telepath(c: Cast) -> None:
+    if not c.build("f0s2"):
+        return
     for ref in ("p8224", "p8225"):
         c.grant_row(ref, on=c.me, until=When.ENCOUNTER)
 

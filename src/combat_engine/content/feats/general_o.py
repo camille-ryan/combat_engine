@@ -105,6 +105,8 @@ PROFICIENCY = ("chargen.proficiency()",)
 FEATURE = ("c.class_feature()",)
 #: A racial power or trait the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
+#: The three racial powers of `r44`, which the page offers as a choice.
+R44 = ("p7441", "p7442", "p7443")
 #: An augmentable clause: spending power points to change what a named
 #: power does is the power's own business and there is no door in.
 AUGMENT = ("dsl.use(augment=)",)
@@ -120,6 +122,15 @@ def _best(c: Cast) -> int:
     """"Your highest ability modifier". The header names one ability, so
     the roll carries the difference as `plus=`."""
     return max(c.str_mod, c.con_mod, c.dex_mod, c.int_mod, c.wis_mod, c.cha_mod)
+
+
+def _used_any(*refs: str):  # noqa: ANN202
+    """"A <race> racial power", where the race prints more than one."""
+
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.power in refs
+
+    return when
 
 
 def _used(ref: str):  # noqa: ANN202
@@ -743,32 +754,44 @@ def f3022(c: Cast) -> None:
                 when=lambda ctx, f=ally: gate(ctx, f))
 
 
-# -- the artificer batch, all three named in prose --------------------------
+# -- the artificer batch ----------------------------------------------------
+#
+# All three name a feature that has a ref and a declared row now, so the
+# feature is no longer what any of them is waiting for.
 
 
 @power("f3045", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.expend_row()", "c.class_feature()"))
+       todo=("c.expend_row()",))
 def f3045(c: Cast) -> None:
-    """Spends a racial power to buy an extra use of a class-feature
-    power. Neither half has a verb: nothing expends a row a character
-    owns, and the feature is named in prose."""
+    """Spends a racial power to buy an extra use of a feature's power.
+
+    `cf:artificer-f2`'s three cards are `p4128`, `p7635` and `p10187`
+    and `c.restore_use` would hand one of them back; what has no verb is
+    the price -- nothing expends a row a character owns and has not
+    used."""
 
 
 @power("f3046", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("c.boost_roll()",))
 def f3046(c: Cast) -> None:
-    """Rides on an ally's attack that benefited from a class feature's
-    bonus. The feature is named in prose, and nothing records which of
-    an ally's modifiers came from it."""
+    """Rides on an ally's attack that benefited from `cf:artificer-f0s0`.
+
+    That feature is declared and refused in play: the +2 it banks in a
+    weapon is spent after the roll and `c.boost_roll()` is what it
+    waits on. Until the charge exists nothing can have benefited from
+    it."""
 
 
 @power("f3047", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.class_feature()", "c.end_effect()"))
+       todo=("c.end_effect()",))
 def f3047(c: Cast) -> None:
-    """Rewrites what an ally gets for *ending* one of two class-feature
-    effects early. Both the features and the ending are prose here."""
+    """Rewrites what an ally gets for *ending* two of `cf:artificer-f2`'s
+    infusions early. `p7635` and `p10187` are the rows and both are
+    written; the cash-in they print is the clause `level_0.py` leaves out
+    of the infusions themselves, for want of anything that ends a live
+    effect."""
 
 
 # -- the shadow batch -------------------------------------------------------
@@ -865,18 +888,30 @@ def f3070(c: Cast) -> None:
             when=burning)
 
 
-@power("f3073", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f3073", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use a r44 racial power",
+       on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3073(c: Cast) -> None:
-    """Rides on "a r44 racial power", which is a class of powers named in
-    prose rather than one ref, so there is nothing to watch for."""
+    """The race's three powers are declared, so "a r44 racial power" is
+    a list of refs. `side="ally"` leaves the caster out, which is what
+    "one ally within 10 squares of you" means; the free action is the
+    shift itself and costs the ally nothing here."""
+    mate = c.choose([a for a in c.within(10, side="ally")], "which ally")
+    if mate is not None:
+        c.shift(1, who=mate)
 
 
 @power("f3074", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF,
+       todo=("c.ignores_difficult(shift=)",))
 def f3074(c: Cast) -> None:
-    """Same gap as f3073, from the other side: the trigger is the class
-    of racial powers and not a ref."""
+    """Re-aimed: "a r44 racial power" is three declared refs now, so the
+    trigger is writable. The benefit is not. `c.ignores_difficult` is
+    per terrain kind and board-wide, and the printed line is per *kind
+    of move* -- laid blanket it would exempt a full run as well as a
+    shift, which is a much larger rule and the whole of this feat.
+    `rt:r4-wild-step` is held back by the same sentence."""
 
 
 @power("f3091", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1561,23 +1596,43 @@ def f3161(c: Cast) -> None:
     """Same shape as f3158, on a racial power that answers a hit."""
 
 
-@power("f3162", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.on_racial_power()", "dsl.use(augment=)"))
+@power("f3162", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use rt:r24-ferocity",
+       on=Trigger(PowerUsed, _used("rt:r24-ferocity"),
+                  "you use that racial trait"))
 def f3162(c: Cast) -> None:
-    """Spends a power point on a basic attack a racial trait grants. The
-    trait is named in prose and the spend is an augment, so both halves
-    are gaps."""
+    """`rt:r24-ferocity` is a declared row and a triggered one, so its
+    firing announces itself like any other use -- and `PowerUsed` is
+    announced above the body, which is the one window in which a
+    modifier can still reach the swing it is about to make.
+
+    Not an augment after all: the point is spent by the feat rather
+    than by the power, which `c.spend_points` says. The trait's blow is
+    a melee basic, so the weapon branch is the only one that applies.
+    """
+    if c.points() >= 1 and c.spend_points(1):
+        c.bonus("damage", 0, dice=c.w(), on=c.me, until=When.EOT, once=True)
 
 
 @power("f3163", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, dropped=("query.charging()",))
 def f3163(c: Cast) -> None:
-    """Rewrites the size of a racial trait's bonus to AC against the
-    opportunity attacks *your own charge* provoked. The defence context
-    knows the blow coming in is an opportunity attack and nothing about
-    what the defender was doing when it provoked one, so even with the
-    trait modelled the gate could not be written."""
+    """`rt:r24-heedless-charge` is declared and lays +2 `kind="racial"`
+    on the same gate. Two of a kind do not stack and the larger wins,
+    so laying the modifier under the same kind *is* "the bonus is equal
+    to" for any character whose better mod is 2 or more -- which the
+    prerequisite's psionic class makes near-certain. Below that the
+    trait's +2 stands, which is the one place this reads generously.
+
+    Dropped, and the trait drops it too: the narrowing is to opportunity
+    attacks provoked by **your own charge**, and the defence context
+    carries the incoming blow's `opportunity` and nothing about what the
+    defender was doing when it provoked one.
+    """
+    c.bonus(AC, max(c.con_mod, c.wis_mod), kind="racial", on=c.me,
+            until=When.ENCOUNTER,
+            when=lambda ctx: bool(ctx.get("opportunity")))
 
 
 @power("f3164", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

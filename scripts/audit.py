@@ -88,6 +88,20 @@ KNOWN_SILENT = {
     "i3045p1": "cures surprised or unconscious; the board produces neither",
     "i608p1": "its Requirement is being marked, and nobody here marks",
     "i3527p1": "wants an adjacent non-minion killed; the board's deaths are neither",
+    # Three more from the class-feature sweep, all Requirements the board
+    # cannot produce for an item row: the caster is a generic wielder, so
+    # it holds no class feature and has spent no channel divinity, and
+    # `_wants_expended` above cannot help -- the sibling it spends has to
+    # be in the *same printed group*, and this caster knows none.
+    #
+    # Driven by hand. `i1927p1` and `i2304p1`: with a `CHANNEL_DIVINITY`
+    # row spent, `Powers.used` goes 1 -> 0 and `dsl.usable` goes False ->
+    # True for it; with nothing spent neither row touches anything.
+    # `i3036p1`: with `f650b` in `Powers.known` the adjacent ally's AC
+    # goes 17 -> 18, and without it 17 -> 17.
+    "i1927p1": "gives a channel divinity use back; this caster has spent none",
+    "i2304p1": "the same sentence as i1927p1, off a rod rather than a symbol",
+    "i3036p1": "its bonus is f650b's, and the board's wielder has no f650b",
     # Targets an undead creature and the board's dummies are not one.
     # Driven by hand against a real undead stat block: a healing surge
     # goes and the target takes that much radiant damage.

@@ -461,9 +461,14 @@ def f2931(c: Cast) -> None:
 
 
 @power("f2936", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("c.on_use(cf:assassin-f1)",))
 def f2936(c: Cast) -> None:
-    """Raises the temporary hit points a class feature hands out, and
-    doubles the raise against two creature types. `c.temp_hp` and
-    `c.kinds_of` are both ready; the feature is named in prose and has no
-    ref, which is the gap fifteen rows across the tree already name."""
+    """Raises the temporary hit points `cf:assassin-f1` hands out, and
+    doubles the raise against two creature types.
+
+    The feature has a ref and a written row now. What it does not have
+    is a seam: the amount is computed inside its `Hit` closure, and
+    `TempHP` names neither the row that paid nor the creature whose
+    being hit caused it -- so neither "increase by 1" nor the
+    `c.kinds_of` test on that creature has anything to read. f291 names
+    the same absence against `p2095`."""

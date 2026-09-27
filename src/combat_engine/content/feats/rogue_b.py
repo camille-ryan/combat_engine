@@ -566,11 +566,11 @@ def f2405(c: Cast) -> None:
 
 
 @power("f2429", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("c.instead_of()",))
 def f2429(c: Cast) -> None:
-    """Shortens the distance `cf:rogue-tactic-stealth` demands before it
-    lets you vanish, from 3 squares to 2. The 3 is a literal inside that
-    feature's `slipped` closure and nothing rewrites one."""
+    """Shortens the distance `cf:rogue-scoundrel-f1s2` asks a move to
+    cover. That row is declared, so the name is not the hold -- the 3 is
+    a literal inside it and nothing rewrites one."""
 
 
 @power("f2459", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -203,18 +203,56 @@ def f2602(c: Cast) -> None:
     the same symbol the ranger's f273 and the rogue's f185 want."""
 
 
-def _flurry(ref: str, what: str) -> None:
+def _flurry(ref: str, what: str, todo: tuple[str, ...] = FEATURE) -> None:
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=FEATURE)
+           reach=PERSONAL, target=SELF, todo=todo)
     def feat(c: Cast) -> None: ...
 
     feat.__name__ = ref
     feat.__doc__ = f"{what} The class feature is named in prose with no ref."
 
 
-_flurry("f1985", "Lengthens the reach of one target of a class feature.")
-_flurry("f2589", "A damage bonus to that feature while holding one weapon.")
-_flurry("f3166", "An attack bonus, and more damage from the same feature.")
+#: Both prerequisites are unparsed clauses and the feature is named in
+#: prose, so there is no ref for either rider -- the standing symbol for a
+#: spec that names a row and gives no id.
+_flurry("f1985", "Lengthens the reach of one target of a class feature.",
+        todo=("spec.power_ref()",))
+_flurry("f2589", "A damage bonus to that feature while holding one weapon.",
+        todo=("spec.power_ref()",))
+
+
+@power("f3166", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.on_extra_damage()",))
+def f3166(c: Cast) -> None:
+    """The attack half is written and the damage half is dropped.
+
+    The attack context carries `power`, so "monk implement attack powers"
+    is read off the declared row rather than guessed, and the grip is
+    asked inside the modifier -- a monk that puts the sword down loses
+    the bonus, which is what "while wielding" says.
+
+    The second sentence raises the damage of the class's level 0 feature
+    row, and those five rows pay with `c.flat`: a fixed amount that goes
+    straight to `deal_damage` and is never offered a damage modifier.
+    Nothing announces the rider paying out, so there is no number to add
+    one to -- and a plain `c.bonus("damage", 1)` would instead raise
+    every attack the monk makes. The two-handed grip is not the hold
+    here; the payout is.
+    """
+    me, world = c.me, c.world
+
+    def monk_implement(ctx: dict[str, Any]) -> bool:
+        if not any(w.ref == "w:longsword" for w in holding(world, me)):
+            return False
+        p = get(ctx.get("power") or "")
+        return (
+            p is not None
+            and p.cls == "monk"
+            and Keyword.IMPLEMENT in p.keywords
+            and p.is_attack
+        )
+
+    c.bonus("attack", 1, on=me, until=When.ENCOUNTER, when=monk_implement)
 
 
 @power("f3116", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

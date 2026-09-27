@@ -895,8 +895,8 @@ def f1969(c: Cast) -> None:
 
 
 @power("f1970", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
 def f1970(c: Cast) -> None:
-    """A damage bonus with the weapon style a class feature chose. The
-    choice is a build-time one the feature does not record, so there is
-    nothing to read back."""
+    """+1 damage with the weapon style chosen for a class feature. The
+    prerequisite is an unparsed clause, the feature is named in prose,
+    and the style it records is not asked anywhere."""

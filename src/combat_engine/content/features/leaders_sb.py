@@ -139,7 +139,7 @@ def bard_virtue(c: Cast) -> None:
         paid["round"] = c.world.round
         return True
 
-    if c.build("second-int"):
+    if c.build("f1s0"):
         reach = 5 + c.int_mod
 
         def on_miss(ev: Miss) -> None:
@@ -155,7 +155,7 @@ def bard_virtue(c: Cast) -> None:
         c.watch(Miss, on_miss, until=When.ENCOUNTER, on=me, label="cf:bard-f1")
         return
 
-    if not c.build("second-con"):
+    if not c.build("f1s2"):
         return
 
     # 1 + Constitution modifier, rising by two at each of the two printed
@@ -203,20 +203,16 @@ def bard_virtue(c: Cast) -> None:
     keywords=[Keyword.PSIONIC],
 )
 def ardent_mantle(c: Cast) -> None:
-    """The one mantle the class page prints in full, and it is not a choice
-    here because the compendium gives no text for the others.
+    """The first of the three mantles, on the first of the three legs.
 
-    So this is unconditional: every ardent in the tree wears this mantle,
-    which is also what makes `p10273`'s rider -- a defence bonus this same
-    mantle grants -- right to pay out unconditionally in its own file.
+    This row is the parent's ref carrying `cf:ardent-f0s0`'s content, which
+    is where it was written before the class had legs. It used to be
+    unconditional -- every ardent in the tree wore this mantle *and* the
+    other two -- and `chargen.BUILDS["ardent"]` now has a leg per mantle,
+    so it is gated like its two siblings in `features/primal_shadow.py`.
 
-    **The three mantle rows are left alone.** `chargen.loadout` deals all
-    three and the page names the one this mantle hands over, but the other
-    two belong to mantles whose text is not on the page, so nothing says
-    which is which. `requires=on_leg(...)` wants the leg a row belongs to
-    and there is none to name; guessing would make a row unreachable on
-    every build, which is worse than an ardent holding one power too many.
-    `cf:ardent-f0-rest` in `docs/blocked.json`.
+    `p10273`'s own rider is a different sentence and stays unconditional in
+    its file: it is the surge power's, not this mantle's.
 
     `opportunity` is a key the attack context carries and `query.defence`
     is handed that context, so "a bonus to all defences against opportunity
@@ -233,6 +229,9 @@ def ardent_mantle(c: Cast) -> None:
     hangs modifiers on a zone's occupants, so an aura would be a
     differently wrong reading rather than a better one.
     """
+    if not c.build("f0s0"):
+        return
+
     def against_openings(ctx: dict) -> bool:
         return bool(ctx.get("opportunity"))
 

@@ -38,6 +38,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
     DAILY,
@@ -75,6 +76,7 @@ from combat_engine.engine import (
     Miss,
     Moved,
     Position,
+    Powers,
     PowerUsed,
     Ranged,
     Relation,
@@ -100,6 +102,13 @@ from combat_engine.engine import (
 )
 
 ITEM = "item"
+
+#: The printed allowance `cf:paladin-f0` is: `dsl._group_spent` refuses a
+#: row of this group once any sibling has been used, so restoring that
+#: sibling is what "regain the use of the feature" comes to. Written out
+#: in each body rather than shared, because `audit._wants_expended` reads
+#: the body's own source to decide whether to spend a sibling for it.
+_CHANNEL = CHANNEL_DIVINITY
 
 #: The five energy keywords a resistance can be named against, and the
 #: damage type each one means.
@@ -288,13 +297,20 @@ def _pick(c: Cast, radius: int) -> int:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.class_feature()",),
 )
 def i1056x1(c: Cast) -> None:
-    """The AC half is conditional on a class feature, and nothing can ask
-    whether a character has one."""
+    """Both halves. The gate is "if you have the `cf:wizard-arcanist-f0c2`
+    class feature", and a feature is a row like any other: `Powers.known`
+    is the list, so having one is an ordinary membership test rather than
+    something only `chargen` could answer.
+
+    Asked once, when the property arms, because a character does not
+    acquire a class feature mid-fight."""
     for d in (FORT, REF, WILL):
         c.bonus(d, 1, kind="item", on=c.me, until=When.ENCOUNTER)
+    known = c.world.get(c.me, Powers)
+    if known is not None and "cf:wizard-arcanist-f0c2" in known.known:
+        c.bonus(AC, 1, kind="item", on=c.me, until=When.ENCOUNTER)
 
 
 @power(
@@ -2217,13 +2233,23 @@ def i1836p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.class_feature()",),
 )
 def i1927p1(c: Cast) -> None:
-    """`c.restore_use` is the verb and the brief now names the feature by
-    ref -- but `cf:paladin-f0` is declared nowhere in the tree, so there
-    is no row whose use could be handed back. The old marker named the
-    naming gap, which has closed; the hold is the undeclared feature."""
+    """`cf:paladin-f0` is declared now, and its own docstring says what
+    "the use of it" means: the feature lays nothing and grants no power,
+    and the once-a-fight allowance is `group=CHANNEL_DIVINITY` on the rows
+    that spend it, refused by `dsl._group_spent` the moment any sibling
+    has been used. So handing the use back is handing back whichever
+    sibling was spent -- the idiom `c.expended`'s own docstring was
+    written for, and `p11291` already uses.
+
+    Returns without spending the item's day if nothing has been used,
+    which is the Requirement the line implies. The old marker named the
+    naming gap, which has closed; it had already."""
+    spent = c.expended(group=_CHANNEL)
+    pick = c.choose(spent, f"{c.ref}: which expended row comes back") if spent else None
+    if pick is not None:
+        c.restore_use(pick)
 
 
 @power(
@@ -2505,11 +2531,19 @@ def i1983p1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you use your orb of imposition on a creature this orb hit",
-    todo=("spec.power_ref()", "c.class_feature()"),
+    todo=("spec.power_ref()", "c.amplify_bonus()"),
 )
 def i1986p1(c: Cast) -> None:
-    """Deepens a class feature's saving-throw penalty. The feature is named
-    in prose and nothing asks after one."""
+    """Deepens a saving-throw penalty `cf:wizard-arcanist-f0` laid.
+
+    The brief prints `cf:wizard-arcanist-f0c1` and nothing declares that
+    ref; the thing it names is the control leg written inline inside
+    `cf:wizard-arcanist-f0`, which chooses a victim, chooses one of that
+    victim's save-ends effects and lays `c.penalty("save", wis_mod, ...)`
+    gated on that one effect. Both the effect and the size of the penalty
+    are locals in its closure, so adding 2 means editing a modifier
+    somebody else laid -- and a second, separate penalty would be gated on
+    nothing and would bite every save the creature made."""
 
 
 @power(
@@ -2650,11 +2684,21 @@ def i2296x1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you hit with a divine attack power using this rod",
-    todo=("c.class_feature()",),
 )
 def i2304p1(c: Cast) -> None:
-    """Same hold as i1927p1: the brief now prints `cf:paladin-f0`, and
-    nothing in the tree declares it, so `c.restore_use` has no row."""
+    """"One extra use of `cf:paladin-f0` during this encounter" comes to
+    the same thing `i1927p1` does and is written the same way: the
+    allowance is the `CHANNEL_DIVINITY` group, and giving a use back is
+    restoring the sibling that spent it.
+
+    `c.first` because the header the importer gave this row carries a
+    target and the effect is about the wielder, not about it."""
+    if not c.first:
+        return
+    spent = c.expended(group=_CHANNEL)
+    pick = c.choose(spent, f"{c.ref}: which expended row comes back") if spent else None
+    if pick is not None:
+        c.restore_use(pick)
 
 
 @power(
@@ -2844,10 +2888,19 @@ def i2627x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.class_feature()",),
+    todo=("c.amplify_bonus()",),
 )
 def i2633x1(c: Cast) -> None:
-    """Deepens one form of a class feature, and nothing asks after one."""
+    """Deepens one form of `cf:wizard-arcanist-f0`.
+
+    That form is `cf:wizard-arcanist-f0c2`, which is declared: an
+    immediate interrupt that reads the attacked defence off
+    `AttackDeclared` and lays `c.bonus(vs, con_mod, once=True)` on it. The
+    defence it picked is a local in that body, and `PowerResolved` does
+    not carry it, so a second bonus laid from here would have to be
+    spread across all four defences and would be spent by whichever
+    attack came next. Raising the one modifier that was laid is the
+    printed sentence, and nothing reaches a stored modifier."""
 
 
 @power(

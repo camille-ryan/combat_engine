@@ -553,11 +553,17 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         Build("stormheart", STR, WIS),
         Build("wildblood", STR, WIS),
     ),
+    # Seven pacts are printed and four had a leg, so three pact rows were
+    # refused in play and their at-wills reached nobody. The three names
+    # are the ones `features/warlock.py` was already written against.
     "warlock": (
         Build("infernal", CON, CHA),
         Build("fey", CHA, CON),
         Build("dark", CON, CHA),
         Build("elemental", CHA, CON, element=DamageType.FIRE),
+        Build("sorcerer-king", CHA, CON),
+        Build("star", CHA, CON),
+        Build("vestige", CHA, CON),
     ),
     # A -- Strength either way, and a third leg for the leader feature that
     # is a shield and a granted row rather than a score.
@@ -590,6 +596,12 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         Build("earth", CHA, CON, element=DamageType.ACID),
         Build("fire", CHA, CON, element=DamageType.FIRE),
         Build("water", CHA, CON, element=DamageType.COLD),
+        # The third of the four printed sources, and the last to get a
+        # leg: two of the four had one and the fourth still has none --
+        # `cf:sorcerer-soul-rest` says why. Dexterity because that is the
+        # modifier its own damage clause spends. Last, so that a sorcerer
+        # that names no build is the one it has always been.
+        Build("f0s2", CHA, DEX),
     ),
     # A -- Strength either way, and the fork is which second ability the
     # rages lean on. The derivation had already found the right pair off
@@ -605,6 +617,69 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         Build("thunderborn", STR, CON),
         Build("whirling", STR, CHA),
         Build("berserker", STR, CON),
+    ),
+    # Eight more classes whose page prints more options than the class had
+    # legs, so every option armed for every character of the class and the
+    # printed word *one* meant nothing. One leg per option.
+    #
+    # **Named for the ref of the option each leg takes**, not for what the
+    # page calls it: `f0s1` is the leg that takes `cf:<class>-f0s1`. The
+    # eleven classes above are named for the word their rows were already
+    # written against, and renaming those would be churn; these are new, so
+    # they are named the way a ref is and `leaks.py` stays honest.
+    #
+    # The secondary is the ability the **option's own text** spends -- a
+    # mantle that pays a Wisdom modifier is the Wisdom leg. Where the
+    # option names no ability, the leg keeps the class's first derived
+    # secondary, which is the one every character of that class already
+    # had; that keeps a leg from inventing an ability line the page does
+    # not print.
+    "ardent": (
+        Build("f0s0", CHA, WIS),
+        Build("f0s1", CHA, CON),
+        Build("f0s2", CHA, CON),
+    ),
+    "assassin": (
+        Build("f1s0", DEX, CON),
+        Build("f1s1", DEX, CHA),
+        Build("f1s2", DEX, CHA),
+    ),
+    "bard": (
+        Build("f1s0", CHA, INT),
+        Build("f1s1", CHA, WIS),
+        Build("f1s2", CHA, CON),
+    ),
+    "battlemind": (
+        Build("f2s0", CON, WIS),
+        Build("f2s1", CON, WIS),
+        Build("f2s2", CON, CHA),
+        Build("f2s3", CON, CHA),
+    ),
+    "druid": (
+        Build("f1s0", WIS, CON),
+        Build("f1s1", WIS, DEX),
+        Build("f1s2", WIS, CON),
+        Build("f1s3", WIS, DEX),
+    ),
+    "monk": (
+        Build("f0s0", DEX, STR),
+        Build("f0s1", DEX, STR),
+        Build("f0s2", DEX, STR),
+        Build("f0s3", DEX, STR),
+        Build("f0s4", DEX, STR),
+    ),
+    "psion": (
+        Build("f0s0", INT, CHA),
+        Build("f0s1", INT, CHA),
+        Build("f0s2", INT, CHA),
+    ),
+    # The second leg is the one that trades the chassis's armour for a
+    # heavier blade, so it carries the blade. The armour half is not a
+    # field a `Build` has -- `cf:runepriest-tradition-rest` records it.
+    "runepriest": (
+        Build("f2s0", STR, WIS),
+        Build("f2s1", STR, WIS, (LONGSWORD, CROSSBOW)),
+        Build("f2s2", STR, CON),
     ),
 }
 

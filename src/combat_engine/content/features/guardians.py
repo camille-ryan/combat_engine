@@ -19,11 +19,11 @@ What is left is real, and it is most of what was blocked: the warden's four
 second-wind riders, two of the three runepriest traditions, the seeker's
 second bond, and the marauder ranger's bonus feat.
 
-**Where a printed choose-one has more options than `chargen.BUILDS` has
-legs**, `_takes_the_option` decides it once per fight and every sibling
-reads the same answer. The runepriest is the one class here that needs it:
-three traditions over two derived legs. The warden has four named legs for
-its four options, so those are ordinary `requires=` gates.
+**Every printed choose-one here is one leg of `chargen.BUILDS`**, asked in
+the header with `requires=on_leg(...)`. The runepriest was the exception
+-- three traditions over two derived legs, decided at the start of each
+fight by a helper because no header could say it -- and it has a leg per
+tradition now, so all three read like the warden's four.
 """
 
 from __future__ import annotations
@@ -52,31 +52,6 @@ from .strikers import BEAST_STYLE, MARAUDER_STYLE
 #: The two thrown properties, which is how a weapon says it is one of the
 #: pair the seeker's second bond pays for.
 THROWN = frozenset({"light thrown", "heavy thrown"})
-
-
-def _takes_the_option(c: Cast, label: str, siblings: tuple[str, ...]) -> bool:
-    """Which of a printed choose-one set this character took, decided once.
-
-    `requires=on_leg(...)` narrows a fork to the options that share an
-    ability and no further, so without this both of a pair arm and the
-    character gets two riders where the card prints one.
-
-    The choice is made by `c.choose` the first time any sibling arms and
-    written down as a hold, so every later sibling reads the same answer
-    rather than asking again. **The asking row is offered first**, which is
-    what lets each of them be driven on its own: `World.decide` takes the
-    head of the list, so a row audited alone picks itself, and a whole
-    character's rows still agree on exactly one.
-    """
-    for held in c.world.effects.of(c.me):
-        if held.label.startswith(label):
-            return held.label == f"{label} {c.ref}"
-    rest = [ref for ref in siblings if ref != c.ref]
-    picked = c.choose([c.ref, *rest], f"{label}: which option")
-    if picked is None:
-        return False
-    c.effect(f"{label} {picked}", until=When.ENCOUNTER, on=c.me)
-    return picked == c.ref
 
 
 def _ability_for_ac(c: Cast, instead: int) -> int:
@@ -294,12 +269,9 @@ def ranger_style_two_blade(c: Cast) -> None:
 
 # -- runepriest -------------------------------------------------------------
 
-#: The two traditions that both spend a Wisdom modifier, so `second-wis`
-#: cannot tell them apart and `_takes_the_option` has to. The third is
-#: `cf:runepriest-f2`, which sits on the Constitution leg and is settled by
-#: its own `requires=`.
-_RUNE_TRADITION = "cf:runepriest-f2 option"
-_WIS_TRADITIONS = ("cf:runepriest-f2s0", "cf:runepriest-f2s1")
+#: The two traditions that both spend a Wisdom modifier. They had one
+#: derived leg between them and a leg each now, so each is settled by its
+#: own `requires=`; the third is `cf:runepriest-f2`.
 
 
 @power(
@@ -331,8 +303,8 @@ def runepriest_heal_feature(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    requires=on_leg("second-wis"),
-    requires_text="needs a tradition that spends Wisdom",
+    requires=on_leg("f2s0"),
+    requires_text="needs the first tradition",
 )
 def runepriest_tradition_miss(c: Cast) -> None:
     """The tradition that is paid for being missed.
@@ -342,18 +314,18 @@ def runepriest_tradition_miss(c: Cast) -> None:
     for "regardless of the number of times the enemy misses you in a
     round" -- a second miss renews the bonus rather than doubling it.
 
-    Two of the three printed traditions spend a Wisdom modifier and
-    `chargen.BUILDS["runepriest"]` has one Wisdom leg between them, so
-    `_takes_the_option` decides which of the pair this runepriest follows.
-    That was `cf:runepriest-tradition-rest` in `docs/blocked.json`, and it
-    is the half the sub-option refs unblock.
+    Two of the three printed traditions spend a Wisdom modifier and had
+    one derived leg between them, so a helper used to pick between the
+    pair at the start of every fight. Each has a leg of its
+    own now and the header decides it, which is where the interface can
+    read it. That was `cf:runepriest-tradition-rest`.
 
     `Miss` carries `attacker`, `target` and `power` and nothing else, so
     the enemy is `ev.attacker`; the side check is `team`, not
     `query.enemies`, which filters out the dead.
     """
     me, world = c.me, c.world
-    if c.wis_mod <= 0 or not _takes_the_option(c, _RUNE_TRADITION, _WIS_TRADITIONS):
+    if c.wis_mod <= 0:
         return
     extra = c.wis_mod
 
@@ -380,8 +352,8 @@ def runepriest_tradition_miss(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    requires=on_leg("second-wis"),
-    requires_text="needs a tradition that spends Wisdom",
+    requires=on_leg("f2s1"),
+    requires_text="needs the second tradition",
 )
 def runepriest_tradition_ward(c: Cast) -> None:
     """The other Wisdom tradition: an armour clause and temporary hit points
@@ -399,11 +371,11 @@ def runepriest_tradition_ward(c: Cast) -> None:
     `target` and `amount`.
 
     The weapon proficiencies are a build-time permission the engine does
-    not model either way.
+    not model either way -- but the blade is real: this leg carries a
+    heavy blade in `chargen.BUILDS["runepriest"]`, because taking the
+    tradition is what puts one in the runepriest's hand.
     """
     me, world = c.me, c.world
-    if not _takes_the_option(c, _RUNE_TRADITION, _WIS_TRADITIONS):
-        return
 
     if out_of_heavy_armour(c):
         gain = _ability_for_ac(c, c.wis_mod)

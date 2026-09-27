@@ -145,10 +145,13 @@ def f750(c: Cast) -> None:
 
 
 @power("f767", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_racial_power()",))
+       reach=PERSONAL, target=SELF, todo=("PowerUsed.trigger",))
 def f767(c: Cast) -> None:
-    """A damage bonus on one named racial power used with combat
-    advantage. The power is named in prose with no ref."""
+    """Re-aimed: the racial power is `p1628` and it is declared, so the
+    trigger is writable. What is not is "combat advantage against **the
+    target**": `p1628` is `target=NO_TARGET` and aims itself at
+    `c.trigger.attacker`, so `PowerUsed.targets` is empty and the event
+    does not carry the attack it was answering."""
 
 
 @power("f784", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

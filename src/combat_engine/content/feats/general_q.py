@@ -64,6 +64,7 @@ from combat_engine.engine import (
     CloseBurst,
     Condition,
     DamageType,
+    Dropped,
     Keyword,
     Melee,
     Ranged,
@@ -74,6 +75,7 @@ from combat_engine.engine import (
     Usage,
     When,
     about_me,
+    cursed_by_me,
     get,
     power,
     targets_me,
@@ -922,10 +924,15 @@ def f3231(c: Cast) -> None:
 
 
 @power("f3232", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*FEATURE, "c.grant_points()"))
+       reach=PERSONAL, target=SELF,
+       todo=("c.fell_might()", "c.regain_points()"))
 def f3232(c: Cast) -> None:
-    """Swaps one class feature's payout for a power point. Neither the
-    feature nor handing a point out has a verb."""
+    """Swaps one pact boon's payout for a power point.
+
+    The feature is `cf:warlock-f1s4` and it is declared -- and refused in
+    play, because the boon it hands over is a charge nothing holds. That
+    is `c.fell_might()`, and it is what "instead of regaining" needs
+    something to take away. Handing a point out is the second absence."""
 
 
 @power("f3233", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -950,10 +957,13 @@ def f3234(c: Cast) -> None:
 
 
 @power("f3235", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("c.fell_might()",))
 def f3235(c: Cast) -> None:
-    """A free saving throw when a class feature comes back. Nothing
-    announces a feature recharging."""
+    """A free saving throw when the pact boon comes back.
+
+    `cf:warlock-f1s4` is the feature and it is a row; the boon inside it
+    is not. Nothing holds the charge, so nothing can announce it being
+    restored and there is no moment to hang the save on."""
 
 
 @power("f3237", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1224,10 +1234,21 @@ def f3329(c: Cast) -> None:
 
 
 @power("f3389", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*FEATURE, "c.grant_points()"))
+       reach=PERSONAL, target=SELF,
+       dropped=(*AUGMENT, "c.regain_points()"))
 def f3389(c: Cast) -> None:
-    """Grants a class feature and one power point. Features are not rows
-    and nothing adds to a pool."""
+    """The feature is a row, so "you gain it" is `c.grant_row`.
+
+    `cf:psion-f1` is declared and is itself refused in play -- it waits
+    on `dsl.use(augment=)` -- so handing it over buys nothing in a fight
+    yet. It is still the printed sentence and it is still worth saying:
+    the ref lands in `Powers.known`, which is what "you also qualify for
+    feats that require that feature" reads.
+
+    The point itself is dropped: nothing adds to a pool, and spending
+    one on an augment is the feature's own gap rather than this row's.
+    """
+    c.grant_row("cf:psion-f1", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3390", level=1, cls="", usage=DAILY, action=ActionType.NONE,
@@ -1320,11 +1341,42 @@ def f3397(c: Cast) -> None:
         c.resist(c.int_mod, until=When.EONT)
 
 
-@power("f3402", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+@power("f3402", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("query.immune_to(keyword)",))
 def f3402(c: Cast) -> None:
-    """Fires on a critical hit inside the radius of a class feature's
-    aura. `c.my_aura` finds an aura by label and the feature has none."""
+    """The feature is `cf:ardent-f0` and its radius is a column, not a
+    guess: `get(...).reach.size` is the burst the row declares, so this
+    row cannot drift away from it.
+
+    That feature lays modifiers rather than an aura -- its own docstring
+    says it is a snapshot -- so "within the radius" is asked of the board
+    at the moment of the critical, which is the live reading and the one
+    the sentence means.
+
+    A trait, and `AT_WILL` rather than `ENCOUNTER`: the card prints no
+    limit, and a triggered `action=NONE` row declared `ENCOUNTER` spends
+    a use every firing (#210). The dropped clause is "not immune to
+    fear" -- `query.immune_to` answers for a condition and a keyword
+    immunity is not something a creature carries.
+    """
+    me = c.me
+    declared = get("cf:ardent-f0")
+    radius = declared.reach.size if declared is not None and declared.reach else 0
+    if radius <= 0:
+        return
+
+    def crit(ev: Hit) -> None:
+        foe = ev.attacker
+        if not ev.critical or foe == me:
+            return
+        if foe not in c.within(radius, side="enemy"):
+            return
+        c.penalty("attack", 2, on=foe, until=When.EOTNT)
+        if c.bloodied(on=me):
+            c.push(1, on=foe)
+
+    c.watch(Hit, crit, until=When.ENCOUNTER, on=me, label="f3402")
 
 
 @power("f3403", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1340,10 +1392,14 @@ def f3403(c: Cast) -> None:
 
 
 @power("f3404", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF,
+       todo=("c.deals(ref=)", "c.ignore_resistance()"))
 def f3404(c: Cast) -> None:
-    """Retypes the damage of a class feature's attack and makes it bite
-    the insubstantial. The feature has no ref."""
+    """Retypes the damage of the class's level 0 feature row and makes it
+    bite the insubstantial. The feature is five refs and all five are
+    written -- what is missing is recolouring one named row's damage
+    (`c.deals` recolours everything a creature deals) and ignoring the
+    halving insubstantial applies."""
 
 
 @power("f3405", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1386,13 +1442,49 @@ def f3416(c: Cast) -> None:
             kind="feat")
 
 
-@power("f3417", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+#: "In addition to regaining the use of your fell might, whenever you drop
+#: an enemy you have cursed to 0 hit points ...". The regaining is the
+#: pact boon and belongs to `cf:warlock-f1s4`; the sentence after it is
+#: this row, and `Dropped` plus `cursed_by_me` is exactly that sentence.
+_CURSED_FELL = "an enemy under your curse drops to 0 hit points"
+
+
+@power("f3417", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*FEATURE, *AUGMENT, "c.ability_for(ref)"))
+       trigger=_CURSED_FELL,
+       on=Trigger(Dropped, cursed_by_me, _CURSED_FELL),
+       dropped=(*AUGMENT, "c.ability_for(ref)"))
 def f3417(c: Cast) -> None:
-    """Three clauses and no writable one: a class feature coming back, a
-    feature spent to augment a listed power, and one ability swapped for
-    another on a named set of rows."""
+    """The first of three clauses is written; the feature was never the
+    hold on it.
+
+    "Hits with a damaging attack" is `DamageApplied` rather than `Hit`:
+    the event names the row that dealt it, so an attack can be told from
+    a burn, and it fires only when hit points actually came off.
+    `once=True` is "the **next** ally", and `When.SONT` is the printed
+    window.
+
+    The curse itself is `c.curse`, an ordinary verb, so the card the
+    spec names for it needs no row of its own. The two clauses left are
+    spending the boon to augment a listed power, and swapping which
+    ability those powers roll -- the associated refs are printed and
+    neither verb exists.
+    """
+    me = c.me
+
+    def struck(ev: DamageApplied) -> None:
+        if ev.source == me or ev.amount <= 0 or ev.source not in c.allies():
+            return
+        p = get(ev.detail)
+        if p is None or not p.is_attack or not c.can_see(ev.source):
+            return
+        if c.cursed(on=ev.target):
+            c.flat(3 + c.int_mod, on=ev.target)
+        else:
+            c.curse(on=ev.target)
+
+    c.watch(DamageApplied, struck, until=When.SONT, on=me, once=True,
+            label=c.ref)
 
 
 @power("f3418", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1404,11 +1496,17 @@ def f3418(c: Cast) -> None:
             kind="feat")
 
 
-@power("f3419", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3419", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*FEATURE, *AUGMENT, "c.ability_for(ref)"))
+       trigger=_CURSED_FELL,
+       on=Trigger(Dropped, cursed_by_me, _CURSED_FELL),
+       dropped=(*AUGMENT, "c.ability_for(ref)"))
 def f3419(c: Cast) -> None:
-    """The same three clauses as f3417, with a push and a fear rider."""
+    """The same three clauses as f3417 and the same split: the shove is
+    written, the augment and the ability swap are not."""
+    for foe in c.enemies():
+        if c.adjacent(foe):
+            c.push(1, on=foe)
 
 
 @power("f3420", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1418,11 +1516,18 @@ def f3420(c: Cast) -> None:
     c.bonus("skill:nature", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
-@power("f3421", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*FEATURE, *AUGMENT))
+@power("f3421", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger=_CURSED_FELL,
+       on=Trigger(Dropped, cursed_by_me, _CURSED_FELL),
+       dropped=AUGMENT)
 def f3421(c: Cast) -> None:
-    """A slide on dropping a cursed enemy, and an augment that makes the
-    target swing at somebody. Both hang off the class feature."""
+    """"No enemy can be slid more than 1 square by this effect" is what
+    the set is for: an adjacent enemy that is also cursed appears in both
+    printed groups and is slid once."""
+    shoved = {f for f in c.enemies() if c.adjacent(f) or c.cursed(on=f)}
+    for foe in sorted(shoved):
+        c.slide(1, on=foe)
 
 
 @power("f3422", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1432,8 +1537,16 @@ def f3422(c: Cast) -> None:
     c.bonus("skill:bluff", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
-@power("f3423", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*FEATURE, *AUGMENT))
+@power("f3423", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger=_CURSED_FELL,
+       on=Trigger(Dropped, cursed_by_me, _CURSED_FELL),
+       dropped=AUGMENT)
 def f3423(c: Cast) -> None:
-    """Psychic damage on dropping a cursed enemy, and an augment that
-    turns the caster insubstantial. Both hang off the class feature."""
+    """`c.enemies` leaves out the dead, so the creature that has just
+    fallen is not paid twice."""
+    if c.int_mod <= 0:
+        return
+    for foe in c.enemies():
+        if c.cursed(on=foe):
+            c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=foe)

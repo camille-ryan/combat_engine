@@ -274,7 +274,7 @@ def f1163(c: Cast) -> None:
 
 
 @power("f2805", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=FEATURE,
+       reach=PERSONAL, target=SELF, dropped=("cf:sorcerer-f0s3",),
        trigger="you slide a target with a sorcerer attack",
        on=Trigger(ForcedMove, _my_sorcerer_slide, "you slide a target"))
 def f2805(c: Cast) -> None:
@@ -283,8 +283,11 @@ def f2805(c: Cast) -> None:
     creature, both ends of the step and `kind_`, and no source at all, so
     "targets **you** slide" could not be asked of it.
 
-    The class feature named beside the attacks is dropped -- it is printed
-    prose with no ref, so there is nothing to recognise it by.
+    The feature named beside the attacks has a ref -- the prerequisite
+    prints `cf:sorcerer-f0s3` -- and no row: that soul is one of the four
+    the class page prints and only two are declared. So the dropped
+    clause names the row it is waiting for rather than the shape of the
+    absence. The day that leg lands, this is one line.
     """
     c.penalty(AC, 2, on=c.trigger.target, until=When.EONT)
 
@@ -334,20 +337,20 @@ def f2804(c: Cast) -> None:
 
 
 @power("f1160", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("events.ShortRested",))
 def f1160(c: Cast) -> None:
-    """Three legs of a cycle, each with its own pair of bonuses. The
-    cycle is printed prose with no ref and nothing records which leg the
-    sorcerer is on -- `c.build` answers the class's own fork and not
-    this."""
+    """Skill and initiative bonuses that differ by cosmic phase.
+    `cf:sorcerer-f0s0` is declared and refused in play for want of a rest
+    anything announces, so no phase is ever set and there is nothing to
+    branch on. Same symbol that row waits on."""
 
 
 @power("f2026", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=("DamageType.pair()", "c.deals(ref=)"))
 def f2026(c: Cast) -> None:
-    """The f2045 shape on the other leg: `f2023b` is a ref and the two
-    damage types are ordinary, but the amount is the cycle's own number
-    and the cycle has no ref."""
+    """Gives `f2023b` a two-type damage line sized by the source's own
+    damage bonus. Both refs exist; what does not is a damage type that is
+    two types at once, or a way to hand one to a named row."""
 
 
 @power("f3433", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

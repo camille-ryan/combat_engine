@@ -13,9 +13,11 @@ creature with `c.call_beast`, and its numbers -- scores, defences, hit
 points, attack bonus, damage die -- load out of the `companion` table
 rather than being written down here. `c.beast()` is the reader.
 
-What is still missing is the *racial* powers four of these name by ref.
-None of them is in the tree, so a resistance keyed to one has no damage
-type to take and an exemption from one has nothing to be exempt from.
+**The racial half is written now too.** The four rows here that name a
+racial power by ref -- `p1448`, `p2473`, `p1450`, `p1449` -- have one:
+the races and their powers are declared, so a resistance keyed to one
+reads its type off `c.element`, an exemption from one knows what the
+effect is, and a rider on one is an ordinary `PowerUsed` trigger.
 """
 
 from __future__ import annotations
@@ -34,9 +36,11 @@ from combat_engine.engine import (
     ActionType,
     AttackDeclared,
     Cast,
+    Condition,
     DamageType,
     Hit,
     Keyword,
+    PowerUsed,
     Relation,
     Trigger,
     When,
@@ -44,9 +48,6 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.dsl import get
 from combat_engine.engine.query import team
-
-#: The racial powers half these rows name are not in the tree at all.
-RACIAL = ("c.on_racial_power()",)
 
 
 def _swings_at_beast(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -211,11 +212,16 @@ def f754(c: Cast) -> None:
 
 
 @power("f760", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF)
 def f760(c: Cast) -> None:
-    """Resistance for the beast, of *the damage type a racial power deals*.
-    The amount is sayable and the type is not: the row it names is not in
-    the tree, so there is nothing to read a type off."""
+    """`p1448` is declared and the damage type it deals is the build
+    choice `c.element` records -- the same reader `p1448`'s own body
+    uses. No element recorded is no resistance rather than resistance to
+    everything, which is what `dtype=None` would have meant."""
+    pet = c.beast()
+    dtype = c.element(on=c.me)
+    if pet is not None and dtype is not None:
+        c.resist(5 + c.level // 2, dtype, on=pet, until=When.ENCOUNTER)
 
 
 @power("f766", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -241,22 +247,43 @@ def f766(c: Cast) -> None:
 
 
 @power("f773", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF)
 def f773(c: Cast) -> None:
-    """The beast is exempt from one named racial power. That row is not in
-    the tree, so there is nothing to be exempt from."""
+    """`p2473` is declared, so "the effect of that power" is a thing
+    with a name: it blinds whoever is standing in the cloud as it forms.
+    `PowerUsed` is announced above the body, which is the one window in
+    which the immunity can be laid before the blinding lands.
+
+    `c.immune` takes no gate, so the hold is kept to the turn the cloud
+    goes up rather than the encounter -- wider than "that power" by any
+    other blinding in the same turn, and narrower than a standing
+    immunity would have been.
+    """
+    me = c.me
+
+    def shelter(ev: Any) -> None:
+        if ev.power != "p2473":
+            return
+        pet = c.beast()
+        if pet is not None:
+            c.immune(Condition.BLINDED, on=pet, until=When.EOT)
+
+    c.watch(PowerUsed, shelter, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} shelter")
 
 
 @power("f776", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignores_difficult(when=)", "c.on_racial_power()"))
+       dropped=("c.ignores_difficult(when=)", "c.reroll_attack(on=)"))
 def f776(c: Cast) -> None:
     """The beast walks over rough ground.
 
     Two things dropped. The printed permission is only *while it shifts*
     and `c.ignores_difficult` takes a terrain kind rather than a gate, so
     the beast has it always -- wider than the card. And the reroll half
-    names a racial row that is not in the tree.
+    is re-aimed: `p1450` is declared now, so the gap is no longer its
+    name but that its reroll is of the caster's own roll and nothing
+    turns it on somebody else's.
     """
     pet = c.beast()
     if pet is not None:
@@ -264,18 +291,21 @@ def f776(c: Cast) -> None:
 
 
 @power("f780", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.on_racial_power()",))
+       reach=PERSONAL, target=SELF)
 def f780(c: Cast) -> None:
-    """An origin and a save bonus against charms for the beast.
+    """An origin, a save bonus against charms, and the teleport rider.
 
     The saving-throw context carries the keywords of whatever is being
     saved against, so "against charm effects" is a real gate rather than a
     flat bonus that would be too good.
 
     The origin is printed as a swap and the companion's stat block prints
-    one already, which is what `instead_of` is for. Dropped: the teleport
-    rider on a racial row that is not in the tree.
+    one already, which is what `instead_of` is for.
+
+    A trait with a `c.watch` rather than a declared trigger: the row
+    holds standing modifiers as well, and declared `on=Trigger(...)`
+    those would never be laid. "The same distance that you teleport" is
+    `p1449`'s own 5, which is on the card rather than on the event.
     """
     pet = c.beast()
     if pet is None:
@@ -285,6 +315,16 @@ def f780(c: Cast) -> None:
         "save", 5, on=pet, until=When.ENCOUNTER,
         when=lambda ctx: Keyword.CHARM in ctx.get("keywords", ()),
     )
+
+    def along(ev: Any) -> None:
+        if ev.power != "p1449":
+            return
+        with_me = c.beast()
+        if with_me is not None:
+            c.teleport(5, who=with_me)
+
+    c.watch(PowerUsed, along, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} along")
 
 
 @power("f781", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -104,6 +104,10 @@ from combat_engine.engine.query import (
 
 #: A racial power or trait the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
+#: The `rt:r6-dilettante` choice: an at-will borrowed from another
+#: class, picked at build time and recorded nowhere. The same symbol
+#: `features/racial._option` carries.
+RACE_OPTION = ("c.race_option()",)
 #: Nothing announces that a roll was a reroll.
 REROLL = ("c.on_reroll()",)
 #: Which weapons a character may pick up is settled when it is built.
@@ -1037,17 +1041,19 @@ def f2320(c: Cast) -> None:
 
 
 @power("f2129", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=RACIAL)
+       reach=PERSONAL, target=SELF)
 def f2129(c: Cast) -> None:
     """A trait, not a trigger, because the row has to do two things: hand
     over the card and arm the crit rider. Declared `on=Trigger(Hit, ...)`
     the grant would never happen at all.
 
-    Taking the old racial power *away* is the dropped half -- it is named
-    in prose and `c.forbid` needs a ref.
+    Taking the old racial power away is written now: the race's own
+    power is `p1628`, which is a ref, so `c.forbid` has something to
+    name and "replace" is both halves rather than one.
     """
     me = c.me
     c.grant_row("f2129b", on=me, until=When.ENCOUNTER)
+    c.forbid("p1628", on=me, until=When.ENCOUNTER)
 
     def avenge(ev: Any) -> None:
         if ev.target != me or not ev.critical:
@@ -1492,10 +1498,12 @@ def f2408(c: Cast) -> None:
 
 
 @power("f2442", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF, todo=RACE_OPTION)
 def f2442(c: Cast) -> None:
-    """A second use of whatever a racial trait handed over. The trait is
-    prose and the power it granted is a build-time choice."""
+    """Re-aimed: the trait is `rt:r6-dilettante` and it is declared. The
+    card it hands over is a 1st-level at-will borrowed from another
+    class, chosen when the character is built, and nothing records the
+    choice -- so there is no ref to hand a second use to."""
 
 
 @power("f2450", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1506,20 +1514,46 @@ def f2450(c: Cast) -> None:
 
 
 @power("f2244", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+       reach=PERSONAL, target=SELF)
 def f2244(c: Cast) -> None:
-    """A damage bonus against anything standing inside a racial zone. The
-    zone is laid by a power named in prose, and `c.my_zones` cannot tell
-    which of a caster's zones it is."""
+    """`p2473` is the racial power and it is declared; `c.zone` labels a
+    zone with the ref of the row that laid it when nothing else is
+    given, so "your cloud" is the caster's zone labelled `p2473` and
+    `c.my_zones` can now tell it from the rest.
+
+    A standing damage modifier rather than a trigger: the zone comes and
+    goes and the gate is asked afresh on every blow. The 11th and 21st
+    level steps are out of scope, and no type word is printed in front
+    of the bonus, so it is untyped.
+    """
+    me = c.me
+
+    def in_the_cloud(ctx: dict[str, Any]) -> bool:
+        from combat_engine.engine.zones import Zone
+
+        who = ctx.get("target")
+        if who is None:
+            return False
+        for zid in c.my_zones():
+            held = c.world.get(zid, Zone)
+            if held is not None and held.label == "p2473" and who in c.in_squares(
+                held.squares
+            ):
+                return True
+        return False
+
+    c.bonus("damage", 4, on=me, until=When.ENCOUNTER, kind="feat",
+            when=in_the_cloud)
 
 
 @power("f2175", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.counts_as(keyword=)", *FEATURE))
+       todo=("c.counts_as(keyword=)", "cf:sorcerer-f0s1"))
 def f2175(c: Cast) -> None:
-    """Adds a keyword to one named power, then rides on a class feature's
-    chosen resistance matching that power's damage type. Neither can be
-    said: a row's keywords are header data, and the feature is prose."""
+    """`p1448` is a ref and the keyword half is the standing gap. The
+    second half compares the racial power's damage type with the one
+    `cf:sorcerer-f0s1` grants resistance to, and that feature has a ref
+    but no row, so there is no resistance to compare against."""
 
 
 @power("f2179", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

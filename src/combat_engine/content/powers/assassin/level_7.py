@@ -149,5 +149,5 @@ def p9434(c: Cast) -> None:
     neither is modelled, so it takes one creature and the rider is dropped."""
     if c.strike():
         c.damage(c.w(2), c.dex_mod)
-        if c.build("second-con") and c.con_mod > 0:
+        if c.build("f1s0") and c.con_mod > 0:
             c.temp_hp(c.con_mod, on=c.me)
