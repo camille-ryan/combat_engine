@@ -685,6 +685,36 @@ class Shrouds:
 
 
 @dataclass
+class Magic:
+    """One magic item, reduced to what a fight needs to know.
+
+    **Not a weapon, and that distinction is the whole design.** A magic
+    longsword is the printed longsword with an enhancement bonus and some
+    rows attached -- so this says which base item it was laid on and what
+    it adds, and the `Weapon` keeps the numbers it always had.
+
+    Its fields are read off `game.db` by whoever equips it; the engine
+    never opens that database, the way it never opens it for a monster's
+    hit points either.
+    """
+
+    ref: str
+    slot: str = ""
+    #: The enhancement bonus of the rung being held, not the whole ladder.
+    plus: int = 0
+    #: What the bonus applies to: `attack_damage`, `ac`, `defences`, or
+    #: nothing at all.
+    enh_to: str = ""
+    #: A critical rider, as dice -- "1d6" for the "+1d6 per plus" that 734
+    #: heroic items print. Multiplied by `plus`, which is what "per plus"
+    #: means.
+    crit: str = ""
+    #: The item's own rows -- its Properties and its Powers -- which go
+    #: into `Powers.known` while it is worn.
+    powers: tuple[str, ...] = ()
+
+
+@dataclass
 class Gear:
     """What the creature is holding and wearing, as mechanical facts only.
 
@@ -696,6 +726,10 @@ class Gear:
     armour: str = "cloth"
     #: What is on the belt rather than in the hands, by weapon ref.
     stowed: set[str] = field(default_factory=set)
+    #: Magic items being worn, by slot. A weapon's own magic is on the
+    #: `Weapon` -- it is a longsword with properties -- so this holds the
+    #: armour, the neck, and the eight small slots that had nowhere to go.
+    worn: dict[str, Magic] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Start with a grip that a pair of hands could actually make.

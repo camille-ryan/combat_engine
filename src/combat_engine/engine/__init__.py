@@ -20,6 +20,7 @@ from .components import (
     Health,
     Ident,
     Initiative,
+    Magic,
     Mod,
     Mods,
     Movement,
