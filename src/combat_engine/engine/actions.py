@@ -110,6 +110,20 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
             continue
         if p.action is ActionType.NONE:
             continue  # a trait; armed at the start of the fight, never chosen
+        if p.trigger and not p.triggers:
+            # **A condition nothing can check is not a condition.**
+            # `Power.trigger` is the printed prose and `Power.on` is the
+            # machine-readable form; a row with the first and not the
+            # second was offered like any other, so its "Trigger:" line
+            # was simply ignored. For a free at-will that means the
+            # policy may take it every iteration of `take_turn` -- one
+            # brute cast the same row 22 times in a fight, walking
+            # itself across the map a square at a time, and only the
+            # turn cap stopped it.
+            #
+            # Refusing is the honest half. The other half is an `on=` on
+            # each of the eleven rows in this state, which is content.
+            continue
         if p.out_of_combat:
             # Declared on rows that light a torch or mend a cloak. The field
             # existed and only `audit.py` read it, so the four wizard
