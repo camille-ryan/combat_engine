@@ -315,7 +315,7 @@ def check_hosted(check: Checks) -> None:
 #: monster ability, a class feature the books describe on the class page and
 #: give no row of its own (`cf:`), and the two attacks the engine names
 #: itself. The check used to be "starts with p or m", which was fine until
-#: the party finally carried its class features and `cf:rogue-bonus` --
+#: the party finally carried its class features and `cf:rogue-scoundrel-f4` --
 #: which *is* its own id, and is exactly what serving no printed name looks
 #: like -- read as a failure.
 IS_REF = re.compile(r"^(p\d+|m\d+a\d+|cf:[a-z0-9-]+|mba|rba|second-wind)$")

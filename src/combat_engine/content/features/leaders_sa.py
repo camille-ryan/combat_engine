@@ -26,7 +26,7 @@ from combat_engine.engine import (
 
 
 @power(
-    "cf:warlord-presence",
+    "cf:warlord-marshal-f4",
     level=0,
     cls="warlord",
     usage=ENCOUNTER,
@@ -85,5 +85,5 @@ def warlord_presence(c: Cast) -> None:
 
     c.watch(
         ActionPointSpent, spent, until=When.ENCOUNTER, on=me,
-        label="cf:warlord-presence",
+        label="cf:warlord-marshal-f4",
     )

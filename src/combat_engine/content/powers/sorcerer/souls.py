@@ -56,7 +56,7 @@ from combat_engine.engine.events import AttackRolled, Bloodied
 _HEAVY = ("chain", "scale", "plate")
 
 #: The feature's ref, and the stem of both holds it lays.
-SOUL = "cf:sorcerer-soul"
+SOUL = "cf:sorcerer-f0"
 
 #: The six the leg that *chooses* may swear to. Untyped and force are not
 #: on the printed list, and neither are necrotic, psychic or radiant.

@@ -92,10 +92,33 @@ def _drawn(case: dict) -> dict[str, list[str]]:
     return out
 
 
-def record() -> int:
+def _pinned(case: dict, redraw: bool) -> dict[str, list[str]]:
+    """The feats this fixture should run with.
+
+    **The saved ones, unless you say otherwise.** `_drawn` exists so that
+    a content wave does not change the party, and re-dealing on every
+    `record` gave that away again at the only moment it mattered: the
+    fixtures are re-recorded precisely *after* a wave, which is when the
+    pool has just moved. One run here re-drew the level-5 party and the
+    log went from 1,431 events to 2,622 -- a diff nobody can read, and a
+    real regression could ride in under it.
+
+    Re-dealing is still the right thing when the party itself is meant
+    to change, so it is `--redraw` rather than gone.
+    """
+    if not redraw:
+        path = FIXTURES / f"{case['name']}.json"
+        if path.exists():
+            saved = json.loads(path.read_text()).get("feats")
+            if saved:
+                return saved
+    return _drawn(case)
+
+
+def record(redraw: bool = False) -> int:
     FIXTURES.mkdir(parents=True, exist_ok=True)
     for case in CASES:
-        pinned = {**case, "feats": _drawn(case)}
+        pinned = {**case, "feats": _pinned(case, redraw)}
         log = play(pinned)
         path = FIXTURES / f"{case['name']}.json"
         path.write_text(json.dumps({**pinned, "log": log}, indent=1))
@@ -173,8 +196,15 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("action", choices=["record", "verify", "coverage"])
+    ap.add_argument(
+        "--redraw",
+        action="store_true",
+        help="re-deal each fixture's feats instead of keeping the pinned ones",
+    )
     args = ap.parse_args()
-    return {"record": record, "verify": verify, "coverage": coverage}[args.action]()
+    if args.action == "record":
+        return record(args.redraw)
+    return {"verify": verify, "coverage": coverage}[args.action]()
 
 
 if __name__ == "__main__":

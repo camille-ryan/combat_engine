@@ -22,7 +22,7 @@ carries all three. Only one of the three has a leg in
 `chargen.BUILDS["warlord"]` -- the shield -- so that is the one case where
 the exclusivity can be said, and it is said here rather than there: a row
 cannot switch another row off, but it can decline to fire.
-`cf:warlord-senses` has no leg and so still overlaps, which is named in its
+`cf:warlord-marshal-f2` has no leg and so still overlaps, which is named in its
 own docstring.
 """
 
@@ -40,7 +40,7 @@ from combat_engine.engine import (
 
 
 @power(
-    "cf:warlord-initiative",
+    "cf:warlord-marshal-f3",
     level=0,
     cls="warlord",
     usage=ENCOUNTER,

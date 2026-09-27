@@ -232,11 +232,12 @@ def f1709(c: Cast) -> None:
 
 @power("f1709b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-       todo=("c.use_power()", "c.set_origin()", "c.familiar_state()"))
+       todo=("c.use_power()", "c.area_origin()", "c.familiar_state()"))
 def f1709b(c: Cast) -> None:
     """Fires an infusion from the familiar's square instead of your own.
-    Three separate holds: a row using another row, moving a burst's
-    origin off its caster, and the familiar's active state."""
+    Three separate holds: a row using another row, moving a declared
+    area's origin off its caster, and the familiar's active state.
+    `c.set_origin` is the creature's origin and not this one."""
 
 
 @power("f1710", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

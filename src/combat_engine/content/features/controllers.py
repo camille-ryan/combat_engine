@@ -24,7 +24,7 @@ from combat_engine.engine import (
 
 
 @power(
-    "cf:wizard-implement",
+    "cf:wizard-arcanist-f0",
     level=0,
     cls="wizard",
     usage=ENCOUNTER,
@@ -78,7 +78,7 @@ def wizard_implement(c: Cast) -> None:
     # save-ends effects has a harder time shaking *that one* off.
     me = c.me
     victims = sorted(c.suffering())
-    who = c.choose(victims, "cf:wizard-implement: who finds it harder to shake off") \
+    who = c.choose(victims, "cf:wizard-arcanist-f0: who finds it harder to shake off") \
         if victims else None
     if who is None:
         return
@@ -98,7 +98,7 @@ def wizard_implement(c: Cast) -> None:
         return
     against = c.choose(
         sorted(held_by_target, key=lambda eff: eff.id),
-        "cf:wizard-implement: which effect it must shake off",
+        "cf:wizard-arcanist-f0: which effect it must shake off",
     )
     if against is None:
         return
@@ -125,12 +125,12 @@ def wizard_implement(c: Cast) -> None:
 
     c.watch(
         SavingThrow, used, until=When.ENCOUNTER, on=who,
-        label="cf:wizard-implement",
+        label="cf:wizard-arcanist-f0",
     )
 
 
 @power(
-    "cf:wizard-rituals",
+    "cf:wizard-arcanist-f1",
     level=0,
     cls="wizard",
     usage=ENCOUNTER,

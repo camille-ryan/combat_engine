@@ -422,7 +422,7 @@ def f1817(c: Cast) -> None:
 
 #: The two rows the class-page bond hands over, one per leg. Named here
 #: rather than guessed at because `controllers_sd` already pairs them with
-#: `cf:seeker-bond`, and a seeker has used at most one of the two.
+#: `cf:seeker-f1`, and a seeker has used at most one of the two.
 _BOND_ROWS = ("p9500", "p11462")
 
 

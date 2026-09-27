@@ -776,12 +776,11 @@ def f3047(c: Cast) -> None:
 
 @power("f3064", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.set_origin()", "c.darkvision()"))
+       dropped=("c.darkvision()",))
 def f3064(c: Cast) -> None:
-    """Changes the character's origin and grants short darkvision. A
-    creature's origin is a column nothing rewrites, and darkvision is
-    not a sense the sight code knows. The Stealth bonus is not a
-    fight."""
+    """Dropped: darkvision, which is not a sense the sight code knows.
+    The Stealth bonus is not a fight."""
+    c.set_origin("shadow", until=When.ENCOUNTER)
 
 
 _granted("f3065", "f3065b", swap=Swap(3, Usage.ENCOUNTER))

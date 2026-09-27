@@ -5,7 +5,7 @@ one twice as hard. **Twenty-three of these thirty-seven ride on the
 class's extra damage or on a weapon the catalogue does not carry**, and
 those are two different gaps that look alike from the outside.
 
-**The extra damage announces nothing.** `cf:rogue-bonus` pays out inside
+**The extra damage announces nothing.** `cf:rogue-scoundrel-f4` pays out inside
 a closure in `content/features/strikers.py` -- `extra_damage` latches
 per turn in a dict and calls `c.damage(..., detail=label)` -- so there
 is no moment at which a feat can offer to trade the payout, forgo a die

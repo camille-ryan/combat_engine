@@ -654,20 +654,22 @@ def f828(c: Cast) -> None:
 
 @power("f1240", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.set_origin()", "c.on_death_save()", "c.on_racial_power()"))
+       dropped=("c.on_death_save()", "c.on_racial_power()"))
 def f1240(c: Cast) -> None:
-    """The one clause of four the engine can say.
+    """Two clauses of four.
 
     The saving-throw context carries the conditions being saved against,
-    so "against the unconscious condition" is a real gate. Dropped: the
-    beast's creature origin, which nothing models; the death-saving-throw
-    half, which does not go through the same roll; and the teleport rider
-    on a racial row that is not in the tree. The Stealth bonus is a skill
-    and belongs to no fight.
+    so "against the unconscious condition" is a real gate. The origin is
+    a swap rather than an addition -- the companion's stat block prints
+    one already -- which is what `instead_of` is for. Dropped: the
+    death-saving-throw half, which does not go through the same roll,
+    and the teleport rider on a racial row that is not in the tree. The
+    Stealth bonus is a skill and belongs to no fight.
     """
     pet = c.beast()
     if pet is None:
         return
+    c.set_origin("shadow", on=pet, until=When.ENCOUNTER, instead_of="natural")
     c.bonus(
         "save", 2, on=pet, until=When.ENCOUNTER,
         when=lambda ctx: Condition.UNCONSCIOUS in ctx.get("conditions", ()),

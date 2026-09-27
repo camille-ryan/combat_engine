@@ -1822,10 +1822,12 @@ def i535p1(c: Cast) -> None:
 
 
 @power("i536x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.surge_bonus()",))
+       reach=PERSONAL, target=SELF)
 def i536x1(c: Cast) -> None:
-    """A surge is a quarter of maximum hit points, computed rather than
-    stored, so nothing can add to it."""
+    """`query.surge_value` reads `Mods.total`, so the raise is an ordinary
+    modifier. The number is the armour's own enhancement bonus."""
+    c.bonus("surge_value", c.enhancement, on=c.me, until=When.ENCOUNTER,
+            kind="item")
 
 
 @power("i610x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -2899,10 +2901,20 @@ def i661p1(c: Cast) -> None:
     """`PowerUsed` is announced before the body runs, so the top-up is
     armed for the rest of the turn rather than paid out here."""
 
+    topping_up = False
+
     def mended(ev: Healed) -> None:
-        if ev.source != c.me or ev.target == c.me:
+        # The top-up is itself a heal from the same source, so without
+        # the latch it answers its own `Healed` and recurses until the
+        # stack runs out.
+        nonlocal topping_up
+        if topping_up or ev.source != c.me or ev.target == c.me:
             return
-        c.heal(c.cha_mod, on=ev.target)
+        topping_up = True
+        try:
+            c.heal(c.cha_mod, on=ev.target)
+        finally:
+            topping_up = False
 
     c.watch(Healed, mended, until=When.EOT, on=c.me)
 

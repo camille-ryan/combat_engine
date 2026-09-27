@@ -281,35 +281,88 @@ class Cast:
     def kinds_of(self, on: int | None = None) -> frozenset[str]:
         """A creature's type words: undead, goblin, beast, natural, and so on.
 
-        Off the stat block's own type line. A power that reads "each undead
-        creature in the burst" asks this; a character has none, which is the
-        right answer for one.
+        Off the stat block's own type line, plus anything `c.set_origin`
+        has written on. A power that reads "each undead creature in the
+        burst" asks this; a character has no type line, and nineteen races
+        print a sentence that gives one a word anyway.
         """
         from .components import Ident
 
         who = self._who(on)
-        ident = self.world.get(who, Ident) if who else None
-        if ident is None or not ident.ref.startswith("m"):
+        if who is None:
             return frozenset()
-        from combat_engine.content.loader import load
+        words = set()
+        gone = set()
+        for eff in self.world.effects.of(who):
+            if eff.label.startswith("origin:"):
+                words.add(eff.label.split(":", 1)[1])
+            elif eff.label.startswith("unorigin:"):
+                gone.add(eff.label.split(":", 1)[1])
+        ident = self.world.get(who, Ident)
+        if ident is not None and ident.ref.startswith("m"):
+            from combat_engine.content.loader import load
 
-        try:
-            import json
+            try:
+                import json
 
-            row = load(ident.ref).row
-        except Exception:  # a ref with no row is simply typeless
-            return frozenset()
-        words = set(json.loads(row.get("keywords") or "[]"))
-        for column in ("kind", "origin"):
-            if row.get(column):
-                words.add(row[column])
+                row = load(ident.ref).row
+            except Exception:  # a ref with no row is simply typeless
+                row = {}
+            words |= set(json.loads(row.get("keywords") or "[]"))
+            for column in ("kind", "origin"):
+                if row.get(column):
+                    words.add(row[column])
         # The type line parenthesises its subtypes -- "(undead)" -- and a
         # power asking whether something is undead should not have to know.
-        return frozenset(w.strip("() ,.").lower() for w in words if w.strip("() ,."))
+        return frozenset(
+            w.strip("() ,.").lower()
+            for w in words
+            if w.strip("() ,.") and w.strip("() ,.").lower() not in gone
+        )
 
     def is_kind(self, word: str, on: int | None = None) -> bool:
         """Is this creature of that type? `c.is_kind("undead")`."""
         return word.lower() in self.kinds_of(on)
+
+    def set_origin(
+        self,
+        *words: str,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        instead_of: str = "",
+    ) -> Effect | None:
+        """"You are considered a fey creature for the purpose of effects
+        that relate to creature origin."
+
+        A character's compendium row is its class, so `kinds_of` -- which
+        reads the `kind` and `origin` columns of a stat block -- had
+        nothing to read and nowhere to be written. Held as a labelled
+        effect, the way `c.deals` holds an overridden damage type, so the
+        word lasts exactly as long as whatever gave it and one reader
+        answers for character and monster alike.
+
+        Several words at once, because two races print more than one and
+        the sentence is a single trait.
+
+        `instead_of` is the other printed shape -- "gains the shadow
+        origin **instead of** the natural origin", which a beast
+        companion's stat block really does carry. An origin is exclusive,
+        so the displaced word has to stop answering or the companion is
+        both; nothing else can take a word off a stat block.
+
+        Yours, so it defaults to the **caster**.
+        """
+        who = on if on is not None else self.me
+        held: Effect | None = None
+        if instead_of:
+            held = self.world.effects.apply(
+                who, self.me, until, label=f"unorigin:{instead_of.strip().lower()}"
+            )
+        for word in words:
+            held = self.world.effects.apply(
+                who, self.me, until, label=f"origin:{word.strip().lower()}"
+            )
+        return held
 
     def build(self, choice: str, *, on: int | None = None) -> bool:
         """Did this character take that build? `c.build("infernal")`.
@@ -508,9 +561,9 @@ class Cast:
         equal to your healing surge value" written as `c.surge_value()`
         quietly healed off the victim's maximum instead of yours.
         """
-        who = self.me if of is None else of
-        health = self.world.get(who, Health)
-        return health.surge_value if health else 0
+        from .query import surge_value
+
+        return surge_value(self.world, self.me if of is None else of)
 
     def spend_surge(self, *, on: int | None = None) -> bool:
         """Spend a surge and gain nothing for it.
@@ -1372,13 +1425,14 @@ class Cast:
 
     def surge(self, *, on: int | None = None, bonus: int = 0) -> int:
         """Spend a healing surge: a quarter of maximum hit points."""
+        from .query import surge_value
         from .resolve import spend_surge
 
         who = self._who(on)
         health = self.world.get(who, Health) if who else None
         if health is None or not spend_surge(self.world, who):
             return 0
-        return heal(self.world, self.me, who, health.surge_value + bonus)
+        return heal(self.world, self.me, who, surge_value(self.world, who) + bonus)
 
     def temp_hp(self, amount: int, *, on: int | None = None) -> None:
         who = self._who(on)
@@ -2928,6 +2982,7 @@ class Cast:
         """
         from .components import Health, Powers
         from .events import SecondWind
+        from .query import surge_value
         from .resolve import spend_surge
 
         who = on if on is not None else self.me
@@ -2939,10 +2994,11 @@ class Cast:
             if known.times("second-wind"):
                 return False
             known.note_use("second-wind", self.world.round)
-        coming = min(health.surge_value, max(0, health.max_hp - max(0, health.hp)))
+        worth = surge_value(self.world, who)
+        coming = min(worth, max(0, health.max_hp - max(0, health.hp)))
         self.world.bus.emit(SecondWind(actor=who, healed=coming, cost=cost))
         spend_surge(self.world, who)
-        self.world.heal(who, who, health.surge_value)
+        self.world.heal(who, who, worth)
         # **All four defences, not just AC.** The printed rule is "+2 to
         # all defences until the start of your next turn" and this gave
         # AC alone, so every creature that took a second wind has been
@@ -4869,15 +4925,21 @@ class Cast:
         this one. This drops one action into the budget the turn is already
         spending, which `Encounter.can` reads back.
 
+        Announced with `ActionGranted`, because the budget alone is
+        invisible: a row whose whole printed effect is this one line left
+        nothing in the log and nothing for another row to answer.
+
         Yours, so it defaults to the **caster**.
         """
         from .components import Budget
+        from .events import ActionGranted
 
         who = on if on is not None else self.me
         budget = self.world.get(who, Budget) or self.world.add(who, Budget())
         if not hasattr(budget, cost.value):
             return False
         setattr(budget, cost.value, getattr(budget, cost.value) + 1)
+        self.world.bus.emit(ActionGranted(actor=who, cost=cost))
         return True
 
     # -- borrowing somebody else's square ------------------------------------
@@ -4955,7 +5017,7 @@ class Cast:
     def quarry_damage(self) -> str:
         """The dice the ranger's quarry rider pays out, as an expression.
 
-        It lives in a closure inside `cf:ranger-quarry` and nothing could
+        It lives in a closure inside `cf:ranger-f1` and nothing could
         read it back, so "extra damage equal to your Hunter's Quarry damage"
         -- a line two rows hand to somebody else -- had no number to name.
         Kept as one expression beside that feature's rather than derived
@@ -5327,11 +5389,11 @@ class Cast:
         """The dice the rogue's once-a-round rider pays out, as an expression.
 
         The twin of `c.quarry_damage`, and for the same reason: the number
-        lives in a closure inside `cf:rogue-bonus` and nothing could read it
+        lives in a closure inside `cf:rogue-scoundrel-f4` and nothing could read it
         back, so "extra damage equal to your Sneak Attack damage" -- a line
         one row hands to somebody else -- had no number to name. Kept as one
         expression beside that feature's so the two cannot disagree; the
-        modifier half is `c.total("cf:rogue-bonus damage")`, which is what
+        modifier half is `c.total("cf:rogue-scoundrel-f4 damage")`, which is what
         `extra_damage` adds on top.
         """
         return "2d6"

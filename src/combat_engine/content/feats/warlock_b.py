@@ -10,15 +10,15 @@ board read their own curse and not each other's. So "against a creature
 you have cursed" is an ordinary gate.
 
 **The curse's extra damage is a different thing, and it is half open.**
-`cf:warlock-curse` pays through `features/strikers.py:extra_damage`,
-which adds `c.total("cf:warlock-curse damage")` on top of the dice. A
+`cf:warlock-f4` pays through `features/strikers.py:extra_damage`,
+which adds `c.total("cf:warlock-f4 damage")` on top of the dice. A
 feat that *adds* to the curse's damage therefore has a hook and is
 written. A feat that changes the **dice** (`c.change_dice()`), rerolls
 them (`c.reroll_ones()`) or deals the curse's damage a second time in a
 turn (`c.curse_damage()`) has none: the die string and the once-a-round
 latch both live inside that closure.
 
-**The pact boon is the hole.** `cf:warlock-pact` pays out on a `Dropped`,
+**The pact boon is the hole.** `cf:warlock-f1` pays out on a `Dropped`,
 and nothing announces the payout, so every feat reading "when your pact
 boon is triggered" carries `c.on_pact_boon()`. The one exception is
 f2193, which *replaces* the boon rather than riding on it -- and a watch
@@ -66,12 +66,12 @@ from combat_engine.engine.dsl import get
 #: reads its bonus under. `extra_damage` pays
 #: `c.total(f"{label} damage")`, so a modifier under that key is the one
 #: way into the curse's payout.
-CURSE = "cf:warlock-curse"
+CURSE = "cf:warlock-f4"
 CURSE_DAMAGE = f"{CURSE} damage"
 
 #: The pact boon, and the class feature that grants concealment.
-PACT = "cf:warlock-pact"
-SHADOW = "cf:warlock-shadow"
+PACT = "cf:warlock-f1"
+SHADOW = "cf:warlock-f3"
 
 #: Nothing announces a pact boon paying out, and nothing invokes one on
 #: purpose. Four rows here turn on that moment.
@@ -108,7 +108,7 @@ def _shadow_concealed(c: Cast) -> bool:
     feats print the narrower one. `c.conceal` is a modifier and
     `c.bonus` labels what it lays `"<ref> <key><amount>"`, so the class
     feature's own concealment is the one effect on the caster whose
-    label opens that way. The bare ref will not do: `cf:warlock-shadow`
+    label opens that way. The bare ref will not do: `cf:warlock-f3`
     also arms two watches, and those are effects with the ref as their
     whole label and last the encounter.
     """
@@ -543,7 +543,7 @@ def f2193(c: Cast) -> None:
 
     The replacing is real rather than dropped. `c.watch` hands its bus
     subscription to the effect it creates, and `Effects.end` unsubscribes
-    everything an effect holds, so ending `cf:warlock-pact`'s own hold
+    everything an effect holds, so ending `cf:warlock-f1`'s own hold
     disarms the feature it armed. The order traits arm in is
     `Powers.all`'s and not guaranteed, so this both sweeps what is
     already there and watches for the feature arming afterwards.

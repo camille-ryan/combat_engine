@@ -1019,10 +1019,21 @@ def i2785x1(c: Cast) -> None:
     not, so "the first saving throw" is written as a penalty that lasts as
     long as the effect does."""
 
+    laying = False
+
     def worsen(ev: EffectApplied) -> None:
-        if ev.source != c.me or not ev.save_ends:
+        # The penalty is itself save-ends, so without the latch it
+        # answers its own `EffectApplied` and recurses until the stack
+        # runs out. Invisible until the audit started arming an item's
+        # Property beside its Power.
+        nonlocal laying
+        if laying or ev.source != c.me or not ev.save_ends:
             return
-        c.penalty("save", 2, on=ev.target, until=When.SAVE_ENDS)
+        laying = True
+        try:
+            c.penalty("save", 2, on=ev.target, until=When.SAVE_ENDS)
+        finally:
+            laying = False
 
     c.watch(EffectApplied, worsen, until=When.ENCOUNTER)
 
@@ -1226,10 +1237,20 @@ def i3403x1(c: Cast) -> None:
     the effect carries, so the penalty is paid on every save-ends effect of
     mine rather than only on the burning ones."""
 
+    laying = False
+
     def worsen(ev: EffectApplied) -> None:
-        if ev.source != c.me or not ev.save_ends:
+        # The penalty is itself save-ends, so without the latch it
+        # answers its own `EffectApplied` and recurses until the stack
+        # runs out.
+        nonlocal laying
+        if laying or ev.source != c.me or not ev.save_ends:
             return
-        c.penalty("save", 2, on=ev.target, until=When.SAVE_ENDS)
+        laying = True
+        try:
+            c.penalty("save", 2, on=ev.target, until=When.SAVE_ENDS)
+        finally:
+            laying = False
 
     c.watch(EffectApplied, worsen, until=When.ENCOUNTER)
 
@@ -1464,7 +1485,7 @@ def i1461p1(c: Cast) -> None:
     attack=Attack(WIS, vs=FORT),
     trigger="an ally within 10 squares of you that you can see is hit",
     on=Trigger(Hit, _ally_hit_within(10), "an ally within 10 squares is hit"),
-    dropped=("c.set_origin()",),
+    dropped=("c.area_origin()",),
 )
 def i1531p1(c: Cast) -> None:
     """The burst is printed as centred on the ally who was hit; nothing

@@ -57,7 +57,7 @@ def out_of_heavy_armour(c: Cast, who: int | None = None) -> bool:
 
 
 @power(
-    "cf:druid-aspect",
+    "cf:druid-f1",
     level=0,
     cls="druid",
     usage=ENCOUNTER,
@@ -85,7 +85,7 @@ def druid_aspect(c: Cast) -> None:
     own sentence and a row elsewhere can change what is worn.
 
     The armour is read **once**, when the trait is armed, for the same
-    reason `cf:warlord-senses` measures its ten squares once: nothing
+    reason `cf:warlord-marshal-f2` measures its ten squares once: nothing
     re-arms a trait when equipment changes.
     """
     if not out_of_heavy_armour(c):
@@ -110,7 +110,7 @@ def druid_aspect(c: Cast) -> None:
 
 
 @power(
-    "cf:druid-rituals",
+    "cf:druid-f2",
     level=0,
     cls="druid",
     usage=ENCOUNTER,
@@ -123,7 +123,7 @@ def druid_aspect(c: Cast) -> None:
 def druid_rituals(c: Cast) -> None:
     """A bonus feat that lets the druid perform rituals, and nothing else.
 
-    Deliberately inert, like `cf:cleric-rituals`. Empty rather than a note:
+    Deliberately inert, like `cf:cleric-templar-f3`. Empty rather than a note:
     a trait is run at the start of every fight and a line in the log would
     be announcing something that is not happening.
     """
@@ -136,7 +136,7 @@ _MANIFESTING = (Usage.ENCOUNTER, Usage.DAILY)
 
 
 @power(
-    "cf:invoker-covenant",
+    "cf:invoker-f1",
     level=0,
     cls="invoker",
     usage=ENCOUNTER,
@@ -220,12 +220,12 @@ def invoker_covenant(c: Cast) -> None:
             c.push(1, on=who)
 
     c.watch(
-        PowerResolved, after, until=When.ENCOUNTER, on=me, label="cf:invoker-covenant"
+        PowerResolved, after, until=When.ENCOUNTER, on=me, label="cf:invoker-f1"
     )
 
 
 @power(
-    "cf:invoker-rituals",
+    "cf:invoker-f2",
     level=0,
     cls="invoker",
     usage=ENCOUNTER,
@@ -238,12 +238,12 @@ def invoker_covenant(c: Cast) -> None:
 def invoker_rituals(c: Cast) -> None:
     """A bonus feat that lets the invoker perform rituals, and nothing else.
 
-    Inert for the reason `cf:cleric-rituals` is.
+    Inert for the reason `cf:cleric-templar-f3` is.
     """
 
 
 @power(
-    "cf:psion-rituals",
+    "cf:psion-f2",
     level=0,
     cls="psion",
     usage=ENCOUNTER,
@@ -256,7 +256,7 @@ def invoker_rituals(c: Cast) -> None:
 def psion_rituals(c: Cast) -> None:
     """A bonus feat that lets the psion perform rituals, and nothing else.
 
-    Inert for the reason `cf:cleric-rituals` is. The psion's *other* two
+    Inert for the reason `cf:cleric-templar-f3` is. The psion's *other* two
     class-page features are elsewhere: the point pool is
     `chargen.CLASSES["psion"].power_points`, and the discipline focus -- six
     declared rows in three mutually exclusive pairs -- has no leg, and is
@@ -265,7 +265,7 @@ def psion_rituals(c: Cast) -> None:
 
 
 @power(
-    "cf:seeker-bond",
+    "cf:seeker-f1",
     level=0,
     cls="seeker",
     usage=ENCOUNTER,

@@ -1448,11 +1448,13 @@ def i491p1(c: Cast) -> None:
 
 
 @power("i503x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.surge_bonus()",))
+       reach=PERSONAL, target=SELF)
 def i503x1(c: Cast) -> None:
-    """`Health.surge_value` is a quarter of maximum hit points computed on
-    read, and consults no modifier -- so a standing raise to it has nowhere
-    to live. `c.surge(bonus=)` raises one surge, not the value."""
+    """`query.surge_value` reads `Mods.total`, which is where the standing
+    raise lives; `c.surge(bonus=)` would have raised one surge and not the
+    value. Untyped -- the card prints no word in front of it."""
+    c.bonus("surge_value", max(0, c.enhancement - 1), on=c.me,
+            until=When.ENCOUNTER)
 
 
 @power("i503p1", level=9, cls=ITEM, usage=DAILY, action=FREE,

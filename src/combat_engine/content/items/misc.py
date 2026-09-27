@@ -1192,9 +1192,10 @@ def i589p1(c: Cast) -> None:
 
 
 @power("i624x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.surge_bonus()",))
+       reach=PERSONAL, target=SELF)
 def i624x1(c: Cast) -> None:
-    """A healing surge heals a quarter of maximum and nothing adds to it."""
+    """Paragon steps are out of scope; this is the heroic +1."""
+    c.bonus("surge_value", 1, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 @power("i624p1", level=3, cls=ITEM, usage=DAILY, action=REACTION,

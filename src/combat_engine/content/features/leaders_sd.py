@@ -41,8 +41,8 @@ from .builds import on_leg
 #: runepriest is in. `p11353` reads them back: it prints a rider per state
 #: and used to pay the first of the two whatever state the runepriest was
 #: in, which is the whole feature decided by nothing.
-DESTRUCTION = "cf:runepriest-rune destruction"
-PROTECTION = "cf:runepriest-rune protection"
+DESTRUCTION = "cf:runepriest-f0 destruction"
+PROTECTION = "cf:runepriest-f0 protection"
 
 
 def rune_state(c: Cast) -> str:
@@ -54,7 +54,7 @@ def rune_state(c: Cast) -> str:
 
 
 @power(
-    "cf:runepriest-rune",
+    "cf:runepriest-f0",
     level=0,
     cls="runepriest",
     usage=ENCOUNTER,
@@ -80,7 +80,7 @@ def runepriest_rune(c: Cast) -> None:
     the list.
 
     **A snapshot of who the allies are, not an aura**, for the reason
-    `cf:warlord-senses` gives -- nothing re-arms a trait when somebody
+    `cf:warlord-marshal-f2` gives -- nothing re-arms a trait when somebody
     walks in. Where the printed line is geometric it stays geometric: both
     riders are gated modifiers that ask about adjacency at the moment the
     roll or the damage happens, so an ally that steps away from the
@@ -93,7 +93,7 @@ def runepriest_rune(c: Cast) -> None:
     """
     me = c.me
     state = c.choose(
-        [DESTRUCTION, PROTECTION], "cf:runepriest-rune: which state to stand in"
+        [DESTRUCTION, PROTECTION], "cf:runepriest-f0: which state to stand in"
     )
     if state is None:
         return
@@ -129,7 +129,7 @@ def runepriest_rune(c: Cast) -> None:
 
 
 @power(
-    "cf:runepriest-tradition",
+    "cf:runepriest-f2",
     level=0,
     cls="runepriest",
     usage=ENCOUNTER,
@@ -185,12 +185,12 @@ def runepriest_tradition(c: Cast) -> None:
 
     c.watch(
         DamageApplied, repaid, until=When.ENCOUNTER, on=me,
-        label="cf:runepriest-tradition",
+        label="cf:runepriest-f2",
     )
 
 
 @power(
-    "cf:artificer-rituals",
+    "cf:artificer-f3",
     level=0,
     cls="artificer",
     usage=ENCOUNTER,
@@ -203,7 +203,7 @@ def runepriest_tradition(c: Cast) -> None:
 def artificer_rituals(c: Cast) -> None:
     """A bonus feat that lets the artificer perform rituals, and nothing else.
 
-    Inert for the reason `cf:cleric-rituals` is. The artificer's other three
+    Inert for the reason `cf:cleric-templar-f3` is. The artificer's other three
     class-page features are all about magic items -- empowering one,
     recharging one, and paying temporary hit points when an ally spends an
     item's daily power -- and the tree has no magic items at all; see

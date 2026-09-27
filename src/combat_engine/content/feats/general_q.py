@@ -733,7 +733,7 @@ def f3214(c: Cast) -> None:
        trigger="an adjacent enemy takes damage from your quarry rider",
        on=Trigger(DamageApplied, lambda w, me, ev: (
            ev.source == me
-           and getattr(ev, "detail", "") == "cf:ranger-quarry"
+           and getattr(ev, "detail", "") == "cf:ranger-f1"
            and distance_between(w, me, ev.target) <= 1
        ), "your quarry rider damages an adjacent enemy"))
 def f3215(c: Cast) -> None:
@@ -741,7 +741,7 @@ def f3215(c: Cast) -> None:
 
     `features/strikers.py:109` pays it with
     `c.damage(..., detail=label)` and the ranger's label is
-    `cf:ranger-quarry`, so `DamageApplied.detail` names the rider
+    `cf:ranger-f1`, so `DamageApplied.detail` names the rider
     exactly. I marked this `c.on_extra_damage()` and wrote the trigger
     as every blow landed on an adjacent quarry -- which the docstring
     admitted fired more often than printed, and which was the wrong
@@ -1267,11 +1267,12 @@ def f3394(c: Cast) -> None:
 
 @power("f3395", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.set_origin()", "c.telepathy()"))
+       dropped=("c.telepathy()",))
 def f3395(c: Cast) -> None:
-    """The card is the combat half and it is handed over. Changing a
-    creature's origin and giving it a telepathy range are both facts
-    about the character sheet that no verb writes."""
+    """The card is the combat half and it is handed over. Dropped: the
+    telepathy range, which is a fact about the sheet that no verb
+    writes."""
+    c.set_origin("immortal", until=When.ENCOUNTER)
     c.grant_row("f3395b", on=c.me, until=When.ENCOUNTER)
 
 
@@ -1287,9 +1288,10 @@ def f3395b(c: Cast) -> None:
 
 
 @power("f3396", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.set_origin()",))
+       reach=PERSONAL, target=SELF)
 def f3396(c: Cast) -> None:
-    """Same shape as f3395: the card plays, the origin change does not."""
+    """Same shape as f3395, and this one has no third clause."""
+    c.set_origin("aberrant", until=When.ENCOUNTER)
     c.grant_row("f3396b", on=c.me, until=When.ENCOUNTER)
 
 

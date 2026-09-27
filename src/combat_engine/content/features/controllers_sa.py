@@ -29,7 +29,7 @@ from combat_engine.engine import (
 
 
 @power(
-    "cf:wizard-spellbook",
+    "cf:wizard-arcanist-f2",
     level=0,
     cls="wizard",
     usage=ENCOUNTER,
@@ -61,6 +61,6 @@ def wizard_spellbook(c: Cast) -> None:
         ]
         if not options or prepared:
             continue
-        pick = c.choose(options, f"cf:wizard-spellbook: which {slot.value} to prepare")
+        pick = c.choose(options, f"cf:wizard-arcanist-f2: which {slot.value} to prepare")
         if pick is not None:
             c.prepare(pick)

@@ -75,7 +75,7 @@ def rogue_tactic_club(c: Cast) -> None:
 
     Two of its three clauses are not here because they are not modifiers.
     The proficiency is the leg's own weapons in `chargen.BUILDS["rogue"]`,
-    and letting those groups stand in for the light blade `cf:rogue-bonus`
+    and letting those groups stand in for the light blade `cf:rogue-scoundrel-f4`
     wants is in that row's `requires` gate, which is the one place the
     question is asked.
 
@@ -107,7 +107,7 @@ _RALLY = "p10887"
 
 
 @power(
-    "cf:warlord-shield",
+    "cf:warlord-marshal-f1",
     level=0,
     cls="warlord",
     usage=ENCOUNTER,

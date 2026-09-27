@@ -115,8 +115,10 @@ def f1078(c: Cast) -> None:
 def f1493(c: Cast) -> None:
     """An extra move action. `usage=ENCOUNTER` is the "first time in an
     encounter" -- the budget does the limiting, so the body counts
-    nothing."""
-    c.grant_action("move", on=c.me)
+    nothing. `c.extra_action`, not `c.grant_action`: the latter opens a
+    menu line for an action you already have and understands only
+    `shift`, `stand` and `second_wind`."""
+    c.extra_action(ActionType.MOVE)
 
 
 @power("f1490", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

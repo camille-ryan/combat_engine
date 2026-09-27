@@ -28,9 +28,9 @@ Four judgements run through the file.
   on**, so "+2 to the saving throw" and "treat the check as a natural 20"
   are written onto the event. `SavingThrow` carries no damage type, so
   "against ongoing *poison*" cannot be told from any other save.
-* **A healing surge is a quarter of maximum hit points, computed rather
-  than stored**, so nothing can add to one. Every card raising a surge
-  value is `todo=("c.surge_bonus()",)`, matching `i536x1`.
+* **A healing surge value is a quarter of maximum hit points plus
+  modifiers**, read through `query.surge_value`. A card raising one is
+  `c.bonus("surge_value", n)` like any other standing number.
 
 Paragon and epic lines (`Level 11:`, `Level 15 or 20:`) are out of scope;
 the heroic number is the one written.
@@ -249,10 +249,11 @@ def i2131x1(c: Cast) -> None:
 
 
 @power("i654x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.surge_bonus()",))
+       reach=PERSONAL, target=SELF)
 def i654x1(c: Cast) -> None:
-    """A surge is a quarter of maximum hit points, computed rather than
-    stored, so nothing can add to it."""
+    """`query.surge_value` reads `Mods.total`. Paragon steps are out of
+    scope; this is the heroic +1."""
+    c.bonus("surge_value", 1, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 @power("i3523x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -540,9 +541,17 @@ def i649x1(c: Cast) -> None:
 
 
 @power("i651x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.surge_bonus()",))
+       reach=PERSONAL, target=SELF)
 def i651x1(c: Cast) -> None:
-    """The same gap as `i654x1`, paid to allies instead of to the wearer."""
+    """The same line as `i654x1`, paid to allies instead of to the wearer.
+
+    Laid on whoever is in range when the belt is armed and gated on still
+    being there, because the printed line is a standing radius and a
+    modifier is laid once. An ally who was outside it at the top of the
+    fight never picks it up; nothing on a bonus watches a distance."""
+    for mate in c.within(5, side="ally"):
+        c.bonus("surge_value", 1, on=mate, until=When.ENCOUNTER, kind="item",
+                when=lambda ctx, who=mate: c.distance(who) <= 5)
 
 
 @power("i651p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
@@ -758,9 +767,14 @@ def i2488p1(c: Cast) -> None:
 
 
 @power("i637x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.surge_bonus()",))
+       reach=PERSONAL, target=SELF)
 def i637x1(c: Cast) -> None:
-    """The same gap as `i654x1`, with the rise gated on being bloodied."""
+    """Gated rather than laid when the blooding happens: a property is
+    armed once and bloodied comes and goes with healing. Untyped -- the
+    card prints no word in front of it."""
+    me = c.me
+    c.bonus("surge_value", c.con_mod, on=me, until=When.ENCOUNTER,
+            when=lambda ctx: c.bloodied(me))
 
 
 @power("i876p1", level=10, cls=ITEM, usage=DAILY, action=INTERRUPT,

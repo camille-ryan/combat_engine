@@ -427,14 +427,14 @@ class Build:
 BUILDS: dict[str, tuple[Build, ...]] = {
     # A -- Strength either way, and the fork is what backs it up.
     # Six legs, which is what the class page lists. Each names one of the
-    # six printed talents, so `cf:fighter-grip` has something to ask about
+    # six printed talents, so `cf:fighter-weaponmaster-f3` has something to ask about
     # and the two that are only a talent are no longer folded into a leg
     # that does not mean them. The scores are the page's own: where it
     # offers a choice of tertiary it is not recorded, and where it names no
     # secondary at all -- the brawling leg -- the second is the ability the
     # feature that leg is handed actually reads.
     # The first leg carries a two-handed weapon because its talent is about
-    # holding one; without it the great-weapon half of `cf:fighter-grip`
+    # holding one; without it the great-weapon half of `cf:fighter-weaponmaster-f3`
     # was unreachable and the leg was a great-weapon fighter with a
     # longsword.
     "fighter": (
@@ -475,8 +475,8 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # of the four were missing: the style that replaces the shared ranged
     # bonus with a bonus for running, and the one that trades a feat and a
     # step of speed for the off hand. Neither had a leg, so
-    # `cf:ranger-running` could only be kept apart from `cf:ranger-nearest`
-    # by sharing a bonus type, and `cf:ranger-style` could not be written.
+    # `cf:ranger-f3` could only be kept apart from `cf:ranger-f2`
+    # by sharing a bonus type, and `cf:ranger-f0` could not be written.
     #
     # The page gives no ability line for either of the two new ones -- it
     # says only which build each resembles -- so each takes the scores and

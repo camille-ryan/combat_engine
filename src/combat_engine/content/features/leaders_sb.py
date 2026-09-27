@@ -7,7 +7,7 @@ Everything else was invisible: not written, not blocked, not counted.
 
 Two of the bard's are deliberately inert -- a ritual feat and a feat-choice
 permission, neither of which has a combat consequence to invent -- and they
-are declared `out_of_combat=True` for the same reason `cf:cleric-rituals`
+are declared `out_of_combat=True` for the same reason `cf:cleric-templar-f3`
 is: the flag is the difference between *decided* and *forgotten*.
 """
 
@@ -49,7 +49,7 @@ def bard_rituals(c: Cast) -> None:
     """A bonus feat, a ritual book, and a daily ritual that costs no
     components. There is no ritual in a fight and nothing to invent, so this
     is inert on purpose rather than unwritten -- the same call, and the same
-    empty body, as `cf:cleric-rituals`.
+    empty body, as `cf:cleric-templar-f3`.
     """
 
 
@@ -227,7 +227,7 @@ def ardent_mantle(c: Cast) -> None:
     character is in the radius of more than one of these, only the highest
     applies" is true across two ardents as well as within one.
 
-    **A snapshot, not an aura**, exactly as `cf:warlord-senses` is: the
+    **A snapshot, not an aura**, exactly as `cf:warlord-marshal-f2` is: the
     five squares are measured once when `Encounter._arm_traits` runs this,
     and an ally that walks into range later does not pick it up. Nothing
     hangs modifiers on a zone's occupants, so an aura would be a

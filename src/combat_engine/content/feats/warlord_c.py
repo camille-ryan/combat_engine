@@ -10,7 +10,7 @@ word's own heal lands on top. `f822` marked the healing half
 `c.heal` is the same number against a capped pool, so `f2797` and
 `f2434` are written rather than marked.
 
-**Combat Leader is `cf:warlord-initiative` in `features/leaders_sc.py`,
+**Combat Leader is `cf:warlord-marshal-f3` in `features/leaders_sc.py`,
 and it gives +2.** So "the bonus increases to +3" is one more point,
 and `f2413` copies the feature's own shielding-build exclusion rather
 than inventing a second version of the question.
@@ -137,7 +137,7 @@ def _martial(ref: str) -> bool:
 
 def _led(c: Cast) -> list[int]:
     """The allies Combat Leader reaches -- within 10 and able to see me,
-    which is how `cf:warlord-initiative` asks it."""
+    which is how `cf:warlord-marshal-f3` asks it."""
     me = c.me
     return [
         a for a in allies(c.world, me)

@@ -8,7 +8,7 @@ one of their prerequisites, `c.quarry` lays the relation and
 quarry" is a real question.
 
 **The beast half is written now.** The class feature exists: the
-fighting-style fork carries a leg for it, `cf:ranger-style` calls the
+fighting-style fork carries a leg for it, `cf:ranger-f0` calls the
 creature with `c.call_beast`, and its numbers -- scores, defences, hit
 points, attack bonus, damage die -- load out of the `companion` table
 rather than being written down here. `c.beast()` is the reader.
@@ -265,20 +265,22 @@ def f776(c: Cast) -> None:
 
 @power("f780", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.set_origin()", "c.on_racial_power()"))
+       dropped=("c.on_racial_power()",))
 def f780(c: Cast) -> None:
-    """A save bonus against charms for the beast.
+    """An origin and a save bonus against charms for the beast.
 
     The saving-throw context carries the keywords of whatever is being
     saved against, so "against charm effects" is a real gate rather than a
     flat bonus that would be too good.
 
-    Dropped: the beast's creature origin, which the engine does not model
-    at all, and the teleport rider on a racial row that is not in the tree.
+    The origin is printed as a swap and the companion's stat block prints
+    one already, which is what `instead_of` is for. Dropped: the teleport
+    rider on a racial row that is not in the tree.
     """
     pet = c.beast()
     if pet is None:
         return
+    c.set_origin("fey", on=pet, until=When.ENCOUNTER, instead_of="natural")
     c.bonus(
         "save", 5, on=pet, until=When.ENCOUNTER,
         when=lambda ctx: Keyword.CHARM in ctx.get("keywords", ()),

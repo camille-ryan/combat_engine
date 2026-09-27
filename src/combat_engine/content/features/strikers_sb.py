@@ -21,7 +21,7 @@ Three shapes recur:
 * **"You gain <power>".** `chargen.loadout` deals every level-0 row of a
   class, so the grant is a no-op and only the exclusivity is worth saying.
   Where the printed page does not say which option a leg took, nothing is
-  taken away -- see `cf:barbarian-might` and `docs/blocked.json`.
+  taken away -- see `cf:barbarian-f1` and `docs/blocked.json`.
 """
 
 from __future__ import annotations
@@ -78,7 +78,7 @@ def _tier(level: int) -> int:
 
 
 @power(
-    "cf:barbarian-agility",
+    "cf:barbarian-f0",
     level=0,
     cls="barbarian",
     # A trait: it is simply true of a barbarian who is not in heavy plate,
@@ -116,7 +116,7 @@ _RAGEBLOOD_ROW = "p4809"
 
 
 @power(
-    "cf:barbarian-might",
+    "cf:barbarian-f1",
     level=0,
     cls="barbarian",
     usage=ENCOUNTER,
@@ -161,7 +161,7 @@ def barbarian_might(c: Cast) -> None:
 
 
 @power(
-    "cf:barbarian-rampage",
+    "cf:barbarian-f3",
     level=0,
     cls="barbarian",
     usage=ENCOUNTER,
@@ -209,7 +209,7 @@ def barbarian_rampage(c: Cast) -> None:
 
 
 @power(
-    "cf:avenger-faith",
+    "cf:avenger-f0",
     level=0,
     cls="avenger",
     usage=ENCOUNTER,
@@ -230,7 +230,7 @@ def avenger_faith(c: Cast) -> None:
 
 
 @power(
-    "cf:avenger-censure",
+    "cf:avenger-f1",
     level=0,
     cls="avenger",
     usage=ENCOUNTER,
@@ -317,7 +317,7 @@ _EXECUTIONER_ROW = "p14372"
 
 
 @power(
-    "cf:assassin-training",
+    "cf:assassin-f1",
     level=0,
     cls="assassin",
     usage=ENCOUNTER,
@@ -331,7 +331,7 @@ def assassin_training(c: Cast) -> None:
 
     Two methods are printed and the class has exactly two legs, so each is
     identified. This one reads Constitution and rides the leg named for
-    that secondary -- the same correspondence `cf:avenger-censure`
+    that secondary -- the same correspondence `cf:avenger-f1`
     explains. The other's first clause is a granted row, which
     `chargen.loadout` has already dealt, so the half worth writing is that
     *this* leg does not have it. Its second clause -- the loss of every
@@ -367,7 +367,7 @@ def assassin_training(c: Cast) -> None:
 
 
 @power(
-    "cf:monk-defence",
+    "cf:monk-f2",
     level=0,
     cls="monk",
     usage=ENCOUNTER,
@@ -388,7 +388,7 @@ def monk_defence(c: Cast) -> None:
 
 
 @power(
-    "cf:monk-tradition",
+    "cf:monk-f0",
     level=0,
     cls="monk",
     usage=ENCOUNTER,

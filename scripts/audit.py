@@ -51,7 +51,7 @@ from combat_engine.engine import (
 from combat_engine.engine.dsl import REGISTRY
 from combat_engine.engine.grid import Square
 from combat_engine.engine.movement import place
-from combat_engine.engine.query import alive
+from combat_engine.engine.query import alive, can_act
 from combat_engine.engine.query import enemies as _foes
 from combat_engine.engine.types import ActionType, Usage
 
@@ -134,7 +134,11 @@ KNOWN_SILENT = {
     # still standing. Driven by hand with a save-ends effect on an enemy:
     # -2 to that effect's save alone, 0 to any other, and spent by the one
     # throw it is for.
-    "cf:wizard-implement": (
+    # Renamed from `cf:wizard-implement` when 45 class features moved to
+    # the database's own `-fN` spelling. A stale key here is silent in the
+    # worst way: the row reappears in the SILENT list and the excuse that
+    # was argued for it is still sitting in the file, unread.
+    "cf:wizard-arcanist-f0": (
         "penalises a save against one of the caster's own save-ends effects; "
         "the board carries none of them"
     ),
@@ -265,8 +269,20 @@ DID_SOMETHING = {
     "DamageApplied", "ConditionApplied", "Healed", "TempHP", "Moved",
     "ForcedMove", "RelationSet", "ZoneCreated", "EffectExpired", "Note",
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
-    "SurgeSpent",
+    "SurgeSpent", "ActionGranted",
 }  # fmt: skip
+# `ActionGranted` because "you can take an extra move action" is the
+# whole printed content of a row, and `Cast.extra_action` used to add one
+# to `Budget` and announce nothing -- so the row did exactly what its card
+# says and was reported SILENT for it.
+#
+# **This set is hand-kept and the names are strings**, which is the same
+# shape as two lint lists that shipped stale this week: rename an event
+# class and the entry here goes quietly false, which reads as a row that
+# does nothing. It cannot be *derived* -- deciding which events count as
+# doing something is a judgement, and `AttackRolled` is the counter-example
+# -- but it can be checked, and `main` refuses to run if a name here is
+# not a declared event.
 # `SurgeSpent` because a healing surge moving **is** the whole printed
 # content of some rows -- "one ally loses a healing surge", "you gain
 # two". Two correct item blocks were reported SILENT for doing exactly
@@ -290,6 +306,126 @@ UNDEAD = "m416"
 #: auditor looking for a monster called "mb".
 MONSTER_ABILITY = re.compile(r"^m\d+a\d+$")
 
+#: A magic item block's ref: the item's own ref with a block on the end.
+#: `i601x1` is its first Property, `i601p1` its first Power, and the two
+#: are separate rows of the same object -- so one of them may need what
+#: the other lays.
+ITEM_BLOCK = re.compile(r"^(i\d+)[a-z]\d+[a-z]?$")
+
+#: What a racial power puts in `cls`. A race is not a class and
+#: `chargen.CLASSES` raises on one.
+RACE_REF = re.compile(r"^r\d+$")
+
+
+def _event_names() -> set[str]:
+    """Every event class the engine declares, by name.
+
+    `DID_SOMETHING` is strings, and a string cannot go stale loudly.
+    Rename an event and the entry here silently stops matching, so every
+    row whose whole content is that event starts reporting SILENT and
+    reads as unwritten.
+    """
+    from combat_engine.engine import events
+
+    return {
+        name
+        for name, thing in vars(events).items()
+        if isinstance(thing, type) and issubclass(thing, events.Event)
+    }
+
+
+def _is_trait(declared) -> bool:  # noqa: ANN001
+    """Simply true of the creature: no action, and nothing to wait for.
+
+    `turns.arm_traits_of` draws the line here and `audit` has to draw it
+    in the same place, or the two disagree about which rows ever run.
+    """
+    return (
+        declared is not None
+        and declared.action is ActionType.NONE
+        and not declared.triggers
+    )
+
+
+def _gates() -> dict[str, dict]:
+    """Every feat's parsed prerequisite, by ref.
+
+    Read once per process. `feat.prereq` is the only place a feat says
+    which class, race and power it is written for -- `Power.cls` is empty
+    on all 2,536 of them -- so the board has no other way to field one on
+    a character that could have taken it.
+    """
+    import json
+
+    if not _GATES:
+        from combat_engine.etl.build import game
+
+        for row in game().execute("SELECT ref, prereq FROM feat WHERE prereq IS NOT NULL"):
+            node = json.loads(row["prereq"]) if row["prereq"] else None
+            if node:
+                _GATES[row["ref"]] = node
+    return _GATES
+
+
+_GATES: dict[str, dict] = {}
+
+
+def _atoms(node: dict | None, key: str) -> list[str]:
+    """Every value of one atom in a prerequisite tree, in printed order."""
+    if not isinstance(node, dict):
+        return []
+    if key in node:
+        return [node[key]]
+    out: list[str] = []
+    for group in ("all", "any"):
+        for sub in node.get(group, ()):
+            out += _atoms(sub, key)
+    return out
+
+
+def _item_blocks() -> dict[str, list[str]]:
+    """Declared rows grouped by the item they are blocks of."""
+    if not _BLOCKS:
+        for other in REGISTRY:
+            found = ITEM_BLOCK.match(other)
+            if found:
+                _BLOCKS.setdefault(found.group(1), []).append(other)
+    return _BLOCKS
+
+
+_BLOCKS: dict[str, list[str]] = {}
+
+
+def _siblings(ref: str) -> list[str]:
+    """The rows this one is printed beside, and cannot work without.
+
+    Three shapes, and all three were invisible to a board that dealt the
+    row under test and nothing else:
+
+    * **a second card.** 354 rows are the second stat block of an entry
+      whose first block is a row of its own -- `p5576b` is the rider on
+      `p5576` and says so by its ref.
+    * **a feat's named power.** 619 heroic feats gate on `{"ref": ...}`,
+      which is the exact card the feat is a rider on. Fielded without it
+      the feat has nothing to watch.
+    * **an item's other blocks.** 1,265 item rows belong to an object that
+      prints more than one -- `i2864p2` answers the mark `i2864p1` lays --
+      and the two arrive together because they are one object.
+    """
+    out: list[str] = []
+    parent = chargen.second_card(ref)
+    if parent:
+        out.append(parent)
+    out += _atoms(_gates().get(ref), "ref")
+    found = ITEM_BLOCK.match(ref)
+    if found:
+        out += _item_blocks().get(found.group(1), [])
+    seen: list[str] = []
+    for other in out:
+        if other != ref and other in REGISTRY and other not in seen:
+            seen.append(other)
+    return seen
+
 
 @dataclass
 class Result:
@@ -311,6 +447,7 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     """
     world = World(Grid(24, 16), Rng(seed), Bus())
     declared = get(ref)
+    named: list[str] = []
 
     if MONSTER_ABILITY.match(ref):
         caster = loader.spawn(world, ref.split("a")[0], (6, 8), team=Team.ENEMY)
@@ -337,35 +474,101 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
         # into `chargen.CLASSES` and raised, which is every row of the
         # weapon slot.
         carried = declared.cls == "item"
-        cls = (not carried and declared.cls) or (
+        # **A race is not a class either.** A racial power carries its race
+        # in `cls` -- `r33` -- and `chargen.CLASSES[...]` raised on every
+        # one of the 155 of them. The race is a `race=` on the character
+        # and the class underneath it is free, so it takes the same
+        # fighter-or-ranger fallback a classless row does.
+        #
+        # A racial *trait* says its race in its ref instead, `rt:r33-...`,
+        # and carries no `cls` at all -- so it was being fielded on a
+        # character of no race, which is the one thing a racial trait
+        # needs.
+        # By the shape of the ref, not by membership in `chargen.RACES`:
+        # that holds the 46 a character may be, and `r67` is a race with
+        # rows written for it that nobody can play. Fielded as a class it
+        # raised; fielded as a race that does not exist it is a raceless
+        # character, which is the honest answer.
+        racial = bool(RACE_REF.match(declared.cls))
+        wears = ref[3:].split("-")[0] if ref.startswith("rt:") else declared.cls
+        worn_race = wears if wears in chargen.RACES else ""
+        gate = _gates().get(ref)
+        # A feat carries no class of its own -- `Power.cls` is "" on all
+        # 2,536 of them -- so this fell through to fighter or ranger every
+        # time, and a feat printed "Prerequisite: cleric" was fielded on a
+        # fighter that could never satisfy it. `feat.prereq` names the
+        # class for 1,022 of them and every name it uses is a real one.
+        gated = next((c for c in _atoms(gate, "class") if c in chargen.CLASSES), "")
+        cls = (not carried and not racial and declared.cls) or gated or (
             "ranger" if declared.reach.kind in ("ranged", "area_burst") else "fighter"
         )
         # Its class features come too. A row that triggers on a *cursed*
         # enemy dropping needs the thing that curses, and a caster holding
         # only the row under test can never satisfy its own precondition.
-        features = sorted(
+        #
+        # **Not for a race.** A class's level-0 rows are features, and
+        # every one of them is true of the character at once. A race's are
+        # the *one* racial power the page tells you to choose -- `r33`
+        # prints seven and you take one -- so sweeping them all in deals a
+        # character seven encounter powers it never had. `chargen.spawn`
+        # already hands over what the race actually grants, off
+        # `RaceLine.granted`.
+        features = [] if racial else sorted(
             p.ref for p in REGISTRY.values() if p.cls == cls and p.level == 0
         )
+        # **A feat goes in `feats=`, not in `powers=`.** Both end up in
+        # `Powers.known`, so the difference is invisible until you look at
+        # what reads the other field: `chargen.proficiency` hands over the
+        # arms a feat grants and `chargen.power_swap` takes back the card
+        # a feat trades for. Neither looks at `powers`, so the 54 feats
+        # declaring `proficiency=("w:net",)` were audited on a character
+        # that had never been given the weapon they exist to grant.
+        a_feat = not carried and not declared.cls and ref.startswith("f")
+        # And the race its prerequisite names, so `meets` and `c.build`
+        # can answer honestly. A race is not dealt automatically for the
+        # reason `Character.race` gives; naming one the card asked for is
+        # a different thing.
+        race = worn_race or next(iter(_atoms(gate, "race")), "")
+        # **Not for a trait.** A trait is credited with whatever effect is
+        # live on the caster after arming, and a granted sibling arms at
+        # the same moment -- so a trait that installs nothing would pass
+        # on its neighbour's work. Traits are never UNUSED anyway, which
+        # is what siblings are here to fix.
+        named = [] if _is_trait(declared) else _siblings(ref)
+        # Siblings first, so a second card's parent is armed before it.
+        hand = [*named, *features] if a_feat else [ref, *named, *features]
         caster = chargen.spawn(
             world,
             chargen.Character(
-                cls, max(1, declared.level), [ref, *features], build=chargen.build_for(cls, ref)
+                cls, max(1, declared.level), hand,
+                build=chargen.build_for(cls, ref),
+                feats=[ref] if a_feat else [],
+                race=race,
             ),
             (6, 8),
         )
         # The item itself, at the bottom rung of its ladder, so that a body
         # reading "equal to the enhancement bonus" has a number to read and
-        # `Weapon.item` says which magic the carried weapon is. The columns
-        # are `game.db`'s; +1 and "1d6" are the heroic floor, which is what
-        # an audit wants -- the row, not the rung.
+        # `Weapon.item` says which magic the carried weapon is.
+        #
+        # **Its own columns, not a guess.** This hardcoded `slot="weapon"`
+        # and `enh_to="attack_damage"` for every item in the game, and only
+        # 447 of the 2,491 item rows are weapon-slot -- so a suit of armour
+        # was audited as a sword. Worse, `enh_to` decides which half of
+        # `equipment.equip` runs: forcing `attack_damage` meant
+        # `_defence_mods` had never run once in the whole audit, so no
+        # armour or neck item had ever laid the bonus it exists for.
         if carried:
             from combat_engine.engine.components import Magic
             from combat_engine.engine.equipment import equip
 
-            equip(world, caster, Magic(
-                ref=ref.split("x")[0].split("p")[0], slot="weapon", plus=1,
-                enh_to="attack_damage", crit="1d6", powers=(ref,),
-            ))
+            block = ITEM_BLOCK.match(ref)
+            item = block.group(1) if block else ref.split("x")[0].split("p")[0]
+            # A ref `game.db` does not carry still has to be fielded, or
+            # the row reports unusable for the importer's reasons rather
+            # than its own.
+            equip(world, caster, chargen.magic_for(item, powers=(ref, *named))
+                  or Magic(ref=item, plus=1, powers=(ref, *named)))
         foe_team = Team.ENEMY
 
     from combat_engine.engine import Health
@@ -414,6 +617,12 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     world.relations.set(Relation.MASTER_OF, ally, caster)
     world.relations.set(Relation.RIDDEN_BY, caster, ally)
     world.relations.set(Relation.GUARDED_BY, caster, ally)
+    # **And the caster riding something, which is the other half.** The
+    # line above makes the caster a *mount*, so "its rider" works and
+    # `c.mount()` is still None -- and "your mount" is the commoner
+    # printed wording of the two. The second ally is the one carrying it,
+    # so neither relation is a creature riding itself.
+    world.relations.set(Relation.RIDDEN_BY, second, caster)
 
     # Where everybody was put, so setup can be undone. Several things
     # between here and the return move creatures -- the caster's own
@@ -580,8 +789,23 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
             Scenery(kind=kind),
         )
 
-    # Bloodied, so a row gated on it can fire.
-    caster_health.hp = max(1, caster_health.max_hp // 2 - 1)
+    # Bloodied, so a row gated on it can fire -- **on odd seeds only**.
+    #
+    # One board cannot answer both halves of this. Bloodying the caster is
+    # what lets a row whose Requirement *is* "you must be bloodied" fire at
+    # all, and it is also what makes every row whose Requirement is "you
+    # must not be bloodied" unsatisfiable by construction -- the `f1347b`
+    # family and about fifteen others, each reported UNUSED for a state
+    # the instrument had chosen for them.
+    #
+    # So it is not one board: it is the seed. A seed is already "another
+    # arrangement of the board, tried until the row can fire at all", and
+    # `_attempts` stops the moment one works -- so this costs nothing for
+    # a row that does not care and costs one extra board for a row that
+    # does. Odd seeds keep the old behaviour, which is tried first,
+    # because gating *on* bloodied is much the commoner shape.
+    if seed % 2:
+        caster_health.hp = max(1, caster_health.max_hp // 2 - 1)
 
     # One of the caster's own rows already spent, because "an expended
     # encounter power" and "an expended channel divinity power" are printed
@@ -639,6 +863,20 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     world.armed_effects = set(world.effects.live)
     armed = {e.kind for e in world.bus.log[mark:]} - START_NOISE
     world.turn = caster
+    # Where the fight begins, which is **before** the opening initiative
+    # rolls and not after them. `_fired` used to read the log from a
+    # cursor taken after `start()` returned, and `turns._roll_initiative`
+    # emits `InitiativeRolled` inside it -- so a row triggered on the roll
+    # answered it correctly, was logged correctly, and then went unseen.
+    # 28 rows could not be reported as working however well they worked.
+    #
+    # It is a second cursor rather than a move of the first, because the
+    # two answer different questions. "Did this row go off?" wants the
+    # whole fight. "What did it do?" for an ordinary row wants only what
+    # followed its own use -- credited from the later cursor, or every row
+    # in the tree would inherit the opening round's damage and conditions
+    # and nothing could ever report SILENT again.
+    world.fight_cursor = mark
     return world, caster, armed
 
 
@@ -755,7 +993,7 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     its predicate and its action budget are exercised too -- which a direct
     call skips entirely.
     """
-    from combat_engine.engine.components import Powers
+    from combat_engine.engine.components import Budget, Powers
     from combat_engine.engine.movement import shift
     from combat_engine.engine.query import enemies
 
@@ -766,24 +1004,89 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         known = world.get(eid, Powers)
         return known.basic if known else ""
 
+    def probe() -> bool:
+        """Has the row gone off yet? And re-arm the caster if it has not.
+
+        **One immediate action per round is the printed rule, and this
+        harness never advances the round.** So the first triggered row a
+        creature owns eats the budget and every other one of its rows is
+        refused for the whole run -- `m1279a3` answers `DamageApplied`
+        and goes off during the opening pass, and `m1279a5` answers
+        `Hit` and could not be offered afterwards however well it worked.
+        It reported UNUSED, which reads as "this row cannot work" rather
+        than "its neighbour spent the action first".
+
+        The limit is a fight's, and this is not a fight: every row is
+        fired on a board of its own, in isolation, and the one being
+        measured is the one that matters. Re-arming between passes is
+        the instrument getting out of its own way -- the row is still
+        offered by the real dispatcher, against its real predicate, with
+        its real Requirement.
+        """
+        if _fired(world, ref, cursor):
+            return True
+        budget = world.get(caster, Budget)
+        if budget is not None:
+            budget.immediate_round = -1
+            budget.opportunity_turn = -1
+        return False
+
+    # Before anything is provoked at all: the row may already have gone
+    # off during `Encounter.start()`. `InitiativeRolled` is announced
+    # there, and a row that answered it has fired -- provoking it a
+    # second time would credit it with the provocation's consequences on
+    # top of its own.
+    if probe():
+        return True
+
     foes = [f for f in enemies(world, caster) if alive(world, f)]
     if not foes:
         return False
 
     _grip_for(world, caster, ref)
 
+    from combat_engine.engine import Health
+
+    # The two things every creature can do that nothing here ever did.
+    # A second wind is 41 declared triggers and emits `SurgeSpent` (19
+    # more) and `Healed` (9) on its way; an action point is 26. Ninety-odd
+    # rows for two lines, and every one of them had reported UNUSED --
+    # "this row cannot work" -- for want of being asked.
+    #
+    # The hit points go back afterwards. A second wind heals a surge, and
+    # the board bloodies the caster on purpose so that a row gated on
+    # being bloodied can fire at all: healing it here and leaving it
+    # healed would quietly close that gate for every pass below.
+    mine = Cast(world=world, me=caster, ref="audit:provoke")
+    caster_health = world.get(caster, Health)
+    was = caster_health.hp if caster_health is not None else 0
+    mine.second_wind(on=caster)
+    if caster_health is not None:
+        caster_health.hp = was
+    if probe():
+        return True
+    mine.action_point()
+    if probe():
+        return True
+
+    # The rows this one is printed beside, used before any of the generic
+    # passes. A second card answers its parent, a feat answers the power
+    # its prerequisite names, and an item's second block answers its
+    # first -- none of which any amount of swinging and walking produces.
+    _use_rows(world, caster, _siblings(ref), foes[0], skip=ref)
+    if probe():
+        return True
+
     # Put the caster in the state its own class puts it in first. A
     # warlock's pact boon triggers on a *cursed* enemy dropping, and a
     # harness that only swings and walks can never curse anybody -- so
     # three correctly written rows reported themselves unusable.
     _use_class_features(world, caster, foes[0])
-    if _fired(world, ref, cursor):
+    if probe():
         return True
 
     if _rolls_checks(world, caster, ref, cursor):
         return True
-
-    from combat_engine.engine import Health
 
     # Bloodied as a **crossing**, not as a state. The board starts the
     # caster below half so that a row *gated* on being bloodied can fire --
@@ -806,7 +1109,7 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         # make `source` itself and read false.
         killer = foes[0] if victim != foes[0] else caster
         world.damage(killer, victim, health.max_hp // 2 + 1)
-        if _fired(world, ref, cursor):
+        if probe():
             return True
 
 
@@ -826,7 +1129,7 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         if not alive(world, target):
             continue
         use(world, attacker, basic(attacker), targets=[target], spend=False)
-        if _fired(world, ref, cursor):
+        if probe():
             return True
 
     # Shoved about. "When you are pushed, pulled or slid" and "when an enemy
@@ -837,23 +1140,51 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     shove.target = caster
     for move in (shove.push, shove.pull, shove.slide):
         move(2, on=caster)
-        if _fired(world, ref, cursor):
+        if probe():
             return True
     shove.prone(on=caster)
-    if _fired(world, ref, cursor):
+    if probe():
         return True
+
+    # A point of damage of each printed type, dealt by an enemy. "When you
+    # take cold damage", "the first time you take fire damage each round"
+    # and the whole family of resistances and answers are printed triggers,
+    # and **every blow this harness strikes is an untyped melee basic** --
+    # so not one of them had ever been asked. One point rather than a
+    # blow, because the trigger is the type and not the number, and a real
+    # hit here would drop the caster before the passes below.
+    for kind in DamageType:
+        if kind is DamageType.UNTYPED:
+            continue
+        hurt = caster_health.hp if caster_health is not None else 0
+        world.damage(foes[0], caster, 1, kind)
+        # And straight back. Eleven types is eleven points, which is most
+        # of a level 1 caster already bloodied on purpose -- so the loop
+        # would kill the creature the passes below are about.
+        if caster_health is not None:
+            caster_health.hp = hurt
+        if probe():
+            return True
 
     # A burst or a blast of its own. "When the m5027 hits with a close or
     # area attack" is a common enough shape, and a harness that only ever
     # swings a basic can never produce one.
+    #
+    # Both directions, for the same reason the basic pass runs both ways:
+    # "when an enemy hits you with a close or area attack" is a printed
+    # trigger too, and the caster's own bursts can never satisfy it.
     for other in _area_rows(world, caster, ref):
         use(world, caster, other, spend=False)
-        if _fired(world, ref, cursor):
+        if probe():
+            return True
+    for other in _area_rows(world, foes[0], ref):
+        use(world, foes[0], other, spend=False)
+        if probe():
             return True
     for foe in foes[:2]:
         for sq in sorted(world.reachable_squares(foe, 1)):
             shift(world, foe, sq)
-            if _fired(world, ref, cursor):
+            if probe():
                 return True
 
     # An opportunity attack, swung by hand in both directions. Walking out
@@ -869,7 +1200,7 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
             world, attacker, basic(attacker), targets=[target],
             spend=False, opportunity=True,
         )
-        if _fired(world, ref, cursor):
+        if probe():
             return True
 
     # Somebody goes down. Several rows trigger on a creature dropping --
@@ -902,7 +1233,7 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         # unwritable rather than unasked.
         killer = foes[0] if victim == caster else caster
         world.damage(killer, victim, health.hp + health.max_hp)
-        if _fired(world, ref, cursor):
+        if probe():
             return True
     return _fired(world, ref, cursor)
 
@@ -1099,12 +1430,35 @@ def _use_with_any_grip(world, caster: int, ref: str) -> bool:  # noqa: ANN001
 
 def _use_class_features(world, caster: int, foe: int, skip: str = "") -> None:  # noqa: ANN001
     """Fire the caster's own level-0 rows -- its curse, its quarry, its mark."""
-    from combat_engine.engine.components import Position, Powers
-    from combat_engine.engine.movement import place
+    from combat_engine.engine.components import Powers
 
     known = world.get(caster, Powers)
     if known is None:
         return
+    _use_rows(
+        world, caster,
+        [r for r in known.all if (p := get(r)) is not None and p.level == 0],
+        foe, skip=skip,
+    )
+
+
+def _nearest_foe(world, caster: int) -> int | None:  # noqa: ANN001
+    """Somebody to point a row at, or None on a board with nobody left."""
+    standing = [f for f in sorted(_foes(world, caster)) if alive(world, f)]
+    return standing[0] if standing else None
+
+
+def _use_rows(world, caster: int, refs: list[str], foe: int | None, skip: str = "") -> None:  # noqa: ANN001
+    """Use these rows on the caster's behalf, and put the board back.
+
+    Split out of `_use_class_features` because the sibling pass wants the
+    same three things it does: a target for an attack row, the trait and
+    triggered rows left alone, and every creature returned to the square
+    it was placed in.
+    """
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.movement import place
+
     # Everybody's square, not just the caster's. A level-0 row that slides
     # or teleports an *ally* moves it too, and one did: firing the warlord's
     # features walked an ally from (5,8) to (2,5), so no ally was adjacent
@@ -1119,8 +1473,8 @@ def _use_class_features(world, caster: int, foe: int, skip: str = "") -> None:  
         for e in creatures(world)
         if world.get(e, Position) is not None
     }
-    for ref in list(known.all):
-        p = get(ref)
+    for other in list(refs):
+        p = get(other)
         # Not a trait, and not a row that waits for a trigger either: a
         # triggered feature called directly gets no event to answer, returns
         # at its first line, and is then counted as having fired -- which
@@ -1130,12 +1484,24 @@ def _use_class_features(world, caster: int, foe: int, skip: str = "") -> None:  
         # already spent whatever it arms -- the assassin's shrouds, the
         # druid's companion call -- so firing it again measures the
         # leftovers and reports the row silent.
-        if ref == skip:
+        if other == skip or p is None or _is_trait(p) or p.triggers:
             continue
-        if p is None or p.level != 0 or p.action is ActionType.NONE or p.triggers:
+        if p.is_attack and foe is None:
             continue
         with contextlib.suppress(Exception):
-            use(world, caster, ref, targets=[foe] if p.is_attack else None, spend=False)
+            use(world, caster, other, targets=[foe] if p.is_attack else None, spend=False)
+        # **And undo it if it took the caster off the board.** `p10046`
+        # is a level-0 minor action that removes its owner until the
+        # start of its next turn; fired during setup it left a character
+        # that could not act, so all six of that race's other rows
+        # reported UNUSED and the fault read as theirs. Three agents
+        # found it separately. Only what this row laid is unwound --
+        # an effect's label is the ref of the row that laid it -- so a
+        # daze the board put there on purpose stays.
+        if not can_act(world, caster):
+            for eff in list(world.effects.live.values()):
+                if eff.owner == caster and eff.label.split(" ")[0] == other:
+                    world.effects.end(eff, "audit:setup would not be able to act")
     # Put it back where it was standing. The rogue's level 0 is nine at-will
     # *move* utilities, and firing them walked the caster from (6,8) to
     # (0,1) -- seven squares from the nearest foe -- so the provocation that
@@ -1277,12 +1643,22 @@ def audit(ref: str) -> Result:
         try:
             world, caster, armed = board(ref, seed)
             world.rng.loaded = face
+            if not (trait or triggered):
+                # The rows this one is printed beside, **before** the
+                # cursor. A second card's parent, the power a feat's
+                # prerequisite names, an item's other block: each has to
+                # have happened for the row to have anything to answer,
+                # and none of it is the row's own work -- so it belongs
+                # on the far side of the line the events are counted from
+                # or every such row would pass on its sibling's doing.
+                _use_rows(world, caster, _siblings(ref), _nearest_foe(world, caster),
+                          skip=ref)
             cursor = len(world.bus.log)
             # Asking whether *any* effect was live was unconditionally true
             # -- the board burns a dummy -- so a row that installed nothing
             # at all still counted as having done something, and the silent
             # check could never fire through this branch.
-            had = world.armed_effects
+            had = set(world.effects.live) if not (trait or triggered) else world.armed_effects
             if trait:
                 out.fired += 1
                 out.events |= armed
@@ -1296,6 +1672,11 @@ def audit(ref: str) -> Result:
                     out.events.add("ConditionApplied")
                 continue
             if triggered:
+                # From the top of the fight, not from here. The dispatcher
+                # is armed inside `Encounter.start()` and the opening
+                # `InitiativeRolled` is announced there, so a row that
+                # answers one has already fired by the time this line runs.
+                cursor = world.fight_cursor
                 if not _provoke(world, caster, ref, cursor):
                     continue
                 out.fired += 1
@@ -1397,6 +1778,18 @@ def main() -> int:
         chosen.append(ref)
 
     refused = _decisions_are_honoured()
+    # An excuse for a ref that no longer exists is the quietest failure in
+    # this file: the row it was written for comes back into the SILENT
+    # list under its new name and the argument for it is still sitting
+    # here, read by nobody. One rename wave produced one of these --
+    # `cf:wizard-implement` became `cf:wizard-arcanist-f0` -- and the
+    # excuse was three sentences long.
+    stale = sorted(k for k in KNOWN_SILENT if k not in REGISTRY)
+    refused += [f"KNOWN_SILENT names {k}, which is not a declared row" for k in stale]
+    refused += [
+        f"DID_SOMETHING names {k}, which is not an event class"
+        for k in sorted(DID_SOMETHING - _event_names())
+    ]
     for line in refused:
         print(f"  IGNORED {line}")
 

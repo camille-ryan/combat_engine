@@ -10,7 +10,7 @@ that raises it to the interrupt that spends it. A stack of untyped +1
 modifiers under one key is a counter with a duration already attached:
 `c.total` reads it, and `When.ENCOUNTER` is exactly the printed "resets to
 0 when you take a short rest". Raising it is the pact's payout and belongs
-to `cf:warlock-pact`, which is where the other two pacts pay out; only the
+to `cf:warlock-f1`, which is where the other two pacts pay out; only the
 spending is here.
 
 **Two damage types at once** is one amount under the first of them, which
@@ -42,7 +42,7 @@ from combat_engine.engine import (
 from combat_engine.engine.events import PowerUsed
 
 #: The row that lays the curse, which both boons are clocked against.
-CURSE = "cf:warlock-curse"
+CURSE = "cf:warlock-f4"
 
 #: The key the dark pact's tally is kept under on `Mods`.
 TALLY = "dark pact tally"

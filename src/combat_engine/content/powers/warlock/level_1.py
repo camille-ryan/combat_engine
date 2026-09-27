@@ -6,7 +6,7 @@ along with the attack.
 Several rows lean on a pact or on a creature's size, neither of which a
 `requires` predicate can read. Where that is the case the rest of the row is
 written and the missing clause is called out in a comment rather than
-approximated. The curse itself is `cf:warlock-curse`, and `c.cursed(...)`
+approximated. The curse itself is `cf:warlock-f4`, and `c.cursed(...)`
 reads it -- and `cursed_by_me` is the same question asked of a trigger, which
 is what arms the three pact boons.
 """

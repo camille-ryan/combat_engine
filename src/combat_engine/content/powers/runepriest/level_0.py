@@ -8,7 +8,7 @@ here in prose. The extra healing dice are the part the body can carry.
 The row prints a rider per rune state and pays the one the runepriest is
 standing in. It used to pay the first of the two unconditionally, on the
 grounds that this row *was* that rune -- which it is not: the states are the
-class's first printed feature, they are now `cf:runepriest-rune`, and this
+class's first printed feature, they are now `cf:runepriest-f0`, and this
 row asks it rather than deciding for it.
 """
 

@@ -13,7 +13,7 @@
   },
   "cf:wizard-implement-rest": {
     "wants": "legs in chargen.BUILDS[\"wizard\"] for the three masteries with none, plus c.store_row(ref) for the one that banks an unprepared encounter power and a summon-time damage hook for the one that pays its summoned creatures",
-    "why": "the page's build sections name a class feature for two builds the tree has no leg for, and a third mastery no build names at all. Each of the three is a real clause -- bank a power, pay a summoning, repeat a missed illusion against a second target -- and none of the three has anything for c.build to answer, so adding a leg first would deal a wizard whose mastery does nothing. The docstring on cf:wizard-implement claimed this file already said so; it did not"
+    "why": "the page's build sections name a class feature for two builds the tree has no leg for, and a third mastery no build names at all. Each of the three is a real clause -- bank a power, pay a summoning, repeat a missed illusion against a second target -- and none of the three has anything for c.build to answer, so adding a leg first would deal a wizard whose mastery does nothing. The docstring on cf:wizard-arcanist-f0 claimed this file already said so; it did not"
   },
   "cf:sorcerer-soul-pierce": {
     "wants": "c.ignore_resistance(dtype, up_to=), read by resolve.damage before Defences.resist is subtracted",
@@ -129,7 +129,7 @@
   },
   "cf:druid-aspect-rest": {
     "wants": "a leg per aspect in chargen.BUILDS[\"druid\"], which the derived second-<ability> pair cannot supply",
-    "why": "four aspects are printed and cf:druid-aspect writes the two the derived legs mean: seventeen druid riders name an aspect and an ability, and one spends Dexterity throughout while another spends Constitution, which is exactly what second-dex and second-con are. Of the other two, one spends Constitution as well -- it reduces melee and ranged damage by that modifier -- so second-con cannot tell it from the aspect already written, and the last reads no ability at all, being a flat attack bonus on cold, fire, lightning and thunder powers. Neither needs anything mechanical: c.reduce and a keyword gate would both do. What is missing is a leg to choose them by"
+    "why": "four aspects are printed and cf:druid-f1 writes the two the derived legs mean: seventeen druid riders name an aspect and an ability, and one spends Dexterity throughout while another spends Constitution, which is exactly what second-dex and second-con are. Of the other two, one spends Constitution as well -- it reduces melee and ranged damage by that modifier -- so second-con cannot tell it from the aspect already written, and the last reads no ability at all, being a flat attack bonus on cold, fire, lightning and thunder powers. Neither needs anything mechanical: c.reduce and a keyword gate would both do. What is missing is a leg to choose them by"
   },
   "cf:druid-at-wills": {
     "wants": "a per-class at-will count in chargen.SLOTS, and a composition rule chargen.loadout can honour",
@@ -137,11 +137,11 @@
   },
   "cf:invoker-covenant-channel": {
     "wants": "something that says which covenant grants which of the two channelled rows -- the covenant named in each row's own spec, or a build column on class_feature filled in for this class",
-    "why": "each covenant hands over one channel divinity power and the tree has both, p5186 and p7150, dealt to every invoker by loadout. cf:invoker-covenant writes the manifestation half, which the page prints in full for both covenants, but the specs are sanitised: neither row says what it is called and neither covenant's clause says what its power does. Forbidding the wrong one would take a working row off the board to express half a sentence"
+    "why": "each covenant hands over one channel divinity power and the tree has both, p5186 and p7150, dealt to every invoker by loadout. cf:invoker-f1 writes the manifestation half, which the page prints in full for both covenants, but the specs are sanitised: neither row says what it is called and neither covenant's clause says what its power does. Forbidding the wrong one would take a working row off the board to express half a sentence"
   },
   "cf:invoker-covenant-legs": {
     "wants": "named legs in chargen.BUILDS[\"invoker\"], one per covenant, and the third covenant's own text on the imported class page",
-    "why": "twenty riders across invoker levels 1 to 9 ask c.build for a covenant by name -- five for one, eight for another, seven for a third -- and every one of the twenty is false, because the class has only the two derived second-<ability> legs and none of them is called that. They were written against legs nobody had added and nothing counted them; cf:invoker-covenant asks second-int and second-con instead, which is the same fork under the names the tree actually carries. The third covenant is worse off again: its riders spend the same Constitution modifier as one of the two, and the imported page prints only two covenants, so it has no printed benefit to write either"
+    "why": "twenty riders across invoker levels 1 to 9 ask c.build for a covenant by name -- five for one, eight for another, seven for a third -- and every one of the twenty is false, because the class has only the two derived second-<ability> legs and none of them is called that. They were written against legs nobody had added and nothing counted them; cf:invoker-f1 asks second-int and second-con instead, which is the same fork under the names the tree actually carries. The third covenant is worse off again: its riders spend the same Constitution modifier as one of the two, and the imported page prints only two covenants, so it has no printed benefit to write either"
   },
   "cf:shaman-spirit": {
     "wants": "the companion spirits' boon text on the imported class page, and a leg per spirit in chargen.BUILDS[\"shaman\"]",
@@ -157,15 +157,15 @@
   },
   "cf:runepriest-rune-switch": {
     "wants": "Keyword.RUNIC declared on the rows whose type line prints it, plus a rune offered when one of them is used and a state the choice writes",
-    "why": "the class's first feature is a pair of states and the rule for entering one: the rune is chosen as part of using a runic power, and the state stands until another is chosen or the encounter ends. cf:runepriest-rune writes the state and both of its standing benefits, chosen once as the fight begins, because nothing marks a row as runic -- Keyword has no member for it and group= is a per-encounter budget rather than a keyword -- so no row can announce a rune and there is no moment for the state to change at. The same gap as the rage keyword p4807 names"
+    "why": "the class's first feature is a pair of states and the rule for entering one: the rune is chosen as part of using a runic power, and the state stands until another is chosen or the encounter ends. cf:runepriest-f0 writes the state and both of its standing benefits, chosen once as the fight begins, because nothing marks a row as runic -- Keyword has no member for it and group= is a per-encounter budget rather than a keyword -- so no row can announce a rune and there is no moment for the state to change at. The same gap as the rage keyword p4807 names"
   },
   "cf:runepriest-tradition-rest": {
     "wants": "a third leg in chargen.BUILDS[\"runepriest\"], which the derived second-<ability> pair cannot supply, plus a build able to wear something lighter than the class chassis",
-    "why": "three traditions are printed and cf:runepriest-tradition writes the one keyed to Constitution, which is one of the two derived legs. The other two both pay a Wisdom modifier -- one on being missed, one on being damaged -- so second-wis cannot tell them apart, and unlike every other class in this set the runepriest's powers carry no tradition riders at all, so there is nothing to read the pairing off. One of the two also opens with an AC clause that is dead on this chassis: it applies only out of heavy armour and the class wears scale, with nothing in Build able to say otherwise"
+    "why": "three traditions are printed and cf:runepriest-f2 writes the one keyed to Constitution, which is one of the two derived legs. The other two both pay a Wisdom modifier -- one on being missed, one on being damaged -- so second-wis cannot tell them apart, and unlike every other class in this set the runepriest's powers carry no tradition riders at all, so there is nothing to read the pairing off. One of the two also opens with an AC clause that is dead on this chassis: it applies only out of heavy armour and the class wears scale, with nothing in Build able to say otherwise"
   },
   "cf:seeker-bond-rest": {
     "wants": "the second bond's text on the imported class page",
-    "why": "the page prints one of the two bonds in full and cf:seeker-bond writes all of it -- the granted row, the exclusivity, and the standing minor-action shift. The other bond is not in the imported text at all. Its granted row is identifiable without it, p11462 being the only other level-0 seeker row and the one that spends the Strength modifier its riders spend, so the exclusivity is written both ways; whatever else that bond gives is not on the page and is not guessed at"
+    "why": "the page prints one of the two bonds in full and cf:seeker-f1 writes all of it -- the granted row, the exclusivity, and the standing minor-action shift. The other bond is not in the imported text at all. Its granted row is identifiable without it, p11462 being the only other level-0 seeker row and the one that spends the Strength modifier its riders spend, so the exclusivity is written both ways; whatever else that bond gives is not on the page and is not guessed at"
   },
   "cf:artificer-items": {
     "wants": "magic items in the engine: an item with a daily power, Gear recording what is worn or carried, and an event announcing that an item's daily power was used",

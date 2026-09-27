@@ -368,7 +368,7 @@ def f2419(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=EXTRA)
 def f2428(c: Cast) -> None:
     """Trades one die of the class's extra damage for a slow. The dice
-    live in a closure inside `cf:ranger-quarry` and nothing announces
+    live in a closure inside `cf:ranger-f1` and nothing announces
     that they are about to be paid, so there is no moment to intercept
     and nothing to take a die off."""
 
@@ -384,7 +384,7 @@ def f2467(c: Cast) -> None:
 def f2462(c: Cast) -> None:
     """Lets the second-nearest enemy be named quarry.
 
-    `c.quarry` takes whoever it is handed and `cf:ranger-quarry` takes
+    `c.quarry` takes whoever it is handed and `cf:ranger-f1` takes
     its target like any other row, so the restriction this feat lifts is
     not enforced anywhere -- writing the row would be granting a
     permission already held. Marked rather than left out, because the

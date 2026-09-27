@@ -554,6 +554,22 @@ class ActionSpent(Event):
 
 
 @dataclass
+class ActionGranted(Event):
+    """A creature was handed an action it had not got. The other half of
+    `ActionSpent`, and `Cast.extra_action` is the one door.
+
+    The budget was raised in silence, so a row whose whole printed effect
+    is "you can take a move action" left no trace at all -- nothing to
+    answer and nothing to show it had worked. An action point announces
+    itself with `ActionPointSpent` and emits this too, because the extra
+    action is the same thing however it was bought.
+    """
+
+    actor: int
+    cost: ActionType
+
+
+@dataclass
 class SavingThrow(Decision):
     """A saving throw, announced **before** it is acted on.
 

@@ -19,19 +19,13 @@ it does>`. `RaceLine.traits` finds them by that prefix rather than from a
 list, so writing one wires it up.
 
 Two families are built by a factory rather than typed out. Nineteen
-races print the same origin sentence word for word and all nineteen want
-the same symbol; thirty-odd print a trait whose whole content is a rest
-rule, a language or a skill choice. Copying either fifty times would be
-fifty chances to mistype a ref and nothing gained.
+races print an origin, a type or a subtype and all nineteen want the
+same one-line body; thirty-odd print a trait whose whole content is a
+rest rule, a language or a skill choice. Copying either fifty times
+would be fifty chances to mistype a ref and nothing gained.
 
 What the engine cannot say, and what is therefore marked:
 
-* **Origin.** `c.kinds_of` reads a creature's compendium row, and a
-  character's row is its class. Nothing writes an origin onto one, so
-  "you are considered a fey creature" has no subject -- `c.set_origin()`.
-* **Healing surge value.** `Health.surge_value` is a quarter of maximum
-  hit points and a property, with no modifier hook, so the two races that
-  move it cannot -- `c.surge_bonus()`.
 * **A choice the page makes you record.** Thirteen elemental
   manifestations, three aspects, an at-will borrowed from another class:
   each is a build decision with no leg and no component --
@@ -105,25 +99,42 @@ def _melee(ctx: dict[str, Any]) -> bool:
     return not ctx.get("ranged", False)
 
 
-def _origin(race: str) -> None:
+def _origin(
+    race: str, *words: str, dropped: tuple[str, ...] = (), why: str = ""
+) -> None:
     """"You are considered a <kind> creature for the purpose of effects
-    that relate to creature origin."
+    that relate to creature origin." The same factory covers the two
+    pages that print a type or a subtype rather than an origin; all three
+    are one word to `c.kinds_of`.
 
-    Nineteen races print it and none of them can have it: `c.kinds_of`
-    reads the `kind` and `origin` columns of a creature's compendium row,
-    and a character's row is `c:fighter`. There is nothing to write onto.
+    `c.kinds_of` reads the `kind` and `origin` columns of a compendium
+    row and a character's row is its class, so `c.set_origin` writes the
+    word onto the creature instead and `kinds_of` unions the two. Every
+    reader in the tree asks `c.kinds_of` or `c.is_kind`, so one place to
+    write it is one place to read it.
     """
 
     def body(c: Cast) -> None:
-        pass
+        c.set_origin(*words, until=_HOLDS)
 
     body.__name__ = f"rt_{race}_origin"
-    body.__doc__ = _origin.__doc__
+    body.__doc__ = why or _origin.__doc__
     power(
         f"rt:{race}-origin",
         level=0, cls="", usage=AT_WILL, action=ActionType.NONE,
-        reach=PERSONAL, target=SELF, todo=("c.set_origin()",),
+        reach=PERSONAL, target=SELF, **({"dropped": dropped} if dropped else {}),
     )(body)
+
+
+#: What the two pages that print "you are both X and undead" lose. Every
+#: row meaning "a living creature" spells it as the absence of `undead`,
+#: so a creature holding both words reads as neither -- and neither page
+#: can be written any other way until one reader settles it.
+_BOTH = (
+    "Both words are written. The living half is dropped: no row asks "
+    "for it directly, they all spell it as not being undead, so a "
+    "creature that is both reads as neither."
+)
 
 
 def _inert(ref: str, why: str, **header: Any) -> None:
@@ -172,12 +183,13 @@ def _option(ref: str, why: str) -> None:
 
 
 @power("rt:r1-surge-value", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.surge_bonus()",))
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r1_surge_value(c: Cast) -> None:
-    """A quarter of maximum hit points is what `Health.surge_value`
-    already is; the Constitution modifier on top of it has no hook -- the
-    value is a property computed on every read."""
+    """A quarter of maximum hit points is what `query.surge_value`
+    already answers; the Constitution modifier is laid on top of it.
+    Untyped -- the page prints no word in front of it and does not call
+    it a bonus at all."""
+    c.bonus("surge_value", c.con_mod, on=c.me, until=_HOLDS)
 
 
 @power("rt:r1-bloodied-attack", level=0, cls="", usage=AT_WILL,
@@ -250,7 +262,7 @@ _inert("rt:r3-longsword", "Proficiency, which is a build-time sentence.",
 _inert("rt:r3-trance",
        "Four hours of trance for six of sleep. A rest rule; no fight "
        "reaches it.")
-_origin("r3")
+_origin("r3", "fey")
 
 
 @power("rt:r3-will", level=0, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -268,7 +280,7 @@ def rt_r3_will(c: Cast) -> None:
 
 _inert("rt:r4-elven-bows", "Proficiency, which is a build-time sentence.",
        proficiency=("w:longbow", "w:shortbow"))
-_origin("r4")
+_origin("r4", "fey")
 
 
 @power("rt:r4-group-perception", level=0, cls="", usage=AT_WILL,
@@ -396,7 +408,7 @@ def rt_r10_oversized(c: Cast) -> None:
 
 # -- r14 ---------------------------------------------------------------
 
-_origin("r14")
+_origin("r14", "shapechanger")
 
 
 @power("rt:r14-will", level=0, cls="", usage=AT_WILL,
@@ -409,7 +421,7 @@ def rt_r14_will(c: Cast) -> None:
 # -- r16 ---------------------------------------------------------------
 
 _inert("rt:r16-trance", "A rest rule; no fight reaches it.")
-_origin("r16")
+_origin("r16", "fey")
 
 
 # -- r17 ---------------------------------------------------------------
@@ -484,7 +496,7 @@ def rt_r19_pack_attack(c: Cast) -> None:
 _inert("rt:r20-master-trickster",
        "A wizard cantrip once an encounter, and every cantrip in the "
        "tree is itself out of combat.")
-_origin("r20")
+_origin("r20", "fey")
 
 
 @power("rt:r20-illusion-save", level=0, cls="", usage=AT_WILL,
@@ -535,7 +547,7 @@ def rt_r22_phalanx(c: Cast) -> None:
 
 # -- r23 ---------------------------------------------------------------
 
-_origin("r23")
+_origin("r23", "reptile")
 
 
 @power("rt:r23-trap-sense", level=0, cls="", usage=AT_WILL,
@@ -599,7 +611,7 @@ def rt_r25_running_charge(c: Cast) -> None:
 
 # -- r26 ---------------------------------------------------------------
 
-_origin("r26")
+_origin("r26", "shadow")
 
 
 @power("rt:r26-winterkin", level=0, cls="", usage=AT_WILL,
@@ -644,7 +656,7 @@ def rt_r28_resilience(c: Cast) -> None:
 
 # -- r33 ---------------------------------------------------------------
 
-_origin("r33")
+_origin("r33", "elemental")
 _option("rt:r33-manifestation",
         "Thirteen manifestations, each a different resistance, defence "
         "bonus and encounter power. One choice, recorded nowhere.")
@@ -652,7 +664,7 @@ _option("rt:r33-manifestation",
 
 # -- r35 ---------------------------------------------------------------
 
-_origin("r35")
+_origin("r35", "immortal")
 
 
 @power("rt:r35-astral-majesty", level=0, cls="", usage=AT_WILL,
@@ -794,7 +806,7 @@ def rt_r43_flock_effect(c: Cast) -> None:
 
 # -- r44 ---------------------------------------------------------------
 
-_origin("r44")
+_origin("r44", "fey")
 _option("rt:r44-aspects",
         "An aspect of nature chosen at every extended rest, each one a "
         "different power. Nothing records which is up.")
@@ -839,7 +851,7 @@ def rt_r46_dual_soul(c: Cast) -> None:
 _inert("rt:r47-past-life",
        "Counting as a second race for prerequisites. `Character.race` "
        "holds one ref and `chargen.meets` reads that one.")
-_origin("r47")
+_origin("r47", "undead", "living", dropped=("query.living()",), why=_BOTH)
 
 
 @power("rt:r47-unnatural-vitality", level=0, cls="", usage=AT_WILL,
@@ -855,7 +867,7 @@ def rt_r47_unnatural_vitality(c: Cast) -> None:
 _inert("rt:r49-living-construct",
        "No eating, drinking, breathing or sleeping; none is modelled.")
 _inert("rt:r49-telepathy", "Speech within 5 squares.")
-_origin("r49")
+_origin("r49", "immortal")
 
 
 @power("rt:r49-crystalline-mind", level=0, cls="", usage=AT_WILL,
@@ -904,7 +916,7 @@ _inert("rt:r52-master-of-shadows",
        "when the character is built.")
 _inert("rt:r52-practiced-sneak",
        "Training in Stealth, and there is no training model.")
-_origin("r52")
+_origin("r52", "shadow")
 
 
 # -- r53 ---------------------------------------------------------------
@@ -913,15 +925,18 @@ _inert("rt:r53-human-heritage", "A Bluff bonus for passing as something.")
 _inert("rt:r53-vampiric-heritage",
        "Trading a class utility for a racial one, made when the "
        "character is built.")
-_origin("r53")
+_origin("r53", "undead", "living", dropped=("query.living()",), why=_BOTH)
 
 
 @power("rt:r53-blood-dependency", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.surge_bonus()",))
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r53_blood_dependency(c: Cast) -> None:
-    """A healing surge is worth a quarter of maximum hit points and that
-    is a property with no hook, so nothing can take two off it."""
+    """Gated rather than laid when the blooding happens, for the reason
+    `rt:r1-bloodied-attack` is: a trait is armed once and bloodied comes
+    and goes with healing."""
+    me = c.me
+    c.penalty("surge_value", 2, on=me, until=_HOLDS,
+              when=lambda ctx: c.bloodied(me))
 
 
 @power("rt:r53-necrotic-resist", level=0, cls="", usage=AT_WILL,
@@ -936,7 +951,7 @@ def rt_r53_necrotic_resist(c: Cast) -> None:
 _inert("rt:r60-oaken-vitality",
        "Endurance against starvation and thirst, and meditation instead "
        "of sleep.")
-_origin("r60")
+_origin("r60", "fey")
 
 
 @power("rt:r60-forest-walk", level=0, cls="", usage=AT_WILL,
@@ -965,7 +980,7 @@ _inert("rt:r61-wee-warrior",
        "Reach is not derived from size here -- every creature reaches 1 "
        "unless a weapon says otherwise -- so this is already true. The "
        "Strength-check penalty is a check no row makes.")
-_origin("r61")
+_origin("r61", "fey")
 
 
 # -- r62 ---------------------------------------------------------------
@@ -974,7 +989,7 @@ _inert("rt:r62-pleasant-recovery",
        "Extra hit points per surge spent during a short rest; a rest is "
        "not played out.")
 _inert("rt:r62-sly-words", "Bluff as a class skill; there is no skill list.")
-_origin("r62")
+_origin("r62", "fey")
 
 
 @power("rt:r62-light-of-heart", level=0, cls="", usage=AT_WILL,
@@ -997,7 +1012,11 @@ _inert("rt:r65-animal-form",
        "A +2 to one skill, picked from a list of twelve animals. The "
        "choice is recorded nowhere and every option is a skill bonus.")
 _inert("rt:r65-language-of-beasts", "Talking to animals.")
-_origin("r65")
+_origin("r65", "fey", "beast", "humanoid", "shapechanger",
+        why="Three printed sentences and one row: the page gives a type, "
+            "an origin and a subtype, and `rt:r65-origin` is the only "
+            "trait ref the race has for any of them, so all four words go "
+            "on together.")
 
 
 @power("rt:r65-elusive", level=0, cls="", usage=AT_WILL,
@@ -1015,7 +1034,7 @@ def rt_r65_elusive(c: Cast) -> None:
 
 _inert("rt:r66-under-dweller",
        "Dungeoneering as a class skill; there is no skill list.")
-_origin("r66")
+_origin("r66", "fey")
 
 
 @power("rt:r66-earth-walk", level=0, cls="", usage=AT_WILL,

@@ -99,7 +99,7 @@ def p7419(c: Cast) -> None:
 
 
 @power(
-    "cf:fighter-mark",
+    "cf:fighter-weaponmaster-f1",
     level=0,
     cls="fighter",
     usage=ENCOUNTER,
@@ -133,11 +133,11 @@ def fighter_mark(c: Cast) -> None:
         if c.may("mark it", who=me):
             c.mark(on=ev.target, until=When.EONT)
 
-    c.watch(AttackRolled, on_roll, until=When.ENCOUNTER, on=me, label="cf:fighter-mark")
+    c.watch(AttackRolled, on_roll, until=When.ENCOUNTER, on=me, label="cf:fighter-weaponmaster-f1")
 
 
 @power(
-    "cf:fighter-opening",
+    "cf:fighter-weaponmaster-f2",
     level=0,
     cls="fighter",
     usage=ENCOUNTER,
@@ -160,7 +160,7 @@ def fighter_opening(c: Cast) -> None:
     never asks again, so immobilising the mover inside the opportunity
     window leaves it walking the rest of its path.
 
-    One leg takes `cf:fighter-chase` in place of this, and the printed
+    One leg takes `cf:fighter-weaponmaster-f0` in place of this, and the printed
     sentence there says so outright.
     """
     if c.build("brawling"):
@@ -181,7 +181,7 @@ _AGILITY = "p10469"
 
 
 @power(
-    "cf:fighter-chase",
+    "cf:fighter-weaponmaster-f0",
     level=0,
     cls="fighter",
     usage=ENCOUNTER,
@@ -191,7 +191,7 @@ _AGILITY = "p10469"
     keywords=[Keyword.MARTIAL],
 )
 def fighter_chase(c: Cast) -> None:
-    """The opening one leg takes in place of `cf:fighter-opening`.
+    """The opening one leg takes in place of `cf:fighter-weaponmaster-f2`.
 
     The printed feature is a single sentence: it replaces the bonus feature
     and hands over `p10469`. This row was written as a second copy of that
@@ -202,7 +202,7 @@ def fighter_chase(c: Cast) -> None:
     `chargen.loadout` deals a class every level 0 row it has, so the grant
     is a no-op for the leg that took this and the exclusivity is the half
     that has to happen: every other leg loses the row. Same shape as
-    `cf:warlord-shield`, and for the same reason.
+    `cf:warlord-marshal-f1`, and for the same reason.
     """
     if c.build("brawling"):
         c.grant_row(_AGILITY)
@@ -213,7 +213,7 @@ def fighter_chase(c: Cast) -> None:
 
 
 @power(
-    "cf:fighter-grip",
+    "cf:fighter-weaponmaster-f3",
     level=0,
     cls="fighter",
     usage=ENCOUNTER,
@@ -270,7 +270,7 @@ def fighter_grip(c: Cast) -> None:
             if dealt is not None and dealt.reach.kind in _MELEE_OR_CLOSE:
                 c.temp_hp(c.con_mod, on=me)
 
-        c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label="cf:fighter-grip")
+        c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label="cf:fighter-weaponmaster-f3")
 
 
 @power(

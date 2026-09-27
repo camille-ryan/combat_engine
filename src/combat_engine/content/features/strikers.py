@@ -223,7 +223,7 @@ def _weapon_attack(world: World, eid: int, ctx: dict[str, Any]) -> Weapon | None
 
 
 @power(
-    "cf:rogue-bonus",
+    "cf:rogue-scoundrel-f4",
     level=0,
     cls="rogue",
     # A trait, not an action. Nobody *does* this -- it is simply true of a
@@ -253,13 +253,13 @@ def rogue_bonus(c: Cast) -> None:
         c,
         "2d6",
         applies=lambda target: has_combat_advantage(c.world, c.me, target),
-        label="cf:rogue-bonus",
+        label="cf:rogue-scoundrel-f4",
         per_turn=True,
     )
 
 
 @power(
-    "cf:rogue-advantage",
+    "cf:rogue-scoundrel-f0",
     level=0,
     cls="rogue",
     usage=ENCOUNTER,
@@ -290,7 +290,7 @@ def rogue_advantage(c: Cast) -> None:
 
 
 @power(
-    "cf:rogue-tactic",
+    "cf:rogue-scoundrel-f1",
     level=0,
     cls="rogue",
     usage=ENCOUNTER,
@@ -316,7 +316,7 @@ def rogue_tactic(c: Cast) -> None:
     """
     if c.build("brawny"):
         c.bonus(
-            "cf:rogue-bonus damage",
+            "cf:rogue-scoundrel-f4 damage",
             c.str_mod,
             until=When.ENCOUNTER,
             on=c.me,
@@ -334,7 +334,7 @@ def rogue_tactic(c: Cast) -> None:
 
 
 @power(
-    "cf:rogue-melee-talent",
+    "cf:rogue-scoundrel-f2",
     level=0,
     cls="rogue",
     usage=ENCOUNTER,
@@ -366,7 +366,7 @@ def rogue_melee_talent(c: Cast) -> None:
 
 
 @power(
-    "cf:rogue-ranged-talent",
+    "cf:rogue-scoundrel-f3",
     level=0,
     cls="rogue",
     usage=ENCOUNTER,
@@ -422,7 +422,7 @@ def _keeps_prime_shot(world: World, eid: int) -> bool:
 
 
 @power(
-    "cf:ranger-style",
+    "cf:ranger-f0",
     level=0,
     cls="ranger",
     usage=ENCOUNTER,
@@ -483,7 +483,7 @@ def ranger_style(c: Cast) -> None:
 
 
 @power(
-    "cf:ranger-quarry",
+    "cf:ranger-f1",
     level=0,
     cls="ranger",
     usage=AT_WILL,
@@ -515,12 +515,12 @@ def ranger_quarry(c: Cast) -> None:
     # printed "against your quarry" rider was silently dead.
     c.quarry(on=quarry)
     extra_damage(
-        c, "1d6", applies=lambda target: target == quarry, label="cf:ranger-quarry"
+        c, "1d6", applies=lambda target: target == quarry, label="cf:ranger-f1"
     )
 
 
 @power(
-    "cf:ranger-nearest",
+    "cf:ranger-f2",
     level=0,
     cls="ranger",
     usage=ENCOUNTER,
@@ -542,7 +542,7 @@ def ranger_nearest(c: Cast) -> None:
 
 
 @power(
-    "cf:ranger-running",
+    "cf:ranger-f3",
     level=0,
     cls="ranger",
     usage=ENCOUNTER,
@@ -590,8 +590,8 @@ def ranger_running(c: Cast) -> None:
         began = run["from"]
         run["far"] = distance(began, ev.at) if began is not None else 0
 
-    c.watch(MoveStart, on_start, until=When.ENCOUNTER, on=me, label="cf:ranger-running")
-    c.watch(MoveEnd, on_end, until=When.ENCOUNTER, on=me, label="cf:ranger-running")
+    c.watch(MoveStart, on_start, until=When.ENCOUNTER, on=me, label="cf:ranger-f3")
+    c.watch(MoveEnd, on_end, until=When.ENCOUNTER, on=me, label="cf:ranger-f3")
     c.bonus(
         "attack",
         1,
@@ -603,7 +603,7 @@ def ranger_running(c: Cast) -> None:
 
 
 @power(
-    "cf:warlock-curse",
+    "cf:warlock-f4",
     level=0,
     cls="warlock",
     usage=AT_WILL,
@@ -631,12 +631,12 @@ def warlock_curse(c: Cast) -> None:
         return
     c.curse(on=victim)
     extra_damage(
-        c, "1d6", applies=lambda target: target == victim, label="cf:warlock-curse"
+        c, "1d6", applies=lambda target: target == victim, label="cf:warlock-f4"
     )
 
 
 @power(
-    "cf:warlock-nearest",
+    "cf:warlock-f2",
     level=0,
     cls="warlock",
     usage=ENCOUNTER,
@@ -661,7 +661,7 @@ def warlock_nearest(c: Cast) -> None:
 
 
 @power(
-    "cf:warlock-blast",
+    "cf:warlock-f0",
     level=0,
     cls="warlock",
     usage=ENCOUNTER,
@@ -695,7 +695,7 @@ def warlock_blast(c: Cast) -> None:
 
 
 @power(
-    "cf:warlock-pact",
+    "cf:warlock-f1",
     level=0,
     cls="warlock",
     usage=ENCOUNTER,
@@ -746,11 +746,11 @@ def warlock_pact(c: Cast) -> None:
         else:
             c.teleport(3, who=me)
 
-    c.watch(Dropped, on_drop, until=When.ENCOUNTER, on=me, label="cf:warlock-pact")
+    c.watch(Dropped, on_drop, until=When.ENCOUNTER, on=me, label="cf:warlock-f1")
 
 
 @power(
-    "cf:warlock-shadow",
+    "cf:warlock-f3",
     level=0,
     cls="warlock",
     usage=ENCOUNTER,
@@ -795,4 +795,4 @@ def warlock_shadow(c: Cast) -> None:
             c.conceal(on=me, until=When.EONT)
 
     for kind, fn in ((TurnStart, on_turn), (MoveEnd, on_end)):
-        c.watch(kind, fn, until=When.ENCOUNTER, on=me, label="cf:warlock-shadow")
+        c.watch(kind, fn, until=When.ENCOUNTER, on=me, label="cf:warlock-f3")

@@ -1,7 +1,7 @@
 """Ranger, level 2: three more on the quarry rider.
 
-`cf:ranger-quarry` no longer closes over its dice: `extra_damage` pays
-`c.total("cf:ranger-quarry damage")` on top of them, so "add 3 to the extra
+`cf:ranger-f1` no longer closes over its dice: `extra_damage` pays
+`c.total("cf:ranger-f1 damage")` on top of them, so "add 3 to the extra
 damage you deal with Hunter's Quarry" is a modifier under that name and
 nothing else. A plain +3 against the quarry would be strictly more than
 printed -- it would pay on every attack rather than on the once-a-round
@@ -63,4 +63,4 @@ def won_initiative(world: World, me: int, ev: Any) -> bool:
 )
 def p4382(c: Cast) -> None:
     c.stance(label="p4382")
-    c.bonus("cf:ranger-quarry damage", 3, on=c.me, until=When.STANCE, kind="untyped")
+    c.bonus("cf:ranger-f1 damage", 3, on=c.me, until=When.STANCE, kind="untyped")

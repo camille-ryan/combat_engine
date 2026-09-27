@@ -2743,9 +2743,20 @@ def i3092x1(c: Cast) -> None:
     effect, and the penalty is laid on all of them."""
     plus = c.enhancement
 
+    laying = False
+
     def on_hold(ev: EffectApplied) -> None:
-        if ev.source == c.me and ev.save_ends:
+        # The penalty is itself save-ends, so without the latch it
+        # answers its own `EffectApplied` and recurses until the stack
+        # runs out.
+        nonlocal laying
+        if laying or ev.source != c.me or not ev.save_ends:
+            return
+        laying = True
+        try:
             c.penalty("save", plus, on=ev.target, until=When.SAVE_ENDS)
+        finally:
+            laying = False
 
     c.watch(EffectApplied, on_hold, until=When.ENCOUNTER)
 

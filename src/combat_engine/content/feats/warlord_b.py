@@ -4,7 +4,7 @@ Three things run through this list.
 
 **Combat Leader is implemented, under another name.** The feats gate on
 `cf:warlord-marshal-f3`; the tree declares the same feature as
-`cf:warlord-initiative` in `features/leaders_sc.py`, hand-named before
+`cf:warlord-marshal-f3` in `features/leaders_sc.py`, hand-named before
 the class-feature table existed. That mismatch is worth knowing and is
 not worth working around here: the printed question is "an ally who
 benefits from Combat Leader", and the feature's own body says what that

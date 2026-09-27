@@ -1295,7 +1295,25 @@ def use(
         charge=charge,
         branch=branch,
     )
-    cast.used()
+    # **The same hole as the `PowerResolved` emit at the bottom of this
+    # function, on the other side of the body.** `cast.used()` announces
+    # `PowerUsed`, the dispatcher offers rows to it, and one of those may
+    # be a row that this one triggers in turn: two free item blocks each
+    # reading "when you use a healing power other than me" handed the use
+    # back and forth until the stack ran out. The guard eighteen lines
+    # below is the thing meant to stop that and it is set too late to be
+    # true for this emit -- so is `powers.note_use`, which means the
+    # encounter limit does not stop it either. Taken and released the way
+    # the emit below does, and for the same reason: the release has to be
+    # in a `finally` or a body that raises leaves the row refused.
+    guarded = (actor, ref) not in _IN_FLIGHT
+    if guarded:
+        _IN_FLIGHT.add((actor, ref))
+    try:
+        cast.used()
+    finally:
+        if guarded:
+            _IN_FLIGHT.discard((actor, ref))
 
     if p.provokes_on(branch) and not _survive_provoking(world, actor, ref):
         # Stopped before it went off -- stunned by an interrupt, or killed.

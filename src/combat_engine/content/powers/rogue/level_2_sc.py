@@ -1,8 +1,8 @@
 """Rogue, level 2: lending the sneak attack to somebody else.
 
 `c.sneak_damage` is the number, the twin of `c.quarry_damage` and added for
-the same reason: `cf:rogue-bonus` closes over its dice and nothing could
-read them back. The modifier half comes from `c.total("cf:rogue-bonus
+the same reason: `cf:rogue-scoundrel-f4` closes over its dice and nothing could
+read them back. The modifier half comes from `c.total("cf:rogue-scoundrel-f4
 damage")`, which is what `extra_damage` adds on top of them, so a rogue whose
 build raised the rider lends the raised figure.
 
@@ -52,6 +52,6 @@ def p4476(c: Cast) -> None:
         if ev.attacker not in c.allies() or not c.had_advantage(ev):
             return
         paid.append(True)
-        c.damage(dice, c.total("cf:rogue-bonus damage"), on=victim, detail=c.ref)
+        c.damage(dice, c.total("cf:rogue-scoundrel-f4 damage"), on=victim, detail=c.ref)
 
     c.watch(Hit, on_hit, until=When.SONT, on=me, label="p4476")

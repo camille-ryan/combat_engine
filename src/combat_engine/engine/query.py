@@ -175,6 +175,24 @@ def alive(world: World, eid: int) -> bool:
     return h is not None and h.hp > h.dying_at
 
 
+def surge_value(world: World, eid: int) -> int:
+    """What one healing surge is worth: a quarter of maximum, modified.
+
+    `Health.surge_value` is a property computed on every read, so there was
+    nothing to hang a change on and two races print one. Read through here
+    the way `speed` is, so a single `c.bonus("surge_value", n)` reaches
+    every place a surge is cashed -- the second wind and the natural
+    twenty on a death save included -- rather than only the rows that
+    happened to ask the same way.
+    """
+    health = world.get(eid, Health)
+    if health is None:
+        return 0
+    mods = world.get(eid, Mods)
+    base = health.surge_value + (mods.total("surge_value") if mods else 0)
+    return max(0, base)
+
+
 def targetable(world: World, eid: int) -> bool:
     """Can a power be aimed at this, and land on it?
 

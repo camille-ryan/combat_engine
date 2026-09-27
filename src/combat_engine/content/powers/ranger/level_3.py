@@ -151,7 +151,7 @@ def p1416(c: Cast) -> None:
 def p1521(c: Cast) -> None:
     """Printed for the quarry only, and nothing can ask whether one is.
 
-    The quarry lives in a closure inside `cf:ranger-quarry` rather than as
+    The quarry lives in a closure inside `cf:ranger-f1` rather than as
     anything on the creature, so the restriction is dropped and any one
     enemy may be attacked.
     """

@@ -2,7 +2,7 @@
 
 Six of these read a class feature, and the difference between the ones
 that are written and the ones that carry a marker is whether the feature
-has a ref. The **soul** does -- `cf:sorcerer-soul`, in
+has a ref. The **soul** does -- `cf:sorcerer-f0`, in
 `content/powers/sorcerer/souls.py` -- and it keeps which type it is sworn
 to in a marker effect, so `soul_of` and `soul_resist` answer "your Spell
 Source resistance" directly and four rows here turn on that. The cosmic

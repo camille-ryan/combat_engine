@@ -6,7 +6,7 @@ leg whose secondary its own riders spend -- Dexterity for one bond and
 Strength for the other, which eight rows from level 1 to 7 print outright.
 Gating in the header is what "choose one of the following" means here:
 `chargen.loadout` deals a seeker both rows and the gate is what keeps the
-one it did not choose out of reach. `cf:seeker-bond` is the rest of the
+one it did not choose out of reach. `cf:seeker-f1` is the rest of the
 printed clause.
 """
 

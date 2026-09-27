@@ -26,7 +26,7 @@ from .events import (
     TurnEnd,
     TurnStart,
 )
-from .query import active, alive, can_act, can_react, combatants, team
+from .query import active, alive, can_act, can_react, combatants, surge_value, team
 from .types import DOWNGRADES, ActionType, Condition, Team, Usage
 
 if TYPE_CHECKING:
@@ -537,7 +537,7 @@ class Encounter:
         saved = rolled.saved
         if saved:
             if roll.total == 20:
-                self.world.heal(ev.actor, ev.actor, health.surge_value)
+                self.world.heal(ev.actor, ev.actor, surge_value(self.world, ev.actor))
             return
         health.failures += 1
         if health.failures >= 3:

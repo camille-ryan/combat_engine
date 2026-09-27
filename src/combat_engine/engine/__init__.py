@@ -69,6 +69,7 @@ from .dsl import (
 from .durations import Effect, Effects, When
 from .ecs import World
 from .events import (
+    ActionGranted,
     ActionPointSpent,
     ActionSpent,
     AdjacencyGained,

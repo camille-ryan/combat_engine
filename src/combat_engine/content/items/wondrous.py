@@ -1638,12 +1638,11 @@ def i3271p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.set_origin()",),
 )
 def i3438x1(c: Cast) -> None:
-    """Origin is a chassis word with nothing to set it. "Only one shard at
-    a time" is a carrying rule rather than a combat one. Paragon numbers
-    are out of scope; this is the heroic +1."""
+    """"Only one shard at a time" is a carrying rule rather than a combat
+    one. Paragon numbers are out of scope; this is the heroic +1."""
+    c.set_origin("elemental", until=When.ENCOUNTER)
     c.bonus(
         "damage",
         1,
@@ -1680,11 +1679,11 @@ def i3438p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.set_origin()",),
 )
 def i3440x1(c: Cast) -> None:
     """Ice walk is `c.ignores_difficult` naming the sort of ground, which is
     what its `kind` argument is for. Paragon numbers are out of scope."""
+    c.set_origin("elemental", until=When.ENCOUNTER)
     c.ignores_difficult("ice", on=c.me, until=When.ENCOUNTER)
     c.ignores_difficult("snow", on=c.me, until=When.ENCOUNTER)
     c.bonus(
@@ -2055,11 +2054,11 @@ def i3259p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.set_origin()",),
 )
 def i3439x1(c: Cast) -> None:
     """Earth walk names three sorts of ground, which is what
     `c.ignores_difficult`'s `kind` takes one at a time."""
+    c.set_origin("elemental", until=When.ENCOUNTER)
     for ground in ("rubble", "uneven stone", "earth"):
         c.ignores_difficult(ground, on=c.me, until=When.ENCOUNTER)
 
@@ -2381,13 +2380,14 @@ def i3352x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.set_origin()", "c.move_through_enemies()"),
+    dropped=("c.move_through_enemies()",),
 )
 def i3441x1(c: Cast) -> None:
-    """`c.phasing` goes through walls, not through people, and the acid
-    damage is paid only for entering an enemy's space by shifting -- so
-    without the movement the damage has no trigger either. The escape
-    bonus alone would not carry the row."""
+    """Dropped: shifting through an enemy's space. `c.phasing` goes
+    through walls, not through people, and the acid damage is paid only
+    for entering a space that way -- so without the movement the damage
+    has no trigger either. The escape bonus is a skill."""
+    c.set_origin("elemental", until=When.ENCOUNTER)
 
 
 @power(

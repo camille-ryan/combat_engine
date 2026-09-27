@@ -143,7 +143,7 @@ def p146(c: Cast) -> None:
 
 
 @power(
-    "cf:cleric-surge",
+    "cf:cleric-templar-f1",
     level=0,
     cls="cleric",
     usage=ENCOUNTER,
@@ -191,15 +191,15 @@ def cleric_surge(c: Cast) -> None:
         if ev.source == me:
             ev.amount += extra
 
-    c.watch(SurgeSpent, spent, until=When.ENCOUNTER, on=me, label="cf:cleric-surge")
+    c.watch(SurgeSpent, spent, until=When.ENCOUNTER, on=me, label="cf:cleric-templar-f1")
     c.watch(
         Healed, more, until=When.ENCOUNTER, window=Window.BEFORE, on=me,
-        label="cf:cleric-surge",
+        label="cf:cleric-templar-f1",
     )
 
 
 @power(
-    "cf:cleric-rituals",
+    "cf:cleric-templar-f3",
     level=0,
     cls="cleric",
     usage=ENCOUNTER,
@@ -221,7 +221,7 @@ def cleric_rituals(c: Cast) -> None:
 
 
 @power(
-    "cf:warlord-senses",
+    "cf:warlord-marshal-f2",
     level=0,
     cls="warlord",
     usage=ENCOUNTER,
@@ -252,7 +252,7 @@ def warlord_senses(c: Cast) -> None:
 
     It is printed as one of three mutually exclusive leader features and
     `chargen.BUILDS["warlord"]` has a leg for only one of the three, so
-    there is nothing to gate this on; see `cf:warlord-shield`.
+    there is nothing to gate this on; see `cf:warlord-marshal-f1`.
     """
     for who in c.within(10, side="ally"):
         if who != c.me and not c.can_see(who):
