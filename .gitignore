@@ -27,3 +27,6 @@ compendium.sqlite
 
 # A reference sheet of blocked rows, with printed names. Not for the tree.
 docs/blocked.csv
+
+# An empty file committed by accident; the real build is data/game.db.
+/game.db

@@ -290,12 +290,54 @@ def _head(head: str) -> tuple[str, list[str], int | None, str, str]:
     return slot, base, price, enh_to, crit
 
 
+#: Every word `item.slot` may hold. An **allow-list, and that is the point**:
+#: the 32 phrases the base line is headed with are printed titles, and 15 of
+#: them name a reward category rather than a place on a body -- one of those
+#: 15 is also the printed name of a feat, which is how `leaks.py --specs`
+#: found this. A deny-list would mean writing those 15 titles into tracked
+#: source, which is the leak the docstrings here and in `sanitise.py` were
+#: right to refuse. So the vocabulary is written instead. Every word below
+#: already appears in tracked source -- as an `items/` module name, as a
+#: `slot=` argument, or in `equipment.py`'s two comparisons -- because it is
+#: game vocabulary, not a name.
+_SLOTS = frozenset(
+    {
+        "alchemical",
+        "ammunition",
+        "armor",
+        "arms",
+        "companion",
+        "consumable",
+        "familiar",
+        "feet",
+        "hands",
+        "head",
+        "implement",
+        "mount",
+        "neck",
+        "ring",
+        "waist",
+        "weapon",
+        "wondrous",
+    }
+)
+
+
 def _slot(label: str) -> str:
+    """The place this goes, or `""` for a reward that goes nowhere.
+
+    A boon occupies no slot, so `""` is the true answer and not a loss.
+    `equipment.py` keys `gear.worn` by `slot or ref`, which means the
+    empty string lets a character hold **any number** of distinct rewards;
+    echoing the printed category made every reward of a kind overwrite the
+    last one, so 27 divine boons shared a single key.
+    """
     low = " ".join(label.lower().split())
     for tail in (" slot", " item"):
         if low.endswith(tail):
-            return low[: -len(tail)]
-    return low
+            low = low[: -len(tail)]
+            break
+    return low if low in _SLOTS else ""
 
 
 def _base(value: str) -> list[str]:

@@ -169,6 +169,13 @@ def main() -> int:
         page.reload(wait_until="networkidle")
 
         check.that(not problems, "the page loads with no script errors", "; ".join(problems[:3]))
+        # On a known seed, for the same reason `_check_footprint` already
+        # restarts on one: the fight the page opens with is drawn fresh, so
+        # who is acting and what they carry was a coin toss and the run
+        # counted anywhere from 40 to 48 checks. A count that moves hides
+        # both a skip and a failure -- one run in five failed here and the
+        # next one passed, which is worse than either answer.
+        _restart(page, START_SEED)
         _play(page, check, problems, served, calls)
 
         if args.shot:
@@ -716,6 +723,11 @@ def _check_enumerated_move(page, check: Checks) -> None:  # noqa: ANN001
 #: A fight whose first turn belongs to somebody holding an area power. The
 #: form's own fields, so this is the fight a player typing this seed gets.
 BLAST_SEED = 2
+
+#: The fight the whole run opens on. Picked because every check has its
+#: precondition met under it -- somebody with a kit is acting, there is a
+#: free square to walk to, and the turn carries a power of each usage band.
+START_SEED = 2
 
 
 def _restart(page, seed: int) -> None:  # noqa: ANN001
