@@ -132,12 +132,18 @@ class Cast:
         damage", and on a two-branch row that is Strength in melee and
         Dexterity at range. Writing `c.dex_mod` in the body hard-codes one
         half of a row that has two.
+
+        **Resolved through `ability_for`, never read off the header.** A
+        theme's line names a `Pick` rather than an ability, and handing one
+        to `Stats.mod` is not an error -- `scores.get` misses, returns the
+        default 10, and the modifier comes back 0. Every such row would
+        have quietly dealt its weapon dice and nothing else.
         """
         p = self._declared()
         line = p.attack_of(self.branch) if p else None
         if line is None or line.ability is None:
             return 0
-        return self.stats.mod(line.ability)
+        return self.stats.mod(line.ability_for(self.world, self.me))
 
     @property
     def ranged(self) -> bool:
@@ -471,6 +477,33 @@ class Cast:
         who = self.me if on is None else on
         known = self.world.get(who, Powers)
         return known is not None and ref in known.all
+
+    def ability_for(self, ref: str = "", *, on: int | None = None) -> Ability:
+        """Which ability a row's attack line rolls, for this creature.
+
+        The header answers this on its own when the line names an ability.
+        This is for a **body** that needs the same answer -- a damage line
+        reading "+ your primary ability modifier", or a row whose rider
+        applies only when it rolled one particular ability.
+
+        Defaults to this row, which is the common case; naming another ref
+        answers for that row instead, which is what "the ability your
+        *other* power rolls" wants. A row with no attack line at all falls
+        back to the best modifier on the sheet, the same way `Pick.PRIMARY`
+        does for a creature with no build -- an answer rather than a raise,
+        because a body asking this is about to do arithmetic with it.
+        """
+        from .dsl import REGISTRY, Attack, Pick
+
+        who = self.me if on is None else on
+        declared = REGISTRY.get(ref or self.ref)
+        line = getattr(declared, "attack", None)
+        if line is None:
+            line = Attack(Pick.HIGHEST)
+        if line.printed is not None:
+            # A stat block's finished total names no ability to return.
+            line = Attack(Pick.HIGHEST)
+        return line.ability_for(self.world, who)
 
     def element(self, *, on: int | None = None) -> DamageType | None:
         """The damage type this character's build is bound to, if any.

@@ -43,7 +43,6 @@ from combat_engine.engine import (
     REF,
     SELF,
     STANDARD,
-    STR,
     WILL,
     ActionPointSpent,
     ActionType,
@@ -69,6 +68,7 @@ from combat_engine.engine import (
     Miss,
     MoveEnd,
     MoveStart,
+    Pick,
     Relation,
     RelationSet,
     SavingThrow,
@@ -93,10 +93,6 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.query import allies, distance_between, flanked_by
 from combat_engine.engine.triggers import Trigger
-
-#: A printed "Primary ability" line. The header holds Strength; which
-#: ability a theme's owner actually attacks with is the missing clause.
-PRIMARY = ("c.ability_for(ref)",)
 
 DEFENCES = (AC, FORT, REF, WILL)
 
@@ -221,8 +217,7 @@ def _my_mount_hurt(world: Any, me: int, ev: Any) -> bool:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
-    attack=Attack(STR, vs=AC),
-    dropped=PRIMARY,
+    attack=Attack(Pick.PRIMARY, vs=AC),
 )
 def p11868(c: Cast) -> None:
     """The second slow is measured after the shove, which is what "adjacent
@@ -267,8 +262,7 @@ def p11869(c: Cast) -> None:
     reach=CloseBurst(1),
     target=EACH_CREATURE,
     keywords=MARTIAL_WEAPON,
-    attack=Attack(STR, vs=AC),
-    dropped=PRIMARY,
+    attack=Attack(Pick.PRIMARY, vs=AC),
 )
 def p11870(c: Cast) -> None:
     if c.strike():
@@ -285,8 +279,7 @@ def p11870(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[*MARTIAL_WEAPON, Keyword.RELIABLE],
-    attack=Attack(STR, vs=AC),
-    dropped=PRIMARY,
+    attack=Attack(Pick.PRIMARY, vs=AC),
 )
 def p11871(c: Cast) -> None:
     if c.strike():
@@ -328,8 +321,7 @@ def p12234(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
-    attack=Attack(STR, vs=AC),
-    dropped=PRIMARY,
+    attack=Attack(Pick.PRIMARY, vs=AC),
 )
 def p12235(c: Cast) -> None:
     """The Effect line stands whether or not the attack landed."""
@@ -354,8 +346,8 @@ def p12235(c: Cast) -> None:
     reach=CloseBurst(1),
     target=EACH_ENEMY,
     keywords=[*MARTIAL_WEAPON, Keyword.STANCE],
-    attack=Attack(STR, vs=AC),
-    dropped=(*PRIMARY, "c.move_before_targeting()"),
+    attack=Attack(Pick.PRIMARY, vs=AC),
+    dropped=("c.move_before_targeting()",),
 )
 def p12236(c: Cast) -> None:
     """The printed "before the attack, you move your speed" cannot be said:
@@ -472,10 +464,9 @@ def p13432(c: Cast) -> None:
     reach=CloseBurst(1),
     target=EACH_ENEMY,
     keywords=MARTIAL_WEAPON,
-    attack=Attack(STR, vs=AC),
+    attack=Attack(Pick.PRIMARY, vs=AC),
     trigger="an enemy moves to a square to flank you",
     on=Trigger(MoveEnd, _flanking_me, "an enemy moves to a square to flank you"),
-    dropped=PRIMARY,
 )
 def p13433(c: Cast) -> None:
     """"Each flanking enemy" narrows the burst, so `query.flanked_by` is
@@ -498,12 +489,11 @@ def p13433(c: Cast) -> None:
     reach=Melee(1),
     target=NO_TARGET,
     keywords=MARTIAL_WEAPON,
-    attack=Attack(STR, vs=AC),
+    attack=Attack(Pick.PRIMARY, vs=AC),
     trigger="an enemy makes a melee attack against you",
     on=Trigger(
         AttackDeclared, both(targets_me, by_melee), "an enemy makes a melee attack against you"
     ),
-    dropped=PRIMARY,
 )
 def p13434(c: Cast) -> None:
     """The row aims itself off its own trigger, so it declares no target
@@ -561,8 +551,7 @@ def p13435(c: Cast) -> None:
     reach=MeleeOrRanged(1, 10),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
-    attack=Attack(STR, vs=AC),
-    dropped=PRIMARY,
+    attack=Attack(Pick.PRIMARY, vs=AC),
 )
 def p13436(c: Cast) -> None:
     """The immobilise asks the attack that was actually rolled, not the
@@ -585,8 +574,8 @@ def p13436(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
-    attack=Attack(STR, vs=FORT),
-    dropped=(*PRIMARY, "Target.max_size(relative=)"),
+    attack=Attack(Pick.PRIMARY, vs=FORT),
+    dropped=("Target.max_size(relative=)",),
 )
 def p13437(c: Cast) -> None:
     """The printed size line is relative to the caster and `Target.max_size`

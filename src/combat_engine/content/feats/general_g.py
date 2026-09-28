@@ -847,19 +847,22 @@ def f1103(c: Cast) -> None:
 
 @power("f1103b", level=1, cls="", usage=ENCOUNTER, action=ActionType.STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.HEALING],
-       attack=Attack(Ability.STR, vs=FORT, plus=2),
+       attack=Attack((Ability.STR, Ability.CON, Ability.DEX), vs=FORT, plus=2),
        requires=_holding_somebody,
        requires_text="you must have a creature grabbed",
-       dropped=("c.ability_for(ref)",))
+       )
 def f1103b(c: Cast) -> None:
     """"One living creature you have grabbed" is a Requirement rather
     than a guard in the body: `Target.holding` filters on what the
     *target* is carrying, not on who is holding it, and a body that
     returns early looks exactly like a row that does nothing.
 
-    The printed three-way choice of attacking ability is a build choice
-    nothing records, so the header writes Strength and the choice is the
-    dropped half.
+    The printed three-way choice of attacking ability is now the header's
+    own -- `Attack` takes a tuple and `ability_for` resolves it to
+    whichever of the three this character is best at. The card settles the
+    choice once at feat selection and never re-asks, so best-of is the
+    same answer a player would write down, and it is the only one that can
+    be given without a record of the pick.
     """
     if c.strike().hit:
         c.damage("1d4", c.con_mod)

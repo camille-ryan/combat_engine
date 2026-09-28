@@ -38,7 +38,6 @@ from combat_engine.engine import (
     ENCOUNTER,
     FORT,
     FREE,
-    INT,
     INTERRUPT,
     MELEE,
     MINOR,
@@ -70,6 +69,7 @@ from combat_engine.engine import (
     Melee,
     Miss,
     MoveStart,
+    Pick,
     Position,
     Powers,
     PowerUsed,
@@ -123,10 +123,6 @@ X7_993 = "x7_993"
 X7_1006 = "x7_1006"
 X7_1021 = "x7_1021"
 X7_939 = "x7_939"
-
-#: "Primary ability vs. Will" -- the header holds one ability and a theme
-#: cannot know which one its taker's class made primary.
-ABILITY = ("c.ability_for(ref)",)
 
 ELEMENTS = (
     DamageType.ACID,
@@ -371,7 +367,7 @@ def _weapon_ctx(ctx: dict[str, Any]) -> bool:
     "p12315", level=0, cls=X7_664, usage=ENCOUNTER, action=STANDARD,
     reach=CloseBurst(5), target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.PSYCHIC],
-    attack=Attack(INT, vs=WILL), dropped=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
 )
 def p12315(c: Cast) -> None:
     """The Effect line is unconditional -- it is not hung on the hit -- so
@@ -425,7 +421,7 @@ def p12316(c: Cast) -> None:
     keywords=[
         Keyword.ARCANE, Keyword.FEAR, Keyword.IMPLEMENT, Keyword.PSYCHIC
     ],
-    attack=Attack(INT, vs=WILL), dropped=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
 )
 def p12318(c: Cast) -> None:
     if c.strike():
@@ -443,7 +439,7 @@ def p12318(c: Cast) -> None:
     keywords=[
         Keyword.ARCANE, Keyword.HEALING, Keyword.IMPLEMENT, Keyword.RADIANT
     ],
-    attack=Attack(INT, vs=WILL), dropped=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
 )
 def p12319(c: Cast) -> None:
     if c.strike():
@@ -502,8 +498,8 @@ def p12320(c: Cast) -> None:
     "p12321", level=7, cls=X7_664, usage=ENCOUNTER, action=STANDARD,
     reach=CloseBurst(2), target=EACH_ENEMY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.PSYCHIC],
-    attack=Attack(INT, vs=WILL),
-    dropped=(*ABILITY, "c.reroll_attack(ev=)"),
+    attack=Attack(Pick.PRIMARY, vs=WILL),
+    dropped=("c.reroll_attack(ev=)",),
 )
 def p12321(c: Cast) -> None:
     """The attack half is written. The payout is not: "rolls twice on any one
@@ -519,7 +515,7 @@ def p12321(c: Cast) -> None:
     "p12322", level=9, cls=X7_664, usage=DAILY, action=STANDARD,
     reach=CloseBurst(2), target=EACH_ENEMY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.PSYCHIC],
-    attack=Attack(INT, vs=WILL), dropped=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
 )
 def p12322(c: Cast) -> None:
     if c.strike():

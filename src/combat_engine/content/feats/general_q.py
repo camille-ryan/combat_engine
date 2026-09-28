@@ -1936,7 +1936,7 @@ _CURSED_FELL = "an enemy under your curse drops to 0 hit points"
        reach=PERSONAL, target=SELF,
        trigger=_CURSED_FELL,
        on=Trigger(Dropped, cursed_by_me, _CURSED_FELL),
-       dropped=(*AUGMENT, "c.ability_for(ref)"))
+       dropped=(*AUGMENT, "c.rolls_with(ref, ability)"))
 def f3417(c: Cast) -> None:
     """The first of three clauses is written; the feature was never the
     hold on it.
@@ -1988,7 +1988,7 @@ def f3418(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        trigger=_CURSED_FELL,
        on=Trigger(Dropped, cursed_by_me, _CURSED_FELL),
-       dropped=(*AUGMENT, "c.ability_for(ref)"))
+       dropped=(*AUGMENT, "c.rolls_with(ref, ability)"))
 def f3419(c: Cast) -> None:
     """The same three clauses as f3417 and the same split: the shove is
     written, the augment and the ability swap are not."""

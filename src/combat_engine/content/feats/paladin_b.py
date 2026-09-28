@@ -221,7 +221,7 @@ def f2734(c: Cast) -> None:
 
 @power("f2909", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.ability_for(ref)",))
+       todo=("c.rolls_with(ref, ability)",))
 def f2909(c: Cast) -> None:
     """Swaps which ability modifier the two marks pay out from.
 

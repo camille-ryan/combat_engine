@@ -1025,6 +1025,13 @@ class Character:
         """
         leg = self.chosen
         out = {leg.name} - {""}
+        # **The ability the class attacks with**, for a row whose printed
+        # line is "Primary ability vs. AC" rather than a named one. A theme
+        # does not know which class took it, so `dsl.Pick.PRIMARY` reads
+        # this back out -- the same arrangement as the element, and for the
+        # same reason: the choice belongs to the build, and a header cannot
+        # know the holder.
+        out.add(f"primary:{leg.primary.value}")
         if leg.element is not None:
             out.add(f"element:{leg.element.value}")
         if leg.companion:

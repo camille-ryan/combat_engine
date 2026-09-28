@@ -330,7 +330,7 @@ def f2708(c: Cast) -> None:
 
 
 @power("f2712", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.ability_for(ref)",),
+       reach=PERSONAL, target=SELF, dropped=("c.rolls_with(ref, ability)",),
        trigger="you score a critical hit with a one-handed axe",
        on=Trigger(Hit, _i_crit, "you crit"))
 def f2712(c: Cast) -> None:

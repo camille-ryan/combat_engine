@@ -95,7 +95,7 @@ AUGMENT = ("c.lend_augment(ref, clause)",)
 #: The "Associated Powers" line is a column no row can read.
 ASSOCIATED = ("feat.associated_powers",)
 #: "You can use Charisma instead of Constitution" for a named list.
-ABILITY_SWAP = ("c.ability_for(ref)",)
+ABILITY_SWAP = ("c.rolls_with(ref, ability)",)
 #: Trading away the extra damage an augment would have dealt.
 FORGO = ("c.forgo_damage()",)
 #: `f1028`'s own hold: a power's reach is header data and is never rewritten

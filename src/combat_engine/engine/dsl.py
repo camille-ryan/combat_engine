@@ -12,9 +12,11 @@ being only one kind of thing to share.
 
 from __future__ import annotations
 
+import contextlib
 import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from .cast import Cast
@@ -339,6 +341,31 @@ def UpTo(n: int, side: str = "enemy") -> Target:
 # --------------------------------------------------------------------------
 
 
+class Pick(Enum):
+    """An attack line that names no ability, only how to choose one.
+
+    A class row names its ability, because a class has one. **A theme does
+    not know which class took it**, so its printed line says "Primary
+    ability vs. AC" or "Highest ability modifier vs. Will" -- a rule for
+    picking rather than a pick. That cannot be written as an `Ability` in a
+    header, because the header is data evaluated at import and the answer
+    depends on who is holding the row.
+
+    So the header says the rule and `Attack.ability_for` answers it per
+    caster. Kept out of `Ability` itself deliberately: that enum is the six
+    scores, and a seventh member would appear in every loop over it and
+    every score table in the game.
+
+    `PRIMARY` reads the character's build. `HIGHEST` reads the sheet, and
+    is also what `PRIMARY` falls back to for a creature with no build --
+    which is the honest answer rather than a raise, since a monster or a
+    companion holding such a row has no class to have a primary of.
+    """
+
+    PRIMARY = "primary"
+    HIGHEST = "highest"
+
+
 @dataclass(frozen=True)
 class Attack:
     """A printed `Attack:` line.
@@ -360,8 +387,16 @@ class Attack:
     down, and it is less for an author to work out, not more.
     """
 
-    #: A character's line names an ability. A monster's does not.
-    ability: Ability | None = None
+    #: A character's line names an ability. A monster's does not. A theme's
+    #: names a `Pick` -- the rule for choosing one, resolved per caster.
+    #:
+    #: **A tuple is a printed choice between named abilities** -- "Charisma
+    #: or Constitution vs. Reflex", "Strength, Constitution, or Dexterity".
+    #: Resolved to whichever of them this creature is best at, which is the
+    #: pick a player makes and the only one that can be made without asking
+    #: mid-roll. Writing one of them and dropping the rest was worth up to
+    #: four points of attack on the wrong character.
+    ability: Ability | Pick | tuple[Ability, ...] | None = None
     vs: Defense = Defense.AC
     plus: int = 0
     #: A monster's finished attack bonus, level included, as printed.
@@ -392,13 +427,62 @@ class Attack:
         # `ref` matters: proficiency applies to a weapon power and not to an
         # implement one, and `_attack_bonus` reads the keywords off it.
         probe = Cast(world=world, me=actor, ref=ref, branch=branch)
-        return probe._attack_bonus(self.ability) + self.plus
+        return probe._attack_bonus(self.ability_for(world, actor)) + self.plus
+
+    def ability_for(self, world: World, actor: int) -> Ability:
+        """Which ability this line rolls, for this caster.
+
+        A named one answers itself. A `Pick` is the theme case -- see its
+        docstring -- and is resolved here rather than at declaration,
+        because the header is data and the holder is not known then.
+        """
+        from .components import Build, Stats
+
+        if isinstance(self.ability, Ability):
+            return self.ability
+        if self.ability is None:
+            raise ValueError("an Attack needs either an ability or a printed bonus")
+        who = roller(world, actor, self.by)
+        if isinstance(self.ability, tuple):
+            stats = world.get(who, Stats)
+            if stats is None:
+                return self.ability[0]
+            return max(self.ability, key=stats.mod)
+        if self.ability is Pick.PRIMARY:
+            held = world.get(who, Build)
+            for choice in held.choices if held else ():
+                if choice.startswith("primary:"):
+                    with contextlib.suppress(ValueError):
+                        return Ability(choice.split(":", 1)[1])
+            # No build, so no primary. Falls through to the sheet.
+        stats = world.get(who, Stats)
+        if stats is None:
+            return Ability.STR
+        return max(Ability, key=stats.mod)
 
     def __str__(self) -> str:
         if self.printed is not None:
             return f"{self.printed:+d} vs. {self.vs.value.upper()}"
         tail = f" {self.plus:+d}" if self.plus else ""
-        name = self.ability.value.title() if self.ability else "?"
+        if isinstance(self.ability, Pick):
+            # As the card prints it, so the page and the audit both read the
+            # rule rather than a resolved guess that is only true for one
+            # character.
+            name = {
+                Pick.PRIMARY: "Primary ability",
+                Pick.HIGHEST: "Highest ability modifier",
+            }[self.ability]
+        elif isinstance(self.ability, tuple):
+            names = [a.value.title() for a in self.ability]
+            if len(names) == 1:
+                name = names[0]
+            else:
+                # "Strength, Constitution, or Dexterity" is how the card
+                # prints three; two get no comma.
+                join = ", " if len(names) > 2 else " "
+                name = f"{', '.join(names[:-1])}{join}or {names[-1]}"
+        else:
+            name = self.ability.value.title() if self.ability else "?"
         return f"{name}{tail} vs. {self.vs.value.upper()}"
 
 

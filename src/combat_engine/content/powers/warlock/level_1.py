@@ -107,16 +107,17 @@ def p1323(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=ARCANE_IMPLEMENT,
-    attack=Attack(CHA, vs=REF),
-    dropped=("c.ability_for(ref)",),
+    attack=Attack((CHA, CON), vs=REF),
 )
 def p1333(c: Cast) -> None:
-    # Printed as "Charisma or Constitution", fixed once at 1st level. A
-    # header holds one ability, so this is the Charisma build -- the
-    # Constitution half is dropped, not absent, and nineteen rows want
-    # the same reader for it.
+    # Printed as "Charisma or Constitution", fixed once at 1st level. The
+    # header now holds both and `Attack.ability_for` takes whichever this
+    # warlock is better at, which is the pick a player makes. The damage
+    # line follows it through `c.attack_mod` rather than naming Charisma:
+    # the printed line is "+ your attacking ability modifier", so a
+    # Constitution warlock added the wrong modifier to every hit.
     if c.strike():
-        c.damage("1d10", c.cha_mod)
+        c.damage("1d10", c.attack_mod)
 
 
 @power(
@@ -188,15 +189,14 @@ def p1456(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.RADIANT, Keyword.FEAR],
-    attack=Attack(CHA, vs=FORT),
-    dropped=("c.ability_for(ref)",),
+    attack=Attack((CHA, CON), vs=FORT),
 )
 def p1457(c: Cast) -> None:
-    # Printed as "Charisma or Constitution", fixed at 1st level; Charisma
-    # here, and the other half marked rather than left in prose. See p1333.
+    # Printed as "Charisma or Constitution", fixed at 1st level. See p1333
+    # for why the header holds both and the damage reads `c.attack_mod`.
     if not c.strike():
         return
-    c.damage("1d6", c.cha_mod, dtype=DamageType.RADIANT)
+    c.damage("1d6", c.attack_mod, dtype=DamageType.RADIANT)
 
     victim = c.target
     mine = c.here

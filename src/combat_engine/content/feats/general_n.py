@@ -1701,7 +1701,7 @@ def f2202(c: Cast) -> None:
 
 
 @power("f2206", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ability_for(ref)",))
+       reach=PERSONAL, target=SELF, todo=("c.rolls_with(ref, ability)",))
 def f2206(c: Cast) -> None:
     """Rolls one named power off a chosen ability. The ability a row
     attacks with is in its header."""
@@ -1867,14 +1867,14 @@ def f2444(c: Cast) -> None:
 
 
 @power("f2455", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ability_for(ref)",))
+       reach=PERSONAL, target=SELF, todo=("c.rolls_with(ref, ability)",))
 def f2455(c: Cast) -> None:
     """Rolls the ranged basic attack off Dexterity when the weapon is
     thrown. Which ability a row attacks with is header data."""
 
 
 @power("f2896", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ability_for(ref)",))
+       reach=PERSONAL, target=SELF, todo=("c.rolls_with(ref, ability)",))
 def f2896(c: Cast) -> None:
     """The same shape as f2455, for a bow and Wisdom."""
 

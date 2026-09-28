@@ -39,7 +39,9 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     AT_WILL,
+    CON,
     DAILY,
+    DEX,
     ENCOUNTER,
     FORT,
     FREE,
@@ -54,6 +56,7 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    WIS,
     ActionType,
     AreaBurst,
     Attack,
@@ -100,9 +103,6 @@ from combat_engine.engine.components import Health, Position
 from combat_engine.engine.query import allies, distance_between, team
 from combat_engine.engine.zones import Zone
 
-#: "Choose Strength, Constitution or Dexterity" -- one attack line, settled
-#: once when the character is built and not re-asked in play.
-ABILITY_CHOICE = ("c.ability_for(ref)",)
 #: A creature the power summons whose numbers are printed nowhere the spec
 #: carries -- no monster row behind it and no block in the entry either, so
 #: `Summon`'s defaults are all there is.
@@ -227,8 +227,8 @@ def _until_you_attack(c: Cast, held: Effect | None) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ACID],
-    attack=Attack(STR, vs=REF, plus=3),
-    dropped=(*ABILITY_CHOICE, "c.overrun(squares=)"),
+    attack=Attack((STR, CON, DEX), vs=REF, plus=3),
+    dropped=("c.overrun(squares=)",),
 )
 def p10043(c: Cast) -> None:
     """`c.overrun` is the only verb that walks through occupied squares and
@@ -943,8 +943,7 @@ def p14396(c: Cast) -> None:
     action=MINOR,
     reach=Melee(1),
     target=UpTo(3),
-    attack=Attack(STR, vs=AC, plus=3),
-    dropped=ABILITY_CHOICE,
+    attack=Attack((STR, DEX, WIS), vs=AC, plus=3),
 )
 def p11739(c: Cast) -> None:
     """"A bonus to the damage roll equal to the number of targets" is read

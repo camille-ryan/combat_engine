@@ -53,6 +53,7 @@ from .dsl import (
     Damage,
     Melee,
     MeleeOrRanged,
+    Pick,
     Power,
     Ranged,
     Summon,

@@ -13,8 +13,11 @@ power associated with this feat", and that list now resolves into refs
 engine gap; the printed list was reaching authors as prose. The greater
 feats' second benefit -- standing in for a basic attack -- is
 `c.as_basic`, filed under the window the card names. One real gap is
-left behind it: `c.ability_for(ref)`, for the ones that swap Dexterity
-in for Strength on named rows.
+left behind it: `c.rolls_with(ref, ability)`, for the ones that swap
+Dexterity in for Strength on named rows. That is **not**
+`c.ability_for`, which arrived and answers the different question of
+which ability a row's *own* line rolls -- these feats reach into a row
+they do not own and change its answer.
 
 `f2384` is the one to read. "It takes damage if it shifts before the end
 of your next turn" is a watch laid on the creature that was hit, and
@@ -66,7 +69,7 @@ from .styles import among, hit_with_one_of, used_one_of
 #: is never armed. Those rows keep the printed Trigger as text and
 #: answer it with `c.watch`, the shape `p7419` already uses.
 #: …nor change which ability a named row rolls.
-ABILITY = ("c.ability_for(ref)",)
+ABILITY = ("c.rolls_with(ref, ability)",)
 #: Nothing announces that the class's extra damage was about to be paid.
 EXTRA = ("c.on_extra_damage()",)
 
@@ -665,7 +668,7 @@ def f2335(c: Cast) -> None:
 
 @power("f2361", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.extend_shift()", "c.ability_for(ref)"))
+       todo=("c.extend_shift()", "c.rolls_with(ref, ability)"))
 def f2361(c: Cast) -> None:
     """Both clauses are gaps and they are different ones. Nothing adds
     to the distance a shift somebody else's row grants, and nothing

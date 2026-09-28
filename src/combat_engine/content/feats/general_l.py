@@ -459,7 +459,7 @@ def f2731(c: Cast) -> None:
 
 
 @power("f2859", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.ability_for(ref)",))
+       reach=PERSONAL, target=SELF, dropped=("c.rolls_with(ref, ability)",))
 def f2859(c: Cast) -> None:
     """A chosen arcane at-will used as an encounter power.
 
@@ -800,7 +800,7 @@ def f2842(c: Cast) -> None:
 
 @power("f2871", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*RACE_OPTION, "c.ability_for(ref)"))
+       todo=(*RACE_OPTION, "c.rolls_with(ref, ability)"))
 def f2871(c: Cast) -> None:
     """Swaps which ability the `rt:r6-dilettante` power attacks with.
 
