@@ -14,9 +14,13 @@ arrives as a **name** and nowhere else carries `c.on_racial_power()`.
 
 Three smaller families come out of this batch.
 
-*"While you are under the effect of your <racial power>"* is five rows.
-Nothing asks which row laid an effect that is standing on a creature,
-so they carry `c.effects_on()`.
+*"While you are under the effect of your <racial power>"* was five rows
+marked `c.effects_on()`, and the marker was wrong. An effect's **label
+is the ref of the row that laid it** -- `durations.keywords_of` says so
+and `c.bonus`, `c.condition` and `c.effect` all stamp it -- so
+`c.suffering(ref, include_self=True)` has always answered the question.
+All five are written, and so is the half of `f719` that was dropped for
+the same reason.
 
 *"You gain a benefit with any of the following exploits you possess"*
 is nine rows whose page prints the preamble and the Associated Powers
@@ -64,6 +68,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Miss,
+    PowerResolved,
     Powers,
     PowerUsed,
     SavingThrow,
@@ -111,11 +116,34 @@ ASSOCIATED = ("feat.associated_powers",)
 #: split on newlines, so a clause's own commas are read as members.
 #: What arrives is a list of refs and no rules at all.
 CLAUSE = ("spec.associated_clause()",)
-#: "While you are under the effect of your <power>." Nothing asks which
-#: row laid a live effect.
-UNDER = ("c.effects_on()",)
 #: A class feature named in prose, with no ref anywhere in the row.
 FEATURE = ("c.class_feature()",)
+
+
+def _under(c: Cast, ref: str) -> bool:
+    """Am I carrying a live effect my own named row laid?
+
+    "While you are under the effect of your <power>." An effect's label
+    is the ref of the row that laid it -- `durations.keywords_of` leans
+    on the same fact -- so `c.suffering` answers this and nothing new
+    was ever needed. `include_self=True` because the method leaves the
+    caster out by default and the caster is the whole question here.
+    """
+    return c.me in c.suffering(ref, by=c.me, include_self=True)
+
+
+def _in_my_zone(c: Cast, ref: str) -> bool:
+    """Am I standing in a zone my own named row laid?
+
+    `c.my_zones` gives ids and `c.in_my_aura` only answers for auras, so
+    the squares are read off the zone. `Cast.zone` labels one with the
+    ref that laid it when the row passes no `label=`, which is how
+    `p2473` is found.
+    """
+    return any(
+        zone.owner == c.me and zone.label == ref and c.here in zone.squares
+        for _zid, zone in c.world.zones.all()
+    )
 
 
 def _used(ref: str):  # noqa: ANN202
@@ -541,12 +569,13 @@ def f1122(c: Cast) -> None:
 
 
 @power("f1059", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.widen_area()",))
+       reach=PERSONAL, target=SELF, dropped=("c.reach_of(power=)",))
 def f1059(c: Cast) -> None:
     """The critical rider plays. Widening one named power's burst is the
-    dropped half: `c.widen_areas` widens *every* close attack the
-    creature makes, which is strictly more than the card, and nothing
-    rewrites the reach of a single row."""
+    dropped half, and the marker was re-aimed: `c.widen_areas` exists,
+    but it widens *every* close attack the creature makes and takes no
+    gate, so the gap is naming one row's range line -- which is what
+    `c.reach_of(power=)` is already asking for elsewhere."""
     me = c.me
 
     def on_crit(ev: Any) -> None:
@@ -569,7 +598,7 @@ def f1025(c: Cast) -> None:
 
 
 @power("f719", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=UNDER,
+       reach=PERSONAL, target=SELF,
        trigger="you use p377",
        on=Trigger(PowerUsed, _used("p377"), "you use that racial power"))
 def f719(c: Cast) -> None:
@@ -578,22 +607,29 @@ def f719(c: Cast) -> None:
     so the concealment is remembered in the interrupt window and put back
     in the reaction window, which brackets the clear.
 
-    Dropped: nothing says which row laid a hold that is standing, so this
-    preserves concealment from any source rather than this power's alone.
+    Narrowed to p377's own hold: `clear_source` wipes the relation and
+    leaves the `Effect` standing, so the label still names the row that
+    laid it and this no longer preserves concealment from any source.
+    Put back on p377's clock rather than `c.hide`'s default, which would
+    outlive the power it is protecting.
     """
     me = c.me
     kept: list[int] = []
 
     def remember(ev: Any) -> None:
         kept.clear()
-        if ev.attacker == me and _has({"power": ev.power}, Keyword.ARCANE):
+        if (
+            ev.attacker == me
+            and _has({"power": ev.power}, Keyword.ARCANE)
+            and _under(c, "p377")
+        ):
             kept.extend(hidden_from(c.world, me))
 
     def restore(ev: Any) -> None:
         if ev.attacker != me:
             return
         for watcher in kept:
-            c.hide(from_=watcher)
+            c.hide(from_=watcher, until=When.EONT)
         kept.clear()
 
     c.watch(AttackDeclared, remember, on=me, until=When.ENCOUNTER,
@@ -859,8 +895,7 @@ def f1111(c: Cast) -> None:
 @power("f1111b", level=1, cls="", usage=ENCOUNTER, action=ActionType.FREE,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.DIVINE, Keyword.WEAPON],
-       trigger="you make an opportunity attack",
-       dropped=("c.as_basic(uses=)",))
+       trigger="you make an opportunity attack")
 def f1111b(c: Cast) -> None:
     """Swaps what an opportunity attack *is* for one of the character's
     own at-wills. The set is not an associated-powers list but a
@@ -868,24 +903,39 @@ def f1111b(c: Cast) -> None:
     to at-will melee attack rows, and the card narrows that to level 1
     and to a single target.
 
-    Dropped: the swap stands for the encounter rather than for the one
-    opportunity attack the Trigger names. The row's own `usage` limits
-    it to one *use*, so the fighter cannot arm it twice; nothing limits
-    it to one swing."""
+    `c.as_basic` takes no count, but the swap does not need one: the
+    Trigger names one opportunity attack, so the offer is withdrawn the
+    moment a swing is declared in that window. `AttackDeclared`'s AFTER
+    window is where that is done -- ending it any earlier would remove
+    the option before the swing that asked for it. The damage rider is
+    `once=True` for the same one swing."""
+    me = c.me
     picked = [
-        r for r in c.borrowed_rows(c.me)
+        r for r in c.borrowed_rows(me)
         if (p := get(r)) is not None and p.level <= 1 and p.target.count == 1
     ]
     if not picked:
         return
-    c.as_basic(*picked, window="opportunity")
+    swap = c.as_basic(*picked, window="opportunity")
     chosen = frozenset(picked)
     c.bonus(
-        "damage", c.str_mod, on=c.me, until=When.ENCOUNTER,
+        "damage", c.str_mod, on=me, until=When.ENCOUNTER, once=True,
         when=lambda ctx: (
             bool(ctx.get("opportunity")) and ctx.get("power") in chosen
         ),
     )
+
+    done = [False]
+
+    def spent(ev: Any) -> None:
+        # Not `once=` on the watch: that spends on the first attack of
+        # any kind, and an ordinary swing would retire the offer before
+        # the opportunity one it exists for.
+        if not done[0] and ev.attacker == me and getattr(ev, "opportunity", False):
+            done[0] = True
+            c.end_effect(swap, why=f"{c.ref}: the one opportunity attack")
+
+    c.watch(AttackDeclared, spent, on=me, until=When.ENCOUNTER)
 
 
 # -- not a fight ------------------------------------------------------------
@@ -984,43 +1034,101 @@ def f1113(c: Cast) -> None:
 # -- "while under the effect of your racial power" --------------------------
 
 
+def _used_close_arcane(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """I used a close arcane attack power."""
+    row = get(getattr(ev, "power", ""))
+    return (
+        ev.actor == me
+        and row is not None
+        and row.attack is not None
+        and Keyword.ARCANE in row.keywords
+        and row.reach.kind in ("close_burst", "close_blast")
+    )
+
+
 @power("f624", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=UNDER)
+       reach=PERSONAL, target=SELF)
 def f624(c: Cast) -> None:
-    """A defence bonus while standing in what a named racial power laid
-    down. The power is a ref; what is missing is asking which row put a
-    live effect on a creature."""
+    """"Within the effect of your p2473 power" is its **zone**, not a hold
+    on the creature: that row lays one and labels it with its own ref.
+    Asked per roll rather than at arming, because the caster walks in
+    and out of it. No type word in front of the bonus, so untyped."""
+    c.bonus(REF, 2, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: _in_my_zone(c, "p2473"))
 
 
-@power("f724", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=UNDER)
+@power("f724", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use a close arcane attack power",
+       on=Trigger(PowerUsed, _used_close_arcane,
+                  "you use a close arcane attack power"))
 def f724(c: Cast) -> None:
-    """A free shift around a close arcane power, gated on being under a
-    named racial power's effect. Same gap as f624."""
+    """"Before or after using the power" -- `PowerUsed` is announced above
+    the body, so this is the "before", which is the half that matters:
+    it is the one that can move the burst's origin.
+
+    `AT_WILL` because a triggered `action=NONE` row spends a use every
+    firing and the card prints no limit."""
+    if _under(c, "p2484"):
+        c.shift(1)
 
 
 @power("f1000", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=UNDER)
+       reach=PERSONAL, target=SELF)
 def f1000(c: Cast) -> None:
-    """Melee damage against a target granting combat advantage, gated on
-    a named racial power's effect. The advantage half is sayable; the
-    gate is not, and without it the bonus is unconditional."""
+    """The damage context carries `advantage` and `ranged` now -- both were
+    absent when this row was first marked, and `AUTHORING.md` still says
+    the damage side is thin. "Granting combat advantage to you" is the
+    board's answer at damage time, which is right for every standing
+    grant and blind to a one-shot one the roll has already spent."""
+    c.bonus(
+        "damage", 2, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            bool(ctx.get("advantage"))
+            and not ctx.get("ranged", False)
+            and _has(ctx, Keyword.WEAPON)
+            and _under(c, "p2484")
+        ),
+    )
 
 
 @power("f1005", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=UNDER)
+       reach=PERSONAL, target=SELF)
 def f1005(c: Cast) -> None:
-    """Charge damage under a named racial power's effect. `charge` is in
-    the damage context; the effect is not."""
-
-
+    """`charge` is in the damage context and the racial power's hold is
+    read off the effect's label, so both halves are gates on one
+    modifier."""
+    c.bonus(
+        "damage", 3, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: bool(ctx.get("charge")) and _under(c, "p2483"),
+    )
 
 
 @power("f1136", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=UNDER)
+       reach=PERSONAL, target=SELF)
 def f1136(c: Cast) -> None:
-    """Splash damage on a ranged arcane hit, gated on a named racial
-    power's effect. Same gap as f624."""
+    """"One enemy adjacent to the target", which is never the target
+    itself. The 11th and 21st level steps are out of scope, so 2."""
+    me = c.me
+
+    def splash(ev: Any) -> None:
+        row = get(ev.power)
+        if (
+            ev.attacker != me
+            or row is None
+            or row.reach.kind != "ranged"
+            or Keyword.ARCANE not in row.keywords
+            or not _under(c, "p2483")
+        ):
+            return
+        near = [
+            foe for foe in enemies(c.world, me)
+            if foe != ev.target and c.adjacent_to(foe, ev.target)
+        ]
+        if near:
+            c.flat(2, on=near[0])
+
+    c.watch(Hit, splash, on=me, until=When.ENCOUNTER)
 
 
 # -- the racial powers of r33, which are declared now -----------------------
@@ -1131,12 +1239,20 @@ def f1125(c: Cast) -> None:
 
 
 @power("f621", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_dice()", "c.bonus('crit_range')"))
+       reach=PERSONAL, target=SELF,
+       todo=("c.change_dice()", "c.counts_as(property=)"))
 def f621(c: Cast) -> None:
     """Raises a weapon's damage die and makes it high crit. `Weapon.damage`
     is read straight out of the component when a swing is rolled and
-    nothing edits it; high crit is a property of the weapon rather than
-    of the wielder, so `c.bonus("crit_damage")` is the wrong creature."""
+    nothing edits it.
+
+    Re-aimed: the old marker named `c.bonus('crit_range')`, which
+    **exists** and is the wrong thing twice over -- high crit is extra
+    damage on a critical, not a wider one, and the modifier sits on the
+    wielder where the property belongs to the weapon. The damage
+    context carries no weapon, so it cannot even be gated to the one in
+    hand. What is wanted is a weapon property, which is the gap
+    `c.counts_as(property=)` already names."""
 
 
 @power("f999", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1170,13 +1286,31 @@ def f725(c: Cast) -> None:
     `c.recast` rewrites the action a row costs and nothing else."""
 
 
-@power("f935", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recast(trigger=)",))
+def _melee_or_close_at_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """I am the target of a melee or close attack."""
+    row = get(getattr(ev, "power", ""))
+    return (
+        getattr(ev, "target", None) == me
+        and row is not None
+        and row.reach.kind in ("melee", "close_burst", "close_blast")
+    )
+
+
+@power("f935", level=1, cls="", usage=AT_WILL,
+       action=ActionType.IMMEDIATE_REACTION, reach=PERSONAL, target=NO_TARGET,
+       trigger="you are the target of a melee or close attack",
+       on=Trigger(AttackDeclared, _melee_or_close_at_me,
+                  "you are the target of a melee or close attack"))
 def f935(c: Cast) -> None:
-    """Makes a named power an immediate reaction to a melee or close
-    attack. `c.recast` can lower what a row costs but cannot give it a
-    trigger, and a reaction with no declared trigger is a row the
-    dispatcher never offers -- which would be worse than leaving it."""
+    """`c.recast` rewrites what a row costs and cannot give one a trigger,
+    so the feat is written as the reaction itself and spends p2473
+    through `c.use_power` -- which is the printed sentence, not an
+    approximation of it.
+
+    `AT_WILL`, because p2473's own encounter use is the limit the card
+    prints and `c.use_power` spends it; a row of its own would refuse
+    the second firing for the wrong reason."""
+    c.use_power("p2473")
 
 
 @power("f928", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1209,11 +1343,34 @@ def f933(c: Cast) -> None:
     to gate."""
 
 
-@power("f1149", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_provoke(when=)",))
+def _used_area_arcane(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """I used an area arcane attack power."""
+    row = get(getattr(ev, "power", ""))
+    return (
+        ev.actor == me
+        and row is not None
+        and row.attack is not None
+        and Keyword.ARCANE in row.keywords
+        and row.reach.kind in ("area_burst", "wall")
+    )
+
+
+@power("f1149", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use an area arcane attack power",
+       on=Trigger(PowerUsed, _used_area_arcane,
+                  "you use an area arcane attack power"))
 def f1149(c: Cast) -> None:
-    """The same gap, narrowed to the creatures an area arcane power
-    targets."""
+    """Not `c.no_provoke(when=)` after all: `from_` names the creature
+    whose opening is closed, which is exactly "the creatures you target
+    with that power". `dsl.use` announces `PowerUsed` **above** the
+    provoke check, so the immunity is laid in time, and targets are
+    chosen before the body so `ev.targets` is trustworthy there.
+
+    `AT_WILL` because a triggered `action=NONE` row spends a use every
+    firing and the card prints no limit."""
+    for foe in getattr(c.trigger, "targets", ()):
+        c.no_provoke(from_=foe, on=c.me, until=When.EOT)
 
 
 @power("f1021", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1250,35 +1407,128 @@ def _arcane_damage(ctx: dict[str, Any]) -> bool:
 
 @power("f1098", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.deals(ref=)", "c.opt_in()"))
+       dropped=("c.deals(ref=)", "c.opt_in()"))
 def f1098(c: Cast) -> None:
-    """Three clauses and no two of them the same shape: change one named
-    power's damage type, type an ally's damage bonus as radiant, and
-    trade a printed payout for a saving throw. `c.bonus(dtype=)` arrived
-    and the radiant clause is writable now; the other two are not.
-    `c.deals` overrides a *creature's* weapon type and cannot name a row,
-    and nothing offers the p833 payout as a choice. The Diplomacy bonus
-    is a check."""
+    """Re-aimed from `todo` to `dropped`: the p839 clause plays, so the
+    row is offered rather than refused.
+
+    Which ally p839 handed the opening to is a `c.choose` inside that
+    row's body and nothing reports it -- but the ally it chose is the
+    one now carrying an effect p839 laid, so `c.suffering("p839")`
+    names them. Read on `PowerResolved`, which is emitted *below* the
+    body: a `Hit` watcher fires while p839 is still mid-strike and the
+    opening has not been handed over yet.
+
+    Dropped: p1458 wants `c.deals` to name a row rather than override a
+    creature's weapon type, and p833's "in lieu of gaining temporary hit
+    points" is a trade nothing offers from a standing modifier. The
+    Diplomacy bonus is a check."""
+    me = c.me
+
+    def opening(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p839":
+            return
+        struck = [r.target for r in ev.rolls if r.hit and _undead(c, r.target)]
+        if not struck:
+            return
+        foe = struck[0]
+        for friend in c.suffering("p839", by=me):
+            c.bonus(
+                "damage", c.cha_mod, on=friend, until=When.ENCOUNTER,
+                once=True, dtype=DamageType.RADIANT,
+                when=lambda ctx, t=foe: ctx.get("target") == t,
+            )
+
+    c.watch(PowerResolved, opening, on=me, until=When.ENCOUNTER)
 
 
 @power("f1101", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.surge_value(bonus=)", "c.on_granted_attack()",
-             "c.on_miss(ref)"))
+       reach=PERSONAL, target=SELF)
 def f1101(c: Cast) -> None:
-    """A surge-value bump and four riders. No class feature is named here
-    at all -- every power the benefit rides on is given by ref -- so the
-    marker that claimed one was wrong. What is genuinely missing is the
-    surge value, the attack a row grants an ally, and a hook on one named
-    row missing."""
+    """All three markers named things that were already there.
+
+    `query.surge_value` reads `Mods.total("surge_value")`, so the printed
+    bump is an ordinary `c.bonus` and reaches the second wind and the
+    natural twenty on a death save alike. "When you use this exploit and
+    miss" is `Miss`, which is an event like any other. And the swing a
+    row hands an ally is `granted_by`/`granted_via`, which ride on
+    `PowerUsed`.
+
+    p1061's rider is armed and inert, and the fault is not here: that
+    row's body only *notes* that it would grant a swing, so nothing ever
+    carries `granted_via == "p1061"`. Written against the hook rather
+    than approximated, so it starts paying the day p1061 does.
+
+    p1567 already adds Wisdom when the target is marked by me, so the
+    printed "Wisdom plus Charisma" is Charisma on top of it.
+    """
+    me = c.me
+    c.bonus("surge_value", 1, on=me, until=When.ENCOUNTER)
+
+    def struck(ev: Any) -> None:
+        if ev.attacker != me or not _undead(c, ev.target):
+            return
+        if ev.power == "p917" and (
+            c.feat("cf:ranger-f2") or c.feat("cf:warlock-f2")
+        ):
+            c.flat(c.attack_mod, on=ev.target)
+        elif ev.power == "p1567" and c.marked(on=ev.target, by=me):
+            c.flat(c.cha_mod, on=ev.target)
+
+    def fumbled(ev: Any) -> None:
+        if ev.attacker != me or ev.power != "p997":
+            return
+        near = [
+            foe for foe in enemies(c.world, me)
+            if foe != ev.target and c.adjacent(to=foe) and _undead(c, foe)
+        ]
+        if near:
+            c.flat(
+                c.str_mod if c.wielding("two-handed") else c.str_mod // 2,
+                on=near[0],
+            )
+
+    def handed(ev: Any) -> None:
+        if (
+            ev.granted_by == me
+            and ev.actor != me
+            and ev.granted_via == "p1061"
+            and any(_undead(c, t) for t in ev.targets)
+        ):
+            c.bonus("attack", 2, on=ev.actor, until=When.EONT, once=True)
+
+    c.watch(Hit, struck, on=me, until=When.ENCOUNTER)
+    c.watch(Miss, fumbled, on=me, until=When.ENCOUNTER)
+    c.watch(PowerUsed, handed, on=me, until=When.ENCOUNTER)
 
 
 @power("f1063", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.opportunity_instead()",))
+       reach=PERSONAL, target=SELF, dropped=("c.as_basic(spent=True)",))
 def f1063(c: Cast) -> None:
-    """Swaps what an opportunity attack is for a named racial power, and
-    unexpends it into the bargain. `Powers.opportunity` is the field
-    that would hold it and no verb writes it."""
+    """`c.as_basic(window="opportunity")` is the verb that files a stand-in
+    for a granted swing -- `Powers.instead`, not `Powers.opportunity` --
+    and `c.restore_use` is the printed "without expending it", handed
+    back the moment the swing spends it. `Hit`/`Miss` carry
+    `opportunity` as a plain attribute, which is the only place the
+    window is legible from a watcher.
+
+    Dropped: "even if you have used it this encounter".
+    `dsl.basic_options` runs each stand-in past `usable`, which refuses
+    a spent encounter power, so the option is missing for the one swing
+    before this row has handed a use back."""
+    me = c.me
+    c.as_basic("p2480", window="opportunity", on=me)
+
+    def unspend(ev: Any) -> None:
+        if (
+            ev.attacker == me
+            and ev.power == "p2480"
+            and getattr(ev, "opportunity", False)
+        ):
+            c.restore_use("p2480", on=me)
+
+    for kind in (Hit, Miss):
+        c.watch(kind, unspend, on=me, until=When.ENCOUNTER)
 
 
 @power("f1066", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1299,12 +1549,37 @@ def f1066(c: Cast) -> None:
 
 
 @power("f1026", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.stay_hidden()",))
+       reach=PERSONAL, target=SELF)
 def f1026(c: Cast) -> None:
-    """Stay hidden after missing with a ranged or area attack.
-    `resolve.attack` clears `Relation.HIDDEN_FROM` **after** it emits the
-    `Miss`, so a watcher that hides again is undone a line later -- the
-    row needs to suppress the clear, not race it."""
+    """`resolve.attack` clears `Relation.HIDDEN_FROM` after it emits the
+    `Miss` and still **inside** the `roll` callback, so the AFTER window
+    of `AttackDeclared` is on the far side of the clear. Noting the
+    concealment on the miss and putting it back there brackets the
+    clear -- the same bracket `f719` uses -- where a watcher on `Miss`
+    alone is undone a line later.
+
+    `kept` is filled only by a miss, so a hit leaves the restore with
+    nothing to do; it clears the list either way, which is what stops a
+    stale miss from hiding the caster after a later swing."""
+    me = c.me
+    kept: list[int] = []
+
+    def missed(ev: Any) -> None:
+        row = get(ev.power)
+        if ev.attacker == me and row is not None and row.reach.kind in (
+            "ranged", "area_burst", "wall"
+        ):
+            kept.extend(hidden_from(c.world, me))
+
+    def restore(ev: Any) -> None:
+        if ev.attacker != me:
+            return
+        for watcher in kept:
+            c.hide(from_=watcher)
+        kept.clear()
+
+    c.watch(Miss, missed, on=me, until=When.ENCOUNTER)
+    c.watch(AttackDeclared, restore, on=me, until=When.ENCOUNTER)
 
 
 @power("f1106", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

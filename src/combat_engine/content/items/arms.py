@@ -15,11 +15,14 @@ Four judgements run through the file.
   power in the context, which is the one thing the ref can be looked up
   for. "Damage when attacking with a bow" cannot be gated that way, so it
   is asked of what the wearer is holding when the trait arms.
-* **A shield's own bonus has no reader.** Three blocks print "equal to your
-  shield bonus" or hand that bonus to somebody else, and `query` has no
-  function that says what a shield is worth. They are marked.
-* **Flanking is not a question the engine answers.** `query.flanking` does
-  not exist, and three blocks turn on it.
+* **A shield's own bonus has no reader.** Two blocks print "equal to your
+  shield bonus" or hand that bonus to somebody else. `Gear.shield` is a
+  bool and the number is folded into the base item's AC, so nothing says
+  what a shield is worth. They are marked.
+* **Flanking *is* answered.** `query.flanked_by(world, target, attacker)`
+  is the whole question for "while you are flanked"; the two shapes that
+  name a particular partner need the pairwise half underneath it, which is
+  `world.grid.flanks(a, b, space)` -- `_flank_pair` below.
 * **`c.bonus(dice=)` is how a rolled rider is written**, and `crit_damage`
   is the modifier key `resolve.deal_damage` reads in the critical branch --
   so "+1d6 damage on a critical" is a modifier, not a watch. A rolled die
@@ -68,11 +71,15 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Miss,
+    Moved,
+    OpportunityWindow,
     Ranged,
     SavingThrow,
     Trigger,
+    TurnEnd,
     Usage,
     When,
+    Window,
     World,
     both,
     by_me,
@@ -210,6 +217,58 @@ def _first_rounds(c: Cast):  # noqa: ANN202
     return gate
 
 
+def _flank_pair(world: World, me: int, mate: int, foe: int) -> bool:
+    """Do `me` and `mate` in particular flank `foe`?
+
+    `query.flanked_by` asks whether *anybody* holds the far side, which is
+    the wrong question for "that ally gains" -- the card pays the partner,
+    so the partner has to be named. This is `flanked_by`'s inner loop with
+    the mate fixed.
+    """
+    if me == mate or mate == foe:
+        return False
+    if not query.can_act(world, me) or not query.can_act(world, mate):
+        return False
+    space = query.squares(world, foe)
+    return any(
+        world.grid.flanks(a, b, space)
+        for a in query.squares(world, me)
+        for b in query.squares(world, mate)
+    )
+
+
+def _is_basic(c: Cast, ref: str, window: str = "") -> bool:
+    """Is that ref the wearer's basic attack, or something standing in for
+    one? `Powers.basic`/`Powers.ranged` name the swing itself and
+    `instead_of_basic` names what `c.as_basic` has filed beside it, which
+    by the printed rule counts as a basic attack too."""
+    known = c.world.get(c.me, _Powers)
+    if known is None:
+        return False
+    own = (known.ranged if window == "ranged" else known.basic) or (
+        "rba" if window == "ranged" else "mba"
+    )
+    return ref == own or ref in known.instead_of_basic(window)
+
+
+def _while_bloodied(c: Cast, who: int, effect: Any) -> None:
+    """"...until he or she is no longer bloodied."
+
+    Not a `When`, and it does not need to be: nothing but healing lifts a
+    creature back out of bloodied, and `Healed` is announced for every
+    point that arrives. The watch is hung on the beneficiary so it travels
+    with them.
+    """
+    if effect is None:
+        return
+
+    def mended(ev: Healed) -> None:
+        if ev.target == who and not c.bloodied(on=who):
+            c.end_effect(effect, on=who, why="no longer bloodied")
+
+    c.watch(Healed, mended, until=When.ENCOUNTER, on=who)
+
+
 def _protect(c: Cast, defence: Any, value: int) -> None:
     """The four "an attack against <defence> would hit an adjacent ally"
     interrupts, which are one shape printed four times.
@@ -327,9 +386,67 @@ def _my_shield_shot_hit(world: World, me: int, ev: Any) -> bool:
     ) == "i2875p1"
 
 
+def _polymorph_rows(world: World, who: int | None) -> list[str]:
+    """Which of that creature's rows change its shape.
+
+    No type line is loaded mid-fight, so "a shapechanger" is read as a
+    creature that has somewhere to change to -- which is also the only
+    thing the printed Effect acts on.
+    """
+    known = None if who is None else world.get(who, _Powers)
+    if known is None:
+        return []
+    return [
+        ref
+        for ref in known.known
+        if (p := get(ref)) is not None and Keyword.POLYMORPH in p.keywords
+    ]
+
+
 def _my_hit_on_shapechanger(world: World, me: int, ev: Any) -> bool:
-    foe = getattr(ev, "target", None)
-    return getattr(ev, "attacker", None) == me and foe is not None
+    return getattr(ev, "attacker", None) == me and bool(
+        _polymorph_rows(world, getattr(ev, "target", None))
+    )
+
+
+def _my_attack_on_adjacent(world: World, me: int, ev: Any) -> bool:
+    if getattr(ev, "attacker", None) != me:
+        return False
+    who = getattr(ev, "target", None)
+    return who is not None and query.distance_between(world, me, who) <= 1
+
+
+def _ally_provokes_ranged(world: World, me: int, ev: Any) -> bool:
+    who = getattr(ev, "provoker", None)
+    if not _friend(world, me, who):
+        return False
+    if "ranged power" not in getattr(ev, "why", ""):
+        return False
+    return query.distance_between(world, me, who) <= 1
+
+
+_HELD_SAVES = frozenset(
+    {
+        Condition.DAZED,
+        Condition.IMMOBILIZED,
+        Condition.PETRIFIED,
+        Condition.RESTRAINED,
+        Condition.STUNNED,
+    }
+)
+
+
+def _my_save_against_hold(world: World, me: int, ev: Any) -> bool:
+    """`SavingThrow.against` is `str(eff)` and carries no conditions -- but
+    the effect it names is still standing on the saver, so the printed list
+    of five is checked there instead of on the event."""
+    if getattr(ev, "actor", None) != me:
+        return False
+    against = getattr(ev, "against", "")
+    return any(
+        str(eff) == against and _HELD_SAVES & set(eff.conditions)
+        for eff in world.effects.of(me)
+    )
 
 
 # -- level 1 ----------------------------------------------------------------
@@ -364,10 +481,13 @@ def i1013x1(c: Cast) -> None:
 
 
 @power("i1527x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.item_set()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i1527x1(c: Cast) -> None:
-    """A paired item: nothing links one worn item to another, so there is
-    no second wearer to be aware of and no check to narrow onto."""
+    """Deliberately inert. The whole printed benefit is knowledge about
+    whoever wears the other half of the pair -- their heartbeat, whether
+    they are bloodied or held, and a bonus to one skill check against
+    them. That person is somewhere else by construction, so nothing here
+    can change a fight the wearer is in."""
 
 
 @power("i1673x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -461,13 +581,14 @@ def i787x1(c: Cast) -> None:
 
 
 @power("i792x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("query.is_basic_attack()",))
+       reach=PERSONAL, target=SELF)
 def i792x1(c: Cast) -> None:
-    """Nothing says whether a ref is the creature's basic attack, so the
-    bonus reaches every melee attack rather than only the basic."""
+    """Which ref a creature's basic attack is *is* recorded --
+    `Powers.basic`, plus whatever `c.as_basic` has filed beside it, which
+    the printed rule counts as a basic attack too. So the gate is exact
+    and the bonus does not leak onto every melee swing."""
     c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, kind="item",
-            when=_reach_is("melee"))
+            when=lambda ctx: _is_basic(c, ctx.get("power") or ""))
 
 
 @power("i794p1", level=2, cls=ITEM, usage=DAILY, action=FREE,
@@ -532,12 +653,21 @@ def i1764x1(c: Cast) -> None:
 @power("i1764p1", level=3, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit a shapechanger with a weapon attack",
-       on=Trigger(Hit, _my_hit_on_shapechanger, "you hit a creature"),
-       todo=("c.on_revert()", "c.forbid(keyword=)"))
+       on=Trigger(Hit, _my_hit_on_shapechanger,
+                  "you hit a creature that can change shape"),
+       dropped=("c.on_revert()",))
 def i1764p1(c: Cast) -> None:
-    """Nothing puts a creature back into a shape it is not currently
-    wearing, and `c.forbid` takes one ref rather than a keyword -- so both
-    halves of the printed Effect are missing."""
+    """Shutting the shapes off is `c.forbid` on each of the target's own
+    polymorph rows: `c.forbid` takes one ref rather than a keyword, so the
+    keyword is spread over them here. Having any such row is also what the
+    trigger reads as "a shapechanger", since no type line is loaded
+    mid-fight.
+
+    Putting a creature back into a shape it is not currently wearing has
+    no verb -- `c.form(revert=)` ends a form the *caster* took."""
+    foe = _foe(c)
+    for ref in _polymorph_rows(c.world, foe):
+        c.forbid(ref, on=foe, until=When.SAVE_ENDS)
 
 
 @power("i2477p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -557,12 +687,15 @@ def i3213x1(c: Cast) -> None:
 
 @power("i3556p1", level=3, cls=ITEM, usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, trigger="you roll a saving throw",
-       on=Trigger(SavingThrow, _my_save, "you roll a saving throw"),
-       dropped=("SavingThrow.condition",))
+       on=Trigger(SavingThrow, _my_save_against_hold,
+                  "you save against a hold this item answers"))
 def i3556p1(c: Cast) -> None:
-    """`SavingThrow` carries the effect only as a string, so the printed
-    list of five conditions cannot be checked and the reroll is offered
-    against any hold instead."""
+    """The printed list of five is checked in the predicate, off the
+    effect rather than off the event -- see `_my_save_against_hold`. That
+    is where it belongs: narrowing in the body would spend the use on a
+    save the card does not cover.
+
+    `keep="new"` is the default, which is "even if it is lower"."""
     c.reroll_save()
 
 
@@ -576,23 +709,31 @@ def i782x1(c: Cast) -> None:
 
 
 @power("i782p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.end_on_attack()",))
+       reach=PERSONAL, target=SELF)
 def i782p1(c: Cast) -> None:
-    """The augment buys a longer hold, not a different one: "until you make
-    an attack" is not a duration, so the augmented version runs to the end
-    of the fight."""
-    if c.spend_points(1):
-        c.conceal(on=c.me, until=When.ENCOUNTER)
-    else:
+    """"Until you make an attack" is not a `When` and does not need to be:
+    the augmented concealment is held to the end of the fight and torn
+    down on the wearer's next `AttackDeclared`, which is the event that
+    sentence names."""
+    if not c.spend_points(1):
         c.conceal(on=c.me, until=When.SONT)
+        return
+    hidden = c.conceal(on=c.me, until=When.ENCOUNTER)
+
+    def swung(ev: AttackDeclared) -> None:
+        if ev.attacker == c.me:
+            c.end_effect(hidden, on=c.me, why="you made an attack")
+
+    c.watch(AttackDeclared, swung, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i799x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("query.is_basic_attack()",))
+       reach=PERSONAL, target=SELF)
 def i799x1(c: Cast) -> None:
+    """The ranged half of the same question: `Powers.ranged` names the
+    shot, and `instead_of_basic("ranged")` names what stands in for it."""
     c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, kind="item",
-            when=_reach_is("ranged"))
+            when=lambda ctx: _is_basic(c, ctx.get("power") or "", "ranged"))
 
 
 # -- level 4 ----------------------------------------------------------------
@@ -600,10 +741,40 @@ def i799x1(c: Cast) -> None:
 
 @power("i1271p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
-       todo=("query.flanking(world, a, b)",))
+       trigger="you attack an adjacent target, before you roll",
+       on=Trigger(AttackDeclared, _my_attack_on_adjacent,
+                  "you aim an attack at an adjacent creature"))
 def i1271p1(c: Cast) -> None:
-    """"The nearest square from which you and an ally flank the target" has
-    to be searched for, and nothing says whether two creatures flank."""
+    """Declared on `AttackDeclared`, which is the "before you roll" window.
+
+    "The nearest square from which you and an ally flank the target" is a
+    search: every square beside the target, kept when some ally already
+    holds the far side of it, taken in order of how far it is from where
+    the wearer stands. `c.teleport(to=)` refuses a square the wearer does
+    not fit in, so the list is tried in order rather than filtered first.
+    """
+    foe = getattr(c.trigger, "target", None)
+    if foe is None:
+        return
+    space = query.squares(c.world, foe)
+    here = min(query.squares(c.world, c.me))
+    beside = [
+        b
+        for mate in c.allies()
+        if query.can_act(c.world, mate)
+        for b in query.squares(c.world, mate)
+    ]
+
+    def flanks_from(sq: Any) -> bool:
+        return any(c.world.grid.flanks(sq, b, space) for b in beside)
+
+    options = sorted(
+        (sq for sq in query.spread(space, 1) - space if flanks_from(sq)),
+        key=lambda sq: (max(abs(sq[0] - here[0]), abs(sq[1] - here[1])), sq),
+    )
+    for sq in options:
+        if c.teleport(10, to=sq):
+            return
 
 
 @power("i1893p1", level=4, cls=ITEM, usage=ENCOUNTER, action=MINOR,
@@ -663,15 +834,16 @@ def i3207p1(c: Cast) -> None:
 
 
 @power("i3207p2", level=4, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=CloseBurst(5), target=ONE_ALLY, dropped=("When.UNBLOODIED",))
+       reach=CloseBurst(5), target=ONE_ALLY)
 def i3207p2(c: Cast) -> None:
-    """"Until he or she is no longer bloodied" is not a duration, so the
-    resistance runs to the end of the fight."""
+    """"Or until he or she is no longer bloodied, whichever comes first":
+    held to the end of the encounter and torn down by `_while_bloodied`,
+    which watches the ally's own healing."""
     hurt = [a for a in c.within(5, side="ally")
             if a != c.me and c.bloodied(on=a)]
     who = c.choose(hurt, "which bloodied ally is shielded")
     if who is not None:
-        c.resist(5, on=who, until=When.ENCOUNTER)
+        _while_bloodied(c, who, c.resist(5, on=who, until=When.ENCOUNTER))
 
 
 @power("i627p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
@@ -720,17 +892,19 @@ def i1094p1(c: Cast) -> None:
 
 
 @power("i2122x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.hit_twice()",))
+       reach=PERSONAL, target=SELF, todo=("Hit.hand",))
 def i2122x1(c: Cast) -> None:
-    """Which hand swung is in the attack context and not on the `Hit`, so
-    "you hit the same creature with both weapons" cannot be counted."""
+    """Which hand swung is in the *attack* context -- `resolve.attack`
+    puts `hand` there -- and `resolve` does not copy it onto the `Hit` the
+    way it copies `opportunity`, `charge` and `vs`. So "you hit the same
+    creature with both your weapons" has nothing to count from."""
 
 
 @power("i2122p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.hit_twice()",))
+       reach=PERSONAL, target=SELF, todo=("Hit.hand",))
 def i2122p1(c: Cast) -> None:
-    """Same missing question as the property above; the off-hand basic
-    attack has no trigger to hang from."""
+    """Same missing field as the property above: the trigger it needs is
+    "you hit with both", and the `Hit` does not say which hand."""
 
 
 @power("i2492p1", level=5, cls=ITEM, usage=DAILY, action=INTERRUPT,
@@ -770,14 +944,25 @@ def i785x1(c: Cast) -> None:
 @power("i804p1", level=5, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit with a melee attack",
-       on=Trigger(Hit, _my_melee_hit, "you hit with a melee attack"),
-       dropped=("c.vulnerable(once=)",))
+       on=Trigger(Hit, _my_melee_hit, "you hit with a melee attack"))
 def i804p1(c: Cast) -> None:
-    """A vulnerability runs for its duration; "against the next attack that
-    hits it" would spend it on the first blow, and nothing does that."""
+    """"Against the next attack that hits it before the end of your next
+    turn" is both ends: the `When` is the outer limit and the inner one is
+    the first blow that gets through. `DamageApplied` is announced after
+    resistance and vulnerability have both been counted, so tearing the
+    effect down there spends it on exactly one attack."""
     foe = _foe(c)
-    if foe is not None:
-        c.vulnerable(5, on=foe, until=When.EONT)
+    if foe is None:
+        return
+    weak = c.vulnerable(5, on=foe, until=When.EONT)
+    if weak is None:
+        return
+
+    def struck(ev: DamageApplied) -> None:
+        if ev.target == foe:
+            c.end_effect(weak, on=foe, why="spent on the next attack")
+
+    c.watch(DamageApplied, struck, until=When.EONT, on=foe)
 
 
 @power("i935p1", level=5, cls=ITEM, usage=DAILY, action=INTERRUPT,
@@ -908,10 +1093,27 @@ def i783p1(c: Cast) -> None:
 
 
 @power("i791p1", level=6, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.ability_for(ref)",))
+       reach=PERSONAL, target=SELF, dropped=("c.ability_check()",))
 def i791p1(c: Cast) -> None:
-    """Which ability a roll uses is declared in the header and read from
-    there; nothing swaps one out for another mid-fight."""
+    """"Use your Intelligence, Wisdom, or Charisma modifier in place of
+    your Strength modifier" is the difference between the two added to the
+    roll. The *attack* context carries the ref and the header says which
+    ability that row rolls, so the swap lands on a Strength attack and
+    nothing else, and `once=True` spends it on one roll as printed.
+
+    A Strength check and a Strength-based skill check are the dropped
+    half: `c.check` takes a skill and no ability to roll it with."""
+    delta = max(c.int_mod, c.wis_mod, c.cha_mod) - c.str_mod
+    if delta <= 0:
+        return
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        p = get(ctx.get("power") or "")
+        return (
+            p is not None and p.attack is not None and p.attack.ability is STR
+        )
+
+    c.bonus("attack", delta, on=c.me, until=When.EONT, once=True, when=gate)
 
 
 @power("i796x1", level=6, cls=ITEM, action=ActionType.NONE,
@@ -1071,10 +1273,28 @@ def i1873x1(c: Cast) -> None:
 
 
 @power("i2053x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("query.flanking(world, a, b)",))
+       reach=PERSONAL, target=SELF)
 def i2053x1(c: Cast) -> None:
-    """Nothing says whether two creatures flank a third."""
+    """The card pays the *partner*, so the pair has to be named --
+    `query.flanked_by` answers "flanked by anybody", which would pay an
+    ally standing somewhere else. `_flank_pair` is the same test with the
+    mate fixed.
+
+    Laid on everyone on the wearer's side and gated at read time, because
+    who is flanking whom changes every round."""
+
+    def gate_for(mate: int):  # noqa: ANN202
+        def gate(_ctx: dict[str, Any]) -> bool:
+            return any(
+                _flank_pair(c.world, c.me, mate, foe) for foe in c.enemies()
+            )
+
+        return gate
+
+    for ally in c.allies():
+        gate = gate_for(ally)
+        c.bonus(AC, 1, on=ally, until=When.ENCOUNTER, kind="shield", when=gate)
+        c.bonus(REF, 1, on=ally, until=When.ENCOUNTER, kind="shield", when=gate)
 
 
 @power("i2473p1", level=8, cls=ITEM, usage=DAILY, action=REACTION,
@@ -1109,10 +1329,26 @@ def i2692p1(c: Cast) -> None:
 
 
 @power("i3101p1", level=8, cls=ITEM, usage=DAILY, action=INTERRUPT,
-       reach=PERSONAL, target=SELF, todo=("c.uncrit()",))
+       reach=PERSONAL, target=SELF,
+       trigger="a critical hit would be scored against you",
+       on=Trigger(Hit, _crit_on_me, "a critical hit lands on you"))
 def i3101p1(c: Cast) -> None:
-    """Turning a critical back into an ordinary hit means unmaking the
-    result the roll already decided, and nothing does it."""
+    """"The attack becomes a normal hit." Both the announcement and the
+    live `AttackResult` are written down: `c.damage` maximises its dice
+    off `result.critical`, and every crit rider in the tree reads
+    `Hit.critical`. `result.hit` is left alone -- it is still a hit, and
+    `resolve.attack`'s `confirm` would cancel the event if it were not.
+
+    Written here rather than as a verb because the interrupt window on
+    `Hit` runs after `resolve` has recomputed both from the die, so
+    nothing recomputes them again afterwards."""
+    ev = c.trigger
+    if ev is None:
+        return
+    ev.critical = False
+    result = getattr(ev, "result", None)
+    if result is not None:
+        result.critical = False
 
 
 @power("i3206x1", level=8, cls=ITEM, action=ActionType.NONE,
@@ -1151,15 +1387,24 @@ def i3206p1(c: Cast) -> None:
 
 @power("i3212p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,
        reach=CloseBurst(1), target=SELF,
-       dropped=("c.grants_in(when=)", "c.zone(ends_on=)"))
+       dropped=("c.grants_in(when=)",))
 def i3212p1(c: Cast) -> None:
     """Concealment is a modifier the creature carries, and `c.grants_in`
     lays one for as long as a creature stands in the aura. It carries no
-    gate, so the concealment covers melee as well as ranged, and nothing
-    ends an aura when its owner moves."""
+    gate, so the concealment covers melee as well as ranged.
+
+    "Or until you move" is the aura's other end, and `c.dispel` on the
+    wearer's first `Moved` is it."""
     aura = c.aura(1, label=c.ref, until=When.ENCOUNTER, on=c.me)
-    if aura:
-        c.grants_in(aura, "concealment", 2, side="any")
+    if not aura:
+        return
+    c.grants_in(aura, "concealment", 2, side="any")
+
+    def walked(ev: Moved) -> None:
+        if ev.actor == c.me:
+            c.dispel(aura)
+
+    c.watch(Moved, walked, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i784p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,
@@ -1200,34 +1445,68 @@ def i863p1(c: Cast) -> None:
 
 
 @power("i1082p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("query.damaged_since()",))
+       reach=PERSONAL, target=SELF)
 def i1082p1(c: Cast) -> None:
-    """"A damage type you were dealt since the end of your last turn" is a
-    question about the recent past, and nothing keeps that tally."""
+    """"Since the end of your last turn" is read off the bus's own log,
+    which keeps every event in order: walk it backwards to the wearer's
+    last `TurnEnd` and collect what hurt them after it. Untyped damage is
+    not a type anything can resist, so it is left out of the offer."""
+    seen: list[DamageType] = []
+    for ev in reversed(c.world.bus.log):
+        if isinstance(ev, TurnEnd) and ev.actor == c.me:
+            break
+        if not isinstance(ev, DamageApplied) or ev.target != c.me:
+            continue
+        for dtype in ev.dtypes or ((ev.dtype,) if ev.dtype else ()):
+            if dtype is not DamageType.UNTYPED and dtype not in seen:
+                seen.append(dtype)
+    pick = c.choose(seen, "which damage type is resisted")
+    if pick is not None:
+        c.resist(10, pick, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i1682x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=CloseBurst(1), target=SELF,
-       dropped=("query.provoked_by()",))
+       reach=CloseBurst(1), target=SELF)
 def i1682x1(c: Cast) -> None:
-    """The attack context carries `opportunity`, so the bonus is exact
-    against every opening; what provoked it is not recorded, so it also
-    covers the openings an ally's walk gives."""
-    for ally in c.within(1, side="ally"):
-        if ally == c.me:
-            continue
-        c.bonus(AC, 2, on=ally, until=When.ENCOUNTER, kind="shield",
+    """What provoked the opening *is* recorded: `dsl._survive_provoking`
+    stamps the window's `why` with the ref and the words "ranged power".
+    Watched in the BEFORE window, the way `c.no_provoke` is, so the bonus
+    is standing before the swing it answers -- laid on the ally who
+    provoked and gated on `opportunity`, so it covers that opening and no
+    other."""
+
+    def opened(ev: OpportunityWindow) -> None:
+        ally = ev.provoker
+        if "ranged power" not in ev.why or not _friend(c.world, c.me, ally):
+            return
+        if query.distance_between(c.world, c.me, ally) > 1:
+            return
+        c.bonus(AC, 2, on=ally, until=When.EOT, kind="shield",
                 when=_opportunity)
-        c.bonus(REF, 2, on=ally, until=When.ENCOUNTER, kind="shield",
+        c.bonus(REF, 2, on=ally, until=When.EOT, kind="shield",
                 when=_opportunity)
+
+    c.watch(OpportunityWindow, opened, until=When.ENCOUNTER, on=c.me,
+            window=Window.BEFORE)
 
 
 @power("i1682p1", level=9, cls=ITEM, usage=DAILY, action=INTERRUPT,
        reach=Melee(1), target=NO_TARGET,
-       todo=("query.provoked_by()",))
+       trigger="an ally adjacent to you provokes an opportunity attack by "
+               "using a ranged or area power",
+       on=Trigger(OpportunityWindow, _ally_provokes_ranged,
+                  "an adjacent ally provokes by shooting"))
 def i1682p1(c: Cast) -> None:
-    """An opportunity attack does not record what provoked it, so "an ally
-    provokes one by using a ranged power" has no trigger to declare."""
+    """"The opportunity attack targets you instead": the window is refused
+    and reopened against the wearer. `c.redirect` is the wrong door -- the
+    attack has not been declared yet, so there is no `target` on the event
+    for it to move."""
+    ev = c.trigger
+    foe = getattr(ev, "actor", None)
+    if foe is None:
+        return
+    c.cancel()
+    c.provoke(foe, on=c.me, why=getattr(ev, "why", "") or c.ref)
 
 
 @power("i2155p1", level=9, cls=ITEM, usage=ENCOUNTER, action=REACTION,
@@ -1249,10 +1528,17 @@ def i2455p1(c: Cast) -> None:
 
 
 @power("i2483x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("query.flanking(world, a, b)",))
+       reach=PERSONAL, target=SELF)
 def i2483x1(c: Cast) -> None:
-    """"While you are flanked" is the same unanswered question."""
+    """"While you are flanked" is `query.flanked_by` asked of each enemy,
+    at read time rather than at arming time. A plain "+1 bonus" with no
+    type word in front of it is untyped, so there is no `kind=`."""
+
+    def gate(_ctx: dict[str, Any]) -> bool:
+        return any(query.flanked_by(c.world, c.me, foe) for foe in c.enemies())
+
+    c.bonus(AC, 1, on=c.me, until=When.ENCOUNTER, when=gate)
+    c.bonus(REF, 1, on=c.me, until=When.ENCOUNTER, when=gate)
 
 
 @power("i3204x1", level=9, cls=ITEM, action=ActionType.NONE,
@@ -1272,12 +1558,23 @@ def i3204p1(c: Cast) -> None:
 
 
 @power("i3402x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.max_hp()",))
+       reach=PERSONAL, target=SELF)
 def i3402x1(c: Cast) -> None:
     """Three of the four named effects are conditions the hold carries;
     charm is a keyword of the row that laid it, which the save context
-    now carries. Nothing lowers a creature's maximum hit points."""
+    now carries.
+
+    The penalty goes straight onto `Health.max_hp`, which is a plain
+    field. Nothing else in the game lowers a maximum, so there is no verb
+    -- and the two things that follow from it, the bloodied line and what
+    a healing surge is worth, are both computed from it."""
+    health = c.world.get(c.me, Health)
+    if health is not None and c.me not in c.suffering(c.ref, include_self=True):
+        # Guarded, because this one writes rather than laying a modifier:
+        # a trait that armed twice would take ten off and keep going.
+        c.effect(c.ref, until=When.ENCOUNTER, on=c.me)
+        health.max_hp = max(1, health.max_hp - 5)
+        health.hp = min(health.hp, health.max_hp)
     c.bonus("save", 1, on=c.me, until=When.ENCOUNTER, kind="item",
             when=_saves_against(Condition.STUNNED, Condition.DAZED,
                                 Condition.DOMINATED,
@@ -1310,12 +1607,12 @@ def i712p1(c: Cast) -> None:
 
 
 @power("i714p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("When.UNBLOODIED",))
+       reach=PERSONAL, target=SELF)
 def i714p1(c: Cast) -> None:
-    """"Until you are no longer bloodied" is not a duration the engine
-    has, so the resistance runs to the end of the fight."""
+    """"Whichever comes first" is both halves: the encounter is the `When`
+    and `_while_bloodied` is the other one."""
     if c.bloodied(on=c.me):
-        c.resist(2, on=c.me, until=When.ENCOUNTER)
+        _while_bloodied(c, c.me, c.resist(2, on=c.me, until=When.ENCOUNTER))
 
 
 @power("i798p1", level=9, cls=ITEM, usage=ENCOUNTER, action=FREE,
@@ -1344,13 +1641,22 @@ def i798p1(c: Cast) -> None:
        reach=Melee(1), target=NO_TARGET,
        trigger="an adjacent ally is hit by an attack",
        on=Trigger(AttackDeclared, _adjacent_ally_targeted(),
-                  "an attack is aimed at an adjacent ally"),
-       dropped=("c.on_damage_dealt()",))
+                  "an attack is aimed at an adjacent ally"))
 def i1487p1(c: Cast) -> None:
-    """The blow is moved with `c.redirect`, which is the whole first half.
-    The resistance is "half the damage dealt", and at the moment an
-    interrupt runs no damage has been rolled."""
-    c.redirect(to=c.me)
+    """The blow is moved with `c.redirect`. "Half the damage dealt by the
+    attack" cannot be read where the interrupt runs -- nothing has been
+    rolled yet -- so the resistance is laid by the `DamageApplied` that
+    follows, which is the first moment the number exists. "(if any)" is
+    the card allowing for a miss, which is the `once=` watch simply never
+    firing."""
+    if not c.redirect(to=c.me):
+        return
+
+    def landed(ev: DamageApplied) -> None:
+        if ev.target == c.me and ev.amount > 0:
+            c.resist(ev.amount // 2, on=c.me, until=When.SONT)
+
+    c.watch(DamageApplied, landed, until=When.EOT, on=c.me, once=True)
 
 
 @power("i1525p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
@@ -1380,11 +1686,14 @@ def i604x1(c: Cast) -> None:
 
 
 @power("i713p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("When.UNBLOODIED",))
+       reach=PERSONAL, target=SELF)
 def i713p1(c: Cast) -> None:
+    """The same two-ended duration as i714p1, on a damage bonus rather
+    than a resistance."""
     if c.bloodied(on=c.me):
-        c.bonus("damage", 5, on=c.me, until=When.ENCOUNTER, kind="power",
-                when=_reach_is("melee"))
+        _while_bloodied(c, c.me, c.bonus(
+            "damage", 5, on=c.me, until=When.ENCOUNTER, kind="power",
+            when=_reach_is("melee")))
 
 
 @power("i730p1", level=10, cls=ITEM, usage=DAILY, action=FREE,

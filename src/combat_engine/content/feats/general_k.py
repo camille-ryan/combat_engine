@@ -6,10 +6,14 @@ Three shapes carry most of this batch.
 benefit -- the prerequisite is a column `chargen.meets` enforces at build
 time. What decides a row is whether the racial power it rides on arrives
 as a **ref** or as a **name**. `p2475`, `p2483`, `p2484`, `p1448`,
-`p1449`, `p1452`, `p1628`, `m5139a3` and `m4421a6` are refs, so a rider
-on one is an ordinary `PowerUsed` trigger. What is still a name is a
-racial *trait* rather than a power, and those keep
-`c.on_racial_power()` -- there is nothing for a trigger to watch.
+`p1449`, `p1452` and `p1628` are refs, so a rider on one is an ordinary
+`PowerUsed` trigger. `m5139a3` and `m4421a6` were listed here as refs
+and are **not in the registry** -- the spec prints them as `x_m5139a3`
+and `x_m4421a6`, which is the ETL saying "a name, unresolved". A trigger
+declared on one is silently inert forever, so both rows hold
+`spec.power_ref()`. What is still a name is a racial *trait* rather than
+a power, and those keep `c.on_racial_power()` -- there is nothing for a
+trigger to watch.
 
 **The granted pair.** A feat whose printed benefit is "you gain the fNNNb
 power" is a trait that hands over the card beside it. Six of these are
@@ -93,6 +97,8 @@ from combat_engine.engine import (
     get,
     power,
 )
+from combat_engine.engine.grid import distance as square_distance
+from combat_engine.engine.grid import neighbours
 from combat_engine.engine.query import allies, distance_between, enemies, team
 
 #: A racial power or trait the benefit names in prose rather than by ref.
@@ -155,6 +161,33 @@ def _resolved(ref: str):  # noqa: ANN202
 def _wielding_group(c: Cast, *groups: str) -> bool:
     gear = c.world.get(c.me, Gear)
     return gear is not None and any(w.group in groups for w in gear.melee)
+
+
+def _wielding_ref(c: Cast, ref: str) -> bool:
+    """One named base item rather than a whole weapon group."""
+    gear = c.world.get(c.me, Gear)
+    return gear is not None and any(w.ref == ref for w in gear.weapons)
+
+
+def _beside(c: Cast, who: int, options: list[Any]) -> list[Any]:
+    """"To a square adjacent to <somebody>", narrowed out of a set of
+    destinations. `c.shift` and `c.teleport` take `to=` and the printed
+    line names where it lands, so the square is computed rather than
+    left to the world's decider."""
+    theirs = c.world.grid.squares_of(who)
+    return [
+        sq for sq in options
+        if any(square_distance(sq, t) <= 1 for t in theirs)
+    ]
+
+
+def _around(c: Cast, who: int) -> list[Any]:
+    """The ring of squares beside a creature. `c.teleport(to=)` checks
+    range and footprint itself, so a candidate it will not take simply
+    comes back False."""
+    theirs = c.world.grid.squares_of(who)
+    ring = {n for sq in theirs for n in neighbours(sq)} - set(theirs)
+    return sorted(sq for sq in ring if c.world.grid.passable(sq))
 
 
 def _near_allies(c: Cast, radius: int) -> list[int]:
@@ -248,16 +281,32 @@ def f1677(c: Cast) -> None:
 
 
 @power("f1678", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.no_provoke(when=)",))
+       reach=PERSONAL, target=SELF)
 def f1678(c: Cast) -> None:
     """A trait is armed before anybody has taken a turn, so every enemy
     on the board qualifies at arming and the grant is laid one enemy at a
-    time. It expires with the caster's first turn, which is the only
-    window in which walking away from somebody matters. What is dropped
-    is an enemy *losing* the exemption by acting inside that window."""
+    time. It expires with the caster's first turn, which is the round the
+    card is about.
+
+    "That have not yet acted" does not need a `when=` on the exemption:
+    each enemy holds its own effect, so the one that acts has its ended
+    where it stands. `ev.ghost` guards the policy's lookahead turns,
+    which would otherwise retire every enemy before the fight began."""
     me = c.me
+    held: dict[int, Any] = {}
     for foe in enemies(c.world, me):
-        c.no_provoke(from_=foe, on=me, until=When.EONT)
+        hold = c.no_provoke(from_=foe, on=me, until=When.EONT)
+        if hold is not None:
+            held[foe] = hold
+
+    def has_acted(ev: Any) -> None:
+        if ev.ghost:
+            return
+        hold = held.pop(ev.actor, None)
+        if hold is not None:
+            c.end_effect(hold)
+
+    c.watch(TurnStart, has_acted, on=me, until=When.EONT)
 
 
 @power("f1774", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -297,46 +346,56 @@ def f1776(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        trigger="you use p2483",
        on=Trigger(PowerResolved, _resolved("p2483"), "you use that power"),
-       dropped=("Effect.duration_of()",))
+       dropped=("c.effects_on()",))
 def f1847(c: Cast) -> None:
     """Declared on `PowerResolved` rather than `PowerUsed`: the racial
     power's own regeneration is laid in its body, and `PowerUsed` is
     announced above it. A second regeneration effect is what "increases
-    by 2" comes to. Its duration is dropped -- nothing can read how long
-    the power it rides on holds for, so this one runs to the end."""
+    by 2" comes to.
+
+    Re-aimed off `Effect.duration_of()`. An `Effect` knows its own
+    duration perfectly well and `on_end` is a list a rider could append
+    to -- what is missing is getting hold of p2483's effect at all,
+    because nothing lists the effects standing on a creature. So this one
+    runs to the end of the encounter rather than with the power."""
     c.regeneration(2, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1849", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       trigger="you use m5139a3",
-       on=Trigger(PowerResolved, _resolved("m5139a3"), "you use that power"),
-       dropped=("c.resist(replace=)",))
+       todo=("spec.power_ref()", "c.resist(replace=)"))
 def f1849(c: Cast) -> None:
-    """The +5 plays. Trading the racial power's resist-all *for* the
-    typed one does not: the amount it granted is inside its own effect
-    and nothing can read it back out, so the two stand together."""
-    pick = c.choose(
-        [DamageType.COLD, DamageType.FIRE, DamageType.LIGHTNING,
-         DamageType.POISON, DamageType.RADIANT, DamageType.THUNDER],
-        "which damage type", optional=True,
-    )
-    if pick is not None:
-        c.resist(5, pick, on=c.me, until=When.ENCOUNTER)
+    """**Re-aimed, and it was worse than a dropped clause.** The trigger
+    was declared on `PowerResolved` of `m5139a3`, which is not in the
+    registry -- the spec prints it as `x_m5139a3`, a name the ETL could
+    not resolve. A predicate comparing a power ref to a string nothing
+    ever emits is false in every fight, so the row looked written and
+    could not fire.
+
+    Both holds are named. With a ref it would still want
+    `c.resist(replace=)`: trading the racial power's resist-all *for* the
+    typed one needs the amount inside its effect, and nothing reads one
+    back out."""
 
 
 @power("f1859", level=1, cls="", usage=AT_WILL, action=REACTION,
        reach=PERSONAL, target=NO_TARGET,
-       trigger="an enemy damages you",
-       on=Trigger(DamageApplied, lambda w, me, ev: (
-           ev.target == me and ev.source != me and ev.amount > 0
-       ), "an enemy damages you"),
-       dropped=("DamageApplied.vs",))
+       trigger="an enemy damages you with an attack against AC or Reflex",
+       on=Trigger(Hit, lambda w, me, ev: (
+           ev.target == me and ev.attacker != me
+           and getattr(ev, "vs", None) in (AC, REF)
+       ), "an enemy hits you against AC or Reflex"))
 def f1859(c: Cast) -> None:
     """"While you're under the effect of p2484" is askable --
     `c.suffering` with `include_self` finds a hold this caster laid on
-    itself. Which defence the attack went against is not: `Hit` and
-    `DamageApplied` both drop the `vs` that `AttackRolled` carried."""
+    itself.
+
+    Which defence the attack went against **is** askable: `resolve.attack`
+    hangs `vs` on the `Hit` as a plain attribute, the way it hangs
+    `opportunity` and `charge`, so it is read with `getattr`. This row
+    carried `DamageApplied.vs` and that event genuinely has none -- so the
+    question is asked of the `Hit` instead, which is also where "with an
+    attack" is true and a fall or an ongoing burn is not."""
     if c.me not in c.suffering("p2484", include_self=True):
         return
     c.shift(1)
@@ -381,13 +440,18 @@ def f1697(c: Cast) -> None:
 
 @power("f1704", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("SkillCheck.target",), proficiency=("w:short-sword",))
+       dropped=("SkillCheck.target",), proficiency=("w:short-sword",))
 def f1704(c: Cast) -> None:
-    """The grant and the damage half are both writable now -- the weapon
-    table keys on the ref -- but the advantage half is the whole reason
-    the row is offered, and `SkillCheck` says who rolled and against what
-    skill without saying who it was aimed at. "That enemy" has no
-    referent, so the row stays refused rather than paying half."""
+    """Re-aimed from `todo` to `dropped`. The grant is header data and the
+    damage half is writable -- the weapon table keys on the ref -- so
+    refusing the whole row in play threw a working sentence away.
+
+    What is still missing is the advantage half: `SkillCheck` says who
+    rolled and against what skill without saying who it was aimed at, so
+    "that enemy" has no referent. Untyped is wrong here for once -- the
+    card prints the word "feat"."""
+    c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
+            when=lambda ctx: _wielding_ref(c, "w:short-sword"))
 
 
 @power("f1751", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -413,26 +477,41 @@ def f1751(c: Cast) -> None:
             window=Window.BEFORE, label=c.ref)
 
 
-@power("f1773", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Moved.power",))
+@power("f1773", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use rt:r18-shifting-fortunes to shift",
+       on=Trigger(PowerResolved, _resolved("rt:r18-shifting-fortunes"),
+                  "you shift with that racial trait"))
 def f1773(c: Cast) -> None:
-    """Re-aimed: `rt:r18-shifting-fortunes` is the row and it is
-    declared. The mark is laid "at the end of your shift", and the shift
-    is that row's -- but `Moved` carries `actor`, `from_`, `to` and
-    `kind_` and never says which row moved the creature, so there is no
-    way to tell the trait's shift from any other. Arming on `SecondWind`
-    beside the trait would fire in an undefined order against the shift
-    the mark is measured from."""
+    """The row is `rt:r18-shifting-fortunes` and it is declared, so
+    `Moved.power` was the wrong question -- the shift does not have to be
+    picked out of every other move, it is announced by the row that made
+    it. `PowerResolved` and not `PowerUsed`: the trait's body is where the
+    shift happens, and "at the end of your shift" is after it, which is
+    also when the adjacency the mark is measured from is true.
+
+    AT_WILL because a triggered trait spends a use each firing and the
+    card prints no limit."""
+    me = c.me
+    for foe in enemies(c.world, me):
+        if c.adjacent(to=foe):
+            c.mark(on=foe)
 
 
 @power("f1832", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.ignore_concealment()",))
 def f1832(c: Cast) -> None:
-    """Re-aimed: `rt:r4-group-perception` is declared and lays an aura,
-    so "each ally affected by it" is now the creatures standing in that
-    aura. What is missing is the benefit -- nothing waives the -2 for
-    attacking a concealed enemy, and `c.grants_in` takes no `when=` to
-    gate one on concealment. `p1831` and `f3671` want the same verb."""
+    """`rt:r4-group-perception` is declared and lays an aura, so "each
+    ally affected by it" is the creatures standing in that aura, and
+    `c.grants_in` would carry a modifier to them.
+
+    What is missing is **narrower** than the docstring here used to
+    claim. `c.ignore_cover` does waive the concealment -2 -- it is one
+    modifier for cover and concealment together, taken as the larger by
+    `query.cover_waived` -- so the verb is not absent. It cannot be held
+    to concealment alone, and a version that also waived cover is a
+    strictly stronger feat than the one printed. `p1831` wants the same
+    narrowing."""
 
 
 @power("f1835", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -454,10 +533,14 @@ def f1835(c: Cast) -> None:
 
 
 @power("f1836", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_dice()",))
+       reach=PERSONAL, target=SELF,
+       todo=("spec.power_ref()", "c.change_dice()"))
 def f1836(c: Cast) -> None:
-    """Swaps the die a racial power adds to a roll. The power is a ref;
-    what is missing is any way to say which dice another row rolls."""
+    """Swaps the die a racial power adds to a roll. Two holds, and the
+    first was missing: the spec prints the power as `x_m4421a6`, which is
+    a name the ETL could not resolve, and `m4421a6` is not in the
+    registry -- so there is nothing to hang a trigger on. Even with a ref
+    there is no way to say which dice another row rolls."""
 
 
 @power("f1848", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -527,15 +610,27 @@ def f1869(c: Cast) -> None:
 
 
 @power("f2092", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.hide(diversion=)",),
+       reach=PERSONAL, target=SELF,
        trigger="you use your second wind",
        on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f2092(c: Cast) -> None:
-    """The combat-advantage half is the one with a consequence on the
-    board, and Bluff against the target's passive Insight is the printed
-    contest. The diversion to hide is dropped: hiding wants a check
-    against every watcher and `c.hide` takes one."""
-    foe = c.choose(c.enemies())
+    """Both halves of the printed choice, and the choice itself. Bluff
+    against the watcher's passive Insight is the contest either way.
+
+    The diversion half was dropped on the ground that "hiding wants a
+    check against every watcher and `c.hide` takes one" -- but `c.hide`
+    is `c.invisible(to=...)` and the loop is the check against every
+    watcher, one enemy at a time, which is exactly how the printed
+    contest reads. You go unseen by whoever you beat."""
+    foes = c.enemies()
+    if not foes:
+        return
+    if c.choose(["advantage", "hide"], "which the check is for") == "hide":
+        for foe in foes:
+            if c.check("bluff", c.passive("insight", of=foe)):
+                c.hide(from_=foe)
+        return
+    foe = c.choose(foes)
     if foe is None:
         return
     if c.check("bluff", c.passive("insight", of=foe)):
@@ -586,18 +681,46 @@ def f1983(c: Cast) -> None:
     back; an expended item cannot."""
 
 
-@power("f1986", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("query.resistance()",))
+@power("f1986", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="an enemy hits your Will or deals psychic damage to you",
+       on=(Trigger(Hit, lambda w, me, ev: (
+               ev.target == me and ev.attacker != me
+               and getattr(ev, "vs", None) is WILL
+           ), "an enemy hits your Will"),
+           Trigger(DamageApplied, lambda w, me, ev: (
+               ev.target == me and ev.source != me and ev.amount > 0
+               and DamageType.PSYCHIC in (ev.dtypes or (ev.dtype,))
+           ), "an enemy deals psychic damage to you")))
 def f1986(c: Cast) -> None:
-    """Reflects damage equal to the caster's own psychic resistance.
-    `c.resist` writes a resistance and nothing reads one back."""
+    """Both markers this row carried are gone. `c.resistances` reads a
+    creature's resistances back as a dict, which is what
+    `query.resistance()` wanted; and the defence an attack went against
+    rides on the `Hit` as a plain attribute, so "targets your Will" is a
+    predicate rather than a gap.
+
+    Two declared triggers, because the card prints two and a sequence is
+    what `on=` takes. The psychic half is asked of `DamageApplied` rather
+    than the `Hit` -- "deals psychic damage" is about the blow, and a
+    weapon that happens to be psychic does it as surely as a psychic
+    power does. Nothing when the caster has no psychic resistance, which
+    is the printed arithmetic and not a silent row."""
+    ev = c.trigger
+    foe = getattr(ev, "attacker", None)
+    if foe is None:
+        foe = getattr(ev, "source", None)
+    back = c.resistances(on=c.me).get(DamageType.PSYCHIC, 0)
+    if foe is not None and back > 0:
+        c.flat(back, dtype=DamageType.PSYCHIC, on=foe)
 
 
 @power("f1988", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.low_light()",))
+       reach=PERSONAL, target=SELF, todo=("c.darkvision()",))
 def f1988(c: Cast) -> None:
-    """Darkvision. Light levels are not modelled, so neither sight grant
-    has anything to be an exception to."""
+    """Re-aimed from `c.low_light()`, which is the weaker sight this card
+    does not print: the whole benefit is darkvision, and the light in the
+    eyes is flavour. Light levels are not modelled, so the grant has
+    nothing to be an exception to."""
 
 
 @power("f2029", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -897,15 +1020,31 @@ def f1703(c: Cast) -> None:
        trigger="you succeed on a saving throw",
        on=Trigger(SavingThrow, lambda w, me, ev: (
            ev.actor == me and ev.saved
-       ), "you succeed on a saving throw"),
-       dropped=("Effect.first_only",))
+       ), "you succeed on a saving throw"))
 def f1714(c: Cast) -> None:
-    """"The next ally to make a saving throw" is one grant shared by
-    everybody in range, and `once=` is per effect rather than per set --
-    so each ally within 5 gets their own one-shot instead of the first
-    of them spending it for the rest."""
+    """"The next ally to make a saving throw" is one grant shared by the
+    whole set, and `once=` is per effect -- so the bonus is laid on
+    everybody in range and the set is closed by hand the moment one of
+    them rolls.
+
+    `SavingThrow` is announced after the throw, which is what makes this
+    work: the roller has already had the bonus applied, and ending the
+    rest afterwards is the printed "the next ally" and not a lookahead.
+    `Effect.first_only` was the marker; `c.end_effect` is the answer."""
+    held: dict[int, Any] = {}
     for friend in _near_allies(c, 5):
-        c.bonus("save", 4, on=friend, until=When.SONT, once=True)
+        hold = c.bonus("save", 4, on=friend, until=When.SONT, once=True)
+        if hold is not None:
+            held[friend] = hold
+
+    def spent(ev: Any) -> None:
+        if ev.actor not in held:
+            return
+        for hold in held.values():
+            c.end_effect(hold)
+        held.clear()
+
+    c.watch(SavingThrow, spent, on=c.me, until=When.SONT)
 
 
 @power("f1717", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1085,14 +1224,21 @@ _granted("f1713", "f1713b", swap=Swap(16, utility=True))
 @power("f1713b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Wall(8, 20), target=NO_TARGET,
        keywords=[Keyword.ARCANE, Keyword.CONJURATION],
-       dropped=("c.destroy(familiar=)", "c.penalty(through_zone=)"))
+       dropped=("c.penalty(through_zone=)",))
 def f1713b(c: Cast) -> None:
     """A wall that herds rather than blocks: `solid=False` because a
     creature may walk into it, `difficult=True` for the extra cost to
-    enter. Two clauses are dropped. Destroying the familiar that pays for
-    it has no verb -- `c.dispel` unwinds a zone, not a creature -- and
-    the -2 for attacking through the wall is a modifier on *other*
-    people's rolls conditioned on geometry no context carries."""
+    enter.
+
+    The price the card charges is paid: `c.dismiss_companion` takes the
+    familiar off the board, which is what "your familiar is destroyed"
+    comes to. It was dropped as `c.destroy(familiar=)` -- that verb
+    destroys a carried *item* -- and the row was quietly free.
+
+    Still dropped: the -2 for attacking through the wall, a modifier on
+    *other* people's rolls conditioned on geometry no context carries."""
+    if c.familiar() is not None:
+        c.dismiss_companion()
     barrier = c.wall(8, difficult=True, solid=False, until=When.EONT,
                      sustain=MINOR)
 
@@ -1232,7 +1378,7 @@ _granted("f1764", "f1764b", swap=Swap(9, Usage.DAILY))
 @power("f1764b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE,
        keywords=[Keyword.DIVINE, Keyword.RADIANT, Keyword.WEAPON],
-       attack=Attack(STR, vs=AC), dropped=("c.shift(toward=)",))
+       attack=Attack(STR, vs=AC))
 def f1764b(c: Cast) -> None:
     """The Aftereffect hangs on the hold's `on_end`, so the daze follows
     the effect ending whichever way it ended. The payout watch runs on
@@ -1240,8 +1386,12 @@ def f1764b(c: Cast) -> None:
     holding a save of its own -- two `SAVE_ENDS` effects would give the
     victim two throws for one printed sentence.
 
-    The shift's destination is dropped: `c.shift` chooses through the
-    world's decider and cannot be told to land beside a named creature."""
+    The shift's destination is no longer dropped: `c.shift` takes `to=`,
+    and `movement.shift` does not measure the distance itself, so the
+    square is picked out of `reachable_squares` and the reach is honoured
+    by the filtering rather than by the verb. No reachable square beside
+    the ally means no shift, which is the printed line and not a plain
+    shift somewhere else."""
     victim = c.target
     if victim is None:
         return
@@ -1268,7 +1418,10 @@ def f1764b(c: Cast) -> None:
         if distance_between(c.world, victim, ev.target) > 3:
             return
         c.temp_hp(best, on=ev.target)
-        c.shift(c.speed_of())
+        reach = c.speed_of()
+        spots = _beside(c, ev.target, c.world.reachable_squares(c.me, reach))
+        if spots:
+            c.shift(reach, to=spots[0])
 
     c.watch(DamageApplied, aid, on=c.me, until=When.ENCOUNTER)
 
@@ -1283,14 +1436,18 @@ _granted("f1765", "f1765b", swap=Swap(6, utility=True))
            ev.target != me
            and team(w, ev.target) == team(w, me)
            and distance_between(w, me, ev.target) <= 5
-       ), "an ally in range is hit"),
-       dropped=("c.shift(toward=)",))
+       ), "an ally in range is hit"))
 def f1765b(c: Cast) -> None:
     """An interrupt, so the defences are up before the attack resolves.
-    Landing the shift beside the ally is dropped -- the decider picks the
-    square and takes no destination."""
+
+    Landing the shift beside the ally was dropped on the ground that the
+    decider picks the square -- it does, but only when `to=` is left off.
+    The destination is computed out of `reachable_squares` instead, which
+    is also what keeps the 5 honest: `movement.shift` does not measure."""
     friend = c.trigger.target
-    c.shift(5)
+    spots = _beside(c, friend, c.world.reachable_squares(c.me, 5))
+    if spots:
+        c.shift(5, to=spots[0])
     for defence in ALL_DEFENCES:
         c.bonus(defence, 3, on=friend, until=When.SONT)
 
@@ -1337,17 +1494,24 @@ _granted("f1767", "f1767b", swap=Swap(6, utility=True))
            ev.target != me
            and team(w, ev.target) == team(w, me)
            and distance_between(w, me, ev.target) <= 10
-       ), "an ally within range is hit"),
-       dropped=("c.teleport(toward=)",))
+       ), "an ally within range is hit"))
 def f1767b(c: Cast) -> None:
     """"Regains hit points as if it spent a healing surge" is the surge's
     *value* without the surge, so `c.heal` rather than `c.surge`. The
     mark hangs on a save rather than a turn, which is the printed
-    duration and unusual for one."""
+    duration and unusual for one.
+
+    The arrival square was dropped as `c.teleport(toward=)`; `to=` says
+    it outright, and that verb checks the square is within range and
+    stands up under the mover's footprint, so a bad candidate simply
+    returns False. The mark is laid whether or not the blink lands --
+    the card joins the two with "and", not "and then"."""
     friend = c.trigger.target
     foe = c.trigger.attacker
     c.heal(c.surge_value(of=friend), on=friend)
-    c.teleport(10)
+    for spot in _around(c, foe):
+        if c.teleport(10, to=spot):
+            break
     c.mark(on=foe, until=When.SAVE_ENDS)
 
 

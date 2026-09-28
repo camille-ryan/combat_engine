@@ -30,9 +30,9 @@ Seven judgements run through the file.
   used where the printed line is about targets rather than hits.
 * **A soulfang is a bargain**: a standing benefit and half a healing
   surge's worth of damage at the start of each of your turns. `_soulfang`
-  is the price. "Damage caused by this soulfang cannot be reduced by any
-  means" has nothing to set, so every one of them carries
-  `dropped=("c.flat(unpreventable=)",)`, and "until you remove this
+  is the price, and "damage caused by this soulfang cannot be reduced by
+  any means" is `c.ignore_resistance` gated on this row -- read off the
+  wearer, who is the source of their own bite. "Until you remove this
   soulfang" is written as the end of the encounter.
 * **"Drink this and spend a healing surge"** is `c.spend_surge`, which
   spends one and pays out nothing -- which is the printed line. `c.surge`
@@ -84,10 +84,13 @@ from combat_engine.engine import (
     InitiativeRolled,
     Keyword,
     Melee,
+    Moved,
+    PowerResolved,
     PowerUsed,
     Ranged,
     SurgeSpent,
     Trigger,
+    TurnEnd,
     TurnStart,
     When,
     World,
@@ -97,6 +100,9 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
+from combat_engine.engine.grid import distance as squares_apart
+from combat_engine.engine.grid import neighbours
+from combat_engine.engine.query import allies, distance_between, squares
 
 ITEM = "item"
 
@@ -111,6 +117,13 @@ _ELEMENTS = (
     DamageType.PSYCHIC,
     DamageType.THUNDER,
 )
+
+
+#: What `i3576p1` leaves on its drinker for `i3576p2` to read back.
+_CHARGED = "i3576 charged"
+
+#: "Tied to a creature type of the creator's choice."
+_SCROLL_KINDS = ("angel", "demon", "devil", "dragon", "elemental", "undead")
 
 
 def _element(c: Cast, *among: DamageType) -> DamageType:
@@ -128,9 +141,11 @@ def _on_my_next_hit(c: Cast, fn: Callable[[Hit], None],
                     *, until: When = When.ENCOUNTER) -> None:
     """"The next creature you hit."
 
-    `c.watch(once=True)` is the wrong tool: it spends itself on whichever
-    `Hit` arrives first, somebody else's included, so the flag is kept
-    here.
+    The flag is kept here rather than passed to `c.watch(once=True)`
+    because the hold has to go on the hit that *counts*, and a guard that
+    returns without announcing anything is indistinguishable from one that
+    did nothing at all -- which is how `c.watch` decides whether a
+    once-only trigger was spent.
     """
     spent: list[bool] = []
 
@@ -155,13 +170,45 @@ def _on_each_hit(c: Cast, fn: Callable[[Hit], None]) -> None:
 
 def _soulfang(c: Cast) -> None:
     """The price every soulfang prints: half a healing surge's worth of
-    damage at the start of each of your turns, for as long as it is in."""
+    damage at the start of each of your turns, for as long as it is in.
+
+    "Damage caused by this soulfang cannot be reduced by any means" is
+    read off the **source** of the blow, which is the wearer, so
+    `c.ignore_resistance` is the verb and the gate is what keeps it from
+    stripping the wearer's resistances against everything else: it fires
+    only for damage whose context names this row.
+    """
+    c.ignore_resistance(
+        on=c.me, until=When.ENCOUNTER, when=_is_row(c.ref),
+        immunity=True, insubstantial=True,
+    )
 
     def bite(ev: TurnStart) -> None:
         if ev.actor == c.me:
             c.flat(max(1, c.surge_value() // 2), on=c.me)
 
     c.watch(TurnStart, bite, until=When.ENCOUNTER)
+
+
+def _ends_when_you_attack(c: Cast, effect: Any, who: int) -> None:
+    """"...or until you attack."
+
+    `AttackRolled` rather than `AttackDeclared`: the printed line is bought
+    so that the attack itself is made from behind the effect, and the hold
+    comes off once the die is down. The flag is kept here for the reason
+    `_on_my_next_hit` keeps one.
+    """
+    if effect is None:
+        return
+    spent: list[bool] = []
+
+    def swung(ev: AttackRolled) -> None:
+        if spent or ev.attacker != who:
+            return
+        spent.append(True)
+        c.end_effect(effect)
+
+    c.watch(AttackRolled, swung, until=When.ENCOUNTER)
 
 
 def _is_row(ref: str) -> Callable[[dict[str, Any]], bool]:
@@ -243,16 +290,31 @@ def i1483p2(c: Cast) -> None:
 @power("i1595p1", level=1, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Ranged(5), target=ONE_CREATURE,
        keywords=[Keyword.IMPLEMENT, Keyword.POISON],
-       attack=Attack(DEX, vs=REF), dropped=("c.ongoing(on_tick=)",))
+       attack=Attack(DEX, vs=REF))
 def i1595p1(c: Cast) -> None:
-    """"Each Failed Saving Throw: the target makes a basic attack against
-    its nearest ally" is a payout hung on a save that fails, and
-    `c.ongoing` has no hook for one. The insanity clause is the DM's."""
+    """"Each Failed Saving Throw" is `escalate`, which `durations` runs on
+    a failed save and on nothing else -- so the burn hangs on
+    `c.condition`, which takes the hook, rather than on `c.ongoing`, which
+    does not. The insanity clause is the DM's.
+
+    `c.within(side="ally")` is the wrong tool for "its nearest ally": the
+    pool is read off the caster whatever `of=` says, so the victim's own
+    side is asked for directly."""
     if c.strike():
         c.damage("2d10", c.dex_mod, dtype=DamageType.POISON)
     else:
         c.half_damage("2d10", c.dex_mod, dtype=DamageType.POISON)
-    c.ongoing(5, DamageType.PSYCHIC)
+
+    def turns_on_a_friend(eff: Any) -> None:
+        victim = eff.owner
+        friends = allies(c.world, victim)
+        if friends:
+            c.basic(who=victim, on=min(
+                friends, key=lambda a: distance_between(c.world, victim, a)
+            ))
+
+    c.condition(ongoing=(5, DamageType.PSYCHIC), until=When.SAVE_ENDS,
+                escalate=turns_on_a_friend)
 
 
 @power("i1595p2", level=1, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -263,16 +325,20 @@ def i1595p2(c: Cast) -> None:
 
 
 @power("i1919p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON],
-       dropped=("c.ongoing(on_tick=)",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON])
 def i1919p1(c: Cast) -> None:
     """Five pieces of ammunition is every hit for the fight, not one, so
-    the coating is `once=False`. The first-failed-save step up to ongoing
-    5 is the dropped clause: `escalate` runs on the effect `c.condition`
-    lays and `c.ongoing` takes no hook of its own."""
+    the coating is `once=False`. "First Failed Saving Throw: ongoing 5
+    instead" is `escalate`, which `c.condition` takes and `c.ongoing` does
+    not; set rather than added, so a second failed save changes nothing,
+    which is what "first" means."""
 
     def coated(ev: Hit) -> None:
-        c.ongoing(2, DamageType.POISON, on=ev.target)
+        def worsens(eff: Any) -> None:
+            eff.ongoing = (5, DamageType.POISON)
+
+        c.condition(ongoing=(2, DamageType.POISON), until=When.SAVE_ENDS,
+                    on=ev.target, escalate=worsens)
 
     c.apply_poison(coated, once=False)
 
@@ -365,7 +431,7 @@ def i2069p1(c: Cast) -> None:
 
 @power("i2356p1", level=2, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("spec.power_ref()", "c.flat(unpreventable=)"))
+       dropped=("spec.power_ref()",))
 def i2356p1(c: Cast) -> None:
     """`p5389` is a ref now, so half the benefit attaches. The second
     power the card names is still prose, which is what stays dropped --
@@ -407,7 +473,7 @@ def i3298x1(c: Cast) -> None:
 
 @power("i1420p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("Healed.power", "c.flat(unpreventable=)"))
+       dropped=("Healed.power",))
 def i1420p1(c: Cast) -> None:
     """"When one of your primal healing powers heals an ally" needs the
     power off the `Healed`, which does not carry one."""
@@ -416,10 +482,12 @@ def i1420p1(c: Cast) -> None:
 
 @power("i2561p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("c.in_beast_form()", "c.flat(unpreventable=)"))
+       dropped=("c.in_form()",))
 def i2561p1(c: Cast) -> None:
-    """Nothing asks whether a druid is in beast form, so the +1 has no
-    gate to hang on and is left off rather than applied to everything."""
+    """Nothing asks which shape a creature is in -- `c.form` labels its
+    hold with the ref that laid it and no two druid rows agree on a word
+    -- so the +1 has no gate to hang on and is left off rather than
+    applied to everything."""
     _soulfang(c)
 
 
@@ -455,8 +523,7 @@ def i2815p1(c: Cast) -> None:
 
 
 @power("i2868p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.flat(unpreventable=)",))
+       reach=PERSONAL, target=SELF)
 def i2868p1(c: Cast) -> None:
     """`p5094` is a ref now. `ForcedMove` is where a slide is announced
     and it is the only event carrying the ref of the row doing the
@@ -569,7 +636,7 @@ def i1469p1(c: Cast) -> None:
 
 
 @power("i1658p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.flat(unpreventable=)",))
+       reach=PERSONAL, target=SELF)
 def i1658p1(c: Cast) -> None:
     c.resist(3, on=c.me, until=When.ENCOUNTER)
     _soulfang(c)
@@ -605,23 +672,26 @@ def i2072p1(c: Cast) -> None:
 
 
 @power("i2079p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus('save:death')",))
+       reach=PERSONAL, target=SELF)
 def i2079p1(c: Cast) -> None:
-    """A death saving throw is not a separate roll the modifier table
-    knows about, so this helps every save, not only the last one."""
+    """A death save *is* reachable: `turns._death_saves` reads the `save`
+    modifier with `label="death"` in the context, which is the gate that
+    keeps this off every other saving throw. "You do not regain hit points
+    as normal" is `c.spend_surge`, which pays out nothing."""
     c.spend_surge(on=c.me)
-    c.bonus("save", 1, on=c.me, kind="power", until=When.ENCOUNTER)
+    c.bonus("save", 1, on=c.me, kind="power", until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("label") == "death")
 
 
 @power("i2563p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.flat(unpreventable=)",))
+       reach=PERSONAL, target=SELF)
 def i2563p1(c: Cast) -> None:
     c.resist(10, _element(c), on=c.me, until=When.ENCOUNTER)
     _soulfang(c)
 
 
 @power("i2564p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.flat(unpreventable=)",))
+       reach=PERSONAL, target=SELF)
 def i2564p1(c: Cast) -> None:
 
     def struck(ev: Hit) -> None:
@@ -633,12 +703,10 @@ def i2564p1(c: Cast) -> None:
 
 
 @power("i2698p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.flat(unpreventable=)",))
+       reach=PERSONAL, target=SELF)
 def i2698p1(c: Cast) -> None:
-    """The extra point is lightning and carries that type. Still dropped:
-    "damage caused by this soulfang cannot be reduced by any means", so
-    the wearer's own resistance shortens what it costs them."""
+    """The extra point is lightning and carries that type, so it meets a
+    lightning resistance the weapon's own damage does not."""
     c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, when=_weapon_attack,
             dtype=DamageType.LIGHTNING)
     _soulfang(c)
@@ -670,12 +738,44 @@ def i3283p1(c: Cast) -> None:
 
 @power("i3305p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(2), target=NO_TARGET,
-       dropped=("c.aura_effect()", "c.end_on_attack()"))
+       dropped=("c.no_enter(zone)",))
 def i3305p1(c: Cast) -> None:
-    """The aura stands. What it does to one named creature type -- a -4
-    to attacks against anything inside it and a bar on entering -- is not
-    something an aura can carry, and neither is "until you attack"."""
-    c.aura(2, on=c.me, until=When.ENCOUNTER)
+    """The creature type is fixed when the scroll is made and carried by
+    no column, so it is asked of the decider the way `_element` asks for a
+    damage type.
+
+    The -4 is not `c.grants_in`: that one is about who is standing inside,
+    and this penalty rides the *attacker* wherever it is, gated on where
+    its target is. The attack context carries `target`, so the gate reads
+    the aura's occupants each time rather than a list frozen now. A
+    creature that joins the fight later is missed, which is the honest
+    limit of laying a modifier per enemy.
+
+    Dropped: nothing bars a creature from walking into a zone, so "it
+    cannot enter the aura willingly, and must use its first action to
+    leave by the shortest route" has nowhere to go."""
+    from combat_engine.engine.components import Stats
+
+    kind = c.choose(list(_SCROLL_KINDS), "the scroll's creature type")
+    aura = c.aura(2, on=c.me, until=When.ENCOUNTER)
+    spent: list[bool] = []
+
+    def in_the_aura(ctx: dict[str, Any]) -> bool:
+        return ctx.get("target") in c.world.zones.occupants(aura)
+
+    for foe in c.enemies():
+        stats = c.world.get(foe, Stats)
+        if not c.is_kind(kind or "", on=foe) or (stats and stats.level > 5):
+            continue
+        c.penalty("attack", 4, on=foe, until=When.ENCOUNTER, when=in_the_aura)
+
+    def swung(ev: AttackRolled) -> None:
+        if spent or ev.attacker != c.me:
+            return
+        spent.append(True)
+        c.dispel(aura)
+
+    c.watch(AttackRolled, swung, until=When.ENCOUNTER)
 
 
 @power("i3307x1", level=5, cls=ITEM, action=ActionType.NONE,
@@ -693,13 +793,27 @@ def i3308p1(c: Cast) -> None:
 
 
 @power("i3392p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.shift(toward=)",))
+       reach=PERSONAL, target=SELF)
 def i3392p1(c: Cast) -> None:
-    """The shift is taken wherever the decider puts it: nothing aims a
-    shift at the nearest enemy."""
+    """"Toward the nearest enemy" is the neighbouring square that shortens
+    the gap most, handed to `c.shift(to=)`. A shift the board refuses --
+    rough ground, an occupied square -- falls back to letting the decider
+    place it, which is what the row did before it could aim."""
     c.spend_surge(on=c.me)
     c.temp_hp(10, on=c.me)
-    c.shift(1)
+    foes = c.enemies()
+    if not foes:
+        c.shift(1)
+        return
+    nearest = min(foes, key=c.distance)
+    theirs = squares(c.world, nearest)
+    here = sorted(squares(c.world, c.me))[0]
+    step = min(
+        neighbours(here),
+        key=lambda s: min(squares_apart(s, t) for t in theirs),
+    )
+    if not c.shift(1, to=step):
+        c.shift(1)
 
 
 @power("i3468x1", level=5, cls=ITEM, action=ActionType.NONE,
@@ -735,20 +849,27 @@ def i3548p1(c: Cast) -> None:
 
 
 @power("i3576p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, dropped=("c.item_charges()",))
+       reach=PERSONAL, target=SELF)
 def i3576p1(c: Cast) -> None:
-    """The surge goes; where it goes -- into the fruit, for twelve hours
-    -- is a charge on the item, which nothing keeps."""
-    c.spend_surge(on=c.me)
+    """Where the surge goes is a charge on the item, and nothing holds
+    state on an item -- but the twelve hours are longer than any fight, so
+    inside one the charge is a named hold on the drinker and `i3576p2`
+    reads it back. Nothing is charged if there was no surge to lose."""
+    if c.spend_surge(on=c.me):
+        c.effect(_CHARGED, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i3576p2", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING],
-       dropped=("c.item_charges()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING])
 def i3576p2(c: Cast) -> None:
-    """Which branch this takes depends on whether the item was charged,
-    which nothing records, so the uncharged reading is written."""
-    c.spend_surge(on=c.me)
+    """Charged, the surge pays out as normal *and* the dice on top, and
+    the charge goes. Uncharged, the surge is lost for the dice alone,
+    which is `c.spend_surge` rather than `c.surge`."""
+    if c.me in c.suffering(_CHARGED, include_self=True):
+        c.end_effect(on=c.me, against=_CHARGED)
+        c.surge(on=c.me)
+    else:
+        c.spend_surge(on=c.me)
     c.heal(c.roll("2d8"), on=c.me)
 
 
@@ -766,11 +887,12 @@ def i992p1(c: Cast) -> None:
 
 
 @power("i1191p1", level=6, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.ILLUSION],
-       dropped=("c.end_on_attack()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.ILLUSION])
 def i1191p1(c: Cast) -> None:
-    """"Or until you attack" is a duration nothing ends on."""
-    c.invisible(on=c.me, until=When.EONT)
+    """"Or until you attack" is not a `When`, so it is the hold ended by
+    hand on the first attack roll the drinker makes. Level 16 is paragon
+    and out of scope."""
+    _ends_when_you_attack(c, c.invisible(on=c.me, until=When.EONT), c.me)
 
 
 @power("i1285p1", level=6, cls=ITEM, usage=DAILY, action=MINOR,
@@ -926,9 +1048,11 @@ def i1422p1(c: Cast) -> None:
 
 
 @power("i1720p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.end_on_attack()",))
+       reach=PERSONAL, target=SELF)
 def i1720p1(c: Cast) -> None:
-    c.invisible(on=c.me, until=When.EONT)
+    """"The effect ends if you make an attack roll" names the event
+    outright, which is why the helper watches `AttackRolled`."""
+    _ends_when_you_attack(c, c.invisible(on=c.me, until=When.EONT), c.me)
 
 
 @power("i2074p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
@@ -966,19 +1090,33 @@ def i3297p1(c: Cast) -> None:
 
 
 @power("i3357p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.see_invisible(within=)",))
+       reach=PERSONAL, target=SELF)
 def i3357p1(c: Cast) -> None:
     """The light is narrative; the candle showing up the invisible is not.
-    Its one-square radius is the missing half -- seeing the unseen has no
-    range on it."""
-    c.see_invisible(on=c.me, until=When.ENCOUNTER)
+    `c.truesight` is `c.see_invisible` with the range the card prints, and
+    the candle is carried, so the radius is measured from the bearer."""
+    c.truesight(1, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i3474p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(decay=)",))
+       reach=PERSONAL, target=SELF)
 def i3474p1(c: Cast) -> None:
-    """The bonus stands at 6 instead of walking down a point a turn."""
-    c.bonus(AC, 6, on=c.me, kind="enhancement", until=When.ENCOUNTER)
+    """Nothing shrinks a live modifier, so the walk down a point a turn is
+    the hold ended and a smaller one laid in its place. At zero nothing is
+    laid, which is the stone spent."""
+    hold = [c.bonus(AC, 6, on=c.me, kind="enhancement", until=When.ENCOUNTER)]
+    left = [6]
+
+    def wanes(ev: TurnStart) -> None:
+        if ev.actor != c.me or hold[0] is None:
+            return
+        c.end_effect(hold[0])
+        left[0] -= 1
+        hold[0] = c.bonus(
+            AC, left[0], on=c.me, kind="enhancement", until=When.ENCOUNTER
+        ) if left[0] > 0 else None
+
+    c.watch(TurnStart, wanes, until=When.ENCOUNTER)
 
 
 @power("i894p1", level=7, cls=ITEM, usage=DAILY, action=FREE,
@@ -1086,27 +1224,49 @@ def i2513p1(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        trigger="you use a conjuration power of 6th level or lower",
        on=Trigger(PowerUsed, _reagent(6, Keyword.CONJURATION),
-                  "you use a conjuration power"),
-       dropped=("c.penalty_in(zone, what, value)",))
+                  "you use a conjuration power"))
 def i3010p1(c: Cast) -> None:
-    """The penalty is laid on whoever is standing beside the conjuration
-    when it arrives; a zone cannot carry one, so anybody who walks up to
-    it afterwards escapes."""
-    for thing in c.my_zones():
-        for foe in c.enemies():
-            if c.adjacent_to(thing, foe):
-                c.penalty("attack", 2, on=foe, until=When.ENCOUNTER)
+    """Two traps in one row. `PowerUsed` is announced **above** the body
+    of the power it answers, so the conjuration does not exist yet and
+    looking for it here finds nothing -- the whole row was silent. It is
+    `PowerResolved` for the same use that says it is on the board, and the
+    reagent's own resolution arrives first, which is what the ref check
+    is for.
+
+    "Enemies adjacent to it" is then an aura 1 hung on the conjuration --
+    `c.aura(on=)` follows anything with a position -- carrying the penalty
+    through `c.grants_in`, so a creature that walks up afterwards takes it
+    and one that walks away stops. Untyped: the card prints a bare -2."""
+    spent_on = getattr(c.trigger, "power", "")
+    before = set(c.conjurations())
+
+    def arrived(ev: PowerResolved) -> None:
+        if getattr(ev, "power", "") != spent_on:
+            return
+        for thing in c.conjurations():
+            if thing in before or c.made_by(thing) != c.me:
+                continue
+            ring = c.aura(1, on=thing, until=When.ENCOUNTER)
+            c.grants_in(ring, "attack", -2, side="enemy", kind="untyped")
+
+    c.watch(PowerResolved, arrived, until=When.EOT)
 
 
 @power("i3273p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=[Keyword.ILLUSION],
-       dropped=("c.end_on_attack()",))
+       dropped=("query.against_wall()",))
 def i3273p1(c: Cast) -> None:
-    """The minor action is banked; the wall the card wants you beside is
-    not a thing the board measures."""
+    """The minor action is banked, and "until you attack" ends the hold
+    the one-shot lays. Dropped: the third end -- you stop being beside a
+    wall or an object your own size -- has nothing to ask. `c.scenery`
+    sees the loose objects a room was furnished with and not the map's
+    own walls, so gating on it would end the concealment instantly on
+    every board that has no furniture."""
 
     def blend(who: int) -> None:
-        c.conceal(on=who, total=True, until=When.ENCOUNTER)
+        _ends_when_you_attack(
+            c, c.conceal(on=who, total=True, until=When.ENCOUNTER), who
+        )
 
     c.give(fn=blend, on=c.me, cost=MINOR)
 
@@ -1132,12 +1292,31 @@ def i3284p1(c: Cast) -> None:
 
 
 @power("i3296p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=Melee(1), target=ONE_ALLY, keywords=[Keyword.ILLUSION],
-       dropped=("c.end_on_attack()",))
+       reach=Melee(1), target=ONE_ALLY, keywords=[Keyword.ILLUSION])
 def i3296p1(c: Cast) -> None:
-    """"Until he or she moves or attacks" -- neither end is a duration,
-    so the invisibility runs to the end of the fight."""
-    c.invisible(until=When.ENCOUNTER)
+    """"Until he or she moves or attacks" is two ends and neither is a
+    `When`, so the encounter clock is the outer bound and both are taken
+    off by hand. `Moved` rather than `MoveStart`: the printed line is
+    about having moved, and the dust should survive a move that is
+    refused.
+
+    `c.invisible` is one of the methods that defaults to the **caster**,
+    so "yourself or an adjacent ally" has to name who: without `on=` this
+    row hid the drinker and left the ally plainly visible."""
+    who = c.target
+    hold = c.invisible(on=who, until=When.ENCOUNTER)
+    if hold is None or who is None:
+        return
+    _ends_when_you_attack(c, hold, who)
+    spent: list[bool] = []
+
+    def stirred(ev: Moved) -> None:
+        if spent or ev.actor != who:
+            return
+        spent.append(True)
+        c.end_effect(hold)
+
+    c.watch(Moved, stirred, until=When.ENCOUNTER)
 
 
 @power("i3299p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1388,7 +1567,7 @@ def i1928p1(c: Cast) -> None:
 
 @power("i2562p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("c.raging()", "c.flat(unpreventable=)"))
+       dropped=("c.raging()",))
 def i2562p1(c: Cast) -> None:
     """"You are considered to be raging" has nothing to set: rage is a
     barbarian's own state and nothing else reads it."""
@@ -1396,7 +1575,7 @@ def i2562p1(c: Cast) -> None:
 
 
 @power("i2565p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.flat(unpreventable=)",))
+       reach=PERSONAL, target=SELF)
 def i2565p1(c: Cast) -> None:
     c.bonus("speed", 2, on=c.me, kind="power", until=When.ENCOUNTER)
     _soulfang(c)
@@ -1423,13 +1602,29 @@ def i2845p1(c: Cast) -> None:
 
 
 @power("i3063p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.vulnerable(once=)",))
+       reach=PERSONAL, target=SELF)
 def i3063p1(c: Cast) -> None:
     """"Against the next attack that deals fire damage to it" is one
-    attack's worth; the vulnerability stands until saved off instead."""
+    blow's worth, and the order is what makes it sayable: `deal_damage`
+    reads the vulnerability and announces `DamageApplied` afterwards, so
+    the blow that spends the hold still gets it. No saving throw -- the
+    card gives none -- so the encounter clock is the outer bound."""
 
     def struck(ev: Hit) -> None:
-        c.vulnerable(5, DamageType.FIRE, on=ev.target)
+        victim = ev.target
+        hold = c.vulnerable(5, DamageType.FIRE, on=victim,
+                            until=When.ENCOUNTER)
+        if hold is None:
+            return
+        spent: list[bool] = []
+
+        def burnt(hurt: DamageApplied) -> None:
+            if spent or hurt.target != victim or hurt.dtype is not DamageType.FIRE:
+                return
+            spent.append(True)
+            c.end_effect(hold)
+
+        c.watch(DamageApplied, burnt, until=When.ENCOUNTER)
 
     _on_each_hit(c, struck)
 
@@ -1492,13 +1687,28 @@ def i3337p1(c: Cast) -> None:
 
 
 @power("i3588p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=Ranged(10), target=ONE_ALLY,
-       dropped=("c.condition(turns=)",))
+       reach=Ranged(10), target=ONE_ALLY)
 def i3588p1(c: Cast) -> None:
-    """"Until the end of 1d4 of its turns" is a duration counted in turns,
-    which `When` does not have; the end of its next turn is the nearest
-    one the engine can say."""
-    c.condition(Condition.REMOVED, until=When.EOTNT)
+    """"Until the end of 1d4 of its turns" is counted, not clocked, and
+    `When` has no turn count -- so the hold runs on the encounter and a
+    `TurnEnd` watcher takes it off on the right one. A creature that
+    cannot act still takes its turn, which is what makes the count
+    reachable; a ghost turn is not one of its turns."""
+    who = c.target
+    hold = c.condition(Condition.REMOVED, until=When.ENCOUNTER)
+    if hold is None or who is None:
+        return
+    left = [c.roll("1d4")]
+
+    def ticks(ev: TurnEnd) -> None:
+        if ev.actor != who or ev.ghost or not left:
+            return
+        left[0] -= 1
+        if left[0] <= 0:
+            left.clear()
+            c.end_effect(hold)
+
+    c.watch(TurnEnd, ticks, until=When.ENCOUNTER)
 
 
 @power("i844p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,

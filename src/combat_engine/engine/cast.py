@@ -3294,6 +3294,7 @@ class Cast:
         on: int | None = None,
         until: When = When.EONT,
         partial: bool = False,
+        once: bool = False,
         when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """"You ignore cover and concealment when attacking."
@@ -3310,11 +3311,18 @@ class Cast:
 
         `partial=True` waives the ordinary -2 and leaves superior cover
         standing, which is the narrower line two rows print.
+
+        `once=True` is "your **next** attack ignores cover", spent on the
+        roll that uses it. It passes straight through to `c.bonus`, which
+        has always understood it -- a row wanting it wrote the underlying
+        `c.bonus` call out by hand instead, duplicating this key, this
+        size and this kind, which would have drifted the first time any
+        of the three changed here.
         """
         return self.bonus(
             "ignore_cover", 2 if partial else 5,
             on=on if on is not None else self.me,
-            until=until, kind="ignore cover", when=when,
+            until=until, kind="ignore cover", once=once, when=when,
         )
 
     def no_cover(

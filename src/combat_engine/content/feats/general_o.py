@@ -5,10 +5,13 @@ Four shapes carry the batch.
 **Racial and psionic riders.** There is still no race, and it does not
 matter for the benefit -- the prerequisite is a column `chargen.meets`
 enforces at build time. What decides a row is whether the power it rides
-on arrives as a **ref**. `p11052`, `p2482`, `p2483`, `p2484`, `p12577`,
-`p1747`, `m4421a6` and `m5139a3` are refs, so a rider on one is an
-ordinary `PowerUsed` trigger. Dilettante, Ferocity, Augment Energy and
-the r44 racial powers are named in prose and carry the usual markers.
+on arrives as a **ref**. `p11052`, `p2482`, `p2483`, `p2484`, `p12577`
+and `p1747` are refs, so a rider on one is an ordinary `PowerUsed`
+trigger. `m4421a6` and `m5139a3` are printed as refs and are **declared
+nowhere in the tree**, so a rider on either is written out whole and
+marked with the ref it waits for -- f3112 and f3160. Dilettante,
+Ferocity, Augment Energy and the r44 racial powers are named in prose
+and carry the usual markers.
 
 **The granted pair.** A feat whose printed benefit is "you gain the
 fNNNb power" is a trait that hands the card over. Nine of these are
@@ -70,6 +73,7 @@ from combat_engine.engine import (
     MeleeOrRanged,
     Miss,
     Moved,
+    OpportunityWindow,
     PowerResolved,
     PowerUsed,
     Ranged,
@@ -78,11 +82,13 @@ from combat_engine.engine import (
     SkillCheck,
     SurgeSpent,
     Swap,
+    Target,
     Trigger,
     TurnEnd,
     TurnStart,
     Usage,
     When,
+    Window,
     about_me,
     get,
     power,
@@ -193,6 +199,35 @@ def _weapon_attack(c: Cast, *groups: str):  # noqa: ANN202
     return gate
 
 
+def _laid_by(c: Cast, who: int, *refs: str) -> Any:
+    """The live effect one of those rows laid on that creature, or None.
+
+    An effect's label starts with the ref of the row that laid it, which
+    `durations.keywords_of` leans on too -- so "while you benefit from
+    pNNNN" and "the hold your infusion left" are both readable without a
+    verb of their own.
+    """
+    for eff in c.world.effects.of(who):
+        if eff.label.split()[:1] and eff.label.split()[0] in refs:
+            return eff
+    return None
+
+
+def _own_ranged_use(c: Cast, ev: Any, *groups: str) -> bool:
+    """A window this creature's own ranged or area attack opened.
+
+    `dsl._survive_provoking` stamps the row's ref into `why`; a window
+    opened by movement names no row, so a declared ref is the whole test
+    of "for doing so". Which weapon is in hand answers the rest.
+    """
+    first = ev.why.split()[0] if ev.why else ""
+    return (
+        ev.provoker == c.me
+        and get(first) is not None
+        and _group(c, *groups)
+    )
+
+
 # -- the r7 batch: a granted card and a swapped at-will, four times ---------
 
 
@@ -207,29 +242,25 @@ def _melee_weapon(ctx: dict[str, Any]) -> bool:
 
 
 @power("f2901b", level=1, cls="", usage=DAILY, action=MINOR,
-       reach=Melee(1), target=SELF, keywords=[Keyword.POISON],
-       dropped=("Target.kind",))
+       reach=Melee(1), target=SELF, keywords=[Keyword.POISON])
 def f2901b(c: Cast) -> None:
-    """The printed target is *one weapon*, and nothing on this board is a
-    weapon you can aim at -- so the row arms the caster's own next hit
-    instead, which is what touching your own blade comes to in every
-    fight the engine can set up. `escalate` is the "each failed saving
-    throw" clause: it is handed the live effect and rewrites its burn."""
-    me = c.me
+    """"One weapon" is `c.apply_poison`, which is the printed target line
+    itself: the hold names the weapon that was coated and checks the blow
+    against it, so the burn rides that blade rather than whatever is
+    swung next. `escalate` is the "each failed saving throw" clause: it
+    is handed the live effect and rewrites its burn."""
 
     def worse(eff: Any) -> None:
         amount, dtype = eff.ongoing
         eff.ongoing = (min(20, amount + 5), dtype)
 
     def envenom(ev: Any) -> None:
-        if ev.attacker != me:
-            return
         c.condition(
             on=ev.target, until=When.SAVE_ENDS,
             ongoing=(5, DamageType.POISON), escalate=worse,
         )
 
-    c.watch(Hit, envenom, on=me, until=When.ENCOUNTER, once=True)
+    c.apply_poison(envenom, until=When.ENCOUNTER)
 
 
 @power("f2902", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -434,12 +465,18 @@ def f2915(c: Cast) -> None:
     who broke it -- so the moment this row is printed for never comes."""
 
 
-@power("f2916", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.forgo_defences()",))
+@power("f2916", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f2916(c: Cast) -> None:
-    """"Instead of the normal +2", and the normal one is laid inside
-    `Cast.second_wind`. Nothing forgoes it, and laying a +3 on top would
-    come to +5 because untyped bonuses stack."""
+    """"+3 instead of the normal +2", written as the *difference*: the
+    normal one is four untyped +2s laid inside `Cast.second_wind`, and
+    untyped bonuses add, so one more point on each is the printed total
+    and a +3 laid on top would have come to +5. Same duration as the
+    bonus it tops up."""
+    for defence in ALL_DEFENCES:
+        c.bonus(defence, 1, on=c.me, until=When.SONT)
 
 
 @power("f2917", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -506,11 +543,14 @@ def f2947(c: Cast) -> None:
        trigger="you spend a healing surge",
        on=Trigger(SurgeSpent, lambda w, me, ev: ev.actor == me,
                   "you spend a healing surge"),
-       dropped=("c.telepathy_range()",))
+       dropped=("c.telepathy()",))
 def f2948(c: Cast) -> None:
     """`by_me` is no use on `SurgeSpent` -- it names its subject `actor`.
-    Telepathy is a racial trait nothing carries, so the reach is written
-    as 10 squares, which is what the races printing it have."""
+
+    Re-aimed at the symbol the other four rows of this shape name:
+    telepathy is not a sense any creature carries, so there is no range
+    to read and the reach is written as the 10 squares the races
+    printing it have."""
     for friend in _near_allies(c, 10):
         c.save(on=friend)
 
@@ -597,12 +637,18 @@ def f2971(c: Cast) -> None:
 
 
 @power("f2975", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.run()",))
+       reach=PERSONAL, target=SELF, todo=("c.ignores_difficult(when=)",))
 def f2975(c: Cast) -> None:
-    """Difficult terrain is ignored *while running*. `c.ignores_difficult`
-    names which sort of ground, not which sort of move, and running is
-    not a state anything holds -- `c.moving_as` knows climb and swim and
-    nothing announces a run. The two skill bonuses are not a fight."""
+    """Difficult terrain is ignored *while running*.
+
+    Re-aimed: running is a move kind the engine has -- `actions.legal`
+    builds a `run` action and `walk` carries `kind_="run"` -- so
+    `c.run()` named a gap that is not there. The gap is the other half:
+    `c.ignores_difficult` is per sort of *ground* and board-wide, and
+    the cost of a square is settled in `reachable_squares` before the
+    move announces itself, so there is no moment at which the exemption
+    could be narrowed to one kind of move. The two skill bonuses are not
+    a fight."""
 
 
 @power("f2976", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -637,13 +683,18 @@ _granted("f3015", "f3015b")
 
 
 @power("f3015b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=Ranged(10), target=ONE_CREATURE, dropped=("Target.kind",))
+       reach=Ranged(10), target=Target("object", 1), dropped=("Target.kind",))
 def f3015b(c: Cast) -> None:
-    """The printed target is *one object*, and the two branches under it
-    -- a weapon whose attacks lose damage, armour whose wearer loses AC
-    -- are both about which kind of object it is. Nothing on the board
-    is an object you can aim at, so the row aims at a creature and lays
-    the vulnerability that is common to every branch."""
+    """Re-aimed. `Target("object")` is a real target line -- the pool is
+    `query.scenery` and `query.targetable` lets a thing with no hit
+    points be aimed at -- so the row no longer points at a creature,
+    which handed a living target a vulnerability to all damage the card
+    never grants.
+
+    The two branches under it are still named: a weapon whose attacks
+    lose damage and armour whose wearer loses AC are both about which
+    *kind* of object this is, and `Scenery.kind` is a free word nothing
+    sets to either, with no tie from a worn thing back to its wearer."""
     c.vulnerable(c.level // 2 + c.int_mod, until=When.EONT)
 
 
@@ -735,12 +786,22 @@ def f3020(c: Cast) -> None:
 
 
 @power("f3021", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.bonus(surge_value)",))
+       reach=PERSONAL, target=SELF)
 def f3021(c: Cast) -> None:
     """A bonus to an adjacent ally's healing surge value.
-    `Health.surge_value` is a derived property -- a quarter of maximum
-    hit points -- and nothing reads a modifier beside it, so the whole
-    benefit has nowhere to land."""
+    `query.surge_value` totals a `"surge_value"` modifier now and every
+    place a surge is cashed reads it, so the benefit lands.
+
+    The gate is handed an empty context -- that read passes no `ctx` --
+    which costs nothing here, because adjacency is a question about the
+    board rather than about the blow, and it has to be asked when the
+    surge is spent rather than when the trait is armed."""
+    me = c.me
+    for ally in allies(c.world, me):
+        if ally == me:
+            continue
+        c.bonus("surge_value", 2, on=ally, until=When.ENCOUNTER, kind="feat",
+                when=lambda ctx, f=ally: c.adjacent_to(me, f))
 
 
 @power("f3022", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -797,18 +858,32 @@ def f3046(c: Cast) -> None:
     it."""
 
 
-@power("f3047", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.effects_on()",))
+#: The two `cf:artificer-f2` infusions whose early end f3047 rewrites.
+_INFUSIONS = ("p7635", "p10187")
+
+
+@power("f3047", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use p7635 or p10187",
+       on=Trigger(PowerResolved, _used_any(*_INFUSIONS),
+                  "you use either of those infusions"))
 def f3047(c: Cast) -> None:
-    """Re-aimed. Rewrites what an ally gets for *ending* two of
-    `cf:artificer-f2`'s infusions early -- `p7635` and `p10187`, both
-    written. Ending one is `c.end_effect` now, and the card prints no
-    moment for it: the ally may take the trade at any time, which is
-    `c.endable` with `then=` as the teleport. That wants the effect
-    itself, and nothing asks what a creature is currently under --
-    `c.end_effect` finds one by label and ends what it finds, which is
-    the wrong half of the operation to arm a choice with."""
+    """Rewrites what an ally gets for *ending* one of `cf:artificer-f2`'s
+    infusions early. `c.endable(..., then=)` is that trade exactly -- a
+    deliberate drop, for a free action, which pays out and which the
+    clock and a saving throw do not.
+
+    The hold it wants is found on the ally by label, since an effect
+    carries the ref of the row that laid it. Declared on `PowerResolved`
+    rather than armed as a trait: the infusion is laid mid-fight, so a
+    trait armed before anybody has acted would find nothing to rewrite,
+    and `PowerUsed` is announced before the infusion's body has laid
+    anything."""
+    hop = 2 + c.dex_mod
+    for who in c.trigger.targets:
+        held = _laid_by(c, who, *_INFUSIONS)
+        if held is not None:
+            c.endable(held, FREE, then=lambda w=who: c.teleport(hop, who=w))
 
 
 # -- the shadow batch -------------------------------------------------------
@@ -1059,25 +1134,50 @@ def f3109(c: Cast) -> None:
 
 
 @power("f3111", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_provoke(when=)",))
+       reach=PERSONAL, target=SELF)
 def f3111(c: Cast) -> None:
-    """No opportunity attacks from enemies that are granting you combat
-    advantage. `c.no_provoke` names one creature or all of them and
-    takes no gate, and which enemies are granting advantage changes
-    every time somebody moves."""
+    """No opportunity attacks from enemies granting you combat advantage.
+
+    `c.no_provoke` names one creature or all of them and takes no gate,
+    and which enemies are granting advantage changes every time somebody
+    moves -- so the refusal is written out instead. That is not a
+    work-around: `OpportunityWindow` is a `Decision`, `c.no_provoke` is
+    itself nothing but a `Window.BEFORE` listener that cancels it, and
+    the only thing added here is the question asked at the moment the
+    window opens."""
+    me = c.me
+
+    def veto(ev: OpportunityWindow) -> None:
+        if ev.provoker == me and has_combat_advantage(c.world, me, ev.actor):
+            ev.cancel(c.ref)
+
+    c.watch(OpportunityWindow, veto, on=me, until=When.ENCOUNTER,
+            window=Window.BEFORE, label=f"{c.ref} no provoke")
 
 
 @power("f3112", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use m4421a6",
        on=Trigger(PowerUsed, _used("m4421a6"), "you use that racial power"),
-       dropped=("c.triggering_of()",))
+       todo=("m4421a6",))
 def f3112(c: Cast) -> None:
-    """The shift plays. The temporary hit points turn on whether the roll
-    that triggered *the racial power* then missed or failed, and a row
-    answering a use has no way back to the event that use was answering:
-    `PowerUsed` carries the actor, the ref and the targets."""
+    """Both halves are written now. `PowerUsed.trigger` is the event the
+    racial power was used in answer to, so "if the triggering attack
+    roll misses or the saving throw or check fails" is a real question
+    -- the old note that a use carries only the actor, the ref and the
+    targets was written before that field existed.
+
+    Re-aimed at what is genuinely missing: `m4421a6` is declared nowhere
+    in the tree, so nothing ever emits the use this row answers. Two
+    other files name the same ref for the same reason."""
     c.shift(1)
+    ev = getattr(c.trigger, "trigger", None)
+    if (
+        isinstance(ev, Miss)
+        or (isinstance(ev, SavingThrow) and not ev.saved)
+        or (isinstance(ev, SkillCheck) and not ev.success)
+    ):
+        c.temp_hp(max(c.int_mod, c.wis_mod), on=c.me)
 
 
 @power("f3113", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1228,11 +1328,15 @@ def f3126(c: Cast) -> None:
 
 
 @power("f3127", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.bonus('save:death')",))
+       reach=PERSONAL, target=SELF)
 def f3127(c: Cast) -> None:
-    """A bonus to death saving throws. A death save is not rolled through
-    `Effects.save` and has no modifier key of its own, so there is
-    nowhere for the +5 to be read."""
+    """A death save reads `"save"` like any other now, and `turns.py`
+    hands the total a context whose `label` is `"death"` -- so the
+    printed narrowing is a gate rather than a blanket save bonus. No
+    row can collide with it: the label of an ordinary save is the ref of
+    the row that laid the effect."""
+    c.bonus("save", 5, on=c.me, until=When.ENCOUNTER, kind="feat",
+            when=lambda ctx: ctx.get("label") == "death")
 
 
 @power("f3128", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1466,18 +1570,25 @@ def f3148(c: Cast) -> None:
 
 
 @power("f3149", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, proficiency=("w:sling",),
-       dropped=("c.no_provoke(when=)",))
+       reach=PERSONAL, target=SELF, proficiency=("w:sling",))
 def f3149(c: Cast) -> None:
     """Sling is a printed group the weapon table carries and `chargen`
     now deals, so the attack bonus plays. Heroic tier, so +1.
 
-    Dropped: "you don't provoke opportunity attacks". `c.no_provoke` is
-    all-or-nothing on the creature and cannot be narrowed to the attacks
-    made with one weapon, and turning it on whole would take every
-    ranged attack the character makes out of the opportunity window."""
-    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
+    The second clause too. `c.no_provoke` is all-or-nothing on the
+    creature, but the window itself says why it opened: `dsl` stamps the
+    ref of the ranged row into `why`, so the refusal can be narrowed to
+    "for doing so" and leaves a shove or a walk provoking as printed."""
+    me = c.me
+    c.bonus("attack", 1, on=me, until=When.ENCOUNTER, kind="feat",
             when=_weapon_attack(c, "sling"))
+
+    def veto(ev: OpportunityWindow) -> None:
+        if _own_ranged_use(c, ev, "sling"):
+            ev.cancel(c.ref)
+
+    c.watch(OpportunityWindow, veto, on=me, until=When.ENCOUNTER,
+            window=Window.BEFORE, label=f"{c.ref} no provoke")
 
 
 @power("f3150", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1496,16 +1607,31 @@ def f3150(c: Cast) -> None:
 
 
 @power("f3151", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.no_provoke(when=)", "c.reach_bonus()"))
+       reach=PERSONAL, target=SELF)
 def f3151(c: Cast) -> None:
     """Staff is a real group, and the bonus is printed for implement
-    *and* weapon powers, so there is no keyword gate on top of it. The
-    other two clauses each want something the vocabulary does not have:
-    a gate on `c.no_provoke`, and a way to lengthen a melee attack's
-    reach as opposed to the squares a creature threatens."""
-    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
+    *and* weapon powers, so there is no keyword gate on top of it.
+
+    All three clauses now. `dsl._stretched` reads a `"reach"` modifier
+    where the area is worked out and hands the gate the row being
+    measured, so "the weapon's reach for that attack increases by 1" is
+    a gated bonus rather than `c.threatens`, which is the other
+    question -- and because only a melee line reads that key, the
+    printed narrowing needs nothing more than the weapon keyword. The
+    opportunity clause is the veto f3149 writes, gated the same way."""
+    me = c.me
+    c.bonus("attack", 1, on=me, until=When.ENCOUNTER, kind="feat",
             when=lambda ctx: _group(c, "staff"))
+    c.bonus("reach", 1, on=me, until=When.ENCOUNTER,
+            when=lambda ctx: _keyworded(ctx, Keyword.WEAPON)
+            and _group(c, "staff"))
+
+    def veto(ev: OpportunityWindow) -> None:
+        if _own_ranged_use(c, ev, "staff"):
+            ev.cancel(c.ref)
+
+    c.watch(OpportunityWindow, veto, on=me, until=When.ENCOUNTER,
+            window=Window.BEFORE, label=f"{c.ref} no provoke")
 
 
 @power("f3152", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1559,11 +1685,11 @@ def f3154(c: Cast) -> None:
 
 
 @power("f3155", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.bonus(surge_value)",))
+       reach=PERSONAL, target=SELF)
 def f3155(c: Cast) -> None:
-    """A bonus to your own healing surge value. `Health.surge_value` is a
-    derived quarter of maximum hit points with no modifier read beside
-    it -- the same gap f3021 carries from the other end."""
+    """A bonus to your own healing surge value, which `query.surge_value`
+    reads a modifier for -- the same key f3021 pays an ally with."""
+    c.bonus("surge_value", 3, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
 @power("f3156", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1610,11 +1736,17 @@ def f3159(c: Cast) -> None:
 @power("f3160", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use m5139a3",
-       on=Trigger(PowerUsed, _used("m5139a3"), "you use that racial power"))
+       on=Trigger(PowerUsed, _used("m5139a3"), "you use that racial power"),
+       todo=("m5139a3",))
 def f3160(c: Cast) -> None:
     """The Athletics substitution is a check rather than a fight; the
     Will bonus is the combat half, and it is gated on still holding a
-    power point at the moment the racial power goes off."""
+    power point at the moment the racial power goes off.
+
+    Marked, having been written and left unmarked: `m5139a3` is declared
+    nowhere in the tree, so the use this row answers is never announced
+    and the row is as inert as an empty one. The benefit is whole and
+    fires the day that ref lands."""
     if c.points() >= 1:
         c.bonus(WILL, 2, on=c.me, until=When.EONT)
 
@@ -1679,14 +1811,16 @@ def f3164(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit with an attack on your turn",
        on=Trigger(Hit, lambda w, me, ev: ev.attacker == me,
-                  "you hit with an attack"),
-       dropped=("c.effects_on()",))
+                  "you hit with an attack"))
 def f3165(c: Cast) -> None:
-    """The regeneration plays. "While you benefit from p2483" is the
-    dropped half: reading somebody else's live effects by the row that
-    laid them has no verb, and `c.suffering` only finds my own."""
-    if c.turn_of() == c.me:
-        c.regeneration(2, on=c.me, until=When.EONT)
+    """"While you benefit from p2483" is answerable after all: that row
+    lays its two holds on the caster and an effect carries the ref of
+    the row that laid it, so the live effects are the state and no verb
+    of its own is needed. `c.suffering` was the wrong place to look --
+    it finds what *I* imposed on somebody else."""
+    if c.turn_of() != c.me or _laid_by(c, c.me, "p2483") is None:
+        return
+    c.regeneration(2, on=c.me, until=When.EONT)
 
 
 #: The thirteen racial powers of `r33`, one per elemental
@@ -1750,11 +1884,14 @@ def f3169(c: Cast) -> None:
 
 
 @power("f3174", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.regain_points()",))
+       reach=PERSONAL, target=SELF,
+       todo=("c.regain_points()", "c.forgo_healing()"))
 def f3174(c: Cast) -> None:
-    """Trades the hit points a racial power would restore for a power
-    point. Points are spent and transferred and never handed back, so
-    there is nothing to trade for."""
+    """Trades the hit points `p2485` would restore for a power point.
+
+    Both halves are missing, so both are named: a pool is spent and
+    transferred and never handed back, and nothing refuses the healing
+    a row is about to do -- the same hold f3130 carries."""
 
 
 @power("f3175", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

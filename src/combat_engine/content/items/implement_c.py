@@ -29,8 +29,24 @@ Two traps this wave walked into, recorded so the next one does not:
   row that needs it carries `query.is_summoned()`.
 
 The recurring gaps, each named with the symbol it wants rather than
-approximated: `c.pact_boon()` (four blocks), `c.class_feature()` (four),
-`c.curse_damage()`, `c.reshape_area()`, `c.expend()` and `c.item_set()`.
+approximated: `c.class_feature()`, `c.reshape_area()`, `c.tome_powers()`
+and `c.item_set()`.
+
+Three of the old recurring gaps closed once the specs gained refs and the
+engine was read rather than its prose:
+
+* **A pact boon is announceable.** `cf:warlock-f1` pays each leg off a
+  `Dropped` whose subject this caster had cursed, and `c.build` says which
+  leg. So "when your <pact> boon triggers" is that event plus those two
+  questions, and only the star leg -- which `cf:warlock-f1` pays nothing
+  for -- is still out of reach.
+* **Warlock's Curse damage carries its label.** `features.strikers.
+  extra_damage` stamps `detail="cf:warlock-f4"` on the blow, so
+  `DamageApplied.detail` is where "when you deal your curse damage"
+  is asked. The die size is the feature's own 1d6 at heroic and is
+  written as that number, since nothing publishes it.
+* **`c.expend_row` is the price half** of "expend an unused power of level
+  N or higher"; the set it is chosen from is read off `Powers.all`.
 """
 
 from __future__ import annotations
@@ -279,6 +295,81 @@ def _as_row(c: Cast, ref: str) -> None:
             c.world.effects.end(borrowed, "the lent row is given back")
 
 
+def _hit_defence(ev: Any):  # noqa: ANN202
+    """Which defence the attack behind a `Hit` was aimed at.
+
+    `Hit` carries attacker, target, power and critical and not the defence
+    -- only `AttackRolled` does -- but the defence is header data: the row
+    that swung declares it. So "an attack that succeeds against Will" is
+    read off the power rather than off the event, which is why neither
+    block here carries a marker for `Hit.vs`.
+    """
+    p = get(getattr(ev, "power", "") or "")
+    line = p.attack_of(0) if p is not None else None
+    return line.vs if line is not None else None
+
+
+def _spend_unused(
+    c: Cast,
+    *,
+    cls: str,
+    level: int,
+    attacks: bool,
+    usage: Usage | None = None,
+) -> bool:
+    """"Expend an unused wizard daily attack power of level 5 or higher."
+
+    `c.expend_row` is the spend and refuses a row that is not owned, is an
+    at-will or is already gone -- but it takes a ref and the card names a
+    *set*, so the set is read off what the character actually carries. A
+    card that names no usage leaves `usage` off: an at-will is refused by
+    `c.expend_row` anyway, having nothing to count down.
+
+    Returns False when there is nothing to charge, which is the printed
+    Requirement.
+    """
+    from combat_engine.engine.components import Powers
+
+    known = c.world.get(c.me, Powers)
+    if known is None:
+        return False
+    for ref in sorted(known.all):
+        p = get(ref)
+        if p is None or p.cls != cls or p.level < level:
+            continue
+        if usage is not None and p.usage is not usage:
+            continue
+        if (p.attack is not None) is not attacks:
+            continue
+        if c.expend_row(ref):
+            return True
+    return False
+
+
+def _boon_drop(leg: str):  # noqa: ANN202
+    """"When your <pact> boon triggers" -- the event and the two questions.
+
+    `cf:warlock-f1` pays every leg off a `Dropped` it reads the curse from,
+    so the boon's moment is that drop: an enemy, cursed by this caster,
+    with this leg taken. `Dropped` is announced before the corpse is
+    cleared, so the curse is still readable, and `query.enemies` filters
+    out the dead -- so the side is compared directly, as the feature does.
+    """
+
+    def check(world: World, me: int, ev: Any) -> bool:
+        from combat_engine.engine.components import Build
+
+        who = getattr(ev, "actor", None)
+        if who is None or who == me or _my_side(world, me, who):
+            return False
+        if not world.relations.holds(Relation.CURSED_BY, me, who):
+            return False
+        held = world.get(me, Build)
+        return held is not None and leg in held.choices
+
+    return check
+
+
 # -- level 5 ----------------------------------------------------------------
 
 
@@ -401,12 +492,14 @@ def i744x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.IMPLEMENT],
-    todo=("c.tome_powers()", "c.expend()"),
+    todo=("c.tome_powers()",),
 )
 def i744p1(c: Cast) -> None:
-    """`x9_146` is the power the tome would lend, and no row of that ref
-    exists to lend -- it is one of the two the tome stores, which nothing
-    holds. Spending a daily to buy it has no hold either."""
+    """Re-aimed to one gap. The price half is sayable now -- `c.expend_row`
+    spends a use without running the row, and `i1098p1` beside this writes
+    it -- but there is nothing to buy: the chosen power is one of the two
+    the tome stores, and nothing holds a tome's contents. The row can
+    never run, so the price is not written either."""
 
 
 @power(
@@ -416,7 +509,7 @@ def i744p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("spec.feature_ref()",),
+    dropped=("cf:sorcerer-f0s3",),
 )
 def i859x1(c: Cast) -> None:
     """The bonus and the vulnerability are one bargain, so the second is
@@ -427,9 +520,10 @@ def i859x1(c: Cast) -> None:
     `cf:warlock-f1s5` is declared -- so a character with that feature is
     let off the vulnerability, which is the printed line.
 
-    Dropped, and re-aimed: the other exemption names `cf:sorcerer-f0s3`,
-    and no row in the tree declares it. That is the whole remaining
-    hold, so the marker names the missing ref rather than a verb."""
+    Dropped, and re-aimed a second time: the other exemption names
+    `cf:sorcerer-f0s3`, and no row in the tree declares it. The spec prints
+    the ref now, so `spec.feature_ref()` is no longer what is missing --
+    the marker names the undeclared ref itself, which is."""
     c.bonus(
         "damage",
         c.enhancement,
@@ -479,13 +573,31 @@ def i859p1(c: Cast) -> None:
     usage=DAILY,
     action=FREE,
     reach=Ranged(10),
-    target=ONE_CREATURE,
-    todo=("c.curse_damage()",),
+    target=NO_TARGET,
+    trigger="you deal your cf:warlock-f4 damage",
+    on=Trigger(
+        DamageApplied,
+        lambda w, me, ev: ev.source == me
+        and getattr(ev, "detail", "") == "cf:warlock-f4",
+        "you deal your curse damage",
+    ),
 )
 def i1852p1(c: Cast) -> None:
-    """The curse's dice are paid out inside the warlock's own feature and
-    nothing announces them, so neither the trigger nor "two dice more" can
-    be said."""
+    """`features.strikers.extra_damage` stamps `detail="cf:warlock-f4"` on
+    the blow, so the curse payout announces itself after all and both
+    halves of the line can be said.
+
+    "Two dice" is two of the feature's own, which is 1d6 at heroic and is
+    written as that number -- nothing publishes the die. Ending the curse
+    is the price and takes the relation with it, so the target may be
+    cursed again normally, which is the printed proviso. The pact boon
+    needs nothing: `cf:warlock-f1` reads the curse off the `Dropped`, and
+    that is announced before this row's damage has removed it."""
+    foe = getattr(c.trigger, "target", None)
+    if foe is None:
+        return
+    c.damage("2d6", on=foe)
+    c.end_effect(on=foe, against="curse", why="the bargain is called in")
 
 
 @power(
@@ -515,12 +627,19 @@ def i1956p1(c: Cast) -> None:
     action=FREE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.worsen_save()", "Hit.vs"),
+    todo=("c.worsen_save()",),
 )
 def i1968p1(c: Cast) -> None:
-    """Two gaps at once: `Hit` does not carry the defence that was attacked,
-    and nothing makes a saving throw roll twice and keep the lower. A save
-    penalty is a different number and would not be this line."""
+    """Re-aimed to one gap. `Hit.vs` is not missing after all: the defence
+    an attack was aimed at is header data on the row that swung, which
+    `_hit_defence` reads, so "succeeds against Will" is sayable.
+
+    What is left is the whole Effect -- nothing makes a saving throw roll
+    twice and keep the lower. `c.reroll_save(keep="worst")` is the same
+    arithmetic but only inside a row the dispatcher offered for that one
+    throw, and this stands over every save against the effects of one
+    attack. A save penalty is a different number and would not be this
+    line."""
 
 
 # -- level 7 ----------------------------------------------------------------
@@ -549,12 +668,15 @@ def i1098x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.expend()",),
 )
 def i1098p1(c: Cast) -> None:
-    """The spec prints the ref, so the loan is real; the price -- an unused
-    utility of level 6 or higher -- has nothing to charge it to."""
-    c.grant_row("p2273", until=When.ENCOUNTER)
+    """The price is real now: `c.expend_row` spends a use without running
+    the row, which is exactly what "expend an unused power" charges, and
+    the set it is picked from is read off what the character owns. Its
+    False is the printed Requirement, so the loan is refused when there is
+    nothing to pay with."""
+    if _spend_unused(c, cls="wizard", level=6, attacks=False):
+        c.grant_row("p2273", until=When.ENCOUNTER)
 
 
 @power(
@@ -744,11 +866,25 @@ def i2309x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.curse_damage()",),
 )
 def i2330x1(c: Cast) -> None:
-    """The curse's dice are paid inside the warlock's feature and nothing
-    adds one to them."""
+    """The curse payout announces itself: `features.strikers.extra_damage`
+    stamps `detail="cf:warlock-f4"` on the blow, so "an extra die of that
+    damage" is a watch on it rather than a reach into the feature.
+
+    The die is the feature's own 1d6 at heroic, written as that number
+    because nothing publishes it. The extra helping carries this row's ref
+    and not the feature's, so it does not answer its own watch."""
+    me = c.me
+
+    def again(ev: DamageApplied) -> None:
+        if ev.source != me or getattr(ev, "detail", "") != "cf:warlock-f4":
+            return
+        if "undead" not in c.kinds_of(on=ev.target):
+            return
+        c.damage("1d6", on=ev.target)
+
+    c.watch(DamageApplied, again, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -760,12 +896,18 @@ def i2330x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.RADIANT],
-    dropped=("c.deals(once=)",),
+    todo=("c.deals(implement=)", "c.deals(once=)"),
 )
 def i2330p1(c: Cast) -> None:
-    """"The next power" is one use; `c.deals` holds until something ends it,
-    so this runs to the end of the fight instead."""
-    c.deals(DamageType.RADIANT, on=c.me, until=When.ENCOUNTER)
+    """Re-aimed from `dropped` to `todo`, because the row was inert and
+    read as working.
+
+    `c.deals` is read through `Cast._typed`, which returns the printed type
+    untouched unless it is `UNTYPED` **and** the row carries
+    `Keyword.WEAPON`. This line converts named necrotic and poison damage
+    on implement powers, which is the one case `_typed` refuses twice over,
+    so laying the effect did nothing at all. "The next power" is the second
+    gap and the smaller one."""
 
 
 @power(
@@ -975,14 +1117,38 @@ def i2775x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with an attack using this holy symbol",
     on=Trigger(Hit, by_me, "you hit with this holy symbol"),
-    dropped=("c.save(conditions=)",),
 )
 def i2776p1(c: Cast) -> None:
-    """`c.save` picks an effect by label, not by the condition it carries,
-    so the printed list of four conditions is not enforced and whichever
-    save-ends effect is found first is the one rolled against."""
+    """`c.save` picks by label fragment and not by the condition an effect
+    carries, but `Effect.conditions` is readable -- `c.end_effect(carrying=)`
+    reads it -- so the printed list of four is enforced by finding the
+    hold first.
+
+    Rolled against that hold rather than handed back to `c.save(against=)`,
+    because a label is the ref of the row that laid the effect and one row
+    routinely lays two: a slow and a weaken off one hit share the label
+    `p...`, and the fragment would find whichever came first. The caster is
+    in the pool, and the bonus is the symbol's own."""
     who = _pick(c, 10)
-    c.save(on=who, bonus=c.enhancement)
+    wanted = {
+        Condition.DOMINATED,
+        Condition.IMMOBILIZED,
+        Condition.RESTRAINED,
+        Condition.SLOWED,
+    }
+    held = next(
+        (
+            eff
+            for eff in sorted(c.world.effects.of(who), key=lambda e: e.id)
+            if not eff.ended
+            and eff.when is When.SAVE_ENDS
+            and wanted & set(eff.conditions)
+        ),
+        None,
+    )
+    if held is not None:
+        held.save_mod += c.enhancement
+        c.world.effects.save(held)
 
 
 @power(
@@ -992,11 +1158,14 @@ def i2776p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.item_set()",),
+    dropped=("c.item_set()", "chargen.race_choice()"),
 )
 def i2777x1(c: Cast) -> None:
-    """The two increases are a race and a completed set, neither of which
-    can be asked after, so every ally gets the base 5."""
+    """The two increases are a race and a completed set. Neither can be
+    asked after -- nothing on `Cast` or `query` reads a character's race,
+    and `c.kinds_of` answers off a stat block's type line, which a
+    character has not got -- so every ally gets the base 5. Re-aimed: the
+    race half was not named before and is a gap of its own."""
 
     def ward(ev: Healed) -> None:
         if ev.source != c.me or not _my_side(c.world, c.me, ev.target):
@@ -1035,12 +1204,16 @@ def i2784p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.penalty(once=)",),
 )
 def i2785x1(c: Cast) -> None:
-    """`once=` is spent by watching an attack roll, which a saving throw is
-    not, so "the first saving throw" is written as a penalty that lasts as
-    long as the effect does."""
+    """The old note here was stale and cost the row its second half.
+    `c.bonus(once=)` has a `"save"` branch that spends the modifier on
+    `SavingThrow`, so "the **first** saving throw" is `once=True` after
+    all.
+
+    And it is the first save against *that* effect, not against anything:
+    the save context carries the label of the hold being shaken off, so
+    the gate names the one this row answered."""
 
     laying = False
 
@@ -1052,9 +1225,17 @@ def i2785x1(c: Cast) -> None:
         nonlocal laying
         if laying or ev.source != c.me or not ev.save_ends:
             return
+        label = ev.label
         laying = True
         try:
-            c.penalty("save", 2, on=ev.target, until=When.SAVE_ENDS)
+            c.penalty(
+                "save",
+                2,
+                on=ev.target,
+                until=When.SAVE_ENDS,
+                once=True,
+                when=lambda ctx: ctx.get("label") == label,
+            )
         finally:
             laying = False
 
@@ -1253,29 +1434,31 @@ def i3203x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("EffectApplied.ongoing",),
 )
 def i3403x1(c: Cast) -> None:
-    """`EffectApplied` says whether a save can end the effect and not what
-    the effect carries, so the penalty is paid on every save-ends effect of
-    mine rather than only on the burning ones."""
+    """`EffectApplied` names no field for the burn, but it carries the
+    **label**, and `c.ongoing` stamps one that begins `"ongoing "`. So
+    "an attack that deals ongoing damage" is read there, and `.ongoing`
+    was not the gap.
 
-    laying = False
+    The other half is the save side: the saving-throw context carries
+    `ongoing`, so the penalty is paid only on throws to end a burn and
+    not on every throw the creature makes. No latch is needed now -- the
+    penalty's own label is this row's ref, so it cannot answer itself."""
+    me = c.me
 
     def worsen(ev: EffectApplied) -> None:
-        # The penalty is itself save-ends, so without the latch it
-        # answers its own `EffectApplied` and recurses until the stack
-        # runs out.
-        nonlocal laying
-        if laying or ev.source != c.me or not ev.save_ends:
+        if ev.source != me or not ev.label.startswith("ongoing "):
             return
-        laying = True
-        try:
-            c.penalty("save", 2, on=ev.target, until=When.SAVE_ENDS)
-        finally:
-            laying = False
+        c.penalty(
+            "save",
+            2,
+            on=ev.target,
+            until=When.SAVE_ENDS,
+            when=lambda ctx: bool(ctx.get("ongoing")),
+        )
 
-    c.watch(EffectApplied, worsen, until=When.ENCOUNTER)
+    c.watch(EffectApplied, worsen, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -1401,12 +1584,16 @@ def i1122p1(c: Cast) -> None:
     action=FREE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.reroll_attacks_against()",),
+    todo=("c.reroll_attack(ev=)",),
 )
 def i1237p1(c: Cast) -> None:
-    """`c.reroll_attack` reads the roll off `c.trigger`, so it means
-    something only inside a row the dispatcher offered. Storing a reroll to
-    be spent later, out of any trigger, has nothing to hold it."""
+    """Re-aimed to the exact gap. `c.reroll_attack` reads the roll off
+    `c.trigger` and nothing else, so it means something only inside a row
+    the dispatcher offered for that one roll. This card stores a reroll
+    and spends it later, from a `c.watch` on somebody else's attack, where
+    `c.trigger` is not the roll in hand -- and rerolling by hand off
+    `AttackRolled.result` would be the engine's arithmetic copied into a
+    content file."""
 
 
 @power(
@@ -1488,12 +1675,13 @@ def i1461x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.expend()",),
 )
 def i1461p1(c: Cast) -> None:
-    """The spec prints the ref, so the loan is real; the daily it is bought
-    with has nothing to charge it to."""
-    c.grant_row("p259", until=When.ENCOUNTER)
+    """As `i1098p1`: `c.expend_row` is the price and its False is the
+    printed Requirement, so the loan is refused when the character has no
+    unused daily attack power of the printed level to burn."""
+    if _spend_unused(c, cls="wizard", usage=Usage.DAILY, level=5, attacks=True):
+        c.grant_row("p259", until=When.ENCOUNTER)
 
 
 @power(
@@ -1631,12 +1819,16 @@ def i1887p1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FEAR],
     trigger="an attack with this orb hits the target's Will defence",
-    on=Trigger(Hit, by_me, "you hit with this orb"),
-    dropped=("Hit.vs",),
+    on=Trigger(
+        Hit,
+        lambda w, me, ev: ev.attacker == me and _hit_defence(ev) is WILL,
+        "you hit a creature's Will defence",
+    ),
 )
 def i1941p1(c: Cast) -> None:
-    """`Hit` carries attacker, target, power and critical -- not the defence
-    that was attacked, which only `AttackRolled` knows."""
+    """`Hit` carries no defence, but it does not have to: the defence an
+    attack is aimed at is declared in the header of the row that swung, so
+    `_hit_defence` reads it off the power. `Hit.vs` was not the gap."""
     foe = _struck(c)
     if foe is None:
         return
@@ -1806,11 +1998,24 @@ def i2323p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.pact_boon()",),
 )
 def i2340x1(c: Cast) -> None:
-    """A pact boon is a class feature rather than a row, and nothing
-    announces one triggering."""
+    """The boon does announce itself after all. `cf:warlock-f1` pays every
+    leg off a `Dropped` whose subject this caster had cursed, so the
+    boon's moment is that event plus `c.cursed` plus `c.build` -- which is
+    what `_boon_drop` asks.
+
+    Two teleports rather than one lengthened, because nothing reaches into
+    a distance already travelled; the squares come to the same total and
+    the caster ends up where the card puts him."""
+    me = c.me
+
+    def further(ev: Dropped) -> None:
+        if not _boon_drop("fey")(c.world, me, ev):
+            return
+        c.teleport(c.enhancement, who=me)
+
+    c.watch(Dropped, further, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -1834,11 +2039,22 @@ def i2340p1(c: Cast) -> None:
     usage=DAILY,
     action=FREE,
     reach=PERSONAL,
-    target=SELF,
-    todo=("c.pact_boon()",),
+    target=NO_TARGET,
+    trigger="your star pact boon triggers",
+    on=Trigger(Dropped, _boon_drop("star"), "an enemy you cursed drops"),
 )
 def i2343p1(c: Cast) -> None:
-    """Nothing announces a pact boon, so the trigger cannot be declared."""
+    """The trigger is the drop `cf:warlock-f1` pays its boons off, asked of
+    the star leg. `cf:warlock-f1` pays nothing for that leg, but the
+    moment is the same moment whether the boon has a body or not, so the
+    trigger is real.
+
+    "Any one d20 roll" is the two this engine rolls -- an attack and a
+    save -- each spent by its own first roll. A skill check takes no
+    modifier and is not offered in a fight."""
+    for mate in c.within(c.enhancement, side="ally"):
+        c.bonus("attack", 1, on=mate, until=When.EONT, once=True)
+        c.bonus("save", 1, on=mate, until=When.EONT, once=True)
 
 
 @power(
@@ -1852,7 +2068,11 @@ def i2343p1(c: Cast) -> None:
     todo=("c.pact_boon()",),
 )
 def i2343p2(c: Cast) -> None:
-    """The trigger and the thing it adds to are both the pact boon."""
+    """Re-read and still blocked, for the second half rather than the
+    first. The trigger is sayable now -- `i2343p1` above declares it off
+    the same `Dropped` -- but the Effect adds a number to the bonus the
+    star pact gives, and `cf:warlock-f1` pays that leg nothing. There is
+    no bonus to add to."""
 
 
 @power(
@@ -1862,11 +2082,21 @@ def i2343p2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.pact_boon()",),
 )
 def i2344x1(c: Cast) -> None:
-    """Nothing announces a pact boon, so there is no temporary hit point
-    total to add to."""
+    """The same drop `cf:warlock-f1` pays the infernal leg off, and the
+    addition is written as the whole total rather than as an increment:
+    temporary hit points do not stack, the larger pool wins, so laying
+    `level + enhancement` beside the feature's `level` is exactly "add the
+    enhancement bonus to the number gained" however the two are ordered."""
+    me = c.me
+
+    def richer(ev: Dropped) -> None:
+        if not _boon_drop("infernal")(c.world, me, ev):
+            return
+        c.temp_hp(c.level + c.enhancement, on=me)
+
+    c.watch(Dropped, richer, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -2001,13 +2231,25 @@ def i2665x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with an attack using this holy symbol",
     on=Trigger(Hit, by_me, "you hit with this holy symbol"),
-    dropped=("Keyword.CHANNEL_DIVINITY",),
 )
 def i2665p1(c: Cast) -> None:
-    """The spec prints the ref for the first half of the choice; Channel
-    Divinity is a class feature with no ref and no keyword, so the second
-    half has nothing to hand a use back to."""
-    c.restore_use("p1455", on=c.me)
+    """Channel Divinity is not a keyword, it is an allowance: every
+    channelled row declares `group=CHANNEL_DIVINITY` and `dsl._group_spent`
+    is what enforces the one-per-fight. So "an additional use of the class
+    feature" is a use handed back to whichever row of that group has been
+    spent, which `c.expended(group=)` and `c.restore_use` say between
+    them.
+
+    The printed choice is made on the board rather than here, and the
+    class feature's own ref is not restorable -- `cf:avenger-f2` and its
+    three siblings are inert rows that lay nothing."""
+    from combat_engine.content.features import CHANNEL_DIVINITY
+
+    spent = c.expended()
+    pool = [r for r in spent if r == "p1455" or r in c.expended(group=CHANNEL_DIVINITY)]
+    if not pool:
+        return
+    c.restore_use(c.choose(pool, "which use comes back") or pool[0], on=c.me)
 
 
 @power(
@@ -2036,12 +2278,19 @@ def i2676p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.RADIANT],
-    dropped=("c.deals(revert=)",),
+    dropped=("c.deals(implement=)",),
 )
 def i2719p1(c: Cast) -> None:
-    """The way back -- "another free action returns the damage to normal" --
-    has nothing to call, so this runs to the end of the fight."""
-    c.deals(DamageType.RADIANT, on=c.me, until=When.ENCOUNTER)
+    """The way back is `c.endable`: it hangs a deliberate drop on the
+    effect, `actions.legal` offers it to whoever holds it, and a free
+    action is what the card charges. So `c.deals(revert=)` was not the
+    gap.
+
+    What is dropped is the reach of the conversion. `Cast._typed` leaves a
+    printed damage type alone and only speaks for a row carrying
+    `Keyword.WEAPON`, so "**all** damage dealt by powers using this symbol"
+    covers only the untyped weapon half of what it says."""
+    c.endable(c.deals(DamageType.RADIANT, on=c.me, until=When.ENCOUNTER), FREE)
 
 
 @power(

@@ -31,6 +31,11 @@ Four judgements run through the file.
 * **A healing surge value is a quarter of maximum hit points plus
   modifiers**, read through `query.surge_value`. A card raising one is
   `c.bonus("surge_value", n)` like any other standing number.
+* **A defence is read again once an interrupt window closes**, so "use X in
+  place of your Fortitude" is the difference between the two written as a
+  modifier to Fortitude, gated on the one attacker. `AttackRolled.defence`
+  is the Fortitude the attack was actually measured against, so the
+  difference is exact rather than recomputed without the attack's context.
 
 Paragon and epic lines (`Level 11:`, `Level 15 or 20:`) are out of scope;
 the heroic number is the one written.
@@ -67,9 +72,11 @@ from combat_engine.engine import (
     Condition,
     DamageRolled,
     DamageType,
+    Defense,
     ForcedMove,
     Health,
     Hit,
+    Ident,
     InitiativeRolled,
     Keyword,
     Melee,
@@ -207,6 +214,85 @@ def _at_target(foe: int) -> Any:
     return gate
 
 
+#: Minion-ness by stat-block ref. `load` goes to sqlite every call and these
+#: are read from a modifier gate, which is once per defence.
+_MINION: dict[str, bool] = {}
+
+
+def _minion(c: Cast, who: int | None) -> bool:
+    """Is that creature a minion?
+
+    `c.is_kind` reads the `keywords`, `kind` and `origin` columns and
+    minion-ness is none of those -- it is its own column, and 383 stat
+    blocks carry it while only some of them also print it as their role.
+    So the block is read the way `c.kinds_of` reads one.
+    """
+    ident = c.world.get(who, Ident) if who is not None else None
+    ref = ident.ref if ident is not None else ""
+    if not ref.startswith("m"):
+        return False
+    if ref not in _MINION:
+        from combat_engine.content.loader import load
+
+        try:
+            _MINION[ref] = bool(load(ref).row["minion"])
+        except Exception:  # a ref with no stat block is nobody's minion
+            _MINION[ref] = False
+    return _MINION[ref]
+
+
+def _flanker_hits_me(world: World, me: int, ev: Any) -> bool:
+    from combat_engine.engine import query
+
+    foe = getattr(ev, "attacker", None)
+    return (
+        getattr(ev, "target", None) == me
+        and foe is not None
+        and query.flanked_by(world, me, foe)
+    )
+
+
+def _ongoing_poison_save(world: World, me: int, ev: Any) -> bool:
+    """A save against ongoing poison damage.
+
+    `SavingThrow.against` is `str(effect)`, and an effect carrying a burn
+    prints "ongoing N <type>" inside it -- so the damage type is on the
+    event after all, spelled rather than typed.
+    """
+    against = getattr(ev, "against", "")
+    return (
+        getattr(ev, "actor", None) == me
+        and "ongoing" in against
+        and DamageType.POISON.value in against
+    )
+
+
+def _would_hit_my_fort(world: World, me: int, ev: Any) -> bool:
+    result = getattr(ev, "result", None)
+    return (
+        getattr(ev, "target", None) == me
+        and getattr(ev, "vs", None) is Defense.FORT
+        and bool(result and result.hit)
+    )
+
+
+def _stand_in_for_fort(c: Cast, value: int) -> None:
+    """Put `value` in place of Fortitude for the attack being interrupted.
+
+    The defence is re-read once this window closes, so the swap is the
+    difference written as a modifier -- gated on the one attacker and gone
+    at the end of the turn, because a modifier is the only thing that
+    reaches the second reading. Untyped: the card prints no bonus at all.
+    """
+    ev = c.trigger
+    foe = getattr(ev, "attacker", None)
+    was = getattr(ev, "defence", None)
+    if foe is None or was is None:
+        return
+    c.bonus(FORT, value - was, on=c.me, until=When.EOT,
+            when=lambda ctx: ctx.get("attacker") == foe)
+
+
 def _plus(c: Cast) -> int:
     """The item's enhancement, never below 1: "1d6 per plus" on a piece of
     ammunition whose plus has been decayed away still rolls something."""
@@ -217,11 +303,12 @@ def _plus(c: Cast) -> int:
 
 
 @power("i650x1", level=1, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.aided_check()",))
+       reach=PERSONAL, target=SELF, todo=("c.aid_another()",))
 def i650x1(c: Cast) -> None:
     """The bonus rides on somebody *else's* Heal check and only when that
-    check is aimed at me. A skill-check context carries `actor` and `skill`
-    and nothing about who is being helped."""
+    check is aimed at me. `SkillCheck` carries `actor`, `skill` and `dc` and
+    nothing about who is being helped, and aiding another is not an action
+    the engine has -- which is the eight-row gap this joins."""
 
 
 @power("i1897x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -232,12 +319,14 @@ def i1897x1(c: Cast) -> None:
 
 
 @power("i2131x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.raging()",))
+       reach=PERSONAL, target=SELF, dropped=("Keyword.RAGE",))
 def i2131x1(c: Cast) -> None:
     """A death save is an ordinary `SavingThrow` with `against="death"`,
     announced before it is read back, so the bonus is written onto it.
-    `once=True` is the printed "first". Nothing asks whether a barbarian is
-    raging, so the bonus is paid whatever the wearer was doing."""
+    `once=True` is the printed "first". A rage is held as an effect like any
+    other and `keywords_of` reads the laying row's keywords, so "while
+    raging" wants the keyword the rage rows have no word for; without it the
+    bonus is paid whatever the wearer was doing."""
 
     def death_save(ev: SavingThrow) -> None:
         if ev.actor != c.me or ev.against != "death":
@@ -294,15 +383,13 @@ def i2993x1(c: Cast) -> None:
 @power("i2993p1", level=4, cls=ITEM, usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you make a saving throw against ongoing poison damage",
-       on=Trigger(SavingThrow, lambda w, me, ev: getattr(ev, "actor", None) == me
-                  and getattr(ev, "against", "") != "death",
-                  "you make a saving throw"),
-       dropped=("SavingThrow.ongoing",))
+       on=Trigger(SavingThrow, _ongoing_poison_save,
+                  "you make a saving throw against ongoing poison damage"))
 def i2993p1(c: Cast) -> None:
     """"No action" is `ActionType.NONE` with the trigger declared. The save
-    cannot be told to be against poison -- a `SavingThrow` carries the
-    effect's label and no damage type -- so any save but a death save is
-    answered."""
+    *can* be told to be against ongoing poison: `against` is the effect
+    rendered, and an effect carrying a burn spells its amount and type
+    inside that string."""
     _boost_save(c, 2)
 
 
@@ -432,12 +519,12 @@ def i652p1(c: Cast) -> None:
 @power("i658p1", level=6, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
        reach=Melee(1), target=ONE_CREATURE,
        trigger="a flanking enemy makes an attack roll against you",
-       on=Trigger(AttackDeclared, targets_me, "an enemy attacks you"),
-       dropped=("query.flanking(world, a, b)",))
+       on=Trigger(AttackDeclared, _flanker_hits_me,
+                  "a flanking enemy attacks you"))
 def i658p1(c: Cast) -> None:
-    """Nothing asks whether an attacker is flanking, so any attacker is
-    pulled round; the slide is to a named square, which is what "to a square
-    adjacent to you" is."""
+    """`query.flanked_by` is the printed gate, asked of the attacker rather
+    than of the attack; the slide is to a named square, which is what "to a
+    square adjacent to you" is."""
     foe = c.target
     sq = _free_near(c, of=c.me)
     if foe is not None and sq is not None:
@@ -503,30 +590,36 @@ def i3491p1(c: Cast) -> None:
 
 
 @power("i591x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.is_minion()",))
+       reach=PERSONAL, target=SELF)
 def i591x1(c: Cast) -> None:
-    """The attack context carries `opportunity`, so half the printed gate is
-    real; nothing distinguishes a minion, so the bonus is paid against every
-    opportunity attack."""
+    """The attack context carries `opportunity` and `attacker`, so both
+    halves of the printed gate are real."""
     c.bonus(AC, 2, on=c.me, until=When.ENCOUNTER, kind="item",
-            when=lambda ctx: bool(ctx.get("opportunity")))
+            when=lambda ctx: bool(ctx.get("opportunity"))
+            and _minion(c, ctx.get("attacker")))
 
 
 @power("i591p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.is_minion()",))
+       reach=PERSONAL, target=SELF, dropped=("c.phasing(through=)",))
 def i591p1(c: Cast) -> None:
-    """Phasing is broader than the printed line -- it walks through walls as
-    well as through minions -- but it is the only verb that lets a creature
-    cross an occupied square, and ending in one is refused by the grid
-    either way."""
+    """Phasing is broader than the printed line -- it walks through walls
+    and through everybody, not only through minions -- but it is the only
+    verb that lets a creature cross an occupied square, and ending in one is
+    refused by the grid either way. What is missing is the narrowing, not
+    the reading: `_minion` answers which squares were meant."""
     c.phasing(on=c.me, until=When.EONT)
 
 
 @power("i642p1", level=7, cls=ITEM, usage=DAILY, action=INTERRUPT,
-       reach=PERSONAL, target=SELF, todo=("c.defence_from_check()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you would be hit by an attack against Fortitude",
+       on=Trigger(AttackRolled, _would_hit_my_fort,
+                  "an attack would hit your Fortitude"))
 def i642p1(c: Cast) -> None:
-    """A defence is a number summed from `Defenses` and `Mods`; a skill
-    check cannot be put in its place."""
+    """The check's total stands in for Fortitude. `c.check` with no DC is a
+    roll with nothing to beat, which is what a check made for its number
+    rather than against a difficulty is."""
+    _stand_in_for_fort(c, c.check("endurance").total)
 
 
 @power("i647x1", level=7, cls=ITEM, action=ActionType.NONE,
@@ -700,10 +793,13 @@ def i643p1(c: Cast) -> None:
 
 
 @power("i648x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Health.max_surges",))
+       reach=PERSONAL, target=SELF, todo=("c.max_surges()",))
 def i648x1(c: Cast) -> None:
-    """`c.regain_surge` refills the pool without lifting its ceiling, and
-    the printed line raises the ceiling for the day."""
+    """`Health.max_surges` is a field, but writing it from a property is
+    wrong twice over: a property is re-armed at the start of every fight, so
+    the ceiling would climb once an encounter, and `c.regain_surge` refills
+    the pool without lifting the ceiling at all. What is missing is a verb
+    that raises it idempotently for the day."""
 
 
 @power("i648p1", level=9, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
@@ -785,23 +881,30 @@ def i637x1(c: Cast) -> None:
 
 
 @power("i876p1", level=10, cls=ITEM, usage=DAILY, action=INTERRUPT,
-       reach=PERSONAL, target=SELF, todo=("c.retarget_defence()",))
+       reach=PERSONAL, target=SELF,
+       trigger="an attack would hit your Fortitude defence",
+       on=Trigger(AttackRolled, _would_hit_my_fort,
+                  "an attack would hit your Fortitude"))
 def i876p1(c: Cast) -> None:
-    """Which defence an attack is rolled against is fixed on the power and
-    read again after this window; nothing swaps one for another."""
+    """Which defence the attack is rolled *against* stays Fortitude -- what
+    changes is the number it meets, and that is read again after this
+    window. So Will is put in its place as the difference."""
+    from combat_engine.engine import query
+
+    _stand_in_for_fort(c, query.defence(c.world, c.me, WILL))
 
 
 # == ring ===================================================================
 
 
 @power("i3475x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("by_ref()",))
+       reach=PERSONAL, target=SELF, dropped=("spec.monster_ref()",))
 def i3475x1(c: Cast) -> None:
     """The attack context carries `attacker`, so "against the attacks of
     constructs" is a gate on all four defences. The daze is dropped rather
-    than over-applied: it answers one named creature and nothing asks which
-    row a creature was built from, so paying it on every hit would daze the
-    whole board."""
+    than over-applied: `Ident.ref` does say which row a creature was built
+    from, but the spec names the creature with an `x_` token, which
+    `etl/build` makes deliberately opaque so that no row can point at it."""
     for d in (AC, FORT, REF, WILL):
         c.bonus(d, 2, on=c.me, until=When.ENCOUNTER, kind="power",
                 when=lambda ctx: c.is_kind("construct", on=ctx.get("attacker")))
@@ -810,11 +913,12 @@ def i3475x1(c: Cast) -> None:
 @power("i3475p1", level=5, cls=ITEM, usage=ENCOUNTER, action=STANDARD,
        reach=Ranged(10), target=ONE_CREATURE,
        attack=Attack(vs=WILL, printed=8),
-       dropped=("Target.kind", "by_ref()"))
+       dropped=("Target.kind", "spec.monster_ref()"))
 def i3475p1(c: Cast) -> None:
     """`Target` has no creature-kind field, so "one construct" is any
-    creature; and the longer domination is printed for one named creature,
-    which nothing can recognise."""
+    creature; and the longer domination is printed for a creature the spec
+    names with an opaque `x_` token, which is a name withheld rather than a
+    ref to point at."""
     if c.strike():
         c.condition(Condition.DOMINATED, until=When.EONT)
 

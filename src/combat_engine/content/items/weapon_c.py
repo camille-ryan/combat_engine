@@ -19,10 +19,12 @@ Four judgements run through the file.
 * **The item's own level** is `get(c.ref).level`, for the cards printing
   "the weapon's level + 3" as an attack bonus. `Attack(printed=)` is the
   wrong tool -- it takes the *character's* level term back out again.
-* **A damage type a card changes is `c.deals`**, which rewrites what the
-  wielder's weapon attacks come out as; where the card changes only part
-  of the damage, or hands back a way to change it again, the missing half
-  is marked rather than quietly written as the whole.
+* **A damage type a card changes is `c.deals`**, and it is *narrower* than
+  its own docstring claims. `Cast._typed` recolours a blow only when the
+  card named no type and the row carries `Keyword.WEAPON`; a power that
+  prints its own type keeps it. So "all **untyped** damage changes to X"
+  is said exactly, and "**all** damage is X" is said only for the untyped
+  part, which is what `c.deals(typed=)` marks here.
 """
 
 from __future__ import annotations
@@ -69,6 +71,7 @@ from combat_engine.engine import (
     EffectApplied,
     Forced,
     ForcedMove,
+    Healed,
     Health,
     Hit,
     Keyword,
@@ -168,20 +171,72 @@ def _type_words(world: World, who: int | None) -> frozenset[str]:
     return Cast(world=world, me=who, ref="").kinds_of(on=who)
 
 
-def _struck_kind(*words: str):  # noqa: ANN202
+def _struck_kind(*words: str, natural: int = 0):  # noqa: ANN202
     """Predicate: I hit a creature of one of these kinds.
 
     The kind belongs in the predicate rather than in the body: a triggered
     daily is expended when it fires, so a row that fires on every hit and
     then finds the target is not a demon has spent itself for nothing.
+
+    `natural` is the same argument for "and the d20 roll is 15 or higher":
+    the live `AttackResult` rides on the outcome as a plain attribute, so
+    it is read with `getattr` rather than declared.
     """
 
     def pred(world: World, me: int, ev: Any) -> bool:
-        return getattr(ev, "attacker", None) == me and bool(
-            _type_words(world, getattr(ev, "target", None)) & set(words)
-        )
+        if getattr(ev, "attacker", None) != me:
+            return False
+        if natural:
+            result = getattr(ev, "result", None)
+            if result is None or result.natural < natural:
+                return False
+        return bool(_type_words(world, getattr(ev, "target", None)) & set(words))
 
     return pred
+
+
+def _by_class(cls_: str):  # noqa: ANN202
+    """Predicate: the row that caused this is that class's.
+
+    "A bard charm power", "a sorcerer attack power". Not a gap: the
+    attack events carry `power`, and a row's class is a header field, so
+    the question is `get(ev.power).cls`. An item's own blocks are
+    `cls="item"` and answer False, which is right -- the card means the
+    wielder's class power and not the weapon's.
+    """
+
+    def pred(world: World, me: int, ev: Any) -> bool:
+        p = get(getattr(ev, "power", "") or "")
+        return p is not None and p.cls == cls_
+
+    return pred
+
+
+def _missed_ac(world: World, me: int, ev: Any) -> bool:
+    """"You miss with an attack that targets AC."
+
+    `resolve.attack` hangs `vs` on the `Hit`/`Miss` as a plain attribute --
+    the comment there says it was added so "an attack against your AC
+    misses you" had something to read -- so it is a `getattr`, like
+    `opportunity` and `charge`.
+    """
+    return getattr(ev, "attacker", None) == me and getattr(ev, "vs", None) is AC
+
+
+def _arcane_implement(c: Cast, who: int) -> list[str]:
+    """That creature's arcane implement attack rows.
+
+    `c.borrowed_rows` is the lister -- standard-action at-will attacks,
+    melee on one call and ranged on the other -- and the two keywords are
+    the whole of "an arcane implement attack".
+    """
+    refs = c.borrowed_rows(who) + c.borrowed_rows(who, melee=False)
+    out = []
+    for ref in refs:
+        p = get(ref)
+        if p is not None and {Keyword.ARCANE, Keyword.IMPLEMENT} <= set(p.keywords):
+            out.append(ref)
+    return out
 
 
 def _my_shove(world: World, me: int, ev: Any) -> bool:
@@ -409,11 +464,22 @@ def i3050p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.heal_bonus()",),
 )
 def i3057x1(c: Cast) -> None:
-    """Adds to the amount a healing power restores. Healing is not read
-    through `Mods`, so there is no key to write a bonus under."""
+    """Healing is not read through `Mods`, but it does not have to be:
+    `resolve.heal` announces `Healed` **before** the hit points go on and
+    `amount` is negotiable there -- the seam `c.half_healing` uses -- so
+    the item bonus is added to the offer.
+
+    "To an ally" leaves the wielder's own healing out, which is the one
+    word that makes this narrower than every heal the character rolls."""
+    plus = c.enhancement
+
+    def restored(ev: Healed) -> None:
+        if ev.source == c.me and ev.target != c.me:
+            ev.amount += plus
+
+    c.watch(Healed, restored, until=When.ENCOUNTER, window=Window.BEFORE)
 
 
 @power(
@@ -462,12 +528,14 @@ def i3099p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.deals(only_untyped=)",),
 )
 def i3135x1(c: Cast) -> None:
-    """`c.deals` rewrites every weapon attack's type; the card rewrites
-    only the untyped ones, so a fire blade in the other hand keeps its
-    fire here and does not in print."""
+    """The marker here had it backwards. `Cast.deals`'s own docstring calls
+    itself an override of the type the power named, and `Cast._typed` does
+    no such thing: it recolours a blow only when the card left it untyped
+    **and** the row carries `Keyword.WEAPON`. That is the printed line word
+    for word -- "all untyped damage dealt by weapon attacks" -- so nothing
+    is missing."""
     c.resist(3 + 2 * c.enhancement, DamageType.FIRE, on=c.me)
     c.deals(DamageType.COLD, on=c.me)
 
@@ -594,23 +662,32 @@ def i3411p1(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
-    dropped=("by_class()",),
 )
 def i3411p2(c: Cast) -> None:
     """The extra [W] is laid as a one-shot damage modifier before the swing
     rather than dealt after it: `c.basic` rolls its own damage and there is
-    no second packet to add to. "An arcane implement attack" is a class
-    gate `c.grant_attack` cannot ask for."""
+    no second packet to add to.
+
+    "An arcane implement attack" is not a class gate at all -- it is two
+    keywords -- so the ally's own rows are listed and the arcane implement
+    ones offered to `c.grant_attack(ref=)`. An ally holding none makes no
+    attack, which is the card: it names the kind of attack, not a basic
+    one."""
     foe = c.target
     if foe is None:
         return
     c.bonus("damage", 0, dice=c.w(), on=c.me, until=When.EOT, once=True)
     c.basic(on=foe)
     allies = c.within(10, side="ally")
-    if allies:
-        who = c.choose(allies, "who strikes after you")
-        if who is not None:
-            c.grant_attack(who, on=foe)
+    if not allies:
+        return
+    who = c.choose(allies, "who strikes after you")
+    if who is None:
+        return
+    rows = _arcane_implement(c, who)
+    if rows:
+        pick = c.choose(rows, "which arcane implement attack") or rows[0]
+        c.grant_attack(who, on=foe, ref=pick)
 
 
 @power(
@@ -943,12 +1020,22 @@ def i1065p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit a demon with this weapon",
     on=Trigger(Hit, _struck_kind("demon"), "you hit a demon"),
-    todo=("c.strip_resistance()",),
 )
 def i1069p1(c: Cast) -> None:
-    """Takes a monster's variable resistance away for a round. `c.resist`
-    grants one and `c.vulnerable` offsets one; neither removes what a
-    creature already has."""
+    """"Does not benefit from variable resistance" is the resistance going
+    away for everybody, and `c.resist` does remove: a **negative** amount
+    is arithmetic rather than a highest-wins hold, and the duration puts
+    back exactly what this call moved. `c.resistances` reads the standing
+    number so the delta is exact.
+
+    Which of a demon's resistances is the *variable* one is not recorded
+    anywhere, so all of them go. That over-applies only for a demon
+    carrying a fixed resistance beside the variable one."""
+    foe = getattr(c.trigger, "target", None) or c.target
+    if foe is None:
+        return
+    for dtype, amount in c.resistances(on=foe).items():
+        c.resist(-amount, dtype, on=foe, until=When.SONT)
 
 
 @power(
@@ -1046,13 +1133,17 @@ def i1275x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.PSYCHIC],
-    dropped=("c.deals(revert=)",),
+    dropped=("c.deals(typed=)",),
 )
 def i1419p1(c: Cast) -> None:
-    """The way back -- "another free action returns the damage to normal"
-    -- has no verb: `c.deals` lays a type on and only a duration takes it
-    off again."""
-    c.deals(DamageType.PSYCHIC, on=c.me)
+    """The way back is `c.endable`: "another free action returns the damage
+    to normal" is `Effect.drop_cost`, and `actions.legal` offers the drop
+    to whoever holds the effect -- which for `c.deals` is the wielder.
+
+    What is left is the other half. `Cast._typed` recolours only damage a
+    row left untyped, so a psychic power's own type survives where the
+    card says **all** damage changes."""
+    c.endable(c.deals(DamageType.PSYCHIC, on=c.me), FREE)
 
 
 @power(
@@ -1184,12 +1275,26 @@ def i1702p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.race()",),
 )
 def i1761x1(c: Cast) -> None:
-    """The whole benefit is gated on the wielder's race, and nothing asks
-    one: `c.kinds_of` reads a monster's type line and answers nothing at
-    all for a character."""
+    """A character's race *is* askable: `chargen.Character.choices` writes
+    `race:<ref>` into `Build.choices` beside the build's own name, so
+    `c.build` reads it. `c.kinds_of` was the wrong door, not a missing one.
+
+    The race is named by ref and found by ref: `chargen.RACES` has exactly
+    one line whose racial power is the p1452 this card names.
+
+    Two item bonuses do not add and the larger wins, so the raised number
+    is laid as a 2 rather than as a second 1."""
+    if not c.build("race:r5"):
+        return
+    c.bonus("damage", 1, kind="item", on=c.me, until=When.ENCOUNTER)
+
+    def racial(ev: PowerUsed) -> None:
+        if ev.actor == c.me and ev.power == "p1452":
+            c.bonus("damage", 2, kind="item", on=c.me, until=When.ENCOUNTER)
+
+    c.watch(PowerUsed, racial, until=When.ENCOUNTER)
 
 
 @power(
@@ -1220,11 +1325,12 @@ def i1761p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("Weapon.silvered",),
+    dropped=("c.silvered()",),
 )
 def i1880x1(c: Cast) -> None:
     """Silver is a material a base weapon cannot record, so nothing reads
-    it. The defence bonus gates on the attack context's `attacker`."""
+    it -- re-aimed onto the name the other six rows wanting it use. The
+    defence bonus gates on the attack context's `attacker`."""
     for d in _DEFENCES:
         c.bonus(
             d, 1, kind="item", on=c.me, until=When.ENCOUNTER,
@@ -1433,14 +1539,17 @@ def i2552x1(c: Cast) -> None:
     keywords=[Keyword.CHARM],
     trigger="you hit an enemy with a charm power using this weapon",
     on=Trigger(
-        Hit, both(by_me, by_keyword(Keyword.CHARM)), "you hit with a charm power"
+        Hit,
+        both(by_me, by_keyword(Keyword.CHARM), _by_class("bard")),
+        "you hit with a bard charm power",
     ),
-    dropped=("by_class()",),
 )
 def i2552p1(c: Cast) -> None:
     """Two failed saves, each worse than the last, is `escalate` twice: the
     second hold carries the callback again so the third can be reached.
-    "A bard charm power" is a class gate no predicate can ask."""
+
+    "A bard charm power" is not a gap: `Hit` carries `power` and a row's
+    class is a header field, so the predicate asks `get(ev.power).cls`."""
     foe = c.target
     if foe is None:
         return
@@ -1479,13 +1588,16 @@ def i2872p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.crit_damage()",),
+    dropped=("c.crit_damage()", "c.deals(typed=)"),
 )
 def i2964x1(c: Cast) -> None:
     """How much the critical rider paid out is a `Mod` rolled inside
     `resolve.deal_damage` and never announced, so healing "equal to the
     damage dealt by this weapon's critical property" has no number to
-    read."""
+    read.
+
+    The second marker is the retype: `Cast._typed` recolours only what a
+    card left untyped, and this card says **all** damage."""
     c.deals(DamageType.NECROTIC, on=c.me)
 
 
@@ -1813,10 +1925,11 @@ def i968p1(c: Cast) -> None:
     dropped=("c.deals(half=)",),
 )
 def i991x1(c: Cast) -> None:
-    """Half of one blow being radiant and half not cannot be said: a hit
-    carries one `DamageType`, and `c.deals` would make the whole swing
-    radiant, which is strictly better than print against anything that
-    resists it."""
+    """Half of one blow being radiant and half not cannot be said: a blow
+    carries one `DamageType`, or a set of types that are all of it at
+    once, and neither is a split. `c.deals` is not the near miss the old
+    note claimed either -- it would recolour the untyped part whole and
+    leave a typed power alone."""
     c.as_implement(on=c.me)
 
 
@@ -1828,12 +1941,35 @@ def i991x1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    todo=("Keyword.CHANNEL_DIVINITY",),
 )
 def i991p1(c: Cast) -> None:
-    """Hands back a use of a group of rows the engine does not group:
-    `c.restore_use` names one ref and nothing marks a row as belonging to
-    channel divinity."""
+    """The engine does group them. 115 rows carry
+    `group="channel divinity"`, `dsl._group_spent` is what holds the
+    allowance to one a fight, and `c.expended(group=)` exists for exactly
+    this card -- its own docstring names it.
+
+    So "an additional use" is handing one back. If one has already gone it
+    is restored now; if none has, the next one is restored as it resolves,
+    which is the same allowance and keeps the row from being a standard
+    action that did nothing because the order was inconvenient.
+    `PowerResolved` rather than `PowerUsed`, because the use is not spent
+    until the row has run."""
+    gone = c.expended(group="channel divinity")
+    if gone:
+        pick = c.choose(gone, "which channel divinity use comes back")
+        if pick is not None:
+            c.restore_use(pick)
+        return
+    done: list[bool] = []
+
+    def again(ev: PowerResolved) -> None:
+        p = get(ev.power)
+        if done or ev.actor != c.me or p is None or p.group != "channel divinity":
+            return
+        done.append(True)
+        c.restore_use(ev.power)
+
+    c.watch(PowerResolved, again, until=When.ENCOUNTER)
 
 
 # -- level 10 ---------------------------------------------------------------
@@ -1849,13 +1985,21 @@ def i991p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with a melee weapon attack using this weapon",
     on=Trigger(Hit, both(by_me, by_melee), "you hit with a melee attack"),
-    dropped=("c.in_action_point()",),
 )
 def i1051p1(c: Cast) -> None:
-    """Whether the triggering swing was made with the extra action an
-    action point bought is not on the `Hit`: `ActionPointSpent` says one
-    was spent and nothing ties an attack to it."""
-    c.ongoing(10)
+    """It *is* on the `Hit`. `resolve.attack` hangs `action_point` on the
+    outcome from `resolve.spent_action_point`, as a plain attribute like
+    `opportunity` -- so the gate is a `getattr` and not a gap. It is true
+    for the whole of the turn the point was spent on, which that helper's
+    docstring says outright: wider than the printed sentence by that
+    turn's other attacks, and the four rows keyed off it accept the same
+    reading.
+
+    The penalty goes on the burn's own effect rather than on the creature,
+    so it narrows to the save the card names instead of every save."""
+    burn = c.ongoing(10)
+    if burn is not None and getattr(c.trigger, "action_point", False):
+        burn.save_mod -= 5
 
 
 @power(
@@ -1865,17 +2009,40 @@ def i1051p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("by_class()",),
 )
 def i1184x1(c: Cast) -> None:
-    """`DamageApplied.absorbed` is how much resistance or immunity ate,
-    which is the printed condition exactly. Which class's power dealt it
-    cannot be asked."""
+    """Two things this row used to believe were wrong.
+
+    **`DamageApplied.absorbed` is temporary hit points**, not resistance:
+    `resolve.deal_damage` sets it from `health.temp` several lines after
+    the resistances have already come off. A blow reduced by resist 5 and
+    nothing else reports `absorbed == 0`, so the old gate was false every
+    time. What resistance ate is the gap between the two announcements --
+    `DamageRolled` is emitted before the defences are read and
+    `DamageApplied` after -- less whatever the temporary hit points took.
+
+    **"A sorcerer attack power" is askable.** `detail` is the ref of the
+    row that rolled the blow, which `Cast.maximise` already reads back
+    that way, so the class is a header field away. A miss's half damage
+    carries `"<ref> (half)"` and answers no, which is right: the card is
+    about a hit."""
+    offered: dict[tuple[str, int], int] = {}
+
+    def rolled(ev: DamageRolled) -> None:
+        if ev.source == c.me:
+            offered[(ev.detail, ev.target)] = ev.amount
 
     def blunted(ev: DamageApplied) -> None:
-        if ev.source == c.me and ev.absorbed > 0:
+        if ev.source != c.me:
+            return
+        was = offered.pop((ev.detail, ev.target), None)
+        if was is None or was - ev.amount - ev.absorbed <= 0:
+            return
+        p = get(ev.detail)
+        if p is not None and p.cls == "sorcerer":
             c.temp_hp(5, on=c.me)
 
+    c.watch(DamageRolled, rolled, until=When.ENCOUNTER)
     c.watch(DamageApplied, blunted, until=When.ENCOUNTER)
 
 
@@ -1887,13 +2054,31 @@ def i1184x1(c: Cast) -> None:
     action=FREE,
     reach=Melee(1),
     target=ONE_CREATURE,
-    trigger="you hit an enemy with this dagger",
-    on=Trigger(Hit, by_me, "you hit with this dagger"),
-    todo=("c.strip_resistance()",),
+    trigger="you hit an enemy with a sorcerer attack power using this dagger",
+    on=Trigger(
+        Hit, both(by_me, _by_class("sorcerer")), "you hit with a sorcerer power"
+    ),
+    dropped=("Defences.immune",),
 )
 def i1184p1(c: Cast) -> None:
-    """Takes a resistance or an immunity away for the fight. `c.resist`
-    grants one and `c.vulnerable` offsets one; neither removes."""
+    """`c.resist` does remove: a **negative** amount is arithmetic rather
+    than a highest-wins hold, and `c.resistances` reads the standing
+    number so the delta is exact and the duration puts it back. The choice
+    is offered among the resistances the creature actually has, because
+    naming a type it does not resist is a use of a daily for nothing.
+
+    Immunity is the dropped half. `Defences.immune` is a separate set and
+    nothing takes anything out of it -- `c.ignore_resistance(immunity=)`
+    is the attacker's side of that sentence, not the target's."""
+    foe = getattr(c.trigger, "target", None) or c.target
+    if foe is None:
+        return
+    standing = c.resistances(on=foe)
+    if not standing:
+        return
+    pick = c.choose(list(standing), "which resistance the dagger takes away")
+    if pick is not None:
+        c.resist(-standing[pick], pick, on=foe, until=When.ENCOUNTER)
 
 
 @power(
@@ -1995,13 +2180,13 @@ def i1536x1(c: Cast) -> None:
     target=SELF,
     keywords=[Keyword.FIRE],
     trigger="you miss with an attack that targets AC",
-    on=Trigger(Miss, by_me, "you miss with an attack"),
-    dropped=("Miss.vs",),
+    on=Trigger(Miss, _missed_ac, "you miss with an attack against AC"),
 )
 def i1536p1(c: Cast) -> None:
-    """`Miss` carries the attacker, the target and the power and not the
-    defence it went at, so "an attack that targets AC" cannot be asked.
-    That half is still dropped.
+    """`Miss` does carry the defence: not as a field, but as the plain
+    attribute `resolve.attack` hangs on it -- the comment there says it
+    was added because "an attack against your AC misses you" had nothing
+    to read. So the AC half is declared rather than dropped.
 
     `c.grant_attack`'s own `damage_bonus` is a bare number, so the fire
     is laid on the devil as a one-shot typed rider aimed at the target
@@ -2043,10 +2228,12 @@ def i1737x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.LIGHTNING],
-    dropped=("c.deals(revert=)",),
+    dropped=("c.deals(typed=)",),
 )
 def i1737p1(c: Cast) -> None:
-    c.deals(DamageType.LIGHTNING, on=c.me)
+    """`c.endable` is the free action back, as on `i1419p1`; what is left
+    is that `Cast._typed` recolours only the untyped part."""
+    c.endable(c.deals(DamageType.LIGHTNING, on=c.me), FREE)
 
 
 @power(
@@ -2244,12 +2431,13 @@ def i3096x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.deals(only_untyped=)",),
 )
 def i3134x1(c: Cast) -> None:
-    """`c.deals` rewrites every weapon attack's type where the card
-    rewrites only the untyped ones. The splash is dealt flat: it is the
-    weapon's own damage and not a rider on any roll."""
+    """`Cast._typed` recolours only what a card left untyped and only on a
+    `Keyword.WEAPON` row, which is this card's sentence exactly -- see
+    `i3135x1`, where the same marker was wrong for the same reason. The
+    splash is dealt flat: it is the weapon's own damage and not a rider on
+    any roll."""
     c.resist(3 + 2 * c.enhancement, DamageType.FIRE, on=c.me)
     c.deals(DamageType.FIRE, on=c.me)
     splash = 5 + c.enhancement
@@ -2358,22 +2546,26 @@ def i3412p1(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
-    dropped=("by_class()",),
 )
 def i3412p2(c: Cast) -> None:
-    """The extra [W] is laid before the swing: `c.basic` rolls its own
-    damage and there is no second packet to add to. "An arcane implement
-    attack" is a class gate `c.grant_attack` cannot ask for."""
+    """As `i3411p2`: the extra [W] is laid before the swing, and "an arcane
+    implement attack" is two keywords off the ally's own rows rather than a
+    class gate."""
     foe = c.target
     if foe is None:
         return
     c.bonus("damage", 0, dice=c.w(), on=c.me, until=When.EOT, once=True)
     c.basic(on=foe)
     allies = c.within(10, side="ally")
-    if allies:
-        who = c.choose(allies, "who strikes after you")
-        if who is not None:
-            c.grant_attack(who, on=foe)
+    if not allies:
+        return
+    who = c.choose(allies, "who strikes after you")
+    if who is None:
+        return
+    rows = _arcane_implement(c, who)
+    if rows:
+        pick = c.choose(rows, "which arcane implement attack") or rows[0]
+        c.grant_attack(who, on=foe, ref=pick)
 
 
 @power(
@@ -2400,12 +2592,20 @@ def i3412p3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("Weapon.silvered", "c.ignore_insubstantial()"),
+    dropped=("c.silvered()",),
 )
 def i3510x1(c: Cast) -> None:
-    """Both clauses are about what the weapon is made of. Silver has
-    nowhere to be recorded, and `c.insubstantial` halves damage taken with
-    nothing that pays it back."""
+    """"Full damage to insubstantial creatures" is already a verb:
+    `c.ignore_resistance(insubstantial=True)`, written for this exact line
+    because insubstantial is a halving rather than a resistance and lives
+    in its own line of `deal_damage`. `amount=0` rather than the default
+    `None`, or the blanket "ignore every resistance" rides along with it
+    and the weapon walks through things the card never mentions.
+
+    Silver is still a material a base weapon cannot record."""
+    c.ignore_resistance(
+        0, on=c.me, until=When.ENCOUNTER, insubstantial=True
+    )
 
 
 @power(
@@ -2484,14 +2684,39 @@ def i3555p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit a dragon or draconian and the d20 roll is 15 or higher",
     on=Trigger(
-        Hit, _struck_kind("dragon", "draconian"), "you hit a dragon or draconian"
+        Hit,
+        _struck_kind("dragon", "draconian", natural=15),
+        "you hit a dragon or draconian on a 15 or better",
     ),
-    todo=("c.make_critical()",),
 )
 def i3555p2(c: Cast) -> None:
-    """Turning a hit that has landed into a critical cannot be said: the
-    crit is decided in `resolve.attack` off the die and nothing rewrites
-    it afterwards."""
+    """It can be said, and `c.maximise(critical=True)` is where the engine
+    says it: "treated as a critical hit" is more than maximum damage, so
+    that branch sets `critical` on the live `AttackResult` rather than
+    topping the number up. Here the hit being answered is the one in hand,
+    so its own result is the thing to set -- the same line, aimed at the
+    event instead of at the next one. `resolve.attack` announces the `Hit`
+    before the attacking body rolls its damage, so the maximum dice, the
+    crit riders and the weapon's critical column are all still ahead of
+    it.
+
+    The d20 clause is in the predicate rather than in the body: this is a
+    daily, and a row that fires on every hit and only then looks at the
+    die has spent itself for nothing.
+
+    "You do not expend this power" turns on whether the target drops,
+    which is knowable only after that damage."""
+    result = getattr(c.trigger, "result", None)
+    if result is None:
+        return
+    result.critical = True
+    foe = getattr(c.trigger, "target", None)
+
+    def felled(ev: Dropped) -> None:
+        if ev.actor == foe and ev.source == c.me:
+            c.restore_use(c.ref, on=c.me)
+
+    c.watch(Dropped, felled, until=When.EOT)
 
 
 @power(

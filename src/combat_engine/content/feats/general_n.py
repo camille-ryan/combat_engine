@@ -17,10 +17,13 @@ area-attack riders that would otherwise have been blind (`f2150`,
 `f2152b`, `f2153b`) are ordinary rows. `PowerUsed` cannot answer any of
 them: it is announced above the body and no attack has been rolled.
 
-**`c.resist` adds.** `f2320` prints "increase the resistance from f2319
-to 5" and f2319 already laid 2, so this row lays **3**. Laying 5 would
-have come to 7 in every fight, and it would have looked right on the
-card.
+**`c.resist` takes the highest; it no longer adds.** This file was
+written while it added, and two rows were written against that: `f2320`
+laid 3 to reach a printed 5, and `f2129b` laid a bare 5 for "increase
+fire resistance by 5". Under the rule the code now has, the first came
+to 3 and the second threw away whatever was standing. A printed *total*
+is now the number to pass; a printed *increase* has to read
+`c.resistances` and add to it.
 
 **A triggered `action=NONE` row spends a use each time it fires**, so
 everything here whose printed benefit has no limit is `AT_WILL`. The
@@ -67,6 +70,7 @@ from combat_engine.engine import (
     DamageType,
     Dropped,
     Gear,
+    Healed,
     Hit,
     Keyword,
     Melee,
@@ -78,6 +82,7 @@ from combat_engine.engine import (
     Ranged,
     RoundStart,
     SavingThrow,
+    SecondWind,
     Size,
     SurgeSpent,
     Swap,
@@ -86,6 +91,7 @@ from combat_engine.engine import (
     TurnStart,
     Usage,
     When,
+    Window,
     about_me,
     both,
     by_charge,
@@ -100,6 +106,9 @@ from combat_engine.engine.query import (
     distance_between,
     enemies,
     flanked_by,
+    spread,
+    squares,
+    team,
 )
 
 #: A racial power or trait the benefit names in prose rather than by ref.
@@ -238,9 +247,9 @@ def _basic_refs(c: Cast, *, ranged: bool = True) -> tuple[str, ...]:
 
 
 def _adjacent_square(c: Cast, who: int, square: Any) -> bool:
-    from combat_engine.engine.query import squares_of
-
-    return any(distance(s, square) <= 1 for s in squares_of(c.world, who))
+    #: `query.squares`, not `squares_of` -- the latter is a method on the
+    #: grid and importing it from `query` raised at the first call.
+    return any(distance(s, square) <= 1 for s in squares(c.world, who))
 
 
 def _keeps_a_familiar(world, eid: int) -> bool:  # noqa: ANN001
@@ -445,11 +454,21 @@ def f2201(c: Cast) -> None:
 @power("f2242", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("c.shift_as(when=)",))
 def f2242(c: Cast) -> None:
-    """The shift is granted for the fight. Gating it on standing next to
-    a creature your p1831 is holding is the half that is missing:
-    `c.suffering("p1831")` asks the question, and `c.shift_as` has
-    nowhere to hang the answer -- it grants an action outright."""
-    c.shift_as(MOVE, 2, on=c.me, until=When.ENCOUNTER)
+    """`c.shift_as` grants an action outright and has nowhere to hang a
+    gate, so the question is asked once a turn instead: standing next to
+    somebody your p1831 is holding at the top of your turn buys the
+    better shift for that turn alone. Granting it for the fight, which
+    is what this row used to do, is the printed line without its
+    condition."""
+    me = c.me
+
+    def each_turn(ev: Any) -> None:
+        if ev.actor != me or ev.ghost:
+            return
+        if any(c.adjacent(to=who) for who in c.suffering("p1831")):
+            c.shift_as(MOVE, 2, on=me, until=When.EOT)
+
+    c.watch(TurnStart, each_turn, on=me, until=When.ENCOUNTER)
 
 
 _granted("f2243", "f2243b")
@@ -688,12 +707,14 @@ _granted("f2105", "f2105b", swap=Swap(9, Usage.DAILY))
 
 @power("f2105b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
-       attack=Attack(REF, vs=AC), dropped=("c.phasing(through=)",))
+       attack=Attack(REF, vs=AC),
+       dropped=("c.phasing(through=)", "c.pick_pocket()"))
 def f2105b(c: Cast) -> None:
     """The Effect runs first, as printed: the shift is what brings you
     into reach. Moving through the target's space on the way is the
     dropped clause -- `c.phasing` goes through terrain and has no way to
-    name one creature.
+    name one creature -- and so is the free-action Thievery check, which
+    was going unsaid here while f2103b named it.
 
     The secondary attack is rolled by hand with `c.attack`, because a
     header carries one attack line and this card prints two.
@@ -916,16 +937,19 @@ _granted("f2155", "f2155b", swap=Swap(6, utility=True))
 
 
 @power("f2155b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.ignore_cover(once=)",))
+       reach=PERSONAL, target=SELF)
 def f2155b(c: Cast) -> None:
-    """The regain-on-a-miss is real -- `c.restore_use` hands a use back
-    by ref, and this row's own ref is `c.ref`. What is dropped is "the
-    **next** attack": `c.ignore_cover` holds for a duration and has no
-    one-shot, so the grant covers every ranged roll until the end of the
-    next turn rather than one."""
+    """"The **next** ranged attack roll" is `once=True`.
+
+    The one-shot is spent on `AttackRolled` and only when the `when=`
+    gate is true of the real attack context, so a melee swing in between
+    does not eat it. The regain-on-a-miss is `c.restore_use` against
+    this row's own ref."""
     me = c.me
-    c.ignore_cover(on=me, until=When.EONT,
-                   when=lambda ctx: bool(ctx.get("ranged", False)))
+    c.ignore_cover(
+        on=me, until=When.EONT, once=True,
+        when=lambda ctx: bool(ctx.get("ranged", False)),
+    )
 
     def missed(ev: Any) -> None:
         if ev.attacker == me:
@@ -1051,11 +1075,12 @@ def f2318(c: Cast) -> None:
 @power("f2320", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f2320(c: Cast) -> None:
-    """**Three**, not five. `c.resist` adds into `Defences.resist`, and
-    f2319 -- which this feat requires -- has already laid 2, so laying
-    the printed total would come to 7 in every fight."""
+    """**Five**, the printed total. This row used to lay 3 on the grounds
+    that f2319 -- which this feat requires -- had already laid 2 and
+    `c.resist` added them; it takes the highest now, so the arithmetic
+    that made 3 right makes it a resistance two points short."""
     for dtype in _LEGACY:
-        c.resist(3, dtype, on=c.me, until=When.ENCOUNTER)
+        c.resist(5, dtype, on=c.me, until=When.ENCOUNTER)
 
 
 # -- the diabolic and intimidating cards ------------------------------------
@@ -1094,11 +1119,18 @@ def f2129(c: Cast) -> None:
 def f2129b(c: Cast) -> None:
     """Raising the attack bonus that *another* row grants is the dropped
     clause: m1031a4's bonus lives inside its own effect and nothing can
-    reach in and rewrite one."""
+    reach in and rewrite one.
+
+    "**Increase** fire resistance by 5" is read off `c.resistances` and
+    added. A bare `c.resist(5)` was right while the method added; it
+    takes the highest now, so on the race that prints this -- which
+    already resists fire -- it was throwing the standing figure away.
+    """
     me = c.me
     c.form(until=When.ENCOUNTER, label=c.ref)
     c.regeneration(2, on=me, until=When.ENCOUNTER)
-    c.resist(5, DamageType.FIRE, on=me, until=When.ENCOUNTER)
+    standing = c.resistances(on=me).get(DamageType.FIRE, 0)
+    c.resist(standing + 5, DamageType.FIRE, on=me, until=When.ENCOUNTER)
     c.bonus("damage", 2, on=me, until=When.ENCOUNTER)
     c.grant_row("f2129c", on=me, until=When.ENCOUNTER)
 
@@ -1223,13 +1255,30 @@ def f2160(c: Cast) -> None:
         c.heal(c.wis_mod, on=c.me)
 
 
-@power("f2161", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.forgo_defences()",))
+@power("f2161", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, lambda w, me, ev: ev.actor == me,
+                  "you use your second wind"))
 def f2161(c: Cast) -> None:
-    """Trades what second wind grants for concealment. `SecondWind` is
-    the moment, but the trade needs the +2 to defences given up, and
-    nothing refuses what `Cast.second_wind` lays -- an untyped bonus on
-    top would add to it rather than replace it."""
+    """`Cast.second_wind` announces itself and *then* lays +2 on all four
+    defences until the start of your next turn, so a handler answering
+    the event cannot end a thing that does not exist yet. Giving the
+    bonus up is therefore written as an equal untyped penalty over the
+    same clock: untyped modifiers add, so the pair comes to nothing and
+    the character is left exactly where the card says.
+
+    "If you already have concealment, you instead gain total
+    concealment" is read off `query.concealment_of`, which answers
+    `Cover.NONE` rather than None when there is none.
+    """
+    me = c.me
+    if not c.may("give up the second wind defence bonus", who=me):
+        return
+    for defence in ALL_DEFENCES:
+        c.penalty(defence, 2, on=me, until=When.SONT)
+    already = concealment_of(c.world, me) is not Cover.NONE
+    c.conceal(on=me, until=When.EONT, total=already)
 
 
 # -- the martial tail -------------------------------------------------------
@@ -1354,11 +1403,23 @@ def f2452(c: Cast) -> None:
     c.prone(on=foe)
 
 
-@power("f2457", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.forgo_defences()",))
+@power("f2457", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, lambda w, me, ev: ev.actor == me,
+                  "you use your second wind"))
 def f2457(c: Cast) -> None:
-    """Same gap as f2161: the moment is there now, and giving up the
-    defence bonus `Cast.second_wind` lays is not."""
+    """The same trade as f2161, bought with attack rolls instead of
+    concealment, and written the same way: the +2 the second wind is
+    about to lay is cancelled by an equal untyped penalty on the same
+    clock rather than refused, because the event is announced above the
+    line that lays it."""
+    me = c.me
+    if not c.may("give up the second wind defence bonus", who=me):
+        return
+    for defence in ALL_DEFENCES:
+        c.penalty(defence, 2, on=me, until=When.SONT)
+    c.bonus("attack", 2, on=me, until=When.EONT)
 
 
 @power("f2458", level=1, cls="", usage=ENCOUNTER,
@@ -1507,15 +1568,28 @@ def f2102(c: Cast) -> None:
             return
 
 
-@power("f2408", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2408", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.damage_of(ref)",))
+       trigger="you hit an enemy with a martial power",
+       on=Trigger(Hit, lambda w, me, ev: (
+           ev.attacker == me and Keyword.MARTIAL in _keywords(ev.power)
+       ), "you hit an enemy with a martial power"))
 def f2408(c: Cast) -> None:
-    """Trades `p1448` for extra damage on a martial hit. Re-aimed: the
-    price is `c.expend_row("p1448")` now, and what is left is rolling
-    *that row's* damage line for a blow this one deals --
-    "as if you had hit with" is a whole damage expression borrowed from
-    elsewhere, which neither `c.damage` nor `c.as_though_hit_by` says."""
+    """"Damage as if you had hit with p1448" **is** `c.as_though_hit_by`,
+    which runs the named row's body against one creature with its attack
+    forced to land -- so the amount and the type both come off p1448's
+    own line, including the element `c.element` records. The earlier
+    reading, that this wanted a damage expression nothing could borrow,
+    was written before that verb existed.
+
+    `by=c.me` rather than letting `c.knows` search the board: the price
+    is the caster's own racial use, so the caster is the owner, and a
+    bare search would find any dragonborn standing nearby.
+    """
+    foe = c.trigger.target
+    if foe is None or not c.expend_row("p1448", on=c.me):
+        return
+    c.as_though_hit_by("p1448", on=foe, by=c.me)
 
 
 @power("f2442", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1527,11 +1601,27 @@ def f2442(c: Cast) -> None:
     choice -- so there is no ref to hand a second use to."""
 
 
-@power("f2450", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+@power("f2450", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1452",
+       on=Trigger(PowerUsed, _used("p1452"), "you use that racial power"),
+       dropped=("c.uncrit()",))
 def f2450(c: Cast) -> None:
-    """A penalty on the roll a racial power forces to be made again.
-    Nothing announces that a roll is a second one."""
+    """Nothing announces that a roll is a second one, but nothing has to:
+    `PowerUsed` is announced *above* the body, so at this moment p1452's
+    reroll has not been made and a one-shot penalty laid here is
+    standing for it and for nothing else. `PowerUsed.trigger` is the
+    blow that provoked the racial power, and it is the only thing that
+    names the attacker -- the row itself is `SELF`.
+
+    The one-shot is spent on the next attack roll that attacker makes,
+    which is the reroll. Denying the critical is the dropped half.
+    """
+    blow = getattr(c.trigger, "trigger", None)
+    foe = getattr(blow, "attacker", None)
+    if foe is None:
+        return
+    c.penalty("attack", 5, on=foe, until=When.EOT, once=True)
 
 
 @power("f2244", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1567,14 +1657,32 @@ def f2244(c: Cast) -> None:
             when=in_the_cloud)
 
 
-@power("f2175", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2175", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.counts_as(keyword=)", "cf:sorcerer-f0s1"))
+       trigger="you take damage of the type your p1448 deals",
+       on=Trigger(DamageApplied, lambda w, me, ev: (
+           ev.target == me and ev.amount > 0
+       ), "you take damage"),
+       dropped=("c.counts_as(keyword=)", "cf:sorcerer-f0s1"))
 def f2175(c: Cast) -> None:
-    """`p1448` is a ref and the keyword half is the standing gap. The
-    second half compares the racial power's damage type with the one
-    `cf:sorcerer-f0s1` grants resistance to, and that feature has a ref
-    but no row, so there is no resistance to compare against."""
+    """The second half plays. p1448's type is `c.element`, which is where
+    the racial choice is recorded and what p1448's own body rolls with,
+    and "the type you have resistance to" is asked of `c.resistances`
+    rather than of the one feature the card names -- `cf:sorcerer-f0s1`
+    has no row, so naming it would make the row inert, while the
+    question the card is really asking is answerable off the character.
+
+    `DamageApplied` is after resistance, which is the printed "after the
+    damage dealt is reduced by your resistance". The keyword half --
+    calling the racial power arcane -- is the standing gap.
+    """
+    me = c.me
+    mine = c.element(on=me)
+    if mine is None or c.resistances(on=me).get(mine, 0) <= 0:
+        return
+    if c.trigger.dtype is not mine:
+        return
+    c.restore_use("p1448", on=me)
 
 
 @power("f2179", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1642,20 +1750,33 @@ def f1351(c: Cast) -> None:
     contributed to a roll that is already made."""
 
 
-@power("f1352", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_revive()",))
+@power("f1352", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you regain hit points after dropping",
+       on=Trigger(Healed, lambda w, me, ev: (
+           ev.target == me and ev.amount > 0 and ev.hp == 0
+       ), "you regain hit points while down"))
 def f1352(c: Cast) -> None:
-    """Pays out on coming back up in the same fight. `Dropped` announces
-    going down and `Healed` announces the hit points, but regaining
-    consciousness is cleared inside `Health` without a word."""
+    """The moment is on `Healed` after all. `resolve.heal` floors a
+    negative total at 0 and calls `_revive` *before* it announces, so a
+    `Healed` carrying `hp == 0` is exactly "you were at or below 0 and
+    are coming back" and nothing else reaches that reading.
+
+    Standing costs nothing to say: `_revive` has already taken off the
+    prone the drop imposed, so what is left of the printed line is the
+    shift.
+    """
+    c.shift(1, who=c.me)
 
 
 @power("f2149", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("feat.weapon_choice()",))
+       reach=PERSONAL, target=SELF, todo=("c.chosen_weapon_group()",))
 def f2149(c: Cast) -> None:
     """Widens two other feats from the weapon group each was taken for to
     every group. Both are refs, and what is missing is the *choice* each
-    of them recorded -- a feat's arguments are not stored anywhere."""
+    of them recorded -- a feat's arguments are not stored anywhere.
+    Re-aimed onto the symbol f233 itself is blocked on, since f233 is
+    half of this row's own gate and the two want the same thing."""
 
 
 @power("f2241", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1806,9 +1927,39 @@ def f2897(c: Cast) -> None:
 
 
 @power("f2898", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_pact_boon()",))
+       reach=PERSONAL, target=SELF)
 def f2898(c: Cast) -> None:
-    """Rides on a pact boon firing. Nothing announces one."""
+    """Nothing announces a pact boon, but the condition behind this one
+    is readable: `cf:warlock-f1` pays the fey leg out of a `Dropped`
+    watch on a cursed enemy, so this arms the same question rather than
+    waiting for a word that is never said.
+
+    `Window.BEFORE`, because that boon's own watch teleports the warlock
+    away and the square this row is about is the one being left -- by
+    the default window it has already gone. `query.spread` of the
+    caster's own squares is "the square you leave and each square
+    adjacent to it".
+
+    Lightly obscured is carried as the zone's cover: `c.cover_in` is the
+    one way a patch of ground shelters what stands in it, and
+    `resolve.attack` takes the larger of cover and concealment, so the
+    -2 a blow meets is the printed one either way.
+    """
+    me = c.me
+    if not c.build("fey"):
+        return
+
+    def boon(ev: Any) -> None:
+        if ev.actor == me or team(c.world, ev.actor) == team(c.world, me):
+            return
+        if not c.cursed(on=ev.actor):
+            return
+        here = squares(c.world, me)
+        if not here:
+            return
+        c.cover_in(c.zone(spread(here, 1), until=When.SONT), side="any")
+
+    c.watch(Dropped, boon, on=me, until=When.ENCOUNTER, window=Window.BEFORE)
 
 
 @power("f2900", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

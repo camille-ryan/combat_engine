@@ -7,11 +7,15 @@ paragon and out of scope.
 
 Four judgements run through the file.
 
-* **The damage context is thin.** It carries `target`, `power`,
-  `opportunity`, `charge`, `dtype` and `crit` -- no attacker, no reach of
-  its own and no combat advantage. "Melee attacks deal 2 extra" is
-  therefore asked of `get(ctx["power"]).reach.kind`, and "against an enemy
-  granting combat advantage to you" cannot be asked at all.
+* **The damage context is not as thin as this file used to say.** It
+  carries `target`, `power`, `opportunity`, `charge`, `dtype`, `dtypes`,
+  `crit`, `advantage`, `ranged`, `granted_by` and `granted_via`. It has no
+  attacker -- the caster is `c.me`, which is who the modifier hangs on --
+  and no reach of its own, so "melee attacks deal 2 extra" is still asked
+  of `get(ctx["power"]).reach.kind`. "Against an enemy granting combat
+  advantage to you" **is** askable, on `ctx["advantage"]`, with the
+  engine's own caveat that a one-shot grant is already spent by the time
+  damage is rolled.
 * **Five items in this slot print the same elemental daily**: use it when
   you make an attack of some shape, that attack changes damage type and
   gains a rider, and every attack of that shape deals 1 extra for the rest
@@ -24,6 +28,10 @@ Four judgements run through the file.
 * **Stowing, drawing and applying a consumable are not modelled.** An
   alchemical item, a dose of poison and an item kept inside a glove have
   no engine object, so those rows carry markers rather than inventing one.
+* **A race is asked for by one of its trait refs.** Nothing carries a
+  creature's race, but a racial trait is an ordinary row in `Powers.known`
+  and `c.feat(ref, on=)` reads that, so "your r3 allies" is exact where
+  `c.is_kind` would have answered for every fey creature on the board.
 """
 
 from __future__ import annotations
@@ -31,6 +39,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.powers.barbarian.rage import in_rage
+from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -78,11 +88,21 @@ from combat_engine.engine import (
     by_melee,
     by_ranged,
     get,
+    granted_via,
     power,
     targets_me,
 )
 
 ITEM = "item"
+
+#: `cf:barbarian-f3` hands its free swing over with `c.basic`, which files
+#: the feature's own ref under `granted_via` -- on the `Hit` and in the
+#: damage context alike. That is what "attacks from your X class feature"
+#: is a set of.
+RAMPAGE = "cf:barbarian-f3"
+
+#: One of r3's racial traits, which only an r3 character carries.
+R3 = "rt:r3-trance"
 
 
 # -- shared reading of the board --------------------------------------------
@@ -139,15 +159,48 @@ def _dtype_gate(*types: DamageType) -> Callable[[dict[str, Any]], bool]:
     return gate
 
 
+def _is_thrown(weapon: Any) -> bool:
+    """A thrown weapon, by the property the table prints.
+
+    The word comes in two grades -- "light thrown" and "heavy thrown" --
+    and no card in this slot distinguishes them.
+    """
+    return weapon is not None and any("thrown" in p for p in weapon.properties)
+
+
+def _throwing(c: Cast) -> bool:
+    """Is a ranged attack by this creature a *thrown* one?
+
+    The same rule `Cast.weapon_of` uses, said with what a body can reach:
+    a real ranged weapon is what a ranged power fires if one is in hand,
+    and otherwise the thing being thrown is the thing being held. A bow
+    answers False, a held dagger answers True.
+    """
+    held = c.held(on=c.me)
+    fired = next((w for w in held if w.ranged), None)
+    if fired is not None:
+        return _is_thrown(fired)
+    return any(_is_thrown(w) for w in held)
+
+
 def _has_keyword(ref: str, *words: Keyword) -> bool:
     row = get(ref)
     return row is not None and any(w in row.keywords for w in words)
 
 
 def _foe(c: Cast) -> int | None:
-    """The other creature in whatever event this row is answering."""
+    """The other creature in whatever event this row is answering.
+
+    **`target` is in the list and used not to be**, which made every row
+    here that answers "when *you* hit" silently wrong: on a `Hit` of mine
+    the attacker is me and is skipped, and with nothing left to read the
+    fallback was `c.target` -- None on the `NO_TARGET` rows and the
+    caster itself on the `SELF` one, so a row printing "make a basic
+    attack against it" swung at its own bearer. Attacker first, so a row
+    answering a blow aimed *at* the bearer still names the striker.
+    """
     ev = c.trigger
-    for name in ("attacker", "source", "actor"):
+    for name in ("attacker", "source", "actor", "target"):
         who = getattr(ev, name, None)
         if who is not None and who != c.me:
             return who
@@ -334,9 +387,13 @@ def i2673p1(c: Cast) -> None:
 
 
 @power("i2947x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.raging()",))
+       reach=PERSONAL, target=SELF)
 def i2947x1(c: Cast) -> None:
-    """A rage is a stance with no standing question to ask of it."""
+    """A rage is a stance and `rage.in_rage` is the standing question the
+    class already asks of it, so the marker here was naming something that
+    had existed all along."""
+    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=lambda ctx: in_rage(c))
 
 
 @power("i2947p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
@@ -361,11 +418,24 @@ def i673p1(c: Cast) -> None:
 
 
 @power("i893x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.in_form()",))
+       reach=PERSONAL, target=SELF)
 def i893x1(c: Cast) -> None:
-    """Both gates are missing: nothing asks which form is on, and the
-    damage context does not carry whether the blow had advantage."""
+    """Both gates exist. `forms.in_beast_form` is the class's own reader,
+    and the damage context does carry `advantage` -- with the engine's
+    caveat that a *one-shot* grant is spent by the attack roll, so this
+    pays on standing advantage and not on a grant used up to land the
+    blow."""
+    melee = _reach_gate("melee")
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return (
+            in_beast_form(c.world, c.me)
+            and bool(ctx.get("advantage"))
+            and melee(ctx)
+        )
+
+    c.bonus("damage", 0, dice="1d10", on=c.me, until=When.ENCOUNTER,
+            when=gate)
 
 
 @power("i903x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -495,12 +565,14 @@ def i1349x1(c: Cast) -> None:
 
 
 @power("i1349p1", level=6, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.FIRE],
-       dropped=("c.typed_damage_bonus()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.FIRE])
 def i1349p1(c: Cast) -> None:
-    """A damage modifier carries no type of its own, so the extra die is
-    dealt as whatever the attack was already dealing."""
-    c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EOT, once=True)
+    """`c.bonus(dtype=)` carries the rider as its own typed part of the
+    blow, which is what "1d6 extra *fire* damage" on a power of any type
+    means: the six points meet fire resistance on their own terms and the
+    power's own damage is left alone."""
+    c.bonus("damage", 0, dice="1d6", dtype=DamageType.FIRE, on=c.me,
+            until=When.EOT, once=True)
 
 
 @power("i1459p1", level=6, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -528,11 +600,13 @@ def i1698x1(c: Cast) -> None:
 @power("i1698p1", level=6, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a thrown weapon attack",
-       on=Trigger(Hit, both(by_me, by_ranged), "you hit at range"),
-       dropped=("Weapon.thrown",))
+       on=Trigger(Hit, both(by_me, by_ranged), "you hit at range"))
 def i1698p1(c: Cast) -> None:
-    """`Weapon.properties` knows about thrown weapons and the attack event
-    does not carry the weapon, so any ranged hit answers."""
+    """`c.weapon_of` picks the weapon the triggering attack was actually
+    made with, so "a thrown weapon attack" is exact and a bowshot is left
+    out -- the event not carrying the weapon was never the whole story."""
+    if not _is_thrown(c.weapon_of(c.trigger)):
+        return
     c.bonus("damage", 5, on=c.me, until=When.EOT, kind="power", once=True)
 
 
@@ -544,22 +618,25 @@ def i1756p1(c: Cast) -> None:
 
 
 @power("i2134x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_feature_power()",))
+       reach=PERSONAL, target=SELF)
 def i2134x1(c: Cast) -> None:
-    """`cf:barbarian-f3` is declared now, and that is what shows the hold
-    is not a naming one. The feature's whole payout is `c.basic(on=...)`
-    inside its own `Hit` handler: the swing it buys announces itself as an
-    ordinary basic attack, with nothing on the event, the row or the
-    damage context saying which feature paid for it. "Attacks from your
-    `cf:barbarian-f3`" is therefore not a set a gate can test."""
+    """The swing `cf:barbarian-f3` buys is announced by `c.basic`, which
+    files the granting row's ref as `granted_via` -- in the damage context
+    as well as on the event. So "attacks from your class feature" is a set
+    a gate can test after all."""
+    c.bonus("damage", 4, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=lambda ctx: ctx.get("granted_via") == RAMPAGE)
 
 
 @power("i2134p1", level=6, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.on_feature_power()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with an attack that uses that class feature",
+       on=Trigger(Hit, both(by_me, granted_via(RAMPAGE)),
+                  "you hit with the swing that feature bought"))
 def i2134p1(c: Cast) -> None:
-    """Same gap as `i2134x1`: the trigger is a hit with the swing
-    `cf:barbarian-f3` bought, and that swing is indistinguishable from any
-    other basic attack."""
+    """`Hit` is announced before the damage is rolled, so the extra dice
+    laid here reach the roll they are printed for."""
+    c.bonus("damage", 0, dice=c.w(2), on=c.me, until=When.EOT, once=True)
 
 
 @power("i2168x1", level=6, cls=ITEM, action=ActionType.NONE,
@@ -588,9 +665,13 @@ def i2168x1(c: Cast) -> None:
        dropped=("c.next_attack_becomes()",))
 def i2452p1(c: Cast) -> None:
     """`c.deals` changes what the *weapon* deals, which is the nearest
-    thing to "the next arcane power you use deals necrotic"."""
+    thing to "the next arcane power you use deals necrotic" -- and it is
+    only near: `Cast._typed` applies it to weapon powers alone, so an
+    arcane implement power is untouched. The extra die carries the
+    printed type on its own."""
     c.deals(DamageType.NECROTIC, on=c.me, until=When.EOT)
-    c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EOT, once=True)
+    c.bonus("damage", 0, dice="1d6", dtype=DamageType.NECROTIC, on=c.me,
+            until=When.EOT, once=True)
 
 
 @power("i3223x1", level=6, cls=ITEM, action=ActionType.NONE,
@@ -630,10 +711,29 @@ def i806x1(c: Cast) -> None:
 
 
 @power("i806p1", level=6, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=NO_TARGET, todo=("c.strip_resistance()",))
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you hit with a weapon attack, before you deal damage",
+       on=Trigger(Hit, by_me, "you hit with a weapon attack"),
+       dropped=("c.strip_resistance()",))
 def i806p1(c: Cast) -> None:
-    """Taking a standing resistance down on the creature that has it is
-    the other half of the same gap, and `c.resist` only adds."""
+    """Re-aimed, and now it plays. "Reduce the resistance the target has
+    **against your attack**" is an ignore read off the attacker, and
+    `c.ignore_resistance(when=)` is handed the damage context, so the
+    five points are narrowed to the one creature.
+
+    `c.resist(-5, on=foe)` is the other sentence and is not this one: it
+    strips the resistance for everybody. A negative gated resist does
+    nothing at all -- `deal_damage` clamps that term at zero.
+
+    Dropped: the printed hold is "(save ends)" on the target, and an
+    ignore lives on the attacker, where a save-ends clock would be the
+    wrong creature rolling. It runs to the end of the turn instead, which
+    is the attack the power is used for."""
+    foe = _foe(c)
+    if foe is None:
+        return
+    c.ignore_resistance(5, on=c.me, until=When.EOT,
+                        when=lambda ctx: ctx.get("target") == foe)
 
 
 @power("i825p1", level=6, cls=ITEM, usage=DAILY, action=FREE,
@@ -673,10 +773,32 @@ def i843p1(c: Cast) -> None:
 
 
 @power("i1137p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("query.flanking()",))
+       reach=PERSONAL, target=SELF)
 def i1137p1(c: Cast) -> None:
-    """Flanking is worked out inside `has_combat_advantage` and there is
-    no way to ask whether it is standing, or with whom."""
+    """`query.flanked_by` asks exactly this and has all along -- flanking
+    is not buried inside `has_combat_advantage`.
+
+    One modifier per creature on the team, gated on *both* the roller and
+    the bearer flanking the creature being attacked. That is "you and the
+    ally flanking with you" without having to know in advance which ally
+    it will be; when the roller is the bearer the two halves collapse into
+    one. Untyped, because the card prints "an additional +1 bonus" with no
+    type word."""
+    from combat_engine.engine import query
+
+    me = c.me
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        foe, roller = ctx.get("target"), ctx.get("attacker")
+        return (
+            foe is not None
+            and roller is not None
+            and query.flanked_by(c.world, foe, roller)
+            and query.flanked_by(c.world, foe, me)
+        )
+
+    for mate in [me, *c.allies()]:
+        c.bonus("attack", 1, on=mate, until=When.ENCOUNTER, when=gate)
 
 
 # -- level 7 ----------------------------------------------------------------
@@ -764,8 +886,12 @@ def i1431p1(c: Cast) -> None:
        reach=PERSONAL, target=SELF, keywords=[Keyword.POISON],
        dropped=("c.next_attack_becomes()",))
 def i1440p1(c: Cast) -> None:
+    """As `i2452p1`: `c.deals` is the nearest thing to "the next arcane
+    power you use deals poison", and the extra die at least lands as the
+    printed type."""
     c.deals(DamageType.POISON, on=c.me, until=When.EOT)
-    c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EOT, once=True)
+    c.bonus("damage", 0, dice="1d6", dtype=DamageType.POISON, on=c.me,
+            until=When.EOT, once=True)
 
 
 @power("i1441x1", level=8, cls=ITEM, action=ActionType.NONE,
@@ -813,17 +939,21 @@ def i465p1(c: Cast) -> None:
 
 
 @power("i1010x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.race_of()",))
+       reach=PERSONAL, target=SELF)
 def i1010x1(c: Cast) -> None:
     """The spec names the racial power, so the trigger is exact.
-    `c.is_kind` answers one of the two races named and the other is a
-    race ref nothing resolves."""
+
+    Nothing carries a creature's race, but a racial trait is an ordinary
+    row in `Powers.known` and `c.feat(ref, on=)` reads that -- so holding
+    one of r3's traits *is* being r3. `c.is_kind("fey")` was the tempting
+    answer and is the wrong one: r3's origin word is shared with r4 and
+    with every other fey creature on the board."""
 
     def landed(ev: Hit) -> None:
         if ev.attacker != c.me or ev.power != "p1831":
             return
         for ally in c.allies():
-            if c.is_kind("elf", on=ally):
+            if c.feat(R3, on=ally) or c.is_kind("elf", on=ally):
                 c.bonus("damage", 2, on=ally, until=When.EONT,
                         when=lambda ctx, foe=ev.target: ctx.get("target") == foe)
 
@@ -900,10 +1030,21 @@ def i1597p1(c: Cast) -> None:
 
 
 @power("i2573p1", level=9, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.sustain_free()",))
+       reach=PERSONAL, target=SELF)
 def i2573p1(c: Cast) -> None:
-    """Sustaining is done by spending the action the effect names, and
-    nothing sustains one from outside."""
+    """`Effects.sustaining` lists what this creature is keeping going and
+    `Effects.sustain` keeps one going, both without an action being
+    spent -- `actions._sustaining` is only the menu that offers them. So
+    the row is two lines of `c.world`, which the older claim that
+    "nothing sustains one from outside" had missed."""
+    held = [
+        e for e in c.world.effects.sustaining(c.me) if e.sustain_cost is MINOR
+    ]
+    if not held:
+        return
+    chosen = c.choose(held, "which effect to sustain")
+    if chosen is not None:
+        c.world.effects.sustain(chosen)
 
 
 @power("i2732x1", level=9, cls=ITEM, action=ActionType.NONE,
@@ -933,12 +1074,15 @@ def i3221p2(c: Cast) -> None:
 
 
 @power("i1151x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Weapon.thrown",))
+       reach=PERSONAL, target=SELF)
 def i1151x1(c: Cast) -> None:
-    """The damage context does not carry the weapon, so a thrown attack
-    cannot be told from a bowshot; this reaches both."""
+    """A thrown weapon is a *melee* weapon with a printed range --
+    `chargen` deliberately leaves `Weapon.ranged` unset on one -- so the
+    thing being thrown is what `c.wielding` answers for, and a bowshot is
+    left out because a bow is not what is in hand to swing."""
+    ranged = _reach_gate("ranged")
     c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, kind="item",
-            when=_reach_gate("ranged"))
+            when=lambda ctx: ranged(ctx) and _throwing(c))
 
 
 @power("i1151p1", level=10, cls=ITEM, usage=ENCOUNTER, action=STANDARD,
