@@ -1414,17 +1414,40 @@ def _area_rows(world, caster: int, exclude: str) -> list[str]:  # noqa: ANN001
 
 
 def _after_its_own_use(world, ref: str, cursor: int) -> set[str]:  # noqa: ANN001
-    """Event kinds logged after this row's own `PowerUsed`.
+    """Event kinds this row emitted, bounded at both ends.
 
     A triggered row is fired by provoking it, and the provocation is an
     attack -- which drops creatures, applies conditions and expires effects
-    on its own account. Everything before the row ran is the provocation's;
-    everything after is by definition the row's consequences.
+    on its own account. Everything before the row ran is the provocation's.
+
+    **What is after it is not all the row's**, which is what this used to
+    assume and is #216. `resolve.attack` only rolls and announces `Hit`;
+    the attacking power's body deals the damage *after* `attack()` returns,
+    so for a row answering `Hit` the harness's own `DamageApplied`,
+    `Bloodied`, `Dropped` and `Died` are all logged **after** the row's
+    `PowerUsed`. Running to end-of-log credited the row with being attacked.
+
+    So the right end is bounded by **`Event.depth`**, which `Bus.emit`
+    already stamps on everything: the row's own events sit at the same depth
+    as its `PowerUsed` -- `cast.used()` completes before the body runs -- and
+    a nested `use()` inside the body emits deeper. The provocation resumes
+    at a *shallower* depth once the trigger window unwinds, so the first
+    event below the row's own depth is where the row stops and the attack
+    that provoked it carries on.
+
+    That costs nothing: no extra board, no engine change, and the field was
+    there the whole time.
     """
     log = world.bus.log[cursor:]
     for i, e in enumerate(log):
         if e.kind == "PowerUsed" and getattr(e, "power", None) == ref:
-            return {x.kind for x in log[i + 1:]}
+            mine = getattr(e, "depth", 0)
+            out: set[str] = set()
+            for x in log[i + 1:]:
+                if getattr(x, "depth", 0) < mine:
+                    break
+                out.add(x.kind)
+            return out
     return set()
 
 
@@ -1866,9 +1889,7 @@ def hollowed(ref: str):  # noqa: ANN201
 #: nonsense value by hand and which still reported
 #: `ok  ConditionApplied, DamageApplied`.
 VERDICT_ROWS = (
-    "f1305",     # hangs both clauses on a Hit -- the issue's example
-    "f172",      # a trait gated on gear, credited with the board's setup
-    "f139",      # the same shape
+    "f1305",     # the issue's example: watches Hit from its body
     "f2206",     # a trait laying a standing modifier
     "f2896",     # a trait laying a conditional one
     "p14271",    # an ordinary melee attack
@@ -1876,6 +1897,20 @@ VERDICT_ROWS = (
     "mba",       # the engine's own melee basic
     "rba",       # and the ranged one
     "p1333",     # an attack whose damage rides on the attack ability
+)
+
+#: Rows that **must** report silent, because the board cannot satisfy them.
+#:
+#: The other half of the fixture, and the half that proves the verdict has
+#: not simply been loosened: #204 established that these are gated on a
+#: two-weapon build the audit board never deals, so they install nothing
+#: here. Before the verdict was fixed both reported `ok`, credited with the
+#: board's own setup -- "a genuinely broken trait is currently
+#: indistinguishable from these", as that issue put it. If either ever
+#: reports credit again, the window has been widened back.
+VERDICT_SILENT = (
+    "f172",
+    "f139",
 )
 
 
@@ -1888,6 +1923,22 @@ def verdicts(refs: tuple[str, ...] = VERDICT_ROWS) -> list[str]:
     verdict at all.
 
     Returns the complaints. Empty is good.
+
+    **This is the enforcement point, and deliberately not `audit` itself.**
+    #216 suggests running the control for every row. Two reasons not to:
+    it costs one extra board per row that fires -- about a quarter on top
+    of a full sweep, which is the cost this file has just been taught to
+    avoid -- and, worse, it is not sound in general. `out.events` is a
+    **union across attempts** (`_attempts` stops as soon as a row shows
+    itself, a hollowed row never does), so a hollowed run explores all 24
+    attempts where the live run may have stopped at one, accumulates a
+    larger set of nearby noise, and subtracting it could take away credit
+    the row had genuinely earned.
+
+    Against a pinned list that hazard is answerable by reading the result,
+    which is why the control lives here. The attribution fixes in
+    `_after_its_own_use` and the trait branch are what make the ordinary
+    verdict honest; this is what stops them being quietly widened again.
     """
     wrong: list[str] = []
     for ref in refs:
@@ -1912,6 +1963,17 @@ def verdicts(refs: tuple[str, ...] = VERDICT_ROWS) -> list[str]:
         # nothing to anybody.
         if live.fired and live.silent and ref not in KNOWN_SILENT:
             wrong.append(f"{ref} is credited with nothing as written")
+    for ref in VERDICT_SILENT:
+        if get(ref) is None:
+            wrong.append(f"{ref} is not a declared row")
+            continue
+        got = audit(ref)
+        if not got.silent:
+            wrong.append(
+                f"{ref} is credited with "
+                f"{', '.join(sorted(got.events & DID_SOMETHING))}, "
+                f"but the board cannot satisfy it -- see VERDICT_SILENT"
+            )
     return wrong
 
 
@@ -1956,7 +2018,7 @@ def audit(ref: str) -> Result:
     # thousand boards.
     for seed, face in _attempts(out):
         try:
-            world, caster, armed = board(ref, seed)
+            world, caster, _armed = board(ref, seed)
             world.rng.loaded = face
             if not (trait or triggered):
                 # The rows this one is printed beside, **before** the
@@ -1976,14 +2038,43 @@ def audit(ref: str) -> Result:
             had = set(world.effects.live) if not (trait or triggered) else world.armed_effects
             if trait:
                 out.fired += 1
-                out.events |= armed
+                # **Its own arming, not the whole of setup.** This was
+                # `armed` -- every event between the spawns and the end of
+                # `Encounter.start()`, minus three noise kinds -- which is
+                # every creature's traits arming, the initiative rolls and
+                # whatever the board did to dress itself. So a trait that
+                # installed nothing was credited with its neighbours' work,
+                # which is #216's second half and #204's first.
+                #
+                # The same depth-bounded slice the triggered branch uses,
+                # from this trait's own `use()`. `dsl.use` emits `PowerUsed`
+                # while arming, so there is a mark to find.
+                mine_now = _after_its_own_use(world, ref, world.fight_cursor)
+                dealt_now = any(
+                    str(getattr(e, "detail", "") or "").startswith(ref)
+                    for e in world.bus.log[world.fight_cursor:]
+                    if e.kind in ("DamageRolled", "DamageApplied")
+                )
+                out.events |= (mine_now - PROVOKE_NOISE) | (
+                    {"DamageApplied"} if dealt_now else set()
+                )
                 # A trait's effect was installed by arming, so it is measured
-                # against the board before that -- and only the caster's own,
-                # since every other creature armed at the same moment.
-                mine = {
-                    i for i, e in world.effects.live.items() if e.source == caster
+                # against the board before that.
+                #
+                # **By label, not by `source`.** `e.source == caster` is the
+                # caster's *entity*, and its class features arm at the same
+                # moment and are sourced to it too -- so a trait that
+                # installed nothing was credited with an effect one of its
+                # neighbours laid. `durations.keywords_of` records the
+                # convention this relies on: an effect's label is the ref of
+                # the row that laid it, stamped by `c.effect`, `c.bonus` and
+                # `c.condition` alike. Prefix, because several sites stamp
+                # `"<ref> trigger"` or `"<ref> on attack"`.
+                mine_eff = {
+                    i for i, e in world.effects.live.items()
+                    if str(e.label or "").startswith(ref)
                 }
-                if mine - world.setup_effects:
+                if mine_eff - world.setup_effects:
                     out.events.add("ConditionApplied")
                 continue
             if triggered:
@@ -2006,13 +2097,30 @@ def audit(ref: str) -> Result:
                 # kinds wholesale, so a triggered row whose *whole content*
                 # is damage reported silent however well it worked.
                 mine = _after_its_own_use(world, ref, cursor)
-                if any(
-                    getattr(e, "detail", None) == ref
+                # **Damage this row dealt, by name.** `PROVOKE_NOISE` drops
+                # both damage kinds wholesale -- it has to, the provocation
+                # is an attack -- so a triggered row whose whole content is
+                # damage reported silent however well it worked. `detail` is
+                # the channel: `Cast.damage` stamps `detail or self.ref`.
+                #
+                # **Prefix, not equality.** `half_damage` stamps
+                # `"<ref> (half)"`, `absorb` `"<ref> (absorbed)"` and a zone
+                # burn `"<ref> zone"`, so `== ref` missed every one of them.
+                dealt = any(
+                    str(getattr(e, "detail", "") or "").startswith(ref)
                     for e in world.bus.log[cursor:]
                     if e.kind in ("DamageRolled", "DamageApplied")
-                ):
-                    mine |= {"DamageApplied"}
-                out.events |= mine - PROVOKE_NOISE | (mine & {"DamageApplied"})
+                )
+                # Parenthesised. `-` binds tighter than `|`, so the old
+                # `mine - PROVOKE_NOISE | (mine & {"DamageApplied"})` read as
+                # `(mine - PROVOKE_NOISE) | (mine & {"DamageApplied"})` --
+                # re-crediting **any** DamageApplied in the window whoever
+                # dealt it, and making the `detail` test above dead code.
+                # That one line is why #216's `f1305` reported
+                # `ok  ConditionApplied, DamageApplied` with its gate false.
+                out.events |= (mine - PROVOKE_NOISE) | (
+                    {"DamageApplied"} if dealt else set()
+                )
                 out.events |= _own_movement(world, ref, cursor, caster)
                 if set(world.effects.live) - had:
                     out.events.add("ConditionApplied")
@@ -2066,8 +2174,8 @@ def main() -> int:
         wrong = verdicts()
         for line in wrong:
             print(f"  FAIL  {line}")
-        print(f"\n{len(VERDICT_ROWS) - len(wrong)} of {len(VERDICT_ROWS)} "
-              f"pinned rows verdict correctly")
+        total = len(VERDICT_ROWS) + len(VERDICT_SILENT)
+        print(f"\n{total - len(wrong)} of {total} pinned rows verdict correctly")
         return 1 if wrong else 0
 
     wanted = args.refs or (
