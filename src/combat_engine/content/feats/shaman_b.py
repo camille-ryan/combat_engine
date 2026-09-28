@@ -21,6 +21,13 @@ Two things the spirit does not have:
   emits `Dropped`, and `Dropped.source` names who struck -- which is
   what the four "causes the spirit to disappear" feats need.
 
+`Dropped` naming no power is not the wall it was taken for either:
+`dsl.use` brackets a body with `PowerUsed` and `PowerResolved`, so the
+log says which row of yours is running when something dies, and that is
+how "with a spirit attack power" is asked. Nor is a reroll unannounced
+-- `p1450` is the reroll and is a declared ref, so its use is the
+announcement, and `PowerUsed.trigger` carries the roll it is rerolling.
+
 The p3773 riders are the easy half of the list: the power is a ref, the
 rider only adds to what it did, and `PowerUsed.targets` names the ally
 it healed.
@@ -71,6 +78,7 @@ from combat_engine.engine import (
     World,
     power,
 )
+from combat_engine.engine.dsl import get
 from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.grid import distance
 from combat_engine.engine.query import adjacent, distance_between, team
@@ -82,8 +90,6 @@ HEALING = "p3773"
 
 #: The brief prints a power by name where a ref belongs.
 NAMED = ("spec.power_ref()",)
-#: Nothing announces that a roll was a reroll.
-REROLL = ("c.on_reroll()",)
 
 DEFENCES = (AC, FORT, REF, WILL)
 
@@ -100,6 +106,44 @@ def _spirit_of(world: World, me: int) -> int | None:
 def _no_spirit(world: World, eid: int) -> bool:
     """p6515's own Requirement, which a free-action use still has to meet."""
     return _spirit_of(world, eid) is None
+
+
+def _spirit_attack(row: Any) -> bool:
+    """Is this declared row a *spirit* attack power?
+
+    A shaman's spirit attack is the one measured from the companion --
+    `Range(from_="companion")`, which is how "Melee spirit 1" is written
+    -- so the question is asked of the range rather than of a word in a
+    name nobody here is given.
+    """
+    return (
+        row is not None
+        and row.cls == "shaman"
+        and row.attack is not None
+        and row.reach is not None
+        and getattr(row.reach, "from_", "") == "companion"
+    )
+
+
+def _running(world: World, me: int) -> str:
+    """The innermost row this creature is in the middle of using.
+
+    `dsl.use` announces `PowerUsed` before the body and `PowerResolved`
+    after it, so the log holds the nesting: the last use of mine with no
+    resolution after it is the row that is running now. That is what
+    tells a kill made by a spirit attack from any other kill, which is
+    the thing `Dropped` itself does not carry.
+    """
+    done: set[str] = set()
+    for ev in reversed(world.bus.log):
+        if isinstance(ev, PowerResolved) and ev.actor == me:
+            done.add(ev.power)
+        elif isinstance(ev, PowerUsed) and ev.actor == me:
+            if ev.power in done:
+                done.discard(ev.power)
+            else:
+                return ev.power
+    return ""
 
 
 def _used(ref: str):  # noqa: ANN202
@@ -459,8 +503,8 @@ def f3054(c: Cast) -> None:
 
 
 @power("f3049", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Dropped.power",),
-       trigger="you reduce an enemy to 0 hit points",
+       reach=PERSONAL, target=SELF,
+       trigger="you reduce an enemy to 0 hit points with a spirit attack",
        on=Trigger(Dropped,
                   lambda w, me, ev: (
                       ev.source == me
@@ -469,15 +513,19 @@ def f3054(c: Cast) -> None:
                   ),
                   "you drop an enemy"))
 def f3049(c: Cast) -> None:
-    """"With a spirit attack power" is the dropped clause: `Dropped`
-    carries who struck the blow but not the row that struck it, so this
-    cannot tell a kill made from the spirit's square from any other.
+    """"With a spirit attack power" was dropped because `Dropped` carries
+    who struck the blow and not the row that struck it. It does not have
+    to: the kill happens *inside* the attacking row's body, between its
+    `PowerUsed` and its `PowerResolved`, so the log says which row is
+    running -- and a spirit attack is one measured from the companion.
 
     The teleport is to a free square beside an enemy within range, which
     is what `send_spirit` picks.
     """
     spirit = c.companion()
     if spirit is None:
+        return
+    if not _spirit_attack(get(_running(c.world, c.me))):
         return
     foes = [
         f for f in c.enemies()
@@ -662,12 +710,41 @@ def f1867(c: Cast) -> None:
 
 
 @power("f3056", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1450 to reroll a spirit attack",
+       on=Trigger(PowerUsed, _used("p1450"), "you use that racial power"))
 def f3056(c: Cast) -> None:
     """An attack bonus for the allies beside the spirit when a racial
-    reroll lands. `p1450` is a ref and the rest of the sentence is
-    ordinary -- what is missing is that nothing announces that a roll was
-    a reroll."""
+    reroll lands.
+
+    Nothing announces that a roll was a reroll, and nothing has to:
+    p1450 **is** the reroll and it is a declared ref, so its own use is
+    the announcement. `PowerUsed` carries the event it answers, which is
+    the `AttackRolled` being rerolled -- that names the row, and the row
+    says whether it is a spirit attack.
+
+    "And that attack hits" is read off the outcome rather than guessed:
+    `PowerUsed` is announced before p1450's body rerolls anything, so
+    the hit is still to come, and `resolve.attack` re-announces the
+    outcome when a listener changes it. A one-shot watch catches that
+    announcement; the allies are read then, because the bonus is theirs
+    and the spirit may have moved.
+    """
+    rolled = getattr(c.trigger, "trigger", None)
+    row = get(getattr(rolled, "power", ""))
+    if rolled is None or not _spirit_attack(row):
+        return
+    me = c.me
+    ref = rolled.power
+
+    def landed(ev: Hit) -> None:
+        if ev.attacker != me or ev.power != ref:
+            return
+        for friend in _mates(c):
+            c.bonus("attack", 2, on=friend, until=When.SONT, kind="power",
+                    when=lambda ctx, foe=ev.target: ctx.get("target") == foe)
+
+    c.watch(Hit, landed, until=When.EOT, on=me, once=True, label=c.ref)
 
 
 @power("f2300", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

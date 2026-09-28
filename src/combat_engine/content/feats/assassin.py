@@ -10,8 +10,11 @@ I first marked three of them as waiting on `c.shrouds()` and
 which is the whole reason that instrument fails on an arrived symbol
 rather than merely listing it. The three are written.
 
-What is genuinely missing is narrower: rewriting the *action* a named
-row costs, and rerolling the ones on another row's damage dice.
+What is genuinely missing is narrower still: rerolling the ones on
+another row's damage dice. Two more were re-aimed off the same
+mistake -- a feat that says "you can use X as an immediate interrupt"
+does not need the engine to rewrite X's printed cost, because the feat
+is itself a row and `c.use_power` fires X from inside it.
 """
 
 from __future__ import annotations
@@ -28,6 +31,8 @@ from combat_engine.engine import (
     ActionType,
     Bloodied,
     Cast,
+    DamageRolled,
+    Miss,
     Trigger,
     When,
     power,
@@ -83,12 +88,28 @@ def f1791(c: Cast) -> None:
     c.reroll_damage(on=c.me, until=When.ENCOUNTER)
 
 
-@power("f1786", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recost(p9402)",))
+def _hurts_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return ev.target == me and ev.amount > 0
+
+
+@power("f1786", level=1, cls="", usage=AT_WILL,
+       action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL, target=NO_TARGET,
+       trigger="you take damage",
+       on=Trigger(DamageRolled, _hurts_me, "an attack damages you"))
 def f1786(c: Cast) -> None:
-    """Changes what action a named row costs, to an immediate interrupt
-    on taking damage. The action is header data, read by the menu before
-    anything runs, and nothing rewrites it."""
+    """Lets a named row be used as an immediate interrupt when you take
+    damage.
+
+    Rewriting a row's printed action was the wrong thing to want: the
+    cost is header data and the menu reads it before anything runs. The
+    feat does not have to change it -- this row **is** the interrupt, and
+    `c.use_power` fires p9402 from inside it. p9402's own use is spent,
+    which is the card: a new way in, not a second copy.
+
+    `usage=AT_WILL` because the card prints no limit of its own; the
+    limit is whatever p9402 costs.
+    """
+    c.use_power("p9402")
 
 
 @power("f1789", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -100,10 +121,24 @@ def f1789(c: Cast) -> None:
     same symbol."""
 
 
+def _missed_with(ref: str):  # noqa: ANN202
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.attacker == me and ev.power == ref
+
+    return when
+
+
 @power("f1787", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.restore_use(racial)",))
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you miss with p9400",
+       on=Trigger(Miss, _missed_with("p9400"), "you miss with that power"))
 def f1787(c: Cast) -> None:
-    """A second use of a racial power after missing a shrouded enemy.
-    `c.restore_use` takes a ref and the shroud is readable -- what the
-    spec does not give is the racial power's ref, so the row watches for
-    nothing and the restore is dropped."""
+    """A second use of a racial power after missing with p9400.
+
+    The spec names the racial power by ref now, which is the whole of
+    what was dropped -- and the clause is not a restore after all:
+    "even if you have already used it" is `again=True`, which waives the
+    usage limit for this one use without handing the row's own use back.
+    `usage=ENCOUNTER` is the printed "once per encounter".
+    """
+    c.use_power("p1628", on=c.trigger.target, again=True)

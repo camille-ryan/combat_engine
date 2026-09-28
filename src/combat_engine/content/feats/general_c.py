@@ -13,9 +13,11 @@ of that class" -- is `c.borrow_row`, which reads the set off the
 registry and carries the printed once-per-encounter limit.
 
 **The familiar chain is four feats deep and the first one is the gate.**
-`c.familiar()` exists and the `companion` table was imported, but a
-familiar has two printed *states* -- active and passive -- and nothing
-holds one. Three of these rows turn on which state it is in.
+Three of these rows turn on which of its two printed states the familiar
+is in, and something does hold one: `c.familiar_mode` sets
+`Companion.passive`, and a passive familiar is off the board entirely.
+Nothing on `Cast` reads it back, so `_familiar` here does -- the same
+question `powers/sorcerer.has_familiar` asks.
 
 **"Once per day" is written as once per encounter**, which is what a day
 is to this engine, and each such row says so. See #72.
@@ -37,7 +39,9 @@ from combat_engine.engine import (
     ActionType,
     Cast,
     CloseBurst,
+    Companion,
     Keyword,
+    Miss,
     PowerResolved,
     Trigger,
     TurnEnd,
@@ -45,10 +49,33 @@ from combat_engine.engine import (
     get,
     power,
 )
-from combat_engine.engine.events import Bloodied, Healed
+from combat_engine.engine.events import (
+    Bloodied,
+    DamageRolled,
+    Healed,
+)
 from combat_engine.engine.query import enemies, team
 
 DIVINE = [Keyword.DIVINE]
+ARCANE = [Keyword.ARCANE]
+
+#: The two striker features whose extra damage this batch reads. Both pay
+#: through `features/strikers.extra_damage`, which stamps the feature's own
+#: ref as the `detail` of the damage it rolls.
+STRIKER_DAMAGE = ("cf:rogue-scoundrel-f4", "cf:ranger-f1")
+
+
+def _familiar(c: Cast, *, passive: bool) -> int | None:
+    """The caster's familiar, if it is in the state the card asks for.
+
+    "Active" and "passive" are one flag -- `Companion.passive`, which
+    `c.familiar_mode` sets and which decides whether the familiar holds a
+    square at all. Nothing on `Cast` reads it back, which is what the
+    `c.familiar_state()` markers on this chain were written against.
+    """
+    fam = c.familiar()
+    mine = c.world.get(fam, Companion) if fam is not None else None
+    return fam if mine is not None and mine.passive is passive else None
 
 
 def _granted(ref: str, card: str):  # noqa: ANN202
@@ -220,36 +247,107 @@ def f739(c: Cast) -> None:
 
 
 @power("f740", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.familiar_state()",))
+       reach=PERSONAL, target=SELF)
 def f740(c: Cast) -> None:
-    """The +1 Reflex half, which the card's own Requirement gates on the
-    familiar's passive state -- a state nothing holds. The bonus is
-    written; the card it also grants is `f740b`."""
-    c.bonus("ref", 1, on=c.me, until=When.ENCOUNTER)
+    """"While your familiar is in its passive state" is a gate on the
+    bonus rather than a condition of laying it: the familiar goes active
+    and passive inside a fight, and a bonus laid once at the start would
+    outlive the state it is printed for. `c.bonus(when=)` is read every
+    time the defence is, so the +1 comes and goes with the state.
+
+    The card it also grants is `f740b`."""
+    c.bonus("ref", 1, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: _familiar(c, passive=True) is not None)
     c.grant_row("f740b", on=c.me, until=When.ENCOUNTER)
+
+
+def _hurts_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return ev.target == me and ev.amount > 0
 
 
 @power("f740b", level=1, cls="", usage=ENCOUNTER,
        action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL, target=NO_TARGET,
-       keywords=[Keyword.ARCANE], todo=("c.familiar_state()",))
+       keywords=ARCANE, trigger="you are hit by an attack",
+       on=Trigger(DamageRolled, _hurts_me, "an attack damages you"),
+       dropped=("c.destroy(companion=)",))
 def f740b(c: Cast) -> None:
-    """Half damage from the triggering attack, and the familiar is
-    destroyed. Its Requirement is a familiar state nothing holds, so
-    writing the halving alone would make it free."""
+    """Half damage from the triggering attack, and the familiar pays for
+    it.
+
+    The Requirement is askable -- `Companion.passive` is the state -- and
+    the halving answers `DamageRolled` rather than `Hit`, because `Hit`
+    carries no amount and `c.halve` needs one; the blow is announced
+    before it is applied, which is the interrupt's window.
+
+    Dropped: the familiar is *destroyed*, and the nearest thing the
+    engine has is dismissing it. The two differ out of combat -- a
+    destroyed familiar wants a ritual and a dismissed one does not -- so
+    the cost is taken as a dismissal and the difference is named rather
+    than papered over.
+    """
+    if _familiar(c, passive=True) is None:
+        return
+    c.halve(c.trigger)
+    c.dismiss_companion()
 
 
 @power("f741", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.familiar_state()",))
+       reach=PERSONAL, target=SELF)
 def f741(c: Cast) -> None:
     """+1 to arcane attacks against targets adjacent to your familiar,
-    while it is active. Both halves need the state."""
+    while it is active.
+
+    Three questions, all asked per roll off the attack context: the
+    familiar is active, the row swinging is arcane, and the target is
+    beside the familiar. A passive familiar holds no square at all, so
+    the adjacency would answer False on its own -- but only because the
+    square was taken away, which is not a reading to rely on.
+
+    The card it also grants is `f741b`.
+    """
+    def beside_it(ctx: dict[str, Any]) -> bool:
+        fam = _familiar(c, passive=False)
+        row = get(ctx.get("power", "") or "")
+        victim = ctx.get("target")
+        return (
+            fam is not None
+            and row is not None
+            and Keyword.ARCANE in row.keywords
+            and victim is not None
+            and c.adjacent_to(fam, victim)
+        )
+
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=beside_it)
+    c.grant_row("f741b", on=c.me, until=When.ENCOUNTER)
+
+
+def _missed_arcane(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    row = get(ev.power)
+    return (
+        ev.attacker == me
+        and row is not None
+        and Keyword.ARCANE in row.keywords
+        and row.usage is ENCOUNTER
+        and row.attack is not None
+    )
 
 
 @power("f741b", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.ARCANE],
-       todo=("c.familiar_state()",))
+       reach=PERSONAL, target=NO_TARGET, keywords=ARCANE,
+       trigger="you miss with an arcane encounter attack power",
+       on=Trigger(Miss, _missed_arcane, "you miss with an arcane power"))
 def f741b(c: Cast) -> None:
-    """Reroll a missed arcane encounter attack. Gated on the same state."""
+    """Reroll a missed arcane encounter attack, active familiar only.
+
+    A miss is not the end of the roll: `resolve.attack` re-announces the
+    outcome when a listener changes it, up to twice, so a reroll taken in
+    the free-action window turns the `Miss` into a `Hit` that is properly
+    announced. `c.reroll_attack` reads the roll off `c.trigger`, and
+    "even if it is lower" is `keep="new"`.
+    """
+    if _familiar(c, passive=False) is None:
+        return
+    c.reroll_attack(keep="new")
 
 
 # -- the rest ---------------------------------------------------------------
@@ -272,11 +370,30 @@ def f734(c: Cast) -> None:
 
 
 @power("f768", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_extra_damage()",))
+       reach=PERSONAL, target=SELF)
 def f768(c: Cast) -> None:
     """Extra damage whenever a named striker feature pays out against the
-    target of one named power. Nothing announces that a striker feature
-    fired, so there is no moment to add to."""
+    target of p1831.
+
+    Something does announce it. Both striker features roll their extra
+    damage through `features/strikers.extra_damage`, which stamps the
+    feature's own ref as the `detail` of the `DamageRolled` -- so "you
+    deal cf:rogue-scoundrel-f4 or Hunter's Quarry damage" is that field,
+    and the moment to add to is that roll.
+
+    "The target of your p1831 power" is `c.suffering`, since an effect's
+    label is the ref of the row that laid it.
+    """
+    me = c.me
+
+    def paid(ev: DamageRolled) -> None:
+        if ev.source != me or ev.detail not in STRIKER_DAMAGE:
+            return
+        if ev.target not in c.suffering("p1831") or c.wis_mod <= 0:
+            return
+        c.flat(c.wis_mod, dtype=ev.dtype, on=ev.target)
+
+    c.watch(DamageRolled, paid, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f800", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

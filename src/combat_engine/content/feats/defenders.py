@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
@@ -27,11 +28,11 @@ from combat_engine.engine import (
     about_me,
     power,
 )
+from combat_engine.engine.basic import MELEE
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import PowerResolved
+from combat_engine.engine.events import OpportunityWindow, PowerResolved
 from combat_engine.engine.query import holding
-
-FEATURE = ("c.class_feature()",)
+from combat_engine.engine.types import Window
 
 
 def _my_ranged_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -81,20 +82,74 @@ def f1118(c: Cast) -> None:
         )
 
 
-@power("f1119", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_provoke(when=)",))
+def _my_melee_swordmage_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    p = get(ev.power)
+    return (
+        ev.attacker == me
+        and p is not None
+        and p.cls == "swordmage"
+        and p.reach.kind == "melee"
+    )
+
+
+@power("f1119", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with a melee swordmage attack power",
+       on=Trigger(Hit, _my_melee_swordmage_hit, "you hit in melee"))
 def f1119(c: Cast) -> None:
-    """Stops ranged powers provoking, for a turn, after a melee hit.
-    `Power.no_provoke` is header data set per row; `c.no_provoke` has no
-    gated form, so there is no way to say "not this turn"."""
+    """Stops this swordmage's ranged and area powers provoking for a turn.
+
+    `c.no_provoke` still takes no gate, which is what this row was marked
+    for -- but the gate does not have to live there. The window is a
+    cancellable `OpportunityWindow` and it carries `why`, which `dsl` sets
+    to "<ref> is a ranged power" when a row at range opens one. So the ref
+    that provoked is readable, and refusing only the rows the card names
+    is the same three-line veto `c.no_provoke` installs with one more
+    question in it.
+
+    A bare `c.no_provoke(on=c.me)` would have been much too generous:
+    walking out of a threatened square opens the same window, and this
+    card says nothing about moving.
+    """
+    me = c.me
+
+    def veto(ev: OpportunityWindow) -> None:
+        if ev.provoker != me:
+            return
+        p = get(ev.why.split(" ", 1)[0])
+        if p is not None and p.cls == "swordmage" and p.reach.kind in (
+            "ranged", "area_burst", "wall"
+        ):
+            ev.cancel("the swordmage's powers do not provoke this turn")
+
+    c.watch(OpportunityWindow, veto, until=When.EONT, on=me,
+            window=Window.BEFORE, label=f"{c.ref} no provoke")
 
 
 @power("f613", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.basic_ability()",))
+       reach=PERSONAL, target=SELF)
 def f613(c: Cast) -> None:
-    """Swaps which ability the melee basic rolls. `mba`'s attack line is
-    header data shared by every creature. Same gap as the general
-    f1016."""
+    """Swaps which ability the melee basic rolls.
+
+    `mba`'s attack line is header data shared by every creature and is
+    not rewritable, which is what this was marked for -- but the number
+    it produces is. Both contexts carry the ref of the row being rolled,
+    so the difference between the two modifiers, laid against `mba` and
+    nothing else, comes out as an Intelligence-based swing. An
+    opportunity attack is a melee basic attack and rolls the same ref,
+    so it is covered without being mentioned.
+
+    **Damage as well as the roll**, which is the judgement call here:
+    `_melee_basic` pays `c.damage(c.w(1), c.str_mod)`, so the Strength
+    modifier the card replaces is in both halves of "making a basic
+    attack" and swapping only one would leave the row half true.
+    """
+    swap = c.int_mod - c.str_mod
+    if not swap:
+        return
+    for what in ("attack", "damage"):
+        c.bonus(what, swap, on=c.me, until=When.ENCOUNTER,
+                when=lambda ctx: ctx.get("power") == MELEE)
 
 
 @power("f612", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -185,11 +240,20 @@ def f584(c: Cast) -> None:
 
 
 @power("f1024", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_save()",))
+       reach=PERSONAL, target=SELF, todo=("SavingThrow.granted_via",))
 def f1024(c: Cast) -> None:
-    """Pays out on succeeding at a saving throw one class feature
-    granted. The feature is named by ref in the prerequisite; what is
-    missing is knowing *which* save a `SavingThrow` came from."""
+    """Pays out on succeeding at a saving throw `cf:warden-f0` granted.
+
+    **Re-aimed.** `c.on_save()` was the wrong symbol: `SavingThrow` is an
+    ordinary event and `c.watch` reaches it, so there is nothing missing
+    on that side. What is missing is on the event -- `Effects.save`
+    builds it with `against=str(eff)`, the effect being *saved against*,
+    and nothing records which row handed the throw over. The feature
+    rolls its save from inside a `TurnStart` watch, so the only thing
+    separating it from the ordinary end-of-turn throw is when in the turn
+    it happened, and "the first save of my turn" is a guess rather than
+    the printed gate.
+    """
 
 
 # -- monk -------------------------------------------------------------------
@@ -203,41 +267,66 @@ def f2602(c: Cast) -> None:
     the same symbol the ranger's f273 and the rogue's f185 want."""
 
 
-def _flurry(ref: str, what: str, todo: tuple[str, ...] = FEATURE) -> None:
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=todo)
-    def feat(c: Cast) -> None: ...
+#: **The feature has refs after all.** Both of these were marked
+#: `spec.power_ref()` on the grounds that the class feature is named in
+#: prose with no id. It is, but the five cards that *are* the feature are
+#: written down in `powers/monk/level_0.py` as `FLURRIES`, and
+#: `cf:monk-f0s0`..`s4` each hand one of them over -- so "your Flurry of
+#: Blows power" is a membership test and not a naming gap. `p11215` in
+#: the same file already reads the list for the same reason.
 
-    feat.__name__ = ref
-    feat.__doc__ = f"{what} The class feature is named in prose with no ref."
+
+@power("f1985", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.extend_reach(ref)",))
+def f1985(c: Cast) -> None:
+    """Lengthens the reach of one target of the class feature.
+
+    **Re-aimed.** The rows are `FLURRIES` and the spear is `c.wielding`,
+    so neither half of the gate is missing any more. What is missing is
+    the payload: all five cards are `reach=Melee(1)`, that is header data
+    read when targets are picked, and nothing in the vocabulary stretches
+    one row's reach for one use. `c.threatens` is the neighbouring verb
+    and speaks only for the opportunity window.
+    """
 
 
-#: Both prerequisites are unparsed clauses and the feature is named in
-#: prose, so there is no ref for either rider -- the standing symbol for a
-#: spec that names a row and gives no id.
-_flurry("f1985", "Lengthens the reach of one target of a class feature.",
-        todo=("spec.power_ref()",))
-_flurry("f2589", "A damage bonus to that feature while holding one weapon.",
-        todo=("spec.power_ref()",))
+@power("f2589", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2589(c: Cast) -> None:
+    """A damage bonus to the class feature while holding one weapon.
+
+    The five cards pay with `c.flat`, and `c.flat` goes through
+    `deal_damage` with `from_attack` left true -- so the blow *is*
+    offered the damage modifiers, and `detail` is the card's own ref,
+    which is what the damage context carries as `power`. The claim
+    beside `f3166` that a `c.flat` payout "is never offered a damage
+    modifier" is not true of the code.
+
+    The grip is asked inside the gate rather than once, so putting the
+    club down loses the bonus, which is what "while wielding" says.
+    """
+    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("power") in FLURRIES and c.wielding("club"))
 
 
 @power("f3166", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_extra_damage()",))
+       reach=PERSONAL, target=SELF)
 def f3166(c: Cast) -> None:
-    """The attack half is written and the damage half is dropped.
+    """Both halves are written now.
 
     The attack context carries `power`, so "monk implement attack powers"
     is read off the declared row rather than guessed, and the grip is
     asked inside the modifier -- a monk that puts the sword down loses
     the bonus, which is what "while wielding" says.
 
-    The second sentence raises the damage of the class's level 0 feature
-    row, and those five rows pay with `c.flat`: a fixed amount that goes
-    straight to `deal_damage` and is never offered a damage modifier.
-    Nothing announces the rider paying out, so there is no number to add
-    one to -- and a plain `c.bonus("damage", 1)` would instead raise
-    every attack the monk makes. The two-handed grip is not the hold
-    here; the payout is.
+    **The second sentence was dropped on a false reading of the code.**
+    It said the five feature cards pay with `c.flat`, which goes straight
+    to `deal_damage` and is never offered a damage modifier. `c.flat`
+    calls `deal_damage` with `from_attack` at its default of true, so the
+    damage mods are read for it exactly as they are for `c.damage`, and
+    `detail` is the card's ref. So the rider is an ordinary damage bonus
+    gated on the five refs, and it cannot raise anything else the monk
+    swings.
     """
     me, world = c.me, c.world
 
@@ -253,12 +342,39 @@ def f3166(c: Cast) -> None:
         )
 
     c.bonus("attack", 1, on=me, until=When.ENCOUNTER, when=monk_implement)
+    def in_both_hands() -> bool:
+        """A versatile blade is in two hands when nothing else is in one.
+
+        The engine records no grip -- `cf:fighter-talent-rest` is blocked
+        on the same thing -- but it records what is *in hand*, and a monk
+        holding one versatile weapon and no shield has the other hand on
+        it. `c.wielding("two-handed")` is the wrong question: that reads
+        the weapon's own properties, and a longsword is versatile rather
+        than two-handed, so the gate would be false in every fight.
+        """
+        held = holding(world, me)
+        return (
+            len(held) == 1
+            and held[0].ref == "w:longsword"
+            and not c.wielding("shield")
+        )
+
+    c.bonus(
+        "damage", 1, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") in FLURRIES and in_both_hands(),
+    )
 
 
 @power("f3116", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.shift(through=)",))
+       reach=PERSONAL, target=SELF, todo=("c.phasing(when=)",))
 def f3116(c: Cast) -> None:
     """Lets a shift pass through occupied squares while a named racial
-    power is unspent. The power is named by ref and `Powers.times` reads
-    whether it is spent -- but `c.shift` has no way to ignore
-    occupancy, and `share=True` is one square rather than a path."""
+    power is unspent.
+
+    **Re-aimed.** `c.shift(through=)` was the wrong symbol: the row does
+    not take the shift, a monk power does, so there is no call here to
+    pass an argument to. Moving through an occupied square is
+    `c.phasing`, which exists -- what it has no form of is a gate, and
+    this card grants it for one kind of movement out of one kind of row.
+    Laid bare it would let the monk walk through walls all fight.
+    """

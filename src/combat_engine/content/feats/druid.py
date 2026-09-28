@@ -10,6 +10,8 @@ form itself uses.
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.engine import (
     AT_WILL,
@@ -132,9 +134,28 @@ def f1019(c: Cast) -> None:
     c.reroll_initiative(on=slowest)
 
 
-@power("f1770", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_revert()",))
+def _reverting(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """`p5032` being used to *drop* the shape rather than take it.
+
+    One row, both directions -- so the direction is read off the board,
+    and `PowerUsed` fires before the body, which is the one window in
+    which the druid is still shaped.
+    """
+    return ev.actor == me and ev.power == "p5032" and in_beast_form(world, me)
+
+
+@power("f1770", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p5032 to leave beast form",
+       on=Trigger(PowerUsed, _reverting, "you drop the shape"))
 def f1770(c: Cast) -> None:
-    """Lengthens the shift taken when leaving beast form. `c.form` takes
-    a `revert` action but announces nothing when the shape drops, so
-    there is no moment to lengthen."""
+    """Shift 2 squares instead of 1 on leaving beast form.
+
+    Re-read: `c.form` does announce the shape dropping -- `Effects.end`
+    emits a `ConditionEnded` per condition and an `EffectExpired` -- but
+    none of that is needed here, because the shift this lengthens is
+    `p5032`'s own and the row that takes it is the moment. The extra
+    square is taken before `p5032`'s, which is the same two squares of
+    displacement either way.
+    """
+    c.shift(1)

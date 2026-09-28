@@ -13,8 +13,11 @@ thing.
 The other recurring shape is **parity**: three cards ask the player to
 call even or odd before a roll and pay out when the call lands. One of the
 three is an attack roll, which `AttackRolled.natural` announces before the
-damage is rolled, so it is writable; the other two are an initiative check
-and a class feature's own d10, and neither moment is announced at all.
+damage is rolled, so it is writable. The other two are still held, for
+different reasons: the class feature's d10 is rolled inside the feature
+and announced to nobody, while an initiative check *is* announced --
+`InitiativeRolled` -- and carries the finished number rather than the
+die, which is the half the parity needs.
 
 `usage=AT_WILL` throughout -- none of these prints a once-per-encounter
 limit, and a triggered row is asked `usable` every time it is offered.
@@ -233,13 +236,18 @@ def f1161(c: Cast) -> None:
 
 
 @power("f3431", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.trained(skill)",))
+       reach=PERSONAL, target=SELF, dropped=("chargen.skill_training()",))
 def f3431(c: Cast) -> None:
     """Both feat bonuses are ordinary `skill:` modifiers. The training is
     dropped rather than approximated as a flat +5: `engine/skills.py` says
     there is no training model at all, so nothing would read the flag and
     adding the number would make this character trained in a way no other
-    character in the game can be."""
+    character in the game can be.
+
+    Re-aimed at the name the other twelve rows of this shape use. Where
+    training is granted is `chargen`, not a body -- the character sheet
+    is made before the board is -- and a spelling of its own kept this
+    row out of the group that will close it."""
     c.bonus("skill:intimidate", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
     c.bonus("skill:streetwise", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
 
@@ -372,13 +380,20 @@ def f2026(c: Cast) -> None:
 
 
 @power("f3433", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.counts_as(group=)", "c.proficient(group)"))
+       reach=PERSONAL, target=SELF, proficiency=("w:kukri", "w:katar"),
+       dropped=("c.counts_as(group=)",))
 def f3433(c: Cast) -> None:
-    """Two weapons made usable and then made to count as a third group
-    for the purpose of casting. `Weapon.group` is a plain string on the
-    component and nothing rewrites one, and proficiency is a number the
-    chassis hands out rather than something a row can grant."""
+    """Re-aimed, and half of it lands.
+
+    Proficiency is header data, not a body: `Power.proficiency` is what
+    `chargen` reads when the character is built, and both weapons are in
+    the table -- so the half that says "you may carry these" is written
+    and the row plays.
+
+    What is dropped is the casting clause. `Weapon.group` is a plain
+    string on the component and nothing rewrites one, so a light blade
+    cannot be made to answer a dagger's Requirement.
+    """
 
 
 # -- the parity the engine cannot hear --------------------------------------
@@ -399,12 +414,19 @@ def f2806(c: Cast) -> None:
 
 
 @power("f2807", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_initiative_roll()",))
+       reach=PERSONAL, target=SELF,
+       todo=("events.InitiativeRolled.natural",))
 def f2807(c: Cast) -> None:
-    """The same call against an initiative check. `turns._roll_initiative`
-    rolls for everybody before any trait is armed and announces the
-    numbers rather than the dice, so there is no parity to read and no
-    window to read it in."""
+    """The same call against an initiative check.
+
+    Re-aimed. The roll *is* announced -- `InitiativeRolled` exists and
+    `turns._roll_initiative` emits one per creature -- so naming the
+    absence of the moment was naming the wrong thing. What the event
+    carries is `rolled`, the finished number with the modifier and the
+    level term already in it, and the parity the card asks about is the
+    d20's. The second half of the hold is the ordering: `start` rolls
+    before `_arm_traits`, so a trait is not listening yet whatever the
+    event carries."""
 
 
 @power("f1162", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

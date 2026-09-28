@@ -3,6 +3,8 @@ rewrite the header are named per row and recorded in `docs/blocked.json`."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.content.powers.augment import augment
 from combat_engine.engine import (
     AC,
@@ -33,7 +35,7 @@ from combat_engine.engine import (
     power,
     spread,
 )
-from combat_engine.engine.events import ActionSpent
+from combat_engine.engine.events import ActionSpent, EnterSquare
 
 PSIONIC_IMPLEMENT = [Keyword.PSIONIC, Keyword.IMPLEMENT]
 PSIONIC_FORCE = [Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.FORCE]
@@ -115,28 +117,62 @@ def p11320(c: Cast) -> None:
     ],
 )
 def p13331(c: Cast) -> None:
-    """"Any enemy that enters the servant's space" is dropped rather than
-    written as a dead zone: `c.conjure` occupies its square, so nothing can
-    ever be standing in it. The minor-action burst made through the servant is
-    `p13331b`, which the importer now gives a ref of its own; Augment 2 is
-    that block's dice, so it belongs to that row rather than this one.
+    """The servant's own bite, written now. It was dropped in this
+    docstring -- not even marked -- on the claim that `c.conjure` occupies
+    its square so nothing can stand in it. That has not been true for some
+    time: `solid=False` is the default and the method's own docstring says
+    the old behaviour made "when an enemy enters its space" permanently
+    false. So the bite is two watches, on entering and on ending a turn
+    there.
+
+    "Only once per turn" is latched and the latch is cleared at the start
+    of every turn, which is the same thing on a board where one creature
+    acts at a time and costs no round counter.
+
+    The minor-action burst made through the servant is `p13331b`, which the
+    importer gives a ref of its own; Augment 2 is that block's dice, so it
+    belongs to that row rather than this one.
 
     Augment 1 slows whoever starts its turn in or beside the servant. The
     servant's own square is in the ring, so "in or adjacent to" is one
-    `spread` and needs no special case for a space nothing can stand in."""
+    `spread`."""
     spent = augment(c, 1)
     servant = c.conjure(until=When.EONT, sustain=None, aura=1 if spent else 0)
-    if not servant or not spent:
+    if not servant:
         return
+    bite = c.cha_mod
+    bitten: set[int] = set()
 
-    def creep(ev: TurnStart) -> None:
+    def its_square() -> Any:
         pos = c.world.get(servant, Position)
-        if pos is None or ev.actor == c.me:
+        return pos.square if pos is not None else None
+
+    def sting(who: int, square: Any) -> None:
+        if who in bitten or square is None or square != its_square():
+            return
+        if who not in c.enemies():
+            return
+        bitten.add(who)
+        c.flat(bite, dtype=DamageType.ACID, on=who)
+
+    def stepped(ev: EnterSquare) -> None:
+        sting(ev.actor, ev.square)
+
+    def stopped(ev: TurnEnd) -> None:
+        pos = c.world.get(ev.actor, Position)
+        sting(ev.actor, pos.square if pos is not None else None)
+
+    def fresh(ev: TurnStart) -> None:
+        bitten.clear()
+        pos = c.world.get(servant, Position)
+        if not spent or pos is None or ev.actor == c.me:
             return
         if ev.actor in c.in_squares(spread({pos.square}, 1), side="enemy"):
             c.slowed(on=ev.actor, until=When.EONT)
 
-    c.watch(TurnStart, creep, until=When.EONT, label=c.ref)
+    c.watch(EnterSquare, stepped, until=When.EONT, label=c.ref)
+    c.watch(TurnEnd, stopped, until=When.EONT, label=c.ref)
+    c.watch(TurnStart, fresh, until=When.EONT, label=c.ref)
 
 
 @power(
@@ -319,16 +355,30 @@ def p8239(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_PSYCHIC,
     attack=Attack(INT, vs=WILL),
+    dropped=("dsl.Power.basic_for",),
 )
 def p8240(c: Cast) -> None:
-    """Augment 2 raises the dice and the vulnerability. Augment 1 is not
-    offered: its second sentence strips the target's psychic resistance and
-    nothing takes a resistance away, so writing the first sentence alone would
-    be half a clause. The Special making the unaugmented form a ranged basic
-    attack still has no header field."""
-    spent = augment(c, 2)
+    """Augment 1 is offered now. It was left out on the claim that nothing
+    takes a resistance away; `c.resistances` reads the number off the
+    creature -- its own docstring names "the target loses that resistance"
+    as the reason it exists -- and `c.resist` takes the negative of it.
+    Read at the moment of the hit, because a resistance can be laid during
+    a fight, and skipped when there is none to take.
+
+    Its vulnerability is a flat 5, not 5 + Charisma: that is Augment 2's
+    line.
+
+    Dropped is the Special, which makes the *unaugmented* form a ranged
+    basic attack -- `dsl.Power.basic_for` is the header field p11169 named
+    for the same sentence."""
+    spent = augment(c, 1, 2)
     if c.strike():
-        c.damage("2d8" if spent else "1d8", c.int_mod, dtype=DamageType.PSYCHIC)
-        c.vulnerable(
-            5 + c.cha_mod if spent else c.cha_mod, DamageType.PSYCHIC, until=When.EONT
-        )
+        c.damage("2d8" if spent == 2 else "1d8", c.int_mod, dtype=DamageType.PSYCHIC)
+        amount = 5 if spent == 1 else (5 + c.cha_mod if spent == 2 else c.cha_mod)
+        c.vulnerable(amount, DamageType.PSYCHIC, until=When.EONT)
+        if spent == 1:
+            held = c.resistances().get(DamageType.PSYCHIC, 0)
+            if held > 0:
+                # `c.resist` is one of the few that defaults to the
+                # caster, so the target is named.
+                c.resist(-held, DamageType.PSYCHIC, on=c.target, until=When.EONT)

@@ -44,6 +44,7 @@ from combat_engine.engine import (
     Hit,
     Miss,
     Trigger,
+    TurnStart,
     When,
     power,
 )
@@ -274,13 +275,19 @@ def f2758(c: Cast) -> None:
 
 
 @power("f2911", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_provoke(when=)",))
+       reach=PERSONAL, target=SELF,
+       todo=("c.no_provoke(when=)", "query.charging()"))
 def f2911(c: Cast) -> None:
     """A charge at the sworn enemy draws no openings on the way in.
-    `c.no_provoke` is a standing veto on the opportunity window with no
-    gated form, so "during this charge" cannot be said and a bare call
-    would cover every step the avenger takes all fight. Same symbol
-    f1119 names."""
+
+    Two holds, and the marker named one. `c.no_provoke` is a standing
+    veto on the opportunity window with no gated form, so "during this
+    charge" cannot be said and a bare call would cover every step the
+    avenger takes all fight -- the symbol f1119 names. And there is
+    nothing for such a gate to read: `actions.execute` walks a charge's
+    path with `walk(world, actor, path)` and no `kind=`, so the move
+    announces itself as an ordinary walk and the board never says a
+    creature is charging."""
 
 
 # -- the longsword family --------------------------------------------------
@@ -326,24 +333,44 @@ def f2927(c: Cast) -> None:
 
 
 @power("f2928", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("Moved.squares", "c.moved_this_turn()"))
+       reach=PERSONAL, target=SELF)
 def f2928(c: Cast) -> None:
-    """The five lands; the ten is dropped.
+    """Both numbers land.
 
-    "If you ended your turn more than 2 squares from where you started"
-    is a distance travelled over a whole turn, and nothing keeps it:
-    `Moved` carries `from_` and `to` for one step and no running total,
-    so a row adding them up would miss a teleport, a push and a shift
-    each resetting the pair.
+    The ten was dropped as a distance *travelled*, which nothing keeps.
+    It is not one: "more than 2 squares away from where you started" is
+    the straight line between two squares, so the only thing wanted is
+    the square the turn began in -- caught on `TurnStart`, the way the
+    psion's p13319 catches its target's. A running total would have been
+    the wrong measure anyway, since walking a circle ends where it
+    started.
+
+    Asked at the moment of the hit rather than at the end of the turn:
+    the printed benefit is temporary hit points on the blow, and a blow
+    struck out of turn is measured from the last turn this avenger took.
     """
     me, seen = c.me, {}
+    began: dict[str, Any] = {}
+
+    def began_turn(ev: TurnStart) -> None:
+        if ev.actor != me:
+            return
+        here = c.world.get(me, Position)
+        if here is not None:
+            began["at"] = here.square
 
     def on_hit(ev: Hit) -> None:
         if not _longsword(c, ev) or seen.get(0) == c.world.round:
             return
         seen[0] = c.world.round
-        c.temp_hp(5, on=me)
+        start = began.get("at")
+        far = start is not None and distance(start, c.here) > 2
+        c.temp_hp(10 if far else 5, on=me)
+
+    c.watch(
+        TurnStart, began_turn, until=When.ENCOUNTER, on=me,
+        label=f"{c.ref} start",
+    )
 
     c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label=f"{c.ref} riders")
     c.bonus("skill:endurance", 2, on=me, until=When.ENCOUNTER, kind="feat")

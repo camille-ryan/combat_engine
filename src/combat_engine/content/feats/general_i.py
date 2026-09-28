@@ -16,9 +16,10 @@ print "+2 feat bonus to <skill>" and then a clause that fires on the
 powers the card associates. `exploits.py`'s `_riders` says the second
 half and not the first, so `_divine` here is `_riders` plus the skill
 modifier -- `skill:<name>` is an ordinary key, so the bonus is real work
-rather than flavour. Two of the sixteen print no list at all and carry
-`dropped=("feat.associated_powers",)`: the skill half plays, the rider
-has nothing to point at.
+rather than flavour. The two that once printed no list at all --
+`f1361` and `f1433` -- carry one now: the errata block that swallowed it
+has been fixed in the ETL, so both riders are written and neither
+`feat.associated_powers` marker survives.
 
 A note on the riders that read "hit **one or more** enemies": a `Hit` is
 announced per target, so a burst pays out once per creature it caught.
@@ -61,6 +62,7 @@ from combat_engine.engine import (
     CloseBlast,
     CloseBurst,
     Condition,
+    ConditionEnded,
     DamageRolled,
     DamageType,
     Dropped,
@@ -229,6 +231,24 @@ def _damage_vs_bloodied(c: Cast, ev: Any) -> None:
         c.bonus("damage", 2, on=c.me, until=When.EOT, once=True)
 
 
+def _damage_vs_unbloodied(c: Cast, ev: Any) -> None:
+    """The mirror of the above. Asked on the `Hit`, which is announced
+    before the damage is rolled, so "unbloodied" means unbloodied when the
+    blow landed rather than after it."""
+    if not c.bloodied(on=ev.target):
+        c.bonus("damage", 2, on=c.me, until=When.EOT, once=True)
+
+
+def _ac_for_one(c: Cast, ev: Any) -> None:
+    """"You or an ally of your choice within 5 squares." A power bonus does
+    not stack with itself, so the second payment a multi-target burst makes
+    costs nothing."""
+    pool = [c.me, *[f for f in c.within(5, side="ally") if f != c.me]]
+    who = c.choose(pool, f"{c.ref}: who gains the bonus") if len(pool) > 1 else c.me
+    c.bonus(AC, 1, on=who if who is not None else c.me, until=When.EONT,
+            kind="power")
+
+
 def _slow_until_sont(c: Cast, ev: Any) -> None:
     c.slowed(on=ev.target, until=When.SONT)
 
@@ -269,7 +289,32 @@ def _ally_temp_three(c: Cast, ev: Any) -> None:
 
 
 def _two_allies_temp(c: Cast, ev: Any) -> None:
-    for friend in [f for f in c.within(5, side="ally") if f != c.me][:2]:
+    """The temporary hit points are *bought* with the blow, and the price
+    is the whole of the clause -- paying them out unconditionally, which is
+    what this did, is a strictly better feat than the one printed.
+
+    `Hit` is announced before the damage is rolled, so the seam exists: a
+    one-shot `DamageRolled` watcher keyed on this power's own ref takes the
+    number to nothing before it lands. `default=False` so an engine with
+    nobody playing deals the damage, which is the printed default."""
+    friends = [f for f in c.within(5, side="ally") if f != c.me][:2]
+    if not friends:
+        return
+    fired = ev.power
+    label = f"{c.ref} forgoes {fired}"
+    # "One or more enemies": a burst announces a `Hit` per creature, and
+    # the choice is made once for the use, not once per victim.
+    if any(e.label == label for e in c.world.effects.of(c.me)):
+        return
+    if not c.may("deal no damage", who=c.me, default=False):
+        return
+
+    def forgo(blow: Any) -> None:
+        if blow.source == c.me and blow.detail == fired:
+            c.reduce(blow.amount, blow)
+
+    c.watch(DamageRolled, forgo, on=c.me, until=When.EOT, label=label)
+    for friend in friends:
         c.temp_hp(5, on=friend)
 
 
@@ -342,11 +387,12 @@ def _wider_crit(c: Cast) -> None:
     )
 
 
-# `f1361` and `f1433` both print a four-member list on the card. Neither
-# list reaches the spec: an errata block sits between the benefit and the
-# list, and `etl/feat._benefit` breaks at an errata heading and takes the
-# rest of that paragraph with it. The skill half of each plays.
-_divine("f1361", "religion", dropped=("feat.associated_powers",))
+_divine("f1361", "religion", clauses={
+    "p833": _ac_for_one,
+    "p2850": _ac_for_one,
+    "p2894": _ac_for_one,
+    "p839": _ac_for_one,
+})
 _divine("f1363", "insight", clauses={
     "p6980": _bloodied_allies_attack,
     "p7152": _bloodied_allies_attack,
@@ -368,7 +414,12 @@ _divine("f1431", "religion", clauses={
     "p839": _damage_vs_bloodied,
     "p7153": _damage_vs_bloodied,
 })
-_divine("f1433", "intimidate", dropped=("feat.associated_powers",))
+_divine("f1433", "intimidate", clauses={
+    "p7241": _damage_vs_unbloodied,
+    "p6980": _damage_vs_unbloodied,
+    "p2850": _damage_vs_unbloodied,
+    "p839": _damage_vs_unbloodied,
+})
 _divine("f1434", "athletics", clauses={
     "p833": _slow_until_sont,
     "p3423": _slow_until_sont,
@@ -405,7 +456,7 @@ _divine("f1447", "diplomacy", clauses={
     "p7072": _two_allies_temp,
     "p5137": _two_allies_temp,
     "p3687": _two_allies_temp,
-}, dropped=("c.forgo_damage()",))
+})
 _divine("f1449", "acrobatics", also=_wider_crit)
 _divine("f1451", "bluff", clauses={
     "p836": _attack_penalty,
@@ -487,6 +538,23 @@ def _save_near_me(world: Any, me: int, ev: Any) -> bool:
 
 def _death_save_near_me(world: Any, me: int, ev: Any) -> bool:
     return ev.against == "death" and distance_between(world, me, ev.actor) <= 10
+
+
+def _revived_near_me(world: Any, me: int, ev: Any) -> bool:
+    """"Regains consciousness after being reduced to 0 hit points."
+
+    `resolve._revive` ends the `dropped` hold, and `Effects.end` announces
+    a `ConditionEnded` per condition it carried -- so the moment is
+    `Condition.UNCONSCIOUS` ending with `why == "healed"`. The `why`
+    narrows it to the revival: waking from a sleep power is the same
+    condition ending and is not what this card pays for.
+    """
+    return (
+        ev.condition is Condition.UNCONSCIOUS
+        and ev.why == "healed"
+        and team(world, ev.target) == team(world, me)
+        and distance_between(world, me, ev.target) <= 10
+    )
 
 
 def _ally_takes_damage(world: Any, me: int, ev: Any) -> bool:
@@ -825,20 +893,26 @@ _granted("f1432", "f1432b")
 
 @power("f1432b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=Melee(1), target=ONE_CREATURE, keywords=DIVINE,
-       group=CHANNEL_DIVINITY, dropped=("c.restore_use(group=)",))
+       group=CHANNEL_DIVINITY)
 def f1432b(c: Cast) -> None:
     """Bloodied only, and the kill is the creature's remaining hit points
     taken as untyped damage rather than a separate verb, so everything
     that watches a creature going down still fires.
 
-    The "otherwise" clause -- you may use another channel divinity power
-    this encounter -- is dropped: the budget is a group rather than a row,
-    and `c.restore_use` hands back one named ref."""
+    The "otherwise" clause is the group budget handed back, and it is two
+    verbs rather than the one nothing provides: `dsl._group_spent` asks
+    whether any sibling has been used, so `c.restore_use` on this row
+    clears the block, and `c.forbid` then keeps *this* row spent. The use
+    is noted above the body in `dsl.use`, so there is something to hand
+    back by the time this runs."""
     if c.target is None or not c.bloodied():
         return
     health = c.world.get(c.target, Health)
     if health is not None and 0 < health.hp <= 5 + c.level // 2:
         c.flat(health.hp, on=c.target)
+        return
+    if c.restore_use(c.ref, on=c.me):
+        c.forbid(c.ref, on=c.me, until=When.ENCOUNTER)
 
 
 _granted("f1435", "f1435b")
@@ -913,14 +987,24 @@ _granted("f1441", "f1441b")
 
 
 @power("f1441b", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=CloseBurst(10), target=ONE_ALLY, keywords=DIVINE,
-       group=CHANNEL_DIVINITY, todo=("c.on_revive()",))
+       reach=CloseBurst(10), target=NO_TARGET, keywords=DIVINE,
+       group=CHANNEL_DIVINITY,
+       trigger="you or an ally within 10 squares regains consciousness",
+       on=Trigger(ConditionEnded, _revived_near_me,
+                  "somebody regains consciousness"))
 def f1441b(c: Cast) -> None:
-    """Pays out when somebody comes back up in the same fight. `Dropped`
-    announces going down and `Healed` announces the hit points, but the
-    unconscious condition is cleared inside `Health` without a word, so the
-    moment this card is printed for does not exist. `f609` is blocked on
-    the same absence."""
+    """The moment does exist: `resolve._revive` ends the `dropped` hold
+    and `Effects.end` announces every condition it took off, so the
+    unconscious condition ending with `why == "healed"` is the printed
+    sentence. `f609` is marked for the same read.
+
+    `NO_TARGET`: the card aims at the triggering character, which the
+    burst would not pick."""
+    who = c.trigger.target
+    c.bonus("attack", 2, on=who, until=When.EOTNT, kind="power")
+    c.bonus("save", 2, on=who, until=When.EOTNT, kind="power")
+    for defence in DEFENCES:
+        c.bonus(defence, 2, on=who, until=When.EOTNT, kind="power")
 
 
 _granted("f1444", "f1444b")
@@ -985,10 +1069,13 @@ _granted("f1452", "f1452b")
 
 
 @power("f1366", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.BUILDS",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def f1366(c: Cast) -> None:
-    """Adds an option to a hybrid class entry. A hybrid entry is a build
-    the chassis does not record, and nothing in a fight reads one."""
+    """Adds an option to a hybrid class entry, and the marker it used to
+    carry named `chargen.BUILDS`, which exists now and was never the gap:
+    the whole printed benefit is a choice made while the character is
+    built. Nothing happens in a fight, so the row is deliberately inert
+    rather than unfinished."""
 
 
 def _daily_hit(me: int):  # noqa: ANN202
@@ -1045,11 +1132,13 @@ def f1369(c: Cast) -> None:
 
 
 @power("f1371", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.BUILDS",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def f1371(c: Cast) -> None:
     """Knowing two arcane utility powers of each level and choosing between
-    them after a rest. Which rows a character knows is settled by its
-    chassis, and nothing on a board holds a second list."""
+    them after an extended rest. The card says in so many words that it
+    changes nothing about how many are usable in a day, so the benefit is
+    entirely which rows the chassis is built with -- inert in a fight, not
+    waiting on `chargen.BUILDS`, which exists."""
 
 
 @power("f1372", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1105,17 +1194,19 @@ def f1388(c: Cast) -> None:
 
 
 @power("f1389", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("spec.feat_ref()",))
+       reach=PERSONAL, target=SELF)
 def f1389(c: Cast) -> None:
-    """The two bonus clauses play. Using a creature's mount powers "as if
-    you had" another feat is dropped, and the marker is re-aimed at what
-    that actually wants: the clause is about a **feat**, not another
-    class's feature, and the brief prints it by name with no ref, so
-    there is nothing to point `c.feat` at. The two rituals in the last
-    line are not a fight.
+    """"As if you had" another feat now reaches the spec as `f30` rather
+    than as a printed name, so the clause is one `c.grant_row`: the ref
+    lands in `Powers.known`, which is what "you are considered to have
+    it" reads. `f30` carries markers of its own and is refused in play
+    until they clear; handing it over is still the printed sentence, the
+    way `f1423` hands over a marked class feature. The two rituals in the
+    last line are not a fight.
 
     Armed once, so a mount taken later in the fight does not get the
     bonus; the printed line is a standing property of the pair."""
+    c.grant_row("f30", on=c.me, until=When.ENCOUNTER)
     for beast in [c.mount(), *c.companions()]:
         if beast is None:
             continue
@@ -1264,12 +1355,14 @@ def f1405(c: Cast) -> None:
 
 @power("f1406", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignore_condition(rules=)",))
+       dropped=("c.ignore_squeeze_penalty()",))
 def f1406(c: Cast) -> None:
     """The combat-advantage half plays, gated on actually squeezing, and
     so does the re-priced escape -- `actions.legal` reads `escape` off
     `_granted` the way it reads `stand`. Squeezing's -5 to attacks is a
-    constant in `conditions.Rules`, not a modifier a row can cancel."""
+    constant in `conditions.Rules`, not a modifier a row can cancel; the
+    marker is re-aimed at the symbol the other three rows wanting that
+    already name."""
     me = c.me
     c.grant_action("escape", MINOR, on=me, until=When.ENCOUNTER)
     c.no_advantage(

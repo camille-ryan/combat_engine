@@ -220,15 +220,31 @@ def f966b(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit a target with a whip",
        on=Trigger(Hit, _hit_with_a_whip, "you hit with a whip"),
-       once_per_round=True, dropped=("c.penalty(against=)",))
+       once_per_round=True)
 def f967(c: Cast) -> None:
-    """The penalty plays and "once per round" is the header's own field.
+    """The penalty, narrowed to the one creature it protects.
 
-    Dropped: "against a target of your choice". A penalty is laid on the
-    creature taking it and nothing narrows one to the attacks it makes
-    against one particular enemy, so this is the whole of its attack
-    rolls -- wider than the card, and said so rather than left silent."""
-    c.penalty("attack", 2, on=c.trigger.target, until=When.EONT)
+    "Against a target of your choice" was dropped for wanting an
+    `against=` argument, and it does not need one. A penalty is a
+    modifier laid on the creature that suffers it, and `c.penalty`
+    passes `when=` through to `c.bonus`; the attack context carries the
+    defender under `target`, so "only against that one" is the ordinary
+    gate every "+2 against a creature you have cursed" row uses. Laid
+    ungated this was the whip's victim's whole attack routine, which is
+    much wider than the card.
+
+    "Once per round" is the header's own field.
+    """
+    foe = c.trigger.target
+    protected = c.choose(
+        [c.me, *c.allies()], f"{c.ref}: whom the whip's victim cannot hit"
+    )
+    if protected is None:
+        return
+    c.penalty(
+        "attack", 2, on=foe, until=When.EONT,
+        when=lambda ctx: ctx.get("target") == protected,
+    )
 
 
 _swap("f968", "f968b")

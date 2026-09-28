@@ -10,20 +10,23 @@ quote those numbers straight back -- f3037 the +1 power bonus to AC,
 f2111 the resistance, f3024 and f3026 the heal -- which is what fixes
 the match.
 
-The other three class-page features are `cf:artificer-items` in
-`docs/blocked.json`: no row of any of them exists and none can, so every
-feat riding on one carries `c.class_feature()` and plays as nothing.
-That is eight of the thirty-seven.
+`docs/blocked.json`'s `cf:artificer-items` is **out of date** and this
+file no longer rides on it: `Gear.worn` records the magic items a
+creature wears, `Magic.powers` lists their rows and `ItemPowerUsed`
+announces one firing, so `cf:artificer-f1` is written and the rows that
+read an item's daily power (f3035) are written with it. Nothing here
+carries `c.class_feature()` any more. What is genuinely left is the
+allowance half of the other three features, which is granted and spent
+inside a short rest -- `events.ShortRested`, which nothing emits.
 
 The next commonest shape is the cash-in all three infusions print --
 "the target can end the effect as a free action to ..." -- which
 `level_0.py` still leaves out of the infusions themselves. `c.end_effect`
 is the trade and its `None` is the guard: without it the ally would keep
 the bonus *and* take the payout, which is the one reading of the clause
-that is certainly wrong. The two that are still marked are the two the
-card gives **no moment** for -- the ally may take the trade at any time,
-which is `c.endable` with a payout, and nothing can hand `c.endable` the
-effect to arm because nothing asks what a creature is under.
+that is certainly wrong. Where the card gives **no moment** for the
+trade, `c.give` hands the ally a one-shot with its own cost instead of
+`c.endable`, which would need an `Effect` nothing reports.
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     AT_WILL,
+    DAILY,
     ENCOUNTER,
     FORT,
     MINOR,
@@ -40,15 +44,24 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    ActionPointSpent,
     ActionType,
+    AttackRolled,
     Cast,
+    Companion,
     Condition,
+    DamageApplied,
     DamageType,
+    Gear,
+    Healed,
     Hit,
     Keyword,
     Moved,
+    PowerResolved,
     PowerUsed,
     SavingThrow,
+    Size,
+    SkillCheck,
     Summoned,
     TempHP,
     Trigger,
@@ -67,8 +80,6 @@ AC_INFUSION = "p7635"
 RESIST_INFUSION = "p10187"
 INFUSIONS = (HEAL_INFUSION, AC_INFUSION, RESIST_INFUSION)
 
-#: A class-page feature with no row: `cf:artificer-items` in blocked.json.
-FEATURE = ("c.class_feature()",)
 
 
 def _ladder(level: int) -> int:
@@ -91,7 +102,42 @@ def _used_infusion(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.actor == me and ev.power in INFUSIONS
 
 
-def _feature(ref: str, what: str, todo: tuple[str, ...] = FEATURE) -> None:
+def _familiar_active(c: Cast) -> int | None:
+    """The familiar, if there is one and it is in its active mode.
+
+    "Requirement: your familiar must be in its active state" is askable:
+    passive is `Companion.passive`, which `c.familiar_mode` sets and
+    nothing on `Cast` reads back. Three rows here were marked as though
+    the state did not exist at all.
+    """
+    fam = c.familiar()
+    mine = c.world.get(fam, Companion) if fam is not None else None
+    return fam if mine is not None and not mine.passive else None
+
+
+def _item_dailies(c: Cast, who: int) -> list[str]:
+    """The **spent** daily rows of the magic items that creature wears.
+
+    `Gear.worn` is every magic item on the creature and `Magic.powers`
+    lists its own rows, so "a magic item's daily power" is a declared row
+    of `DAILY` usage named by one of those slots. `docs/blocked.json`
+    still records this as having no subject; it has had one since
+    `Gear.worn` landed.
+    """
+    gear = c.world.get(who, Gear)
+    if gear is None:
+        return []
+    spent = set(c.expended(on=who))
+    out = []
+    for magic in gear.worn.values():
+        for ref in magic.powers:
+            row = get(ref)
+            if ref in spent and row is not None and row.usage is DAILY:
+                out.append(ref)
+    return out
+
+
+def _feature(ref: str, what: str, todo: tuple[str, ...]) -> None:
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
            reach=PERSONAL, target=SELF, todo=todo)
     def feat(c: Cast) -> None: ...
@@ -184,12 +230,42 @@ def f1400(c: Cast) -> None:
 
 
 @power("f1404", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.bonus(healing)",))
+       reach=PERSONAL, target=SELF)
 def f1404(c: Cast) -> None:
-    """Extra hit points on every artificer healing power. The same hold
-    f822 named: the amount is worked out inside `c.heal` and `Mods` is
-    not consulted for healing at all, so there is nothing to add to --
-    and `Healed` carries no power, so the narrowing has no field either."""
+    """Extra hit points on every artificer healing power.
+
+    The old marker read `Mods` not being consulted for healing as the
+    wall. It is not one: `Healed` is a `Decision` announced with a
+    mutable `amount` **before** the hit points go on, which is the seam
+    "the target regains half the normal hit points" already uses.
+
+    `Healed` naming no power is true and not a wall either. The heal
+    happens inside the power's body, between its `PowerUsed` and its
+    `PowerResolved`, so holding both ends says which row is healing --
+    and "artificer healing power" is that row's `cls` and keyword.
+    """
+    me = c.me
+    step = 2 + sum(c.level >= n for n in (6, 11, 16, 21, 26))
+    open_: list[str] = []
+
+    def opened(ev: PowerUsed) -> None:
+        row = get(ev.power)
+        if (ev.actor == me and row is not None and row.cls == "artificer"
+                and Keyword.HEALING in row.keywords):
+            open_.append(ev.power)
+
+    def closed(ev: PowerResolved) -> None:
+        if ev.actor == me and ev.power in open_:
+            open_.remove(ev.power)
+
+    def topped(ev: Healed) -> None:
+        if open_ and ev.source == me and ev.amount > 0:
+            ev.amount += step
+
+    c.watch(PowerUsed, opened, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.watch(PowerResolved, closed, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.watch(Healed, topped, until=When.ENCOUNTER, on=me, label=c.ref,
+            window=Window.BEFORE)
 
 
 # -- the familiar chain, which hangs off f738 -------------------------------
@@ -207,24 +283,50 @@ def f1707(c: Cast) -> None:
 @power("f1707b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.ARCANE, Keyword.TELEPORTATION],
-       todo=("c.familiar_state()",))
+       dropped=("c.set_hp()",))
 def f1707b(c: Cast) -> None:
     """The card of f1707: the familiar swells into a Small creature that
     can flank, then teleports home and goes passive when the effect ends.
 
-    `c.resize`, `c.can_flank`, `c.cannot_attack` and `c.familiar_mode`
-    all exist, so the body is nearly writable -- but the Requirement is
-    the active state f740b was blocked on, and writing the rest would
-    make a card free that is printed as conditional.
+    The Requirement was the hold and it is not one -- `Companion.passive`
+    holds the state `c.familiar_mode` sets, so "must be in its active
+    state" is asked in full before anything is laid.
+
+    "When this effect ends" is the resize's own `on_end`, which is what
+    makes the teleport and the passive mode part of the same effect
+    rather than a second clock that could outlive it.
+
+    Dropped: hit points equal to your healing surge value. `c.surge_value`
+    knows the number and nothing sets a creature's maximum to it; the
+    familiar keeps the hit points it had, which is the only reading that
+    cannot invent a pool the card does not print.
     """
+    fam = _familiar_active(c)
+    if fam is None:
+        return
+    grown = c.resize(Size.SMALL, on=fam, until=When.SONT)
+    c.can_flank(on=fam, until=When.SONT)
+    c.cannot_attack(on=fam, until=When.SONT)
+    if grown is None:
+        return
+
+    def home() -> None:
+        c.teleport(0, who=fam, to=c.here, share=True)
+        c.familiar_mode("passive", of=c.me)
+
+    grown.on_end.append(home)
 
 
 @power("f1708", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.familiar_state()",))
+       reach=PERSONAL, target=SELF, todo=("query.leash()",))
 def f1708(c: Cast) -> None:
-    """Twenty squares more leash while the familiar is active. Both
-    halves are missing: nothing holds the mode, and nothing enforces a
-    distance between a companion and its owner for this to relax."""
+    """Twenty squares more leash while the familiar is active.
+
+    Re-aimed. The mode is held after all -- `Companion.passive` -- so
+    that half is not missing. What is missing is the thing the feat
+    relaxes: nothing keeps a familiar within any distance of its owner,
+    so there is no limit for twenty squares to be added to, and a row
+    that laid the bonus anyway would be a number nothing reads."""
 
 
 @power("f1709", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -236,14 +338,18 @@ def f1709(c: Cast) -> None:
 
 @power("f1709b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-       todo=("c.area_origin()", "c.familiar_state()"))
+       todo=("c.use_power(origin=)",))
 def f1709b(c: Cast) -> None:
     """Fires an infusion from the familiar's square instead of your own.
-    Re-aimed: `c.use_power` fires the named row now, so that is no
-    longer one of the holds. Two are left, and the row is nothing
-    without either -- moving a declared area's origin off its caster
-    (`c.set_origin` is the creature's origin, not this one), and the
-    familiar's active state, which the Requirement turns on."""
+
+    Re-aimed twice. The familiar's active state is readable
+    (`Companion.passive`), so that half of the old marker is gone, and
+    the hold is now named precisely: `dsl.use` **takes** an `origin`
+    square and `c.use_power` is the only route to it and does not pass
+    one through. `c.use_power(..., who=familiar)` is the near miss to
+    avoid -- it makes the familiar the caster, so the infusion would be
+    rolled with the familiar's ability modifiers instead of moving one
+    burst's origin, and the heal in particular would come out wrong."""
 
 
 @power("f1710", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -284,13 +390,39 @@ def f3025(c: Cast) -> None:
 
 
 @power("f2111", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.bonus(resist)",))
+       reach=PERSONAL, target=SELF)
 def f2111(c: Cast) -> None:
-    """Two more points of the resistance p10187 grants. The power is a
-    ref and `PowerUsed` names its targets, but the number is a literal
-    inside that body and the type is chosen there too -- `Mods` is no
-    more consulted for resistance than it is for healing, which is the
-    hold f822 named on the other side."""
+    """Two more points of the resistance p10187 grants.
+
+    The type is chosen inside that body and the number is a literal
+    there, which the old marker read as a wall. Neither has to be
+    guessed: `c.resistances` reports what a creature resists, and
+    `PowerResolved` is the moment **after** the infusion has laid its
+    own -- so the type is whichever one went up, and the amount is what
+    it went up to. `c.resist` takes the highest rather than adding, so
+    two points more of the same type replaces it instead of stacking.
+    """
+    me = c.me
+    before: dict[int, dict[DamageType, int]] = {}
+
+    def opened(ev: PowerUsed) -> None:
+        if ev.actor != me or ev.power != RESIST_INFUSION:
+            return
+        before.clear()
+        for who in ev.targets:
+            before[who] = dict(c.resistances(on=who))
+
+    def closed(ev: PowerResolved) -> None:
+        if ev.actor != me or ev.power != RESIST_INFUSION:
+            return
+        for who, was in before.items():
+            for dtype, now in c.resistances(on=who).items():
+                if now > was.get(dtype, 0):
+                    c.resist(now + 2, dtype, until=When.ENCOUNTER, on=who)
+        before.clear()
+
+    c.watch(PowerUsed, opened, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.watch(PowerResolved, closed, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f3023", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -357,27 +489,92 @@ def f3033(c: Cast) -> None:
 
 
 @power("f3034", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.effects_on()",))
+       reach=PERSONAL, target=SELF)
 def f3034(c: Cast) -> None:
-    """Re-aimed. The card prints no moment for this trade: the ally may
-    take it as a free action whenever it likes, which is `c.endable` --
-    a `drop` on the ally's own action menu with `then=` as the payout.
+    """The card prints no moment for this trade: the ally may take it as
+    a free action whenever it likes.
 
-    What is missing is a step before that. `c.endable` takes the effect
-    itself, `c.end_effect` is the only thing that finds one by label and
-    it ends what it finds, and nothing asks what a creature is currently
-    under. The gate on p2482 being unspent is `c.expended` and works."""
+    Written the other way round from the old marker. `c.endable` wants
+    the `Effect` object and nothing hands one over -- but it is not the
+    only route to a free action somebody else spends. `c.give` puts a
+    one-shot in the ally's hands with its own cost, `actions.legal`
+    offers it to whoever is carrying it, and the payout closes over this
+    caster. The trade itself is `c.end_effect`, whose `None` is the ally
+    not being under either infusion after all, so the benefit cannot be
+    taken twice or taken for free.
+
+    The gate on p2482 is asked when the one-shot is **spent** rather
+    than when it is handed over, which is where the card asks it.
+    """
+    me = c.me
+
+    def trade(spender: int) -> None:
+        if "p2482" in c.expended(on=me):
+            return
+        for infusion in (AC_INFUSION, RESIST_INFUSION):
+            if c.end_effect(on=spender, against=infusion) is not None:
+                c.insubstantial(on=spender, until=When.SOTNT)
+                return
+
+    def offered(ev: PowerUsed) -> None:
+        if ev.actor != me or ev.power not in (AC_INFUSION, RESIST_INFUSION):
+            return
+        for who in ev.targets:
+            if who != me:
+                c.give(fn=trade, on=who, uses=1, cost=ActionType.FREE)
+
+    c.watch(PowerUsed, offered, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
-@power("f3038", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+def _melee_landing(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """A melee attack that is about to be a hit, on somebody else.
+
+    Read off the live `AttackResult` the event carries: the outcome is
+    recomputed **after** `AttackRolled` is announced, so what the result
+    says here is provisional and what a listener changes is what lands.
+    """
+    row = get(ev.power)
+    result = getattr(ev, "result", None)
+    return (
+        ev.attacker != me
+        and result is not None
+        and result.hit
+        and row is not None
+        and row.reach is not None
+        and row.reach.kind == "melee"
+    )
+
+
+@power("f3038", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.reroll_attack(on=)",))
+       trigger="an ally under one of your infusions is hit by a melee attack",
+       on=Trigger(AttackRolled, _melee_landing, "a melee attack would hit"))
 def f3038(c: Cast) -> None:
-    """Re-aimed. The trade itself is `c.end_effect` now and the moment is
-    printed -- the ally is hit by a melee attack -- but the whole payout
-    is a reroll of somebody else's attack roll, and `c.reroll_attack`
-    rerolls the caster's own and takes no other creature. Writing the
-    row without it would spend the infusion and buy nothing."""
+    """The old marker was stale in both halves. `c.reroll_attack` does
+    not reroll "the caster's own" attack -- it reads the roll off
+    `c.trigger` and changes whichever attack that is, so it needs no
+    `on=`; and the roll is still open, because `resolve.attack` announces
+    `AttackRolled` and then recomputes hit, critical and defence from the
+    result afterwards. That window is the printed interrupt.
+
+    So the moment is `AttackRolled` rather than `Hit`: by the time a hit
+    is announced the damage rider has nothing left to undo. The trade is
+    `c.end_effect`, and its `None` is the ally not being under either
+    infusion, which is what keeps the reroll from being free.
+    """
+    ev = c.trigger
+    who = ev.target
+    if who == c.me or who not in c.allies():
+        return
+    for infusion in (AC_INFUSION, RESIST_INFUSION):
+        if who not in c.suffering(infusion, include_self=True):
+            continue
+        if not c.may("end the infusion to force a reroll", who=who,
+                     default=False):
+            return
+        if c.end_effect(on=who, against=infusion) is not None:
+            c.reroll_attack()
+        return
 
 
 # -- riders on the infusion that heals --------------------------------------
@@ -432,13 +629,17 @@ def f3027(c: Cast) -> None:
 
 
 @power("f3032", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.BUILDS",))
+       reach=PERSONAL, target=SELF, todo=("chargen.race_choice()",))
 def f3032(c: Cast) -> None:
     """Nine legs, one per racial manifestation, seven of them a
-    resistance and two a saving-throw bonus. `c.element` is the only
-    thing that answers "which element is this character sworn to" and it
-    reads a *class build's* fork -- a race has no leg to record one, so
-    every branch of this would be silently false."""
+    resistance and two a saving-throw bonus.
+
+    Re-aimed to name the gap rather than the thing that does exist:
+    `chargen.BUILDS` is there and has a leg for every class that prints
+    a choice, and `c.element` reads `element:` off the build those legs
+    make. A *race* that prints a choice has nowhere to record one, so
+    every branch of this would be silently false. The same hold as the
+    warden's racial leg."""
 
 
 def _wields_infusion(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -479,36 +680,87 @@ def f3042(c: Cast) -> None:
 
 
 @power("f3028", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_skill_check()",),
-       trigger="you hit an enemy granting combat advantage to you",
-       on=Trigger(Hit, lambda w, me, ev: ev.attacker == me, "you hit"))
+       reach=PERSONAL, target=SELF)
 def f3028(c: Cast) -> None:
-    """"Grants combat advantage to all attackers" is `to="team"`, which
-    is you and your side -- everyone who will attack it in practice.
+    """Two printed clauses, one of them standing, so this is a trait with
+    two watchers rather than a declared trigger -- a row with `on=` runs
+    only when that event fires, and the substitution has to be in place
+    before the racial power rolls anything.
 
+    "Grants combat advantage to all attackers" is `to="team"`, which is
+    you and your side -- everyone who will attack it in practice.
     Advantage is read off the blow rather than asked again, because a
-    one-shot grant has been spent by then. The melee-and-artificer gate
-    is asked in the body, since the predicate would have to reach the
-    same header twice.
+    one-shot grant has been spent by then.
 
-    The Arcana-for-Bluff substitution is dropped: the check is made
-    inside a racial power and nothing announces one to swap.
+    The Arcana-for-Bluff half was dropped as unsayable and is not:
+    `SkillCheck` is announced **before** its modifiers are totalled and
+    the callback reads `ev.skill` back off the event, so writing the
+    other skill onto it is the substitution itself rather than a bonus
+    standing in for one. It is narrowed to a check made inside p7546 by
+    holding that power's two ends, the way f1404 holds a heal's.
     """
-    p = get(c.trigger.power)
-    if p is None or p.cls != "artificer" or p.reach is None:
-        return
-    if p.reach.kind != "melee" or not c.had_advantage(c.trigger):
-        return
-    c.grants_advantage(on=c.trigger.target, until=When.SONT, to="team")
+    me = c.me
+    inside: list[str] = []
+
+    def hit(ev: Hit) -> None:
+        if ev.attacker != me:
+            return
+        row = get(ev.power)
+        if row is None or row.cls != "artificer" or row.reach is None:
+            return
+        if row.reach.kind != "melee" or not c.had_advantage(ev):
+            return
+        c.grants_advantage(on=ev.target, until=When.SONT, to="team")
+
+    def opened(ev: PowerUsed) -> None:
+        if ev.actor == me and ev.power == "p7546":
+            inside.append(ev.power)
+
+    def closed(ev: PowerResolved) -> None:
+        if ev.actor == me and ev.power in inside:
+            inside.remove(ev.power)
+
+    def instead(ev: SkillCheck) -> None:
+        if inside and ev.actor == me and ev.skill == "bluff":
+            ev.skill = "arcana"
+
+    c.watch(Hit, hit, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.watch(PowerUsed, opened, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.watch(PowerResolved, closed, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.watch(SkillCheck, instead, until=When.ENCOUNTER, on=me, label=c.ref,
+            window=Window.BEFORE)
 
 
 @power("f3035", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recharge_power()",))
+       reach=PERSONAL, target=SELF, dropped=("events.ShortRested",))
 def f3035(c: Cast) -> None:
     """Spending an action point also hands an adjacent ally back a magic
-    item's daily power. `ActionPointSpent` is announced and
-    `c.restore_use` takes a ref -- but the ref is "a magic item's daily
-    power", and nothing asks a creature which of its rows that is."""
+    item's daily power.
+
+    "Nothing asks a creature which of its rows that is" was true when
+    this was marked and is not now: `Gear.worn` records the items and
+    `Magic.powers` their rows, so `_item_dailies` is the list, and the
+    ally picks which. One ally and one row, so the loop stops on the
+    first hand-back that took.
+
+    Dropped: the second sentence spends a use of a per-day allowance
+    that is granted and spent inside a rest, and nothing announces one
+    -- the same hold `cf:artificer-f0s1` itself carries.
+    """
+    me = c.me
+
+    def spent(ev: ActionPointSpent) -> None:
+        if ev.actor != me:
+            return
+        for who in c.within(1, of=me, side="ally"):
+            rows = _item_dailies(c, who)
+            if not rows:
+                continue
+            pick = c.choose(rows, "item daily power to hand back")
+            if pick is not None and c.restore_use(pick, on=who):
+                return
+
+    c.watch(ActionPointSpent, spent, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f3037", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -527,16 +779,50 @@ def f3037(c: Cast) -> None:
             c.bonus(defence, 1, on=who, until=When.ENCOUNTER, kind="power")
 
 
-@power("f3041", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
+def _hurt(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return ev.amount > 0 and ev.target != ev.source
+
+
+@power("f3041", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you or an ally under p10187 takes damage",
+       on=Trigger(DamageApplied, _hurt, "somebody takes damage"))
 def f3041(c: Cast) -> None:
-    """Widens the trigger of a named racial power to an ally taking
-    damage, and makes both of you invisible when it goes off that way.
-    Re-aimed: `c.use_power` fires `p377` now, and `DamageApplied` is
-    the event -- but the trigger is "you or an ally **affected by your
-    shielding elixir power**", and that power arrives as a name with no
-    ref, so there is nothing to ask who is under it. Without the gate
-    the row answers every point of damage anybody on the team takes."""
+    """Widens the trigger of a racial power to an ally taking damage, and
+    makes both of you invisible when it goes off that way.
+
+    The old marker said the shielding elixir arrives as a name with no
+    ref. It does not have to: this file matches the three infusions to
+    their refs by mechanic, and f2111's own card quotes the resistance
+    that `p10187` grants. So "affected by your shielding elixir" is
+    `c.suffering(p10187)`, which is the gate the row was missing.
+
+    "Until you attack" is not a duration the engine holds, so it is
+    written as what it is -- the clock plus a watcher that ends the
+    effect on that creature's first attack roll.
+    """
+    ev = c.trigger
+    who = ev.target
+    warded = c.suffering(RESIST_INFUSION, include_self=True)
+    if who != c.me and who not in warded:
+        return
+    if who == c.me and c.me not in warded:
+        return
+    if not c.use_power("p377"):
+        return
+    if who == c.me:
+        return
+    for one in (c.me, who):
+        unseen = c.invisible(on=one, until=When.EONT)
+        if unseen is None:
+            continue
+
+        def swung(rolled: AttackRolled, one: int = one,
+                  unseen: Any = unseen) -> None:
+            if rolled.attacker == one and not unseen.ended:
+                c.world.effects.end(unseen, "attacked")
+
+        c.watch(AttackRolled, swung, until=When.EONT, on=one, label=c.ref)
 
 
 @power("f3043", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -660,17 +946,26 @@ def f3040(c: Cast) -> None:
 # -- the four that ride on the charge banked in a weapon --------------------
 
 
+#: Both halves of the charge `cf:artificer-f0s0` banks, which is what the
+#: four rows riding on it have no subject without. The feature's own row
+#: names the same two, so the group holds together.
+BANKED = ("events.ShortRested", "c.boost_roll()")
+
+
 def _banked(ref: str, what: str) -> None:
     """`cf:artificer-f0s0` is declared now, and refused in play.
 
     The feature banks a +2 to one attack roll, spent as a free action
-    *after* the roll -- and that is the half its own row carries
-    `c.boost_roll()` for. Nothing lays the charge, so nothing is
-    "benefiting from" it and these four have no subject; the feature
-    being named in prose was never what stopped them.
+    *after* the roll. Both ends are missing and the marker now says so:
+    the charge is laid during a short rest and nothing announces one, and
+    a roll that has already landed cannot be added to -- `c.bonus` is
+    read by the next roll, not by the one on the table. Nothing lays the
+    charge, so nothing is "benefiting from" it and these four have no
+    subject; the feature being named in prose was never what stopped
+    them.
     """
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=("c.boost_roll()",))
+           reach=PERSONAL, target=SELF, todo=BANKED)
     def feat(c: Cast) -> None: ...
 
     feat.__name__ = ref
@@ -681,7 +976,7 @@ def _banked(ref: str, what: str) -> None:
 #: +2 it banks is the thing nothing lays, which is what its own sub-option
 #: waits on too.
 _feature("f2110", "Doubles the attack bonus one feature banks in a weapon.",
-         todo=("c.boost_roll()",))
+         todo=BANKED)
 _banked("f3029", "Damage to an enemy beside an ally that charge helped.")
 _banked("f3036", "An initiative bonus for whoever carries the banked charge.")
 _banked("f3044", "Lends a racial power's benefit to the charge's wielder.")

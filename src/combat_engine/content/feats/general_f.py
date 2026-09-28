@@ -35,6 +35,10 @@ from combat_engine.engine import (
     ActionPointSpent,
     ActionType,
     Cast,
+    Condition,
+    ConditionEnded,
+    DamageRolled,
+    DamageType,
     Hit,
     Keyword,
     PowerUsed,
@@ -59,12 +63,27 @@ PROFICIENCY = ("chargen.proficiency()",)
 
 _BIG = (Size.LARGE, Size.HUGE, Size.GARGANTUAN)
 
+#: The five the breath feat may be sworn to, in the card's own order.
+_BREATH_TYPES = (
+    DamageType.ACID,
+    DamageType.COLD,
+    DamageType.FIRE,
+    DamageType.LIGHTNING,
+    DamageType.POISON,
+)
+
 
 def _used(ref: str):  # noqa: ANN202
     def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
         return ev.actor == me and ev.power == ref
 
     return when
+
+
+def _woke_up(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """The unconscious that dropping laid, ending. `ConditionEnded` names
+    its subject `target`, so `about_me` is false on it forever."""
+    return ev.target == me and ev.condition is Condition.UNCONSCIOUS
 
 
 def _bigger_than_me(c: Cast, who: int) -> bool:
@@ -242,14 +261,24 @@ def f596(c: Cast) -> None:
     c.watch(Hit, on_crit, on=me, until=When.ENCOUNTER)
 
 
-@power("f609", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_revive()",))
+@power("f609", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you return to consciousness",
+       on=Trigger(ConditionEnded, _woke_up, "you come back up"))
 def f609(c: Cast) -> None:
-    """Pays out on coming back up in the same fight. `Dropped` announces
-    going down and `Healed` announces the hit points, but nothing
-    announces *regaining consciousness* -- the condition is cleared
-    inside `Health` without a word, so the moment this row is printed
-    for does not exist."""
+    """Pays out on coming back up in the same fight.
+
+    Re-read: the moment does exist. Dropping lays an effect labelled
+    "dropped" carrying unconscious, prone and dying, and `resolve._revive`
+    ends it -- and `Effects.end` announces a `ConditionEnded` per
+    condition it was carrying. So "return to consciousness" is the
+    unconscious one going away, and "in the same encounter" is implied
+    by the effect having been laid this fight.
+
+    A plain "+1 bonus" with no type word printed, so untyped.
+    """
+    c.bonus(AC, 1, on=c.me, until=When.ENCOUNTER)
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER)
 
 
 # -- riders on a racial power that is a ref ---------------------------------
@@ -341,16 +370,32 @@ def f601(c: Cast) -> None:
 
 
 @power("f387", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.deals(ref=)",))
+       reach=PERSONAL, target=SELF)
 def f387(c: Cast) -> None:
-    """Changes what damage type one named power deals.
+    """Changes what damage type one named racial power deals.
 
-    `c.deals` exists and is the printed sentence for a *weapon* -- it
-    overrides the type this creature's weapon attacks roll. This row
-    overrides the type **one particular power** rolls, which is a
-    different question: it must not touch anything else the character
-    does, and `c.deals` has no way to name a row.
+    Re-read: `c.deals` is still the wrong verb, because it rewrites every
+    weapon attack the character makes. But it is not the only way to
+    retype a blow. `DamageRolled` is a `Decision` whose `dtype` is
+    writable and whose `detail` is the ref of the row that rolled it --
+    `c.damage` passes `detail or self.ref` -- and `resolve.deal_damage`
+    reads the type back off the event after both windows, so one named
+    row's line can be retyped without touching anything else.
+
+    The choice the card prints is made once, when the trait arms. Which
+    type the breath already deals is a racial choice nothing records, so
+    all five printed options are offered.
     """
+    me = c.me
+    kind = c.choose(list(_BREATH_TYPES), "which damage type for p1448")
+    if kind is None:
+        return
+
+    def retype(ev: DamageRolled) -> None:
+        if ev.source == me and ev.detail == "p1448":
+            ev.dtype = kind
+
+    c.watch(DamageRolled, retype, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f602", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

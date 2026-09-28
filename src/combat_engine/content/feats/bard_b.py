@@ -31,10 +31,12 @@ from combat_engine.engine import (
     SELF,
     ActionType,
     Cast,
+    Condition,
     DamageType,
     Hit,
     Keyword,
     PowerUsed,
+    SavingThrow,
     SurgeSpent,
     Trigger,
     When,
@@ -178,16 +180,19 @@ def f2563(c: Cast) -> None:
 
 @power("f2972", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.moved_by_me()", "c.swap_forced()"))
+       todo=("c.moved_by_me()", "c.instead_of()"))
 def f2972(c: Cast) -> None:
     """A free step whenever you teleport an ally, and a teleport in place
     of the heal's slide.
 
     `Moved`, `MoveStart` and `MoveEnd` all carry `kind_`, so "an ally
     teleports" is sayable -- but none of them carries who did it, and
-    `ForcedMove` (which does) covers pushes, pulls and slides only. The
-    second clause reaches inside another row and swaps the movement it
-    chose, which is the same hold as the avenger's f1724.
+    `ForcedMove` (which does) covers pushes, pulls and slides only.
+
+    The second clause is **re-aimed**: `p2339` is a ref and its slide is
+    an ordinary printed clause inside its body, so what is wanted is the
+    swap for half of what another row does -- the same operation thirty
+    rows name, including the avenger's f1724 -- and not a verb of its own.
     """
 
 
@@ -241,16 +246,50 @@ def f2298(c: Cast) -> None:
 
 
 @power("f2924", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus('save:death')",))
+       reach=PERSONAL, target=SELF)
 def f2924(c: Cast) -> None:
-    """The skill half stands; the rider is dropped.
+    """The skill half stands and the rider lands with it.
 
-    A death saving throw is rolled in `turns._death_saves` with
-    `bonus=0` written into the event, so nothing a creature carries adds
-    to one. A `c.bonus("save", ...)` here would look like the printed +5
-    and never be read.
+    The rider was dropped on the reading that a death saving throw is
+    rolled with `bonus=0` written in. It is not: `turns._death_saves`
+    totals `save` modifiers against a context labelled `death`, so the
+    gate is what keeps the +5 off every ordinary throw the ally makes --
+    an ungated save bonus would be read by both.
+
+    "Their next death saving throw" is spent by hand rather than with
+    `once=True`: that branch of `c.bonus` ends a one-shot save bonus on
+    the owner's next `SavingThrow` **whatever it was against**, and a
+    dying ally rolls ordinary save-ends throws at the end of the same
+    turn. A gated one-shot would be eaten by one of those.
     """
-    c.bonus("skill:nature", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+    me = c.me
+    refs = ("p4987", "p1580")
+
+    def on_hit(ev: Hit) -> None:
+        if not _longsword(c, ev, refs):
+            return
+        for mate in allies(c.world, me):
+            if mate == me or not c.adjacent(to=mate):
+                continue
+            if not c.is_(Condition.DYING, on=mate):
+                continue
+            given = c.bonus(
+                "save", 5, on=mate, until=When.ENCOUNTER, kind="power",
+                when=lambda ctx: ctx.get("label") == "death",
+            )
+
+            def rolled(ev: SavingThrow, who: int = mate, eff: Any = given) -> None:
+                if ev.actor == who and ev.against == "death":
+                    c.end_effect(eff)
+
+            c.watch(
+                SavingThrow, rolled, until=When.ENCOUNTER, on=me,
+                label=f"{c.ref} spent",
+            )
+            return
+
+    c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label=f"{c.ref} riders")
+    c.bonus("skill:nature", 2, on=me, until=When.ENCOUNTER, kind="feat")
 
 
 @power("f2926", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -357,12 +396,16 @@ def f1231(c: Cast) -> None:
 
 
 @power("f2091", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.retrigger(p1452)",))
+       reach=PERSONAL, target=SELF, todo=("c.retrigger(ref)",))
 def f2091(c: Cast) -> None:
     """Widens another row's printed Trigger and adds a miss rider.
     `p1452` is a ref and its `on=Trigger(...)` is header data, read by
     the dispatcher before anything runs; nothing edits one for a
-    character, so the miss clause has no window to live in either."""
+    character, so the miss clause has no window to live in either.
+
+    Re-aimed only in spelling: the marker carried the ref inside the
+    symbol, so it grouped with nothing and the next row wanting the same
+    operation would have named it a third way."""
 
 
 @power("f2973", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

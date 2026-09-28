@@ -11,16 +11,19 @@ consequence instead.
 limit, and `triggers._answers` asks `usable` every time it offers a row, so
 `ENCOUNTER` would quietly turn "whenever you use it" into "once a fight".
 
-Two gaps recur, both already named by `assassin_b.py`.
+**Invoking the shrouds** was the gap four rows here carried, and it is
+closed. `p9400` arms the invoking as a pair of watchers on the assassin's
+own `Hit` and `Miss`, so the moment *is* announced -- it is the attack
+event itself. A listener in the `Window.BEFORE` half of that event runs
+ahead of `p9400`'s own, which is where the count is still intact; the
+payout it rolls comes through as a `DamageRolled` whose `detail` is
+`p9400`, because `c.flat` stamps the rolling row's ref. Between the two,
+"when you invoke" and "the damage from p9400" are both askable.
 
-**Invoking the shrouds.** `c.shroud` lays one, `c.shrouds` counts them and
-`c.spend_shrouds` cashes them in -- but nothing announces the moment they
-were cashed, and four rows here turn on that moment and nothing else.
-
-**A power's printed distance.** "Teleport your Dexterity modifier instead",
-"add 2 squares to your teleport": the reach a row moves you is header data
-the menu reads before anything runs, and `c.extend_move()` is the symbol
-two other classes already name for it.
+**A power's printed distance** is the one that remains. "Teleport your
+Dexterity modifier instead", "add 2 squares to your teleport": the reach a
+row moves you is header data the menu reads before anything runs, and
+`c.extend_move()` is the symbol two other classes already name for it.
 """
 
 from __future__ import annotations
@@ -36,18 +39,27 @@ from combat_engine.engine import (
     DamageType,
     Dropped,
     Hit,
+    Keyword,
     PowerUsed,
     Trigger,
     When,
+    Window,
     power,
     targets_me,
 )
 from combat_engine.engine.components import Shrouds
-from combat_engine.engine.events import Miss, MoveEnd, SkillCheck
+from combat_engine.engine.dsl import get
+from combat_engine.engine.events import (
+    DamageRolled,
+    Miss,
+    MoveEnd,
+    OpportunityWindow,
+    SkillCheck,
+    TempHP,
+)
 
-#: Nothing announces the moment the shrouds are cashed in, as against
-#: merely counted. `assassin_b.py` names the same symbol for four rows.
-INVOKE = ("c.on_invoke_shrouds()",)
+#: The row whose body invokes the shrouds and rolls what they are worth.
+SHROUDS = "p9400"
 #: How far a named row moves you is header data, read before the body.
 DISTANCE = ("c.extend_move()",)
 #: A row's printed Requirement, waived for one use. `Power.requires` is
@@ -368,40 +380,124 @@ def f2919(c: Cast) -> None:
     )
 
 
-# -- the invoking, which nothing announces ----------------------------------
+# -- the invoking ----------------------------------------------------------
+
+
+def _invoked_on_a_miss(c: Cast, fn) -> None:  # noqa: ANN001
+    """Arm `fn(ev)` for a miss of mine that invokes the shrouds.
+
+    `Window.BEFORE` is the whole trick. `p9400` hangs its own invoking on
+    the ordinary (`AFTER`) half of the same `Miss`, and the count is gone
+    by the time that has run -- so a rider asking "how many did you
+    invoke" has to ask in the interrupt window, where nothing has been
+    cashed yet. Insertion order cannot be relied on for it: `p9400` arms
+    itself mid-fight and a trait arms at the start, so an `AFTER`
+    listener here would run *before* the invoking rather than after it.
+    """
+    me = c.me
+
+    def on_miss(ev: Miss) -> None:
+        if ev.attacker == me and c.shrouds(ev.target):
+            fn(ev)
+
+    c.watch(Miss, on_miss, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
 
 
 @power("f2828", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=INVOKE)
+       reach=PERSONAL, target=SELF)
 def f2828(c: Cast) -> None:
     """A miss that invoked two or more shrouds pays the ranger's rider
-    anyway. `c.quarry_damage` is the payout and `c.shrouds` is the count;
-    the moment of invoking is the whole of what is missing."""
+    anyway.
+
+    `c.quarry_damage` is the dice that feature rolls and
+    `c.total("cf:ranger-f1 damage")` the modifier a build feature may have
+    raised it by -- the pair `features.extra_damage` itself pays with, so
+    the two cannot disagree. `detail=` names the feature rather than this
+    feat, because the printed line is that feature's damage arriving by
+    another road.
+    """
+    def pay(ev: Miss) -> None:
+        if c.shrouds(ev.target) >= 2:
+            c.damage(c.quarry_damage(), c.total("cf:ranger-f1 damage"),
+                     on=ev.target, detail="cf:ranger-f1")
+
+    _invoked_on_a_miss(c, pay)
 
 
 @power("f2829", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=INVOKE)
+       reach=PERSONAL, target=SELF)
 def f2829(c: Cast) -> None:
-    """The rogue's side of f2828. `c.sneak_damage` is the payout and
-    `c.had_advantage` reads the grant off the triggering attack, so the
-    invoking is again the only gap."""
+    """The rogue's side of f2828.
+
+    `c.had_advantage` reads the grant off the attack that missed rather
+    than asking the board again -- a one-shot grant has already been
+    spent by the time the roll is over, so the second question comes back
+    false exactly when the card means yes.
+    """
+    def pay(ev: Miss) -> None:
+        if c.shrouds(ev.target) >= 2 and c.had_advantage(ev):
+            c.damage(c.sneak_damage(), c.total("cf:rogue-scoundrel-f4 damage"),
+                     on=ev.target, detail="cf:rogue-scoundrel-f4")
+
+    _invoked_on_a_miss(c, pay)
 
 
 @power("f2922", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=INVOKE)
+       reach=PERSONAL, target=SELF)
 def f2922(c: Cast) -> None:
     """Turns the shroud damage radiant when a divine power invoked it.
-    `c.deals` sets a damage type and `Keyword.DIVINE` is a keyword gate --
-    neither is reachable without the moment the shrouds were cashed."""
+
+    Not `c.deals`, which retypes everything the creature throws and takes
+    no gate: only the one blow `p9400` rolls is meant. That blow announces
+    itself as a `DamageRolled` whose `detail` is `p9400`, and the type on
+    that event is writable and is what resistance and the `DamageApplied`
+    below it both read.
+
+    Which power invoked them is latched off the attack rather than read
+    off the damage: the damage context carries the *rolling* row, which is
+    always `p9400`, and the attack that set it off is only nameable while
+    its own event is in the air.
+    """
+    me = c.me
+    divine: list[bool] = [False]
+
+    def on_swing(ev: Any) -> None:
+        if ev.attacker != me:
+            return
+        row = get(ev.power)
+        divine[0] = row is not None and Keyword.DIVINE in row.keywords
+
+    def retype(ev: DamageRolled) -> None:
+        if divine[0] and ev.source == me and ev.detail == SHROUDS:
+            ev.dtype = DamageType.RADIANT
+
+    for outcome in (Hit, Miss):
+        c.watch(outcome, on_swing, until=When.ENCOUNTER, on=me,
+                window=Window.BEFORE, label=c.ref)
+    c.watch(DamageRolled, retype, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2937", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=INVOKE)
+       reach=PERSONAL, target=SELF)
 def f2937(c: Cast) -> None:
     """Keeps a shroud back on a miss against one sort of creature.
-    `c.kinds_of` answers "undead", `c.spend_shrouds` is the cashing in --
-    but the subtraction happens inside p9400's own miss line and nothing
-    announces it for a rider to change."""
+
+    Written as a shroud handed over rather than as damage added, because
+    `p9400`'s miss line is `count - 1` and then `count` dice *and* `count`
+    times the per-tier number: one extra die is the wrong answer above
+    heroic, and at a count of one there is no `DamageRolled` to amend at
+    all. Lending one back in the interrupt window makes the subtraction
+    land on the number the card says it should.
+
+    Above `p9400`'s own cap deliberately -- the loan lives for the length
+    of one event and `c.spend_shrouds` clears the lot a line later.
+    """
+    def lend(ev: Miss) -> None:
+        if {"undead", "shadow"} & c.kinds_of(ev.target):
+            c.shroud(on=ev.target, cap=c.shrouds(ev.target) + 1)
+
+    _invoked_on_a_miss(c, lend)
 
 
 # -- a power's printed distance ---------------------------------------------
@@ -436,20 +532,45 @@ def f2830(c: Cast) -> None:
 
 
 @power("f2837", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_provoke(when=)",))
+       reach=PERSONAL, target=SELF)
 def f2837(c: Cast) -> None:
     """No opportunity attacks from a shrouded creature, and only against
-    one shape of attack. `c.no_provoke` is a flat waiver with no `when=`,
-    so writing it would also cover the melee attacks the card does not --
-    strictly stronger than print rather than a missing clause."""
+    one shape of attack.
+
+    `c.no_provoke` takes the creature but no `when=`, so the veto is
+    written out: `OpportunityWindow.why` records *what* opened the
+    window, and `dsl` spells a ranged power's as "<ref> is a ranged
+    power". Reading the ref back off it is how "your ranged sorcerer
+    attacks" is narrowed to the class -- walking away from the creature
+    still provokes, which is the half a bare waiver would have thrown in.
+    """
+    me = c.me
+
+    def veto(ev: OpportunityWindow) -> None:
+        if ev.provoker != me or not c.shrouds(ev.actor):
+            return
+        if not ev.why.endswith(" is a ranged power"):
+            return
+        row = get(ev.why.split(" ", 1)[0])
+        if row is not None and row.cls == "sorcerer":
+            ev.cancel(c.ref)
+
+    c.watch(OpportunityWindow, veto, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
 
 
 @power("f2920", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.as_implement(holy symbol)",))
+       reach=PERSONAL, target=SELF, proficiency=("w:holy-symbol",))
 def f2920(c: Cast) -> None:
-    """The whole benefit is what assassin_b's f2812 drops: `c.as_implement`
-    rewrites what is in hand, and a multiclass assassin's chassis carries
-    no holy symbol to rewrite."""
+    """The whole benefit is the header field, as f2814's rods are.
+
+    Not the gap assassin_b's f2812 drops. That one has to rewrite an
+    object already in hand; this one only has to put one there, and
+    `chargen` reads `proficiency=` when the character is built. A holy
+    symbol's `group` is `implement` in this engine, so being handed one
+    *is* being able to cast with one and there is nothing for the body to
+    say.
+    """
 
 
 @power("f2931", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -461,14 +582,45 @@ def f2931(c: Cast) -> None:
 
 
 @power("f2936", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_use(cf:assassin-f1)",))
+       reach=PERSONAL, target=SELF)
 def f2936(c: Cast) -> None:
     """Raises the temporary hit points `cf:assassin-f1` hands out, and
     doubles the raise against two creature types.
 
-    The feature has a ref and a written row now. What it does not have
-    is a seam: the amount is computed inside its `Hit` closure, and
-    `TempHP` names neither the row that paid nor the creature whose
-    being hit caused it -- so neither "increase by 1" nor the
-    `c.kinds_of` test on that creature has anything to read. f291 names
-    the same absence against `p2095`."""
+    `TempHP` still names neither the row that paid nor the creature whose
+    being hit caused it, so both are carried across from the hit instead:
+    the feature's whole condition is "you hit somebody who is not
+    bloodied", which is what the latch below holds, and the creature it
+    holds is the one the second sentence asks about.
+
+    Re-applied rather than amended. `resolve.temp_hp` writes the pool and
+    *then* announces, so an interrupt on the announcement would change a
+    number already stored; a second, larger call is the one operation
+    that moves it, and temporary hit points not stacking is what makes
+    that a raise rather than an addition.
+
+    The narrow way it can be wrong: another source paying the assassin
+    temporary hit points inside the same hit would be raised too. Nothing
+    in the class does, and the alternative is no row at all.
+    """
+    me = c.me
+    struck: list[int] = []
+
+    def on_hit(ev: Hit) -> None:
+        # Reset first: a hit that qualifies and pays nothing -- the pool
+        # is already the larger -- must not leave the latch standing for
+        # whatever the next hit hands over.
+        struck.clear()
+        if ev.attacker == me and ev.target != me and not c.bloodied(on=ev.target):
+            struck.append(ev.target)
+
+    def raise_it(ev: TempHP) -> None:
+        if ev.source != me or ev.target != me or not struck:
+            return
+        victim = struck.pop()
+        bump = 2 if {"undead", "shadow"} & c.kinds_of(victim) else 1
+        c.temp_hp(ev.amount + bump, on=me)
+
+    c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
+    c.watch(TempHP, raise_it, until=When.ENCOUNTER, on=me, label=c.ref)

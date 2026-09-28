@@ -53,7 +53,7 @@ from . import PSIONIC_WEAPON, shift_beside
     keywords=PSIONIC_WEAPON,
     attack=Attack(CON, vs=AC),
     augments=(Augment(2, reach=CloseBurst(1), target=EACH_ENEMY),),
-    dropped=("dsl.Power.basic_for", "c.denies_advantage()"),
+    dropped=("dsl.Power.basic_for", "c.no_advantage(gains=)"),
 )
 def p11169(c: Cast) -> None:
     """Augment 2 is a close burst against each enemy at 2[W], which is a
@@ -63,8 +63,11 @@ def p11169(c: Cast) -> None:
     the Special that lets the row stand in for an opportunity attack, which
     is what a row is *used as* rather than anything its body does; nothing
     in the header says so. And "the target cannot gain combat advantage" is
-    printed on every form -- `c.grants_advantage` hands advantage out and
-    nothing takes it away."""
+    printed on every form. Re-aimed to name where that belongs rather than
+    a verb nobody will write: `c.no_advantage` is the same sentence from
+    the other side -- it stops a creature *granting* advantage -- and what
+    is missing is the attacker's half of it, a creature that cannot gain
+    advantage however the board looks."""
     if c.strike():
         c.damage(c.w(2) if c.augment == 2 else c.w(), c.con_mod)
 

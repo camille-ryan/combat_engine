@@ -209,10 +209,22 @@ def f27(c: Cast) -> None:
 
 @power("f30", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.no_mount_penalty()", "c.lend_skills()"))
+       todo=("c.lend_skills()",))
 def f30(c: Cast) -> None:
-    """A mount takes no printed attack penalty here to waive, and a creature
-    cannot borrow another's skill modifier."""
+    """Riding: waive the mount's attack penalty, and let it use your skill
+    modifier for four skills.
+
+    The first half is not a gap and the marker no longer claims it is.
+    The engine imposes no attack penalty on a mount at all -- `c.ride`,
+    `c.mount` and `c.rider` carry the relation and nothing anywhere
+    subtracts 2 -- so there is nothing for this to waive and writing it
+    would change no roll. `c.no_mount_penalty()` named a verb for
+    undoing something that does not happen, and sat alone in its own
+    group saying so.
+
+    The second half is the real one: a creature cannot borrow another's
+    skill modifier, which is `c.lend_skills()` and four rows elsewhere.
+    """
 
 
 @power("f36", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -512,11 +524,25 @@ def f281(c: Cast) -> None:
        target=ONE_CREATURE, keywords=DIVINE,
        trigger="an enemy scores a critical hit against you or an ally within 5 squares",
        on=Trigger(Hit, _crit_on_me_or_ally,
-                  "an enemy crits you or an ally within 5 squares"),
-       todo=("c.uncrit()",))
+                  "an enemy crits you or an ally within 5 squares"))
 def f281b(c: Cast) -> None:
-    """Turn the critical into an ordinary hit. `c.cancel` refuses the whole
-    attack and `c.halve` changes the number, so neither says this."""
+    """Turn the critical into an ordinary hit.
+
+    An immediate interrupt is dispatched in `Window.BEFORE` of its event
+    and `resolve.attack` announces `Hit` before any damage is rolled, so
+    the crit is still undecided when this runs. `AttackResult.critical`
+    is plain and writable -- `c.maximise(critical=True)` promotes a hit
+    the same way, from the same window -- and `Cast.crit` reads that
+    field, so clearing it is the demotion: ordinary dice, and none of the
+    riders a critical pays. The event's own copy is cleared too, for the
+    listeners after this one that read it rather than the result.
+
+    It was marked `c.uncrit()`; nothing was missing.
+    """
+    ev = c.trigger
+    ev.critical = False
+    if ev.result is not None:
+        ev.result.critical = False
 
 
 @power("f282", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -698,17 +724,49 @@ def f305(c: Cast) -> None:
        trigger="you roll a natural 20 on a saving throw",
        on=Trigger(SavingThrow, _my_natural_20_save,
                   "you roll a natural 20 on a saving throw"),
-       todo=("SavingThrow.effect",))
+       dropped=("Effect.subs",))
 def f305b(c: Cast) -> None:
-    """Hand the effect just saved against to an enemy. `c.transfer` wants the
-    live `Effect` and the event names only the string it was saved against."""
+    """Hand the effect just saved against to an enemy.
+
+    `SavingThrow` carries no `Effect`, but it carries `against=str(eff)`
+    and that rendering opens with `e<id>`, so it names one hold
+    uniquely: matching it against the live list on the roller gets the
+    object back. `Effects.save` announces the throw **before** it acts on
+    the outcome, so the hold is still standing while this runs even
+    though the save succeeded, and `Effects.end` is idempotent -- the
+    "saved" ending that follows finds the transferred copy already gone
+    and does nothing.
+
+    `c.transfer` refuses a hold carrying a relation or a subscription and
+    returns None rather than moving half of it; a mark or a watch-backed
+    effect therefore stays where it is. That is the one dropped clause.
+    """
+    foe = c.target
+    if foe is None:
+        return
+    for eff in c.world.effects.of(c.me):
+        if str(eff) == c.trigger.against:
+            c.transfer(eff, to=foe)
+            return
 
 
 @power("f309", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.is_vulnerable()",))
+       reach=PERSONAL, target=SELF, todo=("c.grants_advantage(when=)",))
 def f309(c: Cast) -> None:
     """Combat advantage with cold powers against whatever is vulnerable to
-    cold. `c.vulnerable` writes the state and nothing reads it back."""
+    cold.
+
+    Reading the vulnerability back is not the gap: `Defences.vulnerable`
+    is a plain dict per type, the mirror of the `Defences.resist` that
+    `c.resistances` reads, so "is it vulnerable to cold" is one lookup.
+
+    The gap is the narrowing. Combat advantage is a *relation*, laid by
+    `c.grants_advantage` and computed by `query.has_combat_advantage`
+    from the pair of creatures alone -- no power, no keyword, nowhere for
+    "only when the power has the cold keyword" to be asked. Laid
+    ungated, this row would hand out advantage with every attack the
+    character makes, which is much stronger than print.
+    """
 
 
 @power("f333", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

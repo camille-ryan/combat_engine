@@ -11,22 +11,25 @@ ordinary row.
 **Nearly every racial power here is nameable.** `p8278`, `p2482`,
 `p2473`, `p1831`, `p7441`, `m4421a6`, `p1448`, `p377`, `p1452`, `p1449`,
 `p2480`, `p6189` and `p7546` all arrive as refs, so a rider on one is an
-ordinary `PowerUsed` or `Hit` trigger. Three rows are left naming their
-power in prose -- a racial *trait*'s borrowed power, the shroud power
-itself and one encounter power -- and those keep `c.on_racial_power()`,
-the symbol the rogue's `f767` named.
+ordinary `PowerUsed` or `Hit` trigger. One row is left naming its power
+in prose and keeps `c.on_racial_power()`, the symbol the rogue's `f767`
+named; `m4421a6` is named by ref but no row declares it.
 
-Several of the newly-named ones are still refused, but for a different
-reason each: a row cannot *use* another row (`c.use_power()`), cannot
-spend one to pay a cost (`c.expend_row()`), cannot lengthen the move a
-named row makes (`c.extend_move()`), and cannot reach back from a use to
-the roll that use was answering (`c.triggering_of()`, which `general_o`'s
-f3112 named against this same racial power).
+What is still refused is narrower than it was: nothing lengthens the
+move a named row makes (`c.extend_move()`) and nothing rewrites the
+reach a row is printed with (`c.recast(reach=)`). `c.triggering_of()` is
+gone from this file -- `PowerUsed.trigger` is the event a use was
+answering, and `f1793` is written against it.
 
-The one genuinely new gap is **invoking** the shrouds as against merely
-carrying them. `c.shroud` and `c.shrouds` say how many are on a creature;
-nothing announces the moment they are cashed in, and six rows turn on
-exactly that moment. `c.on_invoke_shrouds()`.
+**Invoking is askable after all**, and that was the biggest group here.
+`p9400` arms its own `Hit`/`Miss` watch and cashes the shrouds in from
+inside it, unconditionally -- it never declines. So "you invoke your
+shrouds" is "you hit, or miss, a creature carrying them", and the one
+thing needed is to be looked at *before* `p9400`'s watch has cleared the
+count. `Bus.on` keeps insertion order and runs the whole `BEFORE` window
+first, so a trait armed at the start of the fight with
+`window=Window.BEFORE` sees the shrouds intact every time. Six rows here
+came off `c.on_invoke_shrouds()` that way.
 """
 
 from __future__ import annotations
@@ -52,15 +55,14 @@ from combat_engine.engine import (
     SecondWind,
     Trigger,
     When,
+    Window,
     about_me,
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import SkillCheck
+from combat_engine.engine.events import SkillCheck, ZoneExited
+from combat_engine.engine.zones import Zone
 
-#: Nothing announces the moment the shrouds are cashed in, as against
-#: merely counted. Six rows here turn on that moment and nothing else.
-INVOKE = ("c.on_invoke_shrouds()",)
 #: A racial power named in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
 
@@ -68,6 +70,35 @@ RACIAL = ("c.on_racial_power()",)
 #: these feats' own prerequisites.
 SHROUD = "p9400"
 SHADE = "p9402"
+
+
+def _before(c: Cast, event: type, fn) -> None:  # noqa: ANN001
+    """Watch an event in the interrupt window, for the whole fight.
+
+    Every row below that reads a shroud count has to be looked at before
+    `p9400`'s own watch has spent it. `Bus._run` runs the entire `BEFORE`
+    window before the `AFTER` one, so this is order-proof rather than
+    relying on which trait happened to arm first.
+    """
+    c.watch(event, fn, until=When.ENCOUNTER, on=c.me, window=Window.BEFORE)
+
+
+def _payout(c: Cast, victim: int, *, spend: bool = True) -> int:
+    """What invoking pays: one d6 a shroud, plus a flat step each from
+    paragon on. `p9400` keeps this arithmetic inside its own watch and
+    there is no way to call it from outside, so it is written out.
+
+    `spend=False` is for the rows whose payout is *extra* -- `p9400`
+    invokes on every hit of its own accord, so a row that cleared the
+    count would only be taking the engine's own payout away."""
+    count = c.shrouds(victim)
+    if count <= 0:
+        return 0
+    per = 0 if c.level < 11 else (3 if c.level < 21 else 6)
+    dealt = c.flat(c.roll(f"{count}d6") + count * per, on=victim)
+    if spend:
+        c.spend_shrouds()
+    return dealt
 
 
 def _holding_form(c: Cast, ref: str) -> bool:
@@ -229,25 +260,54 @@ def f2231(c: Cast) -> None:
 
 @power("f2230", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.on_invoke_shrouds()",),
-       trigger="you drop a creature carrying your shrouds",
-       on=Trigger(Dropped, lambda w, me, ev: (
-           getattr(ev, "source", None) == me
-       ), "you drop an enemy"))
+       trigger="you drop a creature carrying your shrouds")
 def f2230(c: Cast) -> None:
-    """Temporary hit points scaled by the shrouds on whatever just fell.
+    """Temporary hit points scaled by the shrouds on whatever just fell,
+    and a teleport if they were invoked on the killing blow.
 
-    The count is read before anything clears it, because the creature is
-    down and its shrouds go with it. The teleport half is dropped: it is
-    gated on having *invoked* the shrouds on that blow, and nothing
-    announces the invoking.
+    Written as a trait rather than a declared `Dropped` trigger, because
+    **by the time a creature falls its shrouds are already gone**:
+    `p9400` cashes them in from inside the same `Hit` that killed it, so
+    the count this row is supposed to scale off has been zero at
+    `Dropped` since the day both rows were written. The count is
+    therefore taken in the interrupt window of the blow itself and
+    remembered.
+
+    `Dropped.actor` is the creature that fell -- there is no `target` on
+    that event, and reading one through `getattr` would make the row
+    silently do nothing.
     """
-    # `Dropped.actor` is the creature that fell. There is no `target` on
-    # this event, and reading one through `getattr` would have made the
-    # row silently do nothing -- which is the failure shape this project
-    # is built to hunt, so it is named here rather than left to be found.
-    victim = c.trigger.actor
-    c.temp_hp(5 + c.shrouds(victim), on=c.me)
+    me = c.me
+    #: what each creature was carrying when it was last struck, and
+    #: whether that blow invoked -- a hit invokes on one shroud, a miss
+    #: pays nothing back until there are two.
+    seen: dict[int, tuple[int, bool]] = {}
+
+    def struck(ev: Any) -> None:
+        if ev.attacker != me:
+            return
+        count = c.shrouds(ev.target)
+        if count:
+            seen[ev.target] = (count, count >= (2 if isinstance(ev, Miss) else 1))
+
+    _before(c, Hit, struck)
+    _before(c, Miss, struck)
+
+    def fell(ev: Dropped) -> None:
+        if getattr(ev, "source", None) != me:
+            return
+        count, invoked = seen.pop(ev.actor, (c.shrouds(ev.actor), False))
+        if not count:
+            return
+        c.temp_hp(5 + count, on=me)
+        # The destination is "adjacent to your nearest ally within 10",
+        # which `c.teleport` has no way to carry -- the same constraint
+        # `p9401` leaves to the world's decider. The ally is a gate here
+        # rather than a square.
+        if invoked and c.within(10, of=me, side="ally"):
+            c.teleport(10, who=me)
+
+    c.watch(Dropped, fell, until=When.ENCOUNTER, on=me)
 
 
 # -- poison, fear and illusion: keywords the engine has ---------------------
@@ -533,17 +593,26 @@ def f2226(c: Cast) -> None:
 
 
 @power("f1793", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.triggering_of()",))
+       reach=PERSONAL, target=SELF, todo=("m4421a6",),
+       trigger="you use m4421a6 to improve an attack roll",
+       on=Trigger(PowerUsed, _used("m4421a6"), "you use that racial power"))
 def f1793(c: Cast) -> None:
     """Damage to whoever a named racial power's roll was aimed at.
 
-    `m4421a6` is a ref, so this is no longer a naming gap. What is
-    missing is the same thing `general_o`'s f3112 named against this very
-    power: the racial power answers an attack roll, and a row answering
-    the *use* has no way back to the roll being answered. `PowerUsed`
-    carries the actor, the ref and the racial power's own targets, which
-    are not "the target of that attack roll".
+    Re-aimed. `c.triggering_of()` has arrived: `PowerUsed.trigger` is
+    the event the power was used in answer to, and the racial power
+    answers an attack roll, which carries its own `target`. So the body
+    is writable and is written.
+
+    What is left is the racial power itself -- the spec names it
+    `x_m4421a6`, the ETL's mark for a ref it could not resolve, and
+    nothing in the tree declares it. Until it does, this trigger can
+    never fire, so the row is `todo` rather than finished.
     """
+    rolled = getattr(c.trigger, "trigger", None)
+    victim = getattr(rolled, "target", None)
+    if victim is not None:
+        c.flat(c.dex_mod, on=victim)
 
 
 @power("f1799", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -584,20 +653,17 @@ def f1807(c: Cast) -> None:
 
 
 @power("f2812", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.as_implement(holy symbol)",))
+       reach=PERSONAL, target=SELF, proficiency=("w:holy-symbol",))
 def f2812(c: Cast) -> None:
     """Extra damage per shroud from a named power's damage.
 
-    `p805` is a ref and `c.shrouds` counts, so the damage half is
-    written. The holy-symbol half is dropped: `c.as_implement` rewrites
-    the group of what is in hand, and a multiclass assassin's chassis
-    carries no holy symbol to rewrite.
+    The holy-symbol half is no longer dropped and was never a body:
+    "you can use X as an implement" is the `proficiency=` header field,
+    which `chargen` reads when the character is armed -- the same shape
+    `f2814` next door uses for rods. `w:holy-symbol` is already a
+    printed item.
     """
     me = c.me
-    c.bonus(
-        "damage", 0, on=me, until=When.ENCOUNTER,
-        when=lambda ctx: ctx.get("power") == "p805",
-    )
     for count in (1, 2, 3, 4):
         c.bonus(
             "damage", 1, on=me, until=When.ENCOUNTER, kind=f"{c.ref}:{count}",
@@ -609,29 +675,99 @@ def f2812(c: Cast) -> None:
         )
 
 
-# -- waiting on the invoking, which nothing announces -----------------------
+# -- the invoking, read in the window before it happens ---------------------
 
 
-def _invoke(ref: str, what: str, *, wants: tuple[str, ...] = INVOKE) -> None:
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=wants)
-    def feat(c: Cast) -> None: ...
+@power("f1797", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f1797(c: Cast) -> None:
+    """Strength modifier on top of the shrouds, on a blow that both
+    invokes and lands.
 
-    feat.__name__ = ref
-    feat.__doc__ = (
-        f"{what} `c.shrouds` counts them and `c.shroud` lays one, but "
-        "nothing announces the moment they are cashed in."
-    )
+    `p9400` never declines the invoke, so "you invoke your shrouds on an
+    enemy and hit it" is exactly "you hit an enemy carrying at least one"
+    -- asked in the interrupt window, where the count is still there.
+    """
+    me = c.me
+
+    def landed(ev: Hit) -> None:
+        if ev.attacker == me and c.shrouds(ev.target):
+            c.flat(c.str_mod, on=ev.target)
+
+    _before(c, Hit, landed)
 
 
-_invoke("f1797", "Extra damage when you invoke and hit at once.")
-_invoke("f1795", "A named racial power's damage invokes the shrouds too.")
-#: Re-aimed: `c.expend_row` spends `p6189` without casting it now, so
-#: the price is written; what is left is the moment, which nothing
-#: announces.
-_invoke("f1804", "A racial power pays extra when a miss still invokes.")
-_invoke("f2233", "Leaving a named zone invokes the shrouds and clears them.",
-        wants=("c.on_invoke_shrouds()", "c.on_leave_zone()"))
+@power("f1795", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f1795(c: Cast) -> None:
+    """A named racial power's damage pays the shrouds out as well.
+
+    `p8278` is not a blow of its own: it lays a one-shot necrotic rider
+    on the next hit, labelled with its own ref like every effect. So
+    "when you deal damage with it" is "the hit that rider is about to
+    ride on", which is this `Hit` with that effect still standing.
+
+    The shrouds are **not** spent here. `p9400` invokes on this same hit
+    of its own accord, so clearing them would leave the engine's own
+    payout with nothing to pay and turn the feat into a row that takes
+    damage away.
+    """
+    me = c.me
+
+    def landed(ev: Hit) -> None:
+        if ev.attacker == me and _holding_form(c, "p8278"):
+            _payout(c, ev.target, spend=False)
+
+    _before(c, Hit, landed)
+
+
+@power("f1804", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f1804(c: Cast) -> None:
+    """A miss that the shrouds still pay out on, bought with a racial
+    power.
+
+    `p9400` drops one shroud from the count on a miss, so "your shrouds
+    still deal damage" is two or more of them. `c.expend_row` is the
+    price and its False is the printed requirement -- no racial power
+    left, no extra die.
+    """
+    me = c.me
+    dice = "1d6" if c.level < 11 else "1d12"
+
+    def missed(ev: Miss) -> None:
+        if ev.attacker != me or c.shrouds(ev.target) < 2:
+            return
+        if c.expend_row("p6189"):
+            c.flat(c.roll(dice), on=ev.target)
+
+    _before(c, Miss, missed)
+
+
+@power("f2233", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2233(c: Cast) -> None:
+    """Leaving a named zone of yours pays the shrouds out and clears
+    them.
+
+    `ZoneExited` is the event -- it was already there, so the second
+    half of this row's old marker named nothing. A zone carries its
+    owner and is labelled with the ref of the row that made it, which is
+    how the one `p2473` laid is told from anybody else's.
+
+    The shrouds are spent here: no attack is involved, so nothing else
+    is going to, and the card says they vanish.
+    """
+    me = c.me
+
+    def left(ev: ZoneExited) -> None:
+        zone = c.world.get(ev.zone, Zone)
+        if zone is None or zone.owner != me or not zone.label.startswith("p2473"):
+            return
+        if c.shrouds(ev.actor):
+            _payout(c, ev.actor)
+
+    c.watch(ZoneExited, left, until=When.ENCOUNTER, on=me)
 
 
 # -- waiting on a racial power that has no ref ------------------------------

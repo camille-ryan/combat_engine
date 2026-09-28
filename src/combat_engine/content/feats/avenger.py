@@ -32,6 +32,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.query import enemies
+from combat_engine.engine.types import Forced
 
 
 def _enemy_hit_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -130,7 +131,23 @@ def f1490(c: Cast) -> None:
 
 
 @power("f1492", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.extend_forced()",))
+       reach=PERSONAL, target=SELF)
 def f1492(c: Cast) -> None:
-    """Adds two squares to the pull one named power makes. The power has
-    a ref; nothing lengthens the forced movement another row applies."""
+    """Adds two squares to the pull `p6980` makes.
+
+    `c.extend_forced()` was the wrong symbol: `c.forces` is the verb and
+    it is the shover's side of `c.resist_forced`, read off whoever is
+    doing the shoving. Its gate is handed `how` and `power`, which is
+    both halves of "the pull your p6980 makes" -- and `how` arrives as
+    the enum's value rather than the member, so the comparison is
+    against `Forced.PULL.value`.
+
+    A standing modifier rather than a rider on the use: the shove reads
+    the key while it is being applied, which is inside that row's body.
+    """
+    c.forces(
+        2, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("power") == "p6980" and ctx.get("how") == Forced.PULL.value
+        ),
+    )

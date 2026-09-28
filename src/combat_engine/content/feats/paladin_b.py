@@ -85,6 +85,18 @@ def _used(ref: str):  # noqa: ANN202
     return when
 
 
+def _i_channelled(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """A power of mine that spends the once-a-fight allowance.
+
+    Which rows belong to `cf:paladin-f0` is recorded after all -- as
+    `group=CHANNEL_DIVINITY`, the string `dsl._group_spent` reads to
+    refuse the second one in a fight. Asked of the used row rather than
+    hand-listed, so a row added later is in the set.
+    """
+    row = get(ev.power)
+    return ev.actor == me and row is not None and row.group == CHANNEL_DIVINITY
+
+
 def _melee(ctx: dict[str, Any]) -> bool:
     """"Melee damage rolls", asked of the damage context, which carries
     the attacking row's ref and no `ranged` key of its own."""
@@ -458,20 +470,51 @@ def f2756(c: Cast) -> None:
     c.bonus("damage", 4, on=c.me, until=When.SONT)
 
 
-@power("f3084", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_feature_power()",))
+@power("f3084", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use a cf:paladin-f0 power",
+       on=Trigger(PowerUsed, _i_channelled, "you use one of those powers"))
 def f3084(c: Cast) -> None:
-    """Rides on using a power of one named class feature. The feature
-    has a ref, but which rows *belong* to it is not recorded anywhere,
-    so there is no set to watch for -- the same gap `f1502` names."""
+    """The group is the set -- see `_i_channelled`. A plain "+2 bonus"
+    with no type word in front of it is untyped, so no `kind=`."""
+    for defence in (FORT, REF, WILL):
+        c.bonus(defence, 2, on=c.me, until=When.EONT)
 
 
 @power("f3089", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.uncrit()",))
+       reach=PERSONAL, target=SELF)
 def f3089(c: Cast) -> None:
-    """Gives a critical back in exchange for a surge. The whole benefit
-    hangs off the exchange, so the healing half cannot land on its own:
-    nothing turns a critical into an ordinary hit after it has rolled."""
+    """Gives a critical back in exchange for a surge.
+
+    A critical *can* be put back now. `resolve.attack` decides it, hangs
+    the live `AttackResult` on the `Hit` and announces that before any
+    damage is rolled, and `c.crit` -- which is what maxes the dice --
+    reads `result.critical` each time it is asked. So clearing the flag
+    in the interrupt window is the demotion, and it is the same seam
+    `c.maximise(critical=True)` uses from the other side. The field on
+    the event goes too, for the riders that read it rather than the
+    result.
+
+    Armed as a watcher rather than declared `on=`: this trait is
+    `ENCOUNTER` and a declared trigger on an encounter row is spent by
+    its first firing (#210), which would refuse the choice for the rest
+    of the fight whether or not it was taken.
+    """
+    me = c.me
+
+    def offer(ev: Hit) -> None:
+        if ev.attacker != me or not ev.critical or ev.result is None:
+            return
+        near = [me] + [a for a in allies(c.world, me) if a != me and c.adjacent(to=a)]
+        who = c.choose(near, f"{c.ref}: give up the critical to heal", optional=True)
+        if who is None:
+            return
+        ev.critical = False
+        ev.result.critical = False
+        c.surge(on=who, bonus=10)
+
+    c.watch(Hit, offer, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
 
 
 # -- the bloodied ally -----------------------------------------------------

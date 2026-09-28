@@ -41,6 +41,7 @@ from combat_engine.engine import (
     Ability,
     ActionType,
     Attack,
+    AttackRolled,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -55,6 +56,7 @@ from combat_engine.engine import (
     Ranged,
     SavingThrow,
     SecondWind,
+    SkillCheck,
     Trigger,
     When,
     about_me,
@@ -109,6 +111,22 @@ def _ally_crit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
         ev.critical
         and team(world, ev.target) == team(world, me)
         and distance_between(world, me, ev.target) <= 10
+    )
+
+
+def _ally_rolled(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return (
+        ev.attacker != me
+        and team(world, ev.attacker) == team(world, me)
+        and distance_between(world, me, ev.attacker) <= 10
+    )
+
+
+def _ally_checked(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return (
+        ev.actor != me
+        and team(world, ev.actor) == team(world, me)
+        and distance_between(world, me, ev.actor) <= 10
     )
 
 
@@ -210,11 +228,23 @@ _granted("f629", "f629b")
 
 @power("f629b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=CloseBurst(1), target=ONE_ALLY, keywords=DIVINE,
-       group=CHANNEL_DIVINITY, dropped=("c.bonus('skill:any')",))
+       group=CHANNEL_DIVINITY)
 def f629b(c: Cast) -> None:
-    """The attack-roll half. "Or skill check" is dropped: a skill bonus is
-    keyed `skill:<name>` and the card names no skill."""
+    """**Re-aimed off `c.bonus('skill:any')`, which does not need to
+    exist.** `engine/skills.py` reads a bare `skill` key beside
+    `skill:<name>` and says so outright: "a blanket `skill` modifier
+    applies to every check". That is exactly a bonus the card declines
+    to pin to one skill.
+
+    The printed "or" is a choice made when the bonus is spent and
+    nothing carries that, so both one-shots are laid: an ally who both
+    attacks and rolls a skill before the end of my next turn takes it
+    twice. Narrow enough to prefer to dropping the clause, because the
+    engine rolls a skill check perhaps once a fight and an attack roll
+    every round.
+    """
     c.bonus("attack", 2, on=c.target, until=When.EONT, kind="power", once=True)
+    c.bonus("skill", 2, on=c.target, until=When.EONT, kind="power", once=True)
 
 
 _granted("f630", "f630b")
@@ -300,11 +330,28 @@ _granted("f608", "f608b")
 
 @power("f608b", level=1, cls="", usage=ENCOUNTER, action=ActionType.IMMEDIATE_INTERRUPT,
     reach=CloseBurst(10), target=ONE_ALLY, keywords=DIVINE,
-    group=CHANNEL_DIVINITY, todo=("c.reroll_attack(on=)",))
+    group=CHANNEL_DIVINITY,
+    trigger="an ally in the burst makes an attack roll or skill check",
+    on=(Trigger(AttackRolled, _ally_rolled, "an ally makes an attack roll"),
+        Trigger(SkillCheck, _ally_checked, "an ally makes a skill check")))
 def f608b(c: Cast) -> None:
-    """Rerolls an **ally's** attack roll. `c.reroll_attack` rerolls the
-    triggering roll but has no `on=`, and the triggering roll here is
-    somebody else's."""
+    """Rerolls an **ally's** attack roll or skill check.
+
+    **`c.reroll_attack(on=)` was the wrong symbol and the row was
+    blocked on nothing.** It reads the roll off `c.trigger` and never
+    asks whose it is -- the live `AttackResult` rides on `AttackRolled`
+    as a plain attribute for exactly this -- so the ally's roll is
+    reachable the moment the row is declared against the ally's event.
+    An immediate interrupt lands in `Window.BEFORE`, which for both
+    events is before the outcome is settled: `resolve.attack`
+    recomputes hit and crit from `result` after the window, and
+    `skills.check` totals the modifiers in its resolve callback.
+
+    `keep="new"`, the default, is the printed "must keep the second
+    result, even if it is worse".
+    """
+    if not c.reroll_attack():
+        c.reroll_check()
 
 
 _granted("f610", "f610b")

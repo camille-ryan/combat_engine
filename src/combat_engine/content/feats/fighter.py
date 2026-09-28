@@ -325,15 +325,23 @@ def f758(c: Cast) -> None:
 
 
 @power("f774", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Keyword.INVIGORATING",))
+       reach=PERSONAL, target=SELF,
+       todo=("Keyword.INVIGORATING", "TempHP.power"))
 def f774(c: Cast) -> None:
-    """Same keyword, raising the temporary hit points it pays."""
+    """Same keyword, raising the temporary hit points it pays.
+
+    **Two symbols, not one.** Even with the keyword this could not be
+    said: `resolve.temp_hp` consults `Mods` for nothing, so "+2 to the
+    number of temporary hit points you gain" has no term to add to.
+    Five rows want that second one.
+    """
 
 
 @power("f792", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Keyword.INVIGORATING",))
+       reach=PERSONAL, target=SELF,
+       todo=("Keyword.INVIGORATING", "TempHP.power"))
 def f792(c: Cast) -> None:
-    """Same keyword, a smaller version of f774."""
+    """Same two gaps as f774, a smaller number."""
 
 
 @power("f371", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

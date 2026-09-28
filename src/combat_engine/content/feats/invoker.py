@@ -30,6 +30,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.dsl import get
 from combat_engine.engine.query import distance_between
+from combat_engine.engine.types import Usage
 
 _DEFENCES = (AC, FORT, REF, WILL)
 
@@ -92,14 +93,47 @@ def f483(c: Cast) -> None:
     c.bonus(AC, 2, on=c.me, until=When.SONT, kind="feat")
 
 
-@power("f1022", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Usage.on_power_used",))
+def _bigger_divine(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """A divine encounter or daily attack power, used on your own turn."""
+    p = get(ev.power)
+    return (
+        ev.actor == me
+        and world.turn == me
+        and p is not None
+        and Keyword.DIVINE in p.keywords
+        and p.usage in (Usage.ENCOUNTER, Usage.DAILY)
+        and (p.attack is not None or p.attack_alt is not None)
+    )
+
+
+def _at_will_divine(ctx: dict[str, Any]) -> bool:
+    p = get(str(ctx.get("power") or ""))
+    return (
+        p is not None
+        and Keyword.DIVINE in p.keywords
+        and p.usage is Usage.AT_WILL
+    )
+
+
+@power("f1022", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use a divine encounter or daily attack power on your turn",
+       on=Trigger(PowerUsed, _bigger_divine, "you spend a bigger divine power"))
 def f1022(c: Cast) -> None:
-    """A bonus to the next at-will after using an encounter or daily.
-    The gate on *which* power earns it needs the usage of the row that
-    fired, and `PowerUsed` carries the ref rather than the header -- so
-    the bonus is written and the narrowing to an at-will is dropped."""
-    c.bonus("attack", 1, on=c.me, until=When.EONT, kind="feat", once=True)
+    """A bonus to the next at-will after spending an encounter or daily.
+
+    Re-read: `PowerUsed` does carry only the ref, and `dsl.get` turns a
+    ref into the declared row -- whose `usage`, `keywords` and `attack`
+    are all header fields. So `Usage.on_power_used` named a lookup that
+    already worked, on both sides of the row: the earning half is now a
+    declared trigger rather than a standing bonus that any power bought,
+    and the spending half is a gate on the attack context.
+
+    It was also written as a trait laying a modifier flat, which is the
+    printed trigger going nowhere -- a row holds one or the other.
+    """
+    c.bonus("attack", 1, on=c.me, until=When.EONT, kind="feat", once=True,
+            when=_at_will_divine)
 
 
 @power("f1012", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

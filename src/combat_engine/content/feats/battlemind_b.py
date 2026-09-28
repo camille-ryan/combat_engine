@@ -21,10 +21,10 @@ enemy it likes. `PowerUsed.targets` is therefore the wrong creature roughly
 as often as the right one. The two riders that need the victim watch the
 damage `p10440` itself deals instead, which carries the ref in `detail`.
 
-**Nothing says what set a triggered power off.** `PowerUsed` names the
-actor, the ref and the targets and not the event being answered, so "the
-triggering enemy" of `p10439` -- which targets only the caster -- cannot be
-recovered. That is `PowerUsed.trigger`, and it blocks two rows.
+**What set a triggered power off is `PowerUsed.trigger`**, and it is
+carried now -- `PowerResolved` has it too. "The triggering enemy" of
+`p10439`, which targets only the caster, is the actor on that event, so
+the two rows this paragraph used to say were blocked are not.
 """
 
 from __future__ import annotations
@@ -46,14 +46,18 @@ from combat_engine.engine import (
     DamageApplied,
     DamageType,
     InitiativeRolled,
+    Miss,
     PowerUsed,
     Trigger,
     When,
     about_me,
     get,
     power,
+    targets_me,
 )
+from combat_engine.engine.components import Position
 from combat_engine.engine.events import PowerResolved
+from combat_engine.engine.grid import neighbours
 
 DEFENCES = (AC, FORT, REF, WILL)
 
@@ -217,12 +221,33 @@ def f2271(c: Cast) -> None:
 
 
 @power("f3290", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=INSTEAD)
+       reach=PERSONAL, target=SELF, dropped=INSTEAD,
+       trigger="you use p10439",
+       on=Trigger(PowerUsed, _used(BLURRED_STEP), "you use p10439"))
 def f3290(c: Cast) -> None:
-    """Teleport beside the triggering enemy rather than shifting. The
-    enemy is readable now -- it is the actor on the row's own trigger --
-    and the replacement of the printed shift is not, for the same reason
-    f3286's is not."""
+    """Teleport beside the triggering enemy rather than shifting.
+
+    **Re-aimed from `todo` to `dropped`, the way `f3286` already sits.**
+    The enemy is readable -- `PowerUsed.trigger` is the event `p10439`
+    answered and its actor is the creature that moved -- so the teleport
+    is written and the battlemind lands where the card says. Only
+    "instead of shifting" is missing, and it is missing for exactly
+    `f3286`'s reason: `PowerUsed` is a plain `Event`, so nothing
+    suppresses the square the power shifts on its own.
+
+    The landing square is chosen rather than picked, because "any square
+    adjacent to it" is the player's choice and several are usually free.
+    """
+    foe = getattr(getattr(c.trigger, "trigger", None), "actor", None)
+    if foe is None:
+        return
+    pos = c.world.get(foe, Position)
+    if pos is None:
+        return
+    free = [sq for sq in neighbours(pos.square) if not c.in_squares([sq])]
+    spot = c.choose(free, "where to land")
+    if spot is not None:
+        c.teleport(20, to=spot)
 
 
 # -- mind spike -------------------------------------------------------------
@@ -373,25 +398,55 @@ def f3400(c: Cast) -> None:
 
 
 @power("f3299", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.effects_on()",))
+       reach=PERSONAL, target=SELF,
+       trigger="an attack misses you because of p2475's bonus",
+       on=Trigger(Miss, targets_me, "an attack misses you"))
 def f3299(c: Cast) -> None:
-    """Fires when an attack misses *because of* a named racial power's
-    defence bonus. `Miss` carries no totals and nothing reads back which
-    standing effects a defence was built from, so "the bonus made the
-    difference" cannot be asked."""
+    """Fires when an attack misses *because of* `p2475`'s defence bonus.
+
+    Both halves of "the bonus made the difference" are askable, which is
+    the opposite of what this row was marked for. `Miss` carries the live
+    `AttackResult` as a plain attribute, so `total` and `target_defence`
+    are both there and the comparison is arithmetic. And whether the
+    bonus is standing at all is `c.suffering`, because an effect's label
+    begins with the ref of the row that laid it -- `include_self=True`,
+    since this one is on its own caster.
+
+    `p2475`'s number is read from the card, not from the modifier stack:
+    it lays a flat +2 to each defence and nothing about it varies. A
+    natural 1 misses whatever the defence is, so it is excluded.
+    """
+    ev = c.trigger
+    result = getattr(ev, "result", None)
+    if result is None or result.natural == 1:
+        return
+    if c.me not in c.suffering("p2475", include_self=True):
+        return
+    if result.total + 2 < result.target_defence:
+        return  # it would have missed without the bonus
+    c.mark(on=ev.attacker, until=When.EONT)
+    c.grants_advantage(on=ev.attacker, to=c.me, until=When.EONT)
 
 
 @power("f3304", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.race_option()",))
+       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
 def f3304(c: Cast) -> None:
     """Three riders, one per aspect, and the three rows they hang off --
     `p10438`, `p10439`, `p10440` -- are all declared and named in the
     prerequisite.
 
-    The aspect is `rt:r44-aspects`, a declared racial trait that is
-    itself refused in play: the page makes a player record one of three
-    and there is nowhere to write it down. Which aspect is current is
-    the whole question and that row carries the same marker."""
+    **Re-aimed.** `c.race_option()` is stale: `rt:r44-aspects` used to
+    say the choice had nowhere to live and now says the opposite --
+    `RaceLine.one_of` is true for this race, so exactly one of the three
+    aspect powers is in `Powers.known` and the choice *is* recorded.
+
+    What is missing is the join. The spec names each aspect in prose and
+    gives no ref, and the three candidate rows are `p7441`, `p7442` and
+    `p7443`; deciding which name belongs to which id would be reading
+    flavour, which this project does not do. One of the three clauses --
+    a burst gaining an extra target -- has no verb either, since targets
+    are settled before the rider is reached.
+    """
 
 
 @power("f3322", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

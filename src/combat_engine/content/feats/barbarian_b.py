@@ -84,14 +84,20 @@ def _my_fear_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 
 
 def _i_bloodied_it(world, me: int, ev: Any) -> bool:  # noqa: ANN001
-    """Damage from me that took a creature across the halfway mark.
+    """Damage from a barbarian attack power of mine that took a creature
+    across the halfway mark.
 
-    `Bloodied` names its actor and not whoever did it, so the crossing
-    is worked out from the blow instead: `DamageApplied.hp` is what is
-    left afterwards and `amount` is what landed, so the hit points
-    before it are their sum.
+    `Bloodied` carries `source` now, but not the row that did it, so the
+    crossing is still worked out from the blow: `DamageApplied.hp` is what
+    is left afterwards and `amount` is what landed, so the hit points
+    before it are their sum. `detail` is the ref of the row that dealt the
+    damage -- `c.damage` stamps it with the caster's own ref -- which is
+    where "with a barbarian attack power" is read.
     """
     if ev.source != me or ev.target == me or ev.amount <= 0:
+        return False
+    p = get(ev.detail)
+    if p is None or p.cls != "barbarian" or not p.is_attack:
         return False
     health = world.get(ev.target, Health)
     if health is None:
@@ -177,17 +183,18 @@ def f2792(c: Cast) -> None:
     c.push(1, on=c.trigger.target)
 
 
-@power("f2883", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("DamageApplied.power",),
-       trigger="you bloody an enemy",
+@power("f2883", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you bloody an enemy with a barbarian attack power",
        on=Trigger(DamageApplied, _i_bloodied_it, "you bloody an enemy"))
 def f2883(c: Cast) -> None:
-    """"With a barbarian attack power" is dropped.
+    """Both halves land now.
 
-    `Bloodied` carries no source, so the crossing is read off the blow
-    instead -- and `DamageApplied` carries no power, so which row did
-    it cannot be told. Everything else is right: it is my damage, on
-    somebody else, and it took them past half.
+    The clause naming the row was dropped on the reading that nothing
+    says which power dealt a blow; `DamageApplied.detail` does, and the
+    predicate reads it. `Bloodied` is still the wrong event to hang this
+    on -- it announces the crossing and not the amount, so the halfway
+    line has to be re-derived from `hp` and `amount` either way.
     """
     c.temp_hp(c.cha_mod, on=c.me)
 

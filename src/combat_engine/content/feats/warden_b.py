@@ -22,10 +22,15 @@ word the way the druid's beast form has one -- so "while you are in
 guardian form" is asked of the row the stance came from: all twenty-one
 are warden polymorph powers and nothing else the class has is.
 
-The gaps are the ones `defenders.py` already named. Second wind is an
-action and announces nothing; a build's own second-wind rider has no ref
-at all; and four rows turn on "while you are under the effect of" a
-named power, which no hold records.
+The gaps have narrowed. "While you are under the effect of your X
+power" is no gap at all -- an effect's label is the ref of the row that
+laid it, so `c.suffering(ref, include_self=True)` answers it, and three
+of the four rows written against that hold are written now. "Instead
+of" is not one either: `ForcedMove` is a cancellable `Decision` that
+names the row shoving, so one feature's slide can be declined by ref
+and replaced. What is left is the saving throw the class rolls at the
+start of its turn -- nothing says which of a turn's two throws is being
+rolled, or what the effect under it was.
 
 `usage=AT_WILL` throughout except `f1950`, which is the one card here
 printing "the first time during an encounter". `triggers._answers` asks
@@ -48,6 +53,7 @@ from combat_engine.engine import (
     ActionType,
     Cast,
     DamageType,
+    Forced,
     Hit,
     Keyword,
     PowerUsed,
@@ -61,20 +67,13 @@ from combat_engine.engine.dsl import get
 from combat_engine.engine.events import (
     ActionPointSpent,
     Bloodied,
+    ForcedMove,
     RelationSet,
     TurnStart,
 )
 from combat_engine.engine.query import holding
 from combat_engine.engine.triggers import about_me
 
-#: A class feature named in prose with no ref.
-FEATURE = ("c.class_feature()",)
-#: "Instead of": a printed swap for half of what a class feature does.
-#: The features have refs now, so the hold is the operation and not the
-#: name -- nothing declines one clause of a row that is already running.
-INSTEAD = ("c.instead_of()",)
-#: A racial power the benefit line names in prose rather than by ref.
-RACIAL = ("c.on_racial_power()",)
 #: The two racial powers of `r1`, of which a character takes one.
 R1 = ("p1448", "p12577")
 #: The thirteen racial powers of `r33`, one per elemental
@@ -84,9 +83,6 @@ R33 = (
     "p10043", "p10044", "p10045", "p10046",
     "p14073", "p14074", "p14075", "p14076",
 )
-#: "While you are under the effect of your <ref> power" -- the power is a
-#: ref, but nothing records that one of its holds is standing on you.
-BENEFIT = ("c.benefits_from()",)
 #: Which effect a saving throw was rolled against.
 SAVE_KEYWORDS = ("SavingThrow.keywords",)
 
@@ -258,12 +254,35 @@ def f1944(c: Cast) -> None:
 
 
 @power("f1948", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_reroll()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1450 to reroll a weapon attack",
+       on=Trigger(PowerUsed, _used("p1450"), "you use that racial power"))
 def f1948(c: Cast) -> None:
-    """A bonus to a racial reroll taken while in a guardian form. The
-    power is a ref and the form is readable; what is missing is that
-    nothing announces a roll was a reroll, the same gap the avenger's
-    f1524 named."""
+    """A bonus to a racial reroll taken while in a guardian form.
+
+    The old marker wanted an announcement that a roll was a reroll. The
+    row does not need one: p1450 **is** the reroll, it is a declared ref,
+    and `PowerUsed` carries the event it is answering -- so the attack
+    being rerolled is `c.trigger.trigger`, and the roll it announces is
+    still open.
+
+    The +2 goes on the live `AttackResult` rather than being laid as a
+    modifier, because a modifier is read when the roll is made and this
+    one is printed for a roll that has already been made:
+    `c.reroll_attack` shifts `total` by the difference between the faces
+    and recomputes the hit from it, so two points added here survive the
+    reroll and are read by the comparison that matters. `PowerUsed` is
+    announced before the body runs, which is what puts this ahead of it.
+    """
+    used = c.trigger
+    rolled = getattr(used, "trigger", None)
+    result = getattr(rolled, "result", None)
+    if result is None or not _in_guardian_form(c.world, c.me):
+        return
+    row = get(getattr(rolled, "power", ""))
+    if row is None or Keyword.WEAPON not in row.keywords:
+        return
+    result.total += 2
 
 
 # -- riders on the class's own rows -----------------------------------------
@@ -316,23 +335,68 @@ def f1950(c: Cast) -> None:
         )
 
 
+def _my_crit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return ev.attacker == me and ev.critical
+
+
 @power("f1842", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.uncrit()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you score a critical hit with a heavy blade or a spear",
+       on=Trigger(Hit, _my_crit, "you score a critical hit"))
 def f1842(c: Cast) -> None:
     """Trades a critical hit for an ordinary one plus an immobilise.
-    `Hit` carries `critical` and the immobilise is one line -- what is
-    missing is taking the critical back after the damage it maxed has
-    already been rolled and dealt."""
+
+    The marker read the damage as already rolled. It is not: `Hit` is
+    announced by `resolve.attack` **before** the body rolls any damage,
+    and `AttackResult.critical` -- which the event carries as `result` --
+    is what `c.damage` reads to maximise it. So the demotion happens in
+    time, and both the result and the announcement are set, because a
+    rider watching the `Hit` reads the event rather than the result.
+
+    Printed as "you can choose", so it is offered rather than taken.
+    """
+    ev = c.trigger
+    if not _holding(c, "heavy blade", "spear"):
+        return
+    if not c.may("treat the critical hit as a normal hit"):
+        return
+    result = getattr(ev, "result", None)
+    if result is not None:
+        result.critical = False
+    ev.critical = False
+    c.immobilized(on=ev.target, until=When.SONT)
 
 
 @power("f2796", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.forgo_push()",))
+       reach=PERSONAL, target=SELF)
 def f2796(c: Cast) -> None:
     """Swaps the slide in `p5094` -- the mark punishment that slides --
-    for a longer pull, and slows two printed creature types. The row is a
-    ref and `c.is_kind` reads the types; what is missing is letting a
-    named row's own forced movement not happen, which is the symbol
-    f984 named."""
+    for a longer pull, and slows two printed creature types.
+
+    "Letting a named row's own forced movement not happen" is exactly
+    what `ForcedMove` is: a `Decision`, cancellable, carrying the `power`
+    that is doing the shoving. So the swap is a refusal of that row's
+    slide and a pull of this row's own, at the same beat -- the shove is
+    negotiated before the creature steps.
+
+    A trait rather than a declared trigger, because the slide happens
+    inside p5094's body and the watcher has to be standing before it
+    runs.
+    """
+    me = c.me
+
+    def instead(ev: ForcedMove) -> None:
+        if ev.source != me or ev.power != "p5094" or ev.how is not Forced.SLIDE:
+            return
+        if not c.may("pull 3 squares instead of sliding"):
+            return
+        foe = ev.target
+        ev.cancel("pulled instead")
+        c.pull(3, on=foe)
+        if c.is_kind("giant", on=foe) or c.is_kind("goblin", on=foe):
+            c.slowed(on=foe, until=When.EOTNT)
+
+    c.watch(ForcedMove, instead, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # -- second wind, which announces nothing -----------------------------------
@@ -390,17 +454,38 @@ def f1886(c: Cast) -> None:
 
 
 @power("f2556", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=INSTEAD,
-       trigger="you use your second wind",
-       on=Trigger(SecondWind, about_me, "you use your second wind"))
+       reach=PERSONAL, target=SELF)
 def f2556(c: Cast) -> None:
-    """The shift is sayable. What it is printed as an alternative *to* --
-    `cf:warden-f1s2` sliding every enemy you have marked -- is a declared
-    row now, so this is no longer a naming gap: the slide happens inside
-    that row's own body and nothing declines half of what a feature
-    does."""
-    if c.con_mod > 0:
-        c.shift(c.con_mod)
+    """A shift *instead of* `cf:warden-f1s2` sliding your marked enemies.
+
+    The alternative is sayable after all: `ForcedMove` is cancellable and
+    names the row shoving, so the feature's slides can be declined by
+    ref. Written as a trait that answers the **slide** rather than the
+    second wind, which is what makes the choice ordering-proof -- both
+    rows answer `SecondWind`, and a refusal armed from this row's own
+    answer would arrive after the feature's if the feature is heard
+    first. Asked at the first slide, remembered for the rest of them,
+    because the card offers one choice and not one per enemy.
+    """
+    me = c.me
+    taken: list[bool] = []
+
+    def instead(ev: ForcedMove) -> None:
+        if ev.source != me or ev.power != "cf:warden-f1s2":
+            return
+        if ev.how is not Forced.SLIDE:
+            return
+        if not taken:
+            want = c.con_mod > 0 and c.may(
+                "shift instead of sliding your marked enemies"
+            )
+            taken.append(want)
+            if want:
+                c.shift(c.con_mod)
+        if taken[0]:
+            ev.cancel("shifted instead")
+
+    c.watch(ForcedMove, instead, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2558", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -416,25 +501,49 @@ def f2558(c: Cast) -> None:
 
 
 @power("f1874", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=INSTEAD)
+       reach=PERSONAL, target=SELF)
 def f1874(c: Cast) -> None:
-    """Swaps a slide for a push inside `cf:warden-f1s2`. That row is
-    declared now, so the ref is no longer the hold -- the forced movement
-    is issued from inside its body and nothing takes one back."""
+    """Swaps a slide for a push inside `cf:warden-f1s2`.
+
+    Something does take a forced movement back: `ForcedMove` is a
+    `Decision` and carries the `power` shoving, so one row's slide can be
+    refused by ref and replaced without touching the row that issued it.
+    Same shape as f2796.
+    """
+    me = c.me
+
+    def instead(ev: ForcedMove) -> None:
+        if ev.source != me or ev.power != "cf:warden-f1s2":
+            return
+        if ev.how is not Forced.SLIDE or not c.may("push 2 squares instead"):
+            return
+        foe = ev.target
+        ev.cancel("pushed instead")
+        c.push(2, on=foe)
+
+    c.watch(ForcedMove, instead, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # -- the saving throw the class gets at the start of its turn ---------------
 
 
 @power("f1941", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SAVE_KEYWORDS)
+       reach=PERSONAL, target=SELF,
+       todo=(*SAVE_KEYWORDS, "c.save_order()"))
 def f1941(c: Cast) -> None:
     """Temporary hit points for shaking off one sort of effect.
-    `cf:warden-f0` is the ref that rolls the throw and `SavingThrow`
-    carries whether it succeeded -- what is missing is which keywords the
-    effect it was rolled against had. The save *modifier* context now
-    carries them, but this row answers the event, whose `against` is the
-    effect's `__str__` and not a ref `keywords_of` can read."""
+
+    Two holds, and the second was unnamed. `cf:warden-f0` is the ref that
+    rolls the throw and `SavingThrow` carries whether it succeeded --
+    what is missing is which keywords the effect it was rolled against
+    had. The save *modifier* context carries them, but this row answers
+    the event, whose `against` is the effect's `__str__`: the label is
+    inside that string and only inside it, so reading a ref back out
+    would be parsing a repr, which is the sort of thing that breaks
+    silently the day the repr changes.
+
+    "At the start of your turn" is the second: nothing on the throw says
+    which of the turn's two it is, the hold f2553 names."""
 
 
 _ELEMENTAL = (Keyword.ACID, Keyword.COLD, Keyword.FIRE,
@@ -462,47 +571,117 @@ def f2553(c: Cast) -> None:
 
 
 @power("f2554", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_save()",))
+       reach=PERSONAL, target=SELF, todo=("c.save_order()",))
 def f2554(c: Cast) -> None:
-    """Pays out on succeeding at the throw `cf:warden-f0` grants. The
-    feature is a ref, unlike f1024's -- what is missing there and here is
-    knowing which feature a `SavingThrow` came from."""
+    """Pays out on succeeding at the throw `cf:warden-f0` grants.
+
+    Re-aimed to the hold it shares with f2553 and f1941. The feature is a
+    ref, but it is a trait that calls `c.save` from a `TurnStart` watch
+    rather than a row anybody uses -- so there is no `PowerUsed` to
+    bracket the throw with, and what would tell this one from the
+    ordinary end-of-turn throw is the same missing thing: which of the
+    turn's saves is being rolled."""
 
 
 # -- rows that turn on a named power's hold standing on you -----------------
 
 
 @power("f1949", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BENEFIT)
+       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
 def f1949(c: Cast) -> None:
     """A further attack penalty on marked enemies while a racial power is
-    running. The penalty itself is one gated `c.penalty` -- the attack
-    context carries `target`, so "attacks that don't include you" is
-    askable -- and what is missing is knowing the power is running."""
+    running.
+
+    Re-aimed. "Under the effect of your X power" is `c.under`'s job and
+    `c.suffering(ref, include_self=True)` does it -- an effect's label is
+    the ref of the row that laid it and the source is the creature that
+    laid it, so a self-buff is found the same way anybody else's is.
+    That was the old marker and it is stale.
+
+    What actually stops this row is the ref: the spec names the power as
+    `x_m5139a3`, which is not a compendium id and matches no declared
+    row, so there is nothing to ask about. The penalty itself is one
+    gated `c.penalty` and would be written in a line.
+    """
+
+
+def _under(c: Cast, ref: str) -> bool:
+    """Is this warden under the effect of its own `ref`?
+
+    An effect's label is the ref of the row that laid it, so a power's
+    own hold is found by label; `include_self` is what lets the caster
+    find one it laid on itself, which is every racial buff here.
+    """
+    return c.me in c.suffering(ref, include_self=True)
 
 
 @power("f1951", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BENEFIT)
+       reach=PERSONAL, target=SELF)
 def f1951(c: Cast) -> None:
-    """Raises the damage bonus a racial power grants, against marked
-    targets only. Written as the difference it comes to, it is still
-    gated on that power's hold being up."""
+    """Raises the damage bonus p2483 grants from +2 to +3, against marked
+    targets only, so what is laid here is the one point of difference.
+
+    The hold being up is readable: p2483 lays its bonus with `c.bonus`,
+    which stamps the row's ref as the label, and `c.suffering` finds it.
+    Both halves are asked per damage roll, because the racial power can
+    go up mid-turn and the mark can land after the bonus does.
+    """
+    me = c.me
+    c.bonus(
+        "damage", 1, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            _under(c, "p2483")
+            and (v := ctx.get("target")) is not None
+            and c.marked(on=v, by=me)
+        ),
+    )
 
 
 @power("f1952", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BENEFIT)
+       reach=PERSONAL, target=SELF,
+       trigger="you mark an enemy with cf:warden-f2 while p2484 is up",
+       on=Trigger(RelationSet, _i_marked, "you mark an enemy"))
 def f1952(c: Cast) -> None:
     """A shift around `cf:warden-f2`, which the marks it lays make
-    readable -- so the whole of what is missing is whether the racial
-    power's hold is standing."""
+    readable, and p2484's hold is readable too -- `c.suffering` finds a
+    self-laid effect by the ref of the row that laid it.
+
+    The feature marks every adjacent enemy at once, so the shift is
+    taken on the first mark of the turn and not once per enemy. "Before
+    or after" is one square either way and the after is what a row
+    answering the mark can take.
+    """
+    if not _under(c, "p2484"):
+        return
+    if _marks_this_turn(c.world, c.me) != 1:
+        return
+    c.shift(1)
 
 
 @power("f2557", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BENEFIT)
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with an attack benefiting from p1769",
+       on=Trigger(Hit, lambda world, me, ev: ev.attacker == me, "you hit"))
 def f2557(c: Cast) -> None:
-    """A slide and a slow whenever an attack "benefiting from" a named
-    power lands. `Hit` names the row that rolled; nothing records that a
-    second row helped it."""
+    """A slide and a slow whenever an attack "benefiting from" p1769
+    lands.
+
+    "Benefiting from" is two questions, and both are answerable: that
+    power's hold is standing on the warden (`c.suffering`, by label), and
+    the attack is one it actually pays out on -- p1769's own gate is the
+    lightning-or-thunder keyword of the row rolling, so the same question
+    is asked of the row that hit rather than assumed.
+    """
+    row = get(c.trigger.power)
+    if row is None or not _under(c, "p1769"):
+        return
+    if not {Keyword.THUNDER, Keyword.LIGHTNING} & set(row.keywords):
+        return
+    me = c.me
+    for foe in c.enemies():
+        if c.marked(on=foe, by=me):
+            c.slide(1, on=foe)
+            c.slowed(on=foe, until=When.EONT)
 
 
 # -- riders on a racial power, one a ref and two still prose ----------------

@@ -59,7 +59,6 @@ def _pick(c: Cast, pool: list[int], prompt: str) -> int | None:
         Augment(1),
         Augment(2, reach=CloseBurst(1), target=EACH_ENEMY),
     ),
-    dropped=("c.bonus_in(zone)",),
 )
 def p10287(c: Cast) -> None:
     """"Against the target's attacks" is a gate on the defence modifier, which
@@ -68,10 +67,11 @@ def p10287(c: Cast) -> None:
 
     Augment 2 is a close burst against each enemy, which is a target line
     and so is declared rather than said in the body. Its hit hands an
-    adjacent ally an opportunity swing at the creature. Its zone is laid --
-    the squares are real and block nothing -- but the *bonus inside it* is
-    the dropped clause: a modifier scoped to a footprint has no method,
-    which is the same hold `p13318`'s Augment 1 names from the other side.
+    adjacent ally an opportunity swing at the creature. The bonus inside
+    its zone was marked as having no method and has one under another
+    name: `c.grants_in` hangs a modifier on the zone's own effect, so it
+    ends on the geometry rather than on the clock, and `side="ally"`
+    counts the caster -- which is the printed "you and your allies".
     The guard against the target's own attacks is not printed under
     Augment 2, so it is gated on the cheaper form exactly."""
     spent = augment(c, 1, 2)
@@ -84,7 +84,8 @@ def p10287(c: Cast) -> None:
         if helper is not None:
             c.grant_attack(helper, on=victim)
         if c.first:
-            c.zone(c.area(), until=When.EONT, label="p10287")
+            here = c.zone(c.area(), until=When.EONT, label="p10287")
+            c.grants_in(here, AC, c.wis_mod, side="ally", kind="power")
         return
     ally = _pick(c, _friends(c, 1), "who shares the guard")
 

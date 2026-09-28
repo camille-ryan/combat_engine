@@ -71,6 +71,7 @@ from combat_engine.engine import (
     InitiativeRolled,
     Keyword,
     Melee,
+    MoveEnd,
     MoveStart,
     Ranged,
     Size,
@@ -332,14 +333,22 @@ def p16042(c: Cast) -> None:
     target=NO_TARGET,
     trigger="an enemy flanked by you moves out of the flanked position",
     on=Trigger(MoveStart, _leaving_my_flank, "an enemy you flank moves"),
-    dropped=("query.flanking(world, a, b)",),
+    dropped=("MoveStart.to",),
 )
 def p14393(c: Cast) -> None:
-    """`MoveStart` is the only window where the flank still exists to read.
-    Whether the move actually *leaves* it cannot be asked, so the row fires
-    whenever a flanked enemy moves."""
+    """`MoveStart` is the only window where the flank still exists to read,
+    and `query.flanked_by` is what reads it -- the marker this replaces
+    named a function that has never existed while that one always has, so
+    "an ally who was **also** flanking" was approximated as "any adjacent
+    ally" for nothing.
+
+    What is still not askable is whether the move *leaves* the flank:
+    `MoveStart` carries the mover and the kind of move and not where it is
+    going, so the row fires whenever a flanked enemy moves."""
+    from combat_engine.engine.query import flanked_by
+
     foe = c.trigger.actor
-    mates = [mate for mate in c.allies() if c.adjacent_to(foe, mate)]
+    mates = [mate for mate in c.allies() if flanked_by(c.world, foe, mate)]
     friend = c.choose(mates, "which ally")
     if friend is not None:
         c.grants_advantage(on=foe, to=friend, until=When.EONT)
@@ -534,12 +543,45 @@ def p16459(c: Cast) -> None:
 )
 def p16462(c: Cast) -> None:
     """Hidden from everyone *except* the target, so it is `c.invisible(to=)`
-    once per enemy rather than `c.hide`, which cannot leave one out."""
-    foe = c.target
+    once per enemy rather than `c.hide`, which cannot leave one out.
+
+    Both printed ends are written rather than left to the clock.
+    `AttackDeclared` and not `Hit`, because "immediately after you attack"
+    is about the swing and not about whether it landed; and the shared
+    square is re-checked whenever either creature finishes a move, which
+    is the only way it can stop being shared."""
+    from combat_engine.engine.components import Position
+
+    me, foe = c.me, c.target
     c.shift(1, to=c.there, share=True)
+    hidden = []
     for other in c.enemies():
-        if other != foe:
-            c.invisible(to=other, on=c.me, until=When.EONT)
+        if other == foe:
+            continue
+        eff = c.invisible(to=other, on=me, until=When.EONT)
+        if eff is not None:
+            hidden.append(eff)
+    if not hidden:
+        return
+
+    def lift(why: str) -> None:
+        while hidden:
+            c.end_effect(hidden.pop(), why=why)
+
+    def swung(ev: AttackDeclared) -> None:
+        if ev.attacker == me:
+            lift("you attacked")
+
+    def parted(ev: MoveEnd) -> None:
+        if ev.actor not in (me, foe):
+            return
+        mine = c.world.get(me, Position)
+        theirs = c.world.get(foe, Position)
+        if mine is None or theirs is None or mine.square != theirs.square:
+            lift("you no longer share a space")
+
+    c.watch(AttackDeclared, swung, on=me, until=When.EONT, label=c.ref)
+    c.watch(MoveEnd, parted, on=me, until=When.EONT, label=c.ref)
 
 
 # -- r22 --------------------------------------------------------------------
@@ -596,16 +638,28 @@ def p2479(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("spec.weapon_ref()",),
 )
 def p16465(c: Cast) -> None:
-    """The ammunition is rolled now and spent on the next hit. Which weapon
-    threw it is dropped: a sling is not one of the groups the engine has."""
+    """The marker this replaces said a sling is not a group the engine
+    has. `w:sling` is a row in the weapon table with `sling` for its
+    group, so "with this sling" is an ordinary test on what the blow was
+    struck with, and `engine.basic.RANGED` is the ranged basic attack's
+    own ref, which is the other half of the printed sentence.
+
+    The latch is a local rather than `once=True` on the watch: a swing
+    that is not a sling's must not spend the load."""
+    from combat_engine.engine.basic import RANGED
+
     loaded = c.roll("1d6")
+    spent = {"yet": False}
 
     def lands(ev: Hit) -> None:
-        if ev.attacker != c.me:
+        if spent["yet"] or ev.attacker != c.me or ev.power != RANGED:
             return
+        weapon = c.struck_with(ev)
+        if weapon is None or weapon.ref != "w:sling":
+            return
+        spent["yet"] = True
         if loaded <= 2:
             c.penalty("attack", 2, on=ev.target, until=When.EOTNT)
         elif loaded <= 4:
@@ -613,7 +667,7 @@ def p16465(c: Cast) -> None:
         else:
             c.immobilized(on=ev.target, until=When.EOTNT)
 
-    c.watch(Hit, lands, until=When.EONT, on=c.me, once=True, label=f"{c.ref} shot")
+    c.watch(Hit, lands, until=When.EONT, on=c.me, label=f"{c.ref} shot")
 
 
 @power(
@@ -815,12 +869,29 @@ def p6189(c: Cast) -> None:
     target=NO_TARGET,
     trigger="you charge an enemy",
     on=Trigger(AttackDeclared, both(by_me, by_charge), "you charge an enemy"),
-    dropped=("c.attacks_taken()",),
 )
 def p16384(c: Cast) -> None:
-    """Nothing counts how many creatures swung at you during the run in, so
-    the charge-attack bonus is dropped and the temporary hit points stand."""
-    c.temp_hp(c.str_mod, on=c.me)
+    """The marker this replaces said nothing counts who swung at you
+    during the run in. `world.bus.log` is the tally, and the charge's own
+    `MoveStart` is the boundary -- a charge is built as a walk and then an
+    attack, so everything announced between that move starting and this
+    declaration happened during the movement. Counted by attacker, since
+    the card counts enemies and not blows.
+
+    The bonus is laid in the `AttackDeclared` window, before the roll, and
+    is gated on the use being a charge so the swing it pays for is the one
+    the trigger named."""
+    me = c.me
+    c.temp_hp(c.str_mod, on=me)
+    swung: set[int] = set()
+    for ev in reversed(c.world.bus.log):
+        if isinstance(ev, MoveStart | TurnStart) and ev.actor == me:
+            break
+        if isinstance(ev, AttackDeclared) and ev.target == me and ev.attacker != me:
+            swung.add(ev.attacker)
+    if swung:
+        c.bonus("attack", len(swung), on=me, until=When.EOT, once=True,
+                kind="power", when=lambda ctx: bool(ctx.get("charge")))
 
 
 @power(

@@ -14,9 +14,10 @@ ordinary rows with an action rather than narrative ones. Only the row
 whose benefit is "your book is bigger" is `out_of_combat`, because that
 number is settled by `chargen` and never in a fight.
 
-**Ignoring a resistance has no verb.** `c.resist` grants one and
-nothing reads past one, so three rows name `c.ignore_resistance()` --
-two of them as a dropped clause on a row that otherwise plays.
+**Ignoring a resistance has a verb**, and three rows here use it.
+`c.ignore_resistance(amount, dtype, immunity=, when=)` reads past a
+creature's resistance and its immunity both, gated on the damage
+context, which is what the two racial fire rows and f3068 print.
 """
 
 from __future__ import annotations
@@ -51,9 +52,12 @@ from combat_engine.engine.events import PowerResolved, ZoneEntered
 
 #: A class feature the benefit names in prose with no ref.
 FEATURE = ("c.class_feature()",)
-#: Nothing reads past a creature's resistance or immunity.
-#: A `SavingThrow` says who rolled and not what laid the effect.
-ON_SAVE = ("c.on_save()",)
+#: A `SavingThrow` says who rolled, and `against` is the effect printed as
+#: a string -- not the effect itself, so neither whoever laid it nor the
+#: row it came from can be reached. **Re-aimed** off `c.on_save()`, which
+#: named the moment: the moment is announced and readable, and the one
+#: field that is missing is the effect.
+ON_SAVE = ("SavingThrow.effect",)
 
 
 def _keyword(ref: str, *words: Keyword) -> bool:
@@ -189,10 +193,15 @@ def f1995(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=ON_SAVE)
 def f2134(c: Cast) -> None:
     """Fire damage when an enemy shakes off something a fire attack of
-    yours laid. `SavingThrow` is announced and readable, but it carries
-    `against=str(effect)` and the creature rolling -- not the effect,
-    and not whoever applied it -- so "bestowed by *your* fire attack"
-    cannot be asked. The same hold as f1088 and f1024."""
+    yours laid.
+
+    `SavingThrow` is announced and readable, and the label inside
+    `against` is the ref of the row that laid the effect -- but it is
+    there as part of a rendered string, and the event carries neither
+    the effect nor its source. Recovering the ref by splitting that
+    string would be a workaround that breaks the day `Effect.__str__`
+    changes, and it still would not answer "*your* attack". The same
+    hold as f1088 and f1024."""
 
 
 @power("f2135", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -202,18 +211,21 @@ def f2135(c: Cast) -> None:
 
 
 @power("f2136", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("chargen.power_swap()",))
+       reach=PERSONAL, target=SELF)
 def f2136(c: Cast) -> None:
-    """Both printed clauses, and one still dropped.
+    """Both printed clauses, and the swap with them.
 
-    "You replace your racial power with this one" is what `c.grant_row`
-    says for the half that hands the card over; taking the old row away
-    is `chargen`'s and would need its ref, which the prose does not give.
+    The half that takes the old row away was dropped for want of a ref;
+    the spec names `p1628` outright now, so it is `c.forbid`. That is an
+    in-fight removal standing in for a build-time replacement, which is
+    the same thing from the board's side: the racial power is not in the
+    menu and the card is.
 
     The fire clause is blanket -- no number, and the immunity with it --
     and gated on the target being bloodied, which the damage context
     names.
     """
+    c.forbid("p1628", on=c.me, until=When.ENCOUNTER)
     c.grant_row("f2136b", on=c.me, until=When.ENCOUNTER)
     c.ignore_resistance(
         None, DamageType.FIRE, on=c.me, until=When.ENCOUNTER, immunity=True,

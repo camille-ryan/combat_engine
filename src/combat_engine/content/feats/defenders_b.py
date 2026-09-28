@@ -37,6 +37,7 @@ from combat_engine.engine import (
     Bloodied,
     Cast,
     Condition,
+    DamageType,
     Gear,
     Hit,
     Keyword,
@@ -145,15 +146,57 @@ def f1141(c: Cast) -> None:
     c.watch(MoveEnd, landed, on=me, until=When.ENCOUNTER)
 
 
+#: The field's worth with the consciousness clause taken out -- 0, 1 or 3.
+#: `warding` folds that clause in and returns 0 while unconscious, which is
+#: exactly the sentence `f1142` deletes, so the two-line grip rule is
+#: restated here rather than asked for. `f650b` and `i3036p1` restate it
+#: too, for the same reason: it is a rule, not a stored number.
+def _grip(world: Any, eid: int) -> int:
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return 0
+    held = gear.held
+    if not any(w.is_light_blade or w.group == "heavy blade" for w in held):
+        return 0
+    spare = len(held) == 1 and not held[0].two_handed and not gear.shield
+    return 3 if spare else 1
+
+
 @power("f1142", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.effects_on()", "chargen.race_choice()"))
+       reach=PERSONAL, target=SELF)
 def f1142(c: Cast) -> None:
-    """Both halves name refs now -- `f650b` for the warding and `p2274`
-    for the racial trait -- so the class feature is not the hold.
-    Reading how much AC `f650b` is currently granting is: nothing lists
-    the effects standing on a creature, let alone one row's share of a
-    total. The race half stays as it was."""
+    """Neither half needed what the marker named.
+
+    The field is the grip rule and `_grip` is it; the feature's own two
+    modifiers are gated on `warding`, which is 0 while unconscious, so
+    the readings laid here cover exactly the span the feature drops and
+    the two never both apply. `stacks=False` buckets them under this
+    row's ref so +1 and +3 pick the larger rather than adding.
+
+    "Add the bonus to the resistance" is the second half, and a gated
+    `c.resist` is exactly an addition: given a `when=` it lays a modifier
+    that `resolve.damage` reads on top of the flat number
+    `rt:r35-astral-resistance` wrote, rather than competing with it. So
+    the amount handed over is the field's own worth and the trait's
+    number never has to be known -- and the two readings bucket under one
+    kind, so +1 and +3 pick the larger here too.
+    """
+    me, world = c.me, c.world
+
+    def wielded(size: int) -> Any:
+        return lambda _ctx: _grip(world, me) >= size
+
+    def out_cold(size: int) -> Any:
+        return lambda _ctx: (
+            c.is_(Condition.UNCONSCIOUS, on=me) and _grip(world, me) >= size
+        )
+
+    for size in (1, 3):
+        c.bonus(AC, size, on=me, until=When.ENCOUNTER, stacks=False,
+                when=out_cold(size))
+        for dtype in (DamageType.NECROTIC, DamageType.RADIANT):
+            c.resist(size, dtype, on=me, until=When.ENCOUNTER,
+                     when=wielded(size))
 
 
 @power("f1143", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -256,21 +299,61 @@ def f2263(c: Cast) -> None:
 
 
 @power("f2264", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.bonus(surge_value)",))
+       reach=PERSONAL, target=SELF)
 def f2264(c: Cast) -> None:
-    """`c.surge_value` reads a quarter of maximum hit points straight off
-    `Health` and consults no modifiers, so there is nowhere to add the
-    ability modifier -- which makes the stance half moot as well."""
+    """The marker this replaces said a surge consults no modifiers.
+    `query.surge_value` totals `Mods` and exists precisely so that one
+    `c.bonus("surge_value", n)` reaches every place a surge is cashed,
+    the second wind and a natural twenty on a death save included.
+
+    "While in a stance" is `Effects.stance_of`, whose label is the ref of
+    the row that took it, so the class is read off that row's header. The
+    question is asked per surge and not once: a stance is dropped by
+    taking another, and the context a surge is totalled with is empty, so
+    the gate goes to the board rather than to a key."""
+    me, world = c.me, c.world
+
+    def in_a_swordmage_stance(_ctx: dict[str, Any]) -> bool:
+        held = world.effects.stance_of(me)
+        if held is None:
+            return False
+        row = get(held.label)
+        return row is not None and row.cls == "swordmage"
+
+    c.bonus("surge_value", c.str_mod, on=me, until=When.ENCOUNTER,
+            when=in_a_swordmage_stance)
+
+
+#: The two arms the card names. The secondary end is the same weapon's
+#: other blade and is held as a row of its own.
+_RAISES_THE_FIELD = (
+    "w:falchion",
+    "w:double-scimitar",
+    "w:double-scimitar-secondary-end",
+)
 
 
 @power("f2795", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.raise_bonus(ref)",), proficiency=("w:falchion",))
+       reach=PERSONAL, target=SELF, proficiency=("w:falchion",))
 def f2795(c: Cast) -> None:
-    """The falchion is a row in the weapon table now, so the grip test is
-    real. What is not is the benefit: it *raises another row's* AC bonus
-    from +1 to +2, and nothing edits a bonus another card laid. Laying a
-    second +1 would come to +1 forever, the two being the same kind."""
+    """Both arms are rows in the weapon table, so the grip test is real,
+    and the benefit is written the way `f1143` writes its own: an extra
+    untyped point on top of the field rather than an edit of the
+    feature's `stacks=False` bucket, where a third reading would be
+    swallowed. Gated on the field being up at all -- "increase the AC
+    bonus" says nothing where there is no bonus -- and both of these are
+    two-handed, so the reading being raised is the +1."""
+    me, world = c.me, c.world
+
+    def raised(_ctx: dict[str, Any]) -> bool:
+        gear = world.get(me, Gear)
+        return (
+            gear is not None
+            and any(w.ref in _RAISES_THE_FIELD for w in gear.held)
+            and warding(world, me) > 0
+        )
+
+    c.bonus(AC, 1, on=me, until=When.ENCOUNTER, when=raised)
 
 
 # -- monk -------------------------------------------------------------------

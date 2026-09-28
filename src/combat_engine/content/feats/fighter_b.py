@@ -55,10 +55,18 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Position
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import ForcedMove, Moved, PowerResolved
+from combat_engine.engine.events import (
+    AttackDeclared,
+    ConditionApplied,
+    ForcedMove,
+    Moved,
+    PowerResolved,
+    RelationCleared,
+    RelationSet,
+)
 from combat_engine.engine.grid import distance, neighbours
-from combat_engine.engine.query import allies, enemies, flanked_by, holding
-from combat_engine.engine.types import Forced
+from combat_engine.engine.query import allies, enemies, holding
+from combat_engine.engine.types import Forced, Relation
 
 from .styles import among, hit_with_one_of, used_one_of
 
@@ -572,25 +580,24 @@ def f1319(c: Cast) -> None:
         c.prone(on=c.trigger.target)
 
 
-@power("f1321", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Moved.squares",),
+@power("f1321", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you hit an unbloodied enemy with an associated power",
        on=Trigger(Hit, hit_with_one_of("p4541", "p10592", "p997"),
                   "you hit with an associated power"))
 def f1321(c: Cast) -> None:
     """Punishes an unbloodied target for walking away.
 
-    A watch on the creature rather than a standing modifier, and gated
-    on the *distance*, which is the printed "more than 2 squares".
+    `Moved` has `from_` and `to` and **no `squares`**, which this row
+    carried a marker for -- and does not need one. Every step announces
+    both its ends, so the printed "more than 2 squares before the end of
+    its next turn" is the *running total* of `distance(from_, to)`.
+    Reading one move on its own, which is what was here, let a creature
+    walk two squares twice and pay nothing.
 
-    `Moved` has `from_` and `to` and **no `squares`** -- I reached for
-    one, and a `getattr` default would have made the whole row silently
-    false. The distance is measured between the two ends instead, which
-    is one move action rather than a turn's total: a creature that
-    walks two squares twice does not pay. That is the wrong reading of
-    the card, so the shortfall is named rather than left in prose.
-
-    `once=True`, because it is one payment however far it runs.
+    One payment however far it runs, so the tally latches once spent --
+    `once=True` on the watch would end it on the first step instead.
+    `EOTNT`, not `EONT`: the clock the card names is the enemy's.
     """
     if not _grip(c, "axe", hands=1):
         return
@@ -598,12 +605,17 @@ def f1321(c: Cast) -> None:
     if c.bloodied(on=foe):
         return
     hurt = c.con_mod
+    walked = [0]
 
     def on_move(ev: Any) -> None:
-        if ev.actor == foe and distance(ev.from_, ev.to) > 2:
+        if ev.actor != foe or walked[0] < 0:
+            return
+        walked[0] += distance(ev.from_, ev.to)
+        if walked[0] > 2:
+            walked[0] = -1
             c.flat(hurt, on=foe)
 
-    c.watch(Moved, on_move, on=foe, until=When.EONT, once=True)
+    c.watch(Moved, on_move, on=foe, until=When.EOTNT)
 
 
 @power("f2326", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -689,39 +701,104 @@ def f1317(c: Cast) -> None:
 
 
 @power("f2331", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.retarget_defence()",))
+       reach=PERSONAL, target=SELF, dropped=("c.retarget_defence()",))
 def f2331(c: Cast) -> None:
-    """`p4541`, `p10471` or `p10593` may hit Reflex instead of AC. The
-    list resolves; the defence a row rolls against is header data and
-    four item blocks want the same verb."""
+    """**Re-aimed from `todo` to `dropped`.** The card has two printed
+    sentences and only the second is missing: `p4541`, `p10471` or
+    `p10593` may hit Reflex instead of AC, and the defence a row rolls
+    against is header data with no verb to move it -- four item blocks
+    want the same one. The skill bonus is the whole of the first
+    sentence, stands whatever is in hand, and is worth playing."""
+    c.bonus("skill:perception", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
 @power("f2071", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("feat.associated_powers", "c.coup_de_grace(bonus=)"))
+       reach=PERSONAL, target=SELF, dropped=("c.coup_de_grace(bonus=)",))
 def f2071(c: Cast) -> None:
-    """The list is absent from the spec, but **not** from the page --
-    that diagnosis was wrong. The card prints three members; an errata
-    block sits between the benefit and the list, and `etl/feat._benefit`
-    stops at an errata heading and takes the rest of its paragraph with
-    it, so the list is cut off before the sanitiser ever sees it. Twelve
-    other rows lose theirs the same way. Nothing here can be written
-    until that truncation stops.
+    """**Re-aimed.** The truncation this row was marked for is fixed:
+    the spec prints all three associated refs now, so the long clause is
+    an ordinary gated damage bonus and the row plays.
 
-    Its other clause -- extra damage on a coup de grace -- has the verb
-    but no way to add to what one deals.
+    Two modifiers rather than one, because +5 for helpless or
+    immobilized *replaces* the +2 for slowed rather than adding to it,
+    and both are untyped, which stacks. So the +2 excludes the case the
+    +5 covers.
+
+    The coup de grace half is dropped: `c.coup_de_grace` rolls the whole
+    finisher itself and the damage context has no key saying a blow is
+    one, so "1[W] extra on a coup de grace" has nothing to gate on.
     """
+    me = c.me
+    picked = among("p10592", "p1758", "p620")
+
+    def pinned_down(ctx: dict[str, Any]) -> bool:
+        foe = ctx.get("target")
+        return foe is not None and (
+            c.is_(Condition.HELPLESS, on=foe) or c.is_(Condition.IMMOBILIZED, on=foe)
+        )
+
+    def slowed_only(ctx: dict[str, Any]) -> bool:
+        foe = ctx.get("target")
+        return (
+            foe is not None
+            and not pinned_down(ctx)
+            and c.is_(Condition.SLOWED, on=foe)
+        )
+
+    c.bonus("skill:intimidate", 2, on=me, until=When.ENCOUNTER, kind="feat")
+    c.bonus("damage", 5, on=me, until=When.ENCOUNTER,
+            when=lambda ctx: (picked(ctx) and _grip(c, "axe", hands=2)
+                              and pinned_down(ctx)))
+    c.bonus("damage", 2, on=me, until=When.ENCOUNTER,
+            when=lambda ctx: (picked(ctx) and _grip(c, "axe", hands=2)
+                              and slowed_only(ctx)))
 
 
-@power("f2332", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.retarget_defence()", "c.on_shift_away()"))
+def _where(world, who: int):  # noqa: ANN001, ANN202
+    pos = world.get(who, Position)
+    return pos.square if pos is not None else None
+
+
+def _shifted_away(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """An enemy that was next to me shifted, and ended further off.
+
+    `Moved` rather than `MoveEnd`, because by the end the creature has
+    gone and "adjacent" is false exactly when the row should fire. It is
+    the one movement event carrying `from_`, so the adjacency is asked
+    of where the enemy *was* and the direction is the two ends compared.
+    """
+    if getattr(ev, "kind_", "") != "shift" or ev.actor not in enemies(world, me):
+        return False
+    here = _where(world, me)
+    if here is None:
+        return False
+    was = distance(ev.from_, here)
+    return was <= 1 and distance(ev.to, here) > was
+
+
+def _marked_by_my_side(c: Cast, foe: int) -> bool:
+    return any(c.marked(on=foe, by=a) for a in allies(c.world, c.me))
+
+
+@power("f2332", level=1, cls="", usage=AT_WILL,
+       action=ActionType.IMMEDIATE_REACTION, reach=PERSONAL, target=SELF,
+       dropped=("c.retarget_defence()",),
+       trigger="an adjacent enemy marked by you or an ally shifts away",
+       on=Trigger(Moved, _shifted_away, "an adjacent enemy shifts away"))
 def f2332(c: Cast) -> None:
-    """Both halves are gaps and they are different ones. `p622` and
-    `p1019` may hit Reflex instead of AC, and the defence a row rolls
-    against is header data. The other wants "an adjacent enemy shifts
-    away from you", and while `Moved.kind_` is `"shift"` the event says
-    nothing about which creature it went away from."""
+    """**Re-aimed.** "An adjacent enemy shifts away from you" is
+    sayable after all -- see `_shifted_away`, which asks the adjacency of
+    `Moved.from_` rather than of where the creature is once it has gone.
+    The printed action is the limit, so this is at-will and an immediate
+    reaction rather than a once-a-fight trait (#210).
+
+    Still dropped: `p622` and `p1019` hitting Reflex instead of AC is
+    header data, the same gap `f2331` names.
+    """
+    if not _grip(c, "hammer", "pick", hands=1):
+        return
+    if _marked_by_my_side(c, c.trigger.actor):
+        c.shift(1)
 
 
 # -- the swings Combat Challenge hands over ---------------------------------
@@ -786,14 +863,21 @@ def f2180(c: Cast) -> None:
 
 @power("f795", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.race_option()", "c.deals(when=)"))
+       todo=("c.deals(when=)",))
 def f795(c: Cast) -> None:
-    """**Re-aimed.** The granted swing is readable now -- it carries
-    `granted_via`, and `f1732` beside it gates on exactly that. What is
-    left is the other two thirds of the sentence: which manifestation a
-    genasi is currently in is the choice `rt:r33-manifestation` says is
-    recorded nowhere, and retyping one attack's damage is `c.deals` with
-    a gate, which it does not take."""
+    """**Re-aimed twice, and down to one symbol.** The granted swing is
+    readable -- it carries `granted_via`, and `f1732` beside it gates on
+    exactly that. Which manifestation the character is in is readable
+    too: `rt:r33-manifestation` no longer claims the choice is recorded
+    nowhere, it is the one of the thirteen racial rows in `Powers.known`,
+    and `c.element` names the type that leg is sworn to.
+
+    What is genuinely left is the middle of the sentence: retyping one
+    attack's damage. `c.deals` is an unconditional override held as a
+    labelled effect and read by `Cast._retyped`, which sees no context,
+    so "only the swing Combat Challenge granted" cannot be attached to
+    it. Laying and ending the override around the swing would recolour
+    everything else in the window, which is worse than not saying it."""
 
 
 # -- the rest of the gaps, each named exactly -------------------------------
@@ -826,7 +910,7 @@ def f798(c: Cast) -> None:
 
 
 @power("f803", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("ConditionApplied.power",))
+       reach=PERSONAL, target=SELF)
 def f803(c: Cast) -> None:
     """An attack bonus with one racial power, and damage to whatever it
     knocks down.
@@ -834,63 +918,210 @@ def f803(c: Cast) -> None:
     A standing modifier rather than a trigger: the bonus is asked of
     every roll and `among` reads the ref off the attack context.
 
-    The second clause is dropped. `ConditionApplied` carries `source`,
-    `target`, `condition` and `duration` and **not** the power that
-    applied them, so "enemies knocked prone *by this power*" cannot be
-    told from any other prone this fighter lays -- and a watch without
-    that gate would pay Strength-modifier damage on every one of them.
+    **The second clause no longer needs `ConditionApplied.power`.** That
+    event does carry no power, but the question is answerable without
+    one: `PowerUsed` is announced *before* the body runs and its targets
+    are already chosen, so the set of targets still standing is taken
+    there and compared against the same set once `PowerResolved` lands.
+    Whoever went down in between was knocked down by this row and by
+    nothing else, which is stricter than a gate on the event would be.
     """
-    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=among("p1767"))
+    me = c.me
+    upright: set[int] = set()
+
+    def before(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p1767":
+            return
+        upright.clear()
+        upright.update(
+            t for t in ev.targets if not c.is_(Condition.PRONE, on=t)
+        )
+
+    def after(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p1767":
+            return
+        for foe in upright:
+            if c.is_(Condition.PRONE, on=foe):
+                c.flat(c.str_mod, on=foe)
+        upright.clear()
+
+    c.bonus("attack", 1, on=me, until=When.ENCOUNTER, when=among("p1767"))
+    c.watch(PowerUsed, before, until=When.ENCOUNTER, on=me, label=f"{c.ref} before")
+    c.watch(PowerResolved, after, until=When.ENCOUNTER, on=me, label=f"{c.ref} after")
 
 
-@power("f805", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_reroll()",))
+@power("f805", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you reroll an opportunity attack with p1450 and miss",
+       on=Trigger(PowerResolved, used_one_of("p1450"), "you use p1450"))
 def f805(c: Cast) -> None:
-    """Refunds `p1450` when the reroll it bought misses anyway. The power
-    is named by ref and `c.restore_use` takes one -- what is missing is
-    that nothing announces a roll was a reroll, which is the symbol the
-    ranger's f761 dropped a clause for."""
+    """Refunds `p1450` when the reroll it bought misses anyway.
+
+    Nothing announces that a roll *was* a reroll and nothing has to:
+    `p1450` is an interrupt on `AttackRolled` whose whole body is the
+    reroll, so the attack that event names is the rerolled one by
+    construction. `PowerResolved.trigger` hands it over and it carries
+    `opportunity` as a plain attribute, which is this card's gate where
+    the rogue's `f819` reads `advantage` off the same event.
+
+    The outcome is recomputed after the interrupt window, so the miss is
+    waited for rather than read.
+    """
+    rolled = c.trigger.trigger
+    if rolled is None or not getattr(rolled, "opportunity", False):
+        return
+    victim = rolled.target
+
+    def refund(ev: Miss) -> None:
+        if ev.attacker == c.me and ev.target == victim:
+            c.restore_use("p1450")
+
+    c.watch(Miss, refund, on=c.me, until=When.EOT, once=True)
 
 
 @power("f948", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.forbid_action()",))
+       reach=PERSONAL, target=SELF)
 def f948(c: Cast) -> None:
-    """A prone creature you are grabbing cannot stand. `c.grabbing`
-    answers the grab and `Condition.PRONE` the rest, but standing is a
-    line in the action menu that nothing can take away -- `c.grant_action`
-    adds one and there is no opposite."""
+    """A prone creature you are grabbing cannot stand.
+
+    This was marked for `c.forbid_action()` on the grounds that standing
+    is a menu line nothing can take away. It can: `Condition.PINNED` is
+    `Rules(no_stand=True)` and `actions.legal` reads it, which is the
+    printed sentence exactly and not an approximation.
+
+    Both halves of "prone *and* grabbed" can arrive in either order, so
+    each is watched and the other is asked of the board.
+
+    **The grab's end is a `RelationCleared`, not a `ConditionEnded`.**
+    A grab is a relation mirrored into `Conditions`, and `Effects.cure`
+    clears the relation without announcing the condition -- so a watch
+    on `ConditionEnded` never fired and the pin outlived the grab. That
+    was driven by hand both ways before this was written.
+    """
+    me = c.me
+
+    def hold(who: int) -> None:
+        if who in c.grabbing(of=me) and c.is_(Condition.PRONE, on=who):
+            c.condition(Condition.PINNED, on=who, until=When.ENCOUNTER)
+
+    def on_prone(ev: ConditionApplied) -> None:
+        if ev.condition is Condition.PRONE:
+            hold(ev.target)
+
+    def on_grab(ev: RelationSet) -> None:
+        if ev.kind_ is Relation.GRABBED_BY and ev.source == me:
+            hold(ev.target)
+
+    def loose(ev: RelationCleared) -> None:
+        if ev.kind_ is Relation.GRABBED_BY and ev.source == me:
+            c.cure(Condition.PINNED, on=ev.target)
+
+    for foe in c.grabbing(of=me):
+        hold(foe)
+    c.watch(ConditionApplied, on_prone, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} prone")
+    c.watch(RelationSet, on_grab, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} grab")
+    c.watch(RelationCleared, loose, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} free")
 
 
 @power("f1733", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.feature_ability()",))
+       reach=PERSONAL, target=SELF)
 def f1733(c: Cast) -> None:
-    """Swaps which ability a named class feature reads. The feature is
-    `cf:fighter-weaponmaster-f2` and is named by ref in this feat's own
-    prerequisite, so this is not a naming gap -- the ability is written
-    into that feature's body and nothing rewrites one."""
+    """Swaps which ability `cf:fighter-weaponmaster-f2` reads.
+
+    Nothing rewrites a feature's body, and nothing has to. That feature
+    lays one untyped attack bonus of the caster's Wisdom modifier gated
+    on `opportunity`, and untyped bonuses **add** -- so the difference
+    between the two abilities, laid under the same gate, comes to the
+    Dexterity modifier and nothing else. Negative differences bucket by
+    the row's own ref, so a Dexterity-poorer fighter subtracts cleanly
+    instead of colliding with somebody else's penalty.
+
+    The brawling leg takes `cf:fighter-weaponmaster-f0` in place of that
+    feature and gets no bonus to correct, so it is left alone.
+    """
+    if c.build("brawling"):
+        return
+    c.bonus("attack", c.dex_mod - c.wis_mod, on=c.me, until=When.ENCOUNTER,
+            kind="untyped", when=lambda ctx: bool(ctx.get("opportunity")))
 
 
-@power("f1738", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_shift_away()",))
+def _adjacent_enemy_shifts(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """A neighbour of mine shifted. Where it went is not this card's
+    business -- only that it was next to me when it started."""
+    if getattr(ev, "kind_", "") != "shift" or ev.actor not in enemies(world, me):
+        return False
+    here = _where(world, me)
+    return here is not None and distance(ev.from_, here) <= 1
+
+
+def _adjacent_enemy_swings_elsewhere(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """`AttackDeclared` is announced once per target and names one, so
+    "an attack that doesn't include you as a target" is that one field.
+    `leaves_me_out` reads `among`, which this event does not carry."""
+    if ev.attacker == me or ev.target == me or ev.attacker not in enemies(world, me):
+        return False
+    here, there = _where(world, me), _where(world, ev.attacker)
+    return here is not None and there is not None and distance(there, here) <= 1
+
+
+@power("f1738", level=1, cls="", usage=AT_WILL,
+       action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL, target=SELF,
+       trigger="a marked adjacent enemy shifts or attacks past you",
+       on=(Trigger(Moved, _adjacent_enemy_shifts, "a marked neighbour shifts"),
+           Trigger(AttackDeclared, _adjacent_enemy_swings_elsewhere,
+                   "a marked neighbour attacks somebody else")))
 def f1738(c: Cast) -> None:
     """An interrupt when a marked neighbour shifts or attacks past you.
-    The attack half could be said off `AttackDeclared`; the shift half
-    cannot, for the same reason f2332 cannot, and a row that answered
-    only half its trigger would fire on the wrong occasions rather than
-    on too few."""
+
+    Both halves are sayable and the row is declared against both, which
+    is what `on=` taking a sequence is for. The shift half was marked
+    unwritable; it is not, because `Moved` carries `from_` and the
+    adjacency the card names is the one *before* the step.
+
+    The printed action is the limit, so at-will and an immediate
+    interrupt rather than a once-a-fight trait (#210).
+    """
+    if not holding(c.world, c.me, "shield"):
+        return
+    ev = c.trigger
+    foe = ev.actor if isinstance(ev, Moved) else ev.attacker
+    if not c.marked(on=foe, by=c.me):
+        return
+    friend = c.choose(c.within(1, side="ally"), "which ally")
+    if friend is None:
+        return
+    for defence in (AC, FORT, REF, WILL):
+        c.bonus(defence, 2, on=friend, until=When.SONT)
 
 
 @power("f1739", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.extend()",),
+       reach=PERSONAL, target=SELF,
        trigger="you use your second wind",
        on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f1739(c: Cast) -> None:
-    """The extra hit points play. Lengthening the second wind's own
-    defence bonus does not: nothing moves a standing effect's duration,
-    and re-laying it would stack rather than replace."""
-    if not holding(c.world, c.me, "shield") or c.wis_mod <= 0:
+    """Extra hit points, and the defence bonus held a turn longer.
+
+    Nothing moves a standing effect's duration, which is what this was
+    marked for -- but the duration does not have to move. `second_wind`
+    lays +2 to each defence until the start of the caster's next turn,
+    untyped, and untyped modifiers add. So the window that wants
+    changing is the only one written: the row cancels the short bonus
+    where it overlaps and lays its own to the end of the next turn, and
+    the creature is +2 throughout rather than +4 and then nothing.
+
+    A penalty buckets by the ref of the row that laid it, so the -2 is
+    this row's alone and cannot swallow anybody else's.
+    """
+    if not holding(c.world, c.me, "shield"):
         return
-    c.heal(c.wis_mod, on=c.me)
+    if c.wis_mod > 0:
+        c.heal(c.wis_mod, on=c.me)
+    for defence in (AC, FORT, REF, WILL):
+        c.bonus(defence, -2, on=c.me, until=When.SONT)
+        c.bonus(defence, 2, on=c.me, until=When.EONT)
 
 
 @power("f1741", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -921,32 +1152,54 @@ def f1743(c: Cast) -> None:
 
 
 @power("f1969", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.reroll_ones()",))
+       reach=PERSONAL, target=SELF, todo=("c.reroll_ones()",))
 def f1969(c: Cast) -> None:
     """Lets the ally you flank with reroll damage dice showing a 1.
 
-    The flanking half is written and is the gate the printed line puts
-    first; the reroll is dropped, because `c.reroll_damage` rolls the
-    whole expression twice, which is a different and better outcome than
-    rerolling the ones. The same symbol the assassin's f1789 wants.
+    **Re-aimed from `dropped` to `todo`.** The whole printed benefit is
+    the reroll; what was written beside the marker was a flanking gate
+    on a bonus of *zero*, which lays an effect, satisfies the audit and
+    changes no number in any fight. A row that plays and does nothing is
+    worse than one that is refused, so the gate goes with it.
+
+    `c.reroll_damage` is not the verb: it rolls the whole expression
+    again, which is a different and better outcome than rerolling the
+    ones. The same symbol the assassin's f1789 wants.
     """
-    me = c.me
-    if not _grip(c, *_ONE_HANDED, "polearm", hands=2):
-        return
-    for friend in [a for a in allies(c.world, me) if a != me]:
-        c.bonus(
-            "damage", 0, on=friend, until=When.ENCOUNTER,
-            when=lambda ctx, f=friend: (
-                ctx.get("target") is not None
-                and flanked_by(c.world, ctx["target"], me)
-                and flanked_by(c.world, ctx["target"], f)
-            ),
-        )
 
 
 @power("f1970", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("Gear.off_hand", "Build.armour", "Weapon.improvised"))
 def f1970(c: Cast) -> None:
-    """+1 damage with the weapon style chosen for a class feature. The
-    prerequisite is an unparsed clause, the feature is named in prose,
-    and the style it records is not asked anywhere."""
+    """+1 damage with the weapon style chosen for a class feature.
+
+    The style is asked now: every leg of `chargen.BUILDS["fighter"]` is
+    one of the six printed talents, and `cf:fighter-weaponmaster-f3`
+    reads two of them as a grip. This is the same gate on the damage
+    side, and it checks what is in hand rather than restating the leg --
+    a great-weapon fighter who has swapped to one hand is not getting it.
+
+    The other four legs are the ones `cf:fighter-talent-rest` is blocked
+    on and the symbols are its: an empty or occupied off hand, an armour
+    field on `Build`, and improvised weapons. Each would be a gate that
+    is false for every fighter in the tree, so they are dropped rather
+    than guessed at.
+    """
+    me, world = c.me, c.world
+    if not (c.build("great-weapon") or c.build("guardian")):
+        return
+    two_handed = c.build("great-weapon")
+
+    def style(ctx: dict[str, Any]) -> bool:
+        declared = get(str(ctx.get("power", "")))
+        gear = world.get(me, Gear)
+        held = gear.main if gear is not None else None
+        return (
+            declared is not None
+            and Keyword.WEAPON in declared.keywords
+            and held is not None
+            and held.two_handed == two_handed
+        )
+
+    c.bonus("damage", 1, on=me, until=When.ENCOUNTER, when=style)

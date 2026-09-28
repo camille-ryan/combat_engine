@@ -2,9 +2,15 @@
 
 The class's extra damage is `cf:rogue-scoundrel-f4`, named by ref in
 five of these prerequisites -- so where a row *rides* on it the gap is
-never the name. It is that nothing announces that the extra damage was
-paid, and nothing reaches into the dice another row rolls. Both are
-marked exactly.
+never the name.
+
+Nor is it the announcement, which was the standing diagnosis here and
+is wrong: `features.strikers.extra_damage` pays out through
+`c.damage(detail=label)`, so the payment arrives as a `DamageRolled`
+carrying the feature's ref, rolled and not yet landed. `f751` trades it
+away from there. What is genuinely missing is the once-a-round latch --
+it lives in a closure and nothing can read or reset it -- and any way
+to reach into the dice another row rolls.
 
 The rest divides into the ordinary -- a critical with combat advantage,
 a damage bonus beside an ally -- and three that turn on traps, which
@@ -23,8 +29,10 @@ from combat_engine.engine import (
     ActionType,
     Cast,
     Condition,
+    DamageRolled,
     Hit,
     PowerUsed,
+    Size,
     Trigger,
     When,
     power,
@@ -100,11 +108,33 @@ def f356(c: Cast) -> None:
 
 
 @power("f751", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_extra_damage()",))
+       reach=PERSONAL, target=SELF)
 def f751(c: Cast) -> None:
-    """Trades the class's extra damage for a condition. Nothing announces
-    that the extra damage was about to be paid, so there is no moment at
-    which to offer the trade."""
+    """Trades the class's extra damage for a condition, and the moment
+    does exist after all: `features.strikers.extra_damage` pays out with
+    `c.damage(..., detail=label)`, so the blow arrives as a
+    `DamageRolled` carrying `cf:rogue-scoundrel-f4` in `detail` -- rolled
+    and not yet landed, which is exactly the seam "forgo rolling" needs.
+
+    "Counts as using Sneak Attack for the round" comes free: the
+    feature's own latch was spent before it rolled, so nothing has to say
+    it. `default=False` so a fight with nobody playing takes the damage,
+    which is the printed default.
+    """
+    me = c.me
+
+    def offered(ev: Any) -> None:
+        if ev.source != me or ev.detail != "cf:rogue-scoundrel-f4":
+            return
+        if ev.amount <= 0 or c.size_of(ev.target).order < Size.LARGE.order:
+            return
+        if not c.may("forgo the extra damage", who=me, default=False):
+            return
+        c.reduce(ev.amount, ev)
+        c.slowed(on=ev.target, until=When.EONT)
+
+    c.watch(DamageRolled, offered, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} trade")
 
 
 @power("f763", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -171,12 +201,15 @@ def f767(c: Cast) -> None:
 
 
 @power("f784", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.penalised_by_me()",))
+       reach=PERSONAL, target=SELF)
 def f784(c: Cast) -> None:
-    """Allies hit harder against enemies this rogue has rattled. The
-    rattling keyword is real and `c.suffering` finds the hold it lays,
-    so the ally bonus is written; what is dropped is the narrowing to a
-    penalty *this* character caused, which `Mods` does not record."""
+    """Allies hit harder against enemies this rogue has rattled.
+
+    The narrowing to a penalty *this* character caused was marked as a
+    gap and is not one: `c.suffering` already filters by `eff.source`,
+    and `c._rattle` lays the `rattled` hold from the attacker's own cast
+    -- so the default `by=` is the rogue and the list is the creatures it
+    rattled itself."""
     me = c.me
     for friend in [a for a in allies(c.world, me) if a != me]:
         c.bonus(

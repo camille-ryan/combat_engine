@@ -26,7 +26,9 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     Cast,
+    DamageType,
     Health,
+    Hit,
     Miss,
     PowerUsed,
     Trigger,
@@ -94,12 +96,28 @@ def f1499(c: Cast) -> None:
 
 
 @power("f1505", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_ally_hit()",))
+       reach=PERSONAL, target=SELF)
 def f1505(c: Cast) -> None:
     """Temporary hit points for **any ally** that hits an enemy under a
-    named racial power's effect. The power is named by ref; what is
-    missing is a trigger on somebody else's hit that reads which effect
-    the target is carrying."""
+    named racial power's effect.
+
+    Both halves of the old marker were already sayable. A trait's
+    `c.watch(Hit)` hears every blow on the board, whoever threw it --
+    only a *declared* trigger is narrowed to the caster. And an effect's
+    label is the ref of the row that laid it, so `c.suffering("p1831",
+    by=)` is "under the effect of **your** p1831" exactly.
+
+    The hit points go to the ally that struck, not to the cleric.
+    """
+    me = c.me
+
+    def struck(ev: Hit) -> None:
+        if ev.attacker == me or ev.attacker not in allies(c.world, me):
+            return
+        if ev.target in c.suffering("p1831", by=me):
+            c.temp_hp(c.cha_mod, on=ev.attacker)
+
+    c.watch(Hit, struck, until=When.ENCOUNTER, on=me)
 
 
 @power("f1498", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -128,20 +146,59 @@ def f1498(c: Cast) -> None:
 
 
 @power("f1500", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.retarget(power=)",))
+       reach=PERSONAL, target=SELF, dropped=("c.retarget(power=)",),
+       trigger="you use p1448",
+       on=Trigger(PowerUsed, _i_used("p1448"), "you use p1448"))
 def f1500(c: Cast) -> None:
     """Narrows a racial power's blast to enemies only and pays its allies
-    temporary hit points. Nothing rewrites another row's target line."""
+    temporary hit points.
+
+    The narrowing stays dropped -- nothing rewrites another row's target
+    line -- and dropping it is what makes the second half exact rather
+    than approximate: `p1448` is `EACH_CREATURE`, so while it still
+    catches allies, `PowerUsed.targets` intersected with this cleric's
+    side **is** "allies within the blast", which no other reading of the
+    board gives, a blast being a quarter of the squares within its size.
+
+    Targets are chosen before the body runs, so `ev.targets` is
+    trustworthy in the window `PowerUsed` opens.
+    """
+    friends = set(allies(c.world, c.me))
+    for who in c.trigger.targets:
+        if who in friends:
+            c.temp_hp(c.str_mod, on=who)
 
 
-@power("f1087", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_power_bonus()",))
+@power("f1087", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1589",
+       on=Trigger(PowerUsed, _i_used("p1589"), "you use p1589"))
 def f1087(c: Cast) -> None:
-    """Re-aimed. `p1589` is a ref now, so the naming gap this waited on is
-    closed and was never the whole of it: what the row asks is whether
-    *this* attack is the one that spent that row's `once=True` attack
-    bonus, and a bonus being laid or consumed announces nothing. `Mods`
-    records the number and its kind, not the act. Same hold as f2074."""
+    """Radiant on the first undead struck while a Channel Divinity row's
+    bonus is live.
+
+    "An attack for which you gained a bonus from `p1589`" was left
+    waiting on an announcement that a particular modifier had been
+    spent, and there will not be one -- `Mods` records the number and
+    its kind, not the act. But the bonus is `once=True` and runs to the
+    end of the next turn, so the *window* answers the same sentence: the
+    first roll inside it is the one that spent it. `cleric_b`'s f2007
+    made this judgement first and it is made the same way here.
+
+    `p1589` carries `group=CHANNEL_DIVINITY`, so the once-a-fight limit
+    is the group's and this row counts nothing of its own.
+    """
+    me = c.me
+    paid: list[int] = []
+
+    def struck(ev: Hit) -> None:
+        if ev.attacker != me or paid:
+            return
+        paid.append(1)
+        if c.is_kind("undead", on=ev.target):
+            c.flat(5, dtype=DamageType.RADIANT, on=ev.target)
+
+    c.watch(Hit, struck, until=When.EONT, on=me)
 
 
 def _p146_damage(ctx: dict[str, Any]) -> bool:

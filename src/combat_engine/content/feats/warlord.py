@@ -44,14 +44,18 @@ from combat_engine.engine import (
     Healed,
     Hit,
     Keyword,
+    Miss,
     PowerUsed,
     Trigger,
     When,
     Window,
+    both,
+    by_melee,
     power,
+    targets_me,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.query import distance_between, team
+from combat_engine.engine.query import allies, distance_between, team
 
 FEATURE = ("c.class_feature()",)
 #: A `cf:` ref the prerequisite prints and no row in the tree declares.
@@ -134,9 +138,13 @@ def f779(c: Cast) -> None:
        on=Trigger(Hit, _bow_hit, "you hit with a bow"))
 def f796(c: Cast) -> None:
     """Allies within 10 who can see and hear you, against that one
-    target, until the start of your next turn."""
+    target, until the start of your next turn.
+
+    `query.allies` and not `query.team`: the latter returns the side's
+    *name*, so the loop this used to run walked the letters of "pc" and
+    laid every bonus on a creature that does not exist."""
     me, foe = c.me, c.trigger.target
-    for friend in [a for a in team(c.world, me) if a != me]:
+    for friend in allies(c.world, me):
         if distance_between(c.world, me, friend) > 10:
             continue
         c.bonus(
@@ -147,13 +155,35 @@ def f796(c: Cast) -> None:
         )
 
 
-@power("f756", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Miss.advantage",))
+@power("f756", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="an enemy with combat advantage against you misses you with a "
+               "melee attack",
+       on=Trigger(Miss, both(targets_me, by_melee), "an enemy misses you"))
 def f756(c: Cast) -> None:
-    """Turns on an enemy **missing** you while it has combat advantage.
-    `Miss` carries no `advantage`, and the live `AttackResult` that does
-    rides on `Hit` -- so the one event this row needs is the one that
-    cannot answer the question."""
+    """The marker this replaces said the live `AttackResult` rides on
+    `Hit` alone. It does not: `resolve.attack` builds one event or the
+    other and hangs the result on whichever it built, and the reading
+    has to come off there, since a one-shot grant is already spent by
+    the time an answer runs.
+
+    Read off the event by hand rather than through `c.had_advantage`,
+    which is `bool(result and result.advantage)` while `AttackResult`
+    defines `__bool__` as `self.hit` -- so that helper is False on every
+    miss, which is the only case this row has. Reported as an engine
+    bug; the field itself is there.
+
+    A plain "+1 bonus", so untyped, and against that enemy only.
+    `AT_WILL` because a triggered `action=NONE` row spends a use every
+    firing and the card prints no limit (#210)."""
+    ev = c.trigger
+    result = getattr(ev, "result", None)
+    if result is None or not result.advantage:
+        return
+    foe = ev.attacker
+    for friend in allies(c.world, c.me):
+        c.bonus("attack", 1, on=friend, until=When.SONT,
+                when=lambda ctx: ctx.get("target") == foe)
 
 
 @power("f797", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

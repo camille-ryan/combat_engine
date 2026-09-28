@@ -76,19 +76,23 @@ BORROWED = {
     ("f2398", "racial"),   # raises rt:r8-bloodied-enemies' +1 to +2
 }
 
-#: Rows whose card names a type for a bonus that is **not** laid by a
-#: `c.bonus` call at all, so the type word has no call to sit on and the
-#: untyped calls the row does make are correctly untyped.
+#: Rows where a `c.bonus` call is **not** the card's printed bonus, so
+#: the card's type word does not belong on it. Two shapes:
 #:
-#: `f1766b` is the shape: its card prints "+2 power bonus on the attack
-#: roll", and that +2 is handed over by `c.grant_attack(attack_bonus=)`,
-#: which takes a bare number. The row's one `c.bonus` is the extra
-#: radiant die, which the card does not type. Writing "power" into that
-#: call would put the word on the wrong number.
+#: `f1766b` — the card prints "+2 power bonus on the attack roll", and
+#: that +2 is handed over by `c.grant_attack(attack_bonus=)`, which
+#: takes a bare number. The row's one `c.bonus` is the extra radiant
+#: die, which the card does not type. Writing "power" into that call
+#: would put the word on the wrong number. The type really is lost in
+#: play and the row says so with a marker, so this waives the *checker*
+#: and not the gap.
 #:
-#: The type really is lost in play -- the row says so with a marker --
-#: so this waives the *checker*, not the gap.
-ELSEWHERE = {"f1766b"}
+#: `f2913` — the card's typed bonus is laid, correctly, as `kind="feat"`.
+#: The row's *second* call is the printed "use your Strength modifier in
+#: place of your Charisma modifier", written as the difference between
+#: the two. That is a substitution, not a bonus, and it is untyped
+#: because two of a kind would not stack and it must.
+ELSEWHERE = {"f1766b", "f2913"}
 
 #: A type word is printed as "a **power** bonus" or "+2 **item** bonus".
 #: The same word after "the" or "equal to the" is an *amount* being
@@ -224,7 +228,20 @@ def _granted(text: str, word: str) -> bool:
         # The distinction is the preposition. A type is named *as* a
         # bonus -- "a proficiency bonus" -- and a possession is followed
         # by "with".
-        if re.match(r"\s+with\b", text[m.end():]):
+        #
+        # That preposition test was too literal. The cards also invert
+        # it -- "a weapon **with which you have proficiency**" -- where
+        # the word is followed by a comma and the "with" is four tokens
+        # to its left. So for this one word the positive signal is used
+        # instead of the negative: proficiency is a bonus type only when
+        # the card says "proficiency bonus", and every other phrasing of
+        # it is a possession. The other three mechanics words are
+        # genuinely granted without the noun ("your allies have cover"),
+        # which is why this is not the rule for all four.
+        if word == "proficiency":
+            if not re.match(r"\s+bonus\b", text[m.end():]):
+                continue
+        elif re.match(r"\s+with\b", text[m.end():]):
             continue
         return True
     return False

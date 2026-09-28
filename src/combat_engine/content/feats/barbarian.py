@@ -2,9 +2,10 @@
 
 `Keyword.RAGE` does not exist -- `docs/blocked.json` records
 `cf:barbarian-rage` waiting on it -- so "while raging" is not a state
-anything can ask about. Two rows here want it and name it exactly.
+anything can ask about. Three rows here want it and name it exactly,
+and for the third it is the *only* thing still missing.
 
-The two that do not are ordinary triggers.
+The rest are ordinary triggers, or a class-feature ref nobody declares.
 """
 
 from __future__ import annotations
@@ -118,9 +119,26 @@ def f1009(c: Cast) -> None:
 
 
 @power("f1010", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.widen_area()",))
+       reach=PERSONAL, target=SELF, todo=RAGE)
 def f1010(c: Cast) -> None:
     """Grows a named power's burst and pays a damage bonus, both while
-    raging. The area is header data read before the body runs, so
-    nothing rewrites it for one use -- the same gap the wizard's f1134
-    names."""
+    raging.
+
+    Growing the burst is no longer the gap. `c.widen_areas` lays a
+    `blast_size` modifier and `dsl._stretched` reads it, so
+    "becomes a close burst 5 + your Charisma modifier instead of a close
+    burst 5" is `c.widen_areas(c.cha_mod)` -- the old note here said the
+    area was header data nothing could rewrite, which stopped being true
+    when that verb landed. The marker followed the note and named
+    `c.widen_area()`, a verb that has never existed under that spelling.
+
+    What still blocks it is the condition both halves hang on: rage is
+    not a state anything holds, so writing either half would pay out
+    whether the barbarian is raging or not.
+
+    One caveat for the day rage arrives: `c.widen_areas` is a modifier on
+    the caster with no way to name one row, so the narrowing to `p4932`
+    would have to come from the duration -- laid on the `PowerUsed` that
+    announces it, which fires before the body, and held to the end of
+    that turn.
+    """

@@ -44,6 +44,7 @@ from combat_engine.engine import (
     Keyword,
     Miss,
     Moved,
+    PowerResolved,
     PowerUsed,
     Relation,
     Trigger,
@@ -53,6 +54,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import AttackDeclared
+from combat_engine.engine.grid import spread
 from combat_engine.engine.query import allies, distance_between, enemies, flanked_by
 
 from .styles import among, hit_with_one_of, used_one_of
@@ -537,8 +539,7 @@ def f2355(c: Cast) -> None:
 
 
 def _shift_before(ref: str, squares: int, groups: tuple[str, ...],
-                  refs: tuple[str, ...], what: str,
-                  wants: tuple[str, ...] = ()) -> None:
+                  refs: tuple[str, ...], what: str) -> None:
     """"You can shift N squares **before** the attack."
 
     `PowerUsed` fires before the body, which is the only reason this
@@ -547,10 +548,10 @@ def _shift_before(ref: str, squares: int, groups: tuple[str, ...],
     """
 
     # `AT_WILL`, not `ENCOUNTER`: a triggered trait spends a use every
-    # time it fires, and neither card prints a limit. Written inside a
+    # time it fires, and the card prints no limit. Written inside a
     # helper, so the tree-wide sweep could not see it.
     @power(ref, level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, dropped=wants,
+           reach=PERSONAL, target=SELF,
            trigger="you attack with an associated power",
            on=Trigger(PowerUsed, used_one_of(*refs),
                       "you use an associated power"))
@@ -568,14 +569,46 @@ _shift_before(
     penalty, which is a check rather than a fight and so is not a
     dropped mechanic.""",
 )
-_shift_before(
-    "f2334", 2, ("hammer", "pick"), ("p4405", "p10614"),
-    """Shift before the swing. The other clause -- answering an adjacent
-    marked enemy that shifts away -- is dropped: `Moved.kind_` says a
-    shift happened and nothing says which creature it went away
-    from.""",
-    wants=("c.on_shift_away()",),
-)
+@power("f2334", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="an adjacent marked enemy shifts away from you, or you use "
+               "an associated power")
+def f2334(c: Cast) -> None:
+    """Both printed clauses, so this is a trait with two watchers rather
+    than `_shift_before`'s declared trigger: a row with an `on=` only runs
+    when that one fires, and the second clause would never arm.
+
+    "Shifts away from you" is asked of `Moved`, the only movement event
+    carrying `from_` -- the enemy has already gone by the time it is
+    announced, so adjacency has to be measured at the square it started
+    in. `Moved.kind_` separates the shift from a walk, and "away" is "was
+    beside you and is not now", which for a shift is the whole of it.
+    """
+    me = c.me
+
+    def before_the_swing(ev: Any) -> None:
+        if (
+            ev.actor == me
+            and ev.power in ("p4405", "p10614")
+            and _holding(c, "hammer", "pick")
+        ):
+            c.shift(2)
+
+    def away(ev: Any) -> None:
+        foe = ev.actor
+        if getattr(ev, "kind_", "") != "shift" or foe == me:
+            return
+        if foe not in enemies(c.world, me) or not _holding(c, "hammer", "pick"):
+            return
+        beside = spread({c.here}, 1)
+        if ev.from_ not in beside or ev.to in beside:
+            return
+        if any(c.marked(on=foe, by=w) for w in allies(c.world, me)):
+            c.shift(1)
+
+    c.watch(PowerUsed, before_the_swing, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} before")
+    c.watch(Moved, away, on=me, until=When.ENCOUNTER, label=f"{c.ref} away")
 
 
 @power("f2325", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -593,11 +626,41 @@ def f2325(c: Cast) -> None:
 
 
 @power("f2335", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.add_keyword()",))
+       reach=PERSONAL, target=SELF)
 def f2335(c: Cast) -> None:
-    """Gives `p919`, `p10890` or `p970` the rattling keyword. The list
-    resolves; `Power.keywords` is header data read before anything runs
-    and nothing adds to it for a turn."""
+    """A skill bonus, and the rattling keyword on three named rows.
+
+    `Power.keywords` is header data and nothing adds to it, but
+    `c._rattle` falls back to a `rattling` **modifier** on the attacker
+    when the power does not carry the word -- so the keyword is said by
+    holding that modifier for exactly as long as the named row is
+    resolving. `PowerUsed` is announced above the body and
+    `PowerResolved` below it, which is that window precisely; a gated
+    `c.bonus` would not do, because `_rattle` reads the modifier with
+    `c.total("rattling")` and no context, so a `when=` there is silently
+    false.
+    """
+    me = c.me
+    c.bonus("skill:nature", 2, on=me, until=When.ENCOUNTER, kind="feat")
+    refs = ("p919", "p10890", "p970")
+    held: dict[str, Any] = {}
+
+    def mine(ev: Any) -> bool:
+        return ev.actor == me and ev.power in refs
+
+    def on_used(ev: Any) -> None:
+        if mine(ev) and _holding(c, "bow", "crossbow"):
+            held[ev.power] = c.rattling(on=me, until=When.EOT)
+
+    def on_done(ev: Any) -> None:
+        effect = held.pop(ev.power, None) if mine(ev) else None
+        if effect is not None:
+            c.end_effect(effect)
+
+    c.watch(PowerUsed, on_used, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} rattles")
+    c.watch(PowerResolved, on_done, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} stops")
 
 
 @power("f2361", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -700,9 +763,9 @@ def f828(c: Cast) -> None:
 
 @power("f1240", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.on_death_save()", "c.instead_of()"))
+       dropped=("c.on_death_save()",))
 def f1240(c: Cast) -> None:
-    """Three clauses of four.
+    """All of it but the death saving throw.
 
     The saving-throw context carries the conditions being saved against,
     so "against the unconscious condition" is a real gate. The origin is
@@ -710,15 +773,17 @@ def f1240(c: Cast) -> None:
     one already -- which is what `instead_of` is for. The Stealth bonus
     is a skill and belongs to no fight.
 
-    The teleport rider is written now: `p2482` is declared, and "the
-    same distance that you teleport" is that row's own 3. A `c.watch`
-    rather than a declared trigger, because the row lays standing
-    modifiers as well and a triggered row never lays those.
+    The rider hangs on `PowerResolved` rather than `PowerUsed`, and the
+    choice is why: `p2482` lays its own caster's insubstantiality inside
+    its body, so on `PowerUsed` there is nothing yet to take away.
+    Choosing the beast ends the ranger's hold -- an effect's label is the
+    ref of the row that laid it -- and writes the same one on the
+    companion, which is what "you choose which one of you" asks for.
 
-    Dropped: the death-saving-throw half, which does not go through the
-    same roll, and "you choose which one of you is insubstantial" --
-    `p2482` makes its own caster insubstantial in its body and nothing
-    suppresses a clause of the row that triggered this one.
+    Dropped: the death-saving-throw half. `c.save(against="death")` is
+    rolled from `turns.py` and the context a modifier is asked carries
+    the conditions and not what the throw is against, so the +2 cannot
+    be narrowed to it.
     """
     pet = c.beast()
     if pet is None:
@@ -730,13 +795,21 @@ def f1240(c: Cast) -> None:
     )
 
     def along(ev: Any) -> None:
-        if ev.power != "p2482":
+        if ev.power != "p2482" or ev.actor != c.me:
             return
         with_me = c.beast()
-        if with_me is not None:
-            c.teleport(3, who=with_me)
+        if with_me is None:
+            return
+        c.teleport(3, who=with_me)
+        if c.choose([c.me, with_me], f"{c.ref}: which of you is insubstantial") \
+                != with_me:
+            return
+        for hold in list(c.world.effects.of(c.me)):
+            if hold.label == "p2482":
+                c.end_effect(hold)
+        c.insubstantial(on=with_me, until=When.SONT)
 
-    c.watch(PowerUsed, along, on=c.me, until=When.ENCOUNTER,
+    c.watch(PowerResolved, along, on=c.me, until=When.ENCOUNTER,
             label=f"{c.ref} along")
 
 

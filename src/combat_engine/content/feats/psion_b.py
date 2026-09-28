@@ -60,8 +60,9 @@ CLOUD = "p2473"
 #: The racial attack power `f3172` retypes and hands back.
 RACIAL = "p8278"
 
-#: The discipline focus is a build the chassis does not deal.
-BUILDS = ("chargen.BUILDS",)
+#: `chargen.BUILDS` has a leg per printed focus now, so the list is not
+#: the gap -- what is missing is a way to be on a *second* leg at once.
+SECOND_BUILD = ("c.set_build()",)
 
 #: The two cards each discipline focus hands over, by the leg that takes
 #: it. Read off `features/psionic.py`, which is what grants them.
@@ -320,16 +321,22 @@ def f2789(c: Cast) -> None:
                 break
 
 
-@power("f3294", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3294", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="an ally you can see within 20 squares fails a saving throw",
-       on=Trigger(SavingThrow, _ally_failed_a_save, "an ally fails a save"),
-       dropped=("c.expend()",))
+       on=Trigger(SavingThrow, _ally_failed_a_save, "an ally fails a save"))
 def f3294(c: Cast) -> None:
     """`SavingThrow` is announced before it is acted on and `c.reroll_save`
-    writes the new result back into it. The cost -- expending `p8225`,
-    which is a different row's use -- has no verb."""
-    if c.can_see(c.trigger.actor):
+    writes the new result back into it.
+
+    The cost was marked as having no verb and has one: `c.expend_row`
+    spends a use of a row its owner holds *without running it*, which is
+    what "expend your p8225" means. Its False is the printed
+    requirement -- a psion that has already spent the word cannot pay,
+    and then there is no reroll. That is also why the row is `AT_WILL`:
+    the card prints no limit of its own, and an `ENCOUNTER` triggered
+    trait is spent on its first firing (#210)."""
+    if c.can_see(c.trigger.actor) and c.expend_row(SEND_THOUGHTS, on=c.me):
         c.reroll_save()
 
 
@@ -382,12 +389,14 @@ def f1632(c: Cast) -> None:
 
 
 @power("f3398", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BUILDS)
+       reach=PERSONAL, target=SELF, todo=SECOND_BUILD)
 def f3398(c: Cast) -> None:
-    """A second discipline focus, its powers usable as dailies. A leg per
-    focus exists now and f1632 is written against it, but a character
-    takes one leg and stays on it -- so there is nothing that records a
-    second one alongside the first."""
+    """A second discipline focus, its powers usable as dailies.
+
+    Re-aimed: `chargen.BUILDS` exists and has a leg per printed focus,
+    which is what `f1632` reads, so naming it was naming a gap that has
+    closed. What is missing is standing on two legs -- `c.build` asks
+    which one was taken and nothing adds another."""
 
 
 @power("f2588", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

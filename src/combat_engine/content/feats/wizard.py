@@ -15,13 +15,18 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AC,
     ENCOUNTER,
+    FORT,
     PERSONAL,
+    REF,
     SELF,
+    WILL,
     ActionType,
     Cast,
     Hit,
     Keyword,
+    Summoned,
     Trigger,
     When,
     power,
@@ -90,11 +95,26 @@ def f1132(c: Cast) -> None:
 
 
 @power("f677", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.summoned_by_me()",))
+       reach=PERSONAL, target=SELF, dropped=("Summoned.power",))
 def f677(c: Cast) -> None:
-    """A defence bonus for creatures this wizard has summoned. `c.summon`
-    puts one on the board and `Summoned` announces it, but nothing keeps
-    a list of whose summons are whose after the fact."""
+    """The marker this replaces wanted a list of whose summons are whose,
+    kept after the fact. A trait does not need one: `Summoned` names the
+    summoner as `actor`, and a watch armed at the start of the fight
+    catches each arrival as it happens.
+
+    What the event does not carry is the power that did the summoning,
+    so "by your *arcane summoning* powers" is the dropped clause and
+    every creature this wizard brings in is covered. No type word is
+    printed in front of the bonus."""
+    me = c.me
+
+    def arrived(ev: Summoned) -> None:
+        if ev.actor != me:
+            return
+        for defence in (AC, FORT, REF, WILL):
+            c.bonus(defence, 1, on=ev.summon, until=When.ENCOUNTER)
+
+    c.watch(Summoned, arrived, on=me, until=When.ENCOUNTER, label=c.ref)
 
 
 @power("f1123", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -107,11 +127,17 @@ def f1123(c: Cast) -> None:
 
 
 @power("f1134", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.widen_area()",))
+       reach=PERSONAL, target=SELF, todo=("c.change_dice()",))
 def f1134(c: Cast) -> None:
-    """Trades damage for a larger blast or burst. The area is header
-    data, read before the body runs so the interface can draw it, and
-    nothing rewrites it for one use."""
+    """Re-aimed: the marker named `c.widen_area()`, which has never
+    existed, while `c.widen_areas` does and is exactly the payout -- so
+    the instrument agreed with the typo and stayed quiet.
+
+    What is genuinely missing is the price. The trade is "-2 to *each
+    die* of damage rolled", and a modifier is laid against a roll's
+    total, not against the dice that made it. Writing the wider blast
+    alone would be the payout with no price, which is a strictly better
+    card than the one printed."""
 
 
 @power("f1128", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

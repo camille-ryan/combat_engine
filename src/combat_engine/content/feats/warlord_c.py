@@ -364,13 +364,20 @@ def f2713(c: Cast) -> None:
 
 
 @power("f2716", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("feat.associated_powers",))
+       reach=PERSONAL, target=SELF)
 def f2716(c: Cast) -> None:
-    """The page prints a list; the spec does not carry it. An errata
-    block sits between the benefit and the list, and `etl/feat._benefit`
-    breaks at an errata heading and takes the rest of that paragraph with
-    it -- so there is nothing to widen the critical range of. `f2071`,
-    `f2354` and `f974` are cut off the same way."""
+    """The list reaches the spec now -- the errata heading that
+    `etl/feat._benefit` used to break at no longer swallows it -- so this
+    is `f2377`'s shape with the two refs as the gate in place of the
+    charge. `crit_range` is read with the attack context, which carries
+    the power and so can tell the associated rows from the rest."""
+    c.bonus(
+        "crit_range", 1, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("power") in ("p10935", "p158")
+            and _grip(c, "heavy blade", hands=2)
+        ),
+    )
 
 
 # -- inspiring word, which is a ref -----------------------------------------

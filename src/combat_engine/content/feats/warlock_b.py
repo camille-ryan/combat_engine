@@ -81,6 +81,9 @@ PACT_BOON = ("c.on_pact_boon()",)
 #: A class feature named in prose with no ref -- the vestiges, which are
 #: a whole subsystem the engine has never heard of.
 FEATURE = ("c.class_feature()",)
+#: "Instead of": a printed swap for half of what a class feature does
+#: inside its own body. Declining that half is the operation nothing has.
+INSTEAD = ("c.instead_of()",)
 
 #: "Allies who are helpless, stunned, dominated, unconscious, or
 #: petrified" -- the list f2762 prints, as conditions.
@@ -218,6 +221,26 @@ def _failed_my_warlock_effect(world: Any, me: int, ev: Any) -> bool:
     return False
 
 
+def _killed_by_warlock_power(c: Cast, ev: Dropped) -> bool:
+    """Was the killing blow dealt by one of this class's rows?
+
+    `Dropped` names its `source` -- who landed it -- and not the row that
+    did, so the row is read back off the bus log. `deal_damage` sets
+    `DamageApplied.detail` to the ref of whatever dealt the blow and the
+    drop is announced from inside that same payment, so the nearest
+    earlier `DamageApplied` on the body is the killing one.
+
+    The curse's own extra damage carries `cf:warlock-f4`, which is a
+    warlock row, so a kill made by the class feature counts -- it only
+    ever rides a warlock attack anyway.
+    """
+    for past in reversed(c.world.bus.log[: ev.seq]):
+        if isinstance(past, DamageApplied) and past.target == ev.actor:
+            p = get(past.detail or "")
+            return p is not None and p.cls == "warlock"
+    return False
+
+
 def _no_ally_nearer(c: Cast, target: int, *, widened: bool) -> bool:
     """Prime Shot's own comparison, said again.
 
@@ -308,9 +331,15 @@ def f2764(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=("c.on_extra_damage()",))
 def f2766(c: Cast) -> None:
     """Raises ongoing damage by one per curse die rolled. Word for word
-    the rogue's f763 with the other striker feature in it: it needs both
-    the announcement that the extra damage happened and the count of
-    dice it rolled, and `extra_damage` publishes neither."""
+    the rogue's f763 with the other striker feature in it.
+
+    The *announcement* is not the gap: `extra_damage` pays through
+    `c.damage(..., detail=label)`, so the payout arrives as a
+    `DamageRolled`/`DamageApplied` carrying `cf:warlock-f4`, and it is
+    ordinary to watch. What is missing is the **count of dice**, which
+    the multiplier is per: the die string is a literal closed over inside
+    `extra_damage` and nothing publishes how many were rolled, so
+    "1 point per die" has no number to multiply."""
 
 
 # -- the curse as a target, which is ordinary -------------------------------
@@ -595,8 +624,8 @@ def f2192(c: Cast) -> None:
     of this is narrative -- deliberately inert, not unwritten."""
 
 
-@power("f2191", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Dropped.power",),
+@power("f2191", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you drop an enemy you have cursed",
        on=Trigger(Dropped, cursed_by_me,
                   "an enemy you have cursed drops to 0 hit points"))
@@ -609,12 +638,11 @@ def f2191(c: Cast) -> None:
     that enters or starts its turn within the square takes damage", and
     the printed duration means it is not sustained.
 
-    "With a warlock attack" is dropped. `Dropped` names its `source` --
-    who landed the blow -- and not the row that did, so the narrowing
-    cannot be said. It costs the feat only the warlock's own basic
-    attack, which is the blast and a warlock power anyway.
+    "With a warlock attack" is said after all, off the bus log -- see
+    `_killed_by_warlock_power`. `Dropped` still carries no `power`, but
+    the payment that caused it does, and it is two events back.
     """
-    if c.trigger.source != c.me:
+    if c.trigger.source != c.me or not _killed_by_warlock_power(c, c.trigger):
         return
     pos = c.world.get(c.trigger.actor, Position)
     if pos is None:
@@ -637,14 +665,25 @@ def f2196(c: Cast) -> None:
     it announces `SurgeSpent`, so this is an ordinary declared trigger.
 
     The printed alternative -- "if you already have fire resistance, you
-    can instead increase that resistance by 5" -- is never the better of
-    the two here, because `c.resist` **adds** to the flat pool rather
-    than taking the larger, so the first branch is already worth
-    `5 + half your level` on top of whatever was there. The choice is
-    not offered because one arm of it is strictly worse.
+    can instead increase that resistance by 5" -- is a real choice and is
+    written as one. `c.resist` takes the **highest** of the flat pool
+    rather than adding to it, so a warlock already resisting 10 gains
+    nothing at all from the first arm at heroic and 5 more from the
+    second; the old note here said the opposite and was left over from
+    when resistances summed.
+
+    `c.resistances` is the reader that makes the comparison possible, and
+    the larger of the two arms is taken rather than offered, because
+    "you can instead" with both numbers in hand is a choice with an
+    answer.
     """
-    c.resist(5 + c.level // 2, DamageType.FIRE, on=c.me, until=When.EONT)
-    _next_save(c, c.me, 2)
+    me = c.me
+    amount = 5 + c.level // 2
+    already = c.resistances(on=me).get(DamageType.FIRE, 0)
+    if already > 0:
+        amount = max(amount, already + 5)
+    c.resist(amount, DamageType.FIRE, on=me, until=When.EONT)
+    _next_save(c, me, 2)
 
 
 @power("f2197", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -666,16 +705,19 @@ def f2197(c: Cast) -> None:
 
 
 @power("f2081", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.forgo_temp_hp()",))
+       reach=PERSONAL, target=SELF, todo=INSTEAD)
 def f2081(c: Cast) -> None:
-    """Trades the temporary hit points a named row pays for damage on the
-    next attack.
+    """Trades the temporary hit points a class feature pays for damage on
+    the next attack.
 
-    `p2095` is a ref and `PowerUsed` names it, so the trigger is ready
-    and the damage half is one `c.bonus(once=True)`. The word the row
-    turns on is "instead": nothing declines a benefit another row is
-    about to hand out, and writing the upside without the trade would be
-    a strictly better feat than the printed one.
+    `cf:warlock-f1c6` is a ref and the damage half is one
+    `c.bonus(once=True)`, so the trigger and the upside are both ready.
+    The word the row turns on is "instead": nothing declines half of what
+    a row is doing inside its own body, and writing the upside without
+    the trade would be a strictly better feat than the printed one. That
+    is `c.instead_of()`, the same gap thirty rows elsewhere name -- it
+    was written here as `c.forgo_temp_hp()`, which named the one shape
+    of it this row happens to want and so sat alone in its own group.
     """
 
 

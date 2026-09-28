@@ -11,12 +11,18 @@ benefits from Combat Leader", and the feature's own body says what that
 means -- an ally within 10 who can see you. `_led` asks it the same
 way, so the two cannot disagree about the set.
 
-**"You can choose to use this feat" is a real gap and there are five of
-them.** Each prints a cost and a payoff -- take a -2 to hit and an ally
-gains damage; charge and knock prone, but a miss lets the enemy swing
-back. The engine has no way for a row to offer a *deal* at the moment
-of an attack, so writing them would either hand out the payoff free or
-charge the cost unasked. `c.opt_in()`.
+**"You can choose to use this feat" was called a gap and is not one.**
+Each of those cards prints a cost and a payoff -- take a -2 to hit and
+an ally gains damage; charge and knock prone, but a miss lets the enemy
+swing back -- and the claim here was that nothing lets a row offer a
+*deal* at the moment of an attack. Two things say it. `c.may` is the
+question ("a printed **may** is a real choice and has to be offered as
+one" is its own docstring), and a `c.watch` on `AttackDeclared` in
+`Window.BEFORE` is the moment: `resolve.attack` reads its modifiers
+inside the callback that window precedes, so a penalty laid there is
+read by the very roll being declared. Five of the six are written that
+way now. The sixth wants to forgo dice another row is about to roll,
+which is a different thing and still missing.
 
 **The action point is the warlord's best-served trigger.**
 `ActionPointSpent` is real and points are really spent, so four more
@@ -39,32 +45,43 @@ from combat_engine.engine import (
     SELF,
     ActionPointSpent,
     ActionType,
+    AttackDeclared,
     Cast,
     DamageType,
     Gear,
+    Healed,
     Hit,
     InitiativeRolled,
     Keyword,
     Miss,
+    Moved,
+    OpportunityWindow,
     PowerUsed,
     Ranged,
     SecondWind,
+    SurgeSpent,
     Trigger,
     When,
+    Window,
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.query import allies, distance_between, enemies, team
+from combat_engine.engine.grid import distance as squares_apart
+from combat_engine.engine.query import (
+    allies,
+    distance_between,
+    enemies,
+    squares,
+    team,
+)
+from combat_engine.engine.types import Cover
 
-from .styles import among, hit_with_one_of
+from .styles import among
 
 
 def _used_wrath(world, me: int, ev) -> bool:  # noqa: ANN001
     return ev.actor == me and ev.power == "p1628"
 
-#: A row that offers a deal -- a cost for a payoff -- at the moment of an
-#: attack. Nothing in the engine asks that question.
-OPT_IN = ("c.opt_in()",)
 #: **A standing clause and a triggered one on the same card.** The
 #: dispatcher only reaches a no-action row when its declared trigger
 #: fires, so a row that also has to be *true* from the start of the
@@ -137,6 +154,54 @@ def _versatile(c: Cast, *groups: str) -> bool:
     return gear is not None and any(
         w.group in groups and "versatile" in w.properties for w in gear.melee
     )
+
+
+def _covering(c: Cast, foe: int) -> list[int]:
+    """Which other enemies are giving `foe` cover from me, right now.
+
+    Cover is stored nowhere -- `query.cover_between` traces it corner to
+    corner at the moment of the attack -- so "which creature is giving
+    it" is asked the same way, by tracing the line again with one
+    candidate as the only blocker. `Grid.cover` is the call
+    `cover_between` itself makes, so the two cannot disagree.
+    """
+    mine, theirs = squares(c.world, c.me), squares(c.world, foe)
+    out: list[int] = []
+    for other in enemies(c.world, c.me):
+        if other == foe:
+            continue
+        body = set(squares(c.world, other))
+        if not body:
+            continue
+        best = Cover.SUPERIOR
+        for src in mine:
+            for dst in theirs:
+                best = min(best, c.world.grid.cover(src, dst, blockers=body))
+        if best is not Cover.NONE:
+            out.append(other)
+    return out
+
+
+def _next_swing(c: Cast, then: Any, *, foe: int | None = None) -> None:
+    """Answer the outcome of the attack being declared, once.
+
+    A deal struck in the `AttackDeclared` window pays out on the `Hit`
+    or the `Miss` that follows it, and `once=` on the watch itself is
+    the wrong latch: it is spent by the first event of that type
+    whether the gate matched or not.
+    """
+    done = [False]
+
+    def answer(ev: Any) -> None:
+        if done[0] or ev.attacker != c.me:
+            return
+        if foe is not None and ev.target != foe:
+            return
+        done[0] = True
+        then(ev)
+
+    for what in (Hit, Miss):
+        c.watch(what, answer, on=c.me, until=When.EOT, label=f"{c.ref} deal")
 
 
 # -- the action point -------------------------------------------------------
@@ -217,13 +282,29 @@ def f2063(c: Cast) -> None:
         c.temp_hp(c.cha_mod, on=who)
 
 
-@power("f822", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.bonus(healing)",))
+@power("f822", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1590",
+       on=Trigger(PowerUsed, _my_word, "you use inspiring word"))
 def f822(c: Cast) -> None:
-    """Adds Intelligence to what inspiring word restores. The power is a
-    ref and `PowerUsed` fires before its body -- but the amount is
-    computed inside that body by `c.heal`, and `Mods` is not consulted
-    for healing at all, so there is nothing to add to."""
+    """Adds Intelligence to what inspiring word restores.
+
+    **Re-aimed off `c.bonus(healing)`, which was never the hold.** `Mods`
+    really is not consulted for healing -- but `Healed` is a `Decision`
+    announced *before* the hit points go on, and `resolve.heal` reads
+    `offered.amount` back after the window, which is the seam. Arming it
+    here is in time because `PowerUsed` fires above p1590's body.
+    """
+    spent = [False]
+
+    def more(ev: Any) -> None:
+        if spent[0] or ev.source != c.me:
+            return
+        spent[0] = True
+        ev.amount += c.int_mod
+
+    c.watch(Healed, more, on=c.me, until=When.EOT, window=Window.BEFORE,
+            label=f"{c.ref} inspiring word")
 
 
 # -- Combat Leader ----------------------------------------------------------
@@ -383,24 +464,59 @@ def f2348(c: Cast) -> None:
 
 
 @power("f2333", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_shift_away()",),
-       trigger="you hit with an associated power",
-       on=Trigger(Hit, hit_with_one_of("p158", "p1075"),
-                  "you hit with an associated power"))
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with an associated power, or an adjacent marked "
+               "enemy shifts away from you")
 def f2333(c: Cast) -> None:
-    """An ally's free shift on a named hit. The feat's other clause --
-    shifting yourself when an adjacent marked enemy shifts away -- is
-    dropped, because `Moved.kind_` says a shift happened and nothing
-    says which creature it went away from."""
+    """Two triggered clauses on one card, so both are `c.watch` and the
+    printed Trigger stays text: a declared `on=` arms one of them and the
+    other is never reached.
+
+    **The shift-away half is written now.** It was dropped on the reading
+    that nothing says which creature a shift went away *from*. `Moved`
+    says it: it is the only movement event carrying `from_` **and**
+    `kind_`, so "an adjacent enemy shifts away from you" is one
+    question asked of both ends of the step -- beside me before, not
+    beside me after.
+    """
     me = c.me
     if not _holding(c, "hammer", "pick"):
         return
-    near = [
-        a for a in allies(c.world, me)
-        if a != me and distance_between(c.world, me, a) <= 5
-    ]
-    if near:
-        c.shift(2, who=near[0])
+
+    def on_hit(ev: Any) -> None:
+        if ev.attacker != me or ev.power not in ("p158", "p1075"):
+            return
+        if not _holding(c, "hammer", "pick"):
+            return
+        near = [
+            a for a in allies(c.world, me)
+            if a != me and distance_between(c.world, me, a) <= 5
+        ]
+        if near:
+            c.shift(2, who=near[0])
+
+    def stepped_away(ev: Any) -> None:
+        foe = ev.actor
+        if getattr(ev, "kind_", "") != "shift" or foe == me:
+            return
+        if team(c.world, foe) is team(c.world, me):
+            return
+        # "marked by you **or your ally**", so the mark is asked of
+        # everybody on my side: `c.marked` with no `by=` asks about me
+        # alone, which is half the printed sentence.
+        if not _holding(c, "hammer", "pick"):
+            return
+        if not any(c.marked(on=foe, by=a) for a in (me, *allies(c.world, me))):
+            return
+        mine = squares(c.world, me)
+        was = any(squares_apart(ev.from_, sq) <= 1 for sq in mine)
+        if was and not c.adjacent(to=foe):
+            c.shift(1)
+
+    c.watch(Hit, on_hit, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} associated hit")
+    c.watch(Moved, stepped_away, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} shift away")
 
 
 @power("f2353", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -453,13 +569,29 @@ def f1312(c: Cast) -> None:
 
 
 @power("f2070", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.cover_from()", "c.recast(reach=)"))
+       reach=PERSONAL, target=SELF, dropped=AS_RANGED,
+       trigger="you hit an enemy another enemy is giving cover")
 def f2070(c: Cast) -> None:
-    """Punishes whatever is giving your target cover, and casts `p1556`
-    or `p1074` at range. Cover is a number the attack context carries
-    and nothing says *which* creature is casting it; reach is header
-    data. An item block wants the first of those too."""
+    """Punishes whatever is giving your target cover.
+
+    **Re-aimed off `c.cover_from()`.** Cover is not a number anything
+    stores -- it is traced at the moment of the attack -- so *which*
+    creature is casting it is asked the same way, by tracing the line
+    once per candidate with that candidate as the only blocker. See
+    `_covering`. Casting a melee row at range stays dropped: reach is
+    header data the menu reads before anything runs.
+    """
+    me = c.me
+
+    def punish(ev: Any) -> None:
+        if ev.attacker != me or not _holding(c, "bow"):
+            return
+        blockers = _covering(c, ev.target)
+        if blockers:
+            c.flat(c.str_mod, on=blockers[0])
+
+    c.watch(Hit, punish, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} cover punished")
 
 
 @power("f2336", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -480,28 +612,180 @@ def f2336(c: Cast) -> None:
         c.no_provoke(from_=c.trigger.target, on=c.me, until=When.EOT)
 
 
-# -- the deals the engine cannot offer --------------------------------------
+# -- the deals, offered ------------------------------------------------------
 
 
-def _deal(ref: str, what: str) -> None:
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=OPT_IN)
-    def feat(c: Cast) -> None: ...
+@power("f944", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you make a melee attack")
+def f944(c: Cast) -> None:
+    """A -2 to hit, and an ally beside the target hits harder.
 
-    feat.__name__ = ref
-    feat.__doc__ = (
-        f"{what} Nothing lets a row offer a cost for a payoff at the "
-        "moment of an attack, so writing it would either hand out the "
-        "payoff free or charge the cost unasked."
-    )
+    The window is `AttackDeclared` in `Window.BEFORE`, which is the only
+    place the cost can be charged: `resolve.attack` totals its modifiers
+    inside the callback that window precedes, so a penalty laid here is
+    read by this roll and one laid on the `Hit` is a round late.
+
+    "Another ally adjacent to the target" leaves me out, and the nearest
+    such ally takes the bonus -- one handed to somebody who cannot reach
+    the target is the feat doing nothing.
+    """
+    me = c.me
+
+    def offer(ev: Any) -> None:
+        p = get(ev.power)
+        if ev.attacker != me or p is None or p.reach.kind != "melee":
+            return
+        if not c.may("take -2 to hit so an ally hits this enemy harder"):
+            return
+        foe = ev.target
+        c.penalty("attack", 2, on=me, until=When.EOT, once=True)
+
+        def settle(done: Any) -> None:
+            if not isinstance(done, Hit):
+                return
+            near = [
+                a for a in allies(c.world, me)
+                if a != me and c.adjacent_to(foe, a)
+            ]
+            if near:
+                c.bonus("damage", 3, on=near[0], until=When.EONT,
+                        when=lambda ctx: ctx.get("target") == foe)
+
+        _next_swing(c, settle, foe=foe)
+
+    c.watch(AttackDeclared, offer, on=me, until=When.ENCOUNTER,
+            window=Window.BEFORE, label=f"{c.ref} offer")
 
 
-_deal("f944", "A -2 to hit, and an ally beside the target hits harder.")
-_deal("f2051", "An action-point attack that trades advantage either way.")
-_deal("f2059", "A charge that knocks down, or invites a swing back.")
-_deal("f2060", "A charge bonus handed to an ally instead of taken.")
-_deal("f2052", "Inspiring word's target trades defence for damage.")
-_deal("f814", "Inspiring word's extra dice traded for a saving throw.")
+@power("f2051", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you spend an action point to make an extra attack",
+       on=Trigger(ActionPointSpent, _my_point, "you spend an action point"))
+def f2051(c: Cast) -> None:
+    """Advantage traded either way on the action point's extra attack.
+
+    The point is spent before the attack is declared, so the deal is
+    struck here and `_next_swing` reads which way it went. "You grant
+    combat advantage to the enemy" is `to=<that enemy>`: the words
+    `c.grants_advantage` takes name *my* side, and this hands it to
+    theirs.
+    """
+    if not c.may("trade combat advantage on this action point's attack"):
+        return
+
+    def settle(ev: Any) -> None:
+        if isinstance(ev, Hit):
+            c.grants_advantage(on=ev.target, to="team", until=When.EONT)
+        else:
+            c.grants_advantage(on=c.me, to=ev.target, until=When.EONT)
+
+    _next_swing(c, settle)
+
+
+@power("f2059", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you charge")
+def f2059(c: Cast) -> None:
+    """A charge that knocks down, or invites a swing back.
+
+    `charge` rides on `AttackDeclared` as a plain attribute, so the deal
+    is offered on the charge itself rather than on every attack.
+    """
+    me = c.me
+
+    def offer(ev: Any) -> None:
+        if ev.attacker != me or not getattr(ev, "charge", False):
+            return
+        if not c.may("risk a free swing back to knock this enemy prone"):
+            return
+        foe = ev.target
+
+        def settle(done: Any) -> None:
+            if isinstance(done, Hit):
+                c.prone(on=foe)
+            else:
+                c.basic(who=foe, on=me)
+
+        _next_swing(c, settle, foe=foe)
+
+    c.watch(AttackDeclared, offer, on=me, until=When.ENCOUNTER,
+            window=Window.BEFORE, label=f"{c.ref} offer")
+
+
+@power("f2060", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you charge")
+def f2060(c: Cast) -> None:
+    """The charge bonus handed to an ally instead of taken.
+
+    The printed charge bonus is +1 and `resolve.attack` adds it
+    unconditionally, so forgoing it is a -1 on this roll and nothing
+    else. "One ally with line of sight to you" is `_ally_in_sight`'s
+    question asked the other way round, so it is asked with the grid's
+    `line_of_effect` for the same reason.
+    """
+    me = c.me
+
+    def offer(ev: Any) -> None:
+        from combat_engine.engine.components import Position
+
+        if ev.attacker != me or not getattr(ev, "charge", False):
+            return
+        here = c.world.get(me, Position)
+        near = [
+            a for a in allies(c.world, me)
+            if a != me
+            and (there := c.world.get(a, Position)) is not None
+            and here is not None
+            and c.world.grid.line_of_effect(there.square, here.square)
+        ]
+        if not near or not c.may("give up the charge bonus so an ally hits"):
+            return
+        foe = ev.target
+        c.penalty("attack", 1, on=me, until=When.EOT, once=True)
+        c.bonus("attack", 2, on=near[0], until=When.EONT, once=True,
+                when=lambda ctx: ctx.get("target") == foe)
+
+    c.watch(AttackDeclared, offer, on=me, until=When.ENCOUNTER,
+            window=Window.BEFORE, label=f"{c.ref} offer")
+
+
+@power("f2052", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1590",
+       on=Trigger(PowerUsed, _my_word, "you use inspiring word"))
+def f2052(c: Cast) -> None:
+    """Inspiring word's target trades defence for damage.
+
+    The choice is the **target's**, which is what `c.may(who=)` is for:
+    it asks the creature the clause is about rather than the caster, and
+    whose defence is being sold decides whether it is worth selling.
+
+    "Grants combat advantage" with nobody named is every enemy of mine,
+    one relation each, since `c.grants_advantage`'s words name my side
+    and this is a gift to the other.
+    """
+    for who in c.trigger.targets:
+        if not c.may("grant combat advantage to hit harder", who=who):
+            continue
+        for foe in enemies(c.world, c.me):
+            c.grants_advantage(on=who, to=foe, until=When.SONT)
+        c.bonus("damage", c.cha_mod, on=who, until=When.EONT, once=True)
+
+
+@power("f814", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.forgo_healing()",))
+def f814(c: Cast) -> None:
+    """Inspiring word's extra dice traded for a saving throw.
+
+    **Re-aimed off `c.opt_in()`**, which was the wrong name for this:
+    `c.may` asks the question and `Healed` is a seam wide enough to
+    change the number. What is missing is narrower -- the dice being
+    forgone are *part* of p1590's own heal, rolled inside its body, and
+    nothing separates them from the surge the same call pays. Writing
+    the saving throw without the cost would hand out the payoff free.
+    """
 
 
 # -- the rest, each gap named -----------------------------------------------
@@ -526,12 +810,42 @@ def f2061(c: Cast) -> None:
 
 
 @power("f2058", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_surge()",))
+       reach=PERSONAL, target=SELF)
 def f2058(c: Cast) -> None:
-    """Splits a healing surge between you and a neighbour. `SurgeSpent`
-    is announced and `c.surge_value` is readable -- what is missing is
-    getting in before the hit points land, since the event fires after
-    the pool is decremented and the healing is already done."""
+    """Splits a healing surge between you and a neighbour.
+
+    **Re-aimed off `c.on_surge()` and then written.** The claim was that
+    the healing is already done by the time anything can see it. It is
+    not: `resolve.spend_surge` announces `SurgeSpent` and *then* calls
+    `heal`, which announces `Healed` **before** the hit points go on and
+    reads `amount` back afterwards. So the surge marks the heal that is
+    coming and the `Healed` window divides it.
+
+    "In any proportion" is halved, since nothing carries a proportion,
+    and the neighbour is the first adjacent ally.
+    """
+    me = c.me
+    coming = [False]
+
+    def surged(ev: Any) -> None:
+        if ev.actor == me:
+            coming[0] = True
+
+    def divide(ev: Any) -> None:
+        if not coming[0] or ev.target != me:
+            return
+        coming[0] = False
+        near = [a for a in allies(c.world, me) if a != me and c.adjacent(to=a)]
+        share = ev.amount // 2
+        if not near or share <= 0:
+            return
+        ev.amount -= share
+        c.heal(share, on=near[0])
+
+    c.watch(SurgeSpent, surged, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} surge")
+    c.watch(Healed, divide, on=me, until=When.ENCOUNTER,
+            window=Window.BEFORE, label=f"{c.ref} divided")
 
 
 @power("f2056", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -543,12 +857,35 @@ def f2056(c: Cast) -> None:
 
 
 @power("f2053", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_provoked()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("c.shift(away_from=)",),
+       trigger="an enemy provokes an opportunity attack from you")
 def f2053(c: Cast) -> None:
-    """An ally shifts when an enemy provokes from you. `LeftAdjacent` is
-    the movement that provokes, but it fires for every departure
-    whether an opportunity attack follows or not -- and this row is
-    printed for the provocation, not the walk."""
+    """An ally shifts when an enemy provokes from you.
+
+    **Re-aimed off `c.on_provoked()`.** `LeftAdjacent` really does fire
+    for every departure -- but `OpportunityWindow` is the provocation
+    itself: `actor` is who may swing, `provoker` is who set it off, and
+    `why` says what they did. It is opened by `movement`, by `dsl` for a
+    ranged power used in a threatened square, and by `c.provoke`, which
+    is every way a provocation happens.
+
+    Dropped: "to a square not adjacent to the provoking enemy". `c.shift`
+    takes a destination or leaves it to the decider, and there is no way
+    to hand it a square to stay away from -- so the ally shifts, and
+    where it lands is the decider's.
+    """
+    me = c.me
+
+    def provoked(ev: Any) -> None:
+        if ev.actor != me:
+            return
+        near = [a for a in allies(c.world, me) if a != me and c.adjacent(to=a)]
+        if near and c.int_mod > 0:
+            c.shift(c.int_mod, who=near[0])
+
+    c.watch(OpportunityWindow, provoked, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} provoked")
 
 
 @power("f827", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

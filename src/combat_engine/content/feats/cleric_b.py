@@ -230,12 +230,31 @@ def f1547(c: Cast) -> None:
 
 
 @power("f1531", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.implement_enhancement()",))
+       reach=PERSONAL, target=SELF, dropped=HEAL_SOURCE)
 def f1531(c: Cast) -> None:
     """Adds a held implement's enhancement bonus to what a surge
-    restores. `c.enhancement` is the plus of the item a row *belongs
-    to*, which a feat does not, and `Gear` keeps magic by slot with
-    implements nowhere in it -- so there is no number to add."""
+    restores.
+
+    Re-aimed, and the old marker was wrong twice. An implement is an
+    ordinary `Weapon` of the `implement` group -- that is how the whole
+    tree carries one -- so `c.held(what="implement")` finds it and
+    `Weapon.enhancement` is its plus. And `c.enhancement`'s own
+    documented fallback is "whatever magic is held, then 1", which is
+    exactly the number a feat wants, so it covers a chassis that keeps
+    the symbol stowed rather than in hand.
+
+    What is genuinely missing is the same clause `f1547` and `f1534`
+    drop: `Healed` names a source and no power, so "with any of your
+    cleric healing powers" widens to anything this cleric heals.
+    """
+    armed = [w for w in c.held(on=c.me, what="implement") if w.enhancement]
+    plus = armed[0].enhancement if armed else c.enhancement
+
+    def more(ev: Any) -> None:
+        if ev.source == c.me:
+            ev.amount += plus
+
+    c.watch(Healed, more, until=When.ENCOUNTER)
 
 
 @power("f1534", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -292,12 +292,30 @@ def f1857(c: Cast) -> None:
 
 
 @power("f2276", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reach_bonus()",))
+       reach=PERSONAL, target=SELF)
 def f2276(c: Cast) -> None:
     """A square of extra reach on melee basic attacks while shaped and
-    bloodied. Reach is read off the weapon and `c.threatens` only widens
-    the opportunity window, which is a different question. The skill
-    bonus beside it is a build-time number."""
+    bloodied.
+
+    The old marker was stale. `dsl._stretched` reads `Mods.total("reach")`
+    wherever a melee row's area is worked out and hands it
+    `{"power", "kind"}`, so an ordinary gated `c.bonus` says this -- and
+    gating on the basic attack's own ref keeps it out of
+    `movement.threat_range`, which asks the same modifier with an empty
+    context for the opportunity window the card does not widen.
+
+    No type word is printed in front of the reach, so it is untyped; the
+    Athletics bonus beside it is a build-time number.
+    """
+    me = c.me
+    c.bonus(
+        "reach", 1, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("power") == "mba"
+            and in_beast_form(c.world, me)
+            and c.bloodied(on=me)
+        ),
+    )
 
 
 @power("f2277", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -308,17 +326,22 @@ def f2277(c: Cast) -> None:
 
 
 @power("f2279", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.beast_form()",))
+       reach=PERSONAL, target=SELF)
 def f2279(c: Cast) -> None:
     """`Escaped` is emitted for a failure as well as a success, which is
-    what the second half needs. "While you are in beast form" is dropped:
-    nothing asks what shape a druid is in, so the damage is dealt
-    whenever this druid's grip holds."""
+    what the second half needs.
+
+    The shape was dropped on the claim that nothing asks what form a
+    druid is in; this file imports `in_beast_form` at the top and every
+    other row here gates on it, so the clause is written. It is asked at
+    the moment the grip holds rather than when the trait arms, because a
+    druid changes shape mid-fight.
+    """
     me = c.me
     c.bonus("escape", 2, on=me, until=When.ENCOUNTER, kind="feat")
 
     def held(ev: Escaped) -> None:
-        if ev.holder == me and not ev.success:
+        if ev.holder == me and not ev.success and in_beast_form(c.world, me):
             c.flat(max(c.con_mod, c.dex_mod), on=ev.actor)
 
     c.watch(Escaped, held, until=When.ENCOUNTER, on=me)
@@ -373,12 +396,17 @@ def f2284(c: Cast) -> None:
 
 @power("f1876", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.summoned_by_me()", "c.on_instinctive()"))
+       todo=("c.on_instinctive()",))
 def f1876(c: Cast) -> None:
-    """An attack bonus for a summon acting on its own. `c.instinctive`
-    sets one going, but the attack it makes is announced as an ordinary
-    attack by an ordinary creature -- nothing records that the action was
-    instinctive, and nothing keeps a list of whose summons are whose."""
+    """An attack bonus for a summon acting on its own.
+
+    Re-aimed. Whose summons are whose *is* recorded -- `Companion.owner`
+    holds it, `c.companions(of=)` reads it back and `Summoned` carries
+    the summoner -- so `c.summoned_by_me()` named nothing missing. What
+    is left is the narrowing: `c.instinctive` sets a standing summon
+    going, and the attack it then makes is announced as an ordinary
+    attack by an ordinary creature, so the bonus cannot be held to the
+    instinctive action the card charges it to."""
 
 
 @power("f2033", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

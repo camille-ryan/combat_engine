@@ -1,6 +1,8 @@
-"""Psion, level 3. Each row buys its augment with `augment`; a clause that
-rewrites the header -- a wider target line, a burst -- is named in the row's
-docstring and recorded in `docs/blocked.json` instead."""
+"""Psion, level 3. A clause that only changes the dice or adds a rider is
+bought in the body with `augment`; a clause that **rewrites the header** --
+a wider target line, a burst -- is declared in `augments=` as
+`dsl.Augment`, which settles the spend above targeting and offers each
+affordable form as its own entry in the action menu."""
 
 from __future__ import annotations
 
@@ -15,12 +17,15 @@ from combat_engine.engine import (
     REF,
     STANDARD,
     WILL,
+    AdjacencyGained,
+    AdjacencyLost,
     AreaBurst,
     Attack,
     AttackRolled,
     Augment,
     Cast,
     DamageType,
+    Effect,
     Keyword,
     MoveEnd,
     Position,
@@ -147,12 +152,21 @@ def p13317(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_IMPLEMENT,
     attack=Attack(INT, vs=FORT),
-    dropped=("c.penalty_in(zone)", "c.confine(to=)"),
+    dropped=("c.counts_as(keyword=)", "c.confine(to=)"),
 )
 def p13318(c: Cast) -> None:
     """"Moves more than 2 squares" is measured from where it stood when its
     turn began, so the square it started in has to be caught on `TurnStart`;
     `MoveEnd` alone only says where it stopped.
+
+    Augment 1 is written now. It was dropped as a modifier scoped to an
+    aura, which `c.grants_in` does -- but an aura 1 includes the square at
+    its centre, so the target would have taken its own penalty. Adjacency
+    is the printed word and `AdjacencyGained`/`AdjacencyLost` are the two
+    events for it, so the penalty is laid and lifted as enemies close on
+    the target and leave it. Augment 1's **fear keyword** is what is
+    dropped in its place: it is a header field and nothing adds one for
+    one use.
 
     Augment 2 is a **secondary** attack, and that is why it stays in the
     body rather than being declared in the header: the primary target line
@@ -160,17 +174,38 @@ def p13318(c: Cast) -> None:
     burst is centred on the primary target and rolled against Reflex, which
     is a second attack line the body makes for itself.
 
-    Two clauses are dropped. Augment 1 penalises the attack rolls of
-    enemies *while they stand next to the target*, and nothing scopes a
-    modifier to a zone or an aura. And Augment 2's mutual leash -- neither
-    end may move to a square that is not adjacent to the other -- is the
-    same hold `p13041` names: nothing constrains where a creature may
-    walk."""
-    spent = augment(c, 2)
+    Augment 2's mutual leash -- neither end may move to a square that is
+    not adjacent to the other -- is still dropped, the same hold `p13041`
+    names: nothing constrains where a creature may walk."""
+    spent = augment(c, 1, 2)
     victim = c.target
     if not c.strike():
         return
     c.damage("1d8", c.int_mod)
+    if spent == 1 and victim is not None:
+        held: dict[int, Effect] = {}
+
+        def pinch(who: int) -> None:
+            if who == victim or who in held or who not in c.enemies():
+                return
+            bitten = c.penalty("attack", 2, on=who, until=When.EONT)
+            if bitten is not None:
+                held[who] = bitten
+
+        def closed(ev: AdjacencyGained) -> None:
+            if ev.other == victim:
+                pinch(ev.actor)
+
+        def opened(ev: AdjacencyLost) -> None:
+            if ev.other == victim and ev.actor in held:
+                c.end_effect(held.pop(ev.actor))
+
+        for foe in c.within(1, of=victim, side="enemy"):
+            pinch(foe)
+        c.watch(AdjacencyGained, closed, until=When.EONT, on=c.me,
+                label=f"{c.ref} ring")
+        c.watch(AdjacencyLost, opened, until=When.EONT, on=c.me,
+                label=f"{c.ref} ring")
     if spent == 2 and victim is not None:
         # The secondary is its own attack line -- Intelligence vs. Reflex
         # where the primary rolled against Fortitude -- so its bonus is

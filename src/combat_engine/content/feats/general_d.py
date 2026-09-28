@@ -42,6 +42,7 @@ from combat_engine.engine import (
     Keyword,
     MoveStart,
     Trigger,
+    TurnStart,
     When,
     power,
 )
@@ -82,13 +83,32 @@ def _i_dropped_them(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 
 
 @power("f801", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.shift_as(first_turn=)",))
+       reach=PERSONAL, target=SELF)
 def f801(c: Cast) -> None:
-    """The initiative half. "During your first turn you can shift as a
-    minor" needs a duration that ends when that turn does, and
-    `c.shift_as` holds until a stance replaces it -- which would hand the
-    character a free shift every round for the rest of the fight."""
-    c.initiative(2, on=c.me)
+    """Initiative, and a shift as a minor during your first turn.
+
+    The shift half was dropped for wanting a duration that ends when
+    that turn does. `c.shift_as` takes `until=` and `When.EOT` is
+    exactly that duration; what it could not be given at arming time is
+    *which* turn, because a trait is armed before anybody has had one
+    and `EOT` would have resolved against the encounter's opening slot.
+
+    So it is laid from inside the first `TurnStart` this character is
+    the actor of. The latch is a flag rather than `once=True` on the
+    watch, which would be spent by whoever is first in the order.
+    """
+    me = c.me
+    c.initiative(2, on=me)
+    started = False
+
+    def first_turn(ev: TurnStart) -> None:
+        nonlocal started
+        if started or ev.actor != me:
+            return
+        started = True
+        c.shift_as(MINOR, 1, on=me, until=When.EOT)
+
+    c.watch(TurnStart, first_turn, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f802", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -229,11 +249,20 @@ def f945(c: Cast) -> None:
 
 
 @power("f946", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_skill_check()",))
+       reach=PERSONAL, target=SELF,
+       todo=("c.skill_circumstance()", "SkillCheck.target"))
 def f946(c: Cast) -> None:
-    """Turns on a Bluff check made in combat to gain combat advantage.
-    `SkillCheck` is announced, but nothing says a check was made *for*
-    combat advantage, and nothing grants it from one."""
+    """A slide on a successful Bluff check made in combat to gain combat
+    advantage, while bloodied.
+
+    The hook is not the gap -- `SkillCheck` is announced and carries
+    `skill`, `total` and `success`, so "a successful Bluff check" is
+    already askable, and `c.bloodied` answers the rest of the gate. Two
+    things are missing and the marker names both: what the check was
+    *made to do*, since a check to gain combat advantage and a check to
+    tell a lie are one skill here, and **who it was made against**, with
+    no target on the event there is nobody to slide.
+    """
 
 
 @power("f947", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -245,11 +274,19 @@ def f947(c: Cast) -> None:
 
 
 @power("f949", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.forgo_shield()",))
+       reach=PERSONAL, target=SELF, todo=("query.shield_bonus()",))
 def f949(c: Cast) -> None:
-    """Trades the shield's bonus to AC and Reflex for damage. `Gear.shield`
-    is a flag read at spawn into the defence, and nothing turns it off for
-    a round."""
+    """Trades the shield's bonus to AC and Reflex for damage.
+
+    Turning it off is not the gap: a `c.penalty(AC, n)` and a
+    `c.penalty(REF, n)` held until the start of the next turn say
+    "forgo" exactly, and the `+1` to damage is one more line. What is
+    missing is `n`. `Gear.shield` is a bare bool, folded into the two
+    defences at spawn and never recorded as its own number, so nothing
+    can say how much to take back off -- which is `query.shield_bonus()`
+    and six rows elsewhere. It was marked `c.forgo_shield()`, a verb for
+    this one row and nothing else.
+    """
 
 
 @power("f950", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

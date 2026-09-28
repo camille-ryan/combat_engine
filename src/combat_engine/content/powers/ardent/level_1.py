@@ -515,7 +515,6 @@ def p12934(c: Cast) -> None:
         Augment(1),
         Augment(2, reach=CloseBurst(1), target=EACH_CREATURE),
     ),
-    dropped=("c.penalty_in(zone)",),
 )
 def p12935(c: Cast) -> None:
     """Augment 1 adds -2 to the target's opportunity attack and damage rolls;
@@ -526,9 +525,15 @@ def p12935(c: Cast) -> None:
     is declared as one. Its second sentence -- anybody who *starts its turn*
     adjacent to you is slowed -- is a watcher rather than a rider on the
     hit, because the creatures it catches are not the ones the burst hit.
-    Its first sentence is the `dropped` one: a damage penalty that applies
-    only while an enemy stands next to you is a modifier scoped to a
-    footprint, and nothing scopes one."""
+
+    Its first sentence is an aura, which is what "while adjacent to you"
+    means: a radius-1 zone that follows the ardent, with `c.grants_in`
+    hanging the penalty on whoever is standing in it and taking it back
+    when they leave. That is the scoping a plain `c.penalty(until=)`
+    cannot do -- a duration runs on the clock and this runs on the
+    geometry -- and it catches the enemy who walks up next round, which a
+    loop over whoever is adjacent now would not. Untyped, because the
+    card prints no word in front of "penalty"."""
     spent = augment(c, 1, 2)
     if spent == 2 and c.first:
         me = c.me
@@ -538,6 +543,8 @@ def p12935(c: Cast) -> None:
                 c.slowed(on=ev.actor, until=When.EOT)
 
         c.watch(TurnStart, crowding, until=When.EONT, label="p12935")
+        crowd = c.aura(1, label=c.ref, until=When.EONT)
+        c.grants_in(crowd, "damage", -c.con_mod, side="enemy", kind="untyped")
     if c.strike():
         c.damage(c.w(), c.cha_mod)
         c.slowed(until=When.EONT)

@@ -75,8 +75,11 @@ REROLL = ("c.on_reroll()",)
 #: Nothing adds a keyword to a row, or makes one count as another sort.
 COUNTS_AS = "c.counts_as(keyword=)"
 #: "Instead of your covenant manifestation": nothing declines a class
-#: feature's payout for one use of one power.
-SUPPRESS = ("c.suppress_feature()",)
+#: feature's payout for one use of one power. **Re-aimed** off a spelling
+#: only this file used: the covenant is a declared row now, so the gap is
+#: not the naming of it but the printed swap for what a feature does inside
+#: its own body -- which is what thirty other rows already call.
+SUPPRESS = ("c.instead_of()",)
 #: `c.grants_advantage` takes no `when=`, so combat advantage cannot be
 #: narrowed to one shape of power.
 NARROW_CA = ("c.grants_advantage(when=)",)

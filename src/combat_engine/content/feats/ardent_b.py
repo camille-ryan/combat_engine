@@ -35,6 +35,7 @@ from combat_engine.engine import (
     Bloodied,
     Cast,
     Condition,
+    Dropped,
     PowerUsed,
     SavingThrow,
     SecondWind,
@@ -103,17 +104,32 @@ def f2144(c: Cast) -> None:
 
 
 @power("f3288", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=POINTS)
+       reach=PERSONAL, target=NO_TARGET)
 def f3288(c: Cast) -> None:
-    """The initiative half only. `c.bonus` cannot say it -- the component
-    is read before the d20 -- so `c.initiative` moves each of them in the
-    order instead, which is that method's whole reason for existing.
+    """Both halves. `c.bonus` cannot say the initiative one -- the
+    component is read before the d20 -- so `c.initiative` moves each of
+    them in the order instead, which is that method's whole reason for
+    existing.
 
-    The second clause pays out the first time the ardent's pool empties,
-    and spending power points emits a `Note` and nothing a trigger can
-    watch."""
-    for who in c.within(MANTLE, of=c.me, side="team"):
+    **The pool half does not need the spend announced.** It was marked
+    for that, and points are spent only to augment a row, so the moment
+    after any of this ardent's powers resolves is a moment the pool may
+    have emptied -- asking `c.points()` there is the same question one
+    event later. `once=True`, which is the printed "the first time".
+    """
+    me = c.me
+    for who in c.within(MANTLE, of=me, side="team"):
         c.initiative(2, on=who)
+
+    def emptied(ev: Any) -> None:
+        if ev.actor != me or c.points() > 0:
+            return
+        for friend in c.within(MANTLE, of=me, side="ally"):
+            for defence in DEFENCES:
+                c.bonus(defence, 2, on=friend, until=When.EONT)
+
+    c.watch(PowerResolved, emptied, until=When.ENCOUNTER, on=me, once=True,
+            label=f"{c.ref} empty pool")
 
 
 @power("f3301", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -187,11 +203,47 @@ def f3321(c: Cast) -> None:
 
 
 @power("f3173", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, todo=("When.CONSCIOUS",))
+       reach=PERSONAL, target=NO_TARGET)
 def f3173(c: Cast) -> None:
-    """Allies in the mantle stay up at 0 hit points until their first death
-    save. Nothing holds a creature conscious below zero: dropping applies
-    `unconscious` outright and there is no duration that says otherwise."""
+    """Allies in the mantle stay up at 0 hit points until their first
+    death save.
+
+    This was marked `When.CONSCIOUS` on the reading that no duration
+    holds a creature conscious below zero. None does, and none is
+    needed: the condition is *suppressed* rather than timed.
+    `c.ignore_condition` is the verb -- its own docstring is the printed
+    line, "you take your turn as though you were not unconscious" -- and
+    it leaves the condition standing underneath, so the ally goes down
+    properly the moment the suppression lifts.
+
+    "Until they roll their first death saving throw" is watchable: a
+    death save is announced as a `SavingThrow` with `against="death"`,
+    which `turns._death_saves` sets so a modifier can find it.
+
+    Distance is measured when the ally drops, not when the trait arms,
+    for the reason the file's opening paragraph gives.
+    """
+    me = c.me
+
+    def caught(ev: Dropped) -> None:
+        who = ev.actor
+        if who == me or c.points() < 1:
+            return
+        if team(c.world, who) is not team(c.world, me):
+            return
+        if distance_between(c.world, me, who) > MANTLE:
+            return
+        held = c.ignore_condition(Condition.UNCONSCIOUS, on=who,
+                                  until=When.ENCOUNTER)
+
+        def first_save(sv: SavingThrow) -> None:
+            if sv.actor == who and sv.against == "death":
+                c.end_effect(held, on=who)
+
+        c.watch(SavingThrow, first_save, until=When.ENCOUNTER, on=who,
+                once=True, label=f"{c.ref} first death save")
+
+    c.watch(Dropped, caught, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # -- riders on the class's own rows ----------------------------------------
