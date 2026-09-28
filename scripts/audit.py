@@ -467,6 +467,91 @@ class Result:
         return not self.error and not (self.events & DID_SOMETHING)
 
 
+def _weapon_words() -> dict[str, str]:
+    """Every word a `requires_text` can name a weapon by, longest first.
+
+    The same four things `query.holding` matches on -- a group, a property,
+    a category, or the ref's own tail -- built from the 117 printed weapons
+    rather than listed here, so a weapon added to the table becomes askable
+    for without touching this.
+    """
+    out: dict[str, str] = {}
+    for w in chargen.PRINTED.values():
+        out.setdefault(w.ref.split(":", 1)[1].replace("-", " "), w.ref)
+        if w.group:
+            out.setdefault(w.group, w.ref)
+        for prop in w.properties:
+            out.setdefault(prop, w.ref)
+    return dict(sorted(out.items(), key=lambda kv: -len(kv[0])))
+
+
+_WEAPON_WORDS: dict[str, str] | None = None
+
+
+def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
+    """Wield whatever the row's own Requirement says it needs.
+
+    **257 rows name a weapon they need** -- a whip, a net, a bola, a light
+    blade, something two-handed -- and the board dealt the build's default
+    kit, so every one of them was gated false for the board's reason rather
+    than its own. #209 counted twelve; it is twenty times that.
+
+    **Both `requires_text` and `trigger`.** 184 rows say it in the
+    Requirement and a further **73 say it only in the printed trigger** --
+    "when you hit with a weapon attack using a net" is a gate on gear just
+    as much as a Requirement is, and reading only the first left the net and
+    whip proficiency feats UNUSED on a board that was now holding the net.
+
+    Read off our own strings, not off the printed card. Both live in the
+    tree beside the gate, in our words, so matching them is not parsing the
+    book -- and the vocabulary is generated from the weapon table, so it
+    cannot drift from what `query.holding` will accept.
+
+    Longest match wins, which is the whole of the care needed: "light
+    thrown" and "heavy thrown" both contain "thrown", and a bola is not a
+    net.
+
+    Cheap on purpose -- one equip at board time, **not** another dimension
+    in `_attempts`. Gear variants there would multiply the 24 attempts a
+    failing row already costs by the number of kits, and the failing tail is
+    exactly where all of this instrument's time already goes.
+    """
+    global _WEAPON_WORDS
+
+    from dataclasses import replace
+
+    from combat_engine.engine import Gear
+    from combat_engine.engine.query import holding
+
+    wanted = " ".join(
+        (getattr(declared, "requires_text", "") or "",
+         getattr(declared, "trigger", "") or "")
+    ).lower()
+    if not wanted.strip():
+        return
+    if _WEAPON_WORDS is None:
+        _WEAPON_WORDS = _weapon_words()
+    gear = world.get(caster, Gear)
+    if gear is None:
+        return
+    for word, ref in _WEAPON_WORDS.items():
+        if word not in wanted:
+            continue
+        # Already satisfied by the build's own kit: a rogue has a dagger and
+        # does not need a second one wielded over it.
+        if holding(world, caster, word):
+            return
+        arm = chargen.PRINTED.get(ref)
+        if arm is not None:
+            # A copy, for the reason `chargen.spawn` takes one: these are
+            # module-level singletons and `Cast.decay` reduces enhancement
+            # in place.
+            held = replace(arm)
+            gear.weapons.append(held)
+            gear.wield(held)
+        return
+
+
 def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     """A caster with the row, four creatures in reach, and the fight started.
 
@@ -626,6 +711,7 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
                 if bow is not None and gear is not None:
                     gear.weapons.append(bow)
                     gear.wield(bow)
+        _hand_it_the_weapon(world, caster, declared)
         foe_team = Team.ENEMY
 
     from combat_engine.engine import Health

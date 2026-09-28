@@ -220,9 +220,16 @@ def f966b(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit a target with a whip",
        on=Trigger(Hit, _hit_with_a_whip, "you hit with a whip"),
-       once_per_round=True)
+       once_per_round=True,
+       proficiency=("w:whip",))
 def f967(c: Cast) -> None:
     """The penalty, narrowed to the one creature it protects.
+
+    **`proficiency=` was missing.** The card opens "You gain proficiency
+    with the whip", and its two siblings -- `f959` for the bola, `f963` for
+    the net -- both declare theirs. So a character taking this one was
+    handed the rider and never the weapon, and `_hit_with_a_whip` could not
+    be true of it. The first clause of the card was simply not written.
 
     "Against a target of your choice" was dropped for wanting an
     `against=` argument, and it does not need one. A penalty is a
