@@ -51,6 +51,8 @@ from combat_engine.engine import (
     Miss,
     Mod,
     Ranged,
+    Relation,
+    RelationSet,
     Trigger,
     When,
     World,
@@ -59,7 +61,7 @@ from combat_engine.engine import (
     spread,
     targets_me,
 )
-from combat_engine.engine.events import ConditionApplied, DamageRolled, SurgeSpent
+from combat_engine.engine.events import DamageRolled, SurgeSpent
 from combat_engine.engine.movement import walk
 from combat_engine.engine.query import distance_between, team
 from combat_engine.engine.query import squares as squares_of
@@ -446,16 +448,22 @@ def p4085(c: Cast) -> None:
     """"Cannot be marked" and "escapes a grab automatically" are written as
     one watch that undoes either the moment it lands, which is the same
     thing from the far side. Counting as Tiny for squeezing has no number.
+
+    On `RelationSet`: both are relations, so neither is ever announced as
+    a condition. Ending the effect that carries the relation is what puts
+    it down, and the direct clear covers a relation nothing holds.
     """
+    me = c.me
 
-    def slip(ev: ConditionApplied) -> None:
-        if ev.target != c.me or ev.condition not in (Condition.MARKED, Condition.GRABBED):
+    def slip(ev: RelationSet) -> None:
+        if ev.target != me or ev.kind_ not in (Relation.MARKED_BY, Relation.GRABBED_BY):
             return
-        for held in list(c.world.effects.of(c.me)):
-            if ev.condition in held.conditions:
+        for held in list(c.world.effects.of(me)):
+            if any(k is ev.kind_ and t == me for k, _s, t in held.relations):
                 c.world.effects.end(held, "it does not hold")
+        c.world.relations.clear(ev.kind_, ev.source, me, "it does not hold")
 
-    c.watch(ConditionApplied, slip, until=When.ENCOUNTER)
+    c.watch(RelationSet, slip, until=When.ENCOUNTER)
 
 
 @power(

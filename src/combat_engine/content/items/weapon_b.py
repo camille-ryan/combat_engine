@@ -3193,7 +3193,7 @@ def i3427p1(c: Cast) -> None:
     """"For your enemies" is the zone plus a waiver for your own side --
     difficult going is the ground's property and has no side of its own."""
     z = c.zone(spread({c.here}, 2), difficult=True, until=When.EONT)
-    c.ignores_difficult_in(z, side="ally")
+    c.ignores_difficult_in(z, side="team")
 
 
 @power(

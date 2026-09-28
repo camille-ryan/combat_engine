@@ -107,9 +107,6 @@ ABILITY_CHOICE = ("c.ability_for(ref)",)
 #: carries -- no monster row behind it and no block in the entry either, so
 #: `Summon`'s defaults are all there is.
 FROM_BLOCK = ("spec.stat_block()",)
-#: Substituting one skill for another, or narrowing a bonus to a purpose.
-CIRCUMSTANCE = ("c.skill_circumstance()",)
-
 SHADOW = [Keyword.SHADOW]
 
 
@@ -764,11 +761,13 @@ def p16383(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=CIRCUMSTANCE,
+    narrative=("skill:acrobatics", "skill:athletics"),
 )
 def p16687(c: Cast) -> None:
-    """Swapping Athletics in for the Acrobatics a movement would call for
-    is a substitution nothing expresses; the terrain half is ordinary."""
+    """The terrain half is ordinary and plays. The other half swaps
+    athletics in for the acrobatics a movement would call for -- but
+    movement here costs squares and calls for no check at all, so there is
+    nothing to substitute and no mechanism missing."""
     c.ignores_difficult(on=c.me, until=When.EOT)
 
 
@@ -781,12 +780,14 @@ def p16687(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.CHARM],
-    dropped=CIRCUMSTANCE,
+    narrative=("skill:nature",),
 )
 def p16548(c: Cast) -> None:
     """One `once=True` bonus per named skill: whichever check is made
     first spends its own, which is as near as the keys get to "the next
-    check". The Nature clause is narrowed to beasts and is dropped."""
+    check". The fourth clause is a nature check on a beast, to calm or
+    sway it -- neither is a thing a board does to a creature, so it is
+    narrative and not a bonus waiting on a verb."""
     for skill in ("bluff", "diplomacy", "intimidate"):
         c.bonus(
             f"skill:{skill}", 5, kind="power",

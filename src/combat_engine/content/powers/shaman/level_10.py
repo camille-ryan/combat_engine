@@ -292,5 +292,5 @@ def p5404(c: Cast) -> None:
     not two. Moving the zone 5 squares needs a verb for moving a zone, and
     the Stealth checks it allows need skills; both are noted."""
     lights = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER)
-    c.grants_in(lights, "concealment", 2, side="ally", kind="untyped")
+    c.grants_in(lights, "concealment", 2, side="team", kind="untyped")
     c.note(f"{c.ref}: the zone cannot be moved, and no Stealth check is rolled")

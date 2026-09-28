@@ -25,6 +25,8 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Ranged,
+    Relation,
+    RelationSet,
     Trigger,
     When,
     Window,
@@ -47,6 +49,12 @@ def _splashed_me(world: World, me: int, ev: Any) -> bool:
 
 def _seized_me(world: World, me: int, ev: Any) -> bool:
     return ev.target == me and ev.condition in _SEIZED
+
+
+def _dominated_me(world: World, me: int, ev: Any) -> bool:
+    """The dominate third of the same printed line. It is a relation, and
+    `ConditionApplied` never names one, so it is declared separately."""
+    return ev.target == me and ev.kind_ is Relation.DOMINATED_BY
 
 
 @power(
@@ -156,8 +164,9 @@ def p8243(c: Cast) -> None:
     target=NO_TARGET,
     keywords=PSIONIC,
     trigger="an effect dazes, dominates, or stuns you",
-    on=Trigger(
-        ConditionApplied, _seized_me, "an effect dazes, dominates, or stuns you"
+    on=(
+        Trigger(ConditionApplied, _seized_me, "an effect dazes or stuns you"),
+        Trigger(RelationSet, _dominated_me, "an effect dominates you"),
     ),
 )
 def p8244(c: Cast) -> None:

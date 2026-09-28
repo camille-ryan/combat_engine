@@ -39,6 +39,7 @@ from combat_engine.engine import (
     MoveEnd,
     Powers,
     Relation,
+    RelationSet,
     Trigger,
     TurnEnd,
     TurnStart,
@@ -232,13 +233,25 @@ def p10511(c: Cast) -> None:
     def shrug_off(ev: ConditionApplied) -> None:
         if ev.target != me or ev.source != victim:
             return
-        if ev.condition not in (Condition.GRABBED, Condition.RESTRAINED):
+        if ev.condition is not Condition.RESTRAINED:
             return
         for effect in list(c.world.effects.of(me)):
             if ev.condition in effect.conditions and effect.source == victim:
                 c.world.effects.end(effect, c.ref)
 
+    def slip(ev: RelationSet) -> None:
+        # The grab half is a relation, so it is never announced as a
+        # condition; ending the effect that holds it clears the relation.
+        if ev.kind_ is not Relation.GRABBED_BY or ev.target != me or ev.source != victim:
+            return
+        for effect in list(c.world.effects.of(me)):
+            if any(k is Relation.GRABBED_BY and s == victim
+                   for k, s, _t in effect.relations):
+                c.world.effects.end(effect, c.ref)
+        c.world.relations.clear(Relation.GRABBED_BY, victim, me, c.ref)
+
     c.watch(ConditionApplied, shrug_off, until=When.EONT, on=me, label=f"{c.ref} braced")
+    c.watch(RelationSet, slip, until=When.EONT, on=me, label=f"{c.ref} braced")
 
 
 @power(

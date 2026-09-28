@@ -12,11 +12,11 @@ from combat_engine.engine import (
     WILL,
     Attack,
     Cast,
-    Condition,
-    ConditionEnded,
     DamageApplied,
     Keyword,
     Melee,
+    Relation,
+    RelationCleared,
     When,
     power,
 )
@@ -59,11 +59,11 @@ def p9435(c: Cast) -> None:
             c.effect(c.ref, until=When.SUSTAIN, on=victim, sustain=STANDARD), squeeze
         )
 
-        def let_go(ev: ConditionEnded) -> None:
-            if ev.target == victim and ev.condition is Condition.GRABBED:
+        def let_go(ev: RelationCleared) -> None:
+            if ev.target == victim and ev.kind_ is Relation.GRABBED_BY:
                 c.damage("1d10", c.dex_mod, on=victim)
 
-        c.watch(ConditionEnded, let_go, until=When.ENCOUNTER, once=True)
+        c.watch(RelationCleared, let_go, until=When.ENCOUNTER, once=True)
 
 
 @power(

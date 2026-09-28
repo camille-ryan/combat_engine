@@ -30,6 +30,7 @@ from .query import (
     squares,
     targetable,
 )
+from .skills import SKILLS
 from .triggers import Trigger
 from .types import Ability, ActionType, DamageType, Defense, Keyword, Size, Usage
 
@@ -556,6 +557,35 @@ class Power:
     #: are symbols, both count as partial, both hold an issue open, both
     #: go red when the symbol arrives. Only `todo` makes the row inert.
     dropped: tuple[str, ...] = ()
+    #: A clause of this row that is not absent -- it has no combat meaning
+    #: at all. The per-clause form of `out_of_combat`.
+    #:
+    #: `dropped` was being used for this and is wrong about *why*. "+5 to
+    #: pick a lock" is not waiting on `c.skill_circumstance()`; nothing
+    #: ever rolls Thievery in a fight, so that verb would be a mechanism
+    #: nobody passes a purpose to, and a marker naming a symbol that must
+    #: never be built sits in the queue forever. The marker grammar exists
+    #: to stop exactly that.
+    #:
+    #: **Not a symbol, because there is no symbol.** An element is
+    #: `skill:<name>` for one of the seventeen skills -- the same key
+    #: `c.bonus` takes -- naming the skill whose *circumstance* is the
+    #: narrative part. That is a closed vocabulary the guard checks against
+    #: the engine's own table, so prose, an invented skill and a wishful
+    #: verb are all refused at import, and a new kind of narrative clause
+    #: costs an edit here rather than a sentence inline.
+    #:
+    #: The token says which skill; the body's docstring says why that
+    #: narrowing has nothing to do with a fight, and `power()` refuses the
+    #: row without one. Naming a skill the engine does consult is fine and
+    #: common -- `skill:perception` -- because the claim is about the
+    #: circumstance, never about the skill.
+    #:
+    #: Counted done, never red, and **audited like any other finished
+    #: row**: a `dropped` row is exempt from the audit's run, so a row that
+    #: claimed this and then did nothing in a fight would be caught silent.
+    #: `scripts/todo.py` names these rows so the set stays readable.
+    narrative: tuple[str, ...] = ()
     #: Base items this row lets a character carry, by weapon ref --
     #: `("w:warhammer",)`. **Build-time data, never run.** "You gain
     #: proficiency with all hammers" cannot be a body: a `Cast` opens on a
@@ -812,6 +842,16 @@ _SYMBOL = re.compile(
     r"|[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+"
 )
 
+#: What a `narrative=` element may look like -- `skill:thievery`. See
+#: `Power.narrative` for why this is a closed vocabulary and not a symbol.
+_NARRATIVE = re.compile(r"skill:([a-z]+)")
+
+#: How much docstring counts as a reason. `out_of_combat` asks for one by
+#: convention and gets one; `narrative=` is the easier field to reach for,
+#: so it is asked for by the guard. A sentence clears this and a word does
+#: not, which is the whole distinction being drawn.
+_REASON = 40
+
 
 def power(
     ref: str,
@@ -843,6 +883,7 @@ def power(
     summon: Summon | None = None,
     todo: Iterable[str] = (),
     dropped: Iterable[str] = (),
+    narrative: Iterable[str] = (),
     proficiency: Iterable[str] = (),
     swap: Swap | None = None,
     augments: Iterable[Augment] = (),
@@ -871,7 +912,43 @@ def power(
         # One says nothing here works, the other says the rest of it does.
         raise ValueError(f"{ref}: todo and dropped cannot both be set")
 
+    narrative = tuple(narrative)
+    skills = []
+    for clause in narrative:
+        got = _NARRATIVE.fullmatch(clause.strip())
+        if got is None or got[1] not in SKILLS:
+            raise ValueError(
+                f"{ref}: narrative={clause!r} is not a skill. An element is "
+                f"skill:<name> for one of the {len(SKILLS)} skills -- "
+                f"skill:thievery -- naming the skill whose circumstance has "
+                f"no combat meaning. Not a symbol: there is no symbol."
+            )
+        skills.append(got[1])
+    if narrative and todo:
+        # A `todo` row is refused in play, so it has no combat half for a
+        # narrative clause to sit beside. Claiming both says the row both
+        # does nothing and does the part that matters.
+        raise ValueError(f"{ref}: todo and narrative cannot both be set")
+    if narrative and out_of_combat:
+        # The row is already declared narrative whole. Saying it again of
+        # one clause draws a distinction against nothing, and a marker
+        # that cannot be wrong is a marker nobody reads.
+        raise ValueError(f"{ref}: out_of_combat and narrative cannot both be set")
+
     def wrap(body: Body) -> Body:
+        if narrative:
+            # The token says which skill, never why, and "why" is the only
+            # part that can be checked by a person. `out_of_combat` asks
+            # for this by convention; this field is the easier one to reach
+            # for to make an awkward clause go away, so it is asked here.
+            why = (body.__doc__ or "").strip()
+            if len(why) < _REASON or not any(s in why.lower() for s in skills):
+                raise ValueError(
+                    f"{ref}: narrative= needs a docstring saying why the "
+                    f"clause has no combat meaning, naming the skill "
+                    f"({', '.join(skills)}). A clause the engine is merely "
+                    f"missing is dropped=, not narrative=."
+                )
         if ref in REGISTRY:
             raise ValueError(f"{ref} declared twice")
         REGISTRY[ref] = Power(
@@ -904,6 +981,7 @@ def power(
             summon=summon,
             todo=todo,
             dropped=dropped,
+            narrative=narrative,
             proficiency=tuple(proficiency),
             swap=swap,
             augments=tuple(augments),

@@ -147,7 +147,7 @@ def p14454(c: Cast) -> None:
     zone = c.my_aura()
     if not zone:
         return
-    c.grants_in(zone, "unflankable", 1)
+    c.grants_in(zone, "unflankable", 1, side="ally")
 
     def harder(ev: Any) -> None:
         if ev.source not in aura_allies(c) or ev.target not in c.enemies():
@@ -178,7 +178,7 @@ def p14455(c: Cast) -> None:
     zone = c.my_aura()
     if not zone:
         return
-    c.grants_in(zone, "damage", 2)
+    c.grants_in(zone, "damage", 2, side="ally")
 
     def bloodied_too(ev: Any) -> None:
         if ev.target not in c.enemies() or not c.bloodied(on=ev.target):

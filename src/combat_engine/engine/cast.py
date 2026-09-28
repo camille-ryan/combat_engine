@@ -5357,7 +5357,7 @@ class Cast:
         what: str | Defense,
         value: int,
         *,
-        side: str = "ally",
+        side: str = "team",
         kind: str = "power",
     ) -> None:
         """A zone that carries a modifier for as long as you stand in it.
@@ -5375,8 +5375,9 @@ class Cast:
         the zone is made gets it too, since the printed line is about being
         there rather than about arriving.
 
-        `side` is whose: `"ally"` counts the caster, `"enemy"` the other
-        side, `"any"` everybody.
+        `side` reads as it does on `c.within`: `"team"` is your side with
+        you in it, which is the "you and your allies" these zones print;
+        `"ally"` leaves you out, which is the rarer "allies in the zone".
         """
         # Resistance is not a modifier -- `deal_damage` reads it off
         # `Defences.resist` and never consults `Mods` -- so asking for it
@@ -5401,7 +5402,7 @@ class Cast:
         amount: int,
         dtype: DamageType | None = None,
         *,
-        side: str = "ally",
+        side: str = "team",
     ) -> None:
         """"While within the zone you and your allies gain resist N."
 
@@ -5420,27 +5421,19 @@ class Cast:
     ) -> None:
         """Hold something on whoever stands in a zone, and take it back."""
         from .events import ZoneEntered, ZoneExited
-        from .query import team as side_of
 
         held: dict[int, Effect] = {}
 
-        def wanted(who: int) -> bool:
-            theirs = side_of(self.world, who)
-            mine = side_of(self.world, self.me)
-            # Keyed rather than chained: anything this did not recognise
-            # used to fall through to "enemy", which is the same silent
-            # wrong answer `c.grants_advantage(to=)` was giving.
-            # **`"ally"` is the caster's side *with* the caster**, unlike
-            # `c.within`: these zones all print "you and your allies",
-            # and the question here is team identity, not a pool.
-            return {
-                "any": True,
-                "ally": theirs is mine,
-                "enemy": theirs is not mine,
-            }[side]
-
         def give(who: int) -> None:
-            if who in held or not wanted(who):
+            # `_side`, so the five words mean here what they mean on
+            # `c.within` and `c.in_squares`. They did not: this answered
+            # team identity, which made `"ally"` include the caster while
+            # one file along it excluded him -- right in both places and
+            # opposite between them, which is worse than a uniform bug.
+            # Asked per arrival rather than once, because a creature
+            # summoned after the zone was laid still has to be in the pool
+            # the moment it walks in.
+            if who in held or who not in self._side(side, self.me):
                 return
             got = give_one(who)
             if got is not None:
@@ -5788,7 +5781,7 @@ class Cast:
 
     # -- what a zone gives the people standing in it -------------------------
 
-    def cover_in(self, zone: int, *, side: str = "ally") -> None:
+    def cover_in(self, zone: int, *, side: str = "team") -> None:
         """"You and your allies have cover while within the zone."
 
         `c.zone(blocks_sight=True)` is the nearest thing and is not this: it
@@ -5810,7 +5803,7 @@ class Cast:
             side,
         )
 
-    def ignores_difficult_in(self, zone: int, *, side: str = "ally") -> None:
+    def ignores_difficult_in(self, zone: int, *, side: str = "team") -> None:
         """"You and your allies can ignore difficult terrain in the zone."
 
         `c.ignores_difficult` is per-creature and board-wide, so writing the

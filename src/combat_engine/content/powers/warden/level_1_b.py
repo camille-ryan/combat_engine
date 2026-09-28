@@ -34,18 +34,19 @@ def p11072(c: Cast) -> None:
     """"Until the mark ends" has no duration to name, and a warden's mark
     runs to the end of its next turn, so that is what the vulnerability
     gets. The class feature that lays the mark has no ref on the chassis,
-    so the watch answers any mark this warden lays."""
+    so the watch answers any mark this warden lays -- on `RelationSet`,
+    because a mark is a relation and is never announced as a condition."""
     form = assume(c)
 
-    def on_mark(ev: ConditionApplied) -> None:
-        if ev.source == c.me and ev.condition is Condition.MARKED:
+    def on_mark(ev: RelationSet) -> None:
+        if ev.source == c.me and ev.kind_ is Relation.MARKED_BY:
             c.vulnerable(3, DamageType.FIRE, on=ev.target, until=When.EONT)
 
     while_in(
         c,
         form,
         c.resist(5, DamageType.FIRE),
-        c.watch(ConditionApplied, on_mark, until=When.ENCOUNTER),
+        c.watch(RelationSet, on_mark, until=When.ENCOUNTER),
     )
 
 

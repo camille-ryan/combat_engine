@@ -24,7 +24,8 @@ Four judgements run through the file.
 * **A skill modifier is real** and its context is `{actor, skill}` only,
   so "+2 to Athletics checks" is exact and "+2 to Athletics checks **to
   climb**" is the same flat modifier plus
-  `dropped=("c.skill_circumstance()",)`.
+  `narrative=("skill:athletics",)`. Not a `dropped=`: nothing on a board
+  climbs, so the narrowing is not a gap waiting on a verb.
 * **Stowing, drawing and applying a consumable are not modelled.** An
   alchemical item, a dose of poison and an item kept inside a glove have
   no engine object, so those rows carry markers rather than inventing one.
@@ -452,10 +453,12 @@ def i893x1(c: Cast) -> None:
 
 @power("i903x1", level=4, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()", "c.grant_weapon()"))
+       dropped=("c.grant_weapon()",), narrative=("skill:athletics",))
 def i903x1(c: Cast) -> None:
-    """The climb circumstance and the pair of blades the gloves also are
-    both go unsaid; the Athletics bonus is real."""
+    """Two different absences. The blades are a real gap -- a weapon the
+    wearer is proficient with changes what can be swung. Climbing is not:
+    the flat athletics bonus is laid, and narrowing it to a climb would
+    need a check nothing on a board ever calls for."""
     _skills(c, 1, "athletics")
 
 

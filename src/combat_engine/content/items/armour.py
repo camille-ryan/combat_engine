@@ -292,6 +292,22 @@ def _hit_my_ac(world: World, me: int, ev: Event) -> bool:
     return getattr(ev, "target", None) == me and getattr(ev, "vs", None) == AC
 
 
+def _relation_on_me(kind: Relation):  # noqa: ANN202
+    """A mark, a grab or a domination landing on me.
+
+    Those three arrive as relations and are only mirrored into
+    `Conditions`, so `ConditionApplied` never names one.
+    """
+
+    def check(world: World, me: int, ev: Event) -> bool:
+        return (
+            getattr(ev, "kind_", None) is kind
+            and getattr(ev, "target", None) == me
+        )
+
+    return check
+
+
 def _condition_on_me(*conditions: Condition):  # noqa: ANN202
     wanted = set(conditions)
 
@@ -2686,7 +2702,7 @@ def i1261p1(c: Cast) -> None:
 @power("i1598p1", level=7, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.FIRE],
        trigger="you are marked",
-       on=Trigger(ConditionApplied, _condition_on_me(Condition.MARKED),
+       on=Trigger(RelationSet, _relation_on_me(Relation.MARKED_BY),
                   "you are marked"))
 def i1598p1(c: Cast) -> None:
     foe = _foe(c)
@@ -3110,8 +3126,8 @@ def i1625p1(c: Cast) -> None:
     """"Any ally adjacent to you" keeps being asked, so this is an aura
     with `c.resist_in` rather than a snapshot of who is standing near."""
     ring = c.aura(1, until=When.ENCOUNTER)
-    c.resist_in(ring, 5, DamageType.COLD)
-    c.resist_in(ring, 5, DamageType.NECROTIC)
+    c.resist_in(ring, 5, DamageType.COLD, side="ally")
+    c.resist_in(ring, 5, DamageType.NECROTIC, side="ally")
 
 
 @power("i1708x1", level=9, cls=ITEM, action=ActionType.NONE,

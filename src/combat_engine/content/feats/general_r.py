@@ -131,10 +131,6 @@ ARMOUR = ("chargen.armor_proficiency()",)
 TRAINING = ("chargen.skill_training()",)
 #: Dim light and darkness are not states of a square this engine keeps.
 LOW_LIGHT = ("c.low_light()",)
-#: A check "made to do <a particular thing>" -- to balance on ice, to
-#: find someone hidden, to disable a trap. A skill is the finest grain
-#: `skill:<name>` has.
-CIRCUMSTANCE = ("c.skill_circumstance()",)
 #: Changing the dice another row rolls -- up, down, or maximised.
 DICE = ("c.change_dice()",)
 
@@ -666,13 +662,14 @@ def f3576(c: Cast) -> None:
 
 
 @power("f3577", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=CIRCUMSTANCE)
+       reach=PERSONAL, target=SELF,
+       narrative=("skill:endurance", "skill:acrobatics"))
 def f3577(c: Cast) -> None:
-    """Ice walk is the half that plays -- `c.ignores_difficult` takes the
-    sort of ground by name. The two skill bonuses are each a check "made
-    to" do one thing, which is finer than `skill:<name>` cuts, so they
-    would have to be handed to every Endurance and Acrobatics check the
-    character ever makes."""
+    """Ignoring icy ground is the half that plays -- `c.ignores_difficult`
+    takes the sort of ground by name. The two circumstances are weather
+    and footing: nothing rolls endurance against cold on a board that has
+    no weather, and the acrobatics check is for staying upright while
+    walking, which is not a thing a fight ever asks. Neither is a gap."""
     c.ignores_difficult("ice", on=c.me, until=When.ENCOUNTER)
 
 
@@ -1862,7 +1859,7 @@ def f3665(c: Cast) -> None:
     if not any(c.expend_row(ref) for ref in ("p7441", "p7442", "p7443")):
         return
     zone = c.zone(c.area(), label=c.ref, until=When.EONT, difficult=True)
-    c.ignores_difficult_in(zone, side="ally")
+    c.ignores_difficult_in(zone, side="team")
 
 
 @power("f3666", level=1, cls="", usage=ENCOUNTER, action=NONE,

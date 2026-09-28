@@ -381,6 +381,10 @@ import: one says "finished, and deliberately does nothing", the other says
 "unfinished". A row claiming both would be waved through by the audit's
 inert branch and never looked at again.
 
+`out_of_combat` is **per row**, and most items print a narrative line beside
+a combat one. For a row that fights and also does something inert, the field
+is `narrative=` — see "When the clause is not missing", below.
+
 **A Prerequisite is not the same thing.** A row that merely requires
 training in a skill is usually an ordinary combat power with an entry
 requirement, and should be written properly. It is narrative-only when the
@@ -436,6 +440,8 @@ def f9(c: Cast) -> None:
 * **`todo=`** — nothing here works. The row is **refused in play**.
 * **`dropped=`** — the row works and one named clause is missing. The row
   **is offered and does its job.**
+* **`narrative=`** — the row works and one clause is not missing at all: it
+  has no combat meaning. Counted done, never red, still listed. Below.
 
 Both take symbols, both are counted partial and never done, both are named
 by the audit, both hold their issue open, and both go red the day the
@@ -449,6 +455,60 @@ A docstring is not queryable; `dropped=` is.
 Setting both on one row is refused at import — they say opposite things.
 
 Still put it in your final report, naming the symbol and what it should do.
+
+### When the clause is not missing — it has nothing to do with a fight
+
+`dropped=` says "this clause is absent and here is the symbol it waits on".
+Some clauses are not waiting on anything. An item that gives a real bonus to
+Will against illusions **and** +5 to picking locks has a second half that is
+not a gap: nothing in a fight ever rolls Thievery, so a verb to hold the
+bonus would be a mechanism nobody ever passes a purpose to — and a marker
+naming a symbol that must never be built sits in the queue forever.
+
+That is a third field:
+
+```python
+@power("i1", ..., narrative=("skill:thievery",))
+def i1(c: Cast) -> None:
+    """The Will half is exact. Opening a lock is the other clause, and no
+    thievery check is rolled on a board, so the bonus has nowhere to go
+    and nothing is missing."""
+    c.bonus(WILL, 2, ...)
+```
+
+* **It takes `skill:<name>`, not a symbol** — the same key `c.bonus` takes,
+  one of the seventeen skills, naming the skill whose *circumstance* is the
+  narrative part. There is no symbol to name, which is the whole point. A
+  sentence, an invented skill and a wishful verb are all refused at import.
+* **Naming a skill the engine does consult is fine.** `skill:perception` is
+  common. The claim is about the circumstance — "to detect illusions" — and
+  never about the skill.
+* **A reason in the docstring is required, not hoped for.** It must name
+  the skill and say why that narrowing has no combat meaning. `power()`
+  refuses the row without one, because this is the easiest of the three
+  fields to reach for to make an awkward clause go away.
+* **It is counted done and never goes red**, and it does not spend the
+  marker budget — there is nothing to come back for.
+* **It is still named.** `todo.py` lists every such row under the skill it
+  narrows, so the set stays readable and a skill collecting excuses is
+  visible.
+* **It is audited like any other finished row.** A `dropped=` row is exempt
+  from the audit's run; a `narrative=` row is not, so one that claimed this
+  and then did nothing in a fight is caught silent.
+
+`narrative=` with `todo=` is refused — a `todo` row is refused in play and
+has no combat half for the clause to sit beside. `narrative=` with
+`out_of_combat=True` is refused too: the row is already declared narrative
+whole, and saying it again per clause draws a distinction against nothing.
+
+`narrative=` with `dropped=` **is** allowed, and is the honest answer for a
+row with both kinds of absence: `i802x1` balances and climbs trees
+(narrative) and also softens a fall, which the engine really is missing.
+
+**The test.** If building the mechanism would be work worth doing, it is a
+`dropped=`. If building it would mean inventing a roll the engine never
+makes, it is a `narrative=`. When in doubt it is a `dropped=` — that one
+stays in a queue somebody reads.
 
 **Leave a row out entirely only when there is nothing to decorate** — no
 ref, no card. Then, and only then, `docs/blocked.json` records the reason.

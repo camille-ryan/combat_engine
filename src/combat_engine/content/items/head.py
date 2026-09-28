@@ -12,8 +12,9 @@ Five judgements run through the file.
   off `Mods` -- but the only context it is handed is `{actor, skill}`.
   So "+2 to Perception checks" is written in full, and "+2 to Perception
   checks **to find secret doors**" is written as the same flat modifier
-  with `dropped=("c.skill_circumstance()",)`: the circumstance is the half
-  that cannot be said, and the bonus over-applies without it.
+  with `narrative=("skill:perception",)`: the bonus over-applies without
+  the circumstance, and the circumstance is not one a fight ever asks for,
+  so it is declared inert rather than marked missing.
 * **A save carries its effect and not its keywords.** The save gate is
   handed `effect`, so "against ongoing psychic damage" and "against
   effects that daze, stun or dominate" are exact, and "against fear
@@ -344,10 +345,12 @@ def i3490p1(c: Cast) -> None:
 
 @power("i663x1", level=2, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       narrative=("skill:diplomacy", "skill:insight"))
 def i663x1(c: Cast) -> None:
-    """The larger bonus is against one sort of creature, and a check has
-    no opponent in its context."""
+    """The flat bonus is laid. The larger one is for talking to one sort
+    of creature, and talking is not a move: no fight rolls diplomacy, and
+    the insight the card means is the reading of a conversation rather
+    than anything the board asks. A creature type is not the gap."""
     _skills(c, 1, "diplomacy", "insight")
 
 
@@ -430,10 +433,12 @@ def i838p1(c: Cast) -> None:
 
 @power("i1004x1", level=5, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       narrative=("skill:insight", "skill:perception"))
 def i1004x1(c: Cast) -> None:
-    """The Will half is exact; "to detect illusions" is not sayable, so
-    the two checks go unwritten rather than over-applied to every use."""
+    """The Will half is exact. Seeing through an illusion is the other
+    circumstance, and it is not the one the engine rolls: perception is
+    consulted only against a hider, insight not at all, so laying either
+    flat would pay the bonus out for spotting the wrong thing."""
     c.bonus(WILL, 2, on=c.me, until=When.ENCOUNTER, kind="item",
             when=_keyword_gate(Keyword.ILLUSION))
 
@@ -1009,10 +1014,13 @@ def i1512p1(c: Cast) -> None:
 
 @power("i1519x1", level=10, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       narrative=tuple(f"skill:{s}" for s in _KNOWLEDGE))
 def i1519x1(c: Cast) -> None:
-    """The attack half is exact; the knowledge half over-applies, because
-    "knowledge check" is a circumstance and not a skill."""
+    """The attack half is exact, and the five knowledge skills take the
+    flat bonus. Recalling what a monster is remains the narrower
+    circumstance and stays unsaid: arcana, dungeoneering, history, nature
+    and religion are never rolled in a fight, so there is nothing for a
+    second, larger bonus to attach to."""
     _skills(c, 2, *_KNOWLEDGE)
     c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="item",
             when=_keyword_gate(Keyword.PSYCHIC))

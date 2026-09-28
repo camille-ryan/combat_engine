@@ -3304,7 +3304,7 @@ def i2713p1(c: Cast) -> None:
     """"For your enemies" is the zone plus `c.ignores_difficult_in`, which
     hands your own side a way through the ground you just broke."""
     zone = c.zone(spread({c.here}, 5), difficult=True, until=When.EONT)
-    c.ignores_difficult_in(zone, side="ally")
+    c.ignores_difficult_in(zone, side="team")
 
 
 @power(

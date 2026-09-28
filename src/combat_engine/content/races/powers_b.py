@@ -74,6 +74,8 @@ from combat_engine.engine import (
     MoveEnd,
     MoveStart,
     Ranged,
+    Relation,
+    RelationSet,
     Size,
     Trigger,
     TurnEnd,
@@ -117,7 +119,13 @@ def _hit_me_bloodied(world: World, me: int, ev: Any) -> bool:
 
 
 def _dominate_or_stun(world: World, me: int, ev: ConditionApplied) -> bool:
-    return ev.target == me and ev.condition in (Condition.DOMINATED, Condition.STUNNED)
+    return ev.target == me and ev.condition is Condition.STUNNED
+
+
+def _dominated_me(world: World, me: int, ev: RelationSet) -> bool:
+    """The dominate half of the same line: a domination is a relation and
+    is never announced as a condition."""
+    return ev.target == me and ev.kind_ is Relation.DOMINATED_BY
 
 
 def _leaving_my_flank(world: World, me: int, ev: MoveStart) -> bool:
@@ -255,7 +263,10 @@ def p16380(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     trigger="an effect would dominate or stun you",
-    on=Trigger(ConditionApplied, _dominate_or_stun, "an effect dominates or stuns you"),
+    on=(
+        Trigger(ConditionApplied, _dominate_or_stun, "an effect stuns you"),
+        Trigger(RelationSet, _dominated_me, "an effect dominates you"),
+    ),
 )
 def p14385(c: Cast) -> None:
     """`ConditionApplied` is announced after the condition is installed, so

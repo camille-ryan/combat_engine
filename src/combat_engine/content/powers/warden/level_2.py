@@ -5,6 +5,9 @@ saving-throw one can still be declared -- a successful save is an event
 with a field saying so -- and the conjuration's is written as "whenever
 this warden marks anybody", which is the same sentence for every mark a
 warden actually lays.
+
+Both mark watches hang on `RelationSet`: a mark is a relation and is only
+mirrored into `Conditions`, so `ConditionApplied` never names one.
 """
 
 from __future__ import annotations
@@ -37,8 +40,8 @@ def p13603(c: Cast) -> None:
     faerie = c.conjure(c.origin, until=When.ENCOUNTER, sustain=None, speed=5)
     busy = {"now": False}
 
-    def on_mark(ev: ConditionApplied) -> None:
-        if busy["now"] or ev.source != c.me or ev.condition is not Condition.MARKED:
+    def on_mark(ev: RelationSet) -> None:
+        if busy["now"] or ev.source != c.me or ev.kind_ is not Relation.MARKED_BY:
             return
         near = [
             e for e in c.enemies() if c.adjacent_to(faerie, e) and not c.marked(e)
@@ -51,7 +54,7 @@ def p13603(c: Cast) -> None:
         finally:
             busy["now"] = False
 
-    c.watch(ConditionApplied, on_mark, until=When.ENCOUNTER)
+    c.watch(RelationSet, on_mark, until=When.ENCOUNTER)
 
 
 @power(
@@ -120,14 +123,14 @@ def p5588(c: Cast) -> None:
     mine = c.penalty(AC, c.con_mod, on=c.me, until=When.EONT)
     theirs = c.bonus(AC, c.con_mod, on=ally, until=When.EONT, kind="power")
 
-    def on_mark(ev: ConditionApplied) -> None:
-        if ev.source != ally or ev.condition is not Condition.MARKED:
+    def on_mark(ev: RelationSet) -> None:
+        if ev.source != ally or ev.kind_ is not Relation.MARKED_BY:
             return
         for eff in (mine, theirs):
             if eff is not None:
                 c.world.effects.end(eff, "the ally took the watch back")
 
-    c.watch(ConditionApplied, on_mark, until=When.EONT)
+    c.watch(RelationSet, on_mark, until=When.EONT)
 
 
 @power(

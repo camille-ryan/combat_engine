@@ -71,7 +71,7 @@ def by_basic(c: Cast, ev: Any) -> bool:
     return getattr(ev, "power", "") in refs
 
 
-def while_in(c: Cast, zone: int, give: Any, side: str = "ally") -> None:
+def while_in(c: Cast, zone: int, give: Any, side: str = "team") -> None:
     """`c.grants_in` for what is not a modifier -- a relation, or a bar.
 
     The engine already does the enter/exit bookkeeping in

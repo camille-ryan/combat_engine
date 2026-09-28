@@ -1024,7 +1024,7 @@ def i3493p1(c: Cast) -> None:
        reach=CloseBurst(5), target=NO_TARGET, keywords=[Keyword.ZONE])
 def i615p1(c: Cast) -> None:
     zone = c.zone(c.area(), until=When.ENCOUNTER)
-    c.grants_in(zone, "damage", 1, side="ally", kind="power")
+    c.grants_in(zone, "damage", 1, side="team", kind="power")
 
 
 @power("i635x1", level=4, cls=ITEM, action=ActionType.NONE,

@@ -181,4 +181,4 @@ def p14401(c: Cast) -> None:
         speed=5,
     )
     veil = c.aura(2, label=c.ref, on=figurine, until=When.SUSTAIN, sustain=MINOR)
-    c.grants_in(veil, "concealment", 2, side="ally", kind="untyped")
+    c.grants_in(veil, "concealment", 2, side="team", kind="untyped")

@@ -45,6 +45,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Relation,
+    RelationSet,
     Trigger,
     TurnStart,
     When,
@@ -236,11 +237,12 @@ def p10515(c: Cast) -> None:
         if tighter is not None:
             held.on_end.append(lambda: c.world.effects.end(tighter, "the grip opened"))
 
-    def caught(ev: ConditionApplied) -> None:
-        if ev.source != me or ev.condition is not Condition.GRABBED:
+    def caught(ev: RelationSet) -> None:
+        # A grab is announced as a relation and never as a condition.
+        if ev.source != me or ev.kind_ is not Relation.GRABBED_BY:
             return
         for effect in c.world.effects.of(ev.target):
-            if Condition.GRABBED in effect.conditions and effect.source == me:
+            if any(k is Relation.GRABBED_BY and s == me for k, s, _t in effect.relations):
                 pin(effect, ev.target)
                 return
 
@@ -249,7 +251,7 @@ def p10515(c: Cast) -> None:
             if any(k is Relation.GRABBED_BY and s == me for k, s, _t in effect.relations):
                 pin(effect, who)
 
-    watcher = c.watch(ConditionApplied, caught, until=When.ENCOUNTER, on=me, label=c.ref)
+    watcher = c.watch(RelationSet, caught, until=When.ENCOUNTER, on=me, label=c.ref)
     stance.on_end.append(lambda: c.world.effects.end(watcher, "stance ended"))
 
 

@@ -32,8 +32,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from .components import Powers
-from .events import ConditionApplied, Event
+from .events import ConditionApplied, Event, RelationSet
 from .query import alive, can_act
+from .relations import IMPLIES
 from .types import ActionType, Condition, Keyword, Window
 
 if TYPE_CHECKING:
@@ -109,9 +110,20 @@ def _shrugging(ev: Event, eid: int) -> Condition | None:
     Waiving exactly the condition being applied, and nothing else, is the
     narrow fix: a creature stunned a round ago still cannot react, which
     is right.
+
+    **A grab, a mark and a domination arrive as a `RelationSet`** and are
+    never announced as conditions at all -- #222. So this read them as no
+    condition, built no waiver, and every row printed "immediate
+    interrupt: you are dominated" was correctly armed and still answered
+    nothing: a dominated creature cannot take an immediate action, and
+    the one waiver that would have let it was not made. Three rows sat in
+    that gap. `IMPLIES` is the same table `Relations._apply_condition`
+    uses, so the two stay in step by construction.
     """
     if isinstance(ev, ConditionApplied) and getattr(ev, "target", None) == eid:
         return ev.condition
+    if isinstance(ev, RelationSet) and getattr(ev, "target", None) == eid:
+        return IMPLIES.get(ev.kind_)
     return None
 
 

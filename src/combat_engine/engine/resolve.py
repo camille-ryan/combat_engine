@@ -465,9 +465,17 @@ def _long_range(
     A row that waives the penalty offsets it: `"long_range"` is a modifier
     like any other, so "you take no penalty at long range" is a +2 gated
     however its card gates it.
+
+    The threshold is the **stretched** normal range, asked of the same
+    `"range"` modifier `dsl._stretched` asks when it decides what may be
+    aimed at, and with `"kind"` in the context because that is the key
+    the targeting passes and a gate on a key its context lacks is
+    silently false. Read raw, a line lengthening both a weapon's ranges
+    moved the reach and left the -2 where it was, so every extra square
+    it bought was targetable and penalised.
     """
     from .components import Gear
-    from .dsl import get
+    from .dsl import _stretched, get
     from .query import distance_between
     from .types import Keyword
 
@@ -480,7 +488,10 @@ def _long_range(
     weapon = gear.ranged if gear is not None else None
     if weapon is None or weapon.ranged is None:
         return 0
-    if distance_between(world, attacker, target) <= weapon.ranged[0]:
+    normal = weapon.ranged[0] + _stretched(
+        world, attacker, "ranged", {**ctx, "power": power, "kind": "ranged"}
+    )
+    if distance_between(world, attacker, target) <= normal:
         return 0
     return max(0, 2 - _mods(world, attacker, "long_range", ctx))
 

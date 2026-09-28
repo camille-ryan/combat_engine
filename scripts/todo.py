@@ -22,6 +22,14 @@ will ever build sit invisible for good, and a wave that markers everything
 it found hard would sail through. A budget cannot be satisfied by anything
 except finishing rows, so a wave that marks more than it writes cannot land.
 
+**A narrative clause is not a marker and is still listed here.** `narrative=
+("skill:thievery",)` says a clause has no combat meaning rather than that the
+engine is missing something, so it is counted done and never goes red -- and a
+field that is invisible is worse than the `dropped=` it replaced, because the
+way to make an awkward clause disappear must not be quieter than the way to
+declare it. So the rows are named below the budget line, under the skill each
+one narrows, where a reader of this page walks past them.
+
 **Age is not checked.** The honest way would be the git blame of each
 `todo=` line, and a `Power` does not record where it was written, so it
 would mean re-parsing the tree to map lines back to refs and blaming
@@ -46,6 +54,27 @@ from blocked import _one, _surface
 #: hits a genuine engine gap at; above that the wave is marking what it
 #: found hard rather than what the engine cannot express.
 BUDGET = 0.10
+
+
+def _narrative(rows: dict) -> None:
+    """Every row declaring a clause narrative, named, under its skill.
+
+    Named and not counted: a count is a number that only ever goes up and
+    nobody reads a number. The refs are what lets somebody ask whether
+    `skill:perception` is being used for genuinely narrative circumstances
+    or as a place to put whichever clause was awkward that day.
+    """
+    by_skill: dict[str, list[str]] = defaultdict(list)
+    for ref, p in sorted(rows.items()):
+        for clause in p.narrative:
+            by_skill[clause].append(ref)
+    if not by_skill:
+        return
+    total = len({r for refs in by_skill.values() for r in refs})
+    print(f"  {total} row(s) declare a clause narrative -- counted done, "
+          f"never red, and audited like any other row:")
+    for clause in sorted(by_skill, key=lambda s: (-len(by_skill[s]), s)):
+        print(f"    {clause:<20} {' '.join(by_skill[clause])}")
 
 
 def main() -> int:
@@ -85,6 +114,7 @@ def main() -> int:
     share = len(marked) / len(rows) if rows else 0.0
     print(f"\n  {len(marked)} unfinished of {len(rows)} declared "
           f"({share:.1%}, budget {BUDGET:.0%})")
+    _narrative(rows)
     if not marked:
         print("  nothing is waiting on anything")
         return 0

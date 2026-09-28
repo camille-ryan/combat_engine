@@ -28,8 +28,10 @@ Six judgements run through the file.
   wanted. `_bloodied_gate` and `_near_companion` are the two shapes.
 * **A skill bonus is a real modifier where it is unconditional** --
   `armour.py` set that -- and is left unwritten where the card gates it on
-  a circumstance, which is `c.skill_circumstance()`. Over-applying "+5 to
-  jump" to every Athletics check is worse than not writing it. "Skill
+  a circumstance, which is `narrative=("skill:athletics",)` and not a
+  marker: no check is rolled for jumping, so there is no verb to wait on.
+  Over-applying "+5 to jump" to every Athletics check is worse than not
+  writing it. "Skill
   checks", with no skill named, is the blanket `skill` key rather than
   seventeen guesses: `skills.modifier` adds it to every check.
 * **A saving throw can be asked what it is against.** `Effects.save`
@@ -104,6 +106,8 @@ from combat_engine.engine import (
     PowerResolved,
     PowerUsed,
     Ranged,
+    Relation,
+    RelationSet,
     RoundStart,
     SavingThrow,
     SecondWind,
@@ -448,9 +452,20 @@ def _prone_on_me(world: World, me: int, ev: Any) -> bool:
 
 
 def _marked_on_me(world: World, me: int, ev: Any) -> bool:
+    """`RelationSet`, not `ConditionApplied`: a mark is a relation and is
+    only mirrored into `Conditions`, so nothing announces it as a
+    condition and a trigger declared on that one is silently false."""
     return (
-        getattr(ev, "target", None) == me
-        and getattr(ev, "condition", None) is Condition.MARKED
+        getattr(ev, "kind_", None) is Relation.MARKED_BY
+        and getattr(ev, "target", None) == me
+        and getattr(ev, "source", None) in query.enemies(world, me)
+    )
+
+
+def _dominated_on_me(world: World, me: int, ev: Any) -> bool:
+    return (
+        getattr(ev, "kind_", None) is Relation.DOMINATED_BY
+        and getattr(ev, "target", None) == me
     )
 
 
@@ -574,7 +589,7 @@ def i636x1(c: Cast) -> None:
 @power("i636p1", level=1, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="an enemy marks you",
-       on=Trigger(ConditionApplied, _marked_on_me, "an enemy marks you"))
+       on=Trigger(RelationSet, _marked_on_me, "an enemy marks you"))
 def i636p1(c: Cast) -> None:
     c.cure(Condition.MARKED, on=c.me)
     c.shift(1)
@@ -2700,10 +2715,7 @@ def i2173x1(c: Cast) -> None:
 @power("i2173p1", level=9, cls=ITEM, usage=DAILY, action=INTERRUPT,
        reach=PERSONAL, target=SELF,
        trigger="you are dominated",
-       on=Trigger(ConditionApplied, lambda w, me, ev: (
-           getattr(ev, "target", None) == me
-           and getattr(ev, "condition", None) is Condition.DOMINATED),
-           "you are dominated"))
+       on=Trigger(RelationSet, _dominated_on_me, "you are dominated"))
 def i2173p1(c: Cast) -> None:
     """`dsl.use` spends the use above the body, so the row can hand its
     own back: `c.restore_use` undoes exactly the `note_use` that was

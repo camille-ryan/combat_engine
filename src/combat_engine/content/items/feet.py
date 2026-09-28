@@ -27,8 +27,9 @@ Four judgements run through the file.
   block that discounts it has nothing to cut.
 * **A skill modifier is real** and its context is `{actor, skill}` only,
   so "+2 to Athletics checks" is exact and "+2 to Athletics checks **to
-  jump**" is the same flat modifier plus
-  `dropped=("c.skill_circumstance()",)`.
+  jump**" is the same flat modifier plus `narrative=("skill:athletics",)`.
+  Softening a fall is the exception on this slot: falls happen on a board,
+  so that one is a real `dropped=`.
 
 "When you use your second wind" is `SecondWind`, which `Cast.second_wind`
 emits from the one place a second wind is ever taken. The two rows here
@@ -887,8 +888,11 @@ def i758x1(c: Cast) -> None:
 
 @power("i840x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       narrative=("skill:athletics",))
 def i840x1(c: Cast) -> None:
+    """The fall half is exact and the flat bonus is laid. Jumping is the
+    circumstance left over: a jump is a move this engine spends squares
+    on, never an athletics check, so the narrowing has nowhere to land."""
     _skills(c, 3, "athletics")
     _half_fall(c)
 
@@ -1068,8 +1072,15 @@ def i776p1(c: Cast) -> None:
 
 @power("i802x1", level=10, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       dropped=("falling.drop(check=)",),
+       narrative=("skill:acrobatics", "skill:athletics"))
 def i802x1(c: Cast) -> None:
+    """Three circumstances, and only two of them are narrative. Balancing
+    and climbing trees are: no acrobatics or athletics check is rolled for
+    either. Softening a fall is not -- falls happen on a board, `Fell`
+    already carries a `soften` an interrupt can lower, and the check that
+    should set it is a real absence rather than a clause with no combat
+    meaning."""
     c.ignores_difficult("forest", on=c.me)
     _skills(c, 4, "acrobatics", "athletics")
 

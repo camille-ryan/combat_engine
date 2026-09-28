@@ -678,11 +678,12 @@ def i2580p1(c: Cast) -> None:
 
 
 @power("i3246x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, narrative=("skill:endurance",))
 def i3246x1(c: Cast) -> None:
     """Disease is a keyword of the row that laid the hold, so the save
-    half is exact. The Endurance half applies only to checks against
-    disease, and a skill bonus cannot be narrowed to a subject."""
+    half is exact. The other half is the disease track between fights --
+    an endurance check made over days, which a board that runs for a
+    handful of rounds has no moment for."""
     c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
             when=_saves_against(keywords=(Keyword.DISEASE,)))
 

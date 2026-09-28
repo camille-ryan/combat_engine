@@ -261,7 +261,7 @@ def p16043(c: Cast) -> None:
     c.stance(on=c.me, label=c.ref)
     c.bonus("skill:stealth", 2, kind="power", on=c.me, until=When.STANCE)
     ring = c.aura(1, until=When.STANCE)
-    c.grants_in(ring, "skill:stealth", 2, side="ally")
+    c.grants_in(ring, "skill:stealth", 2, side="team")
 
 
 # -- r5 ---------------------------------------------------------------------

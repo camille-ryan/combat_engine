@@ -85,7 +85,7 @@ def p10287(c: Cast) -> None:
             c.grant_attack(helper, on=victim)
         if c.first:
             here = c.zone(c.area(), until=When.EONT, label="p10287")
-            c.grants_in(here, AC, c.wis_mod, side="ally", kind="power")
+            c.grants_in(here, AC, c.wis_mod, side="team", kind="power")
         return
     ally = _pick(c, _friends(c, 1), "who shares the guard")
 

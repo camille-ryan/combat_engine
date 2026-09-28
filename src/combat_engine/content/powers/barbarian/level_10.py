@@ -47,6 +47,7 @@ from combat_engine.engine import (
     Keyword,
     Miss,
     Relation,
+    RelationSet,
     Target,
     Trigger,
     TurnEnd,
@@ -191,7 +192,14 @@ def p14429(c: Cast) -> None:
         if ev.target == me and ev.condition in (Condition.DAZED, Condition.DOMINATED):
             _strip(c.world, me, ev.condition)
 
+    def seized(ev: RelationSet) -> None:
+        # A domination is a relation, announced as one and never as a
+        # condition, so the watch above never sees one arrive.
+        if ev.target == me and ev.kind_ is Relation.DOMINATED_BY:
+            _strip(c.world, me, Condition.DOMINATED)
+
     c.watch(ConditionApplied, ward, until=When.EONT, on=me, label=f"{c.ref} unshakeable")
+    c.watch(RelationSet, seized, until=When.EONT, on=me, label=f"{c.ref} unshakeable")
 
 
 _SHOVED = "you are pulled, pushed, or slid"
