@@ -478,6 +478,25 @@ class Cast:
         known = self.world.get(who, Powers)
         return known is not None and ref in known.all
 
+    @property
+    def primary(self) -> Ability:
+        """The ability this character's class attacks with.
+
+        "A bonus equal to your **primary ability** modifier" is a printed
+        phrase in its own right, on rows with no attack line for
+        `ability_for` to read -- a saving throw, a number of squares. Those
+        were standing in with the largest modifier on the sheet, which is a
+        different sentence and is only accidentally the same number.
+        """
+        from .dsl import Attack, Pick
+
+        return Attack(Pick.PRIMARY).ability_for(self.world, self.me)
+
+    @property
+    def primary_mod(self) -> int:
+        """The modifier of `c.primary`. What the printed phrase means."""
+        return self.stats.mod(self.primary)
+
     def ability_for(self, ref: str = "", *, on: int | None = None) -> Ability:
         """Which ability a row's attack line rolls, for this creature.
 

@@ -14,7 +14,7 @@ never reached.
 from __future__ import annotations
 
 from .cast import Cast
-from .dsl import ONE_CREATURE, Attack, Melee, Ranged, power
+from .dsl import ONE_CREATURE, Attack, Melee, Pick, Ranged, power
 from .types import Ability, ActionType, Defense, Keyword, Usage
 
 MELEE = "mba"
@@ -51,15 +51,18 @@ def _melee_basic(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON, Keyword.RANGED],
-    attack=Attack(Ability.DEX, vs=Defense.AC),
+    #: **Not plain Dexterity.** A bow or a *light* thrown weapon is
+    #: Dexterity; a **heavy thrown** weapon is Strength. One row, and the
+    #: weapon in hand decides -- so the ability cannot be fixed at import
+    #: the way a class row's can. It rolled Dexterity for everything, which
+    #: made every heavy-thrown basic attack roll the wrong ability and made
+    #: `f2455` -- "Dexterity instead of Strength when you throw" -- grant
+    #: something that was already true.
+    attack=Attack(Pick.BY_WEAPON, vs=Defense.AC),
 )
 def _ranged_basic(c: Cast) -> None:
-    # See `_melee_basic`. **This line is also wrong about thrown weapons**
-    # and only the ability is at fault: a bow's basic attack is Dexterity
-    # and a thrown weapon's is Strength, and this rolls Dexterity for both.
-    # Fixing it moves every thrown basic attack in the game, so it is filed
-    # rather than done here -- `f2455`, whose whole benefit is "Dexterity
-    # instead of Strength when you throw", is a no-op until it is.
+    # See `_melee_basic` for why the damage reads `c.attack_mod`: it has to
+    # follow whichever ability the line above resolved to.
     if c.strike():
         c.damage(c.w(1), c.attack_mod)
 

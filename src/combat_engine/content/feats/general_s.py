@@ -478,7 +478,7 @@ def f3697(c: Cast) -> None:
 
 @power("f3698", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.attack_ability()", *FLURRY))
+       todo=("c.rolls_with(ref, ability)", *FLURRY))
 def f3698(c: Cast) -> None:
     """Dexterity in place of Strength for a basic attack is a swap of the
     ability the header declares. The prerequisite names `cf:monk-f1` and

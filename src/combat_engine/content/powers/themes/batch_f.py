@@ -67,6 +67,7 @@ from combat_engine.engine import (
     Melee,
     Moved,
     OpportunityWindow,
+    Pick,
     Position,
     Powers,
     PowerUsed,
@@ -99,8 +100,6 @@ from combat_engine.engine.dsl import REGISTRY
 from combat_engine.engine.zones import Zone
 
 #: "Primary ability modifier" -- see the module docstring.
-ABILITY = ("c.attack_ability()",)
-
 PSIONIC = [Keyword.PSIONIC]
 PSIONIC_IMPLEMENT = [Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.PSYCHIC]
 ALL_DEFENCES = (AC, FORT, REF, WILL)
@@ -234,8 +233,7 @@ def p12245(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=PSIONIC_IMPLEMENT,
-    attack=Attack(INT, vs=WILL),
-    dropped=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
 )
 def p12246(c: Cast) -> None:
     """The printed Requirement is a spend, not a gate on the board, so it is
@@ -265,8 +263,7 @@ def p12246(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=PSIONIC_IMPLEMENT,
-    attack=Attack(INT, vs=WILL),
-    dropped=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
 )
 def p12247(c: Cast) -> None:
     """One watch, not two: a second save-ends effect would give the victim a
@@ -342,8 +339,7 @@ def p12248(c: Cast) -> None:
     reach=AreaBurst(1, 10),
     target=EACH_ENEMY,
     keywords=PSIONIC_IMPLEMENT,
-    attack=Attack(INT, vs=WILL),
-    dropped=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
 )
 def p12249(c: Cast) -> None:
     """The point cost is paid once for the use, on the first target."""
@@ -370,8 +366,7 @@ def p12249(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=PSIONIC_IMPLEMENT,
-    attack=Attack(INT, vs=WILL),
-    dropped=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
 )
 def p12250(c: Cast) -> None:
     """The escalation watch is held for the encounter and gated on the daze

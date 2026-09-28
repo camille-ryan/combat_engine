@@ -364,6 +364,11 @@ class Pick(Enum):
 
     PRIMARY = "primary"
     HIGHEST = "highest"
+    #: What is in hand decides. The ranged basic attack is Dexterity with a
+    #: bow or a light thrown weapon and **Strength with a heavy thrown
+    #: one** -- one row, two abilities, chosen by the weapon rather than by
+    #: the class or the sheet.
+    BY_WEAPON = "by_weapon"
 
 
 @dataclass(frozen=True)
@@ -461,6 +466,16 @@ class Attack:
             if stats is None:
                 return self.ability[0]
             return max(self.ability, key=stats.mod)
+        if self.ability is Pick.BY_WEAPON:
+            from .components import Gear
+
+            gear = world.get(who, Gear)
+            heavy = bool(gear) and any(
+                "heavy thrown" in prop
+                for w in gear.held
+                for prop in w.properties
+            )
+            return Ability.STR if heavy else Ability.DEX
         if self.ability is Pick.PRIMARY:
             held = world.get(who, Build)
             for choice in held.choices if held else ():
@@ -484,6 +499,7 @@ class Attack:
             name = {
                 Pick.PRIMARY: "Primary ability",
                 Pick.HIGHEST: "Highest ability modifier",
+                Pick.BY_WEAPON: "Strength or Dexterity",
             }[self.ability]
         elif isinstance(self.ability, tuple):
             names = [a.value.title() for a in self.ability]

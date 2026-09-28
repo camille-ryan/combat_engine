@@ -1465,20 +1465,24 @@ def f3247(c: Cast) -> None:
 @power("f3248", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you score a critical hit",
-       on=Trigger(Hit, _i_crit, "you score a critical hit"),
-       dropped=("c.attack_ability()",))
+       on=Trigger(Hit, _i_crit, "you score a critical hit"))
 def f3248(c: Cast) -> None:
-    """"Your primary ability modifier" is a fact about the class, not
-    about the row being used, and nothing names one. The highest
-    modifier stands in, which is right for most builds and generous for
-    a few."""
-    best = max(c.str_mod, c.con_mod, c.dex_mod, c.int_mod, c.wis_mod,
-               c.cha_mod)
-    if best <= 0:
+    """"Your primary ability modifier" is now `c.primary_mod`, which reads
+    the build rather than the sheet.
+
+    It had been standing in with the largest modifier, which is the same
+    number for most builds and generous for the ones whose best score is
+    not what they attack with -- a battle cleric with Strength above
+    Wisdom paid out the wrong one. The marker on this row named
+    `c.attack_ability()`, which was the wrong gap: nothing here swaps an
+    ability, it only needed to be told which one the class uses.
+    """
+    mod = c.primary_mod
+    if mod <= 0:
         return
-    c.temp_hp(best, on=c.me)
+    c.temp_hp(mod, on=c.me)
     for friend in c.within(1, side="team"):
-        c.temp_hp(best, on=friend)
+        c.temp_hp(mod, on=friend)
 
 
 _F3249 = ("p2104", "p4369", "p620")

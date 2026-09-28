@@ -1904,25 +1904,20 @@ def f2444(c: Cast) -> None:
 
 
 @power("f2455", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("basic.rba_thrown_rolls_strength",))
+       reach=PERSONAL, target=SELF)
 def f2455(c: Cast) -> None:
     """Dexterity instead of Strength on a thrown ranged basic attack.
 
-    Written, laid, and **currently a no-op** -- which is recorded rather
-    than hidden, because a row that installs something with no effect is
-    exactly what a wrongly written row looks like.
+    Laid as a **conditional** swap rather than decided here: a trait arms
+    once at the start of a fight and what is in hand changes during one,
+    so a swap settled now would be wrong the moment the thrower drew a
+    bow. `when` is asked at each roll instead.
 
-    `basic.RANGED` rolls Dexterity for every ranged basic attack. A bow's
-    is Dexterity; a **thrown** weapon's is Strength. So the engine already
-    grants what this feat grants, and swapping Dexterity in changes
-    nothing until the basic attack tells the two apart. That fix moves
-    every thrown basic attack in the game and wants its own pass.
-
-    The swap is laid anyway, and conditionally: a trait arms once at the
-    start of a fight and what is in hand changes during one, so `when` is
-    asked at each roll. The day `rba` is fixed, this row starts working
-    with no edit.
+    This row is only worth anything because `basic.RANGED` now tells the
+    weapons apart -- a bow or a light thrown weapon is Dexterity, a
+    **heavy thrown** one is Strength. While it rolled Dexterity for
+    everything, the engine already granted what this feat grants and the
+    row was a no-op that looked finished.
 
     "With which you have proficiency" is not gated. Nothing models a
     character's weapon proficiencies, and `chargen` only deals a build

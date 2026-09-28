@@ -328,7 +328,7 @@ def f2926(c: Cast) -> None:
 
 @power("f1120", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.attack_ability()", "chargen.multiclass_powers()"))
+       todo=("c.rolls_with(ref, ability)", "chargen.multiclass_powers()"))
 def f1120(c: Cast) -> None:
     """Attacks with a borrowed power roll on Charisma instead.
 

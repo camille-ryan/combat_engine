@@ -61,6 +61,7 @@ from combat_engine.engine import (
     MeleeOrRanged,
     Miss,
     Moved,
+    Pick,
     PowerUsed,
     Ranged,
     SavingThrow,
@@ -90,8 +91,6 @@ if TYPE_CHECKING:
 
 #: "Primary ability" is a fact about the class that took the theme, and
 #: nothing names one. The largest modifier stands in.
-PRIMARY = ("c.attack_ability()",)
-
 #: A target line with a restriction `Target` cannot hold -- "granting combat
 #: advantage to you", "of your size or smaller", "adjacent to your familiar".
 FILTER = ("Target.filter()",)
@@ -141,7 +140,7 @@ def _is_social(world: World, me: int, ev: Any) -> bool:
 @power("p11778", level=0, cls="x7_643", usage=ENCOUNTER, action=STANDARD,
        reach=MeleeOrRanged(1, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.MARTIAL, Keyword.WEAPON],
-       attack=Attack(STR, vs=AC), dropped=PRIMARY)
+       attack=Attack(Pick.PRIMARY, vs=AC))
 def p11778(c: Cast) -> None:
     if not c.strike(plus=_best(c) - c.attack_mod):
         return
@@ -178,7 +177,7 @@ def p11781(c: Cast) -> None:
 @power("p11782", level=3, cls="x7_643", usage=ENCOUNTER, action=STANDARD,
        reach=MeleeOrRanged(1, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.MARTIAL, Keyword.WEAPON],
-       attack=Attack(STR, vs=AC), dropped=PRIMARY)
+       attack=Attack(Pick.PRIMARY, vs=AC))
 def p11782(c: Cast) -> None:
     """The Effect line runs whether or not the attack landed."""
     if c.strike(plus=_best(c) - c.attack_mod):
@@ -195,7 +194,7 @@ def p11782(c: Cast) -> None:
 @power("p11786", level=5, cls="x7_643", usage=DAILY, action=STANDARD,
        reach=MeleeOrRanged(1, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.MARTIAL, Keyword.WEAPON, Keyword.RELIABLE],
-       attack=Attack(STR, vs=AC), dropped=PRIMARY)
+       attack=Attack(Pick.PRIMARY, vs=AC))
 def p11786(c: Cast) -> None:
     foe = c.target
     if not c.strike(plus=_best(c) - c.attack_mod):
@@ -231,8 +230,8 @@ def p11789(c: Cast) -> None:
 @power("p11790", level=7, cls="x7_643", usage=ENCOUNTER, action=STANDARD,
        reach=MeleeOrRanged(1, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.MARTIAL, Keyword.WEAPON],
-       attack=Attack(STR, vs=AC),
-       dropped=(*PRIMARY, "c.provokes(when=)"))
+       attack=Attack(Pick.PRIMARY, vs=AC),
+       dropped=("c.provokes(when=)",))
 def p11790(c: Cast) -> None:
     """The second branch of the either/or -- "the target provokes
     opportunity attacks when shifting or making melee attacks" -- is the
@@ -251,7 +250,7 @@ def p11790(c: Cast) -> None:
 @power("p11793", level=9, cls="x7_643", usage=DAILY, action=STANDARD,
        reach=MeleeOrRanged(1, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.MARTIAL, Keyword.WEAPON],
-       attack=Attack(STR, vs=AC), dropped=PRIMARY)
+       attack=Attack(Pick.PRIMARY, vs=AC))
 def p11793(c: Cast) -> None:
     """"Cannot shift" is `c.rooted`, not `c.immobilized` -- it still walks.
 
@@ -295,7 +294,7 @@ def p11796(c: Cast) -> None:
 @power("p12360", level=0, cls="x7_673", usage=ENCOUNTER, action=STANDARD,
        reach=MeleeOrRanged(1, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.PRIMAL, Keyword.WEAPON],
-       attack=Attack(STR, vs=AC), dropped=PRIMARY)
+       attack=Attack(Pick.PRIMARY, vs=AC))
 def p12360(c: Cast) -> None:
     """"Before or after the attack" is a choice with no consequence the
     board can tell apart once the swing is at melee reach, so the shift is
@@ -316,18 +315,18 @@ def p12360(c: Cast) -> None:
            both(lambda w, me, ev: getattr(ev, "actor", None) == me,
                 lambda w, me, ev: _lonely_now(w, me)),
            "you start your turn away from your allies",
-       ), dropped=PRIMARY)
+       ))
 def p12361(c: Cast) -> None:
     """"You do not expend this power" is `c.restore_use`: the use has
     already been spent by the time the body runs."""
-    if not c.save(on=c.me, bonus=_best(c)):
+    if not c.save(on=c.me, bonus=c.primary_mod):
         c.restore_use(c.ref)
 
 
 @power("p12362", level=3, cls="x7_673", usage=ENCOUNTER, action=STANDARD,
        reach=MeleeOrRanged(1, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.PRIMAL, Keyword.WEAPON],
-       attack=Attack(STR, vs=AC), dropped=PRIMARY)
+       attack=Attack(Pick.PRIMARY, vs=AC))
 def p12362(c: Cast) -> None:
     foe = c.target
     apart = _lonely(c) and not c.within(1, of=foe, side="ally")
@@ -340,8 +339,8 @@ def p12362(c: Cast) -> None:
 @power("p12363", level=5, cls="x7_673", usage=DAILY, action=STANDARD,
        reach=MeleeOrRanged(1, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.PRIMAL, Keyword.WEAPON],
-       attack=Attack(STR, vs=AC),
-       dropped=(*PRIMARY, "c.shift(toward=)", "c.ignores_difficult(when=)"))
+       attack=Attack(Pick.PRIMARY, vs=AC),
+       dropped=("c.shift(toward=)", "c.ignores_difficult(when=)"))
 def p12363(c: Cast) -> None:
     """The free shift is laid as a watch on the caster's own turn start.
     Two clauses of it have nowhere to go: the shift must end closer to the
@@ -356,7 +355,7 @@ def p12363(c: Cast) -> None:
     def prowl(ev: Any) -> None:
         if ev.actor != c.me or c.adjacent(foe) or not _lonely(c):
             return
-        c.shift(_best(c), who=c.me)
+        c.shift(c.primary_mod, who=c.me)
 
     c.watch(TurnStart, prowl, until=When.ENCOUNTER, on=c.me)
 
@@ -368,10 +367,10 @@ def p12363(c: Cast) -> None:
            Hit,
            both(targets_me, lambda w, me, ev: _lonely_now(w, me)),
            "an enemy hits you while you stand apart",
-       ), dropped=PRIMARY)
+       ))
 def p12364(c: Cast) -> None:
     foe = getattr(c.trigger, "attacker", None)
-    c.shift(_best(c), who=c.me)
+    c.shift(c.primary_mod, who=c.me)
     if foe is not None:
         c.grants_advantage(on=foe, to="me")
 
@@ -379,7 +378,7 @@ def p12364(c: Cast) -> None:
 @power("p12365", level=7, cls="x7_673", usage=ENCOUNTER, action=STANDARD,
        reach=MeleeOrRanged(1, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.PRIMAL, Keyword.WEAPON],
-       attack=Attack(STR, vs=AC), dropped=PRIMARY)
+       attack=Attack(Pick.PRIMARY, vs=AC))
 def p12365(c: Cast) -> None:
     """"Doesn't move at least 2 squares" is counted off `Moved`, which is
     the only one of the three movement events carrying `from_`; the
@@ -410,7 +409,7 @@ def p12365(c: Cast) -> None:
 @power("p12366", level=9, cls="x7_673", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE,
        keywords=[Keyword.PRIMAL, Keyword.WEAPON],
-       attack=Attack(STR, vs=AC), dropped=PRIMARY)
+       attack=Attack(Pick.PRIMARY, vs=AC))
 def p12366(c: Cast) -> None:
     """The penalty is the number of hits, so it is counted and laid once
     rather than stacked per swing -- two of a kind would not add anyway."""
