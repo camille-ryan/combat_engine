@@ -68,6 +68,7 @@ from combat_engine.engine import (
     Ranged,
     SavingThrow,
     SkillCheck,
+    Summon,
     Target,
     Trigger,
     TurnStart,
@@ -98,8 +99,10 @@ THROUGH_ENEMIES = ("c.through_enemies()",)
 SQUEEZE = ("c.ignore_squeeze_penalty()",)
 #: An invisibility that ends the moment you attack rather than on a clock.
 ENDS_ON_ATTACK = ("c.end_on_attack()",)
-#: A creature block the power prints in full, with no monster row behind it.
-FROM_BLOCK = ("Summon.from_block()",)
+#: A creature the power summons whose numbers are printed nowhere the spec
+#: carries -- no monster row behind it and no block in the entry either, so
+#: `Summon`'s defaults are all there is.
+FROM_BLOCK = ("spec.stat_block()",)
 #: Substituting one skill for another, or narrowing a bonus to a purpose.
 CIRCUMSTANCE = ("c.skill_circumstance()",)
 
@@ -146,9 +149,9 @@ def _my_kill(world: Any, me: int, ev: Any) -> bool:
     return ev.source == me
 
 
-def _enemy_bloodied(world: Any, me: int, ev: Any) -> bool:
-    """`Bloodied` carries `actor` alone -- who did it is not on the event."""
-    return _is_enemy(world, me, ev.actor)
+def _my_bloodying(world: Any, me: int, ev: Any) -> bool:
+    """`Bloodied` names its striker `source`, the shape `Dropped` has."""
+    return ev.source == me and _is_enemy(world, me, ev.actor)
 
 
 def _shifting(world: Any, me: int, ev: Any) -> bool:
@@ -808,11 +811,19 @@ def p16473(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.ELEMENTAL, Keyword.SUMMONING],
-    todo=FROM_BLOCK,
+    dropped=FROM_BLOCK,
 )
 def p16476(c: Cast) -> None:
-    """The creature is printed in the power's own text and has no row in
-    the database, so `c.summon` has no ref to spawn."""
+    """It has no row in the database, so this is `c.summon_inline` and not
+    `c.summon` -- and the entry prints no block either, so the numbers are
+    `Summon`'s defaults. Only the size is printed.
+
+    "It lacks actions of its own" is what a summon already is: spawned as
+    a `Companion`, it takes no turn and acts when its summoner spends an
+    action on it. The lost surge when it drops is a clause about a
+    creature that is gone and nothing watches a summon's own `Dropped`.
+    """
+    c.summon_inline(Summon(size="tiny"), at=c.origin)
 
 
 @power(
@@ -847,13 +858,10 @@ def p14022(c: Cast) -> None:
     trigger="you kill or bloody an enemy",
     on=(
         Trigger(Dropped, _my_kill, "you drop an enemy"),
-        Trigger(Bloodied, _enemy_bloodied, "an enemy is bloodied"),
+        Trigger(Bloodied, _my_bloodying, "you bloody an enemy"),
     ),
-    dropped=("Bloodied.source",),
 )
 def p14033(c: Cast) -> None:
-    """`Dropped` names its killer; `Bloodied` names only the creature, so
-    the second trigger cannot check that it was you who did it."""
     pick = c.choose(["shift", "temporary hit points", "attack bonus"], "which benefit")
     if pick == "shift":
         c.shift(c.speed_of())

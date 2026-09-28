@@ -197,6 +197,11 @@ def _i_am_bloodied(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.actor == me
 
 
+def _by_my_hand(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """`Dropped` and `Bloodied` both name their striker `source`."""
+    return ev.source == me and ev.actor != me
+
+
 def _granted(ref: str, card: str, **kw: Any):  # noqa: ANN202
     """The parent half of a feat whose benefit is "you gain <card>"."""
 
@@ -987,17 +992,11 @@ _granted("f2138", "f2138b")
 @power("f2138b", level=1, cls="", usage=ENCOUNTER, action=FREE,
        reach=CloseBurst(3), target=SELF,
        keywords=[Keyword.DIVINE, Keyword.HEALING],
-       trigger="you drop an enemy",
-       on=Trigger(Dropped, lambda w, me, ev: (
-           ev.source == me and ev.actor != me
-       ), "you reduce an enemy to 0 hit points"),
-       dropped=("Bloodied.source",))
+       trigger="you bloody an enemy or reduce one to 0 hit points",
+       on=(Trigger(Dropped, _by_my_hand, "you reduce an enemy to 0 hit points"),
+           Trigger(Bloodied, _by_my_hand, "you bloody an enemy")))
 def f2138b(c: Cast) -> None:
-    """Only half of "you bloody an enemy **or** reduce one to 0" can be
-    declared: `Dropped` carries `source` and `Bloodied` carries `actor`
-    alone, so nothing says who did the bloodying.
-
-    The surge is spent by the caster and the hit points land on whoever
+    """The surge is spent by the caster and the hit points land on whoever
     is chosen, which is what "gains hit points **as if** it spent the
     healing surge" reads.
     """

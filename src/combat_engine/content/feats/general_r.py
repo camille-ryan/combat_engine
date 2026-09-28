@@ -135,8 +135,6 @@ LOW_LIGHT = ("c.low_light()",)
 #: find someone hidden, to disable a trap. A skill is the finest grain
 #: `skill:<name>` has.
 CIRCUMSTANCE = ("c.skill_circumstance()",)
-#: A minion is not a thing a row can ask about.
-MINION = ("c.is_minion()",)
 #: Changing the dice another row rolls -- up, down, or maximised.
 DICE = ("c.change_dice()",)
 
@@ -216,6 +214,18 @@ def _i_crit(world: Any, me: int, ev: Any) -> bool:
 
 def _i_dropped_a_foe(world: Any, me: int, ev: Any) -> bool:
     return ev.source == me and team(world, ev.actor) != team(world, me)
+
+
+def _i_dropped_a_nonminion(world: Any, me: int, ev: Any) -> bool:
+    """"You reduce a nonminion enemy to 0 hit points."
+
+    `c.is_minion` is a `Cast` verb and a predicate is handed
+    `(world, me, ev)`, so a bare cast is made to ask -- the same probe
+    `weapon_c._type_words` uses for a type line.
+    """
+    return _i_dropped_a_foe(world, me, ev) and not Cast(
+        world=world, me=me, ref=""
+    ).is_minion(on=ev.actor)
 
 
 def _a_foe_dropped(world: Any, me: int, ev: Any) -> bool:
@@ -596,25 +606,23 @@ def f3570(c: Cast) -> None:
        trigger="you score a critical hit or drop a nonminion enemy",
        on=(
            Trigger(Hit, _i_crit, "you score a critical hit"),
-           Trigger(Dropped, _i_dropped_a_foe, "you drop an enemy"),
-       ),
-       dropped=MINION)
+           Trigger(Dropped, _i_dropped_a_nonminion, "you drop an enemy"),
+       ))
 def f3571(c: Cast) -> None:
-    """Two printed triggers, so two declared ones. "Nonminion" is the
-    dropped half: nothing on the board says which creatures are minions,
-    so the row also answers the deaths of the ones it should not."""
+    """Two printed triggers, so two declared ones. "Nonminion" qualifies
+    only the second: a critical hit is a critical hit on anything."""
     c.conceal(on=c.me, until=When.EONT)
 
 
 @power("f3572", level=1, cls="", usage=AT_WILL, action=NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you reduce a nonminion enemy to 0 hit points",
-       on=Trigger(Dropped, _i_dropped_a_foe, "you drop an enemy"),
-       dropped=("Dropped.power", *MINION))
+       on=Trigger(Dropped, _i_dropped_a_nonminion, "you drop an enemy"),
+       dropped=("Dropped.power",))
 def f3572(c: Cast) -> None:
     """`Dropped` carries `actor`, `dead` and `source` and no power, so
     "with a melee basic attack" has nothing to read -- the row answers
-    any killing blow. The nonminion clause goes the same way."""
+    any killing blow. The nonminion clause is declared."""
     ev = c.trigger
     others = [e for e in c.within(2, side="enemy") if e != ev.actor]
     if others:

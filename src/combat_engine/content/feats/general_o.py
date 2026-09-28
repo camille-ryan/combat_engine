@@ -65,6 +65,7 @@ from combat_engine.engine import (
     Condition,
     DamageRolled,
     DamageType,
+    Escaped,
     ForcedMove,
     Gear,
     Hit,
@@ -79,6 +80,7 @@ from combat_engine.engine import (
     Ranged,
     SavingThrow,
     SecondWind,
+    Size,
     SkillCheck,
     SurgeSpent,
     Swap,
@@ -456,13 +458,28 @@ def f2914(c: Cast) -> None:
     c.prone(on=victim)
 
 
+#: "Medium or smaller". `Size` is a string enum and its values sort
+#: alphabetically, so comparing them reads as an ordering and is not one.
+_MEDIUM_OR_SMALLER = (Size.TINY, Size.SMALL, Size.MEDIUM)
+
+
 @power("f2915", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.escape()",))
+       reach=PERSONAL, target=SELF)
 def f2915(c: Cast) -> None:
-    """Pays out when a creature escapes a grab you have on it. Escaping
-    is an action nothing in the engine performs or announces -- a grab
-    ends through `c.cure` or through its duration and says nothing about
-    who broke it -- so the moment this row is printed for never comes."""
+    """`Escaped.holder` is the grabber, so this gates on that and not on
+    `actor`, which is the creature that got away. The slide is taken now
+    rather than offered as an opportunity action: the engine has no
+    window for one outside an attack, and the cost is the difference
+    between this and a free action nobody would decline."""
+    me = c.me
+
+    def broke(ev: Escaped) -> None:
+        if ev.holder != me or not ev.success:
+            return
+        if c.size_of(ev.actor) in _MEDIUM_OR_SMALLER:
+            c.slide(3, on=ev.actor)
+
+    c.watch(Escaped, broke, until=When.ENCOUNTER, on=me)
 
 
 @power("f2916", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1340,12 +1357,12 @@ def f3127(c: Cast) -> None:
 
 
 @power("f3128", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.escape()",))
+       reach=PERSONAL, target=SELF)
 def f3128(c: Cast) -> None:
-    """The extra saving throw plays and is the larger half. Escaping is
-    an action nothing performs, so the +5 to the check has no check to
-    be added to."""
+    """Both halves. The +5 goes on `escape` rather than on the two skills,
+    because the card buys the attempt and not the tumbling."""
     me = c.me
+    c.bonus("escape", 5, on=me, until=When.ENCOUNTER, kind="feat")
     held = (Condition.IMMOBILIZED, Condition.SLOWED, Condition.RESTRAINED)
 
     def early(ev: Any) -> None:

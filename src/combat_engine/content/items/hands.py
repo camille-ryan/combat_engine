@@ -82,7 +82,6 @@ from combat_engine.engine import (
     Trigger,
     When,
     World,
-    about_me,
     both,
     by_me,
     by_melee,
@@ -90,6 +89,7 @@ from combat_engine.engine import (
     get,
     granted_via,
     power,
+    query,
     targets_me,
 )
 
@@ -207,6 +207,15 @@ def _foe(c: Cast) -> int | None:
     return c.target
 
 
+def _bloodied_by_a_foe(world: World, me: int, ev: Any) -> bool:
+    who = getattr(ev, "source", None)
+    return (
+        getattr(ev, "actor", None) == me
+        and who is not None
+        and query.team(world, who) is not query.team(world, me)
+    )
+
+
 def _grabbing(world: World, eid: int) -> list[int]:
     """What this creature is holding in a grab, for a `requires=` gate --
     which is handed `(world, eid)` and has no `Cast` to ask."""
@@ -251,12 +260,15 @@ def i824x1(c: Cast) -> None:
 
 @power("i3098x1", level=2, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_grab_attack()", "c.escape()", "c.save_vs_forced()"))
+       dropped=("c.grab_check()", "c.save_vs_forced()"))
 def i3098x1(c: Cast) -> None:
-    """All three clauses are about grabbing and falling as *procedures*:
-    a grab attack is an ordinary attack the engine does not label, an
-    escape attempt is not an action at all, and catching yourself on the
-    way down is a saving throw nothing rolls."""
+    """The middle clause is the one that plays: `grab_defence` is read off
+    the *grabber* when somebody rolls to get out, which is what "your
+    defences when preventing an escape from your grab" means and is not
+    the same as raising Reflex generally. A grab attack is an ordinary
+    attack the engine does not label, and catching yourself on the way
+    down is a saving throw nothing rolls."""
+    c.bonus("grab_defence", 1, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 # -- level 3 ----------------------------------------------------------------
@@ -376,14 +388,14 @@ def i2673x1(c: Cast) -> None:
 @power("i2673p1", level=4, cls=ITEM, usage=DAILY, action=INTERRUPT,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you become bloodied from a melee attack",
-       on=Trigger(Bloodied, about_me, "you become bloodied"),
-       dropped=("Bloodied.source",))
+       on=Trigger(Bloodied, _bloodied_by_a_foe, "an enemy bloodies you"),
+       dropped=("Bloodied.power",))
 def i2673p1(c: Cast) -> None:
-    """`Bloodied` carries the creature and not who put it there, so the
-    shove goes to whoever is standing next to it."""
-    near = [f for f in c.enemies() if c.adjacent(f)]
-    if near:
-        c.push(3, on=near[0])
+    """`Bloodied.source` is the enemy that bloodied you, so the shove goes
+    where the card puts it. "From a melee attack" is the dropped half --
+    the event carries no attack, so the shape of the blow cannot be
+    asked."""
+    c.push(3, on=c.trigger.source)
 
 
 @power("i2947x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -902,11 +914,13 @@ def i1441x1(c: Cast) -> None:
 
 @power("i1486x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.escape()", "c.ability_check()"))
+       dropped=("c.grab_check()", "c.ability_check()"))
 def i1486x1(c: Cast) -> None:
-    """The two skills are real; the Strength check to grab is an ability
-    check nothing rolls and an escape attempt is not an action."""
-    _skills(c, 3, "athletics", "acrobatics")
+    """The escape half is `escape` rather than the two skill keys: the
+    card narrows it to getting out of a grab, and raising Athletics and
+    Acrobatics outright would raise every climb and tumble too. The
+    Strength check to grab is an ability check nothing rolls."""
+    c.bonus("escape", 3, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 @power("i1560p1", level=8, cls=ITEM, usage=DAILY, action=FREE,
@@ -1171,18 +1185,17 @@ def i3460x1(c: Cast) -> None:
 @power("i3460p1", level=10, cls=ITEM, usage=ENCOUNTER, action=REACTION,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.ACID],
        trigger="you are bloodied by a melee attack, or hit while bloodied",
-       on=(Trigger(Bloodied, about_me, "you become bloodied"),
+       on=(Trigger(Bloodied, _bloodied_by_a_foe, "an enemy bloodies you"),
            Trigger(Hit, both(targets_me, by_melee),
                    "you are hit while bloodied")),
-       dropped=("Bloodied.source",))
+       dropped=("Bloodied.power",))
 def i3460p1(c: Cast) -> None:
-    """Two printed triggers, so two declared ones. `Bloodied` names no
-    attacker, so that half pays out against whoever is adjacent."""
+    """Two printed triggers, so two declared ones. `_foe` reads
+    `Bloodied.source` on the first and the attacker on the second, so both
+    pay out against the creature that struck. "By a melee attack" is
+    dropped on the bloodying half only -- that event carries no attack."""
     foe = _foe(c)
-    if foe is None or foe == c.me:
-        near = [f for f in c.enemies() if c.adjacent(f)]
-        foe = near[0] if near else None
-    if foe is not None:
+    if foe is not None and foe != c.me:
         c.flat(get(c.ref).level // 2, dtype=DamageType.ACID, on=foe)
 
 

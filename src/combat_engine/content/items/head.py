@@ -746,12 +746,12 @@ def i2668x1(c: Cast) -> None:
 
 
 @power("i3470x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.escape()",))
+       reach=PERSONAL, target=SELF)
 def i3470x1(c: Cast) -> None:
     """Six squares is thirty feet. `Fell` is read back by its emitter, so
-    softening the drop and keeping the wearer up are both writable; an
-    escape attempt is not an action the engine has."""
+    softening the drop and keeping the wearer up are both writable."""
     _skills(c, 2, "stealth")
+    c.bonus("escape", 2, on=c.me, until=When.ENCOUNTER, kind="item")
     c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
             when=_holding(Condition.IMMOBILIZED, Condition.RESTRAINED,
                           Condition.SLOWED))

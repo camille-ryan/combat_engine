@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Action:
-    #: power | move | run | shift | charge | stand | second_wind | sustain |
-    #: drop | wield | item | instinctive | end
+    #: power | move | run | shift | charge | stand | escape | second_wind |
+    #: sustain | drop | wield | item | instinctive | end
     kind: str
     cost: ActionType
     ref: str = ""
@@ -701,6 +701,19 @@ def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
         for cost in sorted(costs, key=lambda a: a.value):
             if encounter.can_spend(actor, cost):
                 out.append(Action(kind="stand", cost=cost))
+    # Getting out of a grab. A move action by default, and the same
+    # `_granted` road `stand` above takes, because "you can use the escape
+    # action as a minor action" is a printed line and a constant here left
+    # it nowhere to go.
+    from .escape import grabbed
+
+    if grabbed(world, actor):
+        costs = {ActionType.MOVE} | {
+            cost for (what, cost) in _granted(world, actor) if what == "escape"
+        }
+        for cost in sorted(costs, key=lambda a: a.value):
+            if encounter.can_spend(actor, cost):
+                out.append(Action(kind="escape", cost=cost))
     health = world.get(actor, Health)
     known = world.get(actor, Powers)
     # Second wind is a character's action. Monsters carry surges -- one per
@@ -855,6 +868,14 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             if Condition.PRONE in eff.conditions:
                 world.effects.end(eff, "stood up")
         world.bus.emit(Note(text=f"{actor} stands"))
+        return True
+
+    if action.kind == "escape":
+        from .escape import attempt
+
+        # A failed attempt is a spent move action and nothing else, the
+        # way a failed `hide` is a spent minor.
+        attempt(world, actor)
         return True
 
     if action.kind == "sustain":

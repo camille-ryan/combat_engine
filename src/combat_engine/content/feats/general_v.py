@@ -69,6 +69,7 @@ from combat_engine.engine import (
     DamageRolled,
     DamageType,
     Dropped,
+    Escaped,
     ForcedMove,
     Gear,
     Hit,
@@ -118,12 +119,8 @@ PROFICIENCY = ("chargen.proficiency()",)
 WEAPON_REF = ("spec.weapon_ref()",)
 #: Spending a use of another row as the price of this one.
 EXPEND = ("c.expend_row()",)
-#: Escaping a grab is not an act the engine announces.
-ESCAPE = ("c.escape()",)
 #: "Strength or Dexterity" -- one attack line, whichever is better.
 BEST_OF = ("Attack.best_of()",)
-#: Who threw the blow an interrupt answered, read from a later row.
-ATTACKER = ("c.triggering_attacker()",)
 #: Suppressing a clause of the power that triggered this one.
 INSTEAD = ("c.instead_of()",)
 
@@ -440,17 +437,27 @@ def f3485(c: Cast) -> None:
        reach=Melee(1), target=Target(side="enemy", count=1, max_size=Size.LARGE),
        keywords=[Keyword.MARTIAL, Keyword.WEAPON],
        attack=Attack(STR, vs=REF),
-       dropped=(*WEAPON_REF, *BEST_OF, *ESCAPE))
+       dropped=(*WEAPON_REF, *BEST_OF))
 def f3485b(c: Cast) -> None:
     """"Strength or Dexterity" is one line with two abilities and the
     header carries one, so the damage reads `c.attack_mod` -- whatever the
     declared branch actually swung with -- rather than naming Strength
     twice. The Requirement names a weapon the engine has no group and no
-    ref for, and the secondary attack is answered by an escape, which
-    nothing announces."""
-    if c.strike():
-        c.damage(c.w(2), c.attack_mod)
-        c.grab()
+    ref for. The secondary attack answers `Escaped`, and the watch ends
+    with the grab it is about rather than running for the encounter."""
+    if not c.strike():
+        return
+    c.damage(c.w(2), c.attack_mod)
+    c.grab()
+    me, foe = c.me, c.target
+
+    def broke(ev: Escaped) -> None:
+        if ev.holder != me or ev.actor != foe or not ev.success:
+            return
+        if c.attack(c.str_, FORT, on=foe):
+            c.damage(c.w(1), c.attack_mod, on=foe)
+
+    c.watch(Escaped, broke, until=When.ENCOUNTER, on=me, once=True)
 
 
 @power("f3486", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -501,7 +508,7 @@ def f3487(c: Cast) -> None:
        reach=Melee(1), target=ONE_CREATURE,
        keywords=[Keyword.MARTIAL, Keyword.WEAPON, Keyword.RELIABLE],
        attack=Attack(STR, vs=REF),
-       dropped=(*WEAPON_REF, *BEST_OF, *ESCAPE))
+       dropped=(*WEAPON_REF, *BEST_OF))
 def f3487b(c: Cast) -> None:
     """"Miss: this power is not expended" is the reliable keyword and is
     declared in the header rather than written in the body. The -2 to
@@ -515,9 +522,17 @@ def f3487b(c: Cast) -> None:
     if foe is None:
         return
     c.grab(on=foe)
-    c.penalty("skill:acrobatics", 2, on=foe, until=When.ENCOUNTER)
-    c.penalty("skill:athletics", 2, on=foe, until=When.ENCOUNTER)
+    c.penalty("escape", 2, on=foe, until=When.ENCOUNTER)
     me = c.me
+
+    def broke(ev: Escaped) -> None:
+        if ev.holder != me or ev.actor != foe or not ev.success:
+            return
+        if c.attack(c.str_, FORT, on=foe):
+            c.damage(c.w(2), c.attack_mod, on=foe)
+            c.prone(on=foe)
+
+    c.watch(Escaped, broke, until=When.ENCOUNTER, on=me, once=True)
 
     def stepped(ev: Any) -> None:
         if ev.actor == me and foe in c.grabbing(of=me):
@@ -573,11 +588,29 @@ def f3490(c: Cast) -> None:
 
 
 @power("f3491", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.retarget()",))
+       reach=PERSONAL, target=SELF)
 def f3491(c: Cast) -> None:
-    """The whole benefit is rewriting another row's Target line. `PowerUsed`
-    is announced after its targets are chosen and `c.add_target` adds to
-    the cast that is running, not to somebody else's."""
+    """Another row's Target line cannot be rewritten, but `c.use_power`
+    aims it: the widened power is `p1766` used once more per adjacent
+    enemy the triggering use left out, at no action and spending nothing,
+    which is one attack roll each exactly as a two-target line would be.
+
+    The guard is the whole of the difficulty -- each extra use announces
+    its own `PowerResolved`, which is this watch's own trigger."""
+    me = c.me
+    busy: list[bool] = []
+
+    def widen(ev: Any) -> None:
+        if busy or ev.actor != me or ev.power != "p1766":
+            return
+        busy.append(True)
+        already = set(ev.targets)
+        for foe in c.within(1, side="enemy"):
+            if foe not in already:
+                c.use_power("p1766", on=foe, spend=False, again=True)
+        busy.clear()
+
+    c.watch(PowerResolved, widen, until=When.ENCOUNTER, label=f"{c.ref} widen")
 
 
 @power("f3492", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -777,36 +810,59 @@ def f3502(c: Cast) -> None:
 # -- halfling second chance -------------------------------------------------
 
 
+def _triggering_attacker(ev: Any) -> int | None:
+    """Who threw the blow the triggering power was used to answer.
+
+    `PowerUsed`/`PowerResolved` carry `trigger` -- the event the power
+    was used *in answer to* -- and `p1452` is declared on `Hit`, so the
+    creature that swung is `ev.trigger.attacker`. The marker that stood
+    on both rows below wanted a method for a field the event has."""
+    hit = getattr(ev, "trigger", None)
+    return getattr(hit, "attacker", None)
+
+
 @power("f3503", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=ATTACKER)
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use p1452 while bloodied",
+       on=Trigger(PowerResolved, _used("p1452"), "you use p1452"))
 def f3503(c: Cast) -> None:
-    """The whole benefit is aimed at "the triggering attacker" of another
-    row's interrupt. `PowerResolved` carries the actor and the targets of
-    `p1452`, and `p1452` targets its own user -- the creature that swung is
-    on nothing this row can read."""
+    """`to="team"` is the printed "you and your allies"; `"ally"` would
+    leave the caster out."""
+    who = _triggering_attacker(c.trigger)
+    if who is not None and c.bloodied(on=c.me):
+        c.grants_advantage(on=who, to="team", until=When.EONT)
 
 
 @power("f3504", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=ATTACKER,
+       reach=PERSONAL, target=NO_TARGET,
        trigger="you use p1452 while bloodied",
        on=Trigger(PowerResolved, _used("p1452"), "you use p1452"))
 def f3504(c: Cast) -> None:
-    """Untyped, and the escalation to +4 is dropped rather than written as
-    a second +2: two untyped bonuses add, so a gated second one would come
-    to +4 whenever it applied and to +2 otherwise -- which is the right
-    number by accident and the wrong mechanism. It is dropped because
-    "the triggering attack" cannot be found from here at all."""
-    if c.bloodied(on=c.me):
-        c.bonus("damage", 2, on=c.me, until=When.EONT)
+    """Untyped, and one bonus of the right size rather than a +2 and a
+    gated +2: `c.reroll_attack` writes `result.hit` back onto the
+    `AttackResult` riding on the triggering `Hit`, so whether the attack
+    still hits is settled by the time `p1452` resolves and the number can
+    simply be chosen."""
+    if not c.bloodied(on=c.me):
+        return
+    hit = getattr(c.trigger, "trigger", None)
+    result = getattr(hit, "result", None)
+    c.bonus("damage", 4 if result is not None and result.hit else 2,
+            on=c.me, until=When.EONT)
 
 
 @power("f3507", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.save_vs_forced()", "c.racial_row()"))
+       todo=("query.knocked_prone()",))
 def f3507(c: Cast) -> None:
-    """Forced movement is refused outright by `ForcedMove` being cancelled
-    and there is no saving throw anywhere in it, so the roll this feat
-    doubles does not happen. The Special is a treaty and carries nothing."""
+    """The racial row is `rt:r2-stand-your-ground`, a declared ref, and
+    `c.reroll_save` is the printed "twice, and use the better" -- neither
+    is the hold. The hold is that the trait's prone half is itself
+    dropped on the same symbol: `ConditionApplied` says who applied a
+    condition and not whether an *attack* did, so no saving throw against
+    falling prone is ever rolled and there is none to roll twice.
+
+    The Special is a treaty and carries nothing."""
 
 
 # -- wardens ----------------------------------------------------------------
@@ -872,15 +928,38 @@ def f3511(c: Cast) -> None:
 
 
 @power("f3512", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=("c.forgo_damage()",),
+       reach=PERSONAL, target=NO_TARGET,
        trigger="you hit an enemy with p5093",
        on=Trigger(Hit, _hit_with("p5093"), "you hit with p5093"))
 def f3512(c: Cast) -> None:
-    """`Hit` is announced partway through `p5093`'s body, so the damage is
-    already on its way by the time this answers -- "instead of causing
-    damage" is the half that needs a hold on the blow."""
+    """"Instead of causing damage" is a hold on the blow and `Hit` is
+    announced before the damage is rolled, so the hold is a one-shot
+    watch on the `DamageRolled` that is still to come: that event is a
+    `Decision` and `resolve.deal` returns 0 the moment it is cancelled.
+    `detail` is the ref of the row being rolled, which is what keeps the
+    cancellation on `p5093`'s own blow and off anything else the caster
+    does this turn.
+
+    The choice is three-way, not two: declining is leaving the damage
+    alone, and `optional=True` puts it last so that a board with no
+    decider takes the clause rather than skips it."""
+    me = c.me
     foe = c.trigger.target
-    if c.choose(["prone", "slide"], "knock prone or slide 1") == "prone":
+    pick = c.choose(["prone", "slide"], "prone or slide instead of damage",
+                    optional=True, decline="deal the damage")
+    if pick is None:
+        return
+    spent: list[bool] = []
+
+    def forgo(rolled: Any) -> None:
+        if spent or rolled.source != me or rolled.detail != "p5093":
+            return
+        spent.append(True)
+        rolled.cancel()
+
+    c.watch(DamageRolled, forgo, until=When.EOT, on=me,
+            window=Window.BEFORE, label=f"{c.ref} forgo")
+    if pick == "prone":
         c.prone(on=foe)
     else:
         c.slide(1, on=foe)
@@ -1286,13 +1365,14 @@ def f3540(c: Cast) -> None:
 
 
 @power("f3541", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Summon.from_block()", *INSTEAD))
+       reach=PERSONAL, target=SELF, todo=("spec.stat_block()", *INSTEAD))
 def f3541(c: Cast) -> None:
     """Every name on this card is a ref, so the naming marker was pointing
-    at a gap that is not there. `x10_13` is a summon block nothing
-    declares, so `c.summon` has nothing to put on the board -- and
-    swapping it for the creature `p13744`'s own body summons needs a hold
-    on that body."""
+    at a gap that is not there. The hold now has a name of its own:
+    neither `x10_13` nor the `x10_12` it replaces has a block anywhere the
+    spec carries -- `p13744` summons the second off `Summon`'s bare
+    defaults -- so the two forms are the same creature and the choice this
+    row grants has nothing to choose between."""
 
 
 # -- channel divinity -------------------------------------------------------
@@ -1503,14 +1583,29 @@ def f3552(c: Cast) -> None:
 
 
 @power("f3553", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("SurgeSpent.source",))
+       reach=PERSONAL, target=SELF)
 def f3553(c: Cast) -> None:
     """`SurgeSpent` says whose surge went and how many are left, and
-    nothing about what took it -- so "a power **you** used" cannot be
-    told from a second wind the ally took on its own turn."""
+    nothing about what took it. It does not have to: `PowerUsed` is
+    announced above a body and `PowerResolved` below it, so every event
+    between the two belongs to that use, and "a power **you** used" is
+    the bracket rather than a field. A second wind an ally takes on its
+    own turn falls outside it and is not offered. A stack rather than a
+    flag, because a row reaching another nests."""
     me = c.me
+    running: list[str] = []
+
+    def opened(ev: Any) -> None:
+        if ev.actor == me:
+            running.append(ev.power)
+
+    def closed(ev: Any) -> None:
+        if ev.actor == me and running:
+            running.pop()
 
     def spent(ev: Any) -> None:
+        if not running:
+            return
         who = ev.actor
         if who == me or who not in c.allies():
             return
@@ -1520,6 +1615,8 @@ def f3553(c: Cast) -> None:
             c.bonus(AC, 2, on=who, until=When.SOTNT)
             c.bonus(REF, 2, on=who, until=When.SOTNT)
 
+    c.watch(PowerUsed, opened, until=When.ENCOUNTER, label=f"{c.ref} open")
+    c.watch(PowerResolved, closed, until=When.ENCOUNTER, label=f"{c.ref} close")
     c.watch(SurgeSpent, spent, until=When.ENCOUNTER)
 
 
@@ -1598,12 +1695,29 @@ def f3558(c: Cast) -> None:
     c.watch(PowerResolved, spoke, until=When.ENCOUNTER)
 
 
+#: The six origins, so that "changes to shadow" can displace whichever
+#: one a race wrote on. `c.set_origin` takes one `instead_of` and a
+#: creature has one origin, but which one is not knowable here: this row
+#: and the racial trait that lays the old word are both traits armed at
+#: the start of a fight, in an order neither may assume.
+ORIGINS = ("aberrant", "elemental", "fey", "immortal", "natural")
+
+
 @power("f3559", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.counts_as(kind=)", "query.light_level(world, square)"))
+       dropped=("query.light_level(world, square)",))
 def f3559(c: Cast) -> None:
-    """An origin is one of the creature's type words and nothing can add
-    one, and how bright a square is is not a thing the board records."""
+    """`c.set_origin` writes the word onto the creature and `c.kinds_of`
+    unions it with the stat block, so "your origin changes to shadow" is
+    a word laid and the rest taken off -- "changes to", not "also counts
+    as", and an origin is exclusive.
+
+    How bright a square is is not a thing the board records, so the
+    saving throw half is dropped rather than laid ungated: a standing +1
+    to every save is a bigger number than the card gives."""
+    for word in ORIGINS:
+        c.set_origin(instead_of=word, on=c.me)
+    c.set_origin("shadow", on=c.me)
 
 
 @power("f3561", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

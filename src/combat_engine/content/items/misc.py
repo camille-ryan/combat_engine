@@ -39,9 +39,10 @@ Six judgements run through the file.
   conditions" is `_save_conditions`. The *event* still carries none of
   it, which is why a row answering a save rather than modifying one --
   "roll twice and use either result" -- still names `SavingThrow.ongoing`.
-* **`Bloodied` carries `actor` and nothing else**, so "an enemy bloodies
-  you, but does not reduce you to 0" can say the first half and not the
-  second. Those rows play and carry `Bloodied.source`.
+* **`Bloodied` carries `actor` and `source`**, so "an enemy bloodies you,
+  but does not reduce you to 0" is exact: `_bloodied_by_a_foe` asks the
+  first half, and `resolve.deal_damage` emits the event only while
+  `hp > 0`, which is the second.
 """
 
 from __future__ import annotations
@@ -126,6 +127,7 @@ from combat_engine.engine import (
     get,
     my_check,
     power,
+    query,
     spread,
     targets_me,
 )
@@ -342,6 +344,20 @@ def _save_conditions(*conditions: Condition) -> Callable[[dict[str, Any]], bool]
         return bool(wanted & set(ctx.get("conditions", ())))
 
     return gate
+
+
+def _bloodied_by_a_foe(world: World, me: int, ev: Any) -> bool:
+    """An enemy put the wearer past the half-hit-point line.
+
+    `resolve.deal_damage` emits `Bloodied` only while `hp > 0`, so the
+    printed "but does not reduce you to 0 hit points" needs nothing here.
+    """
+    who = getattr(ev, "source", None)
+    return (
+        getattr(ev, "actor", None) == me
+        and who is not None
+        and query.team(world, who) is not query.team(world, me)
+    )
 
 
 def _my_crit(world: World, me: int, ev: Any) -> bool:
@@ -695,10 +711,17 @@ def i1066x1(c: Cast) -> None:
 
 @power("i1066p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=Ranged(10), target=NO_TARGET, keywords=[Keyword.SUMMONING],
-       dropped=("Summon.from_block()",))
+       dropped=("c.best_ability()",))
 def i1066p1(c: Cast) -> None:
-    """The defence offsets and the hover are printed; the attack line is
-    "your highest ability" and there is no block to read it from, so the
+    """The block is printed in the power's own text and the spec carries
+    all of it, so a missing block was the wrong hold: the defence
+    offsets, the size and the hover are written, and `dsl.Summon` could
+    take the attack line too.
+
+    What stops it is "your highest ability": `Attack` takes one named
+    ability or a printed number, and nothing answers "whichever of mine is
+    largest". Fifty-four rows print the phrase. Without the attack line
+    the Instinctive Effect has nothing to fire, so both wait on it and the
     summon commands with whatever row drives it."""
     c.summon_inline(
         Summon(per_defence={"ac": 2, "fort": 2}, speed=0, modes={"fly": 6}),
@@ -1208,11 +1231,8 @@ def i3396x1(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.ILLUSION, Keyword.TELEPORTATION],
        trigger="an enemy bloodies you",
-       on=Trigger(Bloodied, about_me, "you are bloodied"),
-       dropped=("Bloodied.source",))
+       on=Trigger(Bloodied, _bloodied_by_a_foe, "an enemy bloodies you"))
 def i3396p1(c: Cast) -> None:
-    """`Bloodied` carries only `actor`, so "an enemy bloodies you" fires on
-    any bloodying, including one the wearer brought on itself."""
     roll = c.roll("1d8")
     if roll % 2:
         c.dazed(on=c.me, until=When.EONT)
@@ -1335,14 +1355,11 @@ def i624x1(c: Cast) -> None:
 @power("i624p1", level=3, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="an enemy bloodies you but does not drop you",
-       on=Trigger(Bloodied, about_me, "you are bloodied"),
-       dropped=("Bloodied.source",))
+       on=Trigger(Bloodied, _bloodied_by_a_foe, "an enemy bloodies you"))
 def i624p1(c: Cast) -> None:
-    """Without a source on the event the swing goes at the nearest enemy,
-    which is the only reading the board can supply."""
-    near = sorted(c.within(1, side="enemy")) or sorted(c.enemies())
-    if near:
-        c.basic(on=near[0])
+    """The swing goes back at the triggering enemy, which `Bloodied.source`
+    names."""
+    c.basic(on=c.trigger.source)
 
 
 @power("i927x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -1525,7 +1542,7 @@ def i3336p1(c: Cast) -> None:
        reach=Ranged(5), target=Target(side="other", count=1,
                                       max_size=Size.TINY),
        requires=_something_tiny, requires_text="a Tiny beast within 5 squares",
-       keywords=[Keyword.POLYMORPH], dropped=("Summon.from_block()",))
+       keywords=[Keyword.POLYMORPH], dropped=("spec.stat_block()",))
 def i3364p1(c: Cast) -> None:
     """"Tiny" is the target line's own `max_size`, so the body does not
     re-ask it. The size change and the mount relation are both sayable;
@@ -1757,11 +1774,12 @@ def i2408p1(c: Cast) -> None:
 
 @power("i2714p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
        reach=Ranged(5), target=NO_TARGET, keywords=[Keyword.SUMMONING],
-       dropped=("Summon.from_block()",))
+       dropped=("spec.stat_block()",))
 def i2714p1(c: Cast) -> None:
-    """The summoned creature's own stat block is not in the spec, so it
-    takes the summon defaults; the saving throw that turns it hostile
-    needs the replacement block too."""
+    """The summoned creature's own stat block is printed nowhere the spec
+    carries -- the entry names it and never prints it -- so it takes the
+    summon defaults; the saving throw that turns it hostile needs the
+    replacement block too."""
     c.summon_inline(Summon())
 
 
@@ -2110,8 +2128,7 @@ def i3097x1(c: Cast) -> None:
 @power("i3097p1", level=6, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="an enemy bloodies you but does not drop you",
-       on=Trigger(Bloodied, about_me, "you are bloodied"),
-       dropped=("Bloodied.source",))
+       on=Trigger(Bloodied, _bloodied_by_a_foe, "an enemy bloodies you"))
 def i3097p1(c: Cast) -> None:
     c.reroll_damage(on=c.me, until=When.EONT)
 
@@ -2501,8 +2518,7 @@ def i2164x1(c: Cast) -> None:
 @power("i2164p1", level=8, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="an enemy bloodies you but does not drop you",
-       on=Trigger(Bloodied, about_me, "you are bloodied"),
-       dropped=("Bloodied.source",))
+       on=Trigger(Bloodied, _bloodied_by_a_foe, "an enemy bloodies you"))
 def i2164p1(c: Cast) -> None:
     c.temp_hp(c.surge_value(), on=c.me)
 
@@ -2884,13 +2900,14 @@ def i1675p1(c: Cast) -> None:
 
 
 @power("i2838x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.is_minion()",))
+       reach=PERSONAL, target=SELF)
 def i2838x1(c: Cast) -> None:
-    """Nothing distinguishes a minion, so the save is offered for a minion
-    too."""
+    """"A nonminion enemy" is `c.is_minion`, off the stat block's own
+    column. `c.save` follows the target, so the saving throw the card
+    gives *you* names you."""
 
     def felled(ev: Dropped) -> None:
-        if ev.source == c.me and ev.actor != c.me:
+        if ev.source == c.me and ev.actor != c.me and not c.is_minion(on=ev.actor):
             c.save(on=c.me)
 
     c.watch(Dropped, felled, until=When.ENCOUNTER)

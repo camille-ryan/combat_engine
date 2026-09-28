@@ -793,6 +793,32 @@ class Magic:
     #: The item's own rows -- its Properties and its Powers -- which go
     #: into `Powers.known` while it is worn.
     powers: tuple[str, ...] = ()
+    #: What base items this magic may be laid on, as the printed column
+    #: reads them -- `("heavy blade", "light blade")`, `("arrow",)`.
+    #: Empty is "any", which is most of the catalogue. Read by
+    #: `equipment` to decide which launcher a piece of ammunition fits.
+    base: tuple[str, ...] = ()
+
+
+@dataclass
+class Ammo:
+    """Magic ammunition in the quiver: what it is, and how much is left.
+
+    Not a `Weapon` and not a `Magic` in `Gear.worn`, because it is neither
+    held nor worn -- it is *spent*. One piece goes when a shot is fired
+    and the item's property rides that shot and no other, which is the
+    whole of what the ammunition rows have been waiting for.
+
+    `count` is how many pieces the wielder bought. That is not a printed
+    rule -- the card says what one piece does -- so it is a field rather
+    than a constant, and whoever hands the ammunition out chooses.
+    """
+
+    ref: str
+    #: `arrow`, `bolt` or `stone`, off the item's base-item column.
+    kind: str = ""
+    plus: int = 0
+    count: int = 1
 
 
 @dataclass
@@ -811,6 +837,10 @@ class Gear:
     #: `Weapon` -- it is a longsword with properties -- so this holds the
     #: armour, the neck, and the eight small slots that had nowhere to go.
     worn: dict[str, Magic] = field(default_factory=dict)
+    #: Magic ammunition, in the order it is drawn. Not in `worn`, because
+    #: a worn item is on the creature for the whole fight and a piece of
+    #: ammunition is gone the moment it is loosed.
+    quiver: list[Ammo] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Start with a grip that a pair of hands could actually make.

@@ -78,6 +78,8 @@ from combat_engine.engine import (
     Miss,
     PowerUsed,
     Ranged,
+    Relation,
+    RelationSet,
     SurgeSpent,
     Trigger,
     Usage,
@@ -602,12 +604,24 @@ def f1279b(c: Cast) -> None:
         c.dazed(until=When.SAVE_ENDS)
 
 
-@_trait("f1288", todo=("c.escape()",), proficiency=("w:garrote",))
+@_trait("f1288", usage=AT_WILL, proficiency=("w:garrote",),
+        dropped=("c.two_handed()", "c.counts_as(group=)"))
 def f1288(c: Cast) -> None:
-    """The proficiency lands. The three clauses beneath it are all about
-    a grab that is being *escaped from* -- a penalty to the escape, and
-    advantage for each turn the grab is maintained -- and nothing
-    announces an escape attempt for either to hang on."""
+    """The proficiency lands and the penalty hangs on the grab being made
+    while that weapon is in hand -- `RelationSet` is the only event that
+    names both ends of a grab. The combat advantage clause turns on the
+    weapon being used *with two hands*, which is a fact about the grip
+    and not about the weapon; the light-blade clause re-files the weapon
+    into another group for a class feature's purposes."""
+    me = c.me
+
+    def seized(ev: Any) -> None:
+        if ev.kind_ is not Relation.GRABBED_BY or ev.source != me:
+            return
+        if any(w.ref == "w:garrote" for w in c.held(on=me)):
+            c.penalty("escape", 2, on=ev.target, until=When.ENCOUNTER)
+
+    c.watch(RelationSet, seized, until=When.ENCOUNTER, on=me)
 
 
 _swap("f1289", "f1289b")

@@ -16,6 +16,9 @@ already existed:
   gameplay reader of `Defenses`;
 * **a critical rider** -- a `Mod` on `crit_damage`, rolled, which
   `resolve.deal_damage` reads in the crit branch;
+* **a quiver of magic ammunition** -- `Gear.quiver`, because a piece is
+  spent on one shot rather than worn for a fight, and `engine/ammunition`
+  is what ties the shot to the piece;
 * **its own Properties and Powers** -- appended to `Powers.known`, so
   recharge, the action menu, the trigger dispatcher and `PowerUsed` all
   work on them without knowing they came from an object.
@@ -30,7 +33,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from .components import Gear, Magic, Mod, Mods, Powers, Weapon
+from .ammunition import FIRES
+from .components import Ammo, Gear, Magic, Mod, Mods, Powers, Weapon
 from .types import Defense
 
 #: Slots whose enhancement is an AC bonus, and the three defences the neck
@@ -43,13 +47,19 @@ _DEFENCES = (Defense.FORT, Defense.REF, Defense.WILL)
 _LABEL = "item:"
 
 
-def equip(world, eid: int, magic: Magic, *, onto: str = "") -> None:  # noqa: ANN001
+def equip(world, eid: int, magic: Magic, *, onto: str = "", count: int = 10) -> None:  # noqa: ANN001
     """Wear or wield one magic item.
 
     `onto` is the ref of the base weapon an `attack_damage` item is laid
     on. Without it the item goes on whatever the creature would swing,
     which is what handing somebody a magic sword means -- but a character
     carrying two blades has to be told which.
+
+    `count` is how many pieces of ammunition are being handed over, and is
+    ignored by everything else. Not a printed number -- the card says what
+    one piece does and says nothing about how many you bought -- so it is
+    an argument rather than a constant, and the default is a quiver's
+    worth so that a fight has something to run out of.
     """
     gear = world.get(eid, Gear)
     if gear is None:
@@ -60,13 +70,20 @@ def equip(world, eid: int, magic: Magic, *, onto: str = "") -> None:  # noqa: AN
     # because that is where the attack roll looks -- but "what magic is
     # this creature carrying" has to have one answer, or the rows an item
     # grants belong to no item and `ItemPowerUsed` has nothing to name.
-    gear.worn[magic.slot or magic.ref] = magic
-    if magic.enh_to == "attack_damage":
-        _onto_weapon(gear, magic, onto)
+    if magic.slot == "ammunition":
+        # Neither worn nor wielded: a piece of ammunition is *spent*, so it
+        # goes in the quiver and its enhancement and critical rider stay on
+        # the piece rather than being written onto the bow. Laid on the bow
+        # they would have raised every shot the wielder ever made,
+        # including the ones fired after the last magic arrow was gone.
+        _into_quiver(gear, magic, count)
     else:
-        _defence_mods(world, eid, magic)
-
-    _crit_rider(world, eid, magic)
+        gear.worn[magic.slot or magic.ref] = magic
+        if magic.enh_to == "attack_damage":
+            _onto_weapon(gear, magic, onto)
+        else:
+            _defence_mods(world, eid, magic)
+        _crit_rider(world, eid, magic)
 
     powers = world.get(eid, Powers)
     if powers is not None:
@@ -91,9 +108,22 @@ def unequip(world, eid: int, ref: str) -> None:  # noqa: ANN001
         replace(w, enhancement=0, item="") if w.item == ref else w
         for w in gear.weapons
     ]
+    gear.quiver = [a for a in gear.quiver if a.ref != ref]
     mods = world.get(eid, Mods)
     if mods is not None:
         mods.items = [m for m in mods.items if m.label != f"{_LABEL}{ref}"]
+
+
+def _into_quiver(gear: Gear, magic: Magic, count: int) -> None:
+    """Put `count` pieces in the quiver, replacing any of the same item.
+
+    The kind is the base-item column -- arrow, bolt or stone -- and an
+    item that names none fits any launcher, which is what the two rows
+    printing no base item mean.
+    """
+    kind = next((b for b in magic.base if b in set(FIRES.values())), "")
+    gear.quiver = [a for a in gear.quiver if a.ref != magic.ref]
+    gear.quiver.append(Ammo(ref=magic.ref, kind=kind, plus=magic.plus, count=count))
 
 
 def _onto_weapon(gear: Gear, magic: Magic, onto: str) -> None:

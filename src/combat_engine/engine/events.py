@@ -435,6 +435,11 @@ class DamageApplied(Event):
     target: int
     amount: int
     dtype: DamageType
+    #: **Temporary hit points spent on this blow, and nothing else.** Not
+    #: resistance, which comes off further up and is `resisted` below. A
+    #: row asking "did my resistance eat some of this" off `absorbed` is
+    #: false in every fight that has no temporary hit points in it, which
+    #: is nearly all of them, and true for the wrong reason in the rest.
     absorbed: int
     hp: int
     #: The docstring above has promised this since the class was written and
@@ -446,6 +451,12 @@ class DamageApplied(Event):
     #: The whole type of the blow, as on `DamageRolled`. Empty means "just
     #: `dtype`", which is every blow that is of one type.
     dtypes: tuple[DamageType, ...] = ()
+    #: **Points the target's resistance and immunity took off**, before
+    #: any of it reached hit points. The gap between the blow that was
+    #: rolled and the blow that landed, which is what "if your resistance
+    #: reduces the damage" reads and what `absorbed` was being misread
+    #: for. Zero is the ordinary blow, so it stays out of the log line.
+    resisted: int = 0
 
     def types(self) -> tuple[DamageType, ...]:
         """Every type this blow was, whether it was one or several."""
@@ -514,7 +525,17 @@ class TempHP(Event):
 
 @dataclass
 class Bloodied(Event):
+    """Crossed the half-hit-point line this blow.
+
+    `source` is whoever struck it, and may be None when nothing did --
+    ongoing damage that ticks a creature past the line. Same shape and
+    same reason as `Dropped.source`: "whenever you bloody an enemy" is a
+    common printed trigger and, without it, `by_me` was false on this
+    event and nineteen rows had nowhere to ask.
+    """
+
     actor: int
+    source: int | None = None
 
 
 @dataclass
@@ -586,6 +607,22 @@ class RelationCleared(Event):
     source: int
     target: int
     why: str
+
+
+@dataclass
+class Escaped(Event):
+    """One attempt to get out of a grab, win or lose.
+
+    Emitted for a failure as well, because "whenever a creature fails an
+    escape attempt against you" is printed as often as the other half.
+    `holder` is the grabber, so a row about *your* grabs gates on that and
+    not on `actor` -- which is the creature struggling.
+    """
+
+    actor: int
+    holder: int
+    skill: str
+    success: bool
 
 
 @dataclass

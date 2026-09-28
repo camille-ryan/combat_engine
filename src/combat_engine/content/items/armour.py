@@ -92,6 +92,8 @@ from combat_engine.engine import (
     Powers,
     PowerUsed,
     Ranged,
+    Relation,
+    RelationSet,
     SavingThrow,
     SecondWind,
     SkillCheck,
@@ -250,6 +252,17 @@ def _enemy(world: World, me: int, who: int | None) -> bool:
     if who is None or who == me:
         return False
     return query.team(world, who) is not query.team(world, me)
+
+
+def _we_bloodied_one(world: World, me: int, ev: Event) -> bool:
+    """The wearer or an ally within 5 put an enemy past the line."""
+    who = getattr(ev, "source", None)
+    return (
+        _enemy(world, me, getattr(ev, "actor", None))
+        and who is not None
+        and query.team(world, who) is query.team(world, me)
+        and query.distance_between(world, me, who) <= 5
+    )
 
 
 def _crit_on_me(world: World, me: int, ev: Event) -> bool:
@@ -542,10 +555,10 @@ def i1147p1(c: Cast) -> None:
 
 
 @power("i1198x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.escape()",))
+       reach=PERSONAL, target=SELF)
 def i1198x1(c: Cast) -> None:
-    """An escape attempt is not a thing the engine has: no action, no
-    check, nothing to hang a bonus on."""
+    """Untyped: the card prints no word in front of "bonus"."""
+    c.bonus("escape", 2, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i1198p1", level=2, cls=ITEM, usage=DAILY, action=REACTION,
@@ -835,9 +848,13 @@ def i2441x1(c: Cast) -> None:
 
 
 @power("i2534x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.escape()",))
+       reach=PERSONAL, target=SELF, dropped=("c.bonus(skill=)",))
 def i2534x1(c: Cast) -> None:
-    """An escape action is not modelled, so a bonus to one has no roll."""
+    """The card narrows this to Acrobatics and the escape action offers
+    two skills; `escape` is one key for the attempt however it is rolled,
+    so the Athletics half of the choice gets the bonus too."""
+    c.bonus("escape", 2 * c.enhancement, on=c.me, until=When.ENCOUNTER,
+            kind="item")
 
 
 @power("i2986x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -870,10 +887,12 @@ def i3040x1(c: Cast) -> None:
 
 
 @power("i3117x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.escape()",))
+       reach=PERSONAL, target=SELF)
 def i3117x1(c: Cast) -> None:
     """The second clause -- the armour cannot be taken off -- is not a
-    combat effect; the first has no escape attempt to modify."""
+    combat effect and nothing on a board removes armour."""
+    c.bonus("escape", 2 + c.enhancement, on=c.me, until=When.ENCOUNTER,
+            kind="item")
 
 
 @power("i3130p1", level=2, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1537,15 +1556,31 @@ def i1024p1(c: Cast) -> None:
     c.penalty("attack", 2, until=When.SAVE_ENDS)
 
 
+def _grabbed_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """Somebody has taken hold of me.
+
+    `RelationSet`, not `ConditionApplied`: `Relations._apply_condition`
+    writes the condition straight onto the component, so nothing
+    announces a grab, a mark or a domination as a condition and a trigger
+    declared on that one is silently false forever.
+    """
+    return (
+        getattr(ev, "kind_", None) is Relation.GRABBED_BY
+        and getattr(ev, "target", None) == me
+        and getattr(ev, "source", None) != me
+    )
+
+
 @power("i1111p1", level=4, cls=ITEM, usage=DAILY, action=INTERRUPT,
        reach=PERSONAL, target=NO_TARGET, trigger="another creature grabs you",
-       on=Trigger(ConditionApplied, _condition_on_me(Condition.GRABBED),
-                  "you are grabbed"),
-       dropped=("c.escape()",))
+       on=Trigger(RelationSet, _grabbed_me, "you are grabbed"))
 def i1111p1(c: Cast) -> None:
-    """The grab goes; the +5 to the escape attempt has no roll to join."""
-    foe = _foe(c)
-    c.cure(Condition.GRABBED, on=c.me)
+    """"You immediately use the escape action with a +5 bonus" is an
+    attempt that can fail, not a cure -- so the damage is dealt either
+    way, which is how the two clauses are printed. The grabber is read
+    before the attempt, because a successful one clears the relation."""
+    foe = next(iter(c.grabbed_by(on=c.me)), None) or _foe(c)
+    c.escape(on=c.me, bonus=5)
     if foe is not None:
         c.flat(5, on=foe)
 
@@ -1886,9 +1921,9 @@ def i2380x1(c: Cast) -> None:
 
 
 @power("i2401x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.escape()",))
+       reach=PERSONAL, target=SELF)
 def i2401x1(c: Cast) -> None:
-    """No escape check exists to take the bonus."""
+    c.bonus("escape", 5, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 @power("i2401p1", level=4, cls=ITEM, usage=DAILY, action=INTERRUPT,
@@ -2016,12 +2051,14 @@ def i451x1(c: Cast) -> None:
 
 
 @power("i507x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.escape()",))
+       reach=PERSONAL, target=SELF)
 def i507x1(c: Cast) -> None:
-    """The save bonus stands -- a hold carries its conditions -- and the
-    escape half has no check."""
+    """The save bonus is gated on the hold carrying one of the two
+    conditions; the escape bonus is the armour's own plus."""
     c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
             when=_holding(Condition.RESTRAINED, Condition.IMMOBILIZED))
+    c.bonus("escape", c.enhancement, on=c.me, until=When.ENCOUNTER,
+            kind="item")
 
 
 @power("i530x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -2117,12 +2154,16 @@ def i699p1(c: Cast) -> None:
 
 
 @power("i728p1", level=4, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=NO_TARGET, todo=("Bloodied.source",))
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you or an ally within 5 squares bloodies an enemy",
+       on=Trigger(Bloodied, _we_bloodied_one, "you or an ally bloodies an enemy"))
 def i728p1(c: Cast) -> None:
-    """`Bloodied` names only the creature that was bloodied, and the
-    payout goes to whoever did it -- so the row has no one to reward.
-    `Dropped` was given a `source` for exactly this shape; `Bloodied` was
-    not."""
+    """The payout goes to whoever struck the blow, which `Bloodied.source`
+    names, and it runs on that creature's own clock -- `When.EOTNT`, not
+    the wearer's `EONT`."""
+    who = getattr(c.trigger, "source", None)
+    if who is not None:
+        c.bonus(AC, 2, on=who, until=When.EOTNT, kind="power")
 
 
 @power("i993x1", level=4, cls=ITEM, action=ActionType.NONE,

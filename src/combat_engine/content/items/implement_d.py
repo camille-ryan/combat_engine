@@ -28,10 +28,17 @@ these rows:
   heroic number is written.
 
 Recurring gaps, each named with the symbol it wants rather than
-approximated: `c.ignore_resistance()`, `c.ignore_insubstantial()`,
-`c.tome_powers()`, `c.reshape_area()` and `c.make_critical()`. "Ongoing 5
-fire **and** necrotic damage" is one number of two types and not two
-numbers, and `c.ongoing(dtypes=)` is it.
+approximated: `c.reshape_area()`, `c.no_teleport()`, `c.kill()` and
+`c.darkvision()`. "Ongoing 5 fire **and** necrotic damage" is one number
+of two types and not two numbers, and `c.ongoing(dtypes=)` is it.
+
+Three gaps this file recorded in an earlier wave have since closed, and
+the rows that named them are written:
+`c.ignore_resistance(insubstantial=True)` pierces the quality,
+`c.resistances()` reads what a creature shrugs off so a resistance can be
+swapped for a vulnerability, and `AttackResult.critical` is writable --
+`Hit` is announced inside `c.strike()`, before the body rolls damage, so
+a row promoting a hit still maxes the dice.
 """
 
 from __future__ import annotations
@@ -84,6 +91,7 @@ from combat_engine.engine import (
     Wall,
     When,
     World,
+    ZoneEntered,
     about_me,
     both,
     by_keyword,
@@ -110,6 +118,17 @@ _ELEMENTS = (
 #: The same four as keywords, for reading them off a power.
 _ELEMENT_WORDS = frozenset(
     {Keyword.ACID, Keyword.COLD, Keyword.FIRE, Keyword.LIGHTNING}
+)
+
+#: The seven a tome's wielder picks one of.
+_TOME_TYPES = (
+    DamageType.ACID,
+    DamageType.COLD,
+    DamageType.FIRE,
+    DamageType.LIGHTNING,
+    DamageType.NECROTIC,
+    DamageType.PSYCHIC,
+    DamageType.THUNDER,
 )
 
 #: "Fire, force, lightning, necrotic or radiant" -- one printed list.
@@ -196,6 +215,27 @@ def _from_row(ref: str):  # noqa: ANN202
 
 def _my_kill(world: World, me: int, ev: Dropped) -> bool:
     return ev.source == me
+
+
+def _my_small_kill(world: World, me: int, ev: Dropped) -> bool:
+    """"You drop a Small or Medium enemy" -- the footprint is on
+    `Position`, and a victim already off the board is taken on trust."""
+    if ev.source != me:
+        return False
+    pos = world.get(ev.actor, Position)
+    return pos is None or pos.size in (Size.SMALL, Size.MEDIUM)
+
+
+def _hits_me_and_an_ally(world: World, me: int, ev: AttackDeclared) -> bool:
+    """`AttackDeclared` names one target per announcement, but `among`
+    rides on it as a plain attribute and names everyone the one use is
+    aimed at -- which is how "you and at least one ally" is asked."""
+    if _my_side(world, me, ev.attacker):
+        return False
+    among = tuple(getattr(ev, "among", ()) or ())
+    return me in among and any(
+        w != me and _my_side(world, me, w) for w in among
+    )
 
 
 def _my_curse(world: World, me: int, ev: RelationSet) -> bool:
@@ -289,6 +329,29 @@ def _pick(c: Cast, radius: int) -> int:
     pool = [c.me, *c.within(radius, side="ally")]
     chosen = c.choose(pool, "who gains it")
     return chosen if chosen is not None else c.me
+
+
+def _first_hit_crits(c: Cast) -> None:
+    """"If your first attack roll with the power hits, you score a
+    critical hit."
+
+    `AttackResult.critical` is writable and the `Hit` is announced from
+    inside `c.strike()`, before the row being lent rolls its damage -- so
+    promoting it here pays the crit riders and maxes the dice, which is
+    what the printed sentence is. Only the first, which is what the
+    latch is for.
+    """
+    done: list[int] = []
+
+    def promote(ev: Hit) -> None:
+        result = getattr(ev, "result", None)
+        if ev.attacker != c.me or done or result is None:
+            return
+        done.append(1)
+        result.critical = True
+        ev.critical = True
+
+    c.watch(Hit, promote, until=When.EOT)
 
 
 def _beside(c: Cast, who: int) -> Any:
@@ -482,10 +545,23 @@ def i3180x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.ignore_insubstantial()",),
 )
 def i3191x1(c: Cast) -> None:
-    """`c.insubstantial` grants the quality and nothing pierces it."""
+    """`c.ignore_resistance(insubstantial=True)` is the piercing half and
+    `amount=0` is the rest of it: the card pierces the quality and no
+    resistance. The chosen keyword is read off the damage context's
+    `dtype` and the arcane half off the row that rolled."""
+    pick = c.choose(list(_TOME_TYPES), "which damage type")
+    chosen = pick if pick is not None else DamageType.FIRE
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return ctx.get("dtype") is chosen and Keyword.ARCANE in _keywords_of(
+            ctx.get("power")
+        )
+
+    c.ignore_resistance(
+        0, on=c.me, until=When.ENCOUNTER, when=gate, insubstantial=True
+    )
 
 
 @power(
@@ -497,15 +573,17 @@ def i3191x1(c: Cast) -> None:
     reach=Wall(5, 10),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.burns(condition=)", "c.conceal(in_zone=)"),
 )
 def i3196p1(c: Cast) -> None:
     """`c.wall(solid=False)` is a zone in the shape of a wall, which is
-    what the printed "a zone in a wall 5" is. The frost wall's slow and
-    the venom wall's light obscurement are the two clauses nothing says:
-    `c.burns` gives a zone damage and no condition, and concealment is
-    granted to a creature rather than laid over squares. Heavy obscurement
-    is `blocks_sight`, which the wall does take."""
+    what the printed "a zone in a wall 5" is. Heavy obscurement is
+    `blocks_sight`; light obscurement is concealment held on whoever
+    stands inside, which is `c.grants_in` with the key `c.conceal` uses
+    and `side="any"` because the card shelters everybody. The frost wall
+    bites and slows together, so it is written as its own pair of
+    watchers rather than as `c.burns` -- once per turn, like `c.burns`,
+    and on entering or at the start of a turn, which is the approximation
+    every zone in this file makes for "ends its turn there"."""
     pick = c.choose(["flame", "frost", "darkness", "venom"], "which wall")
     pick = pick or "flame"
     zone = c.wall(
@@ -515,10 +593,29 @@ def i3196p1(c: Cast) -> None:
         return
     if pick == "flame":
         c.burns(zone, 5, DamageType.FIRE)
-    elif pick == "frost":
-        c.burns(zone, 2, DamageType.COLD)
     elif pick == "venom":
         c.burns(zone, 2, DamageType.POISON)
+        c.grants_in(zone, "concealment", 2, side="any", kind="concealment")
+    elif pick == "frost":
+        bitten: dict[int, int] = {}
+
+        def nip(who: int) -> None:
+            if bitten.get(who) == c.world.round:
+                return
+            bitten[who] = c.world.round
+            c.flat(2, dtype=DamageType.COLD, on=who)
+            c.slowed(on=who, until=When.SAVE_ENDS)
+
+        def entered(ev: ZoneEntered) -> None:
+            if ev.zone == zone:
+                nip(ev.actor)
+
+        def began(ev: TurnStart) -> None:
+            if not ev.ghost and ev.actor in c.world.zones.occupants(zone):
+                nip(ev.actor)
+
+        c.watch(ZoneEntered, entered, until=When.EONT)
+        c.watch(TurnStart, began, until=When.EONT)
 
 
 @power(
@@ -776,7 +873,7 @@ def i1280p1(c: Cast) -> None:
     on=Trigger(AttackDeclared, both(by_me, by_melee), "you attack in melee"),
 )
 def i1350p1(c: Cast) -> None:
-    c.deals(DamageType.LIGHTNING, until=When.EOT, on=c.me)
+    c.deals(DamageType.LIGHTNING, until=When.EOT, on=c.me, implement=True)
 
 
 @power(
@@ -810,7 +907,7 @@ def i1350p2(c: Cast) -> None:
     square = _beside(c, foe)
     if square is not None:
         c.teleport(0, to=square)
-    c.deals(DamageType.LIGHTNING, until=When.EOT, on=c.me)
+    c.deals(DamageType.LIGHTNING, until=When.EOT, on=c.me, implement=True)
     c.basic(on=foe)
 
 
@@ -824,9 +921,13 @@ def i1350p2(c: Cast) -> None:
     todo=("c.on_save()",),
 )
 def i1516x1(c: Cast) -> None:
-    """`c.reroll_save` rerolls the **triggering** saving throw, and a
-    property is armed with no trigger to answer. Nothing hands a body a
-    saving throw as it is rolled."""
+    """`SavingThrow` **is** announced before it is acted on, so the roll
+    itself is reachable from a `c.watch`; what is not reachable is the
+    gate, which is the whole of this property. "When you use an arcane
+    power to grant a bonus to saving throws" needs the save to say which
+    row put the bonus there, and nothing records it -- written without
+    that, every low save anybody rolled would be rerolled. `c.on_save()`
+    is the hook the nine rows in this group want, gate included."""
 
 
 @power(
@@ -920,11 +1021,19 @@ def i1894p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.ignore_insubstantial()",),
 )
 def i1953x1(c: Cast) -> None:
-    """`c.points` asks the power-point half, and nothing pierces the
-    insubstantial quality."""
+    """`c.points` asks the power-point half as a gate on the damage
+    context, and `c.ignore_resistance(insubstantial=True)` is the
+    piercing half -- `amount=0` because the card pierces the quality and
+    no resistance."""
+    c.ignore_resistance(
+        0,
+        on=c.me,
+        until=When.ENCOUNTER,
+        when=lambda ctx: c.points() >= 1,
+        insubstantial=True,
+    )
 
 
 @power(
@@ -959,11 +1068,21 @@ def i1953p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.strip_resistance()",),
+    dropped=("c.vulnerable(when=)",),
 )
 def i1977p1(c: Cast) -> None:
-    """Turning a resistance into a vulnerability needs to read what the
-    target resists, and no verb reaches a creature's resistance list."""
+    """`c.resistances` reads what each enemy shrugs off, a negative
+    `c.resist` takes that resistance away and `c.vulnerable` puts the
+    printed 5 in its place; the hold is the clock, so both go back
+    together. The damage context carries no attacker, so the swap cannot
+    be narrowed to the wielder's own attacks and an ally swinging in the
+    same round gets it too. Paragon numbers are out of scope."""
+    for foe in c.enemies():
+        for dtype, amount in c.resistances(on=foe).items():
+            if amount <= 0:
+                continue
+            c.resist(-amount, dtype, on=foe, until=When.EONT)
+            c.vulnerable(5, dtype, on=foe, until=When.EONT)
 
 
 @power(
@@ -1063,16 +1182,28 @@ def i2303p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("DamageApplied.resisted",),
 )
 def i2317x1(c: Cast) -> None:
-    """The payout is writable now -- a negative `c.resist` on the enemy
-    lowers a standing resistance and `c.resistances` reads what is
-    there. The **trigger** is not: "when an enemy's resistances reduce
-    the damage of an attack you use" needs the blow to say how much
-    resistance ate, and `DamageApplied` carries the amount that landed
-    and nothing about what stopped the rest. Written without it the row
-    would fire on every invoker attack, resisted or not."""
+    """`DamageApplied.resisted` is what the target's resistance took off
+    before any of the blow reached hit points, which is the printed
+    trigger exactly. The payout is a negative `c.resist`, clamped to what
+    is standing so the rod cannot drive a resistance below zero, and the
+    class is read off `detail` -- the ref of the row that rolled it."""
+    me, plus = c.me, c.enhancement
+
+    def blunted(ev: DamageApplied) -> None:
+        if ev.source != me or ev.resisted <= 0:
+            return
+        p = get(ev.detail)
+        if p is None or p.cls != "invoker":
+            return
+        standing = c.resistances(on=ev.target).get(ev.dtype, 0)
+        if standing > 0:
+            c.resist(
+                -min(plus, standing), ev.dtype, on=ev.target, until=When.EONT
+            )
+
+    c.watch(DamageApplied, blunted, until=When.ENCOUNTER)
 
 
 @power(
@@ -1267,12 +1398,33 @@ def i2783p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="an enemy targets you and at least one ally with an attack",
-    todo=("AttackDeclared.targets", "c.share_defence()"),
+    on=Trigger(
+        AttackDeclared,
+        _hits_me_and_an_ally,
+        "an enemy targets you and at least one ally",
+    ),
 )
 def i2802p1(c: Cast) -> None:
-    """`AttackDeclared` names one target, announced once per creature, so
-    "you and at least one ally" cannot be asked of it; and nothing replaces
-    a defence with somebody else's score."""
+    """`AttackDeclared` names one target per announcement, but `among`
+    rides on it and names the whole use, so the pool is readable after
+    all. `query.defence` reads each score with the level term in it and
+    the gap is laid as a plain modifier, which the roll callback reads
+    after the interrupt window -- so it lands on the announcement being
+    answered as well as on the ones still to come. It holds to the end of
+    the turn rather than to the one attack, because a modifier has no way
+    to name a single roll."""
+    ev = c.trigger
+    vs = getattr(ev, "vs", None)
+    among = [
+        w for w in getattr(ev, "among", ()) if _my_side(c.world, c.me, w)
+    ]
+    if vs is None or not among:
+        return
+    scores = {w: query.defence(c.world, w, vs) for w in among}
+    best = max(scores.values())
+    for who, score in scores.items():
+        if best > score:
+            c.bonus(vs, best - score, on=who, until=When.EOT)
 
 
 @power(
@@ -1323,11 +1475,13 @@ def i2807p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.retarget_defence()", "c.tome_powers()"),
+    todo=("c.retarget_defence()",),
 )
 def i2895x1(c: Cast) -> None:
-    """The defence a power attacks is header data and nothing swaps it at
-    use time; and nothing holds the two powers a tome contains."""
+    """The defence a power attacks is header data: `AttackDeclared.vs` is
+    a field but `resolve.attack` reads its own local afterwards, so a
+    listener rewriting it changes nothing. The block's second paragraph
+    is the tome's contents, which is the Power beside this one."""
 
 
 @power(
@@ -1338,11 +1492,25 @@ def i2895x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.tome_powers()",),
+    dropped=("c.expend_row(among=)",),
 )
 def i2895p1(c: Cast) -> None:
-    """Nothing holds the two powers the tome contains, and the power it
-    hands back is printed as a name with no ref."""
+    """"The powers contained in the tome" is a set the card names by
+    description rather than by ref, which is exactly what `c.borrow_row`
+    reads off the registry and records the pick of -- wizard dailies with
+    the force keyword, of a level the tome's own level allows, highest
+    first. The price is not written: expending an unused daily of equal
+    or higher level means choosing among the ones the character still
+    has, and `c.expend_row` takes one ref rather than a set."""
+    for lv in range(_item_level(c), 0, -1):
+        if c.borrow_row(
+            cls="wizard",
+            level=lv,
+            usage=DAILY,
+            keyword=Keyword.FORCE,
+            until=When.ENCOUNTER,
+        ):
+            return
 
 
 @power(
@@ -1352,11 +1520,15 @@ def i2895p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.check_bonus()",),
 )
 def i2908x1(c: Cast) -> None:
-    """The damage half is written; the two skill bonuses have no modifier
-    key to hang on. Paragon numbers are out of scope."""
+    """`engine/skills.py` totals `skill:<name>` and `skill` off the
+    creature's modifiers, so the two check bonuses do have a key to hang
+    on. Paragon numbers are out of scope."""
+    for skill in ("arcana", "perception"):
+        c.bonus(
+            f"skill:{skill}", 1, kind="item", on=c.me, until=When.ENCOUNTER
+        )
     c.bonus(
         "damage",
         1,
@@ -1532,15 +1704,20 @@ def i1093p1(c: Cast) -> None:
     target=ONE_ALLY,
     trigger="an ally within your line of sight hits with an attack",
     on=Trigger(Hit, _ally_hit_in_sight, "an ally hits with an attack"),
-    dropped=("c.make_critical()",),
 )
 def i1104p1(c: Cast) -> None:
     """The ally's die is read off the `AttackResult` riding on the event,
-    which is the only place it survives. Winning the contest should turn
-    that hit into a critical and nothing promotes a hit already declared;
-    losing it is written."""
-    theirs = getattr(getattr(c.trigger, "result", None), "natural", 0)
-    if c.roll("1d20") < theirs:
+    which is the only place it survives, and `critical` on that same
+    result is writable. A reaction answers inside the `Hit`, before the
+    ally's body rolls its damage, so promoting it there maxes the dice
+    and pays the crit riders. A tie does neither, as printed."""
+    result = getattr(c.trigger, "result", None)
+    theirs = getattr(result, "natural", 0)
+    mine = c.roll("1d20")
+    if mine > theirs and result is not None:
+        result.critical = True
+        c.trigger.critical = True
+    elif mine < theirs:
         c.penalty("attack", 2, on=c.me, until=When.EONT)
 
 
@@ -1641,12 +1818,12 @@ def i2091x1(c: Cast) -> None:
     reach=CloseBlast(5),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT],
-    dropped=("c.make_critical()",),
 )
 def i2091p1(c: Cast) -> None:
-    """Nothing promotes a hit to a critical after the roll, so the lent
-    power resolves normally."""
+    """The latch is armed before the row is lent, so the first hit of the
+    lent power is the one promoted."""
     if c.target is not None:
+        _first_hit_crits(c)
         c.grant_attack(c.me, on=c.target, ref="p173")
 
 
@@ -1677,10 +1854,10 @@ def i2093x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    dropped=("c.make_critical()",),
 )
 def i2093p1(c: Cast) -> None:
     if c.target is not None:
+        _first_hit_crits(c)
         c.grant_attack(c.me, on=c.target, ref="p1530")
 
 
@@ -1842,12 +2019,17 @@ def i2467p2(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ACID],
-    dropped=("c.deals(when=)", "c.deals(revert=)"),
+    dropped=("c.deals(when=)",),
 )
 def i2595p1(c: Cast) -> None:
-    """`c.deals` converts every blow rather than only the fire ones, and
-    nothing puts the type back short of the end of the encounter."""
-    c.deals(DamageType.ACID, until=When.ENCOUNTER, on=c.me)
+    """`c.deals` converts every blow rather than only the fire ones. "A
+    free action returns the damage to normal" is `c.endable`, which is
+    the same sentence seen from the other side: the effect is the
+    caster's, so the drop is offered to the caster for a free action."""
+    c.endable(
+        c.deals(DamageType.ACID, until=When.ENCOUNTER, on=c.me, implement=True),
+        FREE,
+    )
 
 
 @power(
@@ -1859,10 +2041,13 @@ def i2595p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE],
-    dropped=("c.deals(when=)", "c.deals(revert=)"),
+    dropped=("c.deals(when=)",),
 )
 def i2595p2(c: Cast) -> None:
-    c.deals(DamageType.FIRE, until=When.ENCOUNTER, on=c.me)
+    c.endable(
+        c.deals(DamageType.FIRE, until=When.ENCOUNTER, on=c.me, implement=True),
+        FREE,
+    )
 
 
 @power(
@@ -1998,13 +2183,13 @@ def i2909p1(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=[Keyword.TELEPORTATION, Keyword.ZONE],
-    dropped=("c.burns(on_start=)",),
 )
 def i2917p1(c: Cast) -> None:
     """The zone is centred on the ally rather than on the caster, so its
-    squares are spread from where that ally stands. `c.burns` bites both on
-    entering and at the start of a turn; the printed line bites only at the
-    start of a turn, so it over-applies to a creature walking in."""
+    squares are spread from where that ally stands. `c.burns` bites on
+    entering as well as at the start of a turn and the printed line bites
+    only at the start of one, so the damage goes in the same watcher as
+    the slow rather than in a burn."""
     mate = next(iter(c.within(10, side="ally")), None)
     if mate is None:
         return
@@ -2012,14 +2197,14 @@ def i2917p1(c: Cast) -> None:
     if pos is None:
         return
     area = spread({pos.square}, 5)
-    zone = c.zone(area, until=When.EONT)
-    if zone:
-        c.burns(zone, 5)
+    c.zone(area, until=When.EONT)
     c.teleport(5, who=mate)
 
     def drag(ev: TurnStart) -> None:
-        if ev.actor in c.in_squares(area):
-            c.slowed(on=ev.actor, until=When.EOT)
+        if ev.ghost or ev.actor not in c.in_squares(area):
+            return
+        c.flat(5, on=ev.actor)
+        c.slowed(on=ev.actor, until=When.EOT)
 
     c.watch(TurnStart, drag, until=When.EONT)
 
@@ -2096,16 +2281,29 @@ def i3179x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.CHARM],
-    dropped=("c.end_on_attack()",),
 )
 def i3179p1(c: Cast) -> None:
-    """The two exceptions that can be read now are read now -- an enemy
-    already marked by the caster is skipped. "If you attack it" is the
-    third, and nothing ends one creature's hold when a later attack lands
-    on it."""
+    """An enemy already marked by the caster is skipped outright; "if you
+    attack it" is the same exception arriving later, so each hold is kept
+    and `c.end_effect` takes that one back when the caster declares an
+    attack on its holder. The third exception names a zone the spec gives
+    a ref for and no such zone is standing, so nobody is in it."""
+    holds: dict[int, Any] = {}
     for foe in c.enemies():
-        if not c.marked(on=foe):
-            c.cannot_attack(on=foe, against=c.me, until=When.EONT)
+        if c.marked(on=foe):
+            continue
+        held = c.cannot_attack(on=foe, against=c.me, until=When.EONT)
+        if held is not None:
+            holds[foe] = held
+
+    def released(ev: AttackDeclared) -> None:
+        if ev.attacker != c.me:
+            return
+        held = holds.pop(ev.target, None)
+        if held is not None:
+            c.end_effect(held, why="attacked by its holder")
+
+    c.watch(AttackDeclared, released, until=When.EONT)
 
 
 @power(
@@ -2397,7 +2595,7 @@ def i509x1(c: Cast) -> None:
     the keyword to the spell it converts. The drawback -- treating your own
     allies as enemies -- has no verb: nothing moves a creature between
     sides for the length of a turn."""
-    c.deals(DamageType.NECROTIC, until=When.ENCOUNTER, on=c.me)
+    c.deals(DamageType.NECROTIC, until=When.ENCOUNTER, on=c.me, implement=True)
 
 
 @power(
@@ -2410,11 +2608,17 @@ def i509x1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.SUMMONING],
     trigger="you drop a Small or Medium enemy with an implement attack",
-    todo=("Summon.from_block()",),
+    on=Trigger(Dropped, _my_small_kill, "you drop a small or medium enemy"),
+    todo=("etl.item.inline_block()",),
 )
 def i509p1(c: Cast) -> None:
-    """The summoned creature is printed as a stat block inside the item's
-    own page with no ref of its own, and `c.summon` takes a ref."""
+    """The trigger is declarable -- `Dropped` carries the killer and
+    `Position` carries the victim's footprint -- but the creature is not.
+    `dsl.Summon` and `c.summon_inline` are complete; what is missing is
+    the block itself: `etl/item.py` truncates an item's text at its
+    second `<h1>`, which on this page is the summoned creature's stat
+    block, so no number of it reaches the spec and writing one would be
+    inventing it."""
 
 
 @power(

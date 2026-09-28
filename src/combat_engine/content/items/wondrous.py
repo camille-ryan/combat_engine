@@ -13,14 +13,17 @@ Three judgements run through the file.
   Effect is "sheds bright light / dim light / no light" is therefore
   `out_of_combat=True` rather than a marker. So is every bag, rope, chalk,
   ledger and ritual focus, which is a large part of the slot.
-* **"A nonminion enemy"** cannot be asked: nothing distinguishes a minion
-  from anything else on the board. Those rows play, over-applying to
-  minions, and carry `dropped=("c.is_minion()",)`.
-* **A figurine's beast** is printed as a stat block below the power and
-  `spec.py` does not carry it, so the summons here take `Summon`'s own
-  defaults -- the summoner's defences, a healing surge's worth of hit
-  points -- and carry `dropped=("Summon.from_block()",)` for the numbers
-  and the attack line that are missing.
+* **"A nonminion enemy"** is `c.is_minion`, off the stat block's own
+  column. Seven rows here print the same critical-hit sentence, so the
+  clause is asked once inside `_crit_on_me` and not seven times.
+* **A figurine's beast** is printed as a stat block below the power, so
+  the summons here take `Summon`'s own defaults -- the summoner's
+  defences, a healing surge's worth of hit points -- and the numbers and
+  the attack line are missing. `dsl.Summon` can say all of it; what is
+  missing is the block, and the marker names where from:
+  `etl.item.inline_block()` where the entry does print one and
+  `etl.item._own_page` cuts it off, `spec.stat_block()` where the entry
+  prints none and no amount of ETL will produce one.
 
 "When you use your second wind" is `SecondWind`, which `Cast.second_wind`
 emits from the one place a second wind is ever taken; `_on_second_wind`
@@ -129,11 +132,20 @@ def _aquatic(world: World, eid: int) -> bool:
 
 
 def _crit_on_me(world: World, me: int, ev: Any) -> bool:
-    """An enemy scored a critical hit on me."""
+    """A **nonminion** enemy scored a critical hit on me.
+
+    Every card in this family prints the same sentence, so the nonminion
+    clause lives here rather than seven times over. A predicate is handed
+    `(world, me, ev)` and `c.is_minion` is a `Cast` verb, so a bare one is
+    made to ask -- the same way `weapon_b` reads a type line from a gate.
+    """
+    attacker = getattr(ev, "attacker", None)
     return (
         getattr(ev, "target", None) == me
         and getattr(ev, "critical", False)
-        and getattr(ev, "attacker", None) != me
+        and attacker is not None
+        and attacker != me
+        and not Cast(world=world, me=me, ref="").is_minion(on=attacker)
     )
 
 
@@ -583,7 +595,6 @@ def i1068x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.is_minion()",),
 )
 def i1219x1(c: Cast) -> None:
     def crit(ev: Hit) -> None:
@@ -924,7 +935,7 @@ def i1291x1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("Summon.from_block()",),
+    dropped=("etl.item.inline_block()",),
 )
 def i1932p1(c: Cast) -> None:
     _figurine(c)
@@ -940,7 +951,7 @@ def i1932p1(c: Cast) -> None:
     target=SELF,
     trigger="an enemy adjacent to the beast attacks you",
     on=Trigger(AttackDeclared, targets_me, "an enemy attacks you"),
-    todo=("Summon.from_block()",),
+    todo=("etl.item.inline_block()",),
 )
 def i1932p2(c: Cast) -> None:
     """The whole Effect is the beast's bite, and the bite line is printed in
@@ -1111,7 +1122,7 @@ def i1876x1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("Summon.from_block()",),
+    dropped=("etl.item.inline_block()",),
 )
 def i1925p1(c: Cast) -> None:
     _figurine(c, size="large")
@@ -1188,7 +1199,6 @@ def i2550p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.is_minion()",),
 )
 def i2829x1(c: Cast) -> None:
     """Untyped: the card prints a bare "+3 bonus". Paragon numbers are out
@@ -1329,7 +1339,7 @@ def i1325p1(c: Cast) -> None:
     keywords=[Keyword.CONJURATION],
     requires=_aquatic,
     requires_text="there must be a body of water adjacent to you",
-    dropped=("Summon.from_block()",),
+    dropped=("etl.item.inline_block()",),
 )
 def i1933p1(c: Cast) -> None:
     _figurine(c, modes={"swim": 8})
@@ -2005,7 +2015,7 @@ def i1655x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=NO_TARGET,
-    dropped=("Summon.from_block()",),
+    dropped=("spec.stat_block()",),
 )
 def i1662p1(c: Cast) -> None:
     """The horse is an ally that carries you, so it is a summon and a
@@ -2116,7 +2126,7 @@ def i2708x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.teleport_as()", "c.is_minion()"),
+    todo=("c.teleport_as()",),
 )
 def i2830x1(c: Cast) -> None:
     """The whole benefit is a new way to spend a minor action, and
@@ -2132,7 +2142,6 @@ def i2830x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.is_minion()",),
 )
 def i2948x1(c: Cast) -> None:
     """Both bonuses untyped. "While you are raging" is the class's own
@@ -2172,7 +2181,7 @@ def i3068p1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("Summon.from_block()",),
+    dropped=("etl.item.inline_block()",),
 )
 def i3111p1(c: Cast) -> None:
     """A minion's one hit point is printed, and so are the eight riders;
@@ -2386,7 +2395,7 @@ def i1109x1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("Summon.from_block()",),
+    dropped=("etl.item.inline_block()",),
 )
 def i1171p1(c: Cast) -> None:
     _figurine(c, size="large", modes={"fly": 8})
@@ -2472,7 +2481,7 @@ def i1854p1(c: Cast) -> None:
     keywords=[Keyword.CONJURATION],
     requires=_aquatic,
     requires_text="there must be a body of water adjacent to you",
-    dropped=("Summon.from_block()",),
+    dropped=("etl.item.inline_block()",),
 )
 def i2022p1(c: Cast) -> None:
     """The water is a printed requirement, not a flavour line."""
@@ -2495,7 +2504,6 @@ def i2084p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.is_minion()",),
 )
 def i2161x1(c: Cast) -> None:
     """"To a space within 3 squares of you" names the destination, so the
@@ -2521,7 +2529,6 @@ def i2161x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.is_minion()",),
 )
 def i2704x1(c: Cast) -> None:
     """Untyped."""
@@ -2815,7 +2822,7 @@ def i1154x1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("Summon.from_block()",),
+    dropped=("etl.item.inline_block()",),
 )
 def i1179p1(c: Cast) -> None:
     _figurine(c, modes={"fly": 10})
@@ -2860,7 +2867,7 @@ def i1592p1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("Summon.from_block()",),
+    dropped=("spec.stat_block()",),
 )
 def i1659p1(c: Cast) -> None:
     _figurine(c, speed=8)
@@ -2877,7 +2884,7 @@ def i1659p1(c: Cast) -> None:
     keywords=[Keyword.CONJURATION],
     requires=_aquatic,
     requires_text="there must be a body of water adjacent to you",
-    dropped=("Summon.from_block()",),
+    dropped=("etl.item.inline_block()",),
 )
 def i1664p1(c: Cast) -> None:
     _figurine(c, size="huge", modes={"swim": 10})
@@ -2898,7 +2905,7 @@ def i1717p1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("Summon.from_block()",),
+    dropped=("etl.item.inline_block()",),
 )
 def i1804p1(c: Cast) -> None:
     _figurine(c, size="huge")
@@ -3024,7 +3031,6 @@ def i2594p2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.is_minion()",),
 )
 def i2827x1(c: Cast) -> None:
     """Two watches, because `DamageRolled` does not say the blow was a
@@ -3072,7 +3078,6 @@ def i2827x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.is_minion()",),
 )
 def i2828x1(c: Cast) -> None:
     def crit(ev: Hit) -> None:
@@ -3132,7 +3137,7 @@ def i3106p1(c: Cast) -> None:
     action=MINOR,
     reach=Melee(1),
     target=NO_TARGET,
-    dropped=("Summon.from_block()",),
+    dropped=("etl.item.inline_block()",),
 )
 def i3263p1(c: Cast) -> None:
     """"If you don't command it, it takes no actions" is what a summon

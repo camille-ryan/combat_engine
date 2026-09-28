@@ -45,7 +45,7 @@ from combat_engine.engine import (
     When,
     power,
 )
-from combat_engine.engine.components import Health, Powers
+from combat_engine.engine.components import Powers
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import PowerResolved, ZoneEntered
 
@@ -79,17 +79,6 @@ def _wizard_hit_with(*words: Keyword):  # noqa: ANN202
         )
 
     return when
-
-
-def _minion(world, eid: int) -> bool:  # noqa: ANN001
-    """One hit point is what a minion is, and the number is a column.
-
-    The same test `content/monsters/level_12/controllers.py` makes. The
-    nine `c.is_minion()` markers in the item tree want it on `Cast`; a
-    row that can read it here should not wait for that.
-    """
-    health = world.get(eid, Health)
-    return health is not None and health.max_hp <= 1
 
 
 # -- keyword gates ---------------------------------------------------------
@@ -168,7 +157,7 @@ def f1997(c: Cast) -> None:
     me, tally = c.me, {"n": 0}
 
     def fell(ev: Dropped) -> None:
-        if ev.source == me and _minion(c.world, ev.actor):
+        if ev.source == me and c.is_minion(on=ev.actor):
             tally["n"] += 1
 
     def paid(ev: PowerResolved) -> None:

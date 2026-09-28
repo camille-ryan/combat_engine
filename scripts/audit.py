@@ -584,8 +584,23 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
             # A ref `game.db` does not carry still has to be fielded, or
             # the row reports unusable for the importer's reasons rather
             # than its own.
-            equip(world, caster, chargen.magic_for(item, powers=(ref, *named))
-                  or Magic(ref=item, plus=1, powers=(ref, *named)))
+            magic = chargen.magic_for(item, powers=(ref, *named)) or Magic(
+                ref=item, plus=1, powers=(ref, *named)
+            )
+            equip(world, caster, magic)
+            # **And something to loose it with.** A quiver of magic arrows
+            # on a two-blade ranger is never drawn -- `ammunition.nock`
+            # asks what is in hand -- so every ammunition property
+            # reported UNUSED for the board's reason rather than its own.
+            # Exactly the `rba` case above: the build owns no bow.
+            if magic.slot == "ammunition":
+                from combat_engine.engine import Gear
+
+                bow = chargen.launcher_for(next(iter(magic.base), ""))
+                gear = world.get(caster, Gear)
+                if bow is not None and gear is not None:
+                    gear.weapons.append(bow)
+                    gear.wield(bow)
         foe_team = Team.ENEMY
 
     from combat_engine.engine import Health

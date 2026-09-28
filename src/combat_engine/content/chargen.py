@@ -1399,7 +1399,7 @@ def magic_for(ref: str, *, plus: int = 0, powers: tuple[str, ...] = ()) -> Magic
     from combat_engine.etl.build import game
 
     row = game().execute(
-        "SELECT i.ref, i.slot, i.crit, i.enh_to, "
+        "SELECT i.ref, i.slot, i.crit, i.enh_to, i.base, "
         "(SELECT MIN(s.plus) FROM item_step s WHERE s.ref = i.ref) AS plus "
         "FROM item i WHERE i.ref = ?",
         (ref,),
@@ -1413,7 +1413,19 @@ def magic_for(ref: str, *, plus: int = 0, powers: tuple[str, ...] = ()) -> Magic
         enh_to=row["enh_to"] or "",
         crit=_crit_dice(row["crit"]),
         powers=tuple(powers),
+        base=_base_items(row["base"]),
     )
+
+
+def _base_items(column: str | None) -> tuple[str, ...]:
+    """The base-item restriction as a tuple. `["any"]` is no restriction."""
+    import json
+
+    try:
+        names = json.loads(column or "[]")
+    except ValueError:
+        return ()
+    return tuple(n for n in names if isinstance(n, str) and n != "any")
 
 
 def _fits_base(printed: str, arm: Weapon | None, armour: str) -> bool:
@@ -1509,6 +1521,25 @@ def _leans_on(declared, build: Build) -> int:  # noqa: ANN001
     except (OSError, TypeError):
         return 0
     return sum(f"c.{a.value}_mod" in body for a in (build.primary, build.secondary))
+
+
+def launcher_for(kind: str) -> Weapon | None:
+    """Something that looses that kind of ammunition, from the printed list.
+
+    The cheapest proficiency band that fires it, so a character handed a
+    quiver is not also handed a superior weapon it could not use. An
+    empty kind -- the two ammunition items that name no base item -- gets
+    a bow, which is what the commonest launcher is.
+    """
+    from combat_engine.engine.ammunition import FIRES
+
+    wanted = {g for g, k in FIRES.items() if k == kind} or {"bow"}
+    order = {"simple": 0, "military": 1, "superior": 2}
+    pool = sorted(
+        (w for w in PRINTED.values() if w.group in wanted),
+        key=lambda w: (order.get(w.category, 3), w.ref),
+    )
+    return pool[0] if pool else None
 
 
 def build_for(cls: str, ref: str) -> str:

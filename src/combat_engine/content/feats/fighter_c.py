@@ -14,9 +14,12 @@ The greater ones mostly end in "in place of a melee basic attack",
 which is still `c.as_basic(ref)`.
 
 **The racial riders.** Eleven rows keyed to a race. Where the racial
-power arrives as a ref -- `p2483`, `p2484` -- it is ordinary; where the
-page names it in prose it is not ours to find, and `c.racial_row()`
-with `c.expend_row()` is the pair of gaps.
+power arrives as a ref -- `p2483`, `p2484`, `p1448`, `p1831` -- it is
+ordinary; where the page names it in prose it is not ours to find, and
+`c.racial_row()` with `c.expend_row()` is the pair of gaps. Two of
+these rows were marked for a name the spec now carries, so trust the
+spec over the note beside the row: `f2409` waited on a breath the ETL
+had already resolved to `p1448`.
 
 **The mark.** Three rows change the number a marked creature pays for
 leaving you out of its attack. `resolve._mark_penalty` returns a
@@ -308,7 +311,7 @@ def f2366(c: Cast) -> None:
     c.bonus("skill:endurance", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
 
 
-@power("f2370", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2370", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("Keyword.INVIGORATING",),
        trigger="you hit an enemy with a martial power",
        on=Trigger(Hit, _i_hit_with_martial, "you hit with a martial power"))
@@ -316,7 +319,11 @@ def f2370(c: Cast) -> None:
     """The saving throw's context carries the conditions the effect it is
     against holds, which is what makes "effects that daze or stun" a
     narrowing rather than a blanket penalty -- the same read `f364`
-    makes. The keyword half is the gap four other fighter rows name."""
+    makes. The keyword half is the gap four other fighter rows name.
+
+    `AT_WILL`: the card says "whenever" and prints no limit, and a
+    triggered row declared `ENCOUNTER` is refused after its first
+    firing (#210), so this laid one penalty a fight."""
     if not _grip(c, "hammer", "flail", "mace", hands=1):
         return
     c.penalty(
@@ -328,12 +335,33 @@ def f2370(c: Cast) -> None:
 
 
 @power("f2371", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(compute=)",))
+       reach=PERSONAL, target=SELF)
 def f2371(c: Cast) -> None:
-    """The skill half plays. The damage half is "+1 for each enemy
-    adjacent to you", counted afresh at each swing, and a modifier
-    carries a number decided when it is laid."""
-    c.bonus("skill:endurance", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
+    """"+1 to damage for each enemy adjacent to you", counted per swing.
+
+    A modifier carries a number decided when it is laid, which is why
+    this was marked -- but it also carries a gate that is asked afresh
+    at every roll, and **untyped bonuses add**. So the count is eight
+    +1s, the k-th of them gated on "at least k enemies beside you", and
+    their sum is the count. Eight because eight squares touch a medium
+    creature and each adjacent enemy stands in one of them, so the
+    ladder cannot be short.
+    """
+    me = c.me
+    c.bonus("skill:endurance", 2, kind="feat", on=me, until=When.ENCOUNTER)
+    picked = among("p1505", "p10472", "p1063")
+
+    def at_least(k: int):  # noqa: ANN202
+        def gate(ctx: dict[str, Any]) -> bool:
+            if not picked(ctx) or not _with_property(c, "heavy blade", "versatile"):
+                return False
+            beside = [f for f in enemies(c.world, me) if c.adjacent_to(me, f)]
+            return len(beside) >= k
+
+        return gate
+
+    for k in range(1, 9):
+        c.bonus("damage", 1, on=me, until=When.ENCOUNTER, when=at_least(k))
 
 
 @power("f2374", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -520,10 +548,13 @@ def f2427(c: Cast) -> None:
 
 
 @power("f2432", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.escape()",))
+       reach=PERSONAL, target=SELF)
 def f2432(c: Cast) -> None:
-    """Changes what an escape is rolled against. Escaping a grab is not
-    modelled as a check at all, so there is nothing to redirect."""
+    """`grab_vs_fort` is read off the *grabber* by `escape.attempt`, which
+    is the only creature the printed line is about: any positive value
+    measures every attempt against this fighter's Fortitude whichever
+    skill the grabbed creature rolls."""
+    c.bonus("grab_vs_fort", 1, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2478", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -672,10 +703,24 @@ def f2404(c: Cast) -> None:
 
 
 @power("f2409", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.dragon_breath()",))
+       reach=PERSONAL, target=SELF)
 def f2409(c: Cast) -> None:
-    """Extra damage on a racial breath against creatures marked by you.
-    The breath is named in prose and has no ref to watch."""
+    """Extra damage on `p1448` against creatures marked by you.
+
+    The row was marked for a racial power named in prose; the spec
+    carries the ref now, and with it the whole benefit is one gated
+    modifier -- the damage context holds both the power and the target,
+    which is all the printed sentence asks about.
+    """
+    me = c.me
+    c.bonus(
+        "damage", c.str_mod, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("power") == "p1448"
+            and ctx.get("target") is not None
+            and c.marked(on=ctx["target"], by=me)
+        ),
+    )
 
 
 @power("f2438", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -712,7 +757,7 @@ def f2448(c: Cast) -> None:
     says nothing about the others."""
 
 
-@power("f2456", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2456", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=MARK_PENALTY,
        trigger="you use p2484",
        on=Trigger(PowerUsed, _i_used("p2484"), "you use p2484"))
@@ -741,14 +786,39 @@ def f2472(c: Cast) -> None:
 
 
 @power("f2475", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
+       reach=PERSONAL, target=SELF)
 def f2475(c: Cast) -> None:
-    """Makes one class feature apply to both weapon styles. Same unparsed
-    prerequisite as f1970 and the same prose name; widening the feature
-    needs the feature first."""
+    """The grip talent pays in either hand.
+
+    `cf:fighter-weaponmaster-f3` is declared now, and two of its six
+    legs are the +1 this widens: it asks whether the weapon in hand
+    matches the build's handedness and pays only then. So the whole of
+    this feat is the same +1 laid for the *other* handedness -- untyped
+    like the feature's own, and gated the same way, so the two can
+    never both pay on one swing and the fighter is +1 either way round.
+
+    The build is asked rather than assumed: the four legs that are not
+    a grip talent have no +1 to widen, and laying one would be inventing
+    a feature this character does not have.
+    """
+    me = c.me
+    if not (c.build("great-weapon") or c.build("guardian")):
+        return
+    two_handed = c.build("great-weapon")
+
+    def other_hand(ctx: dict[str, Any]) -> bool:
+        declared = get(str(ctx.get("power", "")))
+        if declared is None or Keyword.WEAPON not in declared.keywords:
+            return False
+        gear = c.world.get(me, Gear)
+        held = gear.main if gear is not None else None
+        return held is not None and held.two_handed != two_handed
+
+    c.bonus("attack", 1, on=me, until=When.ENCOUNTER, kind="untyped",
+            when=other_hand)
 
 
-@power("f2791", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2791", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("query.power_moves()",),
        trigger="you use a fighter attack power",
        on=Trigger(PowerUsed, _i_used_a_fighter_row, "you use a fighter row"))
@@ -837,7 +907,7 @@ def f2801(c: Cast) -> None:
     c.watch(Miss, on_swing, on=me, until=When.ENCOUNTER)
 
 
-@power("f2802", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2802", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("c.forgo_push()",),
        trigger="you hit with a martial encounter attack power",
        on=Trigger(Hit, _i_hit_with_martial_encounter,

@@ -220,8 +220,17 @@ class Cast:
     def enemies(self) -> list[int]:
         return enemies(self.world, self.me)
 
-    def _side(self, side: str, other_than: int) -> list[int]:
+    def _side(self, side: str, excluded: int) -> list[int]:
         """The pool a `side=` names.
+
+        **Always the caster's sides**, never the pool of whatever square
+        or creature the caller is measuring from. That is the printed
+        word: "each enemy within 2 squares of the target" means an enemy
+        of *yours*, and a card meaning the target's own side says "the
+        target and its allies". `excluded` is read by `"other"` and by
+        nothing else, which is the whole of its job -- it names the one
+        creature a "each *other* creature" line leaves out, not a
+        creature whose allegiances the other four words follow.
 
         **`"ally"` leaves the caster out**, which is the printed word: a
         card that means you as well says "you and each ally", and `"team"`
@@ -235,14 +244,21 @@ class Cast:
             "enemy": enemies(self.world, self.me),
             "ally": allies(self.world, self.me),
             "team": [*allies(self.world, self.me), self.me],
-            "other": [c for c in creatures(self.world) if c != other_than],
+            "other": [c for c in creatures(self.world) if c != excluded],
         }[side]
 
     def within(self, radius: int, *, of: int | None = None, side: str = "any") -> list[int]:
         """Creatures within `radius` squares.
 
+        `of` moves the **centre** of the circle and nothing else. `side`
+        is still read from the caster, so `c.within(1, of=foe,
+        side="ally")` is "you or an ally of yours standing next to that
+        enemy" and not "that enemy's own side" -- which is what the cards
+        print, and what the rows using it are written against.
+
         `side` is any, enemy, ally, team or other. `"ally"` is allies and
-        **not** the caster; `"team"` is the caster as well.
+        **not** the caster; `"team"` is the caster as well; `"other"` is
+        everyone but whoever the circle is centred on.
         """
         origin = self.me if of is None else of
         area = spread(squares(self.world, origin), radius)
@@ -251,7 +267,8 @@ class Cast:
 
     def in_squares(self, area: Iterable[Square], *, side: str = "any") -> list[int]:
         """Whoever stands in these squares. `side` reads as it does on
-        `c.within`: `"ally"` without the caster, `"team"` with."""
+        `c.within`: the caster's sides, `"ally"` without the caster,
+        `"team"` with."""
         space = frozenset(area)
         pool = self._side(side, self.me)
         return [c for c in pool if squares(self.world, c) & space and alive(self.world, c)]
@@ -317,8 +334,6 @@ class Cast:
         burst" asks this; a character has no type line, and nineteen races
         print a sentence that gives one a word anyway.
         """
-        from .components import Ident
-
         who = self._who(on)
         if who is None:
             return frozenset()
@@ -329,16 +344,10 @@ class Cast:
                 words.add(eff.label.split(":", 1)[1])
             elif eff.label.startswith("unorigin:"):
                 gone.add(eff.label.split(":", 1)[1])
-        ident = self.world.get(who, Ident)
-        if ident is not None and ident.ref.startswith("m"):
-            from combat_engine.content.loader import load
+        row = self._stat_block(who)
+        if row:
+            import json
 
-            try:
-                import json
-
-                row = load(ident.ref).row
-            except Exception:  # a ref with no row is simply typeless
-                row = {}
             words |= set(json.loads(row.get("keywords") or "[]"))
             for column in ("kind", "origin"):
                 if row.get(column):
@@ -351,9 +360,46 @@ class Cast:
             if w.strip("() ,.") and w.strip("() ,.").lower() not in gone
         )
 
+    def _stat_block(self, who: int | None) -> dict[str, Any]:
+        """The compendium row behind a creature, or `{}` if it has none.
+
+        A character, a companion and a summon are all typeless here -- only
+        an `Ident` naming an `m` ref has a block to read.
+        """
+        from .components import Ident
+
+        if who is None:
+            return {}
+        ident = self.world.get(who, Ident)
+        if ident is None or not ident.ref.startswith("m"):
+            return {}
+        from combat_engine.content.loader import load
+
+        try:
+            return load(ident.ref).row
+        except Exception:  # a ref with no row is simply typeless
+            return {}
+
     def is_kind(self, word: str, on: int | None = None) -> bool:
         """Is this creature of that type? `c.is_kind("undead")`."""
         return word.lower() in self.kinds_of(on)
+
+    def is_minion(self, on: int | None = None) -> bool:
+        """Is this creature a minion? What "a nonminion enemy" asks.
+
+        Its own column on the stat block, and not a hit point count. The
+        two read the same on almost every row -- a minion is printed with
+        1 hit point -- and the tree twice wrote `max_hp <= 1` locally
+        because nothing else could answer. That test is false for the
+        three blocks that print a nonminion with one hit point, and true
+        for anything else that happens to have one: a summon spawned off
+        `Summon(hp=1)`, a conjuration standing in for a creature, a
+        character whose maximum was ground down.
+
+        A creature with no stat block -- a character, a companion, a
+        summon -- is never a minion, which is the printed rule.
+        """
+        return bool(self._stat_block(self._who(on)).get("minion"))
 
     def set_origin(
         self,
@@ -1775,10 +1821,10 @@ class Cast:
 
         "Allies within 3 squares of you can stand up as a minor action" is
         not a bonus, a condition or a power -- it is a line in the action
-        menu that is normally a constant. `what` is `shift`, `stand` or
-        `second_wind`; anything else is carried, costs nothing and does
-        nothing, so add the reader in `actions` at the same time as the
-        word.
+        menu that is normally a constant. `what` is `shift`, `stand`,
+        `escape` or `second_wind`; anything else is carried, costs nothing
+        and does nothing, so add the reader in `actions` at the same time
+        as the word.
 
         Follows `c.target`, because the printed lines grant it to somebody
         else -- `on=c.me` for a stance about yourself, which is what
@@ -3043,6 +3089,43 @@ class Cast:
         return self.world.relations.targets(
             Relation.GRABBED_BY, self.me if of is None else of
         )
+
+    def grabbed_by(self, *, on: int | None = None) -> list[int]:
+        """Everyone holding that creature in a grab."""
+        from .escape import holders
+
+        who = self._who(on)
+        return [] if who is None else holders(self.world, who)
+
+    def escape(
+        self,
+        *,
+        on: int | None = None,
+        bonus: int = 0,
+        skill: str = "",
+        auto: bool = False,
+    ) -> bool:
+        """Make one escape attempt now. True if the grab is broken.
+
+        The printed action is a move action and `actions.legal` offers it;
+        this is the *other* half -- "you immediately use the escape
+        action", "each ally can make an escape attempt as a free action"
+        -- which happens on somebody else's clock and costs whatever the
+        row that called it cost.
+
+        **Follows `c.target` and falls back to the caster**, the way
+        `c.save` does and for the same reason: almost every printed line
+        of this shape hands the attempt to somebody else.
+
+        `auto` is "you escape automatically" -- no check is rolled, so a
+        row watching for one does not see a roll that never happened.
+        """
+        who = self._who(on) or self.me
+        if who is None:
+            return False
+        from .escape import attempt
+
+        return attempt(self.world, who, bonus=bonus, skill=skill, auto=auto)
 
     def no_provoke(
         self, *, from_: int | None = None, on: int | None = None,
@@ -4975,6 +5058,19 @@ class Cast:
         for w in magic:
             if w.item == mine:
                 return w.enhancement
+        # Neither is a suit of armour or anything in the small slots, and
+        # "a bonus equal to the armour's enhancement bonus" is printed on
+        # a dozen of them -- they were all reading the plus of whatever
+        # sword happened to be in the same hand. Ammunition is in neither
+        # place: it is spent, so it lives in the quiver.
+        gear = self.world.get(self.me, Gear)
+        if gear is not None:
+            worn = next((m for m in gear.worn.values() if m.ref == mine), None)
+            if worn is not None and worn.plus:
+                return worn.plus
+            for piece in gear.quiver:
+                if piece.ref == mine:
+                    return piece.plus
         return magic[0].enhancement if magic else 1
 
     def as_implement(self, *, on: int | None = None) -> None:
@@ -6523,6 +6619,30 @@ class Cast:
         fired = p is not None and p.reach.kind == "ranged"
         return gear.ranged if fired and gear.ranged else gear.main
 
+    def ammunition(self, ev: Any = None) -> bool:
+        """Was that shot fired from the ammunition **this row belongs to**?
+
+        The question every ammunition property asks and none could. The
+        item is found the way `c.enhancement` finds it -- off this row's
+        own ref -- so a wielder carrying two kinds of magic arrow has each
+        property answering its own shots and neither answering the other's.
+
+        `resolve.attack` draws and spends one piece as the shot is
+        declared and writes the item's ref onto all four attack events, so
+        this is exact for an `AttackDeclared` answered in the before
+        window as well as for the `Hit`.
+
+        False when the quiver is empty, which is the point: the property
+        stops paying out, rather than riding every shot for the rest of
+        the fight.
+        """
+        from .ammunition import fired_with
+
+        return fired_with(
+            ev if ev is not None else self.trigger,
+            self.ref.split("x")[0].split("p")[0],
+        )
+
     def apply_poison(
         self,
         bite: Callable[[Any], None],
@@ -6536,10 +6656,13 @@ class Cast:
 
         The printed line is "apply the poison to your weapon or one piece
         of ammunition, and the next creature you hit with the coated item
-        takes...". **Ammunition is not modelled**, and it does not need to
-        be for these: the card offers the wielder a choice of two and the
-        row takes the weapon, which is one of the printed answers rather
-        than an approximation of both.
+        takes...". The card offers the wielder a choice of two and this
+        takes the weapon, which is one of the printed answers rather than
+        an approximation of both. Coating a *piece* of ammunition is now
+        sayable -- `Gear.quiver` holds them and `c.ammunition` reads which
+        shot came from which -- and is not done here, because the hold
+        below is keyed on a `Weapon` and the choice would be between two
+        different kinds of thing.
 
         What was missing was the tie. Every one of these rows was written
         as a bare `c.watch(Hit, ...)`, so the poison rode whichever weapon
@@ -6582,13 +6705,24 @@ class Cast:
         *,
         until: When = When.ENCOUNTER,
         on: int | None = None,
+        implement: bool = False,
     ) -> Effect | None:
         """This creature's weapon attacks deal that type from now on.
 
-        The printed line is "this weapon deals fire damage instead of its
-        normal damage type", and it is an *override*, not an addition --
-        which is why it beats the type the power named rather than stacking
-        beside it.
+        The printed line is "all damage dealt by this weapon is fire
+        damage", and it is an *override*, not an addition -- which is why
+        it beats the type the power named rather than stacking beside it.
+        For a long while the code was narrower than this paragraph:
+        `_typed` recoloured a blow only when the card had named no type,
+        so "**all** damage" quietly meant "the untyped part", and every
+        item block printing the line got the smaller thing. The docstring
+        was the correct half and the code now matches it.
+
+        `implement=True` for the symbol and staff version of the same
+        sentence, "all damage dealt by powers using this implement".
+        Without it the override speaks only for `Keyword.WEAPON` rows,
+        which is what the weapon cards say and is silently false for
+        every implement one.
 
         Held as a labelled effect rather than written onto the `Weapon`,
         because the weapon object is the character's and the change is
@@ -6598,25 +6732,61 @@ class Cast:
         for eff in list(self.world.effects.of(who)):
             if eff.label.startswith("deals:"):
                 self.world.effects.end(eff, "deals another type now")
+        through = Keyword.IMPLEMENT if implement else Keyword.WEAPON
         return self.world.effects.apply(
-            who, self.me, until, label=f"deals:{dtype.value}"
+            who, self.me, until, label=f"deals:{dtype.value}:{through.value}"
         )
 
     def _typed(self, dtype: DamageType) -> DamageType:
         """The type this blow really is.
 
-        A weapon power whose card names no type rolls out untyped, and a
-        weapon made of something says otherwise. Only `UNTYPED` is
-        overridden and only for a weapon power: a wizard's fire spell is
-        not the staff's business, and a card that *does* name a type has
-        said what it deals.
+        Two different sentences meet here and they are not equally loud.
+        A weapon *made* of something -- a silvered blade -- only says what
+        an attack that named no type comes out as, so it fills `UNTYPED`
+        and stops. A card saying "all damage dealt by this weapon is fire"
+        is an override and beats the type the power printed.
+
+        Both speak only for a row that used the thing: a wizard's fire
+        spell is not the sword's business. `c.deals(implement=True)` is
+        the other half of that gate, for the cards that retype what a
+        symbol casts.
         """
+        p = self._declared()
+        # `None` is a blow with no row behind it -- a hazard, a fall. It
+        # has no keywords to fail the gate with, so it is not gated.
+        keywords = p.keywords if p is not None else None
+        retype = self._retyped(keywords)
+        if retype is not None:
+            return retype
         if dtype is not DamageType.UNTYPED:
             return dtype
-        p = self._declared()
-        if p is not None and Keyword.WEAPON not in p.keywords:
+        if keywords is not None and Keyword.WEAPON not in keywords:
             return dtype
         return self._weapon_dtype() or dtype
+
+    def _retyped(self, keywords: Sequence[Keyword] | None) -> DamageType | None:
+        """The override a `c.deals` laid down, if it covers this row.
+
+        Separate from `_weapon_dtype` because the two halves of that
+        method were one lookup doing opposite jobs: this one wins over a
+        printed type and the gear below it does not.
+
+        One that does not cover this row is **skipped, not the end of the
+        search**. `deals` ends any standing retype before it lays a new
+        one, so only one can be held today and the difference cannot show
+        -- but the day a weapon retype and an implement retype stand at
+        once, returning on the first miss would silence whichever the
+        effect list happened not to yield first.
+        """
+        for eff in self.world.effects.of(self.me):
+            if not eff.label.startswith("deals:"):
+                continue
+            _, _, rest = eff.label.partition(":")
+            said, _, through = rest.partition(":")
+            if through and keywords is not None and Keyword(through) not in keywords:
+                continue
+            return DamageType(said)
+        return None
 
     def _weapon_dtype(self) -> DamageType | None:
         """What a blow from the thing in hand comes out as.
@@ -6628,9 +6798,6 @@ class Cast:
         "my weapon deals fire" and "+1 damage with fire powers" would
         disagree about the same blow.
         """
-        for eff in self.world.effects.of(self.me):
-            if eff.label.startswith("deals:"):
-                return DamageType(eff.label.partition(":")[2])
         gear = self.world.get(self.me, Gear)
         if gear is None:
             return None

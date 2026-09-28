@@ -85,6 +85,11 @@ def features(
     f["is_action_point"] = float(action.kind == "action_point")
     f["is_hide"] = float(action.kind == "hide")
     f["is_delay"] = float(action.kind == "delay")
+    # Named on the day the escape action arrived, for the reason every
+    # comment here gives: an unnamed kind scores zero, which beats ending
+    # a turn -- so the first grabbed creature would have spent every move
+    # action of the fight struggling whether or not it was worth it.
+    f["is_escape"] = float(action.kind == "escape")
     # **The last six.** Every kind `actions.legal` can produce is named
     # here now, because an unnamed one scores zero -- which beats ending
     # a turn at -2 and beats a move that closes nothing -- and so becomes
@@ -324,6 +329,10 @@ WEIGHTS: dict[str, float] = {
     "is_end": -2.0,
     "is_move": -1.0,
     "is_stand": 3.0,
+    # The same shape as standing up -- a move action spent to shed a
+    # condition -- and priced a little under it because the check can
+    # fail and standing cannot.
+    "is_escape": 2.5,
     "is_second_wind": 0.0,
     "expected_hits": 4.0,
     "hit_chance": 3.0,

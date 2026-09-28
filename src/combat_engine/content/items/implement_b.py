@@ -742,7 +742,7 @@ def i684p1(c: Cast) -> None:
     printed "instead of any other damage type". It is declared on the
     swing, so it has to be in place before the damage is rolled -- hence
     `AttackDeclared` rather than `Hit`."""
-    c.deals(DamageType.FIRE, on=c.me, until=When.EOT)
+    c.deals(DamageType.FIRE, on=c.me, until=When.EOT, implement=True)
 
 
 @power(
@@ -1058,7 +1058,7 @@ def i1398p1(c: Cast) -> None:
     """The damage half works: `c.deals` overrides the type before the roll.
     Moving an in-flight attack from one defence to another has no verb, so
     that clause is dropped rather than the whole row refused."""
-    c.deals(DamageType.PSYCHIC, on=c.me, until=When.EOT)
+    c.deals(DamageType.PSYCHIC, on=c.me, until=When.EOT, implement=True)
 
 
 @power(
@@ -1115,7 +1115,7 @@ def i1533p1(c: Cast) -> None:
     the melee and close ones -- the damage context does not carry the
     weapon, so it cannot be narrowed. Re-taking this is harmless: the same
     override lands on top of itself."""
-    c.deals(DamageType.FIRE, on=c.me, until=When.ENCOUNTER)
+    c.deals(DamageType.FIRE, on=c.me, until=When.ENCOUNTER, implement=True)
 
 
 @power(
@@ -1953,7 +1953,7 @@ def i2339x1(c: Cast) -> None:
     file -- the damage context does not carry the weapon."""
     breath = c.element()
     if breath is not None:
-        c.deals(breath, on=c.me, until=When.ENCOUNTER)
+        c.deals(breath, on=c.me, until=When.ENCOUNTER, implement=True)
 
 
 @power(
@@ -2518,7 +2518,7 @@ def i2811x1(c: Cast) -> None:
     on=Trigger(AttackDeclared, both(by_me, by_melee), "you swing in melee"),
 )
 def i2879p1(c: Cast) -> None:
-    c.deals(DamageType.THUNDER, on=c.me, until=When.EOT)
+    c.deals(DamageType.THUNDER, on=c.me, until=When.EOT, implement=True)
 
 
 @power(
@@ -2811,7 +2811,7 @@ def i3170x1(c: Cast) -> None:
     """`c.deals` is an override and takes no account of what the damage
     already was, so "unless the damage already has a type" is the dropped
     clause -- this makes a cold power's damage fire."""
-    c.deals(DamageType.FIRE, on=c.me, until=When.ENCOUNTER)
+    c.deals(DamageType.FIRE, on=c.me, until=When.ENCOUNTER, implement=True)
 
 
 @power(

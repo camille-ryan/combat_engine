@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from .ammunition import nock
 from .components import Defences, Health
 from .conditions import DROPPED
 from .durations import When
@@ -129,6 +130,12 @@ def attack(
     # attack events -- because two printed rows are about exactly that
     # attack and neither could be written while nothing said so.
     bought = spent_action_point(world, attacker)
+    # One piece of magic ammunition, drawn and spent as the shot is
+    # declared. Rides the same road `opportunity` and `charge` do -- in
+    # the attack context and on all four attack events -- because "an
+    # attack using this ammunition" is about *this* shot and there was
+    # nothing on the wire that said which one.
+    drawn = nock(world, attacker, power, branch)
 
     def roll(declared: AttackDeclared) -> None:
         # Read back off the event, because an interrupt may have moved the
@@ -177,6 +184,10 @@ def attack(
             # lookup duplicating `_is_ranged`.
             "ranged": _is_ranged(power, branch),
             "branch": branch,
+            # Which magic ammunition this shot came from, empty for every
+            # attack that is not one. In the context as well as on the
+            # events so a standing modifier can be gated on it.
+            "ammo": drawn,
             # Which hand swung. `Cast.w(hand="off")` already picked the
             # off-hand weapon's dice, and then threw the fact away -- so
             # a rider gated on an off-hand attack read a key the context
@@ -272,6 +283,7 @@ def attack(
         rolled.granted_by = granted_by
         rolled.granted_via = granted_via
         rolled.action_point = bought
+        rolled.ammo = drawn
         # The context the modifiers were actually read with. `c.bonus(
         # once=True)` has to decide whether the bonus it is watching for
         # *applied*, and it was rebuilding a four-key context of its own --
@@ -315,12 +327,18 @@ def attack(
         landed.granted_by = granted_by
         landed.granted_via = granted_via
         landed.action_point = bought
+        landed.ammo = drawn
         # Which defence was attacked. `AttackDeclared` and `AttackRolled`
         # carry it as a field; the outcome did not, so "an attack against
         # your AC or Reflex misses you" had nothing to read on the one event
         # that says it missed. A plain attribute, like `result` above, so it
         # stays off the wire and out of a replay fixture.
         landed.vs = vs
+        # Which hand swung. Already in the attack context and already
+        # thrown away by the time anything could answer "when you hit with
+        # an off-hand attack", which is the whole of a two-weapon feat's
+        # printed trigger. Same plain attribute as `vs`.
+        landed.hand = hand
 
         # An immediate interrupt answering a hit may undo it -- a reroll on
         # "when you are hit" is the printed shape, and by the rules the hit
@@ -351,7 +369,9 @@ def attack(
             ev.granted_by = granted_by
             ev.granted_via = granted_via
             ev.action_point = bought
+            ev.ammo = drawn
             ev.vs = vs
+            ev.hand = hand
             return ev
 
         # Until the outcome stops changing. An *interrupt* answers before
@@ -387,6 +407,7 @@ def attack(
     announced.granted_by = granted_by
     announced.granted_via = granted_via
     announced.action_point = bought
+    announced.ammo = drawn
     declared = world.bus.emit(announced, roll)
     if declared.cancelled:
         result.cancelled = True
@@ -801,6 +822,11 @@ def deal_damage(
         amount = amount // 2
         parts = _rescale(parts, amount)
 
+    # What the target's defences take off, summed across every step below
+    # and announced on `DamageApplied`. `absorbed` is temporary hit points
+    # and nothing else, and a row wanting "my resistance reduced this" was
+    # reading it and getting False in every fight without temp hp.
+    resisted = 0
     defences = world.get(target, Defences)
     if defences is not None:
         # Untyped damage is included. `c.resist(5)` with no type writes an
@@ -819,6 +845,10 @@ def deal_damage(
         # highest applies.
         live: list[list[int]] = []
         worst_vuln = 0
+        # Parts an immunity removed outright. Counted into `resisted` with
+        # the rest: the printed rows asking about it say "if the damage is
+        # reduced", and an immunity reduces it the hardest.
+        ignored = 0
         # Not `types`: that is the blow's own, read again below, and the
         # loop variable used to be spelled the same.
         for part_types, value in parts:
@@ -832,6 +862,7 @@ def deal_damage(
                 # blanket ignore.
                 becomes = _immunity_ignored(world, source, part_types, dmg_ctx)
                 if becomes is None:
+                    ignored += value
                     continue
                 resist = max(resist, becomes)
             resist = max(
@@ -841,6 +872,7 @@ def deal_damage(
                 worst_vuln, max(defences.vulnerable.get(t, 0) for t in part_types)
             )
             live.append([value, resist])
+        resisted += ignored
         if not live:
             amount = 0
         else:
@@ -854,6 +886,7 @@ def deal_damage(
                 sum(min(v, r) for v, r in live), max(r for _, r in live)
             )
             amount = max(0, sum(v for v, _ in live) - shrugged)
+            resisted += shrugged
 
     # Resistance that only applies to some of the damage that comes in --
     # "but only when the damage is from ranged or area attacks". `Defences`
@@ -893,9 +926,11 @@ def deal_damage(
             )
             for t in types
         )
-        amount = max(
+        left = max(
             0, amount - max(0, gated - _ignored_resist(world, source, types, dmg_ctx))
         )
+        resisted += amount - left
+        amount = left
 
     # "The creature takes no damage from an attack that misses" -- the
     # minion clause, printed on anything standing at one hit point. Nothing
@@ -920,10 +955,11 @@ def deal_damage(
             hp=health.hp,
             detail=detail,
             dtypes=types if len(types) > 1 else (),
+            resisted=resisted,
         )
     )
     if not was_bloodied and health.bloodied and health.hp > 0:
-        world.bus.emit(Bloodied(actor=target))
+        world.bus.emit(Bloodied(actor=target, source=source))
     _check_down(world, target, health, source)
     return landed
 

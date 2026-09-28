@@ -881,10 +881,11 @@ _granted("f1439", "f1439b")
 
 @power("f1439b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=CloseBurst(5), target=EACH_ALLY, keywords=DIVINE,
-       group=CHANNEL_DIVINITY, dropped=("c.escape()",))
+       group=CHANNEL_DIVINITY)
 def f1439b(c: Cast) -> None:
-    """The saving-throw half plays. Escaping a grab is the other choice and
-    is dropped: `c.grab` sets a relation and nothing rolls to break one.
+    """Both halves of the printed choice, and the ally is only offered the
+    one it could actually take -- a target holding neither a grab nor one
+    of the three effects has nothing to choose between.
 
     The three named effects are picked by asking whether the ally is
     actually carrying one of those conditions, not by `c.save(against=)`:
@@ -894,7 +895,17 @@ def f1439b(c: Cast) -> None:
     if who is None:
         return
     wanted = (Condition.IMMOBILIZED, Condition.RESTRAINED, Condition.SLOWED)
+    offered = []
+    if c.grabbed_by(on=who):
+        offered.append("escape")
     if any(c.is_(cond, on=who) for cond in wanted):
+        offered.append("save")
+    picked = offered[0] if len(offered) == 1 else (
+        c.choose(offered, f"{c.ref}: which one") if offered else None
+    )
+    if picked == "escape":
+        c.escape(on=who)
+    elif picked == "save":
         c.save(on=who)
 
 
@@ -1253,14 +1264,14 @@ def f1405(c: Cast) -> None:
 
 @power("f1406", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.escape()", "c.ignore_condition(rules=)"))
+       dropped=("c.ignore_condition(rules=)",))
 def f1406(c: Cast) -> None:
-    """The combat-advantage half plays, gated on actually squeezing. Two
-    clauses are dropped: escaping a grab for a minor is `c.grant_action`'s
-    known blind spot -- it understands shift and stand and silently eats
-    anything else -- and squeezing's -5 to attacks is a constant in
-    `conditions.Rules`, not a modifier a row can cancel."""
+    """The combat-advantage half plays, gated on actually squeezing, and
+    so does the re-priced escape -- `actions.legal` reads `escape` off
+    `_granted` the way it reads `stand`. Squeezing's -5 to attacks is a
+    constant in `conditions.Rules`, not a modifier a row can cancel."""
     me = c.me
+    c.grant_action("escape", MINOR, on=me, until=When.ENCOUNTER)
     c.no_advantage(
         on=me, until=When.ENCOUNTER,
         when=lambda ctx: c.is_(Condition.SQUEEZING, on=me),

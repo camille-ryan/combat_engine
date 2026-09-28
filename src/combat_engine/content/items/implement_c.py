@@ -896,18 +896,16 @@ def i2330x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.RADIANT],
-    todo=("c.deals(implement=)", "c.deals(once=)"),
+    dropped=("c.deals(once=)",),
 )
 def i2330p1(c: Cast) -> None:
-    """Re-aimed from `dropped` to `todo`, because the row was inert and
-    read as working.
+    """`c.deals(implement=True)` is the conversion: it beats the type the
+    power printed and speaks for `Keyword.IMPLEMENT` rows, which is both
+    halves of what this line needs.
 
-    `c.deals` is read through `Cast._typed`, which returns the printed type
-    untouched unless it is `UNTYPED` **and** the row carries
-    `Keyword.WEAPON`. This line converts named necrotic and poison damage
-    on implement powers, which is the one case `_typed` refuses twice over,
-    so laying the effect did nothing at all. "The next power" is the second
-    gap and the smaller one."""
+    What is left is the scope. Nothing spends the override on one use, so
+    it is held to the end of the turn rather than to "the next power"."""
+    c.deals(DamageType.RADIANT, on=c.me, until=When.EOT, implement=True)
 
 
 @power(
@@ -2278,7 +2276,6 @@ def i2676p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.RADIANT],
-    dropped=("c.deals(implement=)",),
 )
 def i2719p1(c: Cast) -> None:
     """The way back is `c.endable`: it hangs a deliberate drop on the
@@ -2286,11 +2283,14 @@ def i2719p1(c: Cast) -> None:
     action is what the card charges. So `c.deals(revert=)` was not the
     gap.
 
-    What is dropped is the reach of the conversion. `Cast._typed` leaves a
-    printed damage type alone and only speaks for a row carrying
-    `Keyword.WEAPON`, so "**all** damage dealt by powers using this symbol"
-    covers only the untyped weapon half of what it says."""
-    c.endable(c.deals(DamageType.RADIANT, on=c.me, until=When.ENCOUNTER), FREE)
+    `implement=True` is the reach of the conversion: it overrides the type
+    the power printed, on the `Keyword.IMPLEMENT` rows this symbol casts."""
+    c.endable(
+        c.deals(
+            DamageType.RADIANT, on=c.me, until=When.ENCOUNTER, implement=True
+        ),
+        FREE,
+    )
 
 
 @power(

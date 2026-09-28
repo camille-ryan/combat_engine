@@ -15,13 +15,11 @@ range at all means melee 1.
 
 Five things this file had to settle.
 
-**"The m2833 resists damage"** is a trigger with nothing on any event to
-read. `DamageApplied.absorbed` is temporary hit points rather than
-resistance -- a different question with a plausible-looking answer -- so
-what the sentence names is asked of the creature's own `Defences.resist`
-against the type that just arrived. Resistance that eats a blow whole still
-announces a `DamageApplied` of 0, which is the case the printed line most
-obviously means.
+**"The m2833 resists damage"** is `DamageApplied.resisted`: the points
+resistance and immunity took off before any of the blow reached hit points.
+(`absorbed`, next to it, is temporary hit points and nothing else.)
+Resistance that eats a blow whole still announces a `DamageApplied` of 0,
+which is the case the printed line most obviously means.
 
 **"Fire and radiant damage"** is one roll of two types and a header holds
 one. Unlike level 7's "fire *or* radiant", there is no choice to make: the
@@ -95,7 +93,6 @@ from combat_engine.engine import (
     CloseBurst,
     Damage,
     DamageType,
-    Defences,
     Effect,
     Health,
     Hit,
@@ -268,19 +265,14 @@ def _crit_on_me(world: World, me: int, ev: Event) -> bool:
 def _resisted_damage(world: World, me: int, ev: Event) -> bool:
     """"The m2833 resists damage."
 
-    `DamageApplied.absorbed` counts temporary hit points rather than
-    resistance, so it answers a different question with a plausible number.
-    What the sentence names is the creature's own `Defences.resist` biting
-    on the type that just arrived -- including the case where it eats the
-    blow whole, which still announces a `DamageApplied` of 0.
+    `DamageApplied.resisted` is the points resistance and immunity took off
+    this blow, so the sentence is asked of the blow rather than of the
+    creature's standing `Defences.resist` -- which said only that it *would*
+    resist, and was true for a blow an attacker ignored resistance on.
+    Resistance that eats a blow whole still announces a `DamageApplied` of
+    0, and that one still counts.
     """
-    dtype = getattr(ev, "dtype", None)
-    if getattr(ev, "target", None) != me or dtype is None:
-        return False
-    if dtype is DamageType.UNTYPED:
-        return False
-    shell = world.get(me, Defences)
-    return shell is not None and shell.resist.get(dtype, 0) > 0
+    return getattr(ev, "target", None) == me and getattr(ev, "resisted", 0) > 0
 
 
 #: The five the printed line names. Untyped and the other five are not on it.

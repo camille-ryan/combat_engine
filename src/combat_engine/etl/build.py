@@ -232,6 +232,8 @@ class Report:
     feat_cards: int = 0
     races: int = 0
     racial: int = 0
+    themed: int = 0
+    talents: int = 0
     terms: int = 0
     aliases: int = 0
     unparsed: int = 0
@@ -261,6 +263,8 @@ class Report:
             f"  unparsed    {self.unparsed:6d}  (prerequisite clauses left opaque)",
             f"races         {self.races:6d}",
             f"  racial rows {self.racial:6d}  (a power a race grants, never imported)",
+            f"theme rows    {self.themed:6d}  (a power a theme grants, never imported)",
+            f"  wild talents{self.talents:6d}  (the cantrips no owner is printed for)",
             f"prereq terms  {self.terms:6d}  (a printed name a prerequisite asks for)",
             f"other names   {self.aliases:6d}  (rituals, deities: indexed, never content)",
             f"names         {self.names:6d}  (localization/names.json, gitignored)",
@@ -840,6 +844,7 @@ def _powers(
             report.seconds += 1
             keep(extra)
     report.racial = _racial_powers(source, out, keep)
+    report.themed, report.talents = _theme_powers(source, keep)
     report.scores["power"] = sum(scores) / max(1, len(scores))
     report.crossed = _cross_reference(out, names)
 
@@ -894,6 +899,111 @@ def _racial_powers(
         written += 1
     return written
 
+
+#: The two `Class` values that name no class and no race. The class pass
+#: takes `Class IN (CLASSES)` and the racial pass takes the races beside
+#: it; these were taken by neither, so 499 theme powers and 10 wild
+#: talents were absent from the build and from the registry -- and the
+#: eighteen feats that ride on nine of those theme powers read as "named
+#: in prose with no ref anywhere", which sent a sweep looking for the
+#: fault in the spec extractor, where it is not.
+_THEME_CLASS = "Theme Power"
+_TALENT_CLASS = "Wild Talent Power"
+
+#: What `cls` says when a power's owner is not a class. Lower case, so it
+#: cannot be read as one of the 25 capitalised class names and cannot be
+#: dealt by `chargen.loadout`, and a category rather than a name: nothing
+#: in the compendium is *called* either of these.
+_THEME = "theme"
+_TALENT = "wild talent"
+
+#: The values `Kind` is supposed to hold. A theme power's is copied
+#: verbatim from the compendium and for 304 of them it is a word off the
+#: **theme's printed name** -- "Minstrel", "Nomad", "Adept" -- and
+#: `scripts/spec.py` prints that column to an author.
+_POWER_KINDS = ("Attack", "Utility", "Feature")
+
+
+def _theme_powers(
+    source: sqlite3.Connection,
+    keep: Callable[[power_parser.Power], None],
+) -> tuple[int, int]:
+    """The powers a theme grants, and the wild talents beside them.
+
+    `cls` is the theme's **alias ref** -- the `x7_642` that
+    `_other_names` already mints for every row of the `Theme` table --
+    for the reasons `_racial_powers` gives one column over: the theme's
+    printed name in a readable column is a leak, and anything spelled
+    like a class would be dealt by `chargen.loadout` to every character
+    of it. A theme is not a class, and unlike a race it has no table of
+    its own here; the alias ref is the one handle the project already
+    has for it, so the same theme is the same string in both places.
+
+    Nothing deals a theme, so no character gains a row from this. The
+    import exists because the **feats** name these powers: without a ref
+    the name reaches the author as prose, which is the thing this
+    project may not do.
+
+    Wild talents get a plain `wild talent` instead. They are the one
+    group with no owner printed anywhere -- no table, no entry, nothing
+    to point at -- and one of the feats here chooses three of them, so
+    they need a handle that can be queried as a set.
+    """
+    themes = {
+        (r["Name"] or "").strip(): f"x{_ALIAS_TABLES.index('Theme')}_{r['ID']}"
+        for r in source.execute("SELECT ID, Name FROM Theme")
+        if (r["Name"] or "").strip()
+    }
+    # Longest first. Two pairs of themes share the first two words of
+    # their names, and 46 cards name a theme whose name contains a
+    # shorter theme's -- shortest first would file both under the stub.
+    longest = sorted(themes, key=len, reverse=True)
+    themed = talents = 0
+    rows = source.execute(
+        "SELECT * FROM Power WHERE Level <= ? AND Class IN (?, ?) ORDER BY ID",
+        (MAX_POWER_LEVEL, _THEME_CLASS, _TALENT_CLASS),
+    )
+    for row in rows:
+        p = power_parser.parse(dict(row), row["Txt"])
+        if (row["Class"] or "").strip() == _TALENT_CLASS:
+            p.cls = _TALENT
+            talents += 1
+        else:
+            name = _theme_of(row["PlainTxt"], longest)
+            p.cls = themes.get(name, _THEME)
+            # **The theme's name opens the spec**, the way the race's
+            # opens a racial card's -- `<theme> Utility 2` where a class
+            # power prints `Fighter Utility 2`. That is the first line
+            # an author is shown, so all 499 of them would have handed
+            # over a printed name, and `leaks.py --specs` would not have
+            # said so: most theme names are two ordinary English words
+            # and `identifies` waives those. Swapped here, where the
+            # theme is already known by name, rather than by position
+            # the way `_racial_labels` has to guess it.
+            if name:
+                p.spec = sanitise.scrub(p.spec, {name: p.cls})
+            themed += 1
+        if p.kind not in _POWER_KINDS:
+            p.kind = "Theme"
+        keep(p)
+    return themed, talents
+
+
+def _theme_of(plain: str, longest: list[str]) -> str:
+    """Which theme printed this card, off its own page.
+
+    The `Class` column says only "Theme Power" and `Kind` holds a single
+    word of the name, so neither identifies the theme. The card's second
+    line does: every one of the 499 opens `<theme> Feature <name>`, and
+    matching the whole printed name against the head of that line is
+    exact for all of them.
+    """
+    lines = [ln.strip() for ln in (plain or "").split("\n") if ln.strip()]
+    head = lines[1] if len(lines) > 1 else ""
+    for name in longest:
+        if head.startswith(name):
+            return name
+    return ""
 
 
 def _companions(source: sqlite3.Connection, out: sqlite3.Connection,
@@ -1263,7 +1373,38 @@ def _cross_reference_rest(
             # two ordinary words -- `star pact`, `iron soul` -- which is
             # precisely what `identifies` waives. The rows this serves
             # are the ones it was skipping.
-            fixed = _label_refs(fixed, by_name, cls, lone=table == "feat")
+            # **A racial card's labelled trait names that race's own
+            # row.** Same guard as the monster one above and for the
+            # same reason: a label is proof of *a* name and not of
+            # whose. The gnoll's `Pack Attack` is also the printed name
+            # of a theme power imported by `_theme_powers`, and with
+            # every name in one index the label resolved onto it -- a
+            # ref an author would read as settled and write a race's
+            # trait against a wolf's utility power. Narrowed by owner:
+            # `speaker` holds each power's class, and a racial power's
+            # class is the race's ref.
+            #
+            # **Refusing the swap is not the fix, here either.** Left
+            # alone the label stays in the spec as the printed name --
+            # three racial cards did that, and two of them had been
+            # pointing at another owner's power since long before the
+            # themes arrived: one at a class's feature, one at a
+            # different race's card. So the name goes to the same
+            # opaque `x_` token the monster arm above uses: the author
+            # is told a name was here and is offered nothing false to
+            # write against.
+            index = by_name
+            if table == "race":
+                index = dict(by_name)
+                # Only the names this card could be printing, so the
+                # token is minted for the three that need one and not
+                # for four thousand that do not.
+                for n in (n for n in by_name if _spelt_out(n, here)):
+                    r = by_name[n]
+                    if r[:1] == "p" and speaker.get(r) != ref:
+                        index[n] = f"x_{r}"
+                        names.setdefault(index[n], {"name": n})
+            fixed = _label_refs(fixed, index, cls, lone=table == "feat")
             # **Outside the `others` guard**, for the same reason
             # `_label_refs` is: that guard skips a row whose spec names
             # nothing `identifies` believes, and a feat name is two
@@ -1279,6 +1420,16 @@ def _cross_reference_rest(
                 out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
                 changed += 1
     return changed
+
+
+def _spelt_out(name: str, words: set[str]) -> bool:
+    """Is every word of this name somewhere in that spec?
+
+    A cheap sieve, not a match: it says which of the thirty thousand
+    indexed names a row could possibly be printing, so the work that
+    follows is done on three of them.
+    """
+    return all(w in words for w in re.findall(r"[a-z']+", name))
 
 
 def _racial_labels(spec: str, by_race: dict[str, str]) -> str:
@@ -1794,7 +1945,13 @@ def _label_refs(
         # monster's stat block -- and a feat modifies the powers a
         # character has, never a monster's claw. The same guard
         # `_named_powers` and `_associated_refs` carry.
-        if ref and ref[:1] not in ("p", "c"):
+        #
+        # **`x_` is the exception**, and it is the same guard rather
+        # than a hole in it: the caller has already decided this name
+        # may not be pointed at and has handed over the opaque token
+        # instead, exactly as the monster arm of `_cross_reference_rest`
+        # does. Refusing it here would put the printed name back.
+        if ref and ref[:1] not in ("p", "c") and not ref.startswith("x_"):
             return m.group(0)
         return f"{ref} : " if ref else m.group(0)
 

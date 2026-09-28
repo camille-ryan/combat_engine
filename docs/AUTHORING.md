@@ -174,7 +174,23 @@ that never applies.
   somebody it never touched. Twenty-one rows were blocked on this.
 * **`Hit` does not declare `opportunity`.** `resolve.attack` sets it as a
   plain attribute afterwards, so a row must ask
-  `getattr(ev, "opportunity", False)`. Same shape as `charge`.
+  `getattr(ev, "opportunity", False)`. Same shape as `charge`, `vs`,
+  `action_point`, `branch`, `granted_by`, `granted_via` and `hand` --
+  every one of them a plain attribute, deliberately, so that none of them
+  reaches the wire or a replay fixture. `hand` is `"main"` or `"off"` and
+  is what a two-weapon rider's "when you hit with your off-hand weapon"
+  reads; it was in the attack context and on nothing that announced the
+  outcome.
+* **`Bloodied` carries `source`**, the way `Dropped` does -- whoever
+  crossed the creature's half-hit-point line, or None when nothing did.
+  `by_me` reads it, so "whenever you bloody an enemy" is a declared
+  trigger and no longer has to be routed off `DamageApplied` and
+  re-derive the threshold by hand.
+* **`DamageApplied.absorbed` is temporary hit points and nothing else.**
+  Resistance is `resisted`, which is the points the target's resistance
+  and immunity took off before any of it reached hit points. A row gating
+  on `absorbed > 0` to mean "my resistance ate some of this" is false in
+  every fight without temp hp, which is nearly all of them.
 * **`c.grant_action` understands `shift` and `stand`, and silently eats
   anything else.** Its own docstring says so: another value "is carried,
   costs nothing and does nothing". "You can escape a grab as a minor

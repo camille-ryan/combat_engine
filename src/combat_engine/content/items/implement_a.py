@@ -237,9 +237,13 @@ def _melee_on_my_side(world: World, me: int, ev: Event) -> bool:
     )
 
 
-def _enemy_bloodied(world: World, me: int, ev: Event) -> bool:
+def _i_bloodied_one(world: World, me: int, ev: Event) -> bool:
     who = getattr(ev, "actor", None)
-    return who is not None and who != me and not _my_side(world, me, who)
+    return (
+        getattr(ev, "source", None) == me
+        and who is not None
+        and not _my_side(world, me, who)
+    )
 
 
 def _enemy_saving(world: World, me: int, ev: Event) -> bool:
@@ -1662,13 +1666,9 @@ def i928p1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you bloody an enemy with an attack",
-    on=Trigger(Bloodied, _enemy_bloodied, "an enemy is bloodied"),
-    dropped=("Bloodied.source",),
+    on=Trigger(Bloodied, _i_bloodied_one, "you bloody an enemy"),
 )
 def i1029p1(c: Cast) -> None:
-    """`Bloodied` carries only the creature, so "you bloody it" is read as
-    "it becomes bloodied" -- the daily usage keeps that from mattering
-    more than once."""
     foe = getattr(c.trigger, "actor", None)
     if foe is not None:
         c.grants_advantage(on=foe, until=When.SAVE_ENDS, to="me")
@@ -1688,7 +1688,7 @@ def i1029p1(c: Cast) -> None:
     ),
 )
 def i1035p1(c: Cast) -> None:
-    c.deals(DamageType.NECROTIC, until=When.EOT, on=c.me)
+    c.deals(DamageType.NECROTIC, until=When.EOT, on=c.me, implement=True)
 
 
 @power(
@@ -2651,7 +2651,7 @@ def i1970p1(c: Cast) -> None:
     on=Trigger(AttackDeclared, by_me, "you make an attack"),
 )
 def i1973p1(c: Cast) -> None:
-    c.deals(DamageType.PSYCHIC, until=When.EOT, on=c.me)
+    c.deals(DamageType.PSYCHIC, until=When.EOT, on=c.me, implement=True)
 
 
 @power(

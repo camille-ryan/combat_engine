@@ -61,7 +61,6 @@ from combat_engine.engine import (
     Cast,
     CloseBurst,
     Condition,
-    ConditionApplied,
     DamageApplied,
     DamageRolled,
     DamageType,
@@ -73,7 +72,10 @@ from combat_engine.engine import (
     Miss,
     Moved,
     OpportunityWindow,
+    PowerUsed,
     Ranged,
+    Relation,
+    RelationSet,
     SavingThrow,
     Trigger,
     TurnEnd,
@@ -892,19 +894,45 @@ def i1094p1(c: Cast) -> None:
 
 
 @power("i2122x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Hit.hand",))
+       reach=PERSONAL, target=SELF)
 def i2122x1(c: Cast) -> None:
-    """Which hand swung is in the *attack* context -- `resolve.attack`
-    puts `hand` there -- and `resolve` does not copy it onto the `Hit` the
-    way it copies `opportunity`, `charge` and `vs`. So "you hit the same
-    creature with both your weapons" has nothing to count from."""
+    """`hand` rides the `Hit` as a plain attribute, so `getattr`. The
+    printed line is "when using a power", so the tally is per use and is
+    cleared on the next announcement rather than at the end of the turn."""
+    me = c.me
+    struck: dict[int, set[str]] = {}
+
+    def fresh(ev: PowerUsed) -> None:
+        if ev.actor == me:
+            struck.clear()
+
+    def landed(ev: Hit) -> None:
+        if ev.attacker != me:
+            return
+        hands = struck.setdefault(ev.target, set())
+        hand = getattr(ev, "hand", "main")
+        if hand in hands:
+            return
+        hands.add(hand)
+        if len(hands) > 1:
+            c.damage("1d6", on=ev.target, detail=c.ref)
+
+    c.watch(PowerUsed, fresh, until=When.ENCOUNTER)
+    c.watch(Hit, landed, until=When.ENCOUNTER)
 
 
 @power("i2122p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("Hit.hand",))
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with both your main weapon and your off-hand "
+               "weapon using one power",
+       dropped=("Cast.basic(hand=)", "query.hit_with_both_hands()"))
 def i2122p1(c: Cast) -> None:
-    """Same missing field as the property above: the trigger it needs is
-    "you hit with both", and the `Hit` does not say which hand."""
+    """Two halves are missing and neither stops the swing. `c.basic` takes
+    no hand, so the basic attack is swung with whatever the creature's
+    basic is; and nothing in the world records that both weapons landed
+    under one power -- the property beside this one counts it in a closure
+    a separate row cannot read -- so the printed Trigger is unenforced."""
+    c.basic()
 
 
 @power("i2492p1", level=5, cls=ITEM, usage=DAILY, action=INTERRUPT,
@@ -1165,18 +1193,21 @@ def i2024x1(c: Cast) -> None:
 
 
 @power("i2141x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.escape()",))
+       reach=PERSONAL, target=SELF)
 def i2141x1(c: Cast) -> None:
-    """An escape attempt is not a thing the engine has -- no action, no
-    check -- so the bonus to one has nowhere to go. The grab itself is
-    announced, which is where the damage hangs."""
+    """The damage hangs on `RelationSet` and not on `ConditionApplied`:
+    `Relations._apply_condition` writes the condition straight onto the
+    component, so a grab is never announced as one and the watch this
+    row had was silently dead."""
+    c.bonus("escape", 2, on=c.me, until=When.ENCOUNTER, kind="item")
+    me = c.me
 
-    def seized(ev: ConditionApplied) -> None:
-        if ev.target != c.me or ev.condition is not Condition.GRABBED:
+    def seized(ev: RelationSet) -> None:
+        if ev.kind_ is not Relation.GRABBED_BY or ev.target != me:
             return
         c.damage("1d10", on=ev.source)
 
-    c.watch(ConditionApplied, seized, until=When.ENCOUNTER, on=c.me)
+    c.watch(RelationSet, seized, until=When.ENCOUNTER, on=me)
 
 
 @power("i2525p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,

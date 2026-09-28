@@ -89,6 +89,7 @@ from .events import (
     EffectApplied,
     EffectExpired,
     EnterSquare,
+    Escaped,
     Event,
     Fell,
     ForcedMove,

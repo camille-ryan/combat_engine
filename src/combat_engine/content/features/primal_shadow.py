@@ -23,10 +23,10 @@ Two things are worth saying once about what did get written.
   ardent has two legs for three mantles and the assassin two for three
   guild methods, so one row in each class is gated on a leg it shares with
   a sibling. Marked where it changes what plays.
-* **"Your attack bloodies an enemy" cannot be said.** `Bloodied` carries
-  `actor` and no source, so all three barbarian riders answer any enemy
-  crossing the line rather than only the ones this barbarian put there.
-  That is `Bloodied.source`, which sixteen other rows already want.
+* **"Your attack bloodies an enemy" is `Bloodied.source`.** The event now
+  names whoever struck the blow, exactly as `Dropped` does, so all three
+  barbarian riders answer only the enemies this barbarian put past the
+  line.
 """
 
 from __future__ import annotations
@@ -243,7 +243,6 @@ def ardent_power_points(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PRIMAL,
-    dropped=("Bloodied.source",),
 )
 def barbarian_thaneborn(c: Cast) -> None:
     """The second option: a bonus off bloodying a foe.
@@ -253,11 +252,6 @@ def barbarian_thaneborn(c: Cast) -> None:
     takes nothing away from this leg and should -- but the parent is
     another file's and the three options it could not name now have text,
     which is the `cf:barbarian-might-rest` entry.
-
-    `Bloodied` carries `actor` and nothing else, so "**your** attack
-    bloodies an enemy" cannot be told from an enemy crossing the line to a
-    hazard or an ally's blow. The row fires on either, which is wider than
-    the card, and that is the dropped clause.
 
     "The **next** attack by you or an ally" is one bonus shared across the
     party, not one each: the modifier is laid on everybody and the whole
@@ -270,7 +264,7 @@ def barbarian_thaneborn(c: Cast) -> None:
 
     def on_bloodied(ev: Bloodied) -> None:
         victim = ev.actor
-        if victim == me or team(c.world, victim) is team(c.world, me):
+        if ev.source != me or team(c.world, victim) is team(c.world, me):
             return
         held: list[Effect | None] = [
             c.bonus(
@@ -301,16 +295,13 @@ def barbarian_thaneborn(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PRIMAL,
-    dropped=("Bloodied.source",),
 )
 def barbarian_thunderborn(c: Cast) -> None:
     """The third option: thunder off bloodying a foe.
 
-    `p9556` is the granted row and is dealt already. Same source gap as the
-    thaneborn leg -- this answers any enemy being bloodied rather than only
-    the ones this barbarian bloodied. The once-a-round latch is the card's
-    own and is keyed on the world's round, not on a boolean, so it survives
-    the effect being re-armed.
+    `p9556` is the granted row and is dealt already. The once-a-round latch
+    is the card's own and is keyed on the world's round, not on a boolean,
+    so it survives the effect being re-armed.
     """
     me = c.me
     if not c.build("thunderborn") or c.con_mod <= 0:
@@ -319,7 +310,7 @@ def barbarian_thunderborn(c: Cast) -> None:
 
     def on_bloodied(ev: Bloodied) -> None:
         victim = ev.actor
-        if victim == me or team(c.world, victim) is team(c.world, me):
+        if ev.source != me or team(c.world, victim) is team(c.world, me):
             return
         if paid.get(me) == c.world.round:
             return
@@ -339,15 +330,14 @@ def barbarian_thunderborn(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PRIMAL,
-    dropped=("Bloodied.source", "Weapon.off_hand_anyway"),
+    dropped=("Weapon.off_hand_anyway",),
 )
 def barbarian_whirling(c: Cast) -> None:
     """The fourth option: a shift off bloodying a foe, and combat advantage.
 
-    `p5249` is the granted row and is dealt already. Two dropped clauses.
-    `Bloodied` names no source, as on the other two legs. And "you can
-    wield a one-handed weapon in your off hand and treat it as an off-hand
-    weapon" is a fact about the gear rather than about the fight --
+    `p5249` is the granted row and is dealt already. One dropped clause:
+    "you can wield a one-handed weapon in your off hand and treat it as an
+    off-hand weapon" is a fact about the gear rather than about the fight --
     `c.w(hand="off")` reads the weapon's own properties and nothing
     overrides them, which is the hold two feats already carry.
 
@@ -362,7 +352,7 @@ def barbarian_whirling(c: Cast) -> None:
 
     def on_bloodied(ev: Bloodied) -> None:
         victim = ev.actor
-        if victim == me or team(c.world, victim) is team(c.world, me):
+        if ev.source != me or team(c.world, victim) is team(c.world, me):
             return
         if paid.get(me) == c.world.round:
             return

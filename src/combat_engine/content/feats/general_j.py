@@ -7,9 +7,16 @@ tree, so none of them is invented here.
 row. `exploits.py` wrote that machine once; `_assoc` below is the same
 thing with the skill bonus laid beside it, because every one of these
 cards prints both and a row may not hold a trigger *and* a standing
-modifier. Three of them print the preamble with **no list under it** --
-nothing to point the clause at -- so those keep the skill bonus and drop
-the rider.
+modifier. Every list in the batch has a ref under it now, so no row in
+the family is short of something to point its clause at.
+
+**Retyping one named row's damage.** Four of these cards read "the
+power's damage changes to <type>, and it loses the keywords of its
+former damage types". That is an override of the *blow*, not of this
+creature's weapon, so it is not `c.deals` -- it is `DamageRolled`, which
+is announced before the damage lands, carries the ref that dealt it in
+`detail`, and has `dtype` read back afterwards. `_retype` below is the
+whole of it.
 
 **The granted pair.** "You gain the `fNNNb` power" is a trait that hands
 over the card; the card is the row. Every card in this batch prints the
@@ -22,12 +29,15 @@ class feature is a ref and the cards that belong to it are exactly the
 rows whose `group` is `CHANNEL_DIVINITY`, so `PowerUsed` plus a group
 check says it exactly.
 
-The r47 run at the end rides on `p8278`, which is a **ref**, so those are
-ordinary triggers. What they mostly want and cannot have is the *extra*
-component of a damage roll: `DamageApplied` carries `amount` and no
-`power`, so "the additional necrotic damage from that power" has no
-number to read. Where the printed line only needs the *moment* rather
-than the number, it is written off the row's own `Hit`.
+The r47 run at the end rides on `p8278`, which is a **ref** -- but the
+row it names rolls no damage and makes no attack. Its whole payload is
+`c.bonus("damage", ..., dtype=NECROTIC)`, a typed *rider* on somebody
+else's blow. So "the extra necrotic damage from that power" has no
+number to read, and "that power deals cold as well" has no roll to
+retype: `resolve.deal_damage` splits a blow into typed parts and only
+`parts[0]`, the power's own, is reachable from `DamageRolled`. That is
+what `RIDER_RETYPE` names, and it is a different gap from the one
+`_retype` closes above.
 """
 
 from __future__ import annotations
@@ -54,8 +64,11 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     AreaBurst,
+    AttackRolled,
+    Bloodied,
     Cast,
     CloseBurst,
+    DamageRolled,
     DamageType,
     Dropped,
     ForcedMove,
@@ -74,6 +87,7 @@ from combat_engine.engine import (
     TurnStart,
     UpTo,
     When,
+    Window,
     about_me,
     ally_within,
     either,
@@ -109,12 +123,17 @@ R33 = (
     "p10043", "p10044", "p10045", "p10046",
     "p14073", "p14074", "p14075", "p14076",
 )
-#: The Associated Powers list is missing from the card, so the rider has
-#: nothing to hang on.
-NO_LIST = ("feat.associated_powers",)
-#: Overriding the damage type of **one named row** rather than of this
-#: creature's weapon, which is what `c.deals` says.
-RETYPE = ("c.deals(ref=)",)
+#: `p8278`'s whole payload is a typed damage **rider** --
+#: `c.bonus("damage", ..., dtype=NECROTIC)` on somebody else's blow --
+#: rather than a roll of its own. `DamageRolled` retypes `parts[0]`, the
+#: power's own part, and nothing reaches the part a modifier contributed,
+#: so the two feats that recolour that rider have nowhere to write.
+RIDER_RETYPE = ("c.bonus(retype=)",)
+#: The other side of the same coin: the *size* of that rider, and the
+#: moment it is paid. Four rows in the r47 run read "the additional
+#: necrotic damage from `p8278`" and the blow's parts are not on the
+#: event either.
+EXTRA = ("c.on_extra_damage()",)
 #: Which implements or weapons a character may pick up is settled when it
 #: is built, not on a board with the gear already in hand.
 PROFICIENCY = ("chargen.proficiency()",)
@@ -211,11 +230,49 @@ def _hit_with(ref: str):  # noqa: ANN202
     return when
 
 
+def _bloodied_by_enemy_near(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """"You are bloodied by an enemy within 10 squares of you."
+
+    The crossing, not the state, and `Bloodied` is emitted only on the blow
+    that makes it and only while `hp > 0`, so neither has to be
+    reconstructed from `DamageApplied`."""
+    who = getattr(ev, "source", None)
+    return (
+        ev.actor == me
+        and who is not None
+        and team(world, who) != team(world, me)
+        and distance_between(world, me, who) <= 10
+    )
+
+
 def _ours(world, me: int, who: int, reach: int) -> bool:  # noqa: ANN001
     return who == me or (
         team(world, who) == team(world, me)
         and distance_between(world, me, who) <= reach
     )
+
+
+def _retype(c: Cast, dtype: DamageType, refs: tuple[str, ...]) -> None:
+    """"The power's damage changes to X, and it loses the keywords of its
+    former damage types."
+
+    Not `c.deals`, which overrides what this creature's *weapon* rolls
+    and would catch every other card in the character's hand.
+    `DamageRolled` is announced before the blow lands, carries in
+    `detail` the ref that dealt it, and its `dtype` is read back --
+    setting `dtype` alone is the override, keywords and all, which
+    `resolve.deal_damage` says out loud. A rider some other row hung on
+    the same hit keeps its own type, which is also what the card means.
+    """
+    me = c.me
+    wanted = frozenset(refs)
+
+    def recolour(ev: Any) -> None:
+        if ev.source == me and ev.detail in wanted:
+            ev.dtype = dtype
+
+    c.watch(DamageRolled, recolour, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
 
 
 def _divine_radiant(p) -> bool:  # noqa: ANN001
@@ -331,33 +388,55 @@ _assoc("f1484", "nature", 2, {
     "p5137": _ignore_rough, "p835": _ignore_rough,
 })
 
-# The two whose *spec* carries the preamble and no list under it. The
-# card prints one in both cases: an errata block sits between the
-# benefit and the list, and `etl/feat._benefit` breaks at an errata
-# heading and takes the rest of that paragraph with it. The skill half
-# plays; there is nothing to hang the rider on until that stops.
-_assoc("f1455", "bluff", 2, {}, dropped=(*NO_LIST, *RETYPE))
-_assoc("f1478", "religion", 2, {}, dropped=(*NO_LIST, *RETYPE))
+# -- the trio that changes a named row's damage type ------------------------
+#
+# The two lists that used to be missing are printed now -- an errata block
+# sat between the benefit and the list and `etl/feat._benefit` took the
+# rest of the paragraph with it -- so all three of these carry the same
+# two halves and nothing in the family is dropped any more.
+
+
+@power("f1455", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f1455(c: Cast) -> None:
+    """"You **can** choose to change its damage type, and if you do so
+    you deal 2 extra damage": one choice, taken, because a standing
+    modifier is laid once at the start of the fight and there is nothing
+    to ask at that point. Both halves therefore hang on the same set.
+
+    A standing modifier rather than a rider, because the card says "when
+    you **use**" and both halves are read while the blow is resolved --
+    which is why the row may not carry a trigger."""
+    me = c.me
+    refs = ("p836", "p2850", "p3423", "p839")
+    c.bonus("skill:bluff", 2, on=me, until=When.ENCOUNTER, kind="feat")
+    _retype(c, DamageType.POISON, refs)
+    c.bonus("damage", 2, on=me, until=When.ENCOUNTER, when=among(*refs))
+
+
+@power("f1478", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f1478(c: Cast) -> None:
+    """The same two halves as f1455 and neither is optional here: the
+    card states the change rather than offering it."""
+    me = c.me
+    refs = ("p6980", "p836", "p2850", "p841")
+    c.bonus("skill:religion", 2, on=me, until=When.ENCOUNTER, kind="feat")
+    _retype(c, DamageType.NECROTIC, refs)
+    c.bonus("damage", 2, on=me, until=When.ENCOUNTER, when=among(*refs))
 
 
 @power("f1486", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=RETYPE)
+       reach=PERSONAL, target=SELF)
 def f1486(c: Cast) -> None:
-    """The third of that trio, and its list arrived: four refs under the
-    preamble instead of four printed names, so the damage half has
-    something to hang on.
-
-    A standing modifier rather than a rider, because the card says "when
-    you **use**" and the bonus is read while the damage is rolled. Both
-    halves are laid here, which is why the row may not carry a trigger.
-
-    Dropped: the damage type changing to cold is an override on one named
-    row rather than on this creature's weapon, which is what `c.deals`
-    says."""
+    """The third of the trio. `+2 bonus to the damage roll` is a plain
+    bonus, so untyped; the type change is the blow's own, not this
+    creature's weapon's."""
     me = c.me
+    refs = ("p6980", "p836", "p7151", "p841")
     c.bonus("skill:endurance", 2, on=me, until=When.ENCOUNTER, kind="feat")
-    c.bonus("damage", 2, on=me, until=When.ENCOUNTER,
-            when=among("p6980", "p836", "p7151", "p841"))
+    _retype(c, DamageType.COLD, refs)
+    c.bonus("damage", 2, on=me, until=When.ENCOUNTER, when=among(*refs))
 
 
 # -- associated-power feats that are standing modifiers, not riders ---------
@@ -369,28 +448,32 @@ def _one_of(refs: frozenset[str]):  # noqa: ANN202
 
 @power("f1461", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.bonus('skill:any')",))
+       dropped=("chargen.skill_training()",))
 def f1461(c: Cast) -> None:
     """The substitution plays and names no window, so it answers the
     charge, the opportunity attack and a defender's swing alike.
 
-    Dropped: a skill bonus is keyed `skill:<name>` and a blanket
-    `skill` key covers every skill; this one covers every *trained*
-    one, which is neither."""
+    **Re-aimed.** The marker named `c.bonus('skill:any')` and that verb
+    is not what is missing: `skills.modifier` totals a blanket `skill`
+    key beside `skill:<name>` for every check, so "a bonus to all of
+    them" is already sayable. What is missing is *which* skills this
+    character is trained in -- `skills.py` says outright there is no
+    training model and `game.db` carries no skill list per class -- so
+    the blanket key would pay on every untrained check as well."""
     c.as_basic("p2848", "p3423", "p839", "p835")
 
 
 @power("f1463", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=RETYPE)
+       reach=PERSONAL, target=SELF)
 def f1463(c: Cast) -> None:
-    """The damage half plays. The type change is dropped: it rewrites one
-    named row rather than this creature's weapon."""
+    """The fourth of the retyping family, and the one whose list never
+    went missing. Same shape as f1455: the choice is taken, so the type
+    change and the bonus hang on one set."""
     me = c.me
+    refs = ("p3423", "p839", "p835", "p2849")
     c.bonus("skill:intimidate", 2, on=me, until=When.ENCOUNTER, kind="feat")
-    c.bonus(
-        "damage", 2, on=me, until=When.ENCOUNTER,
-        when=_one_of(frozenset({"p3423", "p839", "p835", "p2849"})),
-    )
+    _retype(c, DamageType.THUNDER, refs)
+    c.bonus("damage", 2, on=me, until=When.ENCOUNTER, when=_one_of(frozenset(refs)))
 
 
 @power("f1465", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -407,12 +490,45 @@ def f1465(c: Cast) -> None:
 
 
 @power("f1467", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(compute=)",))
+       reach=PERSONAL, target=SELF)
 def f1467(c: Cast) -> None:
-    """The skill half plays. The damage half is +1 *per enemy near the
-    target*, and a modifier's value is a number fixed when it is laid --
-    nothing computes one from the board at the moment it is read."""
-    c.bonus("skill:bluff", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+    """+1 to the damage roll *per enemy within 3 squares of the target*.
+    A modifier's value is fixed when it is laid and nothing computes one
+    at the moment it is read -- but nothing has to. `PowerUsed` fires
+    before the body, targets are already chosen, and the damage has not
+    been rolled, so the board is counted there and a bonus of that size
+    is laid for that target alone.
+
+    One bonus per target rather than one for the power: the count is "near
+    **the target**" and a burst may hit two enemies with different
+    neighbours. The target is not counted among its own neighbours -- the
+    sentence names it apart from "each enemy".
+
+    The gate names the power as well as the target. Gated on the target
+    alone the bonus outlives its own use: it stands until the end of the
+    turn, and the next card swung at the same enemy would collect it."""
+    me = c.me
+    wanted = frozenset({"p7241", "p5333", "p841", "p5137"})
+    c.bonus("skill:bluff", 2, on=me, until=When.ENCOUNTER, kind="feat")
+
+    def on_use(ev: Any) -> None:
+        if ev.actor != me or ev.power not in wanted:
+            return
+        for who in ev.targets:
+            near = sum(
+                1
+                for foe in enemies(c.world, me)
+                if foe != who and distance_between(c.world, foe, who) <= 3
+            )
+            if near:
+                c.bonus(
+                    "damage", near, on=me, until=When.EOT, once=True,
+                    when=lambda ctx, w=who, p=ev.power: (
+                        ctx.get("target") == w and ctx.get("power") == p
+                    ),
+                )
+
+    c.watch(PowerUsed, on_use, until=When.ENCOUNTER, on=me, label="f1467 riders")
 
 
 @power("f1476", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -456,15 +572,18 @@ def f1482(c: Cast) -> None:
 
 
 @power("f1452b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY,
-       dropped=("c.basic(autohit=)",))
+       reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY)
 def f1452b(c: Cast) -> None:
     """Latched by hand rather than with `once=`: the watcher has to see
     every `Hit` until one of them is a fear power of mine, and `once=`
     would spend it on the first blow of any kind.
 
-    Dropped: the card says the enemy *hits* itself, and `c.basic` rolls
-    the attack it grants."""
+    The enemy *hits* itself, and `c.basic` rolls what it grants. Forcing
+    the roll to land is what `c.as_though_hit_by` does internally and the
+    only shape there is: a listener on `AttackRolled` sets `forced` on
+    the result, which the recompute at the close of the window honours.
+    Subscribed around the one swing and taken off again, so no other
+    attack in the fight is rigged by it."""
     me = c.me
     spent: list[int] = []
 
@@ -478,7 +597,20 @@ def f1452b(c: Cast) -> None:
         foe = ev.target
 
         def turn_on_itself(_ev: Any) -> None:
-            c.basic(who=foe, on=foe)
+            def lands(rolled: Any) -> None:
+                result = getattr(rolled, "result", None)
+                if (
+                    result is not None
+                    and rolled.attacker == foe
+                    and rolled.target == foe
+                ):
+                    result.forced = True
+
+            sub = c.world.bus.on(AttackRolled, lands)
+            try:
+                c.basic(who=foe, on=foe)
+            finally:
+                c.world.bus.off(sub)
 
         c.on_attack(turn_on_itself, by=foe, until=When.EOTNT, once=True,
                     label="f1452b")
@@ -700,13 +832,23 @@ _granted("f1474", "f1474b")
        on=Trigger(SavingThrow, lambda w, me, ev: (
            team(w, ev.actor) != team(w, me)
            and distance_between(w, me, ev.actor) <= 5
-       ), "an enemy nearby makes a saving throw"),
-       dropped=("c.unsave(bonus=)",))
+       ), "an enemy nearby makes a saving throw"))
 def f1474b(c: Cast) -> None:
-    """The consolation half plays. Dropped: the -2 on the triggering
-    throw -- `c.unsave` makes one fail outright and `c.reroll_save` takes
-    a bonus, but nothing subtracts from a roll already announced."""
-    if c.trigger.saved:
+    """The -2 lands on the throw being answered, not on the next one.
+    `SavingThrow` is announced **before** it is acted on and `saved` is
+    read back -- the seam `c.unsave` uses -- and the event carries the
+    die and the modifier separately, so the outcome is simply recomputed
+    with two off it. Ten is the number a save beats, in
+    `durations.roll_saves`.
+
+    An immediate interrupt, so `WINDOW_OF` puts this on `Window.BEFORE`
+    and the body runs inside the emit, while the answer is still
+    changeable. Written the other way -- a `c.penalty("save", 2)` -- it
+    would land on the *next* throw the enemy made and the printed one
+    would go by untouched."""
+    ev = c.trigger
+    ev.saved = ev.natural + ev.bonus - 2 >= 10
+    if ev.saved:
         return
     me = c.me
     for who in (me, *allies(c.world, me)):
@@ -750,11 +892,14 @@ _granted("f1481", "f1481b")
 @power("f1481b", level=1, cls="", usage=ENCOUNTER,
        action=ActionType.IMMEDIATE_REACTION, reach=CloseBurst(10),
        target=ONE_CREATURE, keywords=DIVINE, group=CHANNEL_DIVINITY,
-       todo=("Bloodied.source",))
+       trigger="you are bloodied by an enemy within 10 squares of you",
+       on=Trigger(Bloodied, _bloodied_by_enemy_near,
+                  "an enemy within 10 squares bloodies you"))
 def f1481b(c: Cast) -> None:
-    """"You are bloodied *by an enemy*" and the payout lands on that
-    enemy. `Bloodied` carries `actor` and nothing else, so who did it
-    cannot be read and the row has no target."""
+    """The target is read off the trigger rather than off the burst: the
+    burst would otherwise offer any enemy standing in it. Paragon steps are
+    out of scope."""
+    c.damage("1d8", on=c.trigger.source)
 
 
 _granted("f1483", "f1483b")
@@ -979,12 +1124,18 @@ def f1537(c: Cast) -> None:
 
 
 @power("f1541", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.effects_on()",))
+       reach=PERSONAL, target=SELF, todo=("m5139a3",))
 def f1541(c: Cast) -> None:
     """Mirrors onto adjacent allies "the same resistance that the power
-    grants you". The power is a ref, but the amount and the type are
-    whatever its live effect holds, and nothing reads a standing effect's
-    contents back out."""
+    grants you", while that power is active.
+
+    **Re-aimed at the row rather than at a verb.** The marker named
+    `c.effects_on()`, and reading the amount back is no longer the
+    binding problem: `c.resistances(on=me)` returns what is standing, by
+    type. What the row names is `x_m5139a3`, which the ETL could not
+    resolve and which is declared nowhere in the tree -- the same
+    missing row `f2415` and `f3160` are waiting on. There is no power to
+    ask whether it is active, and nothing to mirror."""
 
 
 @power("f1542", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1016,17 +1167,25 @@ def f1545(c: Cast) -> None:
 
 
 @power("f1552", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF, dropped=("c.race_option()",))
 def f1552(c: Cast) -> None:
-    """Swaps between a chosen at-will of another class and the one a
-    racial feature already granted.
+    """Swaps between a chosen at-will of another class and the one the
+    r6 racial feature already granted.
 
-    Re-aimed rather than written. The chosen half alone is
-    `c.borrow_row`, but the card is an **exclusive** pair -- either that
-    power or the racial one each encounter, never both -- and the racial
-    power is named in prose with no ref, so there is nothing to make the
-    other half exclusive with. Writing the grant alone would hand out a
-    second encounter power the card does not give."""
+    The chosen half plays: `c.borrow_row` reads the set off the registry,
+    `keyword=` narrows it to the divine ones, and `uses=1` is the printed
+    "as an encounter power". It already skips rows the character holds,
+    which is most of "other than your own".
+
+    **Re-aimed, and the marker was naming the wrong half.** It said
+    `spec.power_ref()`, as though the other power were a name the ETL had
+    failed to resolve. It is not: `rt:r6-dilettante` is declared, and
+    what it is short of is the *choice* -- the card the player picked,
+    which nothing records. So the pair cannot be made exclusive. Granting
+    the chosen power alone is not over-generous; the card does give it as
+    an encounter power, and the limit it cannot honour is "not both in
+    the same encounter"."""
+    c.borrow_row(keyword=Keyword.DIVINE, level=1, usage=AT_WILL, uses=1)
 
 
 @power("f1557", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1166,51 +1325,78 @@ def f1631(c: Cast) -> None:
 
 
 @power("f1639", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RETYPE)
+       reach=PERSONAL, target=SELF, todo=RIDER_RETYPE)
 def f1639(c: Cast) -> None:
-    """Rewrites the damage type of one named row. `c.deals` overrides the
-    type this creature's *weapon* rolls, which would catch everything
-    else the character does as well."""
+    """**Re-aimed.** The marker said `c.deals(ref=)` -- retyping one
+    named row rather than this creature's weapon -- and that is written
+    now, four times over, in `_retype` above. It does not answer here.
+
+    `p8278` rolls no damage and makes no attack: its whole payload is a
+    typed damage rider laid on the *next* blow the character lands, so
+    no `DamageRolled` ever carries `detail == "p8278"` to catch.
+    `deal_damage` splits a blow into typed parts, a rider is a part of
+    its own, and only `parts[0]` -- the power's own -- is reachable from
+    the event. Nothing retypes the part a modifier contributed."""
 
 
 @power("f1640", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_extra_damage()",))
+       reach=PERSONAL, target=SELF, todo=EXTRA)
 def f1640(c: Cast) -> None:
     """Pays out "the extra necrotic damage dealt", which is a component
     of a roll rather than the roll. `DamageApplied` carries the total and
     no power, so the component cannot be picked out of it."""
 
 
-@power("f1641", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       trigger="you hit a cursed target with p8278",
-       on=Trigger(Hit, _hit_with("p8278"), "you hit with that racial power"))
+@power("f1641", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=EXTRA)
 def f1641(c: Cast) -> None:
-    """The moment is enough here -- the number is the caster's own
-    Constitution modifier, not the component f1640 cannot read. `c.cursed`
-    asks whether *this* caster cursed the creature, which is the printed
-    line."""
-    if not c.cursed(on=c.trigger.target):
-        return
-    for foe in enemies(c.world, c.me):
-        if foe != c.trigger.target and c.cursed(on=foe):
-            c.flat(c.con_mod, dtype=DamageType.NECROTIC, on=foe)
+    """**Unwritten, and it was worse than a marked row.** It was declared
+    on `Trigger(Hit, ...)` gated on `ev.power == "p8278"`, and `p8278`
+    makes no attack: it is a free action that lays a damage rider on the
+    next blow the character lands. No `Hit` in any fight carries that
+    ref, so the row was armed and could never fire.
+
+    The printed moment is "when you deal the **additional necrotic
+    damage** from `p8278`", which is a component of somebody else's
+    blow. The number wanted here is the caster's own Constitution
+    modifier and is not the problem; the moment is. `DamageRolled`
+    carries the blow, and the part a modifier contributed is not on it.
+
+    The body it had, kept for whoever closes that: on the hit, every
+    other creature this caster has cursed takes `c.con_mod` necrotic."""
 
 
 @power("f1642", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.counts_as(kind=)",))
+       reach=PERSONAL, target=SELF, dropped=("query.living()",))
 def f1642(c: Cast) -> None:
-    """"You are no longer considered a living creature" is a change of
-    type, which decides what a good many other rows may target. Nothing
-    rewrites a creature's type words."""
+    """**Re-aimed, and written.** The marker said `c.counts_as(kind=)`
+    and that verb arrived: `c.set_origin` writes a type word onto a
+    creature and `instead_of` takes one off, which is the only thing
+    that can. `rt:r47-origin` writes both `undead` and `living` onto
+    this race; this feat takes the second back.
+
+    The eating, drinking and breathing half is not a fight.
+
+    Dropped, and it is the clause `rt:r47-origin` drops for the same
+    reason: no row in the tree asks whether a creature is living. They
+    all spell it as the absence of `undead`, so taking the word off
+    changes no answer until one reader settles it."""
+    c.set_origin(instead_of="living", until=When.ENCOUNTER)
 
 
 @power("f1643", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("When.CONSCIOUS",))
+       reach=PERSONAL, target=SELF, todo=("c.dying_as()",))
 def f1643(c: Cast) -> None:
     """A minor action on the turn a racial trait buys by staying up at 0
-    hit points. `c.extra_action` is the payout; the trait, and the choice
-    it offers, have no duration and no event."""
+    hit points. `c.extra_action` is the payout and `Dropped` is the
+    moment, so neither half is what is missing.
+
+    **Re-aimed at the trait this hangs off.** The condition is "if you
+    choose to remain conscious due to `rt:r47-unnatural-vitality`", and
+    that row is itself unwritten on `c.dying_as()` -- `resolve` applies
+    the dying condition and nothing chooses what comes with it. Until it
+    does, there is no choice to have made and this row would pay out on
+    every knockdown."""
 
 
 _granted("f1644", "f1644b")
@@ -1241,34 +1427,66 @@ def f1644b(c: Cast) -> None:
 
 @power("f1646", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*RETYPE, "chargen.race_choice()"))
+       dropped=RIDER_RETYPE)
 def f1646(c: Cast) -> None:
-    """Two named rows take a damage type chosen at build time. Both the
-    rewrite and the choice are missing."""
+    """Two named rows take a damage type chosen at build time, and one
+    of them plays.
+
+    **The build choice was not missing.** The marker carried
+    `chargen.race_choice()`; the r1 breath's chosen type is recorded as
+    `element:<type>` on the build and `c.element` reads it -- `p1448`
+    reads it for its own damage line, which is the same question. So the
+    p1448 half is an ordinary retype, and "that damage type **and**
+    necrotic" is a blow of two types, which is `DamageRolled.dtypes` --
+    the "and", where setting `dtype` alone would be the "instead".
+
+    Dropped: the p8278 half, for the reason f1639 gives."""
+    me = c.me
+    picked = c.element(on=me)
+    if picked is None:
+        return
+
+    def both(ev: Any) -> None:
+        if ev.source == me and ev.detail == "p1448":
+            ev.dtypes = (picked, DamageType.NECROTIC)
+
+    c.watch(DamageRolled, both, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
 
 
 @power("f1652", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF)
+       reach=PERSONAL, target=SELF, todo=EXTRA)
 def f1652(c: Cast) -> None:
-    """The damage context carries `power`, so "the damage dealt by that
-    row" is one gate and nothing more."""
-    c.bonus(
-        "damage", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: ctx.get("power", "") == "p8278",
-    )
+    """**Unwritten, and it was silently false.** It laid a damage bonus
+    gated on `ctx["power"] == "p8278"`, and the damage context's `power`
+    is the ref of the row whose blow is being rolled. `p8278` never
+    rolls one -- it lays a rider on the next blow the character lands --
+    so the gate was false in every fight and the bonus was never read.
+
+    "+2 to the damage dealt by `p8278`" means +2 on that rider, and the
+    rider is a part of somebody else's blow with no identity on the
+    event."""
 
 
 @power("f1656", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.race_choice()",))
+       reach=PERSONAL, target=SELF, todo=("c.race_option()",))
 def f1656(c: Cast) -> None:
     """Grants a second race's feature and lets an encounter pick between
-    the two powers. There is no race on a character to hold either."""
+    that feature's power and `p8278`.
+
+    **Re-aimed.** Races are declared now, so "there is no race to hold
+    it" is no longer true and the marker was naming a gap that closed.
+    `rt:r6-dilettante` is declared -- and is one of the twenty-one rows
+    `_option` leaves on `c.race_option()`, because the feature is a
+    *pick* from a printed set and nothing records which card was taken.
+    An either/or between `p8278` and a card nobody can name has no
+    second half."""
 
 
 @power("f1659", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RETYPE)
+       reach=PERSONAL, target=SELF, todo=RIDER_RETYPE)
 def f1659(c: Cast) -> None:
-    """Same gap as f1639, on a different type."""
+    """Same gap as f1639, on a different type, and re-aimed with it."""
 
 
 @power("f1660", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1279,18 +1497,13 @@ def f1660(c: Cast) -> None:
         c.bonus(defence, 1, on=c.me, until=When.ENCOUNTER)
 
 
-@power("f1662", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       trigger="you hit with p8278",
-       on=Trigger(Hit, _hit_with("p8278"), "you hit with that racial power"))
+@power("f1662", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=EXTRA)
 def f1662(c: Cast) -> None:
-    """Like f1641, the printed line needs the moment and not the size of
-    the component, so the row's own `Hit` says it. `c.marked` asks
-    whether the creature is marked **by this caster**, which is the
-    printed "marked by you"."""
-    for foe in enemies(c.world, c.me):
-        if foe != c.trigger.target and c.marked(on=foe):
-            c.flat(c.con_mod, dtype=DamageType.NECROTIC, on=foe)
+    """The same dead trigger as f1641 and unwritten for the same reason:
+    `Trigger(Hit, ev.power == "p8278")` names a hit that `p8278` never
+    makes. The payout it wanted, once the moment exists, is `c.con_mod`
+    necrotic onto every other enemy this caster has marked."""
 
 
 @power("f1663", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1307,18 +1520,21 @@ def f1663(c: Cast) -> None:
 
 
 @power("f1664", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus('skill:any')",))
+       reach=PERSONAL, target=SELF)
 def f1664(c: Cast) -> None:
     """A trait is armed after the opening rolls, so `c.initiative` is
     what actually moves a creature in the order. "The end of your first
     turn" from before turn one is `EONT`.
 
-    Dropped: "and checks" -- a skill bonus is keyed `skill:<name>` and
-    this one names no skill."""
+    "And checks" is the blanket `skill` key, which `skills.modifier`
+    totals beside `skill:<name>` on every check there is -- which is
+    what a bonus naming no skill means. The clause was dropped on the
+    belief that a skill bonus has to name one; it does not."""
     if not c.may("take a penalty to initiative"):
         return
     c.initiative(-10, on=c.me)
     c.bonus("attack", 2, on=c.me, until=When.EONT)
+    c.bonus("skill", 2, on=c.me, until=When.EONT)
 
 
 @power("f1666", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -19,12 +19,13 @@ Four judgements run through the file.
 * **The item's own level** is `get(c.ref).level`, for the cards printing
   "the weapon's level + 3" as an attack bonus. `Attack(printed=)` is the
   wrong tool -- it takes the *character's* level term back out again.
-* **A damage type a card changes is `c.deals`**, and it is *narrower* than
-  its own docstring claims. `Cast._typed` recolours a blow only when the
-  card named no type and the row carries `Keyword.WEAPON`; a power that
-  prints its own type keeps it. So "all **untyped** damage changes to X"
-  is said exactly, and "**all** damage is X" is said only for the untyped
-  part, which is what `c.deals(typed=)` marks here.
+* **A damage type a card changes is `c.deals`**, and it is a true
+  override: `Cast._typed` beats the type the power printed, so "**all**
+  damage is X" is said in full. The gate that is left is the keyword --
+  the override speaks for `Keyword.WEAPON` rows, which is what every card
+  in this file means, and `c.deals(implement=True)` is the other half for
+  the implement files. A weapon *made* of something still only fills in
+  what a row left untyped; that one is the gear, not this call.
 """
 
 from __future__ import annotations
@@ -86,7 +87,6 @@ from combat_engine.engine import (
     When,
     Window,
     World,
-    about_me,
     both,
     by_keyword,
     by_me,
@@ -95,6 +95,7 @@ from combat_engine.engine import (
     by_ranged,
     get,
     power,
+    query,
 )
 
 #: `PowerResolved` is the one event this file needs that the engine's
@@ -210,6 +211,16 @@ def _by_class(cls_: str):  # noqa: ANN202
         return p is not None and p.cls == cls_
 
     return pred
+
+
+def _bloodied_by_adjacent(world: World, me: int, ev: Any) -> bool:
+    who = getattr(ev, "source", None)
+    return (
+        getattr(ev, "actor", None) == me
+        and who is not None
+        and query.team(world, who) is not query.team(world, me)
+        and query.distance_between(world, who, me) <= 1
+    )
 
 
 def _missed_ac(world: World, me: int, ev: Any) -> bool:
@@ -792,15 +803,15 @@ def i556p1(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     trigger="an adjacent enemy bloodies you with a melee attack",
-    on=Trigger(Bloodied, about_me, "you are bloodied"),
-    dropped=("Bloodied.source",),
+    on=Trigger(Bloodied, _bloodied_by_adjacent, "an adjacent enemy bloodies you"),
+    dropped=("Bloodied.power",),
 )
 def i678p1(c: Cast) -> None:
-    """`Bloodied` names only its subject, so "by an adjacent enemy with a
-    melee attack" cannot be asked and the dispatcher's own aim picks which
-    enemy is answered. `c.run_at` is the printed "you must end your
-    movement adjacent to that enemy"."""
-    foe = c.target
+    """`Bloodied.source` names the striker, so the swing goes back at it.
+    "With a melee attack" is the dropped half -- the event carries no
+    attack, so the shape of the blow cannot be asked. `c.run_at` is the
+    printed "you must end your movement adjacent to that enemy"."""
+    foe = getattr(c.trigger, "source", None)
     if foe is None:
         return
     c.basic(on=foe)
@@ -1133,16 +1144,14 @@ def i1275x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.PSYCHIC],
-    dropped=("c.deals(typed=)",),
 )
 def i1419p1(c: Cast) -> None:
     """The way back is `c.endable`: "another free action returns the damage
     to normal" is `Effect.drop_cost`, and `actions.legal` offers the drop
     to whoever holds the effect -- which for `c.deals` is the wielder.
 
-    What is left is the other half. `Cast._typed` recolours only damage a
-    row left untyped, so a psychic power's own type survives where the
-    card says **all** damage changes."""
+    The conversion itself is whole: `c.deals` overrides the type a power
+    printed, which is the card's **all** damage."""
     c.endable(c.deals(DamageType.PSYCHIC, on=c.me), FREE)
 
 
@@ -1588,16 +1597,13 @@ def i2872p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.crit_damage()", "c.deals(typed=)"),
+    dropped=("c.crit_damage()",),
 )
 def i2964x1(c: Cast) -> None:
     """How much the critical rider paid out is a `Mod` rolled inside
     `resolve.deal_damage` and never announced, so healing "equal to the
     damage dealt by this weapon's critical property" has no number to
-    read.
-
-    The second marker is the retype: `Cast._typed` recolours only what a
-    card left untyped, and this card says **all** damage."""
+    read. The retype beside it is whole."""
     c.deals(DamageType.NECROTIC, on=c.me)
 
 
@@ -2011,38 +2017,26 @@ def i1051p1(c: Cast) -> None:
     target=SELF,
 )
 def i1184x1(c: Cast) -> None:
-    """Two things this row used to believe were wrong.
-
-    **`DamageApplied.absorbed` is temporary hit points**, not resistance:
-    `resolve.deal_damage` sets it from `health.temp` several lines after
-    the resistances have already come off. A blow reduced by resist 5 and
-    nothing else reports `absorbed == 0`, so the old gate was false every
-    time. What resistance ate is the gap between the two announcements --
-    `DamageRolled` is emitted before the defences are read and
-    `DamageApplied` after -- less whatever the temporary hit points took.
+    """**`DamageApplied.resisted` is the printed sentence.** It counts what
+    resistance and immunity took off before anything reached hit points,
+    which is both halves of "resistances or immunities reduce the damage".
+    `absorbed` is temporary hit points and always was, so the old gate
+    asked a different question; the pair of announcements this row used to
+    difference is no longer needed.
 
     **"A sorcerer attack power" is askable.** `detail` is the ref of the
     row that rolled the blow, which `Cast.maximise` already reads back
     that way, so the class is a header field away. A miss's half damage
     carries `"<ref> (half)"` and answers no, which is right: the card is
     about a hit."""
-    offered: dict[tuple[str, int], int] = {}
-
-    def rolled(ev: DamageRolled) -> None:
-        if ev.source == c.me:
-            offered[(ev.detail, ev.target)] = ev.amount
 
     def blunted(ev: DamageApplied) -> None:
-        if ev.source != c.me:
-            return
-        was = offered.pop((ev.detail, ev.target), None)
-        if was is None or was - ev.amount - ev.absorbed <= 0:
+        if ev.source != c.me or ev.resisted <= 0:
             return
         p = get(ev.detail)
         if p is not None and p.cls == "sorcerer":
             c.temp_hp(5, on=c.me)
 
-    c.watch(DamageRolled, rolled, until=When.ENCOUNTER)
     c.watch(DamageApplied, blunted, until=When.ENCOUNTER)
 
 
@@ -2228,11 +2222,9 @@ def i1737x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.LIGHTNING],
-    dropped=("c.deals(typed=)",),
 )
 def i1737p1(c: Cast) -> None:
-    """`c.endable` is the free action back, as on `i1419p1`; what is left
-    is that `Cast._typed` recolours only the untyped part."""
+    """`c.endable` is the free action back, as on `i1419p1`."""
     c.endable(c.deals(DamageType.LIGHTNING, on=c.me), FREE)
 
 
@@ -2477,16 +2469,39 @@ def i3134p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.alignment()", "c.is_minion()"),
+    dropped=("c.alignment()", "c.spare_death_trait()"),
 )
 def i3142x1(c: Cast) -> None:
-    """Two of the three clauses have nothing to ask: alignment is not on a
-    creature, and whether one is a minion is not either -- its one hit
-    point is in the database and nothing says the word."""
+    """The middle clause is writable now that `c.is_minion` reads the stat
+    block's own column.
+
+    "Whether the attack hits or misses" is both outcomes, so it is a watch
+    on `Hit` and one on `Miss` rather than a rider on either: an
+    `AttackDeclared` fires before the roll and would take the target off
+    the board underneath the attack resolving against it. A minion has one
+    hit point, so a point of it is the destruction.
+
+    Alignment is not on a creature. Neither is "traits triggered by its
+    destruction are not triggered" -- `Dropped` is announced from one
+    place and nothing suppresses the rows listening to it.
+    """
     c.bonus(
         "damage", c.enhancement, kind="power", on=c.me, until=When.ENCOUNTER,
         when=_against(c, "undead"),
     )
+
+    def crumble(ev: Any) -> None:
+        foe = getattr(ev, "target", None)
+        if (
+            getattr(ev, "attacker", None) == c.me
+            and foe is not None
+            and c.is_minion(on=foe)
+            and c.is_kind("undead", on=foe)
+        ):
+            c.flat(1, on=foe)
+
+    c.watch(Hit, crumble, until=When.ENCOUNTER)
+    c.watch(Miss, crumble, until=When.ENCOUNTER)
 
 
 @power(

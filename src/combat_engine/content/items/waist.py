@@ -10,12 +10,12 @@ start of every fight.
 
 Four judgements run through the file.
 
-* **Ammunition is spent when it is used and nothing models that.** There is
-  no way to ask whether the shot that just landed was fired with this
-  arrow, and no way to take the arrow out of the quiver afterwards. Every
-  ammunition property therefore answers *every* ranged hit of the wearer's
-  and carries `dropped=("c.ammunition()",)`. The payload is real; what is
-  missing is the quiver. Each declares `no_provoke=True`: the rider needs a
+* **Ammunition is drawn and spent by `engine/ammunition`.** A piece goes
+  from `Gear.quiver` when a ranged weapon attack is declared and the
+  item's ref rides all four attack events, so `_ammo_hit` is the cheap
+  filter -- a shot of mine that drew *something* -- and `c.ammunition()`
+  in the body is the exact one, because only the body knows which item
+  its row belongs to. Each declares `no_provoke=True`: the rider needs a
   ranged reach to name the creature that was shot, and without it every
   such rider opened a second opportunity window for the one shot.
 * **A property that answers a printed trigger is `action=ActionType.NONE`
@@ -200,9 +200,20 @@ def _natural_20_initiative(world: World, me: int, ev: Any) -> bool:
 
 
 def _ammo_hit(world: World, me: int, ev: Any) -> bool:
-    """A ranged hit of mine -- the nearest the engine gets to "using this
-    ammunition", since nothing records which shot came out of which quiver."""
-    return by_me(world, me, ev) and by_ranged(world, me, ev)
+    """A ranged attack of mine that drew a piece of magic ammunition.
+
+    Loose on purpose: the dispatcher hands a predicate `(world, me, ev)`
+    and never the ref of the row being offered, so *which* quiver the
+    shot came out of cannot be asked here. `c.ammunition()` asks it in
+    the body, where the row knows what item it is -- so this is the
+    cheap filter and that is the exact one, and a wielder carrying two
+    kinds of magic arrow has each property answering only its own.
+    """
+    return (
+        by_me(world, me, ev)
+        and by_ranged(world, me, ev)
+        and bool(getattr(ev, "ammo", ""))
+    )
 
 
 def _at_target(foe: int) -> Any:
@@ -972,11 +983,12 @@ def i3469p1(c: Cast) -> None:
 @power("i1931x1", level=2, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i1931x1(c: Cast) -> None:
     """The bonus is laid on each ally who can see the target and gated on
     that target, so it is spent on that enemy and nobody else."""
+    if not c.ammunition():
+        return
     foe = c.target
     if foe is None:
         return
@@ -989,9 +1001,10 @@ def i1931x1(c: Cast) -> None:
 @power("i1292x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i1292x1(c: Cast) -> None:
+    if not c.ammunition():
+        return
     dice = f"{_plus(c)}d6"
     foe = c.target
     if foe is None:
@@ -1005,9 +1018,10 @@ def i1292x1(c: Cast) -> None:
 @power("i1357x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i1357x1(c: Cast) -> None:
+    if not c.ammunition():
+        return
     c.damage(f"{_plus(c)}d6", dtype=DamageType.COLD)
     c.slowed(until=When.EOTNT)
 
@@ -1015,19 +1029,21 @@ def i1357x1(c: Cast) -> None:
 @power("i1735x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i1735x1(c: Cast) -> None:
+    if not c.ammunition():
+        return
     c.damage(f"{_plus(c)}d6", dtype=DamageType.LIGHTNING)
 
 
 @power("i2576x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i2576x1(c: Cast) -> None:
     """"Each creature adjacent to it" is everybody, not just enemies."""
+    if not c.ammunition():
+        return
     foe = c.target
     if foe is None:
         return
@@ -1041,23 +1057,25 @@ def i2576x1(c: Cast) -> None:
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you attack an enemy using this ammunition",
        on=Trigger(AttackDeclared, _ammo_hit, "you attack with this ammunition",
-                  window=Window.BEFORE),
-       dropped=("c.ammunition()",))
+                  window=Window.BEFORE))
 def i2736x1(c: Cast) -> None:
     """Answered in the before-window, because the advantage has to be
     standing when the roll is made; `once=True` spends it on that attack."""
+    if not c.ammunition():
+        return
     c.grants_advantage(to="me", until=When.EOT, once=True)
 
 
 @power("i565x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i565x1(c: Cast) -> None:
     """The mark's punishment is the arrow striking the marked enemy again,
     which is `c.on_attack` on that creature rather than a mark rider: the
     damage is the item's, not the wearer's."""
+    if not c.ammunition():
+        return
     foe = c.target
     if foe is None:
         return
@@ -1074,13 +1092,14 @@ def i565x1(c: Cast) -> None:
 @power("i3163x1", level=5, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you make an attack using this ammunition",
-       on=Trigger(AttackRolled, _ammo_hit, "you attack with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(AttackRolled, _ammo_hit, "you attack with this ammunition"))
 def i3163x1(c: Cast) -> None:
     """Declared on `AttackRolled` rather than `Hit`, because the zone is
     laid whether the shot lands or not. Heavily obscured is
     `blocks_sight=True`, which is the grade cover and concealment are read
     from."""
+    if not c.ammunition():
+        return
     c.zone(spread({c.there}, 1), label=c.ref, blocks_sight=True,
            until=When.ENCOUNTER)
 
@@ -1088,11 +1107,12 @@ def i3163x1(c: Cast) -> None:
 @power("i3164x1", level=5, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i3164x1(c: Cast) -> None:
     """"Each other creature" includes the wearer's own allies, and the
     enemy that was hit is the one creature left out."""
+    if not c.ammunition():
+        return
     foe = c.target
     if foe is None:
         return
@@ -1105,19 +1125,21 @@ def i3164x1(c: Cast) -> None:
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with a bow or crossbow attack",
        on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()", "c.aftereffect()"))
+       dropped=("c.aftereffect()",))
 def i3471x1(c: Cast) -> None:
     """The bow-or-crossbow half of the printed trigger *is* sayable --
     `c.wielding` reads the weapon's group -- so it is asked here rather than
     dropped. The aftereffect is not: nothing fires when a save ends an
     effect."""
+    if not c.ammunition():
+        return
     if c.wielding("bow") or c.wielding("crossbow"):
         c.ongoing(5, DamageType.POISON)
 
 
 @power("i660x1", level=5, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
-       todo=("c.ignore_line_of_effect()", "c.ammunition()"))
+       todo=("c.ignore_line_of_effect()",))
 def i660x1(c: Cast) -> None:
     """The whole benefit is being allowed to shoot a creature you have no
     line of effect to; line of effect is checked in targeting and nothing
@@ -1128,11 +1150,12 @@ def i660x1(c: Cast) -> None:
 @power("i1097x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i1097x1(c: Cast) -> None:
     """"One conjuration or zone that enemy has" is `c.conjurations` filtered
     by who made it; `c.dispel` unwinds what it was holding."""
+    if not c.ammunition():
+        return
     foe = c.target
     if foe is None:
         return
@@ -1146,9 +1169,10 @@ def i1097x1(c: Cast) -> None:
 @power("i2570x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i2570x1(c: Cast) -> None:
+    if not c.ammunition():
+        return
     foe = c.target
     if foe is not None:
         c.teleport(1, who=foe)
@@ -1157,9 +1181,10 @@ def i2570x1(c: Cast) -> None:
 @power("i2718x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i2718x1(c: Cast) -> None:
+    if not c.ammunition():
+        return
     foe = c.target
     if foe is None:
         return
@@ -1175,30 +1200,34 @@ def i2718x1(c: Cast) -> None:
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
        on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()", "c.ongoing(ends_on=)"))
+       dropped=("c.ongoing(ends_on=)",))
 def i3162x1(c: Cast) -> None:
     """The ongoing damage ends on a save rather than on the move action the
     card prints, which is the only end condition `c.ongoing` has."""
+    if not c.ammunition():
+        return
     c.ongoing(5)
 
 
 @power("i732x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i732x1(c: Cast) -> None:
     """"Cannot shift" on its own is `c.rooted`, not `c.immobilized`: the
     enemy may still walk."""
+    if not c.ammunition():
+        return
     c.rooted(until=When.EOTNT)
 
 
 @power("i733x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i733x1(c: Cast) -> None:
+    if not c.ammunition():
+        return
     foe = c.target
     if foe is None:
         return
@@ -1209,7 +1238,7 @@ def i733x1(c: Cast) -> None:
 
 @power("i1341x1", level=9, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
-       todo=("c.no_teleport()", "c.ammunition()"))
+       todo=("c.no_teleport()",))
 def i1341x1(c: Cast) -> None:
     """Nothing bars a creature from teleporting, and nothing fences off the
     squares around one: `c.immovable` refuses forced movement only."""
@@ -1218,13 +1247,14 @@ def i1341x1(c: Cast) -> None:
 @power("i551x1", level=9, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i551x1(c: Cast) -> None:
     """Not benefiting from invisibility is written as truesight of that one
     creature, laid on the wearer and each ally -- `c.truesight` sits on
     whoever is looking, so the printed "against anybody" is paid out to the
     side that can use it."""
+    if not c.ammunition():
+        return
     foe = c.target
     if foe is None:
         return
@@ -1235,24 +1265,30 @@ def i551x1(c: Cast) -> None:
 @power("i1136x1", level=10, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you attack an enemy using this ammunition",
-       on=Trigger(AttackRolled, _ammo_hit, "you attack with this ammunition"),
-       dropped=("c.ammunition()",))
+       on=Trigger(AttackRolled, _ammo_hit, "you attack with this ammunition"))
 def i1136x1(c: Cast) -> None:
     """"Roll twice and use either result" is a reroll keeping the better of
     the two: the choice is only ever worth making one way."""
+    if not c.ammunition():
+        return
     c.reroll_attack(keep="best")
 
 
 @power("i3160x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.ammunition()",))
+       reach=PERSONAL, target=SELF)
 def i3160x1(c: Cast) -> None:
     """Two printed halves with different triggers, so this one is a trait
     holding a watch rather than a declared trigger: the first clause is a
-    standing modifier on the wearer and the second answers a hit."""
-    c.ignore_cover(on=c.me, until=When.ENCOUNTER)
+    standing modifier on the wearer and the second answers a hit. Both are
+    gated on the shot having come from this quiver -- the waiver through
+    the attack context's `ammo`, which is the same fact `c.ammunition`
+    reads off the event."""
+    mine = c.ref.split("x")[0]
+    c.ignore_cover(on=c.me, until=When.ENCOUNTER,
+                   when=lambda ctx: ctx.get("ammo") == mine)
 
     def landed(ev: Hit) -> None:
-        if ev.attacker != c.me or not by_ranged(c.world, c.me, ev):
+        if ev.attacker != c.me or not c.ammunition(ev):
             return
         c.no_cover(on=ev.target, until=When.SAVE_ENDS)
         c.truesight(of=ev.target, on=c.me, until=When.SAVE_ENDS)

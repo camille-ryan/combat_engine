@@ -936,7 +936,13 @@ def narrate(session: Session, event: Event) -> str:
     if kind == "Miss":
         return "miss"
     if kind == "DamageApplied":
-        tail = f" ({d['absorbed']} absorbed)" if d.get("absorbed") else ""
+        # Two different reductions and the reader cannot tell them apart
+        # from the number alone: `absorbed` is temporary hit points spent,
+        # `resisted` is what the defences took off before that.
+        parts = [
+            f"{d[k]} {k}" for k in ("resisted", "absorbed") if d.get(k)
+        ]
+        tail = f" ({', '.join(parts)})" if parts else ""
         return f"{who('target')} takes {d['amount']} damage{tail}, now on {d['hp']}"
     if kind == "Healed":
         return f"{who('target')} heals {d['amount']}, now on {d['hp']}"

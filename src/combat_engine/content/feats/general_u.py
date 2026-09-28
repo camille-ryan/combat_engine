@@ -404,13 +404,14 @@ def f3446(c: Cast) -> None:
 
 
 @power("f3447", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.escape()",))
+       reach=PERSONAL, target=SELF, dropped=("c.check(circumstance=)",))
 def f3447(c: Cast) -> None:
-    """Locks, sleight of hand and restraints are not fought over. The one
-    clause a board would read is the +4 to escape a grab, and there is no
-    escape attempt to add it to -- nothing in the engine rolls a check
-    against `Relation.GRABBED_BY`. Re-aimed off the skill circumstance,
-    which was never the missing piece, onto the missing action."""
+    """The escape half plays. The Thievery half is narrowed to opening
+    locks and sleight of hand, and a check's circumstance is not
+    sayable -- a blanket bonus to the skill would raise every use of it
+    -- so that clause is dropped rather than widened. Restraints other
+    than a grab are not a hold anything rolls against."""
+    c.bonus("escape", 4, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
 @power("f3448", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

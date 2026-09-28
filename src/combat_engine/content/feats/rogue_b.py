@@ -1,20 +1,32 @@
 """Rogue feats, the second batch.
 
 `rogue.py` holds the first, and the split it describes runs through this
-one twice as hard. **Twenty-three of these thirty-seven ride on the
-class's extra damage or on a weapon the catalogue does not carry**, and
-those are two different gaps that look alike from the outside.
+one twice as hard. Most of these ride on the class's extra damage or on
+a weapon the catalogue does not carry, and those are two different gaps
+that look alike from the outside.
 
-**The extra damage announces nothing.** `cf:rogue-scoundrel-f4` pays out inside
-a closure in `content/features/strikers.py` -- `extra_damage` latches
-per turn in a dict and calls `c.damage(..., detail=label)` -- so there
-is no moment at which a feat can offer to trade the payout, forgo a die
-of it, or spend it a second time. Five rows here say `c.on_extra_damage()`
-and three more say `c.extra_damage(applies=)`, which is the narrower
-half: the *condition* on which the payout happens is the `applies=`
-callable handed to that helper, and widening it ("even without combat
-advantage", "on this racial power's target") is what four of these
-feats print.
+**The extra damage announces itself after all.** It used to be written
+here that it did not: `cf:rogue-scoundrel-f4` pays out inside a closure
+in `content/features/strikers.py`, so nothing could see the payout. But
+that closure pays through `c.damage(..., detail=label)`, and
+`DamageRolled` carries `source`, `target`, `amount` and `detail` -- and
+is a `Decision`, so a `Window.BEFORE` listener may change the number.
+That is the announcement, and five rows here were waiting on a verb for
+something they could already read. What is still shut is narrower and
+worth keeping apart:
+
+* the **latch**, a dict inside `extra_damage` keyed on the turn. It
+  cannot be reset, so "this use does not count" is written as one spare
+  payout handed out for later rather than as a use given back --
+  f818 and f2426 both do that, and neither can ever pay twice because
+  each spends its spare only once the class has already paid this turn.
+* the **condition**, the `applies=` callable that closure closes over.
+  Widening it from outside would mean a second latch beside the first
+  and two payouts in a turn, which is why f2076 still waits.
+* the **dice**, which are rolled inside `c.damage` and gone. `c.bonus`
+  reaches the total -- `c.bonus("cf:rogue-scoundrel-f4 damage", n)` is
+  what `extra_damage` adds on top, and `dice=` puts a whole die there --
+  but no modifier takes a die back out or rerolls one that came up low.
 
 **The weapon gate is a ref, not a group, wherever the group is wider
 than the card.** `chargen` carries ten weapons. A card reading "while
@@ -34,6 +46,7 @@ the clause is one `ev.power in ...` read, and the second benefit is
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from combat_engine.engine import (
@@ -56,39 +69,43 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import AttackDeclared, PowerResolved
-from combat_engine.engine.query import allies
+from combat_engine.engine.events import (
+    ActionPointSpent,
+    AttackDeclared,
+    DamageApplied,
+    DamageRolled,
+    PowerResolved,
+)
+from combat_engine.engine.query import allies, has_combat_advantage
 
 from .styles import hit_with_one_of, used_one_of
 
-#: Nothing announces that the class's extra damage was about to be paid.
-#: `rogue.py` named it first and three other classes wait on it.
-EXTRA = ("c.on_extra_damage()",)
-#: The narrower half: *when* the extra damage applies is the `applies=`
-#: callable closed over inside `strikers.extra_damage`, and a feat that
-#: widens it has nothing to widen.
+#: The narrower half of the extra damage: *when* it applies is the
+#: `applies=` callable closed over inside `strikers.extra_damage`, and a
+#: feat that widens it has nothing to widen -- see the module docstring
+#: for why a second latch beside the first is not the answer.
 APPLIES = ("c.extra_damage(applies=)",)
-#: **A standing clause and a triggered one on the same card.** The
-#: dispatcher only reaches a no-action row when its declared trigger
-#: fires, so a row that also has to be *true* from the start of the
-#: fight -- "you can use this in place of a melee basic attack" is --
-#: is never armed. Those rows keep the printed Trigger as text and
-#: answer it with `c.watch`, the shape `p7419` already uses.
 #: One weapon group standing in for another, for named rows only.
 COUNTS_AS = ("c.counts_as(group=)",)
 #: Nothing adds to the distance somebody else's shift covers.
 EXTEND_SHIFT = ("c.extend_shift()",)
 
+#: The class feature whose payout half this file keeps reaching for.
+_SNEAK = "cf:rogue-scoundrel-f4"
+
 #: The two conditions f2369 narrows its save penalty to. Compared by
 #: value, as `ranger_b.f2367` does -- the saving throw's context hands
 #: over `Condition` members and the card names words.
 _STUNNING = ("dazed", "stunned")
+#: The four f813 narrows its own to, read the same way.
+_SOFTENING = ("blinded", "immobilized", "slowed", "weakened")
 
 #: The printed weapons that `chargen` has no entry for. Asking by ref
 #: keeps the row exact; see the module docstring for why the group is
 #: not good enough.
 _RAPIER = ("w:rapier",)
 _SWORDS = ("w:longsword", "w:short-sword", "w:rapier")
+_CLUBS = ("w:club", "w:mace")
 
 
 def _holding(c: Cast, *groups: str) -> bool:
@@ -173,6 +190,82 @@ def _slip_away(c: Cast, squares: int) -> None:
         c.hide()
 
 
+# -- reading the class's extra damage from outside --------------------------
+
+
+def _window(c: Cast) -> object:
+    """The slot `strikers.extra_damage` latches the rogue's payout in.
+
+    Written the same way as the closure's own `window()`, because a row
+    asking "has it paid this turn?" and the latch deciding it must not
+    be able to disagree. The rogue's card says *turn*, so the initiative
+    slot is part of the answer and the round alone is not.
+    """
+    fight = c.world.encounter
+    if fight is None:
+        return c.world.round
+    return (c.world.round, fight.index)
+
+
+def _round_of(slot: object) -> int:
+    return slot[0] if isinstance(slot, tuple) else int(slot)  # type: ignore[index]
+
+
+def _watch_payout(c: Cast) -> Callable[[], object]:
+    """Remember the slot the class's extra damage was last paid in.
+
+    The payout goes out through `c.damage(..., detail=label)`, so
+    `DamageRolled.detail` names it. Returns a reader rather than a
+    number because every caller asks later, from inside a trigger.
+    """
+    seen: list[object] = []
+
+    def note(ev: DamageRolled) -> None:
+        if ev.source == c.me and ev.detail == _SNEAK:
+            seen.append(_window(c))
+
+    c.watch(
+        DamageRolled, note, on=c.me, until=When.ENCOUNTER,
+        label=f"{c.ref} watched the payout",
+    )
+    return lambda: seen[-1] if seen else None
+
+
+def _pay(c: Cast, who: int) -> int:
+    """Pay the extra damage once, dice and modifier both.
+
+    `c.sneak_damage` is the dice and `c.total` is what `extra_damage`
+    adds on top, so a build feature that raises one raises this too.
+    """
+    return c.damage(
+        c.sneak_damage(), c.total(f"{_SNEAK} damage"), on=who, detail=_SNEAK
+    )
+
+
+def _spare_use(c: Cast, paid: Callable[[], object]) -> None:
+    """Hand out one extra payout, spent on a later hit this turn.
+
+    The latch itself cannot be reset -- it is a dict inside a closure --
+    so "that use does not count" is written as a second payout rather
+    than as a use given back. **It is spent only once the class has
+    already paid in this slot**, which is what makes it safe: if this
+    watcher runs ahead of the feature's on the same `Hit` it simply
+    declines and catches the next one, and there is no order of the two
+    in which the rogue is paid twice for one use.
+    """
+
+    def spend(ev: Hit) -> None:
+        if ev.attacker != c.me or paid() != _window(c):
+            return
+        if has_combat_advantage(c.world, c.me, ev.target):
+            _pay(c, ev.target)
+
+    c.watch(
+        Hit, spend, on=c.me, until=When.EOT, once=True,
+        label=f"{c.ref} spare payout",
+    )
+
+
 # -- the rows that play -----------------------------------------------------
 
 
@@ -190,7 +283,7 @@ def f2075(c: Cast) -> None:
                 kind="feat")
 
 
-@power("f820", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f820", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("c.extend_move()",),
        trigger="an opportunity attack hits you while you are moving",
        on=Trigger(Hit, _at_me, "you are hit"))
@@ -198,11 +291,13 @@ def f820(c: Cast) -> None:
     """Being caught on the way out makes you faster.
 
     Untyped and `stacks=True` by default, which is the printed
-    "cumulative if you are hit multiple times" and the only reason the
-    bonus is left unkinded. `When.EOT` rather than the printed "for that
-    move": the move in flight has already had its budget measured, so
-    what is dropped is the retroactive half and what plays is the rest
-    of the turn.
+    "cumulative if you are hit multiple times" -- and `AT_WILL`, because
+    a triggered row declared `ENCOUNTER` fires once a fight and
+    "cumulative" is the card saying outright that it does not. That was
+    the bug: the second hit laid nothing. `When.EOT` rather than the
+    printed "for that move": the move in flight has already had its
+    budget measured, so what is dropped is the retroactive half and what
+    plays is the rest of the turn.
     """
     if _was_opportunity(c.trigger):
         c.bonus("speed", 1, on=c.me, until=When.EOT)
@@ -345,7 +440,7 @@ def f2388(c: Cast) -> None:
     c.penalty("skill:perception", 2, on=c.trigger.target, until=When.EONT)
 
 
-@power("f2362", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2362", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=EXTEND_SHIFT,
        trigger="you attack with an associated power",
        on=Trigger(PowerResolved, lambda w, me, ev: (
@@ -356,15 +451,17 @@ def f2362(c: Cast) -> None:
 
     The two are the same row's bookends and picking the wrong one puts
     the shift on the far side of the swing from where the card prints
-    it. The other benefit -- every shift this turn is a square longer --
-    is dropped: nothing reaches into the distance another row's shift
-    covers, which `ranger_b.f2361` named first.
+    it. `AT_WILL`, because the card prints no limit and an `ENCOUNTER`
+    triggered row fires once a fight. The other benefit -- every shift
+    this turn is a square longer -- is dropped: nothing reaches into the
+    distance another row's shift covers, which `ranger_b.f2361` named
+    first.
     """
     if _holding(c, "light blade"):
         _slip_away(c, 2)
 
 
-@power("f2338", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2338", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        dropped=("c.as_ranged(ref)", "c.counts_as(group=)"),
        trigger="you attack with a bow or a crossbow",
@@ -377,7 +474,7 @@ def f2338(c: Cast) -> None:
     provocation happens as the shot is taken, and an `AFTER` window
     hands over the exemption once the reprisal has been made.
     `from_=` names the one creature the card exempts, which is not the
-    same as not provoking at all.
+    same as not provoking at all. `AT_WILL` for the reason f2362 is.
 
     The second benefit is two clauses and both are gaps: turning a named
     melee row into a ranged one for this use, and letting a crossbow
@@ -387,48 +484,290 @@ def f2338(c: Cast) -> None:
         c.no_provoke(from_=c.trigger.target, on=c.me, until=When.EOT)
 
 
-# -- the extra damage, which announces nothing ------------------------------
+@power("f2354", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       dropped=("query.cover_waived()",))
+def f2354(c: Cast) -> None:
+    """Cover and concealment do not count on the two shots this names.
+
+    The associated list used to be missing from the spec -- an errata
+    block sat between it and the benefit -- and it is there now, so the
+    row is a gated `c.ignore_cover` and nothing more.
+
+    `partial=True` rather than the full waiver, which is the conservative
+    half of the printed sentence: the ordinary -2 goes and superior cover
+    stands. Turning the -5 into a -2 is not sayable, because
+    `query.cover_waived` is a **threshold** -- `resolve.attack` zeroes the
+    penalty when the waiver reaches it and otherwise leaves it whole --
+    so the only numbers available are "all of it" and "none of it", and
+    the full waiver would beat superior cover outright.
+    """
+    if not _holding(c, "crossbow", "bow", "sling"):
+        return
+    c.ignore_cover(
+        partial=True, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("power") in ("p10766", "p10755") and bool(ctx.get("ranged"))
+        ),
+    )
 
 
-def _extra(ref: str, what: str, *, wants: tuple[str, ...] = EXTRA) -> None:
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=wants)
-    def feat(c: Cast) -> None: ...
+@power("f1775", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p2475",
+       on=Trigger(PowerUsed, used_one_of("p2475"), "you use p2475"))
+def f1775(c: Cast) -> None:
+    """Combat advantage against whoever provoked `p2475`.
 
-    feat.__name__ = ref
-    feat.__doc__ = what
+    `PowerUsed.trigger` is the event the row was used in answer to, and
+    `p2475` answers a `Hit` on itself -- so "the triggering attacker" is
+    one read off it. `ev.targets` is not that creature: `p2475` is an
+    interrupt and does not target the one that swung.
+    """
+    attacker = getattr(c.trigger.trigger, "attacker", None)
+    if attacker is not None:
+        c.grants_advantage(on=attacker, until=When.EONT)
 
 
-_extra("f809", """Trades combat advantage to every enemy for a bigger
-       payout. Nothing announces that the payout is about to happen, so
-       there is no moment at which to offer the trade.""")
-_extra("f813", """A save penalty on whatever condition the blow applied,
-       but only when the blow paid the extra damage. `c.penalty("save")`
-       and the saving throw's `conditions` context say the second half
-       exactly -- see f2369 -- and the first half is unaskable, so the
-       whole row waits rather than firing on every mace hit.""")
-_extra("f818", """A second helping of the extra damage after an action
-       point. `ActionPointSpent` is a real event and `Hit.action_point`
-       is set beside it; what is missing is the once-a-turn latch, which
-       lives in a dict inside `strikers.extra_damage`.""")
-_extra("f952", """Forgoes one die of the extra damage to lay an attack
-       penalty. Needs the announcement and a way to take a die back out
-       of a roll another row is making.""",
-       wants=("c.on_extra_damage()", "c.forgo_damage()"))
-_extra("f1661", """Rerolls the low dice of the extra damage when a named
-       racial power's necrotic rides along. `p8278` is a ref and not
-       prose, so the naming is not the gap; the dice are rolled inside
-       `c.damage` and are gone by the time anything sees them.""",
-       wants=("c.on_extra_damage()", "c.reroll_ones()"))
-_extra("f2076", """Pays the extra damage without combat advantage when
-       you are the only creature beside the target. The condition is the
-       `applies=` callable `strikers.extra_damage` closes over, and
-       nothing widens it. The rapier half is writable -- see f2077 --
-       and is not what holds this up.""", wants=APPLIES)
-_extra("f2426", """Pays the extra damage on a named racial power's
-       target, and off the once-a-turn latch. Both halves live inside
-       that same closure.""", wants=("c.extra_damage(applies=)",
-                                     "c.on_extra_damage()"))
+@power("f810", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1628",
+       on=Trigger(PowerUsed, used_one_of("p1628"), "you use p1628"))
+def f810(c: Cast) -> None:
+    """Deepens the rattling penalty against `p1628`'s victim, -2 to -4.
+
+    `Cast._rattle` lays a flat -2 and nothing raises it, but penalties
+    bucket by the **label** of the row that laid them and only two from
+    one source refuse to add -- so a second -2 of this row's own comes
+    to the printed -4. Laid on `DamageApplied`, which is emitted from
+    inside `c.damage` just before `_rattle` runs, so it lands exactly
+    when the rattle does and never on a blow that dealt nothing.
+
+    `p1628` is `NO_TARGET` and aims off its own trigger, so the victim
+    is read there rather than from `ev.targets`, which is empty.
+
+    The narrower "rattling melee" modifier is not asked: `DamageApplied`
+    does not say whether the blow was a melee one, and the two rows that
+    grant that modifier are not in reach of this feat's prerequisite.
+    """
+    me = c.me
+    victim = getattr(c.trigger.trigger, "attacker", None)
+    if victim is None:
+        return
+
+    def deepen(blow: DamageApplied) -> None:
+        if blow.source != me or blow.target != victim:
+            return
+        p = get(blow.detail)
+        rattles = (p is not None and Keyword.RATTLING in p.keywords) or bool(
+            c.total("rattling")
+        )
+        if rattles:
+            c.penalty("attack", 2, on=victim, until=When.EONT)
+
+    c.watch(DamageApplied, deepen, on=me, until=When.EONT)
+
+
+@power("f2449", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with p6189",
+       on=Trigger(Hit, hit_with_one_of("p6189"), "you hit with it"))
+def f2449(c: Cast) -> None:
+    """"The enemy you hit" is the blow rather than the declaration, so
+    this hangs on `Hit` and not on `PowerUsed` -- the racial power can
+    miss."""
+    c.grants_advantage(on=c.trigger.target, until=When.EONT)
+
+
+@power("f819", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you reroll an attack with p1450 and the second roll misses",
+       on=Trigger(PowerResolved, used_one_of("p1450"), "you use p1450"))
+def f819(c: Cast) -> None:
+    """Refunds `p1450` when the reroll it bought misses anyway.
+
+    Nothing announces that a roll *was* a reroll, but nothing has to:
+    `p1450` is an interrupt on `AttackRolled` whose whole body is the
+    reroll, so the attack that event names is the rerolled one by
+    construction. `PowerResolved.trigger` hands it over, and the
+    `advantage` field on it is "an enemy granting you combat advantage"
+    asked at the moment of the roll rather than afterwards.
+
+    The outcome is recomputed after the interrupt window, so the miss is
+    waited for rather than read: one `Miss` against the same creature,
+    this turn.
+    """
+    rolled = c.trigger.trigger
+    if rolled is None or not getattr(rolled, "advantage", False):
+        return
+    victim = rolled.target
+
+    def refund(ev: Miss) -> None:
+        if ev.attacker == c.me and ev.target == victim:
+            c.restore_use("p1450")
+
+    c.watch(Miss, refund, on=c.me, until=When.EOT, once=True)
+
+
+@power("f829", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f829(c: Cast) -> None:
+    """`p1766` burns through fire resistance and immunity while you have
+    combat advantage against its target.
+
+    `advantage` is a key the damage context carries, asked of the board
+    at damage time -- which is right for a standing grant and blind to a
+    one-shot that the attack roll already spent. The narrower reading
+    would need the rolled result threaded down to here."""
+    c.ignore_resistance(
+        None, DamageType.FIRE, on=c.me, until=When.ENCOUNTER, immunity=True,
+        when=lambda ctx: ctx.get("power") == "p1766"
+        and bool(ctx.get("advantage")),
+    )
+
+
+# -- the extra damage, read off `DamageRolled` ------------------------------
+
+
+@power("f809", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f809(c: Cast) -> None:
+    """Trades combat advantage to every enemy for a bigger payout.
+
+    The offer is made at the one moment the card makes it: the payout is
+    announced as a `DamageRolled` carrying the feature's label, and that
+    event is a `Decision`, so a `Window.BEFORE` listener changes the
+    number that is about to land. `c.bonus` on the feature's own
+    modifier key would have added the +2 to every payout instead, which
+    is not a choice and would charge the price once for the whole fight.
+    """
+    me = c.me
+
+    def offer(ev: DamageRolled) -> None:
+        if ev.source != me or ev.detail != _SNEAK:
+            return
+        if not c.may("add 2 damage and grant combat advantage to every enemy"):
+            return
+        ev.amount += 2
+        for foe in c.enemies():
+            c.grants_advantage(on=me, to=foe, until=When.EONT)
+
+    c.watch(
+        DamageRolled, offer, on=me, until=When.ENCOUNTER, window=Window.BEFORE
+    )
+
+
+@power("f813", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f813(c: Cast) -> None:
+    """A save penalty on the four conditions, after a club or mace payout.
+
+    Both halves are readable now. "You dealt the extra damage" is the
+    `DamageRolled` the feature pays it with, and "against any of those
+    conditions" is the saving throw's own context, which carries the
+    conditions the effect holds -- the reading f2369 uses.
+
+    What is approximated is "that causes the target to become": the
+    conditions a power applies land in its body *after* the `Hit` the
+    payout rides on, so there is nothing to read at this moment. The
+    penalty is therefore laid on the target and narrowed to those four
+    words, which is wider than the card by any of them the target picks
+    up later in the fight from somebody else.
+    """
+    me = c.me
+
+    def on_payout(ev: DamageRolled) -> None:
+        if ev.source != me or ev.detail != _SNEAK:
+            return
+        if not _holding_ref(c, *_CLUBS):
+            return
+        c.penalty(
+            "save", 2, on=ev.target, until=When.ENCOUNTER,
+            when=lambda ctx: any(
+                str(x.value) in _SOFTENING for x in ctx.get("conditions", ())
+            ),
+        )
+
+    c.watch(DamageRolled, on_payout, on=me, until=When.ENCOUNTER)
+
+
+@power("f818", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f818(c: Cast) -> None:
+    """A second helping of the extra damage after an action point.
+
+    `ActionPointSpent` is the trigger and `DamageRolled` answers "have
+    you already dealt it this round". The latch cannot be reset, so the
+    second helping is a spare payout spent on a later hit this turn --
+    see `_spare_use` for why that can never come to two payouts where
+    the card grants one.
+    """
+    paid = _watch_payout(c)
+
+    def spend(ev: ActionPointSpent) -> None:
+        last = paid()
+        if ev.actor == c.me and last is not None and _round_of(last) == c.world.round:
+            _spare_use(c, paid)
+
+    c.watch(ActionPointSpent, spend, on=c.me, until=When.ENCOUNTER)
+
+
+@power("f2426", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2426(c: Cast) -> None:
+    """The racial power's target pays, and the use does not count.
+
+    The first printed clause is already true of a rogue with the
+    feature: its condition -- combat advantage against the target -- is
+    exactly the feature's own, so a hit with `p1766` pays whenever the
+    latch is free. The clause that is this feat's is the second one, and
+    it is written as one spare payout for later rather than as a use
+    handed back, because the latch is a dict inside a closure.
+
+    So the total over a turn is the printed total; which attack carries
+    the second helping is a square the engine cannot place it on.
+    """
+    paid = _watch_payout(c)
+
+    def on_hit(ev: Hit) -> None:
+        if ev.attacker != c.me or ev.power != "p1766":
+            return
+        if has_combat_advantage(c.world, c.me, ev.target):
+            _spare_use(c, paid)
+
+    c.watch(Hit, on_hit, on=c.me, until=When.ENCOUNTER)
+
+
+@power("f952", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.forgo_damage()",))
+def f952(c: Cast) -> None:
+    """Forgoes one die of the extra damage to lay an attack penalty. The
+    payout is announced -- `DamageRolled` carries the label and the
+    amount, and a `BEFORE` listener may change it -- but the dice are
+    already summed into that number, so there is no die to decline.
+    Subtracting a fresh roll instead would be a different distribution
+    dressed up as the printed one."""
+
+
+@power("f1661", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=("c.reroll_ones()",))
+def f1661(c: Cast) -> None:
+    """Rerolls the low dice of the extra damage when `p8278`'s necrotic
+    rides along. The payout is announced and the racial power is a ref,
+    so neither the naming nor the moment is the gap; `DamageRolled`
+    carries one total and the individual faces are gone by the time
+    anything sees it."""
+
+
+@power("f2076", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, todo=APPLIES)
+def f2076(c: Cast) -> None:
+    """Pays the extra damage without combat advantage when you are the
+    only creature beside the target. That is the `applies=` callable
+    `strikers.extra_damage` closes over, and widening it from out here
+    means a second watcher with a latch of its own -- which pays twice
+    in any turn that has one hit of each kind in it. The rapier half is
+    writable, see f2077, and is not what holds this up."""
 
 
 # -- one weapon group standing in for another -------------------------------
@@ -457,72 +796,14 @@ _counts_as("f2078", """A one-handed heavy blade where the rows ask for a
            light blade, the extra damage included. The proficiency half
            is a column and not a body.""")
 _counts_as("f2437", """A hammer where the rows ask for a light blade.""")
-_counts_as("f2471", """A bow where the rows ask for a crossbow.""")
+_counts_as("f2471", """A bow where the rows ask for a crossbow. The extra
+           damage already takes a bow -- `strikers._SNEAK_GROUPS` has
+           it -- so what is left is the rogue powers.""")
 _counts_as("f2895", """A shortbow where the rows ask for a crossbow. The
            proficiency half is a column.""")
 
 
 # -- the rest of the gaps, each named exactly -------------------------------
-
-
-@power("f810", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.rattling(penalty=)",))
-def f810(c: Cast) -> None:
-    """Deepens the rattling penalty against `p1628`'s target. The
-    trigger is sayable now the power is a ref; the penalty
-    `Cast._rattle` applies is a fixed 2 with nothing to raise it, and
-    the whole printed benefit is that number."""
-
-
-@power("f2449", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       trigger="you hit with p6189",
-       on=Trigger(Hit, hit_with_one_of("p6189"), "you hit with it"))
-def f2449(c: Cast) -> None:
-    """"The enemy you hit" is the blow rather than the declaration, so
-    this hangs on `Hit` and not on `PowerUsed` -- the racial power can
-    miss."""
-    c.grants_advantage(on=c.trigger.target, until=When.EONT)
-
-
-@power("f819", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_reroll()",))
-def f819(c: Cast) -> None:
-    """Refunds `p1450` when the reroll it bought misses anyway. The power
-    is named by ref and `c.restore_use` takes one -- what is missing is
-    that nothing announces a roll was a reroll. The fighter's f805 is the
-    same row from the other class."""
-
-
-@power("f829", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF)
-def f829(c: Cast) -> None:
-    """`p1766` burns through fire resistance and immunity while you have
-    combat advantage against its target.
-
-    `advantage` is a key the damage context carries, asked of the board
-    at damage time -- which is right for a standing grant and blind to a
-    one-shot that the attack roll already spent. The narrower reading
-    would need the rolled result threaded down to here."""
-    c.ignore_resistance(
-        None, DamageType.FIRE, on=c.me, until=When.ENCOUNTER, immunity=True,
-        when=lambda ctx: ctx.get("power") == "p1766"
-        and bool(ctx.get("advantage")),
-    )
-
-
-@power("f1775", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.triggering_attacker()",))
-def f1775(c: Cast) -> None:
-    """Combat advantage against whoever provoked `p2475`.
-
-    The ref comes out of this feat's own prerequisite, so the naming is
-    not the gap. `PowerUsed` says who used the row and which targets it
-    chose, and `p2475` is an interrupt whose own trigger names the
-    attacker -- that event is not carried anywhere the answering row can
-    read it.
-    """
 
 
 @power("f826", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -555,16 +836,6 @@ def f2074(c: Cast) -> None:
     its kind, not the act of granting it."""
 
 
-@power("f2354", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("feat.associated_powers",))
-def f2354(c: Cast) -> None:
-    """The list is absent from the spec and present on the page: an
-    errata block sits between the benefit and it, and `etl/feat._benefit`
-    breaks at an errata heading and drops the rest of that paragraph. So
-    `c.ignore_cover(partial=True)` is the whole of the benefit and has
-    nowhere to aim. The fighter's `f2071` is cut off the same way."""
-
-
 @power("f2405", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        todo=("c.counts_as(property=)", "Weapon.proficiency"))
@@ -580,7 +851,9 @@ def f2405(c: Cast) -> None:
 def f2429(c: Cast) -> None:
     """Shortens the distance `cf:rogue-scoundrel-f1s2` asks a move to
     cover. That row is declared, so the name is not the hold -- the 3 is
-    a literal inside it and nothing rewrites one."""
+    a literal inside its printed text and that feature is itself
+    unwritten, so there is neither a number to rewrite nor a check to
+    move it on."""
 
 
 @power("f2459", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -603,9 +876,11 @@ def f2468(c: Cast) -> None:
 
 
 @power("f2890", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.feint()", "c.change_dice()"))
+       reach=PERSONAL, target=SELF, todo=("c.feint()",))
 def f2890(c: Cast) -> None:
     """Feinting with Bluff, and a bigger payout against whoever fell for
-    it. Both halves are gaps: there is no feint in the action menu to
-    put a bonus on, and the extra die is inside `strikers.extra_damage`
-    as a dice string rather than a count."""
+    it. Both printed clauses hang on the feint and there is none in the
+    action menu -- neither a check to put the +2 on nor a success to
+    trigger the rest. The payout half alone would be writable now:
+    `c.bonus("cf:rogue-scoundrel-f4 damage", 0, dice="1d6")` is the
+    extra die, since `extra_damage` reads that key beside its own."""

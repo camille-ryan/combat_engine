@@ -39,6 +39,7 @@ from combat_engine.engine import (
     ActionType,
     Cast,
     Condition,
+    Escaped,
     Hit,
     SecondWind,
     Trigger,
@@ -307,11 +308,20 @@ def f2277(c: Cast) -> None:
 
 
 @power("f2279", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.escape()",))
+       reach=PERSONAL, target=SELF, dropped=("c.beast_form()",))
 def f2279(c: Cast) -> None:
-    """Damage to whatever fails to get out of this druid's grip.
-    `c.grabbing` lists who is held; there is no escape attempt to fail,
-    which seven item blocks also want."""
+    """`Escaped` is emitted for a failure as well as a success, which is
+    what the second half needs. "While you are in beast form" is dropped:
+    nothing asks what shape a druid is in, so the damage is dealt
+    whenever this druid's grip holds."""
+    me = c.me
+    c.bonus("escape", 2, on=me, until=When.ENCOUNTER, kind="feat")
+
+    def held(ev: Escaped) -> None:
+        if ev.holder == me and not ev.success:
+            c.flat(max(c.con_mod, c.dex_mod), on=ev.actor)
+
+    c.watch(Escaped, held, until=When.ENCOUNTER, on=me)
 
 
 @power("f2280", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -112,7 +112,6 @@ from combat_engine.engine import (
     Died,
     Dropped,
     Effect,
-    Health,
     Hit,
     Ident,
     Initiative,
@@ -189,11 +188,6 @@ def _wake_traits(c: Cast, who: int) -> None:
         if p is not None and p.action is ActionType.NONE:
             use(c.world, who, ref, spend=True)
 
-
-def _is_minion(world: World, eid: int) -> bool:
-    """One hit point is what a minion is, and the number is in the database."""
-    health = world.get(eid, Health)
-    return health is not None and health.max_hp <= 1
 
 
 # ==========================================================================
@@ -1922,11 +1916,12 @@ def m4971a4(c: Cast) -> None:
     creature's own downfall to that creature even though it is no longer
     alive.
 
-    "Nonminion" is one hit point, which is in the database.
+    "Nonminion" is `c.is_minion`, which reads the stat block's own
+    column rather than counting hit points.
     """
     me = c.me
     for who in c.allies():
-        if who == me or _is_minion(c.world, who) or not alive(c.world, who):
+        if who == me or c.is_minion(on=who) or not alive(c.world, who):
             continue
         if c.is_kind("plant", on=who) and distance_between(c.world, me, who) <= 3:
             c.temp_hp(20, on=who)

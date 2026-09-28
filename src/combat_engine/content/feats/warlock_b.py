@@ -814,8 +814,8 @@ def f2127b(c: Cast) -> None:
     c.watch(AttackDeclared, scorch, until=When.EONT, on=me, label=c.ref)
 
 
-@power("f2293", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.deals(implement=)",),
+@power("f2293", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you use p1333",
        on=Trigger(PowerUsed, _used("p1333"), "you use that at-will"))
 def f2293(c: Cast) -> None:
@@ -826,15 +826,14 @@ def f2293(c: Cast) -> None:
     `once=True` on a damage bonus is spent by `DamageRolled`, so it
     rides exactly the one blow.
 
-    The type change is dropped. `c.deals` overrides only *untyped*
-    damage and only on a `WEAPON` power, and `p1333` is an implement
-    row -- so the blast would stay untyped and would not gain the fire
-    keyword, which is the half of the sentence that matters against
-    anything resistant.
+    The type change is `c.deals(implement=True)`: `p1333` is an implement
+    row, and the override beats the type that row prints. Nothing scopes
+    it to one use, so it is held to the end of the turn.
     """
     step = 1 + (c.level >= 11) + (c.level >= 21)
     if not c.may("make the blast burn", who=c.me):
         return
+    c.deals(DamageType.FIRE, on=c.me, until=When.EOT, implement=True)
     c.bonus(
         "damage", step, on=c.me, until=When.EOT, once=True,
         when=lambda ctx: ctx.get("power") == "p1333",

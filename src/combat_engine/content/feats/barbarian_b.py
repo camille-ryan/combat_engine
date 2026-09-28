@@ -62,9 +62,6 @@ THROWN = ("c.make_thrown()", "c.weapon_range()")
 #: its own body. The feature has a ref now; declining half of what it does
 #: is the operation nothing has.
 INSTEAD = ("c.instead_of()",)
-#: `Bloodied` still names nobody as its cause, so "your attack bloodies an
-#: enemy" answers any enemy being bloodied. The features carry the same.
-BLOODIED_BY = ("Bloodied.source",)
 
 _DEFENCES = (AC, FORT, REF, WILL)
 
@@ -293,7 +290,7 @@ def f1878(c: Cast) -> None:
 
 
 @power("f1880", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=BLOODIED_BY)
+       reach=PERSONAL, target=SELF)
 def f1880(c: Cast) -> None:
     """Five more thunder off the same bloodying `cf:barbarian-f1s2` answers.
 
@@ -306,17 +303,13 @@ def f1880(c: Cast) -> None:
     feature keys its own, so the two fire together and never apart. The
     leg is not asked again -- `chargen.meets` has already checked the
     feature is held, and the feature checks the leg.
-
-    Dropped for the same reason the feature drops it: `Bloodied` names no
-    source, so this answers any enemy being bloodied rather than only the
-    ones this barbarian bloodied.
     """
     me = c.me
     paid: dict[int, int] = {}
 
     def on_bloodied(ev: Bloodied) -> None:
         victim = ev.actor
-        if victim == me or team(c.world, victim) is team(c.world, me):
+        if ev.source != me or team(c.world, victim) is team(c.world, me):
             return
         if paid.get(me) == c.world.round:
             return

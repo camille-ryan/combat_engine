@@ -238,6 +238,13 @@ def _killed_by_me(world: World, me: int, ev: Any) -> bool:
     return getattr(ev, "source", None) == me
 
 
+def _my_bloodying(world: World, me: int, ev: Any) -> bool:
+    return (
+        getattr(ev, "source", None) == me
+        and query.team(world, ev.actor) is not query.team(world, me)
+    )
+
+
 def _my_marked_melee(world: World, me: int, ev: Any) -> bool:
     """Damage reached me from a creature I have marked."""
     return getattr(ev, "target", None) == me and world.relations.holds(
@@ -460,18 +467,17 @@ def _vs_kind(c: Cast, word: str):  # noqa: ANN202
 def _bloodied_by_me(c: Cast, fn) -> None:  # noqa: ANN001
     """Arm `fn(event, power_ref)` for "whenever **you** bloody an enemy".
 
-    `Bloodied` names only the creature. `resolve.hurt` emits `DamageApplied`
-    -- which carries `source` and the row that dealt it -- immediately
-    before it with nothing in between, so the blow that crossed the line is
-    read there and matched back by target.
+    `Bloodied.source` is the striker. Which *row* dealt the blow is not on
+    it, so the `DamageApplied` emitted immediately before -- same blow,
+    nothing in between -- is still watched for the power ref.
     """
-    last: dict[str, Any] = {"source": -1, "target": -1, "power": ""}
+    last: dict[str, Any] = {"target": -1, "power": ""}
 
     def saw(ev: DamageApplied) -> None:
-        last["source"], last["target"], last["power"] = ev.source, ev.target, ev.detail
+        last["target"], last["power"] = ev.target, ev.detail
 
     def crossed(ev: Bloodied) -> None:
-        if last["source"] == c.me and last["target"] == ev.actor:
+        if ev.source == c.me and last["target"] == ev.actor:
             fn(ev, last["power"])
 
     c.watch(DamageApplied, saw, until=When.ENCOUNTER)
@@ -2076,12 +2082,33 @@ def i1502x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("Hit.hand",),
 )
 def i1507x1(c: Cast) -> None:
-    """Turns on hitting with each hand in the same turn. The attack context
-    carries `hand`, but the hit does not, so the two blows cannot be told
-    apart after the fact."""
+    """`hand` rides the `Hit` as a plain attribute, like `opportunity`, so
+    it is read with `getattr`. The tally is per turn and per enemy, and the
+    penalty is installed on the enemy gated on the attack coming back at
+    the wielder -- an "attack" modifier is read off the attacker."""
+    me = c.me
+    struck: dict[int, set[str]] = {}
+
+    def landed(ev: Hit) -> None:
+        if ev.attacker != me:
+            return
+        hands = struck.setdefault(ev.target, set())
+        hand = getattr(ev, "hand", "main")
+        if hand in hands:
+            return
+        hands.add(hand)
+        if len(hands) > 1:
+            c.penalty("attack", 2, on=ev.target, until=When.EONT,
+                      when=lambda ctx: ctx["target"] == me)
+
+    def fresh(ev: TurnStart) -> None:
+        if ev.actor == me:
+            struck.clear()
+
+    c.watch(Hit, landed, until=When.ENCOUNTER)
+    c.watch(TurnStart, fresh, until=When.ENCOUNTER)
 
 
 @power(
@@ -4868,12 +4895,19 @@ def i3488p1(c: Cast) -> None:
     action=FREE,
     reach=Melee(1),
     target=ONE_CREATURE,
-    todo=("Bloodied.source",),
+    trigger="you bloody an enemy with an attack that is not a critical hit",
+    on=Trigger(Bloodied, _my_bloodying, "you bloody an enemy"),
+    todo=("c.crit_damage()",),
 )
 def i709p1(c: Cast) -> None:
-    """"*You* bloody an enemy" -- and the event that says a creature has
-    been bloodied names only the creature, so which side did it cannot be
-    read."""
+    """The trigger reads now that `Bloodied` names its striker. The Effect
+    does not: "extra damage equal to your bonus critical damage" is the
+    `crit_damage` mods `resolve.deal_damage` sums inside its own crit
+    branch, and nothing outside that branch can ask for the total. Hand-
+    writing the rider is refused -- it is a column.
+
+    "That is not a critical hit" is the same absence read the other way:
+    `Bloodied` carries no attack, so the crit cannot be excluded either."""
 
 
 @power(
@@ -5274,11 +5308,15 @@ def i1687p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.HEALING],
-    todo=("Bloodied.source",),
+    trigger="you bloody an enemy with an attack",
+    on=Trigger(Bloodied, _my_bloodying, "you bloody an enemy"),
+    dropped=("Bloodied.power",),
 )
 def i1688p1(c: Cast) -> None:
-    """"*You* bloody an enemy" -- and the event that says a creature has
-    been bloodied names only the creature."""
+    """"With an attack that uses the augmented weapon" is the dropped half:
+    `Bloodied` names its striker but not the blow, so any bloodying this
+    wielder does pays out. Paragon steps are out of scope."""
+    c.heal(10, on=c.me)
 
 
 @power(
