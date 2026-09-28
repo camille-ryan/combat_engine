@@ -60,6 +60,13 @@ class Server:
             ],
             cwd=ROOT,
             env=env,
+            # **Its own process group, so teardown can reach the server.**
+            # `self.proc` is the `uv` wrapper, not uvicorn -- terminating it
+            # left the real server running, reparented to PID 1. 69 of them
+            # had accumulated over three and a half days, holding 328 MB and
+            # contending for the cores the audit is trying to use.
+            start_new_session=True,
+
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -71,19 +78,38 @@ class Server:
         raise SystemExit("the server did not come up")
 
     def __exit__(self, *_: object) -> None:
+        """Signal the whole process group, not just the wrapper.
+
+        `self.proc` is the `uv run ...` handle; the uvicorn is its child.
+        `terminate()` killed `uv` and left the server running, reparented to
+        PID 1 -- **69 of them had accumulated over three and a half days**,
+        holding 328 MB and contending for the cores the audit needs. That is
+        what `start_new_session=True` above is for: `killpg` reaches both.
+
+        Killed rather than asked politely if it dawdles. A uvicorn holding
+        an event stream open can outlast a polite terminate, and the wait
+        raising turned a clean run into a failure *after* every check had
+        passed -- the instrument reporting on its own teardown.
+        """
         if not self.proc:
             return
-        # Killed rather than asked politely if it dawdles. A uvicorn holding
-        # an event stream open can take longer than ten seconds to drain,
-        # and the wait raising turned a clean run into a failure *after*
-        # every check had already passed -- the instrument reporting on its
-        # own teardown rather than on the page.
-        self.proc.terminate()
+        import signal
+
         try:
-            self.proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            self.proc.kill()
-            self.proc.wait(timeout=10)
+            group = os.getpgid(self.proc.pid)
+        except (ProcessLookupError, PermissionError):
+            group = None
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                if group is not None:
+                    os.killpg(group, sig)
+                elif sig == signal.SIGTERM:
+                    self.proc.terminate()
+                else:
+                    self.proc.kill()
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                self.proc.wait(timeout=10)
+                return
 
     @property
     def base(self) -> str:
