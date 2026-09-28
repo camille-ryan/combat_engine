@@ -237,7 +237,14 @@ def p10497(c: Cast) -> None:
         if ev.attacker != victim or not adjacent(c.world, me, victim):
             return
         known = c.world.get(victim, Powers)
-        allowed = {known.basic, known.opportunity} if known else set()
+        # Whatever stands in for the basic attack counts as one: the card
+        # says "a melee basic attack", and a row filed under `instead` is
+        # what the victim would swing when the game hands one out.
+        allowed = (
+            {known.basic, *known.instead_of_basic("opportunity")}
+            if known
+            else set()
+        )
         if ev.power not in allowed:
             ev.cancel(c.ref)
 

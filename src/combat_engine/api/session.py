@@ -137,6 +137,15 @@ class Session:
     #: character's triggered row asks the policy rather than parking a
     #: question the player has no way to answer.
     _theirs: bool = False
+    #: True while the encounter is being set up, for the same reason and
+    #: with a worse deadlock: `encounter.start()` arms every trait, and a
+    #: trait that asks its owner something is asking before the session
+    #: exists to be asked. The worker blocks on an answer that cannot be
+    #: sent until `create` returns, and `create` cannot return until the
+    #: worker unblocks, so the whole request hangs rather than erroring.
+    #: A build choice made at arming time is a setup fact, and the policy
+    #: is the right answerer for it.
+    _setting_up: bool = False
 
     # -- building -----------------------------------------------------------
 
@@ -195,7 +204,11 @@ class Session:
             },
         )
         session.transcript.attach(world)
-        encounter.start()
+        session._setting_up = True
+        try:
+            encounter.start()
+        finally:
+            session._setting_up = False
         session._run_monsters()
         return session
 
@@ -214,7 +227,7 @@ class Session:
             # whole session -- the worker blocked on `_answers.get()` and
             # the HTTP call never came back. The first row in the tree to
             # be offered that way hung the app at round 3.
-            if side and side.team is Team.PC and not self._theirs:
+            if side and side.team is Team.PC and not (self._theirs or self._setting_up):
                 return self.gate.decide(actor, kind, options, prompt)
             return self.policy.decide(self.world, actor, kind, options, prompt)
 

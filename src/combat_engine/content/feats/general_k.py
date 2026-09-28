@@ -1303,12 +1303,18 @@ _granted("f1766", "f1766b", swap=Swap(9, Usage.DAILY))
        keywords=[Keyword.DIVINE, Keyword.HEALING, Keyword.RADIANT],
        trigger="you hit an enemy",
        on=Trigger(Hit, lambda w, me, ev: ev.attacker == me,
-                  "you hit an enemy"))
+                  "you hit an enemy"),
+       dropped=("c.grant_attack(kind=)",))
 def f1766b(c: Cast) -> None:
     """`c.grant_attack`'s own `damage_bonus` is a bare number with no type
     to it, so the extra die is laid as a one-shot typed damage modifier on
     the ally instead and the granted attack spends it. Same arithmetic,
-    and the radiant meets a radiant resistance the way it is printed to."""
+    and the radiant meets a radiant resistance the way it is printed to.
+
+    `attack_bonus` is the same bare number and has no such workaround:
+    the card prints the +2 as a **power** bonus, and laid untyped it
+    stacks with another power bonus where the printed one would not. So
+    the number is right and its type is dropped."""
     friend = c.target
     if friend is None:
         return

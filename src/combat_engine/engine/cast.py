@@ -3876,6 +3876,7 @@ class Cast:
             Companion,
             Defenses,
             Health,
+            Ident,
             Movement,
             Position,
             Side,
@@ -3927,6 +3928,15 @@ class Cast:
             mine = self.world.need(self.me, Defenses)
             hp = max(1, self.surge_value())
             made = self.world.spawn(
+                # A companion conjured from no stat block still has to be
+                # somebody. The other two branches get an `Ident` from the
+                # loader; this one had none, and a creature without one is
+                # a creature `query.creatures` hands to every reader that
+                # then asks it who it is -- the renderer raised on exactly
+                # that, on a familiar armed at the start of the fight.
+                # Named like the wall and the zone: the row that made it,
+                # then what it is.
+                Ident(ref=f"{self.ref}:{kind}"),
                 Position(square=where, size=Size.MEDIUM),
                 Side(team=side),
                 Health(hp=hp, max_hp=hp),

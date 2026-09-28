@@ -348,7 +348,7 @@ def p12947(c: Cast) -> None:
         known = c.world.get(victim, Powers)
         basics = {MELEE, RANGED}
         if known is not None:
-            basics |= {known.basic, known.opportunity}
+            basics |= {known.basic, *known.instead_of_basic("opportunity")}
         return ctx.get("power") not in basics
 
     if not spent:

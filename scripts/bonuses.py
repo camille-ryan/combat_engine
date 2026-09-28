@@ -53,6 +53,42 @@ TYPES = (
 #: handing one out.
 MECHANICS = ("cover", "shield", "proficiency", "concealment")
 
+#: Calls that lay a bonus under **another row's** type on purpose, where
+#: the card's own type word is therefore the wrong thing to compare with.
+#:
+#: The docstring above says neither side of this comparison is a
+#: judgement. That is true of the two shapes it was built for and false
+#: of a third: a feat whose printed benefit *extends* or *replaces* a
+#: bonus some other row already lays. "The bonus from your <racial
+#: feature> also applies to ..." and "the bonus to AC ... is equal to
+#: the higher of your Constitution or Wisdom modifier" both mean one
+#: bonus, not two -- and two of a kind do not stack while the larger
+#: wins, so writing the *other* row's kind is what makes the arithmetic
+#: come out as printed. Written untyped, both would stack and pay twice.
+#:
+#: Kept as a list rather than inferred, because deciding that a sentence
+#: is talking about somebody else's bonus is exactly the judgement this
+#: instrument exists to avoid making. It fails the useful way round: a
+#: row that stops needing its waiver is reported, not silently excused.
+BORROWED = {
+    ("f2095", "racial"),   # extends rt:r39-bold's save bonus
+    ("f3163", "racial"),   # replaces rt:r24-heedless-charge's +2
+}
+
+#: Rows whose card names a type for a bonus that is **not** laid by a
+#: `c.bonus` call at all, so the type word has no call to sit on and the
+#: untyped calls the row does make are correctly untyped.
+#:
+#: `f1766b` is the shape: its card prints "+2 power bonus on the attack
+#: roll", and that +2 is handed over by `c.grant_attack(attack_bonus=)`,
+#: which takes a bare number. The row's one `c.bonus` is the extra
+#: radiant die, which the card does not type. Writing "power" into that
+#: call would put the word on the wrong number.
+#:
+#: The type really is lost in play -- the row says so with a marker --
+#: so this waives the *checker*, not the gap.
+ELSEWHERE = {"f1766b"}
+
 #: A type word is printed as "a **power** bonus" or "+2 **item** bonus".
 #: The same word after "the" or "equal to the" is an *amount* being
 #: pointed at rather than a type being named.
@@ -122,7 +158,7 @@ def main() -> int:
                 # may be that one. The untyped branch below already made
                 # that allowance and this one did not, so a mixed card
                 # could never be satisfied from either side.
-                if typed and not plain:
+                if typed and not plain and ref not in ELSEWHERE:
                     missing.append((ref, sorted(typed)[0], path, text))
             elif code == "untyped":
                 # A card can print one typed bonus and one plain one, and
@@ -133,7 +169,7 @@ def main() -> int:
                 # somewhere, or types nothing at all.
                 if typed and not plain:
                     wrong.append((ref, code, sorted(typed), path))
-            elif code not in typed:
+            elif code not in typed and (ref, code) not in BORROWED:
                 wrong.append((ref, code, sorted(typed) or ["untyped"], path))
 
     if args.fix:

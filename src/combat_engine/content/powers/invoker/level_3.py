@@ -50,7 +50,14 @@ def only_basic_attacks(c: Cast, victim: int, until: When) -> None:
     known = c.world.get(victim, Powers)
     if known is None:
         return
-    spared = {known.basic, known.ranged, known.opportunity, "mba", "rba", ""}
+    spared = {
+        known.basic,
+        known.ranged,
+        *known.instead_of_basic("opportunity"),
+        "mba",
+        "rba",
+        "",
+    }
     for ref in known.all:
         if ref in spared:
             continue
