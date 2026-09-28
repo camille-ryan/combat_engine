@@ -139,6 +139,8 @@ def p146(c: Cast) -> None:
         c.damage("1d10", c.wis_mod, dtype=DamageType.RADIANT)
         c.push(3 + c.cha_mod)
         c.immobilized()
+    else:
+        c.half_damage("1d10", c.wis_mod, dtype=DamageType.RADIANT)
 
 
 @power(
