@@ -79,7 +79,12 @@ def p14471(c: Cast) -> None:
         return
 
     def relief(ev: ConditionApplied) -> None:
-        if ev.target == mate and ev.duration is When.SAVE_ENDS:
+        # `== When.SAVE_ENDS.value`, not `is When.SAVE_ENDS`. The field is
+        # the printed word as a `str`, so the identity test against the enum
+        # member was False on every event this row ever saw -- armed, read
+        # right, and dead. `races/powers_b.py` carries a note about the same
+        # trap.
+        if ev.target == mate and ev.duration == When.SAVE_ENDS.value:
             c.save(on=mate, bonus=3)
 
     c.watch(ConditionApplied, relief, until=When.ENCOUNTER, on=mate, once=True, label="p14471")
