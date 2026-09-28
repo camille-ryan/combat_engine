@@ -126,6 +126,7 @@ from combat_engine.engine.query import (
     squares,
     team,
 )
+from combat_engine.engine.relations import IMPLIES
 from combat_engine.engine.triggers import Trigger, about_me, both, by_ranged, hits_me
 
 #: The sizes m229a3 can shuffle about: the printed line says Medium or
@@ -872,14 +873,37 @@ def m289a4(c: Cast) -> None:
     false here forever. `Effects.apply` installs everything before it
     announces, which is what makes ending the effect from inside this window
     work at all -- the hold exists to be found.
+
+    **Searches `eff.relations` as well as `eff.conditions`**, and must. A
+    grab, a mark and a domination are imposed by `Relations.set` and live in
+    `relations`; `conditions` never holds one. This row's trigger has no
+    condition filter at all, so once relation-imposed conditions started
+    announcing themselves it began answering every grab and mark -- and with
+    the old body it would have spent a `recharge=6` interrupt finding
+    nothing and shrugging nothing off. Worse for a mark, which
+    `powers/paladin/marks.py` sets with **no effect behind it at all**:
+    there is nothing to end, so the row now says so rather than burning the
+    recharge.
     """
     me = c.me
     condition = getattr(c.trigger, "condition", None)
     if condition is None:
         return
-    for eff in list(c.world.effects.of(me)):
-        if condition in eff.conditions:
-            c.world.effects.end(eff, c.ref)
+    held = [
+        eff
+        for eff in c.world.effects.of(me)
+        if condition in eff.conditions
+        or any(IMPLIES.get(kind) is condition for kind, _s, _t in eff.relations)
+    ]
+    if not held:
+        # Nothing carries it -- a bare relation with no effect behind it.
+        # The use is already spent by the time a body runs, so handing it
+        # back is how a row declines; otherwise the first mark of the fight
+        # burns a recharge-6 interrupt on nothing.
+        c.restore_use(c.ref)
+        return
+    for eff in held:
+        c.world.effects.end(eff, c.ref)
 
 
 @power(

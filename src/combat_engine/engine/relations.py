@@ -70,14 +70,14 @@ class Relations:
         if self.holds(kind, source, target):
             return
         self._live[(kind, source, target)] = None
-        self._apply_condition(kind, target, +1)
+        self._apply_condition(kind, target, +1, source)
         self.world.bus.emit(RelationSet(kind_=kind, source=source, target=target))
 
     def clear(self, kind: Relation, source: int, target: int, why: str = "expired") -> None:
         if not self.holds(kind, source, target):
             return
         del self._live[(kind, source, target)]
-        self._apply_condition(kind, target, -1)
+        self._apply_condition(kind, target, -1, source, why)
         self.world.bus.emit(
             RelationCleared(kind_=kind, source=source, target=target, why=why)
         )
@@ -94,8 +94,40 @@ class Relations:
             if source == eid or target == eid:
                 self.clear(kind, source, target, why)
 
-    def _apply_condition(self, kind: Relation, target: int, delta: int) -> None:
+    def _apply_condition(
+        self,
+        kind: Relation,
+        target: int,
+        delta: int,
+        source: int = 0,
+        why: str = "expired",
+    ) -> None:
+        """Move the condition a relation mirrors, and **say so**.
+
+        This wrote onto `Conditions` in silence, so establishing a grab, a
+        mark or a domination emitted `RelationSet` and no
+        `ConditionApplied` -- and a row declared the obvious way, watching
+        `ConditionApplied` for `Condition.GRABBED`, was armed, read right
+        and could never fire. Four content docstrings recorded it as
+        unfixable from where they sat. Clearing was silent in the same way,
+        which the issue reporting this only noticed half of.
+
+        **Guarded on `add`/`remove`, which is what keeps it single-fire.**
+        `durations.apply` calls `relations.set` *before* running its own
+        `ConditionApplied` loop, so by the time that loop reaches this
+        condition `conds.add` returns False and says nothing. Drop the
+        guard and every save-ends grab announces itself twice.
+
+        `duration` is deliberately `""` and not a `When`. A relation has no
+        duration -- it lasts until it is cleared -- and twelve listeners in
+        the tree carry no condition filter and gate on
+        `duration == When.SAVE_ENDS.value` instead. Passing a real `When`
+        here would wake all twelve on every mark laid in the game. The
+        empty string is not a `When` value, and nothing parses this field
+        back into the enum.
+        """
         from .components import Conditions
+        from .events import ConditionApplied, ConditionEnded
 
         cond = IMPLIES.get(kind)
         if cond is None:
@@ -104,6 +136,13 @@ class Relations:
         if conds is None:
             return
         if delta > 0:
-            conds.add(cond)
-        else:
-            conds.remove(cond)
+            if conds.add(cond):
+                self.world.bus.emit(
+                    ConditionApplied(
+                        source=source, target=target, condition=cond, duration=""
+                    )
+                )
+        elif conds.remove(cond):
+            self.world.bus.emit(
+                ConditionEnded(target=target, condition=cond, why=why)
+            )

@@ -446,9 +446,14 @@ def p13432(c: Cast) -> None:
     """"As appropriate" is which of the two the condition answers to: a
     grab is escaped, the other three are saved against.
 
-    A grab is a relation and is never announced as a condition, so watching
-    `ConditionApplied` for `Condition.GRABBED` would be false forever --
-    `RelationSet` is the other half of the printed trigger line."""
+    A grab is a relation, and `_BINDING` leaves `GRABBED` out of the
+    `ConditionApplied` half on purpose. That used to be a necessity -- the
+    relation announced no condition, so watching for `Condition.GRABBED`
+    was false forever -- and is now a **guard**: relation-imposed conditions
+    do announce themselves, so listing it in both halves would arm this one
+    reaction twice on a single grab. `RelationSet` stays the half that
+    answers for the grab, because it is the one that also names who did it.
+    """
     if c.is_(Condition.GRABBED, on=c.me):
         c.escape(on=c.me, bonus=2)
     else:
