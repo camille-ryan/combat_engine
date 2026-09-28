@@ -748,12 +748,17 @@ def p16052(c: Cast) -> None:
 @power("p16053", level=2, cls="x7_942", usage=DAILY, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.DIVINE],
        trigger="you grant an ally a power bonus or a healing surge",
-       todo=("EffectApplied.kind", "SurgeSpent.source"))
+       todo=("EffectApplied.mods", "SurgeSpent.source"))
 def p16053(c: Cast) -> None:
-    """Nothing announces *what kind* of bonus an effect carries, and
-    `SurgeSpent` names only who spent -- not who enabled it. Neither half
-    of the printed trigger can be declared, so the row cannot fire at all
-    and the working Effect below it has nothing to hang on."""
+    """**Re-aimed off `EffectApplied.kind`.** `Event.kind` is a property on
+    the base class returning the event's own type name, so that marker read
+    as arrived on every event there is while the gap stayed wide open: the
+    announcement carries a source, a target, a duration and a label, and
+    nothing about the modifiers the effect holds -- so "a **power** bonus"
+    cannot be told from any other kind. `SurgeSpent` still names only who
+    spent, not who enabled it. Neither half of the printed trigger can be
+    declared, so the row cannot fire at all and the working Effect below it
+    has nothing to hang on."""
 
 
 @power("p16054", level=6, cls="x7_942", usage=ENCOUNTER, action=MINOR,

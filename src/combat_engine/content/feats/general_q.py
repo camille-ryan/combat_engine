@@ -27,17 +27,17 @@ psionic feats here are finished for that reason alone. What is not
 writable is reading a pool *back down to zero* (`c.on_points_spent()`)
 or handing points out (`c.grant_points()`).
 
-**Theme powers, which are not prose-named at all.** Eighteen rows here
-were marked `spec.power_ref()` on the reading that the spec names their
-subject in words and no ref exists. Half of that is wrong, and the half
-that is wrong is the half that matters. Each of the nine powers those
-eighteen ride on is a real compendium row with a real id, carrying
-`Class = 'Theme Power'`. `etl/build.py:_powers` imports
-`Class IN (CLASSES)` and `_racial_powers` imports the races beside it;
-nothing imports the themes, so the id never becomes a ref. The gap is
-`etl.build.CLASSES`, not the spec extractor -- and since the ref each
-row would watch is known, it is named too, so the marker goes red on the
-day somebody writes the row rather than never.
+**Theme powers, and what naming the ref bought.** Eighteen rows here ride
+on nine theme powers that no build imported, and each was marked with the
+import gap *and* the ref it would watch. The nine are declared rows now,
+so the marker went red and all eighteen are written against them. Sixteen
+are finished; the two that fire on dismissing a conjuration are re-aimed,
+because the row they ride on never dismisses one and nothing announces it.
+
+They are traits carrying `c.watch` rather than rows with `on=Trigger`, the
+same shape as the ten associated-power riders above: a declared trigger
+does not arm at the start of a fight, and three of these hang two clauses
+off one event.
 
 `p12315` and the rest are ids, not names: what the id is called is still
 nobody's business here.
@@ -86,22 +86,34 @@ from combat_engine.engine import (
     about_me,
     cursed_by_me,
     get,
+    grid,
     power,
     targets_me,
 )
 from combat_engine.engine.events import (
     ActionSpent,
+    AttackRolled,
     ConditionApplied,
     ConditionEnded,
     DamageApplied,
     DamageRolled,
+    EffectApplied,
     Hit,
+    Miss,
+    MoveEnd,
     MoveStart,
     PowerResolved,
     PowerUsed,
     SkillCheck,
 )
-from combat_engine.engine.query import alive, allies, distance_between, holding, team
+from combat_engine.engine.query import (
+    alive,
+    allies,
+    distance_between,
+    holding,
+    squares,
+    team,
+)
 
 #: A power the spec names in prose and that has no ref **anywhere** --
 #: not in the tree, not in the compendium. Nothing can watch it and
@@ -112,19 +124,10 @@ PROSE = ("spec.power_ref()",)
 #: classes, plus a second pass for the races; `Class = 'Theme Power'` and
 #: `Class = 'Wild Talent Power'` are taken by neither, so ten wild talents
 #: and every theme power are absent from `data/game.db` and therefore from
-#: the registry. Widening that filter is the whole of the gap.
+#: the registry. Widening that filter is the whole of the gap. The theme
+#: powers themselves are declared now, so what is left here is the rows
+#: naming a *set* of them by category, with no ref to watch.
 NO_IMPORT = ("etl.build.CLASSES",)
-
-
-def _unimported(ref: str) -> tuple[str, ...]:
-    """The import gap, and the ref the row will watch once it closes.
-
-    Two symbols because there are two waits and only one of them is
-    checkable: `etl.build.CLASSES` is where the fix goes and the
-    instrument cannot see `etl`, while the ref is looked up in the
-    registry and turns this row red the day it is declared.
-    """
-    return (*NO_IMPORT, ref)
 #: "You swap one of your level N powers for this one." The card is handed
 #: over; giving a power up is a build-time exchange.
 SWAP = ("chargen.power_swap()",)
@@ -213,6 +216,68 @@ def _on_hit_with(c: Cast, refs: tuple[str, ...], fn,  # noqa: ANN001
     c.watch(Hit, rider, on=c.me, until=When.ENCOUNTER, once=once)
 
 
+def _resolving(c: Cast, ref: str):  # noqa: ANN202
+    """Is `ref` between its own `PowerUsed` and `PowerResolved` right now?
+
+    "Who shifts as a result of the power" names creatures the body moved,
+    and neither event alone can say it: `PowerUsed` is announced above the
+    body, so nothing has happened yet, and `PowerResolved` below it, so the
+    move is over and unattributed. The pair brackets everything the body
+    emits, which is exactly the set the clause means.
+    """
+    live = [False]
+
+    def opened(ev: Any) -> None:
+        if ev.actor == c.me and ev.power == ref:
+            live[0] = True
+
+    def closed(ev: Any) -> None:
+        if ev.actor == c.me and ev.power == ref:
+            live[0] = False
+
+    c.watch(PowerUsed, opened, on=c.me, until=When.ENCOUNTER, label=f"{c.ref} open")
+    c.watch(PowerResolved, closed, on=c.me, until=When.ENCOUNTER, label=f"{c.ref} shut")
+    return lambda: live[0]
+
+
+def _after_hits_with(c: Cast, ref: str, fn) -> None:  # noqa: ANN001
+    """"When you hit with `ref`", paid out once the row has finished.
+
+    A `Hit` fires above the rest of the body, so a clause printed as
+    happening at the end of a shove, or after the attack, cannot be paid
+    there -- the shove has not happened yet. The creatures hit are collected
+    and spent on `PowerResolved`, which is the first point at which they are
+    standing where the row left them.
+    """
+    caught: set[int] = set()
+
+    def landed(ev: Any) -> None:
+        if ev.attacker == c.me and ev.power == ref:
+            caught.add(ev.target)
+
+    def done(ev: Any) -> None:
+        if ev.actor != c.me or ev.power != ref:
+            return
+        for who in sorted(caught):
+            fn(who)
+        caught.clear()
+
+    c.watch(Hit, landed, on=c.me, until=When.ENCOUNTER, label=f"{c.ref} landed")
+    c.watch(PowerResolved, done, on=c.me, until=When.ENCOUNTER, label=f"{c.ref} after")
+
+
+def _spot(c: Cast, who: int) -> tuple[int, int] | None:
+    return next(iter(sorted(squares(c.world, who))), None)
+
+
+def _who_rolled(ev: Any) -> int | None:
+    """Whose roll an immediate answered. `AttackRolled` says `attacker`."""
+    if ev is None:
+        return None
+    who = getattr(ev, "actor", None)
+    return getattr(ev, "attacker", None) if who is None else who
+
+
 def _i_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.attacker == me
 
@@ -297,9 +362,23 @@ def f3179(c: Cast) -> None:
 
 
 @power("f3180", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p11778"))
+       reach=PERSONAL, target=SELF)
 def f3180(c: Cast) -> None:
-    """Rides on a theme power the build does not import."""
+    """"Affected by" is read as the ally p11778 actually moved: the row
+    offers a choice and only one half of it shifts anybody, so the window
+    between its own two announcements is what names them.
+
+    The grant is held on the enemy, because that is whose side of the
+    relation it is -- `to=` says who reads it."""
+    during = _resolving(c, "p11778")
+
+    def stepped(ev: MoveEnd) -> None:
+        if not during() or ev.kind_ != "shift" or ev.actor not in c.allies():
+            return
+        for foe in c.within(1, of=ev.actor, side="enemy"):
+            c.grants_advantage(on=foe, to=ev.actor, until=When.EONT)
+
+    c.watch(MoveEnd, stepped, on=c.me, until=When.ENCOUNTER, label=f"{c.ref} step")
 
 
 @power("f3182", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -318,9 +397,15 @@ def f3182(c: Cast) -> None:
 
 
 @power("f3183", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p11868"))
+       reach=PERSONAL, target=SELF)
 def f3183(c: Cast) -> None:
-    """Widens the push of a theme power the build does not import."""
+    """"Instead of 2 squares" is the shover's own `"forcing"` key, which
+    `movement.forced` reads with the ref and the kind of shove in its
+    context. A second `c.push` would have been the wrong shape: it measures
+    its direction from wherever the first one left the target."""
+    c.bonus("forcing", c.con_mod, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: (ctx.get("power") == "p11868"
+                              and ctx.get("how") == "push"))
 
 
 _swap("f3184", "f3184b", Swap(6, utility=True))
@@ -401,9 +486,20 @@ def f3186b(c: Cast) -> None:
 
 
 @power("f3187", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p12338"))
+       reach=PERSONAL, target=SELF)
 def f3187(c: Cast) -> None:
-    """A second beneficiary for an unimported theme power."""
+    """"Character" is the caster or an ally, and the creature p12338 hit is
+    not a candidate -- it is who the invisibility is *from*. `c.invisible`
+    sets the relation one watcher at a time, so `to=` is that target and
+    nobody else."""
+
+    def landed(ev: Hit) -> None:
+        crowd = [w for w in (c.me, *c.within(10, side="ally")) if w != ev.target]
+        who = c.choose(crowd) if crowd else None
+        if who is not None:
+            c.invisible(on=who, to=ev.target, until=When.EONT)
+
+    _on_hit_with(c, ("p12338",), landed)
 
 
 _F3188 = ("p917", "p992", "p704", "p1063")
@@ -427,10 +523,16 @@ def f3188(c: Cast) -> None:
 
 
 @power("f3189", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p11804"))
+       reach=PERSONAL, target=SELF, todo=("c.on_dismiss(ref, fn)",))
 def f3189(c: Cast) -> None:
-    """Fires on dismissing the conjuration an unimported theme power
-    makes."""
+    """**Re-aimed off `etl.build.CLASSES`, and off the ref.** p11804 is a
+    declared row now and the ref was not the wait that mattered: its printed
+    dismissal is one standard action that banishes the spirit *and* attacks
+    from its square, and the attack line is the half p11804 drops -- so
+    nothing in the tree ever dismisses the spirit, and no event announces a
+    conjuration being dismissed. The payout of a deliberate end is
+    `c.endable(then=)`, which a row writes into its own body; a second row
+    cannot add a clause to it. That hook is the whole of the gap."""
 
 
 @power("f3190", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -447,9 +549,11 @@ def f3190(c: Cast) -> None:
 
 
 @power("f3191", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p11868"))
+       reach=PERSONAL, target=SELF)
 def f3191(c: Cast) -> None:
-    """Adds prone to the push an unimported theme power deals out."""
+    """"At the end of the push" cannot be paid on the `Hit`, which fires
+    above the shove -- the target has not moved yet there."""
+    _after_hits_with(c, "p11868", lambda who: c.prone(on=who))
 
 
 _swap("f3192", "f3192b", Swap(6, utility=True))
@@ -519,9 +623,42 @@ def f3194b(c: Cast) -> None:
 
 
 @power("f3195", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p12360"))
+       reach=PERSONAL, target=SELF)
 def f3195(c: Cast) -> None:
-    """A slide and a shift hung on an unimported theme power."""
+    """Both halves name where they end, so both are `to=`: a free slide goes
+    away from nobody in particular and a free shift does not land beside the
+    target. Squares adjacent to an ally are struck out before the choice
+    rather than gated afterwards, which is what "to a square that is not"
+    says. "After the attack" is p12360's own resolution, by which its
+    opening shift has been taken."""
+
+    def after(who: int) -> None:
+        spot = _spot(c, who)
+        if spot is None:
+            return
+        beside_ally = {
+            sq
+            for friend in c.allies()
+            if (at := _spot(c, friend)) is not None
+            for sq in grid.neighbours(at)
+        }
+        clear = sorted(
+            sq
+            for sq in grid.spread({spot}, 2)
+            if sq != spot and sq not in beside_ally and not c.in_squares([sq])
+        )
+        if clear:
+            c.slide(2, on=who, to=c.choose(clear))
+        spot = _spot(c, who) or spot
+        beside = sorted(
+            sq
+            for sq in grid.neighbours(spot)
+            if not c.in_squares([sq]) and grid.distance(c.here, sq) <= 3
+        )
+        if beside:
+            c.shift(3, to=c.choose(beside))
+
+    _after_hits_with(c, "p12360", after)
 
 
 _F3196 = ("p4368", "p971", "p315", "p1758")
@@ -542,9 +679,18 @@ def f3196(c: Cast) -> None:
 
 
 @power("f3197", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p12360"))
+       reach=PERSONAL, target=SELF)
 def f3197(c: Cast) -> None:
-    """A daze hung on an unimported theme power."""
+    """"A target granting combat advantage to you" is read off the roll that
+    already happened. Asking the board again is too late: a one-shot grant
+    has been spent by the time a `Hit` is announced."""
+
+    def landed(ev: Hit) -> None:
+        result = getattr(ev, "result", None)
+        if result is not None and result.advantage:
+            c.dazed(on=ev.target, until=When.EONT)
+
+    _on_hit_with(c, ("p12360",), landed)
 
 
 @power("f3198", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -584,16 +730,37 @@ def f3199(c: Cast) -> None:
 
 
 @power("f3200", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p11804"))
+       reach=PERSONAL, target=SELF, todo=("c.on_dismiss(ref, fn)",))
 def f3200(c: Cast) -> None:
-    """Fires on dismissing the conjuration an unimported theme power
-    makes."""
+    """**Re-aimed off `etl.build.CLASSES`, and off the ref.** Same wait as
+    f3189: p11804 is declared and never dismisses its spirit, because the
+    dismissal is the standard-action attack it drops -- and nothing
+    announces a conjuration being dismissed for another row to answer."""
 
 
 @power("f3201", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p12338"))
+       reach=PERSONAL, target=SELF)
 def f3201(c: Cast) -> None:
-    """Widens the invisibility an unimported theme power grants."""
+    """Who "becomes invisible as a result of the power" is read off the hold
+    the power laid: `c.invisible` labels it with the ref that made it and
+    `EffectApplied` carries that label. Nothing else announces a creature
+    going unseen to one watcher -- `RelationSet` names the pair and not who
+    paid for it.
+
+    The target itself is struck out of "each enemy adjacent to the target":
+    `c.within` keeps whatever the circle is centred on."""
+    foe = [-1]
+    _on_hit_with(c, ("p12338",), lambda ev: foe.__setitem__(0, ev.target))
+
+    def unseen(ev: EffectApplied) -> None:
+        if ev.source != c.me or foe[0] < 0 or not ev.label.startswith("p12338"):
+            return
+        for near in c.within(1, of=foe[0], side="enemy"):
+            if near != foe[0]:
+                c.invisible(on=ev.target, to=near, until=When.EONT)
+
+    c.watch(EffectApplied, unseen, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} unseen")
 
 
 @power("f3203", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -604,9 +771,26 @@ def f3203(c: Cast) -> None:
 
 
 @power("f3204", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p12244"))
+       reach=PERSONAL, target=SELF)
 def f3204(c: Cast) -> None:
-    """A free shift hung on an unimported theme power."""
+    """"That ally" is whoever made the triggering roll, which is the trigger
+    the announcement carries and not `ev.targets` -- p12244 is `NO_TARGET`
+    and aims itself off its own trigger. `AttackRolled` names its subject
+    `attacker` where the other two name it `actor`.
+
+    Read on resolution rather than on use, because the printed clause is
+    paid "after that roll is resolved" and `PowerUsed` fires above the body
+    that does the modifying."""
+
+    def paid(ev: PowerResolved) -> None:
+        if ev.actor != c.me or ev.power != "p12244":
+            return
+        who = _who_rolled(ev.trigger)
+        if who is not None and who in c.allies():
+            c.grant_action("shift", FREE, squares_=2, on=who, until=When.EOT)
+
+    c.watch(PowerResolved, paid, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} step")
 
 
 _swap("f3206", "f3206b", Swap(6, utility=True))
@@ -831,9 +1015,24 @@ def f3215(c: Cast) -> None:
 
 
 @power("f3216", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p11749"))
+       reach=PERSONAL, target=SELF)
 def f3216(c: Cast) -> None:
-    """Extra poison damage on an unimported theme power."""
+    """`dtype=` because the rider's type differs from the weapon damage
+    p11749's own line rolls, so the two points meet a poison resistance on
+    their own terms. `power` on the damage side is the ref of whatever
+    rolled the blow, which is the row's own.
+
+    The miss half is a flat hit and not a `c.damage` roll: the card prints a
+    number."""
+    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER,
+            dtype=DamageType.POISON,
+            when=lambda ctx: ctx.get("power") == "p11749")
+
+    def spat(ev: Miss) -> None:
+        if ev.attacker == c.me and ev.power == "p11749":
+            c.flat(7, dtype=DamageType.POISON, on=ev.target)
+
+    c.watch(Miss, spat, on=c.me, until=When.ENCOUNTER, label=f"{c.ref} spat")
 
 
 @power("f3217", level=1, cls="", usage=AT_WILL, action=FREE,
@@ -986,15 +1185,53 @@ def f3224b(c: Cast) -> None:
 
 
 @power("f3225", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p12258"))
+       reach=PERSONAL, target=SELF)
 def f3225(c: Cast) -> None:
-    """Retypes the damage of an unimported theme power."""
+    """`c.deals` is an override of every weapon blow the creature lands and
+    the printed choice speaks for one power, so the hold is laid on
+    p12258's own announcement and taken off again on its resolution -- the
+    pair brackets the body and nothing else of the turn.
+
+    "You can choose" declines, and declining leaves the thunder alone."""
+    held: list[Any] = []
+
+    def picked(ev: PowerUsed) -> None:
+        if ev.actor != c.me or ev.power != "p12258":
+            return
+        word = c.choose(
+            [DamageType.COLD, DamageType.FIRE, DamageType.LIGHTNING], optional=True
+        )
+        if word is not None:
+            held.append(c.deals(word, on=c.me, until=When.EOT))
+
+    def done(ev: PowerResolved) -> None:
+        if ev.actor != c.me or ev.power != "p12258":
+            return
+        while held:
+            c.end_effect(held.pop(), on=c.me)
+
+    c.watch(PowerUsed, picked, on=c.me, until=When.ENCOUNTER, label=f"{c.ref} pick")
+    c.watch(PowerResolved, done, on=c.me, until=When.ENCOUNTER, label=f"{c.ref} drop")
 
 
 @power("f3226", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p12244"))
+       reach=PERSONAL, target=SELF)
 def f3226(c: Cast) -> None:
-    """Defences hung on an unimported theme power."""
+    """Same subject as f3204 and read the same way. "The end of his or her
+    next turn" is the ally's own clock. No type word is printed in front of
+    "bonus", so it is untyped."""
+
+    def paid(ev: PowerResolved) -> None:
+        if ev.actor != c.me or ev.power != "p12244":
+            return
+        who = _who_rolled(ev.trigger)
+        if who is None or who not in c.allies():
+            return
+        c.bonus(AC, 2, on=who, until=When.EOTNT)
+        c.bonus(WILL, 2, on=who, until=When.EOTNT)
+
+    c.watch(PowerResolved, paid, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} guard")
 
 
 @power("f3227", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1034,9 +1271,32 @@ def f3230(c: Cast) -> None:
 
 
 @power("f3231", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p12258"))
+       reach=PERSONAL, target=SELF)
 def f3231(c: Cast) -> None:
-    """Replaces the effect of an unimported theme power."""
+    """"Replace the effect" has nothing to take away first: p12258's mark
+    hangs off its hit and its attack line is the half that waits, so the
+    save-ends mark laid here is the only one on the target. When that line
+    lands, both are the same relation from the same source and the longer
+    one is what stands.
+
+    "An attack that does not include you" is the whole set one use was
+    aimed at, which rides on the roll as `among`; `ev.target` alone is
+    false for a burst that caught the caster too."""
+
+    def landed(ev: Hit) -> None:
+        foe = ev.target
+        c.mark(on=foe, until=When.SAVE_ENDS)
+
+        def spurned(shot: AttackRolled) -> None:
+            if shot.attacker != foe or not c.marked(on=foe, by=c.me):
+                return
+            if c.me not in getattr(shot, "among", (shot.target,)):
+                c.flat(5, dtype=DamageType.THUNDER, on=foe)
+
+        c.watch(AttackRolled, spurned, on=c.me, until=When.ENCOUNTER,
+                label=f"{c.ref} spurned")
+
+    _on_hit_with(c, ("p12258",), landed)
 
 
 @power("f3232", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1052,9 +1312,20 @@ def f3232(c: Cast) -> None:
 
 
 @power("f3233", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p11778"))
+       reach=PERSONAL, target=SELF)
 def f3233(c: Cast) -> None:
-    """Defences hung on an unimported theme power."""
+    """"Any character" is the caster as well as the allies -- p11778's other
+    option moves only the caster -- so the shift is read off whoever moved
+    and not off a side. Plain "+2 bonus" with no type word, so untyped."""
+    during = _resolving(c, "p11778")
+
+    def stepped(ev: MoveEnd) -> None:
+        if not during() or ev.kind_ != "shift":
+            return
+        for defence in (AC, FORT, REF, WILL):
+            c.bonus(defence, 2, on=ev.actor, until=When.EONT)
+
+    c.watch(MoveEnd, stepped, on=c.me, until=When.ENCOUNTER, label=f"{c.ref} step")
 
 
 _F3234 = ("p917", "p10890", "p704", "p10472")
@@ -1096,9 +1367,14 @@ def f3237(c: Cast) -> None:
 
 
 @power("f3239", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p11749"))
+       reach=PERSONAL, target=SELF)
 def f3239(c: Cast) -> None:
-    """A saving-throw penalty hung on an unimported theme power."""
+    """`"save"` is the key `c.save` reads, and `c.penalty` takes no
+    `kind`."""
+    _on_hit_with(
+        c, ("p11749",),
+        lambda ev: c.penalty("save", 2, on=ev.target, until=When.EONT),
+    )
 
 
 @power("f3240", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1118,15 +1394,21 @@ def f3240(c: Cast) -> None:
 
 
 @power("f3242", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p12315"))
+       reach=PERSONAL, target=SELF)
 def f3242(c: Cast) -> None:
-    """A daze hung on an unimported theme power."""
+    """The daze is the whole benefit; p12315 already slows on the same hit
+    and the two hold separately."""
+    _on_hit_with(
+        c, ("p12315",), lambda ev: c.dazed(on=ev.target, until=When.EONT)
+    )
 
 
 @power("f3243", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=_unimported("p12315"))
+       reach=PERSONAL, target=SELF)
 def f3243(c: Cast) -> None:
-    """A slide hung on an unimported theme power."""
+    """"You can slide the target 3 squares" names no destination, so the
+    decider picks it."""
+    _on_hit_with(c, ("p12315",), lambda ev: c.slide(3, on=ev.target))
 
 
 @power("f3244", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -77,6 +77,7 @@ from combat_engine.engine import (
     TurnStart,
     Usage,
     When,
+    Window,
     World,
     about_me,
     both,
@@ -786,12 +787,35 @@ def p14168(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    dropped=("c.bonus(value=)",),
 )
 def p14169(c: Cast) -> None:
-    """The defence bonus is "the number of enemies adjacent to you **when
-    the attack is made**", and `c.bonus` takes a fixed number -- a count
-    taken now would be a different number by the time it is read."""
+    """The count is taken **when the attack is declared**, which is a window
+    that turned out to exist: `resolve.attack` emits `AttackDeclared` with
+    the roll as its continuation, so a listener runs before the defence is
+    ever read and a number only knowable then can still be laid.
+
+    **Re-aimed away from `c.bonus(value=)`,** which was never the gap -- the
+    parameter has always been there and a fixed number was the wrong shape,
+    not a missing one.
+
+    `window=Window.BEFORE` is load-bearing and `c.watch`'s default is the
+    reaction window, which runs *after* the continuation -- the bonus was
+    laid and read too late, and the row looked finished with a delta of
+    nought.
+
+    Laid against `ev.vs` rather than five times over: that is the one
+    defence this attack reads, and `once=True` spends the hold on it so
+    "against that attack" does not outlive the attack."""
+
+    def braced(ev: AttackDeclared) -> None:
+        if ev.target != c.me:
+            return
+        crowd = len(c.within(1, side="enemy"))
+        if crowd:
+            c.bonus(ev.vs, crowd, on=c.me, until=When.EOT, kind="power", once=True)
+
+    c.watch(AttackDeclared, braced, until=When.EONT, window=Window.BEFORE,
+            label=f"{c.ref} brace")
 
     def dodged(ev: Miss) -> None:
         if ev.target == c.me:

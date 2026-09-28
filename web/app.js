@@ -45,17 +45,20 @@ window.__dnd4e_app_loaded = true;
 // to choose (#338) — and only those. The defaults in `index.html` match the
 // server's, so an untouched form asks for exactly what it always did.
 
-// Headings for the powers that have no place in the action economy. A trait is
-// always running and a reaction waits for its trigger; neither is something
-// you spend an action on, and both would otherwise land under "none" beside
-// "End turn" as though you had chosen not to use them.
-const ALWAYS_ON = "always on";
-const TRIGGERED = "triggered";
-
 // Cost buckets in the order a player thinks about them. Anything the engine
-// hands back that is not in this list is appended after, in first-seen order
-// — which is where `ALWAYS_ON` ends up, and where it belongs.
-const COST_ORDER = ["standard", "move", "minor", "immediate", "free", "none"];
+// hands back that is not in this list is appended after, in first-seen order.
+// The two immediates are spelled as `ActionType` spells them — "immediate" is
+// not a value anything emits, so both used to sort to the bottom.
+const COST_ORDER = [
+  "standard",
+  "move",
+  "minor",
+  "immediate_interrupt",
+  "immediate_reaction",
+  "opportunity",
+  "free",
+  "none",
+];
 
 // What the wire calls ending your turn. `Action.kind` is "end" and both modes
 // looked for "end_turn", so neither ever found it: the button was never lifted
@@ -529,11 +532,10 @@ function renderActions(s) {
   }
   for (const p of s.roster || []) {
     // An available power is already in the list as its option(s); only the
-    // ones that produced none need a row of their own. Traits and auras are
-    // not actions at any price, so they go last under their own heading
-    // rather than into the bucket a cost of "none" would put them in.
+    // ones that produced none need a row of their own. Traits never reach
+    // here: the roster drops them and the creature card prints them instead.
     if (p.available) continue;
-    put(sectionFor(p), { power: p });
+    put(p.cost || "none", { power: p });
   }
 
   const costs = [...buckets.keys()].sort((a, b) => {
@@ -667,7 +669,7 @@ function renderFreeform(s) {
     put("move", { movement: ["Shift", "shift", move.shift, "one square, provokes nothing"] });
   }
 
-  for (const p of s.roster || []) put(sectionFor(p), { power: p });
+  for (const p of s.roster || []) put(p.cost || "none", { power: p });
 
   // Actions with nothing to point at — total defense, a second wind, a buff on
   // yourself. Freeform showed none of them, because it only ever rendered the
@@ -871,7 +873,8 @@ function previewFootprint(at) {
  */
 function costHead(s, cost) {
   const economy = s.economy || {};
-  const head = div("cost-head", cost);
+  // `cost` is an `ActionType` value, and two of them carry an underscore.
+  const head = div("cost-head", cost.replace(/_/g, " "));
   if (!(economy.spent || []).includes(cost)) return head;
   head.classList.add("spent");
   const payer = (economy.buys || {})[cost];
@@ -883,13 +886,6 @@ function costHead(s, cost) {
 function scoreOf(entry) {
   if (!entry.option) return -Infinity;
   return typeof entry.option.score === "number" ? entry.option.score : 0;
-}
-
-/** Which heading an unusable power belongs under. Declared fields, not prose. */
-function sectionFor(p) {
-  if (p.action === "trait" || p.usage === "aura" || p.usage === "trait") return ALWAYS_ON;
-  if (p.action === "triggered") return TRIGGERED;
-  return p.cost || "none";
 }
 
 /** A power that produced no option: greyed, in its own section, with why. */
@@ -933,7 +929,11 @@ function unavailableRow(p) {
  * means on the page.
  */
 function usageBar(p) {
-  const usage = String(p.usage || "").toLowerCase();
+  // Hyphens folded to spaces before the match: the server sends `Usage`
+  // verbatim and the enum reads "at-will", but the prose spelling "at will"
+  // has been on the wire too. Reading only the prose one is why at-wills fell
+  // through to the neutral rule and looked like dailies (#164).
+  const usage = String(p.usage || "").toLowerCase().replace(/[-_]/g, " ");
   let tone = "other";
   if (usage.startsWith("at will")) tone = "at-will";
   else if (usage.startsWith("encounter") || usage.startsWith("recharge")) tone = "encounter";

@@ -1447,7 +1447,14 @@ def p16394(c: Cast) -> None:
 
 #: "You must have a trap-making kit on your person." Mundane gear is not
 #: modelled, so the Requirement never refuses the row.
-KIT = ("c.carrying(ref)",)
+#: "You must have a trap-making kit on your person."
+#: **Re-aimed off `c.carrying(ref)`.** That one arrived and is not this: it
+#: reads the `Item` component, which is a thing a *power* made and handed
+#: over, and a kit is ordinary equipment. `Gear` records weapons, a shield,
+#: armour, worn magic and ammunition and has no slot for the rest, so there
+#: is no ref to ask for -- and a printed Requirement is a `requires=` gate,
+#: handed `(world, eid)`, which cannot call a `Cast` method at all.
+KIT = ("Gear.carried",)
 
 
 def _enemy_closed(world: Any, me: int, ev: Any) -> bool:

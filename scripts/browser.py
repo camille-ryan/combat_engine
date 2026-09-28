@@ -146,6 +146,20 @@ def main() -> int:
 
         page.on("response", remember)
 
+        # Every call the page makes, in order. A click that does not move the
+        # board could be a click that never reached the handler or a move the
+        # server refused, and the DOM alone cannot say which.
+        calls: list[str] = []
+
+        def note(response) -> None:  # noqa: ANN001
+            if "/api/" in response.url:
+                calls.append(
+                    f"{response.status} {response.request.method} "
+                    f"{response.url.split('/api/')[-1]} <- {response.request.post_data}"
+                )
+
+        page.on("response", note)
+
         page.goto(server.base, wait_until="networkidle")
         page.evaluate(f"localStorage.setItem('dnd4e.speed', '{args.speed}')")
         # Clicking the board is gated behind "freeform targeting", which is
@@ -155,7 +169,7 @@ def main() -> int:
         page.reload(wait_until="networkidle")
 
         check.that(not problems, "the page loads with no script errors", "; ".join(problems[:3]))
-        _play(page, check, problems, served)
+        _play(page, check, problems, served, calls)
 
         if args.shot:
             page.screenshot(path=args.shot, full_page=True)
@@ -166,7 +180,8 @@ def main() -> int:
     return 1 if check.failed else 0
 
 
-def _play(page, check: Checks, problems: list[str], served: list[dict]) -> None:  # noqa: ANN001
+def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa: ANN001
+          calls: list[str]) -> None:
     page.wait_for_selector("#board .token", timeout=15000)
     tokens = page.locator("#board .token")
     check.that(tokens.count() >= 8, f"the board drew {tokens.count()} tokens")
@@ -185,6 +200,8 @@ def _play(page, check: Checks, problems: list[str], served: list[dict]) -> None:
                "raw events arrived but no narration frames did")
     for i in range(min(4, read.count())):
         print(f"        {read.nth(i).inner_text()[:78]}")
+
+    _check_usage_bars(page, check)
 
     # The action list, and a move by clicking the board. The range is no
     # longer painted on every render -- `Move` is a thing you press and the
@@ -206,22 +223,21 @@ def _play(page, check: Checks, problems: list[str], served: list[dict]) -> None:
     check.that(route.count() > 0, f"hovering a square draws its route ({route.count()} steps)",
                "the server sends every route with the squares; nothing drew one")
 
+    sent = len(calls)
+    seen = len(served)
     moved = _click_a_move_square(page)
     check.that(moved is not None, "a highlighted square accepted a click")
     if moved:
         # Wait for the board to change, not for a fixed 900ms. The token
-        # animates and the server has to answer, and under `check.py` --
-        # where this runs after seven other instruments -- 900ms was about
-        # even odds. A flaky instrument is worse than a slow one: it
-        # teaches you to re-run rather than to read.
-        # Wait for the board to change. **No retry.** There was one here
-        # and it made the suite green while hiding the thing worth
-        # knowing: the click does not always register, only ever inside
-        # `check.py`, and neither load nor running straight after
-        # `api_smoke` reproduces it. A retry turns that into silence.
-        # This instrument is paused in `check.py` until the backend work
-        # settles, and the plan when it comes back is a verbose log that
-        # emits every event -- which is what would actually answer it.
+        # animates and the server has to answer, and 900ms was about even
+        # odds. A flaky instrument is worse than a slow one: it teaches you
+        # to re-run rather than to read.
+        #
+        # It was flaky for a second reason for a long time, blamed on
+        # `check.py` and on the click not registering, and it was neither:
+        # the square being clicked was one that provokes. See
+        # `_click_a_move_square`. **No retry** here -- a retry would have
+        # hidden that instead of making it measurable.
         after = before
         for _ in range(40):
             after = _positions(page)
@@ -233,12 +249,35 @@ def _play(page, check: Checks, problems: list[str], served: list[dict]) -> None:
         # slow animation from a parked question from a click that missed --
         # so it got read as a regression twice before anyone measured it.
         pending = page.locator("#question, .pending, [data-pending]").count()
-        acting = page.locator(".actor.current").count()
+        # `.token.current` and `.unit.current` are the classes the page
+        # actually sets. `.actor.current` was asked for and matches nothing,
+        # so this line reported "0" on every run, pass or fail.
+        acting = page.locator("#board .token.current").count()
+        # The board refuses a click three ways and only one of them is loud:
+        # `busy` and a turn that is not yours return in silence, an
+        # unreachable square says so in `#status`. Reading the status line
+        # tells those apart, which two position dicts never could.
+        status = page.eval_on_selector("#status", "el => el.innerText.trim()")
+        still = page.locator("#movement .mv").count()
+        # The square under the pointer, in the page's own words, and where
+        # the reply to the click says the actor is standing. A board that did
+        # not move because the server said it did not is a different fault
+        # from a board that was sent a move and did not draw it.
+        at = page.eval_on_selector("#hover", "el => el.innerText.trim()")
+        reply = served[-1] if len(served) > seen else None
+        where = None
+        if reply:
+            where = next(
+                (a["square"] for a in reply["actors"] if a["id"] == reply.get("current")), None
+            )
         check.that(
             after != before,
             "the board moved somebody",
             f"{before} vs {after}"
-            f" | pending questions: {pending} | current actor drawn: {acting}",
+            f" | pending questions: {pending} | current actor drawn: {acting}"
+            f" | squares still lit: {still} | status line: {status!r}"
+            f" | calls after the click: {calls[sent:] or None}"
+            f" | clicked {at} | the reply puts the actor at {where}",
         )
 
     # An area power must highlight where it can be *centred*, not the
@@ -270,6 +309,40 @@ def _play(page, check: Checks, problems: list[str], served: list[dict]) -> None:
 
     check.that(not problems, "still no script errors after playing",
                "; ".join(problems[:3]))
+
+
+#: What `style.css` paints each band. Read back as the browser computes it,
+#: because the class landing on the element is not the same claim as the
+#: colour arriving: #164 was a tone name nothing matched, so the rule that
+#: applied was the neutral default and the class list looked fine.
+BANDS = {
+    "at-will": "rgb(63, 156, 83)",
+    "encounter": "rgb(156, 59, 50)",
+    "daily": "rgb(125, 132, 143)",
+}
+
+
+def _check_usage_bars(page, check: Checks) -> None:  # noqa: ANN001
+    """Is an at-will's band green on the page, and an encounter's red?
+
+    Matched on the usage the row prints beside the name, so this is the same
+    reading a player makes: the words say "at-will", the rule under them must
+    be green.
+    """
+    rows = page.evaluate(
+        "() => [...document.querySelectorAll('#actions .option')].map(b => {"
+        "  const u = b.querySelector('.option-usage'), bar = b.querySelector('.usage-bar');"
+        "  if (!u || !bar) return null;"
+        "  return [u.innerText.trim().toLowerCase(),"
+        "          getComputedStyle(bar).backgroundColor]; }).filter(Boolean)"
+    )
+    check.that(bool(rows), f"powers print a usage band ({len(rows)} rows)")
+    for word, want in BANDS.items():
+        seen = {c for u, c in rows if u.replace("-", " ").startswith(word.replace("-", " "))}
+        if not seen:
+            print(f"        no {word} power in this turn's kit (skipped)")
+            continue
+        check.that(seen == {want}, f"{word} powers show the {word} colour", f"got {sorted(seen)}")
 
 
 _TURNS = 14
@@ -449,7 +522,7 @@ def _press_move(page) -> bool:  # noqa: ANN001
 
 def _hover_a_move_square(page):  # noqa: ANN001, ANN202
     """Point at a highlighted square. The route is drawn on `mousemove`."""
-    squares = page.locator("#movement .mv")
+    squares = page.locator("#movement .mv-free")
     if not squares.count():
         return None
     box = squares.nth(min(5, squares.count() - 1)).bounding_box()
@@ -465,8 +538,17 @@ def _click_a_move_square(page):  # noqa: ANN001, ANN202
 
     The click has to go to the board, which is what carries the handler. The
     highlight overlay sits on top of it and is only there to be looked at.
+
+    **`.mv-free`, not `.mv`.** The overlay draws the provoking squares first
+    and there are usually ten times as many of them, so "the fourth square"
+    was reliably one that provokes -- and a walk that provokes can be stopped
+    by the attack it draws, sometimes on the very first step. The server
+    answers 200 and the creature has not moved, which is correct play and
+    looks exactly like a click that missed. That is the whole of this
+    instrument's intermittent failure. A free square provokes nothing and so
+    cannot be interrupted.
     """
-    squares = page.locator("#movement .mv")
+    squares = page.locator("#movement .mv-free")
     if not squares.count():
         return None
     box = squares.nth(min(3, squares.count() - 1)).bounding_box()

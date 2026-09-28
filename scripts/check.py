@@ -62,13 +62,14 @@ CHECKS = (
                "a whole fight runs to a finish"),
     Instrument("api", ("uv", "run", "scripts/api_smoke.py"),
                "the wire: options, streams, names off", heavy=True),
+    # Un-paused. The intermittent failure was never `check.py` and was never
+    # a click that missed: the instrument clicked the fourth highlighted
+    # square, the overlay draws the provoking squares first, and a walk that
+    # provokes can be stopped by the attack it draws -- 200, nobody moved,
+    # nothing wrong. It clicks a free square now. 18 runs straight, in both
+    # ways of launching it, against roughly one failure in five before.
     Instrument("browser", ("uv", "run", "scripts/browser.py"),
-               "the page itself, in Chromium", heavy=True,
-               paused="fails about half the time inside check.py and never "
-                      "standalone; the click does not register and nothing "
-                      "so far reproduces it. Paused until the backend work "
-                      "settles, then to be answered with a verbose log that "
-                      "emits every event. Run it by name: --only browser"),
+               "the page itself, in Chromium", heavy=True),
 )
 
 

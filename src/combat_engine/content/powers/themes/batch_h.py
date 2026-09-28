@@ -854,17 +854,20 @@ def p14139(c: Cast) -> None:
     "p14140", level=10, cls=X7_854, usage=DAILY, action=MINOR,
     reach=CloseBurst(2), target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.ZONE],
-    dropped=("c.deals_half(when=)",),
+    dropped=("query.deals_half(ctx=)",),
 )
 def p14140(c: Cast) -> None:
     """The penalties are held on the geometry and on what the creature is --
     `c.grants_in` carries neither the origin test nor five effects at once,
     so `_while_in` does it.
 
-    The half-damage clause is dropped: `query.deals_half` is derived from
-    being weakened and nothing can set it for one circumstance, and
-    `c.weakened` would halve the creature's damage everywhere instead of
-    only against what is standing in the zone.
+    The half-damage clause is dropped. **Re-aimed off `c.deals_half(when=)`,**
+    which read as arrived only because `query.deals_half` exists and a
+    marker naming a lowercase owner is looked for anywhere on the surface.
+    That one is the *read*: it is derived from being weakened and takes
+    `(world, eid)` and no context, so it cannot say "only against what is
+    standing in the zone". `c.weakened` would halve the creature's damage
+    everywhere instead.
     """
     word = c.choose(list(ORIGINS), "which origin")
     zone = c.zone(c.area(), until=When.EONT, sustain=MINOR)
