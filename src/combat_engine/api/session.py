@@ -160,7 +160,7 @@ class Session:
         enemies: list[str] | None = None,
     ) -> Session:
         world = World(Grid(16, 12), Rng(seed), Bus())
-        terrain.dress(world, seed)
+        terrain.dress(world, seed, level=level)
         world.scaling = PRESETS.get(scaling, PRESETS["full"])
 
         for i, name in enumerate(pcs or PARTY):

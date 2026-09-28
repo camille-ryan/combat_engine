@@ -11,6 +11,7 @@ else about which ability is being used.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from combat_engine.engine import (
@@ -34,6 +35,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     MoveEnd,
+    Powers,
     Ranged,
     Trigger,
     When,
@@ -267,3 +269,38 @@ def p14508(c: Cast) -> None:
     effect.
     """
     c.merge()
+
+
+def _expended(ref: str) -> Callable[[World, int], bool]:
+    """"Requirement: your <ref> must be expended."""
+
+    def check(world: World, eid: int) -> bool:
+        powers = world.get(eid, Powers)
+        return powers is not None and ref in powers.all and powers.times(ref) > 0
+
+    return check
+
+
+@power(
+    "p14510",
+    level=6,
+    cls="druid",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.PRIMAL],
+    requires=_expended("p15852"),
+    requires_text="the p15852 power must be expended",
+)
+def p14510(c: Cast) -> None:
+    """Two clauses, two verbs. `c.recast` rather than `c.grant_row` for the
+    second: the druid already has the row and what the line changes is what
+    using it costs.
+
+    The cheaper cost is held to the end of the encounter rather than to this
+    turn, because p15852 is an encounter power -- the use handed back is the
+    only one there is, and once it is spent again there is nothing for the
+    discount to apply to."""
+    c.restore_use("p15852")
+    c.recast("p15852", action=FREE, until=When.ENCOUNTER)

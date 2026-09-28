@@ -1418,17 +1418,29 @@ def m668a1(c: Cast) -> None:
 def m668a2(c: Cast) -> None:
     """A standing bonus rather than an action, whatever the section line says.
 
-    Only the "adjacent to" half is sayable. Nothing on the board is
-    *carried* -- there is no inventory and no way to ask who is holding
-    what -- so a creature walking off with the guarded thing gets the same
-    treatment as one standing a long way from it. See the report.
+    Both halves. `c.carrying` answers who is holding what, so a creature that
+    picks the guarded thing up and walks off with it is still the one this
+    row wants -- which is the whole point of the sentence, and it used to
+    read the same as standing a long way off.
+
+    Written here rather than widening `_beside_a_ward`: the other row using
+    that helper prints the adjacency alone.
     """
+
+    def has_a_ward(who: int | None) -> bool:
+        if who is None:
+            return False
+        wards = c.guarding()
+        return any(distance_between(c.world, who, ward) <= 1 for ward in wards) or bool(
+            set(c.carrying(on=who)) & set(wards)
+        )
+
     c.bonus(
         "attack",
         4,
         until=When.ENCOUNTER,
         on=c.me,
-        when=lambda ctx: _beside_a_ward(c, ctx.get("target")),
+        when=lambda ctx: has_a_ward(ctx.get("target")),
     )
 
 

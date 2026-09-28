@@ -2931,6 +2931,34 @@ class Cast:
         """
         return self.mode("phasing", self.speed_of(on or self.me), until=until, on=on)
 
+    def shares_space(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        difficult: bool = True,
+    ) -> Effect | None:
+        """Anyone may stand in this creature's square, and it costs them.
+
+        Not `c.shift(share=True)`: that is an argument to **one move**, made
+        by the creature doing the moving. This is the standing property the
+        printed line describes -- a swarm's square is enterable by whoever
+        likes, and the swarm is still in it -- so it has to live on the
+        creature being entered rather than on the mover.
+
+        Two mod keys rather than one, because the two halves come apart: a
+        printed line that shares a square without charging for it is
+        `difficult=False`, and `movement._clear` reads only the first.
+
+        Yours, so it defaults to the **caster** -- every printed line of
+        this shape is a trait about the creature carrying it.
+        """
+        who = on if on is not None else self.me
+        held = self.bonus("shares_space", 1, on=who, until=until, kind=self.ref)
+        if difficult:
+            self.bonus("shares_space_rough", 1, on=who, until=until, kind=self.ref)
+        return held
+
     def mode(
         self, name: str, speed: int, *, until: When = When.ENCOUNTER, on: int | None = None
     ) -> Effect | None:
@@ -5146,6 +5174,58 @@ class Cast:
         return self.watch(
             TurnStart, tick, until=until, on=who,
             label=f"{self.ref} regeneration",
+        )
+
+    def arm_trigger(
+        self,
+        event: type[Event],
+        fn: Callable[[Any], None],
+        *,
+        when: Callable[[Any], bool] | None = None,
+        cost: ActionType = ActionType.IMMEDIATE_REACTION,
+        until: When = When.EONT,
+        on: int | None = None,
+        window: Window | None = None,
+        label: str = "",
+    ) -> Effect:
+        """A `c.watch` that costs the watcher the action a trigger costs.
+
+        A declared trigger is **header data on the row that owns it**, so a
+        body that arms a reaction for a duration -- "until the end of its
+        next turn, when an adjacent enemy moves it may shift 1" -- has no
+        header to write to and falls back to `c.watch`, which is free.
+        That is the one way such a row differs from its printed line, and
+        the difference is the whole point of an immediate action: once a
+        round, and not while dazed.
+
+        `Encounter.spend` is the same budget `triggers._ask` charges, so an
+        armed reaction and a declared one cannot both fire in one round.
+        Nothing happens if it cannot be paid, which is the printed rule.
+
+        `window` defaults to the one the action type implies, the same
+        table the dispatcher uses -- an interrupt resolves before the thing
+        it answers and may `ev.cancel()` it, a reaction after.
+
+        **Handing a whole row over is `c.grant_row`, not this.** A row with
+        a declared trigger goes into `Powers.known` and the dispatcher
+        budgets it already; this is for the reaction that has no row.
+        """
+        from .triggers import WINDOW_OF
+
+        who = on if on is not None else self.me
+        where = window if window is not None else WINDOW_OF.get(cost, Window.AFTER)
+
+        def budgeted(ev: Any) -> None:
+            if when is not None and not when(ev):
+                return
+            encounter = getattr(self.world, "encounter", None)
+            if encounter is None or not encounter.spend(who, cost):
+                return
+            fn(ev)
+
+        return self.watch(
+            event, budgeted, until=until, window=where, on=who,
+            label=label or self.ref,
         )
 
     def watch(

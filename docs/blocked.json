@@ -31,49 +31,9 @@
     "wants": "c.attacks_with(ability=)",
     "why": "spec.py can read the class page now and the card is three clauses: it drops two proficiencies, adds one, and lets a ranged basic attack with a bow roll Strength for the attack and the damage. basic.RANGED fixes its ability in the header and nothing can rewrite it for one creature; a bow on a warlord leg in chargen.BUILDS is wanted too, because no leg carries one and there would be nothing to shoot with"
   },
-  "p10354": {
-    "wants": "an event announcing a power use's finished set of attack rolls, plus c.reroll_attack(all=True) over it",
-    "why": "the earlier misses have already resolved and their bodies have already branched on them, so there is nothing left to reroll when the free action answers"
-  },
-  "p10744": {
-    "wants": "a thrown weapon or a sling in chargen, before c.range_bonus(mult=) is worth adding",
-    "why": "every weapon in the table is a mace, bow or crossbow, so a thrown-or-sling gate would be false for every character in the tree"
-  },
-  "p13887": {
-    "wants": "c.link plus link-aware query.distance_between / query.adjacent and a teleport-flavoured step",
-    "why": "the card makes the two squares adjacent for movement OR melee attacks and calls the crossing teleportation; c.link as built is movement-only, so the row would silently drop the melee half"
-  },
-  "p13984": {
-    "wants": "a stat block for the creature it summons",
-    "why": "blocked on content rather than on the engine -- the spec prints no creature, so summon=/c.summon_inline have nothing to carry"
-  },
-  "p14510": {
-    "wants": "a compendium ref for the other druid power its Requirement and Effect both name",
-    "why": "no id in the spec and it cannot be identified from this card's mechanics; c.restore_use and c.recast both exist now"
-  },
-  "p3839": {
-    "wants": "a plural companion API: dsl.measured_from and dsl.roller each return one eid and must let the shaman pick which spirit an attack is measured and rolled from; c.call_companion must stop relocating when a second is allowed",
-    "why": "its second and third sentences change how ~60 existing shaman rows read \"your spirit companion\", so it cannot be honoured by adding a method"
-  },
-  "p4396": {
-    "wants": "a run action in the engine -- actions._movement offering it, movement walking speed + 2, and the combat-advantage grant",
-    "why": "the engine builds no run action, so neither printed clause has a subject; c.run(n) alone would not be enough"
-  },
   "p4807": {
     "wants": "Keyword.RAGE declared on the 41 rage rows (the compendium prints it in their type line), plus c.expend(ref)",
     "why": "nothing at runtime tells a rage daily from any other barbarian daily; group= is the wrong field, the engine reads it as one-per-encounter"
-  },
-  "p5591": {
-    "wants": "a separate compendium ref for a guardian form's attack",
-    "why": "the forms (p5106, p9825, p9859) bundle their attack under the same ref, so there is no second id for c.restore_use and inventing one would be inventing an id"
-  },
-  "p5845": {
-    "wants": "AttackResult.parity plus c.treat_roll_as(\"odd\"|\"even\"), and the two rows reading result.natural % 2 moved onto it",
-    "why": "nothing can dictate what another row reads off natural, and there is no event for \"you are about to use a parity power\" to trigger on"
-  },
-  "p7399": {
-    "wants": "a hand key in the attack context, set from a header field or c.strike(hand=\"off\")",
-    "why": "c.w(hand=\"off\") picks the dice only, so a grant gated on an off-hand attack would read a key the context does not carry"
   },
   "cf:barbarian-rage": {
     "wants": "Keyword.RAGE on the class's daily attack rows -- the p4807 gap -- so that the row this feature grants at 5th level exists for c.grant_row to hand over",
@@ -142,34 +102,6 @@
   "cf:artificer-infusions": {
     "wants": "a shared per-encounter allowance of more than one use -- group= counts to one -- and chargen.power_choice() for the card the page offers in place of another",
     "why": "the fourth feature is the budget the three declared infusion rows draw on: two per extended rest, one per round, three from 16th level. Each row is written as its own encounter power with once_per_round, which is three separate allowances rather than one shared one. The second half was filed as chargen.BUILDS and that was the wrong symbol: a Build records which secondary a fork leans on and carries no card list, so a leg could not express one card taken in place of another"
-  },
-  "p12426b": {
-    "wants": "movement.shift walking its path a square at a time the way walk does, so Moved/EnterSquare announce the squares crossed -- plus a way to open one named creature's space rather than c.phasing, which opens everybody's",
-    "why": "the printed Effect is a 3-square shift that may pass through the spaces of enemies marked by the battlemind, and charges force damage the first time it enters one. movement.shift is a single step to the destination, so there are no intermediate squares and no event announcing one: the damage clause could never fire and the row would be a bare shift wearing two sentences it does not do"
-  },
-  "p13320b": {
-    "wants": "Range(from_=\"conjuration\"), resolved by dsl.measured_from the way from_=\"companion\" already is",
-    "why": "an opportunity attack made through the psion's anomaly: Melee 1 measured from the conjuration, triggered by an enemy starting its turn beside it, sliding that enemy back beside it. The trigger and the slide can both be written; the reach cannot, and dsl._can_land measures from the caster before the body runs -- so the row would be refused in exactly the situation it is printed for, which is the charge trap in a different costume"
-  },
-  "p13339b": {
-    "wants": "Range(from_=\"conjuration\"), plus dsl.aim_points centring a close burst on the caster's own conjuration",
-    "why": "a once-per-round close burst 1 fired from one of the four motes the parent leaves on the board, expending it. A close burst is centred on the creature using it and nothing moves that origin, so the burst would go off around the psion instead of around the mote -- a different set of creatures every time"
-  },
-  "p13462b": {
-    "wants": "the same Range(from_=\"conjuration\") and aim_points",
-    "why": "the card names its own origin outright -- close burst 3 centred on the square the mote occupied -- and there is no way to say it. The detonation stays folded into p13462, which fires it at the start of the psion's next turn from the mote's square"
-  },
-  "p464b": {
-    "wants": "a Cast method letting a parent run a declared row as its printed secondary attack -- c.secondary(ref, origin=<square>) -- plus a reach origin naming the granting power's primary target",
-    "why": "free action, area burst 1 centred on the primary target, with no Requirement, no Trigger and no sustain. Standing alone there is no primary target to centre on, and the parent's printed 'Effect: Make the secondary attack' obliges the parent to make it, which it already does inline"
-  },
-  "p465b": {
-    "wants": "a Cast method letting a parent run a declared row as its printed secondary attack -- c.secondary(ref, origin=<square>) -- plus a reach origin naming the granting power's primary target",
-    "why": "the same shape as p464b, and worse: the secondary is printed inside the parent's Hit line, so it must run after the primary attack resolves. Nothing in the header can say either half"
-  },
-  "p16281b": {
-    "wants": "the same c.secondary(ref, origin=) hook; an ActionType.NONE row with no trigger cannot be offered at all",
-    "why": "'No Action', area burst 2 centred on the primary target, no Requirement and no Trigger. triggers.WINDOW_OF only offers a NONE-action row that declares a trigger; without one it is armed as a trait, which is not what the card is. The parent's 'Effect: Make the secondary attack' already resolves it inline"
   },
   "p12422:augment2": {
     "wants": "dsl.Range.by_ability, a reach sized off an ability modifier",

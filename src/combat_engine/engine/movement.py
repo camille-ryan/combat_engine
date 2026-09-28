@@ -279,7 +279,12 @@ def _clear(
         if not world.grid.passable(sq) and not ghost:
             return False
         who = world.grid.occupant(sq)
-        if who is not None and who != eid and not (overhead or ghost):
+        if (
+            who is not None
+            and who != eid
+            and not (overhead or ghost)
+            and not shares_space(world, who)
+        ):
             return False
     return True
 
@@ -331,9 +336,26 @@ def phasing(world: World, eid: int) -> bool:
     return bool(mv and "phasing" in mv.modes)
 
 
+def shares_space(world: World, eid: int) -> bool:
+    """Does this creature let others stand where it stands?
+
+    The occupancy half of `c.shares_space`. Read off `Mods` rather than off
+    `Movement.modes`, because it is not a way of moving -- `mode_of` picks
+    the best mode a creature has and a creature cannot travel by being
+    shared -- and because the printed lines give it a duration.
+    """
+    from .components import Mods
+
+    mods = world.get(eid, Mods)
+    return bool(mods and mods.items and mods.total("shares_space", {}) > 0)
+
+
 def _occupied(world: World, eid: int, target: set[Square] | frozenset[Square]) -> bool:
     return any(
-        (who := world.grid.occupant(sq)) is not None and who != eid for sq in target
+        (who := world.grid.occupant(sq)) is not None
+        and who != eid
+        and not shares_space(world, who)
+        for sq in target
     )
 
 

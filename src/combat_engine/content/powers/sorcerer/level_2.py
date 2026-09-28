@@ -30,6 +30,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    ActionType,
     AttackDeclared,
     Cast,
     CloseBurst,
@@ -49,7 +50,7 @@ from combat_engine.engine import (
     hits_me,
     power,
 )
-from combat_engine.engine.events import DamageApplied, Miss
+from combat_engine.engine.events import DamageApplied, Miss, PowerUsed
 
 from . import has_familiar
 from .dice import face_of
@@ -387,3 +388,40 @@ def p12468(c: Cast) -> None:
         on=c.me,
         until=When.EONT,
         when=lambda ctx: ctx.get("target") in c.within(1, of=fam), kind="power")
+
+
+def _sorcerer_attack(world: World, me: int, ev: PowerUsed) -> bool:
+    """"You use a sorcerer power that works differently depending on whether
+    the attack roll is odd or even."
+
+    The widest predicate that is true whenever the printed one is. Nothing
+    on a `Power` records that its body reads `AttackResult.parity`, so the
+    narrowing cannot be asked -- see the marker.
+    """
+    if ev.actor != me:
+        return False
+    p = get(ev.power)
+    return p is not None and p.cls == "sorcerer" and p.attack is not None
+
+
+@power(
+    "p5845",
+    level=2,
+    cls="sorcerer",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.ARCANE],
+    trigger="you use a sorcerer power that works differently depending on "
+    "whether the attack roll is odd or even",
+    on=Trigger(PowerUsed, _sorcerer_attack, "you use a sorcerer attack power"),
+    dropped=("dsl.Power.reads_parity",),
+)
+def p5845(c: Cast) -> None:
+    """`PowerUsed` is announced above the body, which is the one window where
+    the roll has not been made yet, and `c.treat_roll_as` is spent on the
+    first attack after it -- that power's."""
+    chosen = c.choose(["odd", "even"], f"{c.ref}: how the roll counts")
+    if chosen is not None:
+        c.treat_roll_as(chosen)

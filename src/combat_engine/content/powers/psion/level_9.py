@@ -157,10 +157,9 @@ def p13338(c: Cast) -> None:
     attack=Attack(INT, vs=REF),
 )
 def p13339(c: Cast) -> None:
-    """The once-per-round burst fired from a mote is `p13339b`, which is left
-    out: the burst is centred on the mote and a close burst is centred on the
-    creature using it. With it goes the expending, which is why the motes here
-    last the encounter."""
+    """The burst fired from a mote is the second block, `p13339b`, and the
+    expending goes with it -- which is why the motes here last the encounter
+    rather than a turn."""
     if c.first:
         made = 0
         for sq in sorted(c.area()):

@@ -231,10 +231,9 @@ def p451(c: Cast) -> None:
     attack=Attack(INT, vs=REF),
 )
 def p464(c: Cast) -> None:
-    """The secondary attack rolls the same line -- Intelligence vs. Reflex --
-    so it is `c.strike(on=...)` once per creature in the burst round the
-    primary target. The Effect line makes it unconditional on the primary
-    attack landing. It catches allies too, which is what the row says.
+    """The second block is `p464b`, and it is a free action rather than part
+    of this one, so it is used rather than inlined. The Effect line makes it
+    unconditional on the primary attack landing.
     """
     primary = c.target
     if c.strike():
@@ -243,13 +242,8 @@ def p464(c: Cast) -> None:
     else:
         c.half_damage("2d8", c.int_mod, dtype=DamageType.ACID)
         c.ongoing(2, DamageType.ACID)
-
-    for who in c.within(1, of=primary):
-        if who == primary:
-            continue
-        if c.strike(on=who):
-            c.damage("1d8", c.int_mod, dtype=DamageType.ACID, on=who)
-            c.ongoing(5, DamageType.ACID, on=who)
+    if primary is not None:
+        c.use_power("p464b", on=primary, spend=False)
 
 
 @power(
@@ -265,15 +259,11 @@ def p464(c: Cast) -> None:
     attack=Attack(INT, vs=REF),
 )
 def p465(c: Cast) -> None:
-    """Secondary attack only on a hit, and only at enemies -- unlike p464,
-    which catches everything in the burst."""
+    """The second block is `p465b`. Only on a hit, and only at enemies --
+    unlike p464, which catches everything in the burst."""
     primary = c.target
     if not c.strike():
         return
     c.damage("2d8", c.int_mod, dtype=DamageType.FORCE)
-
-    for who in c.within(1, of=primary, side="enemy"):
-        if who == primary:
-            continue
-        if c.strike(on=who):
-            c.damage("1d10", c.int_mod, dtype=DamageType.FORCE, on=who)
+    if primary is not None:
+        c.use_power("p465b", on=primary, spend=False)

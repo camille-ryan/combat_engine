@@ -287,3 +287,45 @@ def p9870(c: Cast) -> None:
     the ref `actions.perform` and `c.second_wind` spend the use under, so it
     is the one to hand back."""
     c.restore_use("second-wind", on=c.me)
+
+
+def _spent_form_attack(world: World, eid: int) -> str:
+    """The guardian form this warden is in, if that form's attack is spent.
+
+    Every warden form prints its attack as a second block and the importer
+    mints it `<form>b`, so the ref is derived from the hold the form left
+    rather than listed -- a list would go stale the next time a form lands.
+    """
+    from combat_engine.engine.dsl import REGISTRY
+
+    powers = world.get(eid, Powers)
+    if powers is None:
+        return ""
+    for eff in world.effects.of(eid):
+        ref = f"{eff.label}b"
+        if ref in REGISTRY and powers.times(ref) > 0:
+            return ref
+    return ""
+
+
+def _form_attack_spent(world: World, eid: int) -> bool:
+    return bool(_spent_form_attack(world, eid))
+
+
+@power(
+    "p5591",
+    level=10,
+    cls="warden",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.PRIMAL],
+    requires=_form_attack_spent,
+    requires_text="you must be in a guardian form and have used its attack",
+)
+def p5591(c: Cast) -> None:
+    """The whole row is the Requirement and its undoing, the way p9870 is."""
+    ref = _spent_form_attack(c.world, c.me)
+    if ref:
+        c.restore_use(ref, on=c.me)

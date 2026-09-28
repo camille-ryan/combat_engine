@@ -352,45 +352,27 @@ def p13312(c: Cast) -> None:
     attack=Attack(INT, vs=REF),
 )
 def p13462(c: Cast) -> None:
-    """The second block is `p13462b`, a No Action whose burst is centred on
-    the square the mote occupied -- a close burst is centred on the creature
-    using it, so the row is left out and the detonation stays folded in here.
-    The mote is not despawned when it goes off -- its own duration takes it
-    away at the end of that turn instead.
+    """The detonation is the second block, `p13462b`, which fires off its own
+    trigger at the start of the psion's next turn and rolls from the mote's
+    square. The mote is not despawned when it goes off -- its own duration
+    takes it away at the end of that turn instead.
 
-    The augment is bought when the mote is conjured and spends itself a turn
-    later, when the burst goes off: Augment 1 drags one of the creatures it
+    The augment is bought here, when the mote is conjured, and `p13462b`
+    reads the spend back: Augment 1 drags one of the creatures the burst
     caught toward the mote's square, Augment 2 raises the dice."""
-    spent = augment(c)
+    augment(c)
     mote = c.conjure(until=When.EONT, sustain=None, aura=1)
     if not mote:
         return
 
-    def where() -> Position | None:
-        return c.world.get(mote, Position)
-
     def creep(ev: TurnStart) -> None:
-        pos = where()
+        pos = c.world.get(mote, Position)
         if pos is None or ev.actor == c.me:
             return
         if ev.actor in c.in_squares(spread({pos.square}, 1), side="any"):
             c.slowed(on=ev.actor, until=When.EOT)
 
-    dragged = [False]
-
-    def detonate(ev: TurnStart) -> None:
-        pos = where()
-        if pos is None or ev.actor != c.me:
-            return
-        for who in c.in_squares(spread({pos.square}, 3), side="any"):
-            if c.strike(on=who):
-                dice = "2d6" if spent == 2 else "1d6"
-                c.damage(dice, c.int_mod, dtype=DamageType.LIGHTNING, on=who)
-                if spent == 1 and not dragged[0]:
-                    dragged[0] = c.pull(1, on=who, anchor=pos.square) > 0
-
     c.watch(TurnStart, creep, until=When.EONT, label=c.ref)
-    c.watch(TurnStart, detonate, until=When.EONT, label=c.ref)
 
 
 @power(

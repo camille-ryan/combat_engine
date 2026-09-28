@@ -378,3 +378,22 @@ def p4475(c: Cast) -> None:
         if Condition.PRONE in effect.conditions:
             c.world.effects.end(effect, c.ref)
     c.shift(1)
+
+
+@power(
+    "p10744",
+    level=2,
+    cls="rogue",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[*MARTIAL, Keyword.STANCE],
+    todo=("c.bonus(multiply=)",),
+)
+def p10744(c: Cast) -> None:
+    """The whole printed Effect is a **doubling**, and the `"range"` modifier
+    `dsl._stretched` and `resolve._long_range` both read is a number that is
+    added. Doubling a 5/10 weapon means +5 to one threshold and +10 to the
+    other, which one addend cannot be, and the weapon the stance applies to
+    is not known when the stance is taken."""

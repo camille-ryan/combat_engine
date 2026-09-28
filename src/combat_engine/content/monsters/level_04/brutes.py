@@ -72,6 +72,7 @@ from combat_engine.engine.events import (
     ForcedMove,
     Hit,
     MoveStart,
+    PowerUsed,
     TurnEnd,
     TurnStart,
 )
@@ -94,6 +95,35 @@ from combat_engine.engine.triggers import (
 #: The reaches that count as a melee attack, for the rows whose rider is on
 #: "its melee attacks" rather than on one named row.
 MELEE_KINDS = ("melee",)
+
+
+def _seen_used(c: Cast, who: int | None) -> list[str]:
+    """That creature's at-will and encounter attack rows it has been *seen* using.
+
+    In the order they were thrown. `c.borrowed_rows` is the ownership half --
+    it answers what a creature could throw -- and the printed line asks the
+    narrower question, so the log is walked for the uses that actually
+    happened.
+
+    `melee=` on that method is a two-valued switch and not a filter that can
+    be turned off: False means *ranged*, so both calls are needed to say
+    "an attack" with no reach named. Asking with one returned nothing.
+    """
+    if who is None:
+        return []
+    owned = set(c.borrowed_rows(who, at_will=False, melee=True)) | set(
+        c.borrowed_rows(who, at_will=False, melee=False)
+    )
+    out: list[str] = []
+    for ev in c.world.bus.log:
+        if not isinstance(ev, PowerUsed) or ev.actor != who or ev.power not in owned:
+            continue
+        p = get(ev.power)
+        if p is None or p.usage not in (Usage.AT_WILL, Usage.ENCOUNTER):
+            continue
+        if ev.power not in out:
+            out.append(ev.power)
+    return out
 
 
 def _same_row(c: Cast, who: int, ref: str) -> bool:
@@ -273,19 +303,29 @@ def m2812a2(c: Cast) -> None:
     damage=Damage("2d6", 5, dtype=DamageType.PSYCHIC, kind=LIMITED),
     requires=_in_shape(_M2812_SHAPE, "wolf"),
     requires_text="the m2812 must be in its wolf shape",
+    dropped=("c.learn()",),
 )
 def m2812a3(c: Cast) -> None:
-    """The attack only. The second half of the printed line -- it gains one
-    use of an at-will or encounter attack it has seen the target use, to be
-    spent in its other shape at +7 vs AC and +5 vs anything else -- has no
-    expression: `c.forbid` takes a row away and nothing hands one over, and
-    a borrowed row would roll its owner's attack line rather than the two
-    numbers printed here. See the report.
+    """`c.grant_row` says the copy; the two printed numbers it is spent at do not.
+
+    "Seen the target use" is read off the bus log and not off the target's
+    list of rows -- a row it owns and has not thrown is not one this creature
+    has watched -- and the most recent is taken, which is the only ordering
+    the printed line supports.
+
+    Dropped is the rest of that sentence: the copy is spent at +7 vs AC and
+    +5 vs anything else, and only in the other shape. A grant carries neither
+    an attack line nor a requirement of its own, so the borrowed row rolls its
+    owner's numbers in either shape.
 
     No range is printed, and melee 1 is what a stat block giving none means.
     """
-    if c.strike():
-        c.hit()
+    if not c.strike():
+        return
+    c.hit()
+    seen = _seen_used(c, c.target)
+    if seen:
+        c.grant_row(seen[-1], uses=1, until=When.ENCOUNTER)
 
 
 @power(
@@ -756,18 +796,20 @@ def m4980a0(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m4980a1(c: Cast) -> None:
-    """Only the shove half of the swarm trait.
+    """The shove half and the occupancy half.
 
     `c.immovable` refuses every kind of forced movement and the printed line
     refuses two of them, so the refusal is written against `ForcedMove`
     itself, which carries the row doing the shoving and can therefore tell a
     sword from a burst.
 
-    Not written: sharing a square with another creature, an enemy entering
-    that square and finding it difficult, and squeezing through gaps. All
-    three are facts about occupancy that the grid decides, and no `Cast`
-    method reaches them. See the report.
+    `c.shares_space` is the other two sentences at once: the square is
+    enterable and it is rough for whoever steps in. The third -- moving
+    through an opening a much smaller creature would have to squeeze through
+    -- has no content on this board, whose narrowest passage is the one
+    square this creature already walks into.
     """
+    c.shares_space()
     me = c.me
 
     def refuse(ev: ForcedMove) -> None:
@@ -1177,12 +1219,17 @@ def m3021a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
+    dropped=("c.aid_another()",),
 )
 def m3021a4(c: Cast) -> None:
     """Flanking is combat advantage and combat advantage is +2 here, so the
     printed +3 is that plus one -- written as the extra point rather than as
-    a replacement, which nothing can express. The other half of the line,
-    aiding another, is a skill action the engine does not have.
+    a replacement, which nothing can express.
+
+    The other half of the line is the same +3 when aiding another, and aiding
+    another is an action `actions.legal` does not offer, so there is no roll
+    for the point to land on. Marked rather than left in prose, but see the
+    report: nothing in the engine has a use for the verb apart from this.
     """
     c.bonus(
         "attack",
@@ -1747,10 +1794,11 @@ def m879a1(c: Cast) -> None:
     rolled onto the blow as it lands rather than carried as a bonus, which
     would have arrived untyped and ignored resistance to fire.
 
-    The sidestep is written as a watch rather than as a declared trigger: a
-    header's `on=` is data on this row, and this row is the minor action that
-    arms it, not the reaction itself. It therefore costs no immediate action,
-    which is the one way it differs from the printed line. See the report.
+    The sidestep cannot be a declared trigger: a header's `on=` is data on
+    this row, and this row is the minor action that arms it, not the reaction
+    itself. `c.arm_trigger` is the watch that still charges the immediate
+    action, so it is once a round and refused while dazed, which is the rest
+    of the printed line.
     """
     me = c.me
 
@@ -1764,10 +1812,18 @@ def m879a1(c: Cast) -> None:
     c.watch(Hit, scald, until=When.SONT, on=me, label="m879a1 heat")
 
     def sidestep(ev: MoveStart) -> None:
-        if ev.actor != me and ev.actor in c.enemies() and c.distance(ev.actor) <= 1:
-            c.shift(1)
+        c.shift(1)
 
-    c.watch(MoveStart, sidestep, until=When.SONT, on=me, label="m879a1 step")
+    c.arm_trigger(
+        MoveStart,
+        sidestep,
+        when=lambda ev: ev.actor != me
+        and ev.actor in c.enemies()
+        and c.distance(ev.actor) <= 1,
+        until=When.SONT,
+        on=me,
+        label="m879a1 step",
+    )
 
 
 @power(

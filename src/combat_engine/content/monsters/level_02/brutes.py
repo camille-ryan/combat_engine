@@ -213,16 +213,21 @@ def m2830a0(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m2830a1(c: Cast) -> None:
-    """Only the middle sentence of the printed three can be said.
+    """All three printed sentences.
 
-    Sharing a square is a standing property of the creature and `share=` is
-    an argument to one move, so nothing can make this one's space enterable
-    by an enemy or difficult for whoever steps in; squeezing through a gap
-    has no combat content at all. What is left is a complete printed
-    sentence: `c.immovable` refuses *all* forced movement and this one is
-    refused only from a melee or a ranged attack, so the listener is written
-    out and gated on the reach of whatever shoved it.
+    `c.shares_space` is the standing property `c.shift(share=True)` could not
+    say -- that one is an argument to a single move, made by the mover, and
+    this belongs to the creature being entered. It carries the rough-going
+    half too, so "difficult terrain for whoever steps in" needs nothing else.
+
+    `c.immovable` refuses *all* forced movement and this one is refused only
+    from a melee or a ranged attack, so the listener is written out and gated
+    on the reach of whatever shoved it.
+
+    Squeezing through a gap has no content on a square grid: the narrowest
+    passage is one square and this creature walks into one already.
     """
+    c.shares_space()
     me = c.me
 
     def brace(ev: ForcedMove) -> None:

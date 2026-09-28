@@ -505,3 +505,30 @@ def p4487(c: Cast) -> None:
     where = c.choose(room, "where you come round to") if room else None
     if where is not None:
         c.shift(to=where)
+
+
+@power(
+    "p7399",
+    level=6,
+    cls="rogue",
+    usage=ENCOUNTER,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=MARTIAL,
+    dropped=("query.has_combat_advantage(hand=)",),
+)
+def p7399(c: Cast) -> None:
+    """Combat advantage is a fact about a **pair** of creatures rather than a
+    modifier on one, so "you gain combat advantage for your next attack" is
+    the grant laid on every enemy and spent by the first attack that reads
+    one. The ones not spent go out with the turn, which is the printed
+    window.
+
+    "With an off-hand weapon" is the dropped half: `resolve.attack` puts
+    `hand` in the attack context, and `query.has_combat_advantage` is asked
+    with `{attacker, target}` and nothing else, so the narrowing has nowhere
+    to be read.
+    """
+    for foe in sorted(c.enemies()):
+        c.grants_advantage(on=foe, until=When.EOT, once=True)

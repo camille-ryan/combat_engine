@@ -28,9 +28,11 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AC,
     AT_WILL,
     DAILY,
     ENCOUNTER,
+    FORT,
     FREE,
     INT,
     MINOR,
@@ -41,6 +43,7 @@ from combat_engine.engine import (
     REF,
     STANDARD,
     WILL,
+    ActionType,
     Attack,
     AttackDeclared,
     Cast,
@@ -391,3 +394,102 @@ def p16288b(c: Cast) -> None:
         if eff.label.startswith("p16288 globe"):
             c.world.effects.end(eff, "a globe is spent")
             break
+
+
+def _resolving(ref: str) -> Any:
+    """"Secondary Target: each creature in the burst other than the primary."
+
+    The block is the back half of one use of its parent and is never a choice
+    of its own, so the gate is "the parent is running now": `dsl._IN_FLIGHT`
+    holds `(caster, ref)` for exactly the length of the parent's body. True
+    where `c.use_power` reaches for this row and false everywhere a menu is
+    built -- and false at the start of a fight, which is what keeps a No
+    Action row with no trigger from being armed out of nowhere.
+    """
+
+    def check(world: World, eid: int) -> bool:
+        from combat_engine.engine.dsl import _IN_FLIGHT
+
+        return (eid, ref) in _IN_FLIGHT
+
+    return check
+
+
+@power(
+    "p464b",
+    level=1,
+    cls="wizard",
+    usage=DAILY,
+    action=FREE,
+    reach=Ranged(20),
+    target=ONE_CREATURE,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.ACID],
+    attack=Attack(INT, vs=REF),
+    requires=_resolving("p464"),
+    requires_text="the p464 power must be resolving",
+)
+def p464b(c: Cast) -> None:
+    """Aimed at the **primary** target and never striking it: the burst is
+    centred there and the secondary target line is everything else in it,
+    allies included, which is what the row says."""
+    primary = c.target
+    if primary is None:
+        return
+    for who in c.within(1, of=primary):
+        if who == primary:
+            continue
+        if c.strike(on=who):
+            c.damage("1d8", c.int_mod, dtype=DamageType.ACID, on=who)
+            c.ongoing(5, DamageType.ACID, on=who)
+
+
+@power(
+    "p465b",
+    level=1,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=FREE,
+    reach=Ranged(20),
+    target=ONE_CREATURE,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE],
+    attack=Attack(INT, vs=REF),
+    requires=_resolving("p465"),
+    requires_text="the p465 power must be resolving",
+)
+def p465b(c: Cast) -> None:
+    """Enemies only, where p464b beside it catches everything in the burst."""
+    primary = c.target
+    if primary is None:
+        return
+    for who in c.within(1, of=primary, side="enemy"):
+        if who == primary:
+            continue
+        if c.strike(on=who):
+            c.damage("1d10", c.int_mod, dtype=DamageType.FORCE, on=who)
+
+
+@power(
+    "p16281b",
+    level=5,
+    cls="wizard",
+    usage=DAILY,
+    action=ActionType.NONE,
+    reach=Ranged(20),
+    target=ONE_CREATURE,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD],
+    attack=Attack(INT, vs=FORT),
+    requires=_resolving("p16281"),
+    requires_text="the p16281 power must be resolving",
+)
+def p16281b(c: Cast) -> None:
+    """Fortitude here where the parent rolled Reflex, which is why this is a
+    block of its own rather than a second loop inside it."""
+    primary = c.target
+    if primary is None:
+        return
+    for who in sorted(c.within(2, of=primary)):
+        if who == primary:
+            continue
+        if c.strike(on=who):
+            c.flat(5, dtype=DamageType.COLD, on=who)
+            c.penalty(AC, 2, on=who, until=When.SAVE_ENDS)

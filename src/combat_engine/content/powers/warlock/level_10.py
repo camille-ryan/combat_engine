@@ -58,6 +58,7 @@ from combat_engine.engine import (
     distance,
     get,
     power,
+    spread,
     targets_me,
 )
 from combat_engine.engine.events import DamageRolled, MoveEnd, SurgeSpent
@@ -535,3 +536,44 @@ def p6956(c: Cast) -> None:
 )
 def p7404(c: Cast) -> None:
     c.teleport(1)
+
+
+def _apart(a: tuple[int, int], b: tuple[int, int]) -> int:
+    return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+
+
+@power(
+    "p13887",
+    level=10,
+    cls="warlock",
+    usage=ENCOUNTER,
+    action=MINOR,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.SHADOW, Keyword.TELEPORTATION],
+    dropped=("query.distance_between(links=)",),
+)
+def p13887(c: Cast) -> None:
+    """`c.link` is read by `movement.reachable` and by nothing else, so the
+    two squares are one step apart for anything that walks and no melee
+    reach, burst or line of effect is measured through them. That is the
+    movement half of the printed line; the melee half is the marker.
+
+    The options are ordered furthest-first, because a headless fight takes
+    the first of them and two squares picked by grid order would be
+    neighbours -- a rift joining a square to the one beside it.
+    """
+    here = c.here
+    if here is None:
+        return
+    room = [sq for sq in spread({here}, 5) if c.world.grid.passable(sq)]
+    if len(room) < 2:
+        return
+    room.sort(key=lambda sq: (-_apart(here, sq), sq))
+    first = c.choose(room, f"{c.ref}: one end of the rift")
+    if first is None:
+        return
+    rest = sorted((sq for sq in room if sq != first), key=lambda sq: (-_apart(first, sq), sq))
+    second = c.choose(rest, f"{c.ref}: the other end")
+    if second is not None:
+        c.link(first, second, until=When.EONT)

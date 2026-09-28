@@ -89,6 +89,25 @@ class World:
         for sq, kind in self.zones.difficult_squares().items():
             if sq not in laid:
                 out.setdefault(sq, kind)
+        # A creature that shares its square makes that square rough for
+        # whoever steps in. Read live rather than written into `grid.difficult`
+        # once, because the square is wherever the creature is now.
+        for sq in self._shared_squares():
+            out.setdefault(sq, "shared")
+        return out
+
+    def _shared_squares(self) -> set[Any]:
+        """Every square a share-space creature is standing in."""
+        from .components import Mods
+        from .movement import shares_space
+        from .query import squares
+
+        out: set[Any] = set()
+        for eid, mods in self.each(Mods):
+            if not mods.items or mods.total("shares_space_rough", {}) <= 0:
+                continue
+            if shares_space(self, eid):
+                out |= squares(self, eid)
         return out
 
     def difficult(self, for_: int | None = None) -> set[Any]:

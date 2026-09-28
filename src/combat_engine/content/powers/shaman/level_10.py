@@ -294,3 +294,27 @@ def p5404(c: Cast) -> None:
     lights = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER)
     c.grants_in(lights, "concealment", 2, side="team", kind="untyped")
     c.note(f"{c.ref}: the zone cannot be moved, and no Stealth check is rolled")
+
+
+@power(
+    "p3839",
+    level=10,
+    cls="shaman",
+    usage=DAILY,
+    action=FREE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.PRIMAL],
+    todo=(
+        "c.call_companion(second=)",
+        "c.companion(which=)",
+        "dsl.measured_from(which=)",
+    ),
+)
+def p3839(c: Cast) -> None:
+    """A second spirit companion, and the engine has one everywhere: the
+    call relocates the companion that is already out, `c.companion` answers
+    with a single eid, and "melee spirit 1" is measured and rolled from that
+    one. Its second and third sentences also change how every standing
+    shaman row reads "your spirit companion", so this is not a row that can
+    be finished by adding a method. Left for the issue that owns it."""

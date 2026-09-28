@@ -299,12 +299,9 @@ def p13319(c: Cast) -> None:
 )
 def p13320(c: Cast) -> None:
     """Only the conjuration. The opportunity attack made through the anomaly
-    is `p13320b`, which is left out: its reach is measured from the anomaly
-    and a range is measured from the caster, so the row would be refused in
-    exactly the situation it is printed for. Augment 2 is that block's Hit
-    line and goes with it. Augment 1 is on this block: the anomaly becomes
-    something your allies can flank with, which is the modifier
-    `query.flankers` reads."""
+    is the second block, `p13320b`, and Augment 2 is that block's Hit line.
+    Augment 1 is on this block: the anomaly becomes something your allies can
+    flank with, which is the modifier `query.flankers` reads."""
     spent = augment(c, 1)
     anomaly = c.conjure(until=When.EONT, sustain=None)
     if anomaly and spent:

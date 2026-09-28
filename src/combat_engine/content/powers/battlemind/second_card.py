@@ -27,6 +27,7 @@ from combat_engine.engine import (
     CON,
     DAILY,
     INTERRUPT,
+    MOVE,
     ONE_CREATURE,
     OPPORTUNITY,
     PERSONAL,
@@ -291,3 +292,26 @@ def p13057b(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(), c.con_mod)
         c.mark(until=When.EONT)
+
+
+@power(
+    "p12426b",
+    level=9,
+    cls="battlemind",
+    usage=DAILY,
+    action=MOVE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.PSIONIC, Keyword.FORCE, Keyword.STANCE],
+    requires=active("p12426"),
+    requires_text="the p12426 power must be active",
+    dropped=("c.shift(path=)", "c.phasing(through=)"),
+)
+def p12426b(c: Cast) -> None:
+    """The shift is exact. Passing **through** the space of an enemy marked by
+    you is not: `movement.shift` is one step to the destination, so no square
+    between the two is ever entered and nothing announces one -- the force
+    damage the first such entry charges has no moment to happen in.
+    `c.phasing` would open everybody's space, not one named creature's.
+    """
+    c.shift(3)

@@ -37,7 +37,6 @@ from combat_engine.content.powers.wizard.level_1_d import (
     _reach_is,
 )
 from combat_engine.engine import (
-    AC,
     DAILY,
     EACH_CREATURE,
     EACH_ENEMY,
@@ -481,8 +480,8 @@ def p16280(c: Cast) -> None:
     attack=Attack(INT, vs=REF),
 )
 def p16281(c: Cast) -> None:
-    """The secondary is a burst 2 on the primary and rolls Fortitude where the
-    primary rolled Reflex, so it goes through `c.attack`. It is an Effect line:
+    """The secondary is its own block, `p16281b`: a burst 2 on the primary
+    rolling Fortitude where this one rolled Reflex. It is an Effect line, so
     it happens whether the first blow landed or not."""
     primary = c.target
     if primary is None:
@@ -492,12 +491,7 @@ def p16281(c: Cast) -> None:
         c.immobilized(until=When.SAVE_ENDS)
     else:
         c.half_damage("2d8", c.int_mod, dtype=DamageType.COLD)
-    for who in sorted(c.within(2, of=primary)):
-        if who == primary:
-            continue
-        if c.attack(c.int_, FORT, on=who):
-            c.flat(5, dtype=DamageType.COLD, on=who)
-            c.penalty(AC, 2, on=who, until=When.SAVE_ENDS)
+    c.use_power("p16281b", on=primary, spend=False)
 
 
 @power(
@@ -783,3 +777,22 @@ def p4078(c: Cast) -> None:
         c.command(made, on=ev.attacker)
 
     c.watch(AttackRolled, retort, until=When.ENCOUNTER, label=f"{c.ref} maw retort")
+
+
+@power(
+    "p13984",
+    level=5,
+    cls="wizard",
+    usage=DAILY,
+    action=MINOR,
+    reach=Ranged(5),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.SHADOW, Keyword.SUMMONING],
+    todo=("cf:wizard-expert-mage",),
+)
+def p13984(c: Cast) -> None:
+    """Which creature is summoned is read off the caster's Expert Mage
+    benefit, and that class feature is not in the tree -- so there is no
+    block for `summon=` to declare and nothing for `c.summon_inline` to
+    place. Everything else on the card is the standard summoning rules the
+    engine already applies to a `summon=` line."""

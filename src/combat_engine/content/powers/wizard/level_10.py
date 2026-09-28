@@ -98,6 +98,7 @@ from combat_engine.engine import (
 from combat_engine.engine.events import (
     DamageRolled,
     MoveStart,
+    PowerResolved,
     RelationSet,
     ZoneEntered,
     ZoneExited,
@@ -783,3 +784,44 @@ def p4117(c: Cast) -> None:
     all four where the printed +2 is AC and Fortitude.
     """
     c.summon_inline(get(c.ref).summon, at=c.origin)
+
+
+def _missed_twice(world: World, me: int, ev: PowerResolved) -> bool:
+    """"You use an arcane attack power and miss with at least two of that
+    power's attack rolls."
+
+    Asked of `PowerResolved` because that is the only event carrying every
+    roll a use made; `PowerUsed` fires before any of them exist.
+    """
+    if ev.actor != me:
+        return False
+    p = get(ev.power)
+    if p is None or Keyword.ARCANE not in p.keywords:
+        return False
+    return sum(1 for roll in ev.rolls if not getattr(roll, "hit", False)) >= 2
+
+
+@power(
+    "p10354",
+    level=10,
+    cls="wizard",
+    usage=DAILY,
+    action=FREE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.ARCANE],
+    trigger="you use an arcane attack power and miss with at least two of "
+    "that power's attack rolls",
+    on=Trigger(
+        PowerResolved,
+        _missed_twice,
+        "you miss with at least two of one arcane power's attack rolls",
+    ),
+    todo=("c.reroll_attack(rolls=)",),
+)
+def p10354(c: Cast) -> None:
+    """The trigger is exact. The effect is not: `c.reroll_attack` reads one
+    result off `c.trigger` and rewrites its number, and by `PowerResolved`
+    every miss has already been resolved -- so a roll turned into a hit would
+    buy no damage and no rider. It wants the set, and to replay what each new
+    number now lands."""

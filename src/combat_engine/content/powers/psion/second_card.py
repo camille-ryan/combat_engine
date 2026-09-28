@@ -5,16 +5,25 @@ holds something down, and each carries the same Requirement: the first block
 has to still be up. They had no ids until the importer began minting one per
 printed block, so each was dropped or folded into its parent.
 
-Three of the eight are left out. Their printed origin is the **conjuration**
--- the burst is centred on the mote, the reach is measured from the anomaly
--- and a range is measured from the caster or from a companion and from
-nothing else. See `docs/blocked.json`.
+Three of them print their origin as the **conjuration** -- the burst is
+centred on the mote, the reach is measured from the anomaly -- and
+`Range.from_` knows no such word. Those take **no target line**: the reach
+stays as printed, the victims are gathered round the conjuration in the
+body, and `c.strike(from_=)` rolls from the right square. A targetless row
+is not `Power.is_attack`, so `usable` never applies the reach gate that
+would refuse every creature standing round the mote.
+
+Each of the three prints its augment clauses on its own block, but the
+points are spent when the **parent** is used -- targets and forms are
+settled before either body runs -- so the spend is read back with
+`augment.spent_on`.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
+from combat_engine.content.powers.augment import spent_on
 from combat_engine.content.powers.cards import active
 from combat_engine.engine import (
     AT_WILL,
@@ -25,27 +34,46 @@ from combat_engine.engine import (
     MINOR,
     NO_TARGET,
     ONE_CREATURE,
+    OPPORTUNITY,
     REACTION,
     REF,
+    WILL,
+    ActionType,
     Attack,
     Cast,
     CloseBurst,
     DamageType,
     Hit,
     Keyword,
+    Melee,
     Position,
     Ranged,
     Trigger,
+    TurnStart,
     When,
     World,
     enemy_target_within,
     power,
     spread,
 )
+from combat_engine.engine.query import squares as squares_of
+from combat_engine.engine.query import team
 
 from .level_1 import PSIONIC_FORCE, PSIONIC_IMPLEMENT
 
 PSIONIC_ACID = [Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.ACID, Keyword.CONJURATION]
+PSIONIC_LIGHTNING = [
+    Keyword.PSIONIC,
+    Keyword.IMPLEMENT,
+    Keyword.LIGHTNING,
+    Keyword.CONJURATION,
+]
+PSIONIC_PSYCHIC = [
+    Keyword.PSIONIC,
+    Keyword.IMPLEMENT,
+    Keyword.PSYCHIC,
+    Keyword.CONJURATION,
+]
 
 
 def _conjuration(c: Cast, ref: str) -> int | None:
@@ -254,3 +282,158 @@ def p13336b(c: Cast) -> None:
     parent, not a count."""
     c.flat(5, dtype=DamageType.THUNDER)
     c.slide(1)
+
+
+def _mote(world: World, eid: int, ref: str) -> int | None:
+    """That row's conjuration, still standing somewhere on the board."""
+    from combat_engine.engine.components import Conjuration
+
+    for who, conj in world.each(Conjuration):
+        if conj.ref == ref and conj.by == eid and world.get(who, Position) is not None:
+            return who
+    return None
+
+
+def _my_turn_with(ref: str) -> Callable[[World, int, TurnStart], bool]:
+    """"At the start of your next turn", while that conjuration still stands."""
+
+    def check(world: World, me: int, ev: TurnStart) -> bool:
+        if getattr(ev, "ghost", False) or ev.actor != me:
+            return False
+        return _mote(world, me, ref) is not None
+
+    return check
+
+
+def _starts_turn_beside(ref: str) -> Callable[[World, int, TurnStart], bool]:
+    """"An enemy starts its turn in a square adjacent to the anomaly."""
+
+    def check(world: World, me: int, ev: TurnStart) -> bool:
+        if getattr(ev, "ghost", False) or ev.actor == me:
+            return False
+        if team(world, ev.actor) is team(world, me):
+            return False
+        thing = _mote(world, me, ref)
+        pos = world.get(thing, Position) if thing else None
+        if pos is None:
+            return False
+        return bool(squares_of(world, ev.actor) & spread(pos.squares, 1))
+
+    return check
+
+
+@power(
+    "p13462b",
+    level=1,
+    cls="psion",
+    usage=AT_WILL,
+    action=ActionType.NONE,
+    reach=CloseBurst(3),
+    target=NO_TARGET,
+    keywords=PSIONIC_LIGHTNING,
+    attack=Attack(INT, vs=REF),
+    requires=_standing("p13462"),
+    requires_text="this power follows the use of the p13462 power",
+    trigger="the start of your turn, with the mote still standing",
+    on=Trigger(
+        TurnStart,
+        _my_turn_with("p13462"),
+        "the start of your turn, with the mote still standing",
+    ),
+)
+def p13462b(c: Cast) -> None:
+    """A No Action that declares a trigger rather than none: armed at the
+    start of a fight it would go off once, out of nowhere, and never again.
+
+    Augment 1 drags one of the creatures the burst caught toward the mote --
+    one, so the drag stops after the first that moves.
+    """
+    mote = _mote(c.world, c.me, "p13462")
+    pos = c.world.get(mote, Position) if mote else None
+    if pos is None:
+        return
+    spent = spent_on(c.me, "p13462")
+    dragged = False
+    for who in sorted(c.in_squares(spread({pos.square}, 3), side="any")):
+        if not c.strike(on=who, from_=mote):
+            continue
+        dice = "2d6" if spent == 2 else "1d6"
+        c.damage(dice, c.int_mod, dtype=DamageType.LIGHTNING, on=who)
+        if spent == 1 and not dragged:
+            dragged = c.pull(1, on=who, anchor=pos.square) > 0
+
+
+@power(
+    "p13320b",
+    level=3,
+    cls="psion",
+    usage=AT_WILL,
+    action=OPPORTUNITY,
+    reach=Melee(1),
+    target=NO_TARGET,
+    keywords=PSIONIC_PSYCHIC,
+    attack=Attack(INT, vs=WILL),
+    requires=_standing("p13320"),
+    requires_text="the p13320 power must be active",
+    trigger="an enemy starts its turn in a square adjacent to the anomaly",
+    on=Trigger(
+        TurnStart,
+        _starts_turn_beside("p13320"),
+        "an enemy starts its turn in a square adjacent to the anomaly",
+    ),
+)
+def p13320b(c: Cast) -> None:
+    """Melee 1 measured from the anomaly, so the victim is the triggering
+    enemy rather than anything the reach gate picked.
+
+    Augment 1's clause is the parent's -- the anomaly becomes something the
+    psion's allies can flank with -- and is written there. Augment 2 is this
+    block's, and is the only augment read here.
+    """
+    anomaly = _mote(c.world, c.me, "p13320")
+    pos = c.world.get(anomaly, Position) if anomaly else None
+    who = getattr(c.trigger, "actor", None)
+    if pos is None or who is None:
+        return
+    spent = spent_on(c.me, "p13320")
+    if not c.strike(on=who, from_=anomaly):
+        return
+    if spent == 2:
+        c.damage("1d8", c.int_mod, dtype=DamageType.PSYCHIC, on=who)
+        c.dazed(on=who, until=When.EONT)
+    else:
+        c.damage("1d6", c.int_mod, dtype=DamageType.PSYCHIC, on=who)
+    c.slide(3, on=who, anchor=pos.square)
+
+
+@power(
+    "p13339b",
+    level=9,
+    cls="psion",
+    usage=DAILY,
+    action=MINOR,
+    reach=CloseBurst(1),
+    target=NO_TARGET,
+    keywords=PSIONIC_LIGHTNING,
+    attack=Attack(INT, vs=REF),
+    uses=99,
+    requires=_standing("p13339"),
+    requires_text="the p13339 power must be active",
+)
+def p13339b(c: Cast) -> None:
+    """The burst goes off round one of the parent's motes, not round the
+    psion, so the row takes no target line and gathers its victims there.
+
+    `uses` is opened up because the printed limit is the motes: each use
+    expends the one it fired from, and the requirement fails when the last
+    is gone.
+    """
+    mote = _mote(c.world, c.me, "p13339")
+    pos = c.world.get(mote, Position) if mote else None
+    if pos is None:
+        return
+    for who in sorted(c.in_squares(spread({pos.square}, 1), side="any")):
+        if c.strike(on=who, from_=mote):
+            c.damage("1d6", c.int_mod, dtype=DamageType.LIGHTNING, on=who)
+            c.push(1, on=who, anchor=pos.square)
+    c.dispel(mote)

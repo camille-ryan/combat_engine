@@ -330,3 +330,23 @@ def p9354(c: Cast) -> None:
         return
     c.quarry(on=chosen)
     c.grants_advantage(on=chosen, until=When.EONT)
+
+
+@power(
+    "p4396",
+    level=6,
+    cls="ranger",
+    usage=DAILY,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.MARTIAL, Keyword.STANCE],
+)
+def p4396(c: Cast) -> None:
+    """`actions._moves` offers a run at speed + 2 + `c.bonus("run")`, so the
+    printed speed + 4 is a +2 laid there. The combat advantage a run gives
+    away is asked of `"run_exposed"` after the move and suppressed by a
+    negative, which is exactly the second clause."""
+    c.stance()
+    c.bonus("run", 2, on=c.me, until=When.STANCE)
+    c.penalty("run_exposed", 1, on=c.me, until=When.STANCE)
