@@ -57,6 +57,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    Ability,
     ActionSpent,
     ActionType,
     Attack,
@@ -249,6 +250,30 @@ def _basic_refs(c: Cast, *, ranged: bool = True) -> tuple[str, ...]:
         return (melee,)
     shot = (known.ranged if known else "") or RANGED
     return (melee, shot)
+
+
+def _rba(c: Cast) -> str:
+    """This creature's ranged basic attack, whatever replaced the default."""
+    known = c.world.get(c.me, Powers)
+    return (known.ranged if known else "") or RANGED
+
+
+def _throwing(world, eid: int) -> bool:  # noqa: ANN001
+    """Is a thrown weapon in hand? A `c.rolls_with` `when`, so it is handed
+    `(world, eid)` and asked again at every roll rather than once at arming.
+
+    `endswith`, because the property is written both bare and qualified --
+    `"heavy thrown"` is a property and `"thrown" in properties` misses it.
+    """
+    gear = world.get(eid, Gear)
+    return bool(gear) and any(
+        prop.endswith("thrown") for w in gear.held for prop in w.properties
+    )
+
+
+def _drawing_a_bow(world, eid: int) -> bool:  # noqa: ANN001
+    gear = world.get(eid, Gear)
+    return bool(gear) and any(w.group == "bow" for w in gear.held)
 
 
 def _adjacent_square(c: Cast, who: int, square: Any) -> bool:
@@ -1701,10 +1726,22 @@ def f2202(c: Cast) -> None:
 
 
 @power("f2206", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.rolls_with(ref, ability)",))
+       reach=PERSONAL, target=SELF)
 def f2206(c: Cast) -> None:
-    """Rolls one named power off a chosen ability. The ability a row
-    attacks with is in its header."""
+    """Rolls `p1448` off a chosen ability from now on.
+
+    The card names the row outright, so there is nothing to resolve. The
+    *ability* is "choose one" and is settled once when the feat is taken,
+    which nothing records -- so it takes the best modifier on the sheet,
+    the same answer a player writes down and the same reading `f1103b`
+    gives its three-way choice.
+
+    Attack and damage both, which is one call: `c.attack_mod` resolves
+    through `Attack.ability_for`, so a damage line that says "your
+    attacking ability modifier" follows the swap without being told.
+    """
+    best = max(Ability, key=c.stats.mod)
+    c.rolls_with("p1448", best, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2203", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1867,16 +1904,42 @@ def f2444(c: Cast) -> None:
 
 
 @power("f2455", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.rolls_with(ref, ability)",))
+       reach=PERSONAL, target=SELF,
+       dropped=("basic.rba_thrown_rolls_strength",))
 def f2455(c: Cast) -> None:
-    """Rolls the ranged basic attack off Dexterity when the weapon is
-    thrown. Which ability a row attacks with is header data."""
+    """Dexterity instead of Strength on a thrown ranged basic attack.
+
+    Written, laid, and **currently a no-op** -- which is recorded rather
+    than hidden, because a row that installs something with no effect is
+    exactly what a wrongly written row looks like.
+
+    `basic.RANGED` rolls Dexterity for every ranged basic attack. A bow's
+    is Dexterity; a **thrown** weapon's is Strength. So the engine already
+    grants what this feat grants, and swapping Dexterity in changes
+    nothing until the basic attack tells the two apart. That fix moves
+    every thrown basic attack in the game and wants its own pass.
+
+    The swap is laid anyway, and conditionally: a trait arms once at the
+    start of a fight and what is in hand changes during one, so `when` is
+    asked at each roll. The day `rba` is fixed, this row starts working
+    with no edit.
+
+    "With which you have proficiency" is not gated. Nothing models a
+    character's weapon proficiencies, and `chargen` only deals a build
+    weapons it is proficient with -- so holding it *is* the proficiency
+    here. A gate on `Weapon.proficiency` would have read the bonus, which
+    is 2 on everything and true always.
+    """
+    c.rolls_with(_rba(c), Ability.DEX, on=c.me, until=When.ENCOUNTER,
+                 when=_throwing)
 
 
 @power("f2896", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.rolls_with(ref, ability)",))
+       reach=PERSONAL, target=SELF)
 def f2896(c: Cast) -> None:
-    """The same shape as f2455, for a bow and Wisdom."""
+    """The same shape as f2455: a bow, and Wisdom in place of Dexterity."""
+    c.rolls_with(_rba(c), Ability.WIS, on=c.me, until=When.ENCOUNTER,
+                 when=_drawing_a_bow)
 
 
 @power("f2889", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

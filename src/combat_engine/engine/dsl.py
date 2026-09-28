@@ -427,22 +427,35 @@ class Attack:
         # `ref` matters: proficiency applies to a weapon power and not to an
         # implement one, and `_attack_bonus` reads the keywords off it.
         probe = Cast(world=world, me=actor, ref=ref, branch=branch)
-        return probe._attack_bonus(self.ability_for(world, actor)) + self.plus
+        return probe._attack_bonus(self.ability_for(world, actor, ref)) + self.plus
 
-    def ability_for(self, world: World, actor: int) -> Ability:
+    def ability_for(self, world: World, actor: int, ref: str = "") -> Ability:
         """Which ability this line rolls, for this caster.
 
         A named one answers itself. A `Pick` is the theme case -- see its
         docstring -- and is resolved here rather than at declaration,
         because the header is data and the holder is not known then.
-        """
-        from .components import Build, Stats
 
+        `ref` is which row this line belongs to, and is only needed for the
+        `c.rolls_with` override: without it a swap laid on a named row is
+        silently not applied, so every caller that knows its ref passes it.
+        """
+        from .components import Build, Powers, Stats
+
+        who = roller(world, actor, self.by)
+        # **Before the header is read at all.** "You may use Dexterity
+        # instead of Strength with this power" is a feat reaching into a row
+        # it does not own, so it cannot be a header edit -- the header is
+        # one object shared by everyone who ever holds the row.
+        if ref:
+            known = world.get(who, Powers)
+            for ability, when in (known.rolls.get(ref, ()) if known else ()):
+                if when is None or when(world, who):
+                    return ability
         if isinstance(self.ability, Ability):
             return self.ability
         if self.ability is None:
             raise ValueError("an Attack needs either an ability or a printed bonus")
-        who = roller(world, actor, self.by)
         if isinstance(self.ability, tuple):
             stats = world.get(who, Stats)
             if stats is None:

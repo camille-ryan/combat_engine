@@ -143,7 +143,7 @@ class Cast:
         line = p.attack_of(self.branch) if p else None
         if line is None or line.ability is None:
             return 0
-        return self.stats.mod(line.ability_for(self.world, self.me))
+        return self.stats.mod(line.ability_for(self.world, self.me, self.ref))
 
     @property
     def ranged(self) -> bool:
@@ -503,7 +503,7 @@ class Cast:
         if line.printed is not None:
             # A stat block's finished total names no ability to return.
             line = Attack(Pick.HIGHEST)
-        return line.ability_for(self.world, who)
+        return line.ability_for(self.world, who, ref or self.ref)
 
     def element(self, *, on: int | None = None) -> DamageType | None:
         """The damage type this character's build is bound to, if any.
@@ -4666,6 +4666,59 @@ class Cast:
         known.forbidden.add(ref)
         return effect
 
+    def rolls_with(
+        self,
+        ref: str,
+        ability: Ability,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[Any, int], bool] | None = None,
+    ) -> Effect | None:
+        """Make a named row attack with a different ability.
+
+        "You may use Dexterity instead of Strength with any power
+        associated with this feat" -- sixteen feats print a line of this
+        shape and none could be written, because the ability a row attacks
+        with is **header data**: one `Attack` object, fixed at import, and
+        shared by every creature that ever holds the row. A feat cannot
+        edit it without editing it for everybody.
+
+        So the swap is recorded against the creature instead, and
+        `Attack.ability_for` reads it before the header. The row is
+        untouched and any number of characters may roll it differently.
+
+        `when` is a `(world, eid)` predicate for a swap that only holds
+        sometimes -- "when the weapon is thrown", "while wielding a bow".
+        Those read what is in hand, which is a fact about the creature, so
+        they can be answered here; a condition about the *attack in
+        flight* cannot be, and wants a different mechanism.
+
+        `until=When.ENCOUNTER` because the usual caller is a feat arming at
+        the start of a fight, which is as permanent as this engine gets.
+        """
+        from .components import Powers
+
+        who = self._who(on)
+        if who is None:
+            return None
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        entry = (ability, when)
+        # The effect first, as `forbid` does: adding the swap before it
+        # exists left a row rolling the wrong ability with nothing alive to
+        # ever put it back.
+        effect = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} rolls {ref} with {ability.value}",
+            on_end=[lambda: _drop_roll(known, ref, entry)],
+        )
+        if effect is None:
+            return None
+        known.rolls.setdefault(ref, []).insert(0, entry)
+        return effect
+
     def master(self) -> int | None:
         """Whoever this creature serves, if anybody."""
         found = self.world.relations.sources(Relation.MASTER_OF, self.me)
@@ -7485,3 +7538,21 @@ def _min_of(dice: str | int) -> int:
 
 def expected(dice: str | int, bonus: int = 0) -> float:
     return average(dice) + bonus
+
+
+def _drop_roll(known: Any, ref: str, entry: tuple) -> None:
+    """Undo one `c.rolls_with`, leaving any others on the same row alone.
+
+    By identity rather than by value: two feats may lay the same ability on
+    the same row, and removing "a matching pair" would take both away when
+    the first of them expired.
+    """
+    swaps = known.rolls.get(ref)
+    if not swaps:
+        return
+    for i, held in enumerate(swaps):
+        if held is entry:
+            del swaps[i]
+            break
+    if not swaps:
+        known.rolls.pop(ref, None)

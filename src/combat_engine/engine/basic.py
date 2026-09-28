@@ -36,8 +36,12 @@ BEAST = "bmba"
     attack=Attack(Ability.STR, vs=Defense.AC),
 )
 def _melee_basic(c: Cast) -> None:
+    # `c.attack_mod`, not `c.str_mod`: the two are the same until something
+    # swaps the ability this row rolls, and a feat that does is explicit
+    # that it moves "the attack roll **and** the damage roll". Naming
+    # Strength here moved half of it and said nothing about the other half.
     if c.strike():
-        c.damage(c.w(1), c.str_mod)
+        c.damage(c.w(1), c.attack_mod)
 
 
 @power(
@@ -50,8 +54,14 @@ def _melee_basic(c: Cast) -> None:
     attack=Attack(Ability.DEX, vs=Defense.AC),
 )
 def _ranged_basic(c: Cast) -> None:
+    # See `_melee_basic`. **This line is also wrong about thrown weapons**
+    # and only the ability is at fault: a bow's basic attack is Dexterity
+    # and a thrown weapon's is Strength, and this rolls Dexterity for both.
+    # Fixing it moves every thrown basic attack in the game, so it is filed
+    # rather than done here -- `f2455`, whose whole benefit is "Dexterity
+    # instead of Strength when you throw", is a no-op until it is.
     if c.strike():
-        c.damage(c.w(1), c.dex_mod)
+        c.damage(c.w(1), c.attack_mod)
 
 
 @power(

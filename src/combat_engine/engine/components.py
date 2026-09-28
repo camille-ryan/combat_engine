@@ -574,6 +574,21 @@ class Powers:
     #: Rows taken away for a while. Not the same as spent: a forbidden row
     #: is one the creature still has and cannot currently reach.
     forbidden: set[str] = field(default_factory=set)
+    #: Which ability a named row rolls, when something has changed it.
+    #: Keyed by ref, each entry an `(ability, when)` pair -- sixteen feats
+    #: print "you may use Dexterity instead of Strength with <row>", and
+    #: the ability a row attacks with is otherwise **header data**, fixed
+    #: at import for everyone who ever holds it.
+    #:
+    #: A list, because two feats may both speak about one row, and `when`
+    #: is a `(world, eid)` predicate so "when the weapon is thrown" and
+    #: "with a bow" are sayable -- those read what is in hand, which is a
+    #: fact about the creature and not about the attack in flight. First
+    #: entry whose `when` passes wins; `dsl.Attack.ability_for` is the
+    #: only read.
+    rolls: dict[str, list[tuple[Ability, Callable[[Any, int], bool] | None]]] = field(
+        default_factory=dict
+    )
     #: A spellbook: rows the creature **owns and has not prepared**.
     #:
     #: `known` is what can be used, and it was the only list there was -- so
