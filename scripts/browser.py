@@ -216,6 +216,53 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
     check.that(highlights.count() > 0,
                f"pressing Move highlights where you can go ({highlights.count()} squares)")
 
+    # **A bare board click must not move anybody (#139).** Moving is now
+    # selected before it is aimed, in both modes, so the reachable square that
+    # walks with Move pressed must do nothing with Move unpressed. Measured on
+    # a square known to be reachable and known not to provoke -- the same one
+    # the click further down uses -- because "nothing moved" is only evidence
+    # if the square would otherwise have moved somebody. And on the calls the
+    # page made, because a board that did not move could also be a board that
+    # asked the server and was refused.
+    spot = _move_square_box(page, 3)
+    check.that(spot is not None, "a reachable free square is on the board")
+    _press_move(page)  # the row is a toggle; press it again to unpick it
+    # Off the action list first. Hovering the Move row is a *preview* of
+    # pressing it and paints the same squares, so with the pointer parked on
+    # the row the range is legitimately lit whether or not it is picked --
+    # which is why the state being tested is the picked class, and the range
+    # is only read once nothing is being pointed at.
+    page.mouse.move(4, 4)
+    page.wait_for_timeout(200)
+    check.that(
+        page.locator("#board.aiming").count() == 0
+        and page.locator("#actions button.aiming").count() == 0,
+        "unpicking Move leaves nothing picked",
+    )
+    check.that(
+        page.locator("#movement .mv").count() == 0,
+        "and puts the range away again",
+    )
+    if spot:
+        sent = len(calls)
+        parked = _positions(page)
+        _click_box(page, spot)
+        page.wait_for_timeout(600)
+        after_bare = _positions(page)
+        moves = [c for c in calls[sent:] if "/aim" in c or "/act" in c]
+        status = page.eval_on_selector("#status", "el => el.innerText.trim()")
+        check.that(
+            after_bare == parked and not moves,
+            "a bare board click with nothing picked moves nobody",
+            f"{parked} vs {after_bare} | calls: {moves or None} | status: {status!r}",
+        )
+        check.that(bool(status), "and says why instead of moving", f"status: {status!r}")
+    _press_move(page)  # back to picked, for the walk the rest of this checks
+    check.that(
+        page.locator("#movement .mv").count() > 0,
+        "pressing Move again brings the range back",
+    )
+
     # Pointing at one of those squares draws the route the walk would take.
     box = _hover_a_move_square(page)
     check.that(box is not None, "a movement square accepted a hover")
@@ -306,6 +353,8 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
     _check_animation(page, check)
     _check_enemies_animate(page, check)
     _check_initiative(page, check, served)
+
+    _check_enumerated_move(page, check)
 
     check.that(not problems, "still no script errors after playing",
                "; ".join(problems[:3]))
@@ -520,24 +569,8 @@ def _press_move(page) -> bool:  # noqa: ANN001
     return False
 
 
-def _hover_a_move_square(page):  # noqa: ANN001, ANN202
-    """Point at a highlighted square. The route is drawn on `mousemove`."""
-    squares = page.locator("#movement .mv-free")
-    if not squares.count():
-        return None
-    box = squares.nth(min(5, squares.count() - 1)).bounding_box()
-    if not box:
-        return None
-    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-    page.wait_for_timeout(200)
-    return box
-
-
-def _click_a_move_square(page):  # noqa: ANN001, ANN202
-    """Click a highlighted movement square, as a player would.
-
-    The click has to go to the board, which is what carries the handler. The
-    highlight overlay sits on top of it and is only there to be looked at.
+def _move_square_box(page, nth: int):  # noqa: ANN001, ANN202
+    """The screen rect of one highlighted movement square.
 
     **`.mv-free`, not `.mv`.** The overlay draws the provoking squares first
     and there are usually ten times as many of them, so "the fourth square"
@@ -551,11 +584,34 @@ def _click_a_move_square(page):  # noqa: ANN001, ANN202
     squares = page.locator("#movement .mv-free")
     if not squares.count():
         return None
-    box = squares.nth(min(3, squares.count() - 1)).bounding_box()
+    return squares.nth(min(nth, squares.count() - 1)).bounding_box()
+
+
+def _hover_a_move_square(page):  # noqa: ANN001, ANN202
+    """Point at a highlighted square. The route is drawn on `mousemove`."""
+    box = _move_square_box(page, 5)
     if not box:
         return None
-    page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.wait_for_timeout(200)
     return box
+
+
+def _click_a_move_square(page):  # noqa: ANN001, ANN202
+    """Click a highlighted movement square, as a player would.
+
+    The click has to go to the board, which is what carries the handler. The
+    highlight overlay sits on top of it and is only there to be looked at.
+    """
+    box = _move_square_box(page, 3)
+    if not box:
+        return None
+    _click_box(page, box)
+    return box
+
+
+def _click_box(page, box: dict) -> None:  # noqa: ANN001
+    page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
 
 
 def _check_area_aiming(check: Checks, state: dict | None) -> None:
@@ -594,6 +650,67 @@ def _check_area_aiming(check: Checks, state: dict | None) -> None:
         if "within" in p["range_text"]:
             limit = int(p["range_text"].rsplit(" ", 1)[-1])
             check.that(far <= limit, f"{p['name']} aims no further than {limit}", f"got {far}")
+
+
+def _check_enumerated_move(page, check: Checks) -> None:  # noqa: ANN001
+    """The mode with the checkbox off must play the same two-step gesture.
+
+    Everything above runs with "freeform targeting" on, which is *not* what a
+    fresh visitor gets. The default list used to print one button per reachable
+    square -- around ninety "move to (x, y)" rows and a hundred and twenty "run
+    to" ones -- and its board was not clickable at all. So the same complaint as
+    #139 arrived from the other end: the destination was over-specified and the
+    kind of movement was the thing nobody could see. Both modes now offer Move,
+    Run and Shift and take the square off the board.
+    """
+    page.evaluate("localStorage.setItem('dnd4e.freeform', 'off')")
+    page.reload(wait_until="networkidle")
+    page.wait_for_selector("#board .token", timeout=15000)
+    # A known seed, because whether the first turn belongs to a character with a
+    # move left is otherwise a coin toss.
+    _restart(page, BLAST_SEED)
+
+    rows = page.locator("#actions button")
+    labels = [rows.nth(i).inner_text().strip().lower() for i in range(rows.count())]
+    per_square = [text for text in labels if "move to" in text or "run to" in text]
+    check.that(
+        not per_square,
+        f"the default list has no per-square movement rows ({len(labels)} rows in all)",
+        f"still there: {per_square[:3]}",
+    )
+    check.that(
+        any(text.startswith("run") for text in labels),
+        "and offers Run, which only the enumerated squares used to carry",
+        f"rows: {labels[:12]}",
+    )
+    check.that(
+        page.locator("#movement .mv").count() == 0,
+        "the default board draws no range until Move is pressed",
+    )
+
+    before = _positions(page)
+    check.that(_press_move(page), "the default list offers Move")
+    check.that(
+        page.locator("#movement .mv").count() > 0,
+        "pressing it lights where you can go",
+    )
+    box = _move_square_box(page, 3)
+    check.that(box is not None, "a free square is lit in the default mode")
+    if not box:
+        return
+    _click_box(page, box)
+    after = before
+    for _ in range(40):
+        after = _positions(page)
+        if after != before:
+            break
+        page.wait_for_timeout(100)
+    status = page.eval_on_selector("#status", "el => el.innerText.trim()")
+    check.that(
+        after != before,
+        "and clicking a lit square walks there with the checkbox off",
+        f"{before} vs {after} | status: {status!r}",
+    )
 
 
 #: A fight whose first turn belongs to somebody holding an area power. The

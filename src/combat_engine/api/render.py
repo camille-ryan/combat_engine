@@ -30,7 +30,7 @@ from combat_engine.engine.actions import legal
 from combat_engine.engine.dsl import aim_points, area_of, candidates
 from combat_engine.engine.durations import When
 from combat_engine.engine.events import Event
-from combat_engine.engine.movement import OVERHEAD, mode_of, reachable, risk_along
+from combat_engine.engine.movement import risk_along
 from combat_engine.engine.query import (
     alive,
     creatures,
@@ -69,7 +69,7 @@ def state(session: Session, seq: int = 0) -> dto.EncounterStateDTO:
         options=[option_dto(session, i, o) for i, o in enumerate(options)],
         roster=roster(session, options),
         economy=economy(session),
-        movement=movement(session),
+        movement=movement(session, options),
         pending=pending(session),
         seq=len(world.bus.log),
         scaling=world.scaling.describe(),
@@ -324,6 +324,7 @@ def option_dto(session: Session, index: int, action: Action) -> dto.OptionDTO:
         label=_option_label(session, action, p),
         cost=action.cost.value,
         targets=[wire.id(t) or str(t) for t in action.targets],
+        dest=action.dest,
         origin=action.origin,
         affected=affected,
         path=list(action.path),
@@ -630,10 +631,10 @@ def economy(session: Session) -> dto.EconomyDTO:
     return dto.EconomyDTO(spent=spent, buys=buys)
 
 
-def movement(session: Session) -> dto.MovementDTO | None:
+def movement(session: Session, options: list[Action]) -> dto.MovementDTO | None:
     """Where the acting creature can walk this turn, and what it costs there.
 
-    Both lists are inside the creature's **speed** -- this is one move
+    `free` and `risky` are inside the creature's **speed** -- this is one move
     action, not two -- and they split by **risk**, not by cost. `risky` is
     the squares whose route provokes an opportunity attack or walks through
     an enemy's zone; `free` is the rest. A square two moves' worth of
@@ -652,36 +653,67 @@ def movement(session: Session) -> dto.MovementDTO | None:
     square, and it must be the same route the move would take -- working it
     out a second time in JavaScript is how the drawn path and the walked
     path come to disagree.
+
+    **Read off the engine's own move, run and shift options** rather than
+    worked out again here. This used to call `movement.reachable` a second
+    time with its own budget and its own mode, which is the same shape of
+    mistake as recomputing the path in JavaScript, and it diverged three
+    ways that were each a square the board painted and `walk_to` then
+    refused: a prone creature got a full green range while `_movement`
+    offered nothing until it stood up; a stance granting "shift 2 squares as
+    a move action" was drawn as one square; and running had no list at all.
+    Every square here is now a square some option ends on, so a click can
+    always be resolved to one.
     """
     world = session.world
     actor = session.current
     if actor is None or session.encounter.finished:
         return None
-    budget = world.get(actor, Budget)
-    if budget is None:
+    if world.get(actor, Budget) is None:
         return None
-    if not session.encounter.can_spend(actor, ActionType.MOVE):
-        return dto.MovementDTO()
 
-    pace = speed(world, actor)
-    routes = reachable(world, actor, pace)
-    free, risky = [], []
+    free: list = []
+    risky: list = []
+    run: list = []
+    shift: list = []
     paths: dict[str, list] = {}
     warnings: dict[str, str] = {}
-    for square, path in sorted(routes.items()):
+    # A walk's route is the one to draw when a square is reachable both ways:
+    # a shift carries only its destination, and a run over the same ground is
+    # the same line. Ranked so the better route wins whatever order the
+    # options arrive in.
+    rank = {"move": 3, "run": 2, "shift": 1}
+    best: dict[str, int] = {}
+    for action in options:
+        if action.kind not in rank or action.dest is None:
+            continue
+        square = tuple(action.dest)
         key = f"{square[0]},{square[1]}"
-        paths[key] = list(path)
-        why = risk_along(world, actor, list(path))
-        if why:
-            warnings[key] = why
+        path = list(action.path)
+        why = risk_along(world, actor, path)
+        if best.get(key, 0) < rank[action.kind]:
+            best[key] = rank[action.kind]
+            paths[key] = path
+            if why:
+                warnings[key] = why
+            else:
+                warnings.pop(key, None)
+        if action.kind == "shift":
+            shift.append(square)
+        elif action.kind == "run":
+            run.append(square)
+        elif why:
             risky.append(square)
         else:
             free.append(square)
 
-    mode = mode_of(world, actor, None)
-    step = reachable(world, actor, 1, mode="walk" if mode in OVERHEAD else None)
     return dto.MovementDTO(
-        free=free, risky=risky, shift=sorted(step), paths=paths, warnings=warnings
+        free=sorted(free),
+        risky=sorted(risky),
+        shift=sorted(shift),
+        run=sorted(run),
+        paths=paths,
+        warnings=warnings,
     )
 
 

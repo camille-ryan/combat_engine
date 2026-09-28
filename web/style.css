@@ -827,10 +827,12 @@ main {
   font-style: italic;
 }
 
-/* In freeform the board is a control, so say so. The same goes while a
-   question is open, in either mode: the answers are squares. */
+/* The board is a control once something is picked to point with, so say so.
+   The same goes while a question is open, in either mode: the answers are
+   squares. Not for the whole of a freeform turn any more -- a click with
+   nothing picked does nothing (#139), and a crosshair over it promised
+   otherwise. */
 .board.aiming,
-.board.freeform,
 .board.deciding {
   cursor: crosshair;
 }

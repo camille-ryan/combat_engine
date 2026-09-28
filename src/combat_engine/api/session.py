@@ -120,6 +120,15 @@ class Turnstile:
         return options[max(0, min(index, len(options) - 1))]
 
 
+#: Which kind of option a clicked square resolves to, by the mode the page
+#: asked for. `run` was unreachable by pointing until it was listed here: the
+#: engine has offered `run` options for a while and the old reader tested only
+#: for "shift", so the one surface most people play could not run.
+#:
+#: "walk" is the word the page has always sent for a plain move.
+MODES = {"move": "move", "walk": "move", "shift": "shift", "run": "run"}
+
+
 @dataclass
 class Session:
     id: str
@@ -293,21 +302,23 @@ class Session:
 
     # -- playing by pointing at squares --------------------------------------
 
-    def walk_to(self, square: tuple[int, int], *, shift: bool = False) -> None:
+    def walk_to(self, square: tuple[int, int], *, mode: str = "move") -> None:
         """Move to a square the player clicked.
 
         Resolved to one of the same options `legal` produced, so clicking the
         board and picking from the list are the same act and cannot disagree
         about what is allowed.
         """
-        wanted = "shift" if shift else "move"
+        wanted = MODES.get(mode)
+        if wanted is None:
+            raise LookupError(f"no way of moving called {mode!r}")
         for i, option in enumerate(self.options()):
             if option.kind == wanted and option.dest == square:
                 self.act(i)
                 return
         raise LookupError(
             f"cannot {wanted} to {square}"
-            + (" -- out of reach" if not shift else " -- a shift is one square")
+            + (" -- a shift is one square" if wanted == "shift" else " -- out of reach")
         )
 
     def aim(self, power_index: int, square: tuple[int, int]) -> None:

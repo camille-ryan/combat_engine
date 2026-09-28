@@ -62,10 +62,11 @@ class DecideRequest(BaseModel):
 class AimRequest(BaseModel):
     """A click on the board.
 
-    With no `power_index` it is a move: walk to the square, or shift to it
-    when `mode` says so. With one, it is that entry of the roster aimed at
-    the square -- at whatever is standing there, or at that square as the
-    origin of a burst or a blast.
+    With no `power_index` it is a move, and `mode` says which of the three
+    ways of moving is meant -- "move", "shift" or "run", defaulting to a
+    walk. With one, it is that entry of the roster aimed at the square -- at
+    whatever is standing there, or at that square as the origin of a burst
+    or a blast.
     """
 
     actor_id: str | None = None
@@ -153,7 +154,7 @@ def aim(encounter_id: str, body: AimRequest) -> dto.EncounterStateDTO:
     square = tuple(body.square)
     try:
         if body.power_index is None:
-            session.walk_to(square, shift=body.mode == "shift")
+            session.walk_to(square, mode=body.mode or "move")
         else:
             session.aim(body.power_index, square)
     except LookupError as exc:

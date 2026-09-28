@@ -153,6 +153,11 @@ class OptionDTO(BaseModel):
     label: str
     cost: str
     targets: list[str] = Field(default_factory=list)
+    #: Where a move, run or shift ends up. It was only ever in the label
+    #: ("move to (3, 4)") and at `path[-1]`, so anything wanting to match a
+    #: clicked square to an option had to parse prose or trust that a path's
+    #: last square is its destination.
+    dest: Square | None = None
     origin: Square | None = None
     affected: list[Square] = Field(default_factory=list)
     path: list[Square] = Field(default_factory=list)
@@ -185,6 +190,11 @@ class MovementDTO(BaseModel):
     free: list[Square] = Field(default_factory=list)
     risky: list[Square] = Field(default_factory=list)
     shift: list[Square] = Field(default_factory=list)
+    #: Every square a **run** reaches -- speed + 2, and you grant combat
+    #: advantage for it. A superset of `free` and `risky`. The engine has
+    #: offered one `run` option per square for a while and this list was
+    #: missing, so the only surface that could run was the enumerated one.
+    run: list[Square] = Field(default_factory=list)
     #: The route to each reachable square, keyed "x,y". What the page draws
     #: when the player points at one.
     paths: dict[str, list[Square]] = Field(default_factory=dict)

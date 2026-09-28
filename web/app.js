@@ -82,11 +82,29 @@ let animatedThrough = -1;
 // the board speed, because it is a way of playing rather than a setting you
 // fiddle with mid-fight.
 let freeform = readFreeform();
-// What is waiting for a square: an index into `roster`, or "walk"/"shift".
-// Movement is offered the same way a power is, because in freeform it is the
+// What is waiting for a square: an index into `roster`, or one of the movement
+// modes below. Movement is offered the same way a power is, because it is the
 // same gesture and a player should not have to know that one of them is not a
 // power.
+//
+// **Null means nothing is selected, and a click on the board does nothing.**
+// It used to mean "walk there", so the first stray click on the map walked the
+// party's fighter across the room and spent the move (#139). Moving is a thing
+// you choose, exactly like attacking is.
 let aiming = null;
+
+//: The three ways of moving, as the page names them, against the `Action.kind`
+//: each one resolves to. Walking is called "walk" here and "move" on the wire
+//: because "move" is also the name of the action it costs.
+const MOVE_MODES = { walk: "move", run: "run", shift: "shift" };
+
+function isMoveMode(mode) {
+  return typeof mode === "string" && Object.hasOwn(MOVE_MODES, mode);
+}
+
+//: The `Action.kind`s that are one-option-per-square. Both modes replace them
+//: with the rows `movementRows` builds.
+const MOVEMENT_KINDS = new Set(Object.values(MOVE_MODES));
 // The power whose aim squares are on the board right now, and which of them
 // is showing its footprint. Held because the aim squares are lit from the
 // action list and the aim point is picked on the board, and the two gestures
@@ -270,14 +288,35 @@ function renderBoard(s) {
 // before this ever sees them. Which of the two lists a square is in is the
 // whole of this function's knowledge.
 function renderMovement(movement) {
-  if (!movement) return;
-  if (aiming !== "walk" && aiming !== "shift") return;
-  const lists =
-    aiming === "shift"
-      ? [["free", movement.shift]]
-      : [["risky", movement.risky], ["free", movement.free]];
-  for (const [tone, squares] of lists) {
-    for (const sq of squares || []) {
+  if (!movement || !isMoveMode(aiming)) return;
+  paintMovement(movement, aiming);
+}
+
+// The squares one way of moving reaches, in two tones. Risky first, because
+// `scripts/browser.py` clicks `.mv-free` and relies on knowing which order the
+// overlay is built in.
+function movementTones(movement, mode) {
+  const m = movement || {};
+  // A shift provokes nothing at all, by rule, so none of its squares are ever
+  // the yellow kind.
+  if (mode === "shift") return [["risky", []], ["free", m.shift || []]];
+  if (mode === "run") {
+    // Running reaches further and the extra squares are risky for exactly the
+    // same reason the near ones are: `warnings` is per square and the server
+    // filled it in for every square any option ends on.
+    const warned = m.warnings || {};
+    const risky = [];
+    const free = [];
+    for (const sq of m.run || []) (warned[key(sq)] ? risky : free).push(sq);
+    return [["risky", risky], ["free", free]];
+  }
+  return [["risky", m.risky || []], ["free", m.free || []]];
+}
+
+function paintMovement(movement, mode) {
+  clear(el.movement);
+  for (const [tone, squares] of movementTones(movement, mode)) {
+    for (const sq of squares) {
       const h = div(`mv mv-${tone}`);
       place(h, squareRect(sq[0], sq[1]));
       el.movement.appendChild(h);
@@ -293,7 +332,7 @@ function renderMovement(movement) {
 let shownPath = null;
 
 function previewPath(at) {
-  if (aiming !== "walk" && aiming !== "shift") {
+  if (!isMoveMode(aiming)) {
     shownPath = null;
     return;
   }
@@ -525,11 +564,20 @@ function renderActions(s) {
   // buckets entirely so it is not also listed under "none" further down.
   const ending = options.find((o) => o.kind === END_TURN);
   if (ending) el.actions.appendChild(optionButton(s, ending));
+  // The second half of the gesture, said out loud. This mode used to have no
+  // gesture at all — the board was dead and the destination was one of a
+  // hundred buttons.
+  if (isMoveMode(aiming)) {
+    el.actions.appendChild(div("freeform-hint", "Now click a square."));
+  }
 
   for (const o of options) {
     if (o === ending) continue;
+    // Movement is three rows, not two hundred. See `movementRows`.
+    if (MOVEMENT_KINDS.has(o.kind)) continue;
     put(o.cost || "none", { option: o });
   }
+  for (const row of movementRows(s)) put("move", { movement: row });
   for (const p of s.roster || []) {
     // An available power is already in the list as its option(s); only the
     // ones that produced none need a row of their own. Traits never reach
@@ -562,9 +610,13 @@ function renderActions(s) {
     group.sort((a, b) => scoreOf(b) - scoreOf(a));
 
     for (const entry of group) {
-      el.actions.appendChild(
-        entry.option ? optionButton(s, entry.option) : unavailableRow(entry.power),
-      );
+      if (entry.movement) {
+        el.actions.appendChild(movementButton(...entry.movement, s));
+      } else if (entry.option) {
+        el.actions.appendChild(optionButton(s, entry.option));
+      } else {
+        el.actions.appendChild(unavailableRow(entry.power));
+      }
     }
   }
 }
@@ -652,22 +704,7 @@ function renderFreeform(s) {
     buckets.get(cost).push(entry);
   };
 
-  // Movement rides in its own section rather than in a bucket, because "move"
-  // is both a cost and a thing you do, and the two would print the same word.
-  const move = s.movement || { free: [], risky: [], shift: [] };
-  const walkable = [...(move.free || []), ...(move.risky || [])];
-  const risky = (move.risky || []).length;
-  put("move", {
-    movement: [
-      "Move",
-      "walk",
-      walkable,
-      risky ? `${risky} of them provoke` : "anywhere you can reach",
-    ],
-  });
-  if ((move.shift || []).length) {
-    put("move", { movement: ["Shift", "shift", move.shift, "one square, provokes nothing"] });
-  }
+  for (const row of movementRows(s)) put("move", { movement: row });
 
   for (const p of s.roster || []) put(p.cost || "none", { power: p });
 
@@ -681,7 +718,7 @@ function renderFreeform(s) {
   for (const p of s.roster || []) for (const i of p.option_indices || []) aimable.add(i);
   for (const o of s.options || []) {
     if (o === ending || aimable.has(o.index)) continue;
-    if (o.kind === "move" || o.kind === "shift" || o.kind === "run") continue;
+    if (MOVEMENT_KINDS.has(o.kind)) continue;
     put(o.cost || "none", { option: o });
   }
 
@@ -770,7 +807,36 @@ function costPayable(s, cost) {
   return !(economy.spent || []).includes(cost) || Boolean((economy.buys || {})[cost]);
 }
 
-/** Move or shift, offered the way a power is. */
+/**
+ * The movement rows, in both modes: one per way of moving, not one per square.
+ *
+ * The enumerated list used to print every one of these as its own button —
+ * around ninety "move to (x, y)" rows and a hundred and twenty "run to" ones at
+ * speed 6, which is the same complaint as #139 from the other end. A hundred
+ * buttons is not a choice a player can see, and the destination is not the
+ * decision; *which kind of movement* is. So both modes now offer the three
+ * decisions and take the destination off the board.
+ */
+function movementRows(s) {
+  const move = s.movement || {};
+  const rows = [];
+  const risky = (move.risky || []).length;
+  rows.push([
+    "Move",
+    "walk",
+    [...(move.free || []), ...(move.risky || [])],
+    risky ? `${risky} of them provoke` : "anywhere you can reach",
+  ]);
+  if ((move.run || []).length) {
+    rows.push(["Run", "run", move.run, "speed + 2, and you grant combat advantage"]);
+  }
+  if ((move.shift || []).length) {
+    rows.push(["Shift", "shift", move.shift, "one square, provokes nothing"]);
+  }
+  return rows;
+}
+
+/** Move, run or shift, offered the way a power is. */
 function movementButton(name, mode, squares, note, s) {
   const b = document.createElement("button");
   b.className = "option";
@@ -794,27 +860,23 @@ function movementButton(name, mode, squares, note, s) {
 
   // Hovering the row is a preview of pressing it: the squares appear, and
   // go again when the pointer leaves unless the row is the one being aimed.
-  const light = () => {
-    clear(el.movement);
-    for (const [tone, list] of [["risky", s.movement?.risky], ["free", s.movement?.free]]) {
-      if (mode === "shift" && tone === "risky") continue;
-      for (const sq of mode === "shift" ? squares : list || []) {
-        const h = div(`mv mv-${tone}`);
-        place(h, squareRect(sq[0], sq[1]));
-        el.movement.appendChild(h);
-      }
-      if (mode === "shift") break;
-    }
-  };
+  const light = () => paintMovement(s.movement, mode);
   b.addEventListener("mouseenter", light);
+  // Back to whatever is *selected* on the way out — which is often nothing, and
+  // a range left lit under nothing selected now says a click would walk there
+  // when it would not.
   b.addEventListener("mouseleave", () => {
-    if (aiming === null) highlight(null);
-    else if (aiming === mode) light();
+    if (isMoveMode(aiming)) paintMovement(s.movement, aiming);
+    else {
+      clear(el.movement);
+      highlight(null);
+    }
   });
   b.addEventListener("click", () => {
     aiming = aiming === mode ? null : mode;
     render();
     if (aiming === mode) light();
+    else clear(el.movement);
   });
   return b;
 }
@@ -884,6 +946,10 @@ function costHead(s, cost) {
 
 /** An entry's score for ordering. Unavailable powers sink to the bottom. */
 function scoreOf(entry) {
+  // A movement row is not an option and has no score. Sorted as neutral rather
+  // than as nothing, so it sits above the greyed-out rows instead of under
+  // them: it is the one thing in the MOVE section anybody can always do.
+  if (entry.movement) return 0;
   if (!entry.option) return -Infinity;
   return typeof entry.option.score === "number" ? entry.option.score : 0;
 }
@@ -1270,7 +1336,13 @@ function render() {
   // stale total behind made the *next* walk start from it — a creature would
   // slide to a square it was not on while the game had it in the right one.
   anim.reset();
-  el.board.classList.toggle("freeform", freeform && Boolean(s.awaiting_input) && !s.pending);
+  // A crosshair only while a click would actually do something. It used to be
+  // on for the whole of a freeform turn, which was true when a bare click
+  // walked and is a lie now that one does not.
+  el.board.classList.toggle(
+    "aiming",
+    aiming !== null && Boolean(s.awaiting_input) && !s.pending,
+  );
   // The board is a control while a question is open, in either mode: the
   // answers are squares and clicking one is how you give it.
   el.board.classList.toggle("deciding", Boolean(s.pending));
@@ -1376,6 +1448,9 @@ async function act(actorId, index) {
       actor_id: actorId,
       action_index: index,
     });
+    // Whatever was picked has been spent. Left set, the movement range stayed
+    // lit from the square the creature no longer stands on.
+    aiming = null;
     highlight(null);
     // The server harvests and rests the instant the fight ends — inside this
     // very request — so by the time it answers, the day already knows what the
@@ -1680,13 +1755,24 @@ anim.init({
   onIdle: maybeCommit,
 });
 
-// Freeform's one gesture. The board is a control in this mode: click a square
-// to use the power you picked, or — with nothing picked — to walk there.
+// The board's one gesture: pick something, then click a square.
+//
+// **Nothing is selected by default and nothing happens on a bare click.**
+// Clicking an empty board used to walk, which meant the map was a live control
+// the moment a turn began: a click meant to dismiss a card, or aimed at a
+// creature to read it, spent the move action and put the creature somewhere
+// nobody chose (#139). Moving is now selected the same way an attack is.
+//
+// Live in both modes. The enumerated list resolves the square to the index of
+// one of its own `move`/`run`/`shift` options and posts that, because in that
+// mode the index is the interface and every other row posts one; freeform posts
+// the square to `/aim` and lets the server resolve it. The two arrive at the
+// same option either way — `movement` is now built out of those very options.
 //
 // No rules here. Which squares are legal came from the server (a power's
-// `squares`, and `movement.free` / `movement.risky`), and what a click means
-// is decided by the server too; this only refuses to send one the server has
-// already said is not on.
+// `squares`, and `movement.free` / `movement.risky` / `movement.run`), and what
+// a click means is decided by the server too; this only refuses to send one the
+// server has already said is not on.
 el.board.addEventListener("click", (ev) => {
   if (!state || busy) return;
   // A question turns the board into the answer sheet, in both modes. The
@@ -1702,24 +1788,37 @@ el.board.addEventListener("click", (ev) => {
     else say("Nothing to choose on that square.", "warn");
     return;
   }
-  if (!freeform || !state.awaiting_input) return;
+  if (!state.awaiting_input) return;
+  if (aiming === null) {
+    say("Pick Move, Run, Shift or a power first, then click a square.", "warn");
+    return;
+  }
   const { x, y } = pointerSquare(el.board, ev);
   const square = [x, y];
-  const move = state.movement || { free: [], risky: [], shift: [] };
   const here = (list) => (list || []).some((s) => s[0] === x && s[1] === y);
 
-  if (aiming === "walk" || aiming === null) {
-    // Bare board with nothing picked still walks, because it is the gesture
-    // anybody tries first.
-    if (here(move.free) || here(move.risky)) aimAt(square, null, "walk");
-    else if (aiming === "walk") say("You cannot reach that square.", "warn");
+  if (isMoveMode(aiming)) {
+    // Matched on `dest`, which is the option's own destination square. It used
+    // to live only inside the label ("move to (3, 4)") and at `path[-1]`, so
+    // this could not be written without parsing prose.
+    const kind = MOVE_MODES[aiming];
+    const option = (state.options || []).find(
+      (o) => o.kind === kind && o.dest && o.dest[0] === x && o.dest[1] === y,
+    );
+    if (!option) {
+      say(
+        aiming === "shift"
+          ? "A shift is one square, and not onto somebody else."
+          : "You cannot reach that square.",
+        "warn",
+      );
+      return;
+    }
+    if (freeform) aimAt(square, null, aiming);
+    else act(state.current, option.index);
     return;
   }
-  if (aiming === "shift") {
-    if (here(move.shift)) aimAt(square, null, "shift");
-    else say("A shift is one square, and not onto somebody else.", "warn");
-    return;
-  }
+  if (!freeform) return;  // powers are only aimed by pointing in freeform
   const power = (state.roster || [])[aiming];
   if (power && here(power.squares)) aimAt(square, aiming);
   else say("That power cannot be aimed there.", "warn");
