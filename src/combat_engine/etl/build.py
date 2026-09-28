@@ -247,6 +247,8 @@ class Report:
     crossed: int = 0
     companions: int = 0
     traps: int = 0
+    links_found: int = 0
+    links_total: int = 0
     build_powers: int = 0
     items: int = 0
     item_blocks: int = 0
@@ -278,6 +280,10 @@ class Report:
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
             f"companions    {self.companions:6d}  (familiars and beasts, new)",
             f"traps         {self.traps:6d}  (with a printed Perception DC where one is given)",
+            f"assoc links   {self.links_found:6d}/{self.links_total}"
+            "  (linked Associated members resolved; see _links_resolve)"
+            + ("   <-- A MISS. The name resolver has regressed."
+               if self.links_found != self.links_total else ""),
             f"build powers  {self.build_powers:6d}  (which build lists which row)",
             f"items         {self.items:6d}  (heroic magic items)",
             f"  blocks      {self.item_blocks:6d}  (a Property or a Power: the work unit)",
@@ -359,6 +365,7 @@ def build() -> Report:
     # After both, because a feat's Special line names items and
     # a set's benefit names feats. Neither index exists earlier.
     report.crossed += _cross_reference_rest(out, names)
+    report.links_found, report.links_total = _links_resolve(source, out)
 
     out.execute(
         "INSERT INTO meta (key, value) VALUES (?, ?)",
@@ -1164,6 +1171,46 @@ def _build_powers(source: sqlite3.Connection, out: sqlite3.Connection,
                 )
                 written += 1
     return written
+
+
+#: `href="power.php?id=NNNN"` inside a feat's Associated Powers block. The id
+#: is the compendium's own `Power.ID`, which is exactly the engine's `pNNNN`.
+_HREF = re.compile(r'href="power\.php\?id=(\d+)"')
+
+
+def _links_resolve(source: sqlite3.Connection, out: sqlite3.Connection) -> tuple[int, int]:
+    """How many linked Associated Powers members resolved, out of how many.
+
+    **Ground truth the resolver does not use.** `_associated_refs` matches
+    members by *name* -- normalising apostrophes, ranking a power over a
+    class feature, un-gluing members the page wrote without a separator --
+    and a name that fails to resolve looks exactly like prose, so the only
+    signal was a `(+N above heroic)` tail that conflates "correctly trimmed
+    because it is paragon" with "the resolver missed".
+
+    The source HTML **links** every member, so the ids are the answer sheet.
+    #221 proposed reading them instead of the names; measured, the resolver
+    is already perfect -- 478 of 478 members with a heroic row -- so
+    rewriting the parse would risk a record it cannot improve. This asserts
+    the record instead, which is the cheap half of that issue and the half
+    worth having: a regression in the name path now shows up as a number.
+
+    Counted only where a heroic `power` row exists. The rest are above the
+    project's level ceiling and there is nothing for them to point at.
+    """
+    # Index access: `out` carries no `row_factory`, unlike `source`.
+    heroic = {r[0] for r in out.execute("SELECT ref FROM power")}
+    specs = {r[0]: (r[1] or "") for r in out.execute("SELECT ref, spec FROM feat")}
+    total = found = 0
+    for row in source.execute("SELECT ID, Txt FROM Feat WHERE Txt LIKE '%Associated%'"):
+        for wanted in _HREF.findall(row["Txt"] or ""):
+            ref = f"p{wanted}"
+            if ref not in heroic:
+                continue
+            total += 1
+            found += ref in specs.get(f"f{row['ID']}", "")
+    return found, total
+
 
 def _cross_reference(out: sqlite3.Connection, names: dict[str, dict[str, str]]) -> int:
     """Swap one power's name for its ref wherever another power prints it.

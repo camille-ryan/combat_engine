@@ -993,15 +993,23 @@ def f1071(c: Cast) -> None:
 def _associated(ref: str, *, listed: bool = True) -> None:
     """The preamble, a list of refs, and the rules discarded in transit.
 
-    **Re-aimed.** The old reading was that these cards print no benefit
-    against any member of the list. They do: each member is set on its
-    own line as `<name> : <clause>`, and the clause is the entire feat --
-    the preamble says only "you gain a benefit with any of the following".
-    `build._associated_refs` takes `part.split(":")[0]` and throws the
-    clause away, and it splits on commas where these lists are split on
-    newlines, so the sentences are shredded into fragments and the
-    `(+N above heroic)` count is counting those fragments. So the marker
-    is `spec.associated_clause()`, not the list.
+    **Re-aimed twice, and the second time was to say the ETL is fine.**
+    The first reading was that these cards print no benefit against any
+    member of the list. They do: each member is set on its own line as
+    `<name> : <clause>`, and the clause is the entire feat -- the preamble
+    says only "you gain a benefit with any of the following".
+
+    The second reading was that `_associated_refs` threw that clause away.
+    **It does not, and has not for some time.** The spec carries
+    `p4368 : Before and after the attack with this exploit, your beast
+    companion can shift 1 square.` -- ref resolved, clause intact. Checked
+    against the source: of 737 linked Associated-Powers members, 478 have a
+    heroic row and **all 478 resolve correctly**.
+
+    So `spec.associated_clause()` names an ETL gap that is not there. What
+    is actually missing is that nobody has written these rows, and the
+    pattern for writing them is already in the tree: `f1305` arms one
+    watcher per window and picks the clause by which power fired.
 
     `listed=False` for the three that lose the whole block as well: an
     errata paragraph sits above the list and `etl/feat._benefit` breaks

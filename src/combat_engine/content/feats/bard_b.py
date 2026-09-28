@@ -387,12 +387,17 @@ def f1145(c: Cast) -> None:
 @power("f1231", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("spec.associated_clause()",))
 def f1231(c: Cast) -> None:
-    """**Re-aimed off `feat.associated_powers`.** The list is not what is
-    missing -- it resolved, and the spec carries the ref. What is missing
-    is the clause beside it: this card sets each member on its own line
-    as `<name> : <clause>`, the clause is the whole benefit, and
-    `build._associated_refs` keeps only the name before the colon. The
-    style family in `general_g` loses its rules the same way."""
+    """**Re-aimed off `feat.associated_powers`, and now off the ETL
+    entirely.** The list resolved and the spec carries the ref -- that part
+    was right. The claim that `build._associated_refs` "keeps only the name
+    before the colon" is **wrong**: the spec carries
+    `<ref> : <clause>` with the clause intact, and 478 of 478 linked
+    members with a heroic row resolve correctly.
+
+    So nothing is lost in transit. This row is simply unwritten, and
+    `f1305` shows the shape it wants -- one watcher per window, the clause
+    picked by which power fired. See `general_g._associated`, which carried
+    the same wrong note."""
 
 
 @power("f2091", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
