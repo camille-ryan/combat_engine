@@ -1178,6 +1178,20 @@ def _cross_reference_rest(
         if by_name.get(key, "").startswith("cf:"):
             by_name[key] = ref
 
+    # **The feats' own index.** Kept apart from `by_name` on purpose:
+    # see `_NAMED_FEAT`. The shortest ref wins a tie, which is always
+    # the parent -- 139 feat names are shared by a feat and the power
+    # card it prints, `f1091` and `f1091b`, and "the <name> feat" means
+    # the feat.
+    by_feat: dict[str, str] = {}
+    for (ref,) in out.execute("SELECT ref FROM feat"):
+        name = _low(((names.get(ref) or {}).get("name") or "").strip())
+        if len(name) < 3:
+            continue
+        held_by = by_feat.get(name, "")
+        if not held_by or (len(ref), ref) < (len(held_by), held_by):
+            by_feat[name] = ref
+
     # **Which class is speaking.** The disambiguator was there all
     # along: a class feature's ref names its class, a power's row
     # stores it, and a feat's gate usually states it. A feat's sub-rows
@@ -1250,6 +1264,12 @@ def _cross_reference_rest(
             # precisely what `identifies` waives. The rows this serves
             # are the ones it was skipping.
             fixed = _label_refs(fixed, by_name, cls, lone=table == "feat")
+            # **Outside the `others` guard**, for the same reason
+            # `_label_refs` is: that guard skips a row whose spec names
+            # nothing `identifies` believes, and a feat name is two
+            # ordinary words -- `quick draw`, `ritual caster` -- which
+            # is precisely what `identifies` waives.
+            fixed = _named_feats(fixed, by_feat, ref)
             if others:
                 fixed = scrub(fixed, others)
                 if table == "feat":
@@ -1359,6 +1379,32 @@ _NAMED = re.compile(
     r"(\s+(?:racial|encounter|daily|at-will|utility|attack))*"
     r"\s+(power|class feature|feature|trait)\b"
 )
+
+#: **"the <name> feat".** The same construction one noun along from
+#: `_NAMED`, and `feat` was the one noun missing from its vocabulary --
+#: so the commonest cross-reference a feat page makes had no pattern at
+#: all and 67 of them reached authors as printed names, on rows whose
+#: only remaining gap was the name.
+#:
+#: The position is the whole of the argument, exactly as it is for
+#: *power* and *class feature*: a run of words immediately before the
+#: word *feat* is a feat's name. `identifies` is waived here for the
+#: reason it is waived before a colon -- "Quick Draw" and "Ritual
+#: Caster" are two ordinary words each and would never pass it in
+#: running prose.
+#:
+#: **Its own index, never `by_name`.** `_rank` prefers a `p` and then a
+#: `cf:`, so a feat sharing its name with the power it grants -- and
+#: hundreds do, `f1091` prints `f1091b` -- would lose the tie and this
+#: pattern would point "the <name> feat" at a power card. A feat-only
+#: index cannot do that, and it is also why the character-side guard the
+#: other passes carry is not needed here: every ref it can return is an
+#: `f`, and an `f` is character-side by construction. There is no path
+#: from here to a stat block.
+_NAMED_FEAT = re.compile(
+    r"\b([A-Za-z][\w'\u2019-]*(?:\s+[A-Za-z][\w'\u2019-]*){0,4}?)\s+feat\b"
+)
+
 
 #: The same name on the other side of the noun: "you gain the barbarian
 #: **class feature** *<name>*". Rare -- one row in the corpus asks for it
@@ -1681,6 +1727,35 @@ def _longest(
     return ""
 
 
+def _named_feats(spec: str, by_feat: dict[str, str], own: str) -> str:
+    """Swap `<name> feat` for `<ref> feat`.
+
+    See `_NAMED_FEAT` for why the position is proof and why the index is
+    the feats' own. Longest match first, so a three-word name is not
+    left as a fragment of a two-word one -- `Student of the Plague`
+    rather than `the Plague`.
+
+    **The row's own name is not a reference to itself.** A feat page
+    says "this feat" and never its own name, but a feat that prints a
+    power card has the card filed under `f1091b` with the parent's name
+    on it, so the pair share a name and the child would otherwise
+    resolve onto the parent and back.
+    """
+    base = re.sub(r"[a-z]\d*$", "", own)
+
+    def swap(m: re.Match) -> str:
+        words = m.group(1).split()
+        for size in range(len(words), 0, -1):
+            ref = by_feat.get(_low(" ".join(words[-size:])))
+            if not ref or ref in (own, base):
+                continue
+            head = " ".join(words[:-size])
+            return " ".join(w for w in (head, ref, "feat") if w)
+        return m.group(0)
+
+    return _NAMED_FEAT.sub(swap, spec)
+
+
 def _label_refs(
     spec: str, by_name: dict[str, str], cls: str = "", lone: bool = True
 ) -> str:
@@ -1735,6 +1810,60 @@ _ASSOCIATED = re.compile(r"^Associated Powers\s*:\s*(.+)$", re.M | re.S)
 _IS_REF = re.compile(r"^[pmifr]\d+[a-z]*\d*$")
 
 
+def _members(body: str) -> list[tuple[str, str]]:
+    """The list's members as `(name, clause)`, in printed order.
+
+    **A line first, a comma second.** The list has two shapes on the
+    page and only one of them was being read. A domain or a channel
+    feat prints its members on one line, comma-separated and bare --
+    `Bolstering Strike, Grasping Shards, Radiant Vengeance`. A weapon
+    style feat prints **one member per line**, each with a sentence of
+    its own attached after a colon, and splitting that on commas
+    shreds the sentences: the first member survived because its name
+    is in front of the first comma, and every member after it was a
+    fragment of somebody's clause. Those fragments then resolved to
+    nothing and were counted as "above heroic", so the count an author
+    was shown as the size of the trimmed remainder was really the
+    number of commas in the prose.
+
+    **A sentence ends with a full stop and a list does not.** That is
+    what tells the two shapes apart when a line has a colon in it, and
+    it has to be asked rather than assumed: a few pages print a short
+    parenthetical clause on the *first* member and then run the rest of
+    the members on after it, commas and all, with no line break --
+    `<name>: (Only when used as a ranged attack)<name>, <name>, <name>`.
+    Reading that line as one member swallows the four that follow. So a
+    line whose clause is a sentence is one member, and any other line is
+    a comma-separated run in which a part may still carry a short clause
+    of its own.
+    """
+    out: list[tuple[str, str]] = []
+    for raw in body.split("\n"):
+        line = raw.strip()
+        if not line:
+            continue
+        parts = [line] if ":" in line and line.endswith(".") else line.split(",")
+        for part in parts:
+            head, _, clause = part.partition(":")
+            head, clause, tail = head.strip(), clause.strip(), ""
+            # **A parenthetical clause is not followed by a separator.**
+            # The page writes `<a>name</a>: (Only when used as a melee
+            # attack)<a>name</a>`, and the tags are gone by the time
+            # this runs, so the next member is simply stuck to the back
+            # of the clause -- and kept there it would be a printed
+            # name sitting in a spec, which is the one thing this
+            # project may not do. The bracket closes the clause.
+            run_on = re.match(r"^(\([^)]*\))\s*(.+)$", clause)
+            if run_on:
+                clause, tail = run_on.group(1), run_on.group(2)
+            if head:
+                out.append((head, clause))
+            for extra in tail.split(","):
+                if extra.strip():
+                    out.append((extra.strip(), ""))
+    return out
+
+
 def _associated_refs(spec: str, by_name: dict[str, str]) -> str:
     """Turn a feat's Associated-Powers list into refs.
 
@@ -1747,7 +1876,7 @@ def _associated_refs(spec: str, by_name: dict[str, str]) -> str:
     `feat.associated_powers`.
 
     The same argument as `_label_refs`, one step further along. A
-    comma-separated list under the heading *Associated Powers* is a list
+    list under the heading *Associated Powers* is a list
     of power names by construction, so `identifies` is rightly waived:
     "Sure Strike" and "Crushing Blow" are two ordinary words each and
     would never pass it in running prose.
@@ -1764,13 +1893,13 @@ def _associated_refs(spec: str, by_name: dict[str, str]) -> str:
 
     def swap(m: re.Match) -> str:
         refs: list[str] = []
+        clauses: dict[str, str] = {}
         above = 0
-        for part in m.group(1).split(","):
-            head = part.strip().split(":")[0].strip()
-            if not head:
-                continue
+        for head, clause in _members(m.group(1)):
             if _IS_REF.match(head):
                 refs.append(head)
+                if clause:
+                    clauses.setdefault(head, clause)
                 continue
             # `_low`, not `.lower()`: the list prints `Hunter's Quarry`
             # with a curly apostrophe and `by_name`'s keys carry the
@@ -1794,7 +1923,15 @@ def _associated_refs(spec: str, by_name: dict[str, str]) -> str:
             if r not in seen:
                 seen.append(r)
         tail = f"  (+{above} above heroic)" if above else ""
-        return f"Associated Powers: {', '.join(seen)}{tail}"
+        # **The member's clause is the feat.** Eleven of these feats say
+        # no more in their Benefit than "you gain a benefit with any of
+        # the following", and the benefit itself is written once per
+        # member in the list -- so discarding the clause, as this pass
+        # did, threw away the whole of the rule and left the row with a
+        # set of refs and nothing to do with them.
+        lines = [f"Associated Powers: {', '.join(seen)}{tail}"]
+        lines += [f"{r} : {clauses[r]}" for r in seen if clauses.get(r)]
+        return "\n".join(lines)
 
     return _ASSOCIATED.sub(swap, spec)
 

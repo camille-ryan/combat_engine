@@ -70,6 +70,16 @@ _ERRATA = re.compile(
     r"^(?:update|updated|addition|errata|change|correction)\b", re.I
 )
 
+#: **Where the errata block ends.** Taking the rest of the paragraph is
+#: right for the instruction the heading introduces and wrong for what
+#: comes after it: on 13 pages the `Update (<date>)` block sits *between*
+#: the Benefit and the `Associated Powers:` line, in the same run of
+#: loose `<br/>`-separated text, so the list went down with the erratum
+#: and those feats' associated set was unknowable for no reason but the
+#: order the page prints in. This line is the page's own section heading,
+#: not part of an edit to a previous printing, so it ends the block.
+_RESUMES = re.compile(r"^Associated Powers\s*:", re.I)
+
 #: The long forms the pages also print. The short ones come off the enum.
 _SPELT_OUT = {
     "strength": "str", "dexterity": "dex", "constitution": "con",
@@ -247,17 +257,26 @@ def _benefit(head: str, ref: str, name: str) -> str:
     followed by the instruction it introduces -- add a word to the second
     sentence, and so on -- and dropping the heading alone leaves an author
     reading an edit to the paragraph above as though it were a rule.
+
+    **The rest of the paragraph, not the rest of the page's sections.**
+    `_RESUMES` says where the block stops; see its note.
     """
     lines: list[str] = []
     for cls, para in paragraphs(head):
         if "publishedIn" in cls:
             continue
+        erratum = False
         for line in text(para).split("\n"):
             bare = line.strip()
             if not bare:
                 continue
             if _ERRATA.match(bare):
-                break
+                erratum = True
+                continue
+            if _RESUMES.match(bare):
+                erratum = False
+            if erratum:
+                continue
             if _FURNITURE.match(bare):
                 continue
             lines.append(line)
