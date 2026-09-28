@@ -7,23 +7,41 @@ only the part that needs a body.
 
 Three things shape the whole file.
 
-* **"using this implement" cannot be gated.** The damage context carries
-  `target`, `power`, `opportunity`, `charge`, `dtype` and `crit`, and the
-  attack context adds `attacker` and `ranged` -- neither carries the item.
-  Since the character is holding the implement for as long as the property
-  is armed, every such rider is written always-on. That over-applies only
-  for somebody carrying two implements of which one is magical.
+* **"using this implement" cannot be gated.** Neither context carries the
+  item. Since the character is holding the implement for as long as the
+  property is armed, every such rider is written always-on. That
+  over-applies only for somebody carrying two implements of which one is
+  magical.
+
+  What the contexts *do* carry has grown, and the list that stood here was
+  a season out of date. The damage context is `target`, `power`, `dtype`,
+  `dtypes`, `crit`, `opportunity`, `charge`, `granted_by`, `granted_via`
+  and -- both added since -- `advantage` and `ranged`; the attack context
+  is that plus `attacker`, `branch`, `action_point` and `hand`. The old
+  note said the damage side was thin and that `ranged` lived only on the
+  attack side, and two rows in this file were written around a gate that
+  is now perfectly readable.
 * **"Class X can use this as a Y implement"** is `c.as_implement`, and the
   class half is not enforced: the item was dealt to whoever holds it.
 * **`c.enhancement`** is the item's own plus, which a great many of these
   lines are equal to.
+
+**An item's blocks name one another's rows.** A wand's Property and its
+Power are separate refs on one page and, for the whole wand family here,
+they are about the same row: `i1832x1` and `i1832p1` both resolved to
+`p1166`, `i1836` to `p1169`, `i1822` to `p1457`. So where the Power block
+resolved and the Property block did not, the Property's ref is the
+Power's -- `i1821x1` is `i1821p1`'s `p1164`, `i1823x1` is `i1823p1`'s
+`p1333`, `i1831x1` is `i1831p1`'s `p1167`, and `i2614p1` is `i2614x1`'s
+`p463`. Four blocks were written off this join rather than waiting for the
+ETL. Check the sibling block before believing a `spec.power_ref()`.
 
 Four gaps account for most of the markers, and each is named with the
 symbol it wants rather than approximated:
 
 * **`spec.power_ref()`** -- the brief prints a prose power name where a ref
   belongs, and a name is the one thing this project may not go and look up.
-  Thirteen blocks, down from twenty-six: the label matcher now reads a
+  Nine blocks, down from twenty-six: the label matcher now reads a
   bracketed class, so most of "as the <class>'s <name> power" resolves and
   `_as_row` says the rest. The example that used to stand here was itself a
   printed name and has been taken out.
@@ -260,6 +278,37 @@ def _elemental_on_ally(world: World, me: int, ev: Event) -> bool:
     return bool(_keywords_of(getattr(ev, "power", "")) & frozenset(_ELEMENTS))
 
 
+def _attacking_with(ref: str):  # noqa: ANN202
+    """`AttackDeclared` gate: the swing being declared is that row's."""
+
+    def gate(world: World, me: int, ev: Event) -> bool:
+        return getattr(ev, "attacker", None) == me and getattr(ev, "power", "") == ref
+
+    return gate
+
+
+def _damage_from(ref: str):  # noqa: ANN202
+    """`DamageApplied` gate: you dealt it and that row is what dealt it.
+
+    `detail` is the ref for anything a body deals -- it is the same string
+    the damage context hands over as `power`.
+    """
+
+    def gate(world: World, me: int, ev: Event) -> bool:
+        return getattr(ev, "source", None) == me and getattr(ev, "detail", "") == ref
+
+    return gate
+
+
+def _is_row(ref: str):  # noqa: ANN202
+    """Damage or attack gate: the blow came from that exact row."""
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return ctx.get("power") == ref
+
+    return gate
+
+
 HIT_BY_ME = Trigger(Hit, by_me, "you hit an enemy with this implement")
 
 
@@ -360,10 +409,25 @@ def i1216x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.ignore_insubstantial()",),
 )
 def i1399x1(c: Cast) -> None:
-    """`c.insubstantial` grants the quality and nothing pierces it."""
+    """`c.ignore_resistance(insubstantial=True)` is exactly the printed
+    piercing, and the old marker was written before it existed.
+
+    `amount=0` keeps it to that one clause: the blanket call waives every
+    resistance as well, which this line does not say. The two halves of
+    the gate are the power's own reach and the damage context's
+    `advantage`, both readable there now. Being insubstantial needs no
+    test of its own -- the mod is consulted nowhere but on the halving
+    line, so a solid target never reaches it."""
+    c.ignore_resistance(
+        0,
+        on=c.me,
+        until=When.ENCOUNTER,
+        insubstantial=True,
+        when=lambda ctx: _reach_of(ctx.get("power")) == "melee"
+        and bool(ctx.get("advantage")),
+    )
 
 
 @power(
@@ -701,11 +765,16 @@ def i2274p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.boost_row_die()",),
+    todo=("c.boost_roll()",),
 )
 def i2295x1(c: Cast) -> None:
-    """Adds 1 to a d6 another row rolls. Nothing reaches inside a row's own
-    roll to change it."""
+    """Adds 1 to a d6 `x_m4421a6` rolls. Nothing reaches inside a row's
+    own roll to change it.
+
+    Re-aimed onto the name nine other rows already use for that, since
+    the ref the property is gated on is given and the naming gap was
+    never the hold. `c.boost_check` is the near neighbour and answers a
+    `SkillCheck` trigger only."""
 
 
 @power(
@@ -902,12 +971,41 @@ def i2601x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.extra_area_target()",),
+    dropped=("AttackDeclared.origin",),
 )
 def i2605p1(c: Cast) -> None:
-    """`c.widen_areas` grows the burst, which catches a different set of
-    squares; "also target 1 creature adjacent to it" adds one creature
-    outside the area and leaves the area alone."""
+    """`c.widen_areas` is the wrong verb -- it grows the burst, catching a
+    different set of squares -- but `c.add_target` is the right one, and
+    the old marker predates it.
+
+    A watcher's own `Cast` is long off the stack, so `dsl.running_below`
+    falls through to whatever row is running *now*, which is exactly the
+    burst being declared. `AttackDeclared` is announced from inside that
+    row's target loop, so an appended creature is one its body is then
+    called for.
+
+    What is dropped is the shape of the reach: the event names an
+    attacker, a target, a power and a defence, and not the square the
+    burst was centred on -- the same field `i1832x1` wants off `Hit`. So
+    "adjacent to the burst" is read as "adjacent to somebody in it",
+    which misses a creature standing beside an empty edge square.
+    `c.add_target` refuses a creature already in the list, so the loop
+    simply tries the next one.
+
+    Paragon's second and third creatures are out of scope."""
+    spent: list[int] = []
+
+    def widen(ev: AttackDeclared) -> None:
+        if spent or ev.attacker != c.me:
+            return
+        if _reach_of(ev.power) not in ("area_burst", "close_blast", "close_burst"):
+            return
+        for foe in c.within(1, of=ev.target, side="enemy"):
+            if c.add_target(foe):
+                spent.append(1)
+                return
+
+    c.watch(AttackDeclared, widen, until=When.EONT)
 
 
 @power(
@@ -918,12 +1016,19 @@ def i2605p1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.reroll_damage_dice()",),
+    dropped=("c.reroll_damage_dice()",),
 )
 def i2606p1(c: Cast) -> None:
-    """`c.reroll_damage` rolls the whole expression twice and keeps the
-    higher; this rerolls a counted number of dice and must keep the new
-    result even when it is worse."""
+    """Re-aimed from a `todo` to a `dropped`: `c.reroll_damage(keyword=)`
+    is a real reroll narrowed to the printed keyword, so refusing the
+    whole row threw away the half the engine can say.
+
+    Two clauses go. It rolls the whole expression twice and keeps the
+    higher, where the card rerolls a counted number of dice and makes
+    you keep the new result even when it is worse -- so this is the
+    generous reading. And there is no `once=`, so it stands for the rest
+    of the turn rather than for the one power the free action answers."""
+    c.reroll_damage(keyword=Keyword.FIRE, on=c.me, until=When.EOT)
 
 
 @power(
@@ -1008,10 +1113,38 @@ def i2614x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
+    trigger="you use p463",
+    on=Trigger(DamageApplied, _damage_from("p463"), "p463 goes off"),
 )
 def i2614p1(c: Cast) -> None:
-    """Same missing ref, plus the retarget."""
+    """The ref is `p463`, read off this item's other block, which already
+    names it. `c.add_target` is the verb.
+
+    **`PowerUsed` is the wrong window for it, and looks like the right
+    one.** `add_target` appends to whatever `dsl.running_below` finds,
+    and `dsl.use` calls `cast.used()` *above* `_RUNNING.append(cast)` --
+    so during the announcement the row is not on the stack and there is
+    nothing to append to. `PowerUsed.targets` is a `list(...)` copy, so
+    reaching for it instead changes nothing either. The same reasoning
+    `i1828x1` writes out: the consequence is readable where the
+    declaration is not.
+
+    So the window is the row going off. `p463` rolls no attack -- its
+    whole body is one `c.flat` -- so its damage is the first thing it
+    emits from inside the target loop, and a row answering that runs
+    nested with the loop still walking. The appended creature is one the
+    body is then called for.
+
+    "No target can be more than 5 squares from any other" is, for the two
+    the heroic tier allows, the pool within 5 of the one already hit.
+    Paragon's third target is out of scope."""
+    first = getattr(c.trigger, "target", None)
+    if first is None:
+        return
+    for foe in c.within(5, of=first, side="enemy"):
+        if foe != first and c.distance(foe) <= 20 and c.can_see(foe):
+            c.add_target(foe)
+            return
 
 
 @power(
@@ -1386,11 +1519,15 @@ def i3195p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.no_provoke_ranged()",),
+    dropped=("c.no_provoke(when=)",),
 )
 def i3503x1(c: Cast) -> None:
     """`c.no_provoke` vetoes the opportunity window whatever opened it, so
-    this also covers walking away -- which the printed line does not."""
+    this also covers walking away -- which the printed line does not.
+
+    Re-aimed onto the name nineteen other rows use for the same absence:
+    the verb takes `from_` and `on` and no `when=`, so no printed
+    narrowing of *which* action stops provoking can be said."""
     c.no_provoke(on=c.me, until=When.ENCOUNTER)
 
 
@@ -1962,11 +2099,22 @@ def i1738p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()", "c.zone_damage()"),
 )
 def i1821x1(c: Cast) -> None:
-    """Doubles the bite of one named zone power. The ref is prose in the
-    brief, and nothing changes a standing zone's damage after the fact."""
+    """The ref is `p1164`, read off this item's other block -- `i1821p1`
+    is that row and the property is about the zone that row lays.
+
+    Doubling a standing zone's bite is still not something anything does,
+    but it does not have to be: `Cast.burns` deals the zone's damage with
+    `detail=f"{ref} zone"`, so the bite is a readable `DamageApplied` and
+    a second helping of the same size doubles it from outside. The
+    printed minimum of 2 is the row's own `max(1, wis_mod)` paid twice."""
+
+    def again(ev: DamageApplied) -> None:
+        if ev.source == c.me and ev.detail == "p1164 zone" and ev.amount > 0:
+            c.flat(max(1, c.wis_mod), dtype=DamageType.FORCE, on=ev.target)
+
+    c.watch(DamageApplied, again, until=When.ENCOUNTER)
 
 
 @power(
@@ -2027,10 +2175,20 @@ def i1822p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
 )
 def i1823x1(c: Cast) -> None:
-    """A damage bonus gated on `ctx["power"]`, and the ref is prose."""
+    """The ref is `p1333`, read off this item's other block: `i1823p1`
+    resolves to it and the property names the same row. The damage
+    context carries `power`, so the gate is the one `i2614x1` uses.
+    Paragon numbers are out of scope."""
+    c.bonus(
+        "damage",
+        1,
+        kind="item",
+        on=c.me,
+        until=When.ENCOUNTER,
+        when=_is_row("p1333"),
+    )
 
 
 @power(
@@ -2094,11 +2252,20 @@ def i1824p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
+    todo=("DamageApplied.from_attack",),
 )
 def i1826x1(c: Cast) -> None:
-    """Splashes half of one named power's rebound onto adjacent allies, and
-    the ref is prose in the brief."""
+    """Re-aimed: the ref is `p1333`'s neighbour `p1458`, read off this
+    item's other block, so the naming gap is closed and was never the
+    hold.
+
+    What holds it is telling that row's two blows apart. It deals its
+    hit with `c.damage` and its rebound with `c.flat`, both as
+    `DamageApplied(source=me, target=victim, dtype=FIRE,
+    detail="p1458")` -- identical on every field the event carries. Only
+    the rebound is "damage from attacking you", and splashing both would
+    give the at-will a second area it does not print. The damage context
+    knows `from_attack`; the event does not carry it."""
 
 
 @power(
@@ -2165,11 +2332,14 @@ def i1828p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
 )
 def i1831x1(c: Cast) -> None:
-    """`c.ignore_cover(when=)` says it; the ref of the power it is gated on
-    is prose in the brief."""
+    """The ref is `p1167`, read off this item's other block. `query.
+    cover_waived` is handed the whole attack context, `power` included,
+    so `c.ignore_cover(when=)` narrows to the one row."""
+    c.ignore_cover(
+        on=c.me, until=When.ENCOUNTER, when=_is_row("p1167")
+    )
 
 
 @power(
@@ -2585,12 +2755,40 @@ def i1986p1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you hit a target with an attack with this implement",
-    todo=("c.effects_on()",),
+    on=HIT_BY_ME,
 )
 def i1989p1(c: Cast) -> None:
-    """`c.transfer` moves a live hold intact and is exactly this line's
-    verb -- but nothing hands back the effects standing on a creature, so
-    there is no hold to pass it."""
+    """`c.transfer` moves a live hold intact, ending it on the old
+    subject and rebuilding it on the new one with its conditions, its
+    burn and the saving throw it is still owed -- this line's verb
+    exactly. The old marker said nothing hands back the effects standing
+    on a creature; `world.effects.of` does, and this file already reaches
+    the same object in `_as_row`.
+
+    Narrowed to holds an enemy laid, because the printed line is about
+    getting rid of something and a chooser offered the party's own buffs
+    would hand one of them to the enemy. `c.transfer` refuses a hold
+    carrying a relation or a subscription and says so in its own
+    docstring, so those never reach the list."""
+    foe = _struck(c)
+    if foe is None:
+        return
+    live = [
+        eff
+        for who in (c.me, *c.within(5, side="ally"))
+        for eff in c.world.effects.of(who)
+        if not eff.ended
+        and not eff.relations
+        and not eff.subs
+        and (eff.conditions or eff.ongoing)
+        and not _my_side(c.world, c.me, eff.source)
+    ]
+    if not live:
+        return
+    by_label = {str(eff): eff for eff in live}
+    pick = c.choose(sorted(by_label), f"{c.ref}: which effect moves")
+    if pick is not None:
+        c.transfer(by_label[pick], to=foe)
 
 
 @power(
@@ -2686,10 +2884,35 @@ def i2289p1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
+    trigger="you use p1333",
+    on=Trigger(
+        AttackDeclared, _attacking_with("p1333"), "p1333 declares its swing"
+    ),
 )
 def i2291p1(c: Cast) -> None:
-    """Retargets one named power, whose ref is prose in the brief."""
+    """The twin of `i2614p1`, with the same verb and the same reason for
+    not using `PowerUsed`; only the ref took one more step to reach.
+
+    This item has no second block to read it off. `i1823` does: its
+    property and its power are one row between them, its power resolves
+    to `p1333`, and the token its property prints for that row is the
+    token this row's trigger prints. So the join is `i1823x1`'s, applied
+    across two items rather than within one -- worth knowing, because if
+    it is wrong this row is inert rather than wrong-headed, which is the
+    same shape the marker left behind.
+
+    `p1333` does roll an attack, so the nested window is the declaration
+    rather than the damage: `resolve.attack` announces it from inside
+    the target loop, which is where `c.add_target` needs to be standing.
+    Paragon's third target is out of scope, and the printed line puts no
+    distance between the targets -- only `p1333`'s own Ranged 10."""
+    first = getattr(c.trigger, "target", None)
+    if first is None:
+        return
+    for foe in c.within(10, side="enemy"):
+        if foe != first and c.can_see(foe):
+            c.add_target(foe)
+            return
 
 
 @power(
@@ -2778,15 +3001,18 @@ def i2332p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.typed_damage_bonus()", "c.once_per_round_bonus()"),
+    dropped=("c.once_per_round_bonus()",),
 )
 def i2442x1(c: Cast) -> None:
-    """The extra damage is untyped rather than necrotic -- `c.bonus` has no
-    `dtype` -- and it pays out on every qualifying hit rather than once a
-    round per enemy."""
+    """Re-aimed: `c.bonus(dtype=)` exists and is the type of the *extra*
+    damage, which is this line exactly, so the typing half was waiting
+    for something already there. What is still dropped is the latch --
+    it pays out on every qualifying hit rather than once a round per
+    enemy."""
     c.bonus(
         "damage",
         4 + c.enhancement,
+        dtype=DamageType.NECROTIC,
         on=c.me,
         until=When.ENCOUNTER,
         when=lambda ctx: ctx.get("target") is not None
@@ -2961,12 +3187,21 @@ def i2636p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("SavingThrow.condition",),
 )
 def i2642x1(c: Cast) -> None:
-    """The save modifier is totalled with no context, so "against being
-    immobilized or slowed" cannot narrow it."""
-    c.bonus("save", 2, kind="item", on=c.me, until=When.ENCOUNTER)
+    """The old note was wrong: `durations` builds a context for the save
+    and `holder.total("save", ctx)` is handed it, so the modifier is not
+    contextless at all. It carries `conditions` -- the frozenset the
+    effect holds -- alongside the `keywords` two other rows in this file
+    already gate on, and "against being immobilized or slowed" is that
+    set intersected."""
+    c.bonus(
+        "save", 2, kind="item", on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: bool(
+            ctx.get("conditions", frozenset())
+            & {Condition.IMMOBILIZED, Condition.SLOWED}
+        ),
+    )
 
 
 @power(

@@ -13,13 +13,13 @@ gate -- `holding(world, eid, ...)` -- and every one of them will report
 UNUSED. That is a chassis gap (chargen deals no such weapon) rather
 than a row gap, and it is the same one `exotic.py` states at length.
 
-**The associated-power rider.** Seven martial feats print a skill bonus
+**The associated-power rider.** Ten martial feats print a skill bonus
 *and* "when you use a power associated with this feat and hit an enemy
 with it, ...". A row declared with `on=Trigger(...)` never lays its
 standing modifiers, so these are traits: the bonus is laid at arm time
-and `c.watch(Hit, ...)` carries the rider. Three of the seven print no
-Associated Powers line at all, so their rider is `dropped` and their
-skill bonus still plays.
+and `c.watch(Hit, ...)` carries the rider. Three of them were written
+with the rider `dropped` because the spec carried no Associated Powers
+line; **it carries one now** for all three, and they are finished.
 
 **"You can spend 1 power point to ..."** is writable: `c.points()` asks
 whether there is one and `c.spend_points(1)` takes it. Five of the
@@ -27,11 +27,20 @@ psionic feats here are finished for that reason alone. What is not
 writable is reading a pool *back down to zero* (`c.on_points_spent()`)
 or handing points out (`c.grant_points()`).
 
-**Prose-named powers.** Nineteen rows are riders on a power the spec
-names in words with no ref -- quick formation, disrupting advance,
-wasteland fury, the spirit of Athas -- and `spec.power_ref()` is the
-symbol that has held that gap since the fourth wave. There is nothing
-for `c.watch` to match on.
+**Theme powers, which are not prose-named at all.** Eighteen rows here
+were marked `spec.power_ref()` on the reading that the spec names their
+subject in words and no ref exists. Half of that is wrong, and the half
+that is wrong is the half that matters. Each of the nine powers those
+eighteen ride on is a real compendium row with a real id, carrying
+`Class = 'Theme Power'`. `etl/build.py:_powers` imports
+`Class IN (CLASSES)` and `_racial_powers` imports the races beside it;
+nothing imports the themes, so the id never becomes a ref. The gap is
+`etl.build.CLASSES`, not the spec extractor -- and since the ref each
+row would watch is known, it is named too, so the marker goes red on the
+day somebody writes the row rather than never.
+
+`p12315` and the rest are ids, not names: what the id is called is still
+nobody's business here.
 """
 
 from __future__ import annotations
@@ -94,15 +103,31 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.query import alive, allies, distance_between, holding, team
 
-#: A power the spec names in prose with no ref, so nothing can watch it.
+#: A power the spec names in prose and that has no ref **anywhere** --
+#: not in the tree, not in the compendium. Nothing can watch it and
+#: nothing will import it either.
 PROSE = ("spec.power_ref()",)
+#: A rider on a row the compendium has and this build does not import.
+#: `etl/build.py` takes powers whose `Class` is one of the 25 playable
+#: classes, plus a second pass for the races; `Class = 'Theme Power'` and
+#: `Class = 'Wild Talent Power'` are taken by neither, so ten wild talents
+#: and every theme power are absent from `data/game.db` and therefore from
+#: the registry. Widening that filter is the whole of the gap.
+NO_IMPORT = ("etl.build.CLASSES",)
+
+
+def _unimported(ref: str) -> tuple[str, ...]:
+    """The import gap, and the ref the row will watch once it closes.
+
+    Two symbols because there are two waits and only one of them is
+    checkable: `etl.build.CLASSES` is where the fix goes and the
+    instrument cannot see `etl`, while the ref is looked up in the
+    registry and turns this row red the day it is declared.
+    """
+    return (*NO_IMPORT, ref)
 #: "You swap one of your level N powers for this one." The card is handed
 #: over; giving a power up is a build-time exchange.
 SWAP = ("chargen.power_swap()",)
-#: A class feature named in prose, with no `cf:` ref to borrow.
-FEATURE = ("c.class_feature()",)
-#: The Associated Powers line is absent from the block.
-ASSOCIATED = ("feat.associated_powers",)
 #: Augmenting a power from outside its own card.
 #: **Re-aimed.** `dsl.use(augment=)` arrived -- a row declares its
 #: augments in its own header and the spend is settled before targeting --
@@ -167,18 +192,25 @@ def _best_of_two(c: Cast) -> int:
     return max(c.str_mod, c.dex_mod)
 
 
-def _on_hit_with(c: Cast, refs: tuple[str, ...], fn) -> None:  # noqa: ANN001
+def _on_hit_with(c: Cast, refs: tuple[str, ...], fn,  # noqa: ANN001
+                 *, once: bool = False) -> None:
     """"When you use a power associated with this feat and hit an enemy."
 
     A trait rather than a declared trigger, because each of these feats
     also prints a standing skill bonus and a body under `on=` runs only
-    when the trigger fires."""
+    when the trigger fires.
+
+    `once` is `c.watch`'s own, which means "fire once" and not "live for
+    one event" -- it reads the log to see whether the handler did
+    anything, so a `Hit` with the wrong power does not spend the hold.
+    That is what a printed "once per encounter" needs.
+    """
 
     def rider(ev: Any) -> None:
         if ev.attacker == c.me and ev.power in refs:
             fn(ev)
 
-    c.watch(Hit, rider, on=c.me, until=When.ENCOUNTER)
+    c.watch(Hit, rider, on=c.me, until=When.ENCOUNTER, once=once)
 
 
 def _i_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -265,9 +297,9 @@ def f3179(c: Cast) -> None:
 
 
 @power("f3180", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p11778"))
 def f3180(c: Cast) -> None:
-    """Rides on a power named only in words."""
+    """Rides on a theme power the build does not import."""
 
 
 @power("f3182", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -286,9 +318,9 @@ def f3182(c: Cast) -> None:
 
 
 @power("f3183", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p11868"))
 def f3183(c: Cast) -> None:
-    """Widens the push of a power named only in words."""
+    """Widens the push of a theme power the build does not import."""
 
 
 _swap("f3184", "f3184b", Swap(6, utility=True))
@@ -369,9 +401,9 @@ def f3186b(c: Cast) -> None:
 
 
 @power("f3187", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p12338"))
 def f3187(c: Cast) -> None:
-    """Adds a second beneficiary to a power named only in words."""
+    """A second beneficiary for an unimported theme power."""
 
 
 _F3188 = ("p917", "p992", "p704", "p1063")
@@ -395,22 +427,29 @@ def f3188(c: Cast) -> None:
 
 
 @power("f3189", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p11804"))
 def f3189(c: Cast) -> None:
-    """Fires on dismissing a conjuration a power named in words makes."""
+    """Fires on dismissing the conjuration an unimported theme power
+    makes."""
 
 
 @power("f3190", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=PROSE)
 def f3190(c: Cast) -> None:
-    """Lets a class feature ride an action point. The feature has no ref
-    and nothing announces one being used."""
+    """Lets a named ability ride an action point.
+
+    **Re-aimed off `c.class_feature()`.** It is not a class feature: the
+    prerequisite parser files the same ability under `kind = 'power'`
+    (six feats share the term), and the compendium holds no row of any
+    kind by that name -- no Power, no Feat, no Theme, no Class. So there
+    is no ref to import and none to borrow, which is what
+    `spec.power_ref()` says and `c.class_feature()` did not."""
 
 
 @power("f3191", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p11868"))
 def f3191(c: Cast) -> None:
-    """Adds prone to a push a power named only in words deals out."""
+    """Adds prone to the push an unimported theme power deals out."""
 
 
 _swap("f3192", "f3192b", Swap(6, utility=True))
@@ -480,9 +519,9 @@ def f3194b(c: Cast) -> None:
 
 
 @power("f3195", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p12360"))
 def f3195(c: Cast) -> None:
-    """A slide and a shift hung on a power named only in words."""
+    """A slide and a shift hung on an unimported theme power."""
 
 
 _F3196 = ("p4368", "p971", "p315", "p1758")
@@ -503,9 +542,9 @@ def f3196(c: Cast) -> None:
 
 
 @power("f3197", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p12360"))
 def f3197(c: Cast) -> None:
-    """A daze hung on a power named only in words."""
+    """A daze hung on an unimported theme power."""
 
 
 @power("f3198", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -545,15 +584,16 @@ def f3199(c: Cast) -> None:
 
 
 @power("f3200", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p11804"))
 def f3200(c: Cast) -> None:
-    """Fires on dismissing a conjuration a power named in words makes."""
+    """Fires on dismissing the conjuration an unimported theme power
+    makes."""
 
 
 @power("f3201", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p12338"))
 def f3201(c: Cast) -> None:
-    """Widens an invisibility a power named only in words grants."""
+    """Widens the invisibility an unimported theme power grants."""
 
 
 @power("f3203", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -564,9 +604,9 @@ def f3203(c: Cast) -> None:
 
 
 @power("f3204", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p12244"))
 def f3204(c: Cast) -> None:
-    """A free shift hung on a power named only in words."""
+    """A free shift hung on an unimported theme power."""
 
 
 _swap("f3206", "f3206b", Swap(6, utility=True))
@@ -627,10 +667,14 @@ def f3208b(c: Cast) -> None:
 
 
 @power("f3209", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=NO_IMPORT)
 def f3209(c: Cast) -> None:
-    """"One of your <feature> attacks" names a set of rows by the feature
-    that grants them, and a feature is not a row with members to list."""
+    """A set of attacks named by the theme that grants them.
+
+    **Re-aimed off `c.class_feature()`.** The gate is a theme, not a
+    class feature, and the attacks are that theme's powers -- present in
+    the compendium, absent from the build. No single ref, because the
+    printed sentence names the whole set."""
 
 
 _F3210 = ("p2105", "p10733", "p10889", "p919")
@@ -787,9 +831,9 @@ def f3215(c: Cast) -> None:
 
 
 @power("f3216", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p11749"))
 def f3216(c: Cast) -> None:
-    """Extra poison damage on a power named only in words."""
+    """Extra poison damage on an unimported theme power."""
 
 
 @power("f3217", level=1, cls="", usage=AT_WILL, action=FREE,
@@ -806,33 +850,60 @@ def f3217(c: Cast) -> None:
         c.temp_hp(5 + c.con_mod, on=c.me)
 
 
+_F3218 = ("p2620", "p10591", "p315", "p10734")
+
+
 @power("f3218", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ASSOCIATED)
+       reach=PERSONAL, target=SELF)
 def f3218(c: Cast) -> None:
-    """The block *does* print an Associated Powers line; the spec does
-    not carry it. An errata block sits between the benefit and the list,
-    and `etl/feat._benefit` breaks at an errata heading and drops the
-    rest of that paragraph -- so the rider has no set of refs to watch.
-    The skill bonus is the whole of what plays."""
+    """**The Associated Powers line is in the spec now**, so the rider
+    has refs to watch and the row is finished. The docstring here used to
+    blame `etl/feat._benefit` for breaking at an errata heading and
+    eating the list; whatever the cause was, it is fixed, and the marker
+    outlived it.
+
+    "Adjacent to that enemy" is measured from the enemy and not from the
+    caster, so it is `distance_between` rather than `c.adjacent`, which
+    always asks about `c.me`. A plain "+1 bonus" with no type word is
+    untyped."""
     c.bonus("skill:perception", 1, on=c.me, until=When.ENCOUNTER,
             kind="feat")
 
+    def screen(ev: Any) -> None:
+        near = [a for a in c.allies()
+                if distance_between(c.world, a, ev.target) <= 1]
+        if not near:
+            return
+        friend = c.choose(near, "who gains the bonus")
+        if friend is not None:
+            c.bonus(AC, 1, on=friend, until=When.SONT)
+
+    _on_hit_with(c, _F3218, screen)
+
 
 @power("f3220", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.resist_forced(when=)",))
+       reach=PERSONAL, target=SELF)
 def f3220(c: Cast) -> None:
     """The poison save is exact -- the keywords of the row that laid the
-    hold, with the burn's type as the fallback. The forced-movement half
-    plays and is slightly too generous: it is printed only while
-    unbloodied, and `c.resist_forced` takes no gate, so a bloodied
-    character keeps the square here."""
+    hold, with the burn's type as the fallback.
+
+    **The unbloodied gate is writable after all.** `c.resist_forced`
+    takes no `when=`, but it is two lines long and the second of them is
+    `self.bonus("forced", ...)`; `movement.py` reads that key with a
+    context, so a gated bonus written out is the same modifier with the
+    gate the verb does not expose. The gate ignores the context and asks
+    the board, which is what "while you are not bloodied" means -- the
+    answer changes mid-fight and a modifier laid once would not notice.
+    `c.resist_forced(when=)` is still worth having; the row no longer
+    waits for it."""
+    me = c.me
     c.bonus(
-        "save", 2, on=c.me, until=When.ENCOUNTER, kind="racial",
+        "save", 2, on=me, until=When.ENCOUNTER, kind="racial",
         when=lambda ctx: Keyword.POISON in ctx.get("keywords", ())
         or ctx.get("dtype") is DamageType.POISON,
     )
-    c.resist_forced(1, on=c.me, until=When.ENCOUNTER)
+    c.bonus("forced", 1, on=me, until=When.ENCOUNTER,
+            when=lambda ctx: not c.bloodied(on=me))
 
 
 @power("f3221", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -915,15 +986,15 @@ def f3224b(c: Cast) -> None:
 
 
 @power("f3225", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p12258"))
 def f3225(c: Cast) -> None:
-    """Retypes the damage of a power named only in words."""
+    """Retypes the damage of an unimported theme power."""
 
 
 @power("f3226", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p12244"))
 def f3226(c: Cast) -> None:
-    """Defences hung on a power named only in words."""
+    """Defences hung on an unimported theme power."""
 
 
 @power("f3227", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -941,20 +1012,31 @@ def f3228(c: Cast) -> None:
     reroll out of combat."""
 
 
+_F3230 = ("p4541", "p971", "p10592", "p997")
+
+
 @power("f3230", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ASSOCIATED)
+       reach=PERSONAL, target=SELF)
 def f3230(c: Cast) -> None:
-    """No Associated Powers line *in the spec* -- the page prints one and
-    the errata truncation in `etl/feat._benefit` eats it, same as
-    `f3218`. So the once-per-encounter advantage has nothing to hang on.
-    The skill bonus plays."""
+    """**The spec carries the Associated Powers line now**, same as
+    `f3218`, so the once-per-encounter advantage has somewhere to hang.
+
+    The printed limit is the `once=` on the watch and not a `usage`: a
+    triggered trait declared ENCOUNTER spends a use on every firing
+    (#210), and `c.watch(once=True)` spends the hold only when the
+    handler actually did something."""
     c.bonus("skill:endurance", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+
+    def opening(ev: Any) -> None:
+        c.grants_advantage(on=ev.target, to=c.me, until=When.EONT, once=True)
+
+    _on_hit_with(c, _F3230, opening, once=True)
 
 
 @power("f3231", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p12258"))
 def f3231(c: Cast) -> None:
-    """Replaces the effect of a power named only in words."""
+    """Replaces the effect of an unimported theme power."""
 
 
 @power("f3232", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -970,9 +1052,9 @@ def f3232(c: Cast) -> None:
 
 
 @power("f3233", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p11778"))
 def f3233(c: Cast) -> None:
-    """Defences hung on a power named only in words."""
+    """Defences hung on an unimported theme power."""
 
 
 _F3234 = ("p917", "p10890", "p704", "p10472")
@@ -1002,17 +1084,21 @@ def f3235(c: Cast) -> None:
 
 @power("f3237", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*FEATURE, "c.familiar_state()"))
+       todo=(*PROSE, "c.familiar_state()"))
 def f3237(c: Cast) -> None:
-    """Pays out when a daily is used *without* a class feature, and the
-    beneficiary is picked by standing next to a familiar. Neither the
-    feature nor the familiar's position can be asked about."""
+    """Pays out when a daily is used *without* a named ability, and the
+    beneficiary is picked by standing next to a familiar.
+
+    **Re-aimed off `c.class_feature()`**, the same ability as `f3190`
+    and `f3244` and the same finding: nothing in the compendium is that
+    row, so there is nothing to give it a ref. The familiar's position
+    is the second absence."""
 
 
 @power("f3239", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p11749"))
 def f3239(c: Cast) -> None:
-    """A saving-throw penalty hung on a power named only in words."""
+    """A saving-throw penalty hung on an unimported theme power."""
 
 
 @power("f3240", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1032,22 +1118,24 @@ def f3240(c: Cast) -> None:
 
 
 @power("f3242", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p12315"))
 def f3242(c: Cast) -> None:
-    """A daze hung on a power named only in words."""
+    """A daze hung on an unimported theme power."""
 
 
 @power("f3243", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=_unimported("p12315"))
 def f3243(c: Cast) -> None:
-    """A slide hung on a power named only in words."""
+    """A slide hung on an unimported theme power."""
 
 
 @power("f3244", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=PROSE)
 def f3244(c: Cast) -> None:
-    """A defence penalty that rides on a class feature being used with a
-    daily. The feature has no ref and announces nothing."""
+    """A defence penalty that rides on a named ability used with a daily.
+
+    **Re-aimed off `c.class_feature()`** -- see `f3190`. Same ability,
+    same prerequisite term, and it is not a class feature."""
 
 
 _F3245 = ("p2099", "p2248", "p10592", "p4542")
@@ -1083,9 +1171,13 @@ def f3246(c: Cast) -> None:
 
 
 @power("f3247", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, todo=NO_IMPORT)
 def f3247(c: Cast) -> None:
-    """Three powers named by their category and not by ref."""
+    """Three powers named by their category and not by ref.
+
+    **Re-aimed off `spec.power_ref()`.** The category is a `Class` value
+    in the compendium -- ten rows carry it -- and the build imports
+    neither it nor the themes. The same widening closes both."""
 
 
 @power("f3248", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1107,14 +1199,32 @@ def f3248(c: Cast) -> None:
         c.temp_hp(best, on=friend)
 
 
+_F3249 = ("p2104", "p4369", "p620")
+
+
 @power("f3249", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ASSOCIATED)
+       reach=PERSONAL, target=SELF, dropped=("c.shift(toward=)",))
 def f3249(c: Cast) -> None:
-    """No Associated Powers line *in the spec*; the page prints one and
-    the errata truncation in `etl/feat._benefit` eats it, same as
-    `f3218` and `f3230`. So the shift has nothing to ride on."""
+    """**The spec carries the Associated Powers line now**, same as
+    `f3218` and `f3230`, so the shift has something to ride on.
+
+    "Larger than you" is `.order` and not `.squares`: Tiny, Small and
+    Medium all occupy one square, so a footprint comparison cannot tell
+    them apart. `c.grant_action` follows `c.target`, so the offer is
+    aimed at `c.me` by hand.
+
+    Dropped, as on `f3206b`: the shift's *destination* -- "to a square
+    adjacent to the enemy" -- which `c.shift` picks through the world's
+    decider with no creature to close on."""
     c.bonus("skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER,
             kind="feat")
+
+    def close(ev: Any) -> None:
+        if c.size_of(on=ev.target).order <= c.size_of(on=c.me).order:
+            return
+        c.grant_action("shift", MINOR, on=c.me, until=When.EOT)
+
+    _on_hit_with(c, _F3249, close)
 
 
 # -- the psionic tail: power points, spent one at a time --------------------
@@ -1223,11 +1333,22 @@ def f3311(c: Cast) -> None:
 
 @power("f3312", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.bonus('skill:any')", "c.on_skill_check()"))
+       dropped=("c.on_skill_check()",))
 def f3312(c: Cast) -> None:
-    """A skill chosen when the feat is taken, and a point spent on a
-    check as it is made. `c.bonus` wants a named skill and nothing offers
-    the option at the moment a check happens."""
+    """**Re-aimed off `c.bonus('skill:any')`, which was never the hold.**
+    `c.bonus` wants a named skill and there is a list of them --
+    `engine.skills.SKILLS`, seventeen entries, which `items/misc.py`
+    already offers this way. So the standing +2 plays, chosen at arm
+    time the way `f3214` chooses its defence.
+
+    Dropped: spending a point to raise it, which wants an offer at the
+    moment a check is made and nothing announces that window in time."""
+    from combat_engine.engine.skills import SKILLS
+
+    pick = c.choose(sorted(SKILLS), "which skill")
+    if pick is not None:
+        c.bonus(f"skill:{pick}", 2, on=c.me, until=When.ENCOUNTER,
+                kind="feat")
 
 
 @power("f3313", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1329,15 +1450,19 @@ def f3391(c: Cast) -> None:
 
 
 @power("f3392", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.lend_skills()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("chargen.skill_training()",))
 def f3392(c: Cast) -> None:
     """One of another class's at-wills, chosen by level rather than by
     ref, which is exactly the set `c.borrow_row` reads off the registry.
     `uses=1` is the printed limit: an at-will handed over bare is an
     extra attack every turn.
 
-    Dropped: the training half, which is a skill from another class's
-    list and is not a fight."""
+    Dropped, and **re-aimed off `c.lend_skills()`**: the training half
+    is plain training in a skill from another class's list, which is
+    `chargen.skill_training()` and a build-time fact. `c.lend_skills` is
+    one skill *standing in for* another -- what `f3274` prints -- and
+    naming it here pointed ten rows at the wrong verb."""
     c.borrow_row("monk", level=1, uses=1)
 
 
@@ -1564,10 +1689,15 @@ def f3417(c: Cast) -> None:
 
 
 @power("f3418", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=(*AUGMENT, *PROSE))
+       reach=PERSONAL, target=SELF, dropped=AUGMENT)
 def f3418(c: Cast) -> None:
-    """Same shape as f3416: a skill bonus that plays and an augment on a
-    power named only in words."""
+    """Same shape as f3416: a skill bonus that plays and an augment.
+
+    **Re-aimed off `spec.power_ref()`.** The power is `p12887` -- the
+    one its three siblings `f3416`, `f3420` and `f3422` name by ref in
+    the same printed sentence. Only this block's copy went unscrubbed,
+    so the row looked like it was waiting on a name when the augment
+    machinery was the whole of what it wanted."""
     c.bonus("skill:intimidate", 2, on=c.me, until=When.ENCOUNTER,
             kind="feat")
 

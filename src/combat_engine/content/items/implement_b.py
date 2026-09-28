@@ -16,24 +16,29 @@ Three judgements run through the whole file.
 * **The class half of a line is not enforced.** "An artificer attack
   power", "a wizard lightning power" -- the item was dealt to whoever is
   holding it, and the same reading the weapon wave took.
-* **A great many blocks hang on a power the spec names only in prose.**
-  The compendium name is stripped and no ref is printed in its place, so
-  the trigger cannot be written at all; those carry `by_ref()`, and the
-  rows whose whole content is "as the <class>'s <name> power" carry
-  `c.use_power()`. Where the spec does print a ref -- `p2365`, `p3403` --
-  `c.grant_attack(c.me, ref=...)` resolves the row and no marker is needed.
+* **The riders that hang on a named power are writable now.** The specs
+  used to print the compendium name and no ref, so nine blocks carried
+  `by_ref()`; the ETL fixes put the refs back, and `_on_hit_with` is the
+  shape they all wanted -- watch `Hit`, compare `ev.power`. Only `i3525x1`
+  still names its power in prose. Where the whole block is "as the
+  <class>'s <power>", `c.use_power(ref, spend=False)` is it, and
+  `c.grant_attack(c.me, ref=...)` where the row is a swing.
 
 Recurring gaps, each marked with the symbol it wants rather than
-approximated: `c.flurry_of_blows()`, `c.pact_boon()`, `c.fell_might()`,
-`c.dragon_breath()`, `c.regain_points()`, `c.store_points()`,
-and `c.tome_powers()`. "Ongoing 5 fire and radiant damage" is one number
-of two types and not two numbers, and `c.ongoing(dtypes=)` is it.
+approximated: `c.pact_boon()`, `c.fell_might()`, `c.regain_points()`,
+`c.store_points()` and `c.tome_powers()`. Four class features the cards
+lean on are not verbs at all but undeclared rows, so the markers name the
+refs: `cf:monk-f0c0`..`c4` for the monk's per-tradition attack flurry and
+`cf:warlock-f1c0` for the star pact's boon. "Ongoing 5 fire and radiant
+damage" is one number of two types and not two numbers, and
+`c.ongoing(dtypes=)` is it.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.powers.druid.forms import BEAST, in_beast_form
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -99,9 +104,20 @@ from combat_engine.engine import (
     power,
     spread,
 )
+from combat_engine.engine.components import Powers
 from combat_engine.engine.events import PowerResolved
 
 ITEM = "item"
+
+#: The monk's attack flurry is one row per monastic tradition and none of
+#: the five is declared, so the four blocks that lean on it name the refs.
+FLURRY = (
+    "cf:monk-f0c0",
+    "cf:monk-f0c1",
+    "cf:monk-f0c2",
+    "cf:monk-f0c3",
+    "cf:monk-f0c4",
+)
 
 
 def _struck(c: Cast) -> int | None:
@@ -138,6 +154,26 @@ def _just_bloodied(c: Cast, ev: Any) -> bool:
         return False
     half = h.max_hp // 2
     return ev.hp <= half < ev.hp + ev.amount
+
+
+def _tome_power(c: Cast, cap: int, *words: Keyword) -> str:
+    """One of the dailies a tome would have been stocked with.
+
+    `c.borrow_row` is the verb for "the card names a set and asks the
+    character to take one of it", which is exactly what a tome's two
+    chosen powers are. It matches the level **exactly** and the card
+    says "equal to or lower than that of the tome", so the ladder is
+    walked from the tome's rung down and the first with anything on it
+    answers. Several `words` because one card names two keywords.
+    """
+    for word in words:
+        for lvl in range(cap, 0, -1):
+            taken = c.borrow_row(
+                cls="wizard", level=lvl, usage=DAILY, keyword=word, uses=1
+            )
+            if taken:
+                return taken
+    return ""
 
 
 def _crit_by_me(world: World, me: int, ev: Any) -> bool:
@@ -234,6 +270,56 @@ def _target_is(c: Cast, *words: str):  # noqa: ANN202
 def _is_melee(ctx: dict[str, Any]) -> bool:
     p = get(ctx.get("power", ""))
     return p is not None and p.reach_of(0).kind == "melee"
+
+
+def _augmented(world: World, who: int, ref: str) -> bool:
+    """Did that creature spend power points on that row this fight?
+
+    `c.points_spent` is the same read from inside a body; a declared
+    trigger's predicate is handed `(world, me, ev)` and no `Cast`.
+    """
+    from combat_engine.engine.components import PowerPoints
+
+    pool = world.get(who, PowerPoints)
+    return pool is not None and pool.augmented.get(ref, 0) > 0
+
+
+def _ally_miss_within(radius: int):  # noqa: ANN202
+    """"An ally within N squares misses with an augmented power."
+
+    `Miss` names the swinger `attacker`, so `about_me` and `ally_within`
+    -- which read `actor` -- are both false here forever.
+    """
+
+    def check(world: World, me: int, ev: Any) -> bool:
+        who = getattr(ev, "attacker", None)
+        if who is None or who == me:
+            return False
+        from combat_engine.engine import query
+
+        if who not in query.allies(world, me):
+            return False
+        if query.distance_between(world, me, who) > radius:
+            return False
+        return _augmented(world, who, getattr(ev, "power", ""))
+
+    return check
+
+
+def _on_hit_with(c: Cast, ref: str, fn: Any) -> None:
+    """Hang a rider on the wielder's hits with one named row.
+
+    The shape nine properties in this file wanted and could not have while
+    the specs printed their power in prose: the ref is in the spec now, so
+    "when you hit with <ref> using this wand" is `ev.power` and nothing
+    cleverer.
+    """
+
+    def on_hit(ev: Hit) -> None:
+        if ev.attacker == c.me and ev.power == ref:
+            fn(ev)
+
+    c.watch(Hit, on_hit, until=When.ENCOUNTER)
 
 
 # -- level 3 ----------------------------------------------------------------
@@ -478,12 +564,15 @@ def i3345x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("by_ref()", "c.reroll_ones()"),
+    todo=("c.reroll_ones()",),
 )
 def i3374x1(c: Cast) -> None:
-    """Rerolling the ones out of a damage roll is not `c.reroll_damage`,
-    which rolls the whole expression twice and keeps the higher. The power
-    the rider hangs on is named in prose with no ref beside it."""
+    """Re-aimed. `p13799` is printed and declared, so the power the rider
+    hangs on is no longer the hold. What is left is the rider itself:
+    rerolling the ones out of a damage roll is not `c.reroll_damage`,
+    which rolls the whole expression twice and keeps the higher, and the
+    individual dice are gone by the time anything can see them. Same hold
+    as `i1076x1`."""
 
 
 @power(
@@ -553,11 +642,16 @@ def i3434x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("by_ref()",),
 )
 def i3465x1(c: Cast) -> None:
-    """The rider hangs on one named power and the spec prints its name in
-    prose with no ref, so there is nothing to watch for."""
+    """The spec prints `p10137` now, so the rider is an ordinary watch on
+    the wielder's hits with that one row. `c.flat` rather than `c.bonus`:
+    the number is fixed and the card adds it to the power's own damage
+    rather than to every roll the wielder makes."""
+    _on_hit_with(
+        c, "p10137",
+        lambda ev: c.flat(c.enhancement, dtype=DamageType.FIRE, on=ev.target),
+    )
 
 
 @power(
@@ -658,11 +752,27 @@ def i684p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.in_beast_form()", "query.charging()"),
+    dropped=("query.charging()",),
 )
 def i726x1(c: Cast) -> None:
-    """Neither gate can be asked. Speed is read with no context at all, so
-    "while charging" cannot narrow it, and no verb reports beast form."""
+    """Re-aimed. Beast form is askable after all -- the druid package
+    records it as one labelled effect and `in_beast_form` is the read, so
+    the bonus is laid when the shape is taken rather than at arming. What
+    is still dropped is "when charging": speed is totalled with no context
+    at all, so nothing can narrow a speed bonus to one kind of move. No
+    type word on the card, so untyped."""
+
+    def granted() -> None:
+        c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER)
+
+    if in_beast_form(c.world, c.me):
+        granted()
+
+    def shaped(ev: EffectApplied) -> None:
+        if ev.target == c.me and ev.label == BEAST:
+            granted()
+
+    c.watch(EffectApplied, shaped, until=When.ENCOUNTER)
 
 
 @power(
@@ -675,12 +785,13 @@ def i726x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with a charge attack using this totem",
     on=Trigger(Hit, both(by_me, by_charge), "you hit with a charge"),
-    dropped=("c.in_beast_form()",),
 )
 def i726p1(c: Cast) -> None:
-    """"The space it vacated" has to be read before the shove, not after."""
+    """"The space it vacated" has to be read before the shove, not after.
+    The beast-form requirement is a real gate now: `in_beast_form` reads
+    the label every druid shape wears."""
     foe = _struck(c)
-    if foe is None:
+    if foe is None or not in_beast_form(c.world, c.me):
         return
     vacated = _square(c, foe)
     c.push(1, on=foe)
@@ -795,10 +906,13 @@ def i998p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.dark_spiral_aura()",),
+    todo=("cf:warlock-f1c0",),
 )
 def i1015x1(c: Cast) -> None:
-    """The extra damage is the value of a class feature nothing models."""
+    """Re-aimed at the ref. The extra damage is the running value of the
+    star pact's boon, and that boon is a row -- `cf:warlock-f1c0`, named
+    by `cf:warlock-f1s0` -- which is not declared. A verb was the wrong
+    thing to ask for: once the row exists its value is the row's."""
 
 
 @power(
@@ -900,11 +1014,14 @@ def i1197x1(c: Cast) -> None:
     target=SELF,
     trigger="an enemy hits you with an opportunity attack",
     on=Trigger(Hit, hits_me, "an enemy hits you"),
-    todo=("c.flurry_of_blows()",),
+    todo=FLURRY,
 )
 def i1197p1(c: Cast) -> None:
-    """The whole payout is one named class feature, used out of turn and
-    past its own limit. Nothing models it."""
+    """Re-aimed at the refs. The payout is not a verb: `cf:monk-f0` hands
+    out one attack row per monastic tradition and none of the five is
+    declared, so there is nothing for `c.use_power(..., again=True)` --
+    which is exactly "even if you have already used it this round" -- to
+    point at."""
 
 
 @power(
@@ -1029,10 +1146,11 @@ def i1533p2(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.flurry_of_blows()",),
+    todo=FLURRY,
 )
 def i1588p1(c: Cast) -> None:
-    """Both the trigger and the payout are one named class feature."""
+    """Re-aimed at the refs. Both the trigger and the payout are the
+    monk's per-tradition attack row, and none of the five is declared."""
 
 
 @power(
@@ -1067,10 +1185,15 @@ def i1594p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("by_ref()",),
+    todo=("c.curse_damage()", "c.extend_range()"),
 )
 def i1825x1(c: Cast) -> None:
-    """A rider on one named power the spec prints in prose with no ref."""
+    """Re-aimed. `p6855` is printed and declared, so the ref was never the
+    hold here -- both printed clauses are. Lengthening the reach at which
+    that row picks its second creature means reaching into another row's
+    own range line, which is the same hold `i2635x1` has; and the curse's
+    damage dice, which the other half adds to, are not a thing any verb
+    rolls -- the same hold as `i1833x1`."""
 
 
 @power(
@@ -1095,10 +1218,24 @@ def i1825p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("by_ref()",),
 )
 def i1827x1(c: Cast) -> None:
-    """A rider on one named power the spec prints in prose with no ref."""
+    """The spec prints `p3214`, whose own hit lays a -2 to attack rolls
+    until the end of the wielder's next turn. "While it is taking the
+    penalty" is therefore that window and not a second question: the
+    second watch is hung with the same duration the penalty has, so it
+    stops when the penalty does."""
+
+    def struck(ev: Hit) -> None:
+        foe = ev.target
+
+        def swung(later: AttackDeclared) -> None:
+            if later.attacker == foe:
+                c.flat(3 + c.enhancement, dtype=DamageType.PSYCHIC, on=foe)
+
+        c.watch(AttackDeclared, swung, until=When.EONT)
+
+    _on_hit_with(c, "p3214", struck)
 
 
 @power(
@@ -1167,10 +1304,15 @@ def i1829p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("by_ref()",),
 )
 def i1830x1(c: Cast) -> None:
-    """A rider on one named power the spec prints in prose with no ref."""
+    """The spec prints `p4305`, and `c.forces` is gated on `power` and
+    `how`, so "one extra square of *that* row's slide" is exact rather
+    than a blanket extra square on everything the wielder shoves."""
+    c.forces(
+        1, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") == "p4305" and ctx.get("how") == "slide",
+    )
 
 
 @power(
@@ -1223,11 +1365,14 @@ def i1833p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("by_ref()", "c.on_damage_reduced()"),
+    todo=("c.on_damage_reduced()",),
 )
 def i1834x1(c: Cast) -> None:
-    """Hangs on one named power with no ref, and on that power's own
-    clause about reducing damage, which announces nothing."""
+    """Re-aimed. `p7636` is printed and declared, so the ref is no longer
+    the hold. The trigger is that row's own clause about reducing the
+    damage its target would deal, and nothing announces a reduction --
+    `c.reduce` takes the number off and emits no event of its own, so
+    there is no moment to hang this on."""
 
 
 @power(
@@ -1254,10 +1399,18 @@ def i1834p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("by_ref()",),
 )
 def i1835x1(c: Cast) -> None:
-    """A rider on one named power the spec prints in prose with no ref."""
+    """The spec prints `p4199`, whose own hit pushes 1 square. The card
+    replaces that number with the wielder's Wisdom modifier, and
+    `c.forces` adds rather than sets, so the difference is what is laid
+    -- gated on that row's pushes and nothing else. Floored at 0: a
+    modifier of 1 or less is the printed number already, and a negative
+    would shorten somebody else's shove."""
+    c.forces(
+        max(0, c.wis_mod - 1), on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") == "p4199" and ctx.get("how") == "push",
+    )
 
 
 @power(
@@ -1285,10 +1438,21 @@ def i1835p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("by_ref()",),
 )
 def i1837x1(c: Cast) -> None:
-    """A rider on one named power the spec prints in prose with no ref."""
+    """The spec prints `p2780`. "A different enemy within 2 squares of
+    the target" is a choice, so it is offered rather than picked; a
+    penalty takes no `kind`, by the rule."""
+
+    def struck(ev: Hit) -> None:
+        near = [e for e in c.within(2, of=ev.target, side="enemy") if e != ev.target]
+        if not near:
+            return
+        pick = c.choose(near, "takes the penalty to attack rolls")
+        if pick is not None:
+            c.penalty("attack", 2, on=pick, until=When.EONT)
+
+    _on_hit_with(c, "p2780", struck)
 
 
 @power(
@@ -1313,10 +1477,11 @@ def i1837p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.flurry_of_blows()",),
+    todo=FLURRY,
 )
 def i1856x1(c: Cast) -> None:
-    """Adds to the damage of one named class feature nothing models."""
+    """Re-aimed at the refs. Adds to the damage of the monk's
+    per-tradition attack row, and none of the five is declared."""
 
 
 @power(
@@ -1397,13 +1562,14 @@ def i1954p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="an ally within 5 squares misses with an augmented psionic power",
-    on=Trigger(Miss, lambda w, me, ev: False, "an ally misses"),
+    on=Trigger(Miss, _ally_miss_within(5), "an ally within 5 squares misses"),
     todo=("c.regain_points()",),
 )
 def i1972p1(c: Cast) -> None:
-    """`c.spend_points` takes power points away and `c.points` counts what
-    is left; nothing puts any back. The trigger is written inert to match
-    -- the row is refused in play either way."""
+    """The trigger is real now -- `Miss` names the swinger `attacker`, and
+    an augmented use is one `Pool.augmented` has a number for. Only the
+    payout is missing: `c.spend_points` takes power points away and
+    `c.points` counts what is left, and nothing puts any back."""
 
 
 @power(
@@ -1660,10 +1826,12 @@ def i1999p1(c: Cast) -> None:
     action=FREE,
     reach=Melee(1),
     target=ONE_CREATURE,
-    todo=("c.flurry_of_blows()",),
+    todo=FLURRY,
 )
 def i2115p1(c: Cast) -> None:
-    """The trigger is one named class feature nothing models."""
+    """Re-aimed at the refs. The trigger is the monk's per-tradition
+    attack row, and none of the five is declared; `c.basic` is waiting
+    for it on the other side."""
 
 
 @power(
@@ -1775,11 +1943,17 @@ def i2335p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.dragon_breath()",),
 )
 def i2339x1(c: Cast) -> None:
-    """`c.deals` would say the override, but the type to override with is
-    a racial feature's, and nothing reports it."""
+    """`c.element` is the reader that was missing: the breath's damage
+    type is a build choice `chargen` records beside the leg, and `p1448`
+    reads it the same way. A carrier whose build names no element gets
+    nothing, which is the printed prerequisite rather than a silent row.
+    "Using this implement" is armed always-on, as everywhere in this
+    file -- the damage context does not carry the weapon."""
+    breath = c.element()
+    if breath is not None:
+        c.deals(breath, on=c.me, until=When.ENCOUNTER)
 
 
 @power(
@@ -1790,10 +1964,29 @@ def i2339x1(c: Cast) -> None:
     action=FREE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.dragon_breath()",),
+    trigger="you hit a cursed target with an arcane power using this rod",
+    on=Trigger(
+        Hit, both(by_me, by_keyword(Keyword.ARCANE)), "you hit with an arcane power"
+    ),
+    dropped=("c.cast_from(ref=)", "c.add_target(pending=)"),
 )
 def i2339p1(c: Cast) -> None:
-    """Moves the origin square of a racial attack nothing models."""
+    """Re-aimed and written. `p1448` is declared, so the racial attack is
+    no longer the hold, and "treat the affected creature as the origin
+    square of the blast" is `c.cast_from` -- which is read in
+    `dsl.measured_from`, so the borrowed square decides what may be aimed
+    at as well as where the line is traced.
+
+    Two clauses are dropped. `c.cast_from` is a standing change and takes
+    no ref, so it moves the origin of every area attack the wielder makes
+    in the window rather than only the breath's; and "the attack also
+    targets the affected creature" has to be said about a use that has
+    not begun -- `c.add_target` only reaches a power already running
+    underneath this one."""
+    foe = _struck(c)
+    if foe is None or not c.cursed(on=foe):
+        return
+    c.cast_from(foe, on=c.me, until=When.EONT)
 
 
 @power(
@@ -1833,17 +2026,22 @@ def i2345p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.conceal(from_=)",),
 )
 def i2348x1(c: Cast) -> None:
     """`c.curse` lands as a labelled effect, so `EffectApplied` is where
-    "whenever you place a curse" is heard. Concealment cannot be aimed at
-    one creature, so it is granted against everybody -- that clause is the
-    dropped one."""
+    "whenever you place a curse" is heard. `c.conceal` is handed the
+    *attack* context, which carries `attacker` -- so "from the target"
+    is a real gate and the concealment is not granted against the rest
+    of the board."""
 
     def cursed(ev: EffectApplied) -> None:
-        if ev.source == c.me and "curse" in ev.label:
-            c.conceal(on=c.me, until=When.EONT)
+        if ev.source != c.me or "curse" not in ev.label:
+            return
+        foe = ev.target
+        c.conceal(
+            on=c.me, until=When.EONT,
+            when=lambda ctx, f=foe: ctx.get("attacker") == f,
+        )
 
     c.watch(EffectApplied, cursed, until=When.ENCOUNTER)
 
@@ -1976,11 +2174,13 @@ def i2610p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.RADIANT],
-    todo=("by_ref()", "c.light()"),
+    todo=("c.light()",),
 )
 def i2612p1(c: Cast) -> None:
-    """Hangs on one named light power with no ref, and on the lit radius
-    being a thing on the board that the damage can measure from."""
+    """Re-aimed. `p1225` is printed and declared, so the ref is no longer
+    the hold. The whole row measures the radius that row lights -- which
+    square is lit, and for how long -- and nothing on the board is lit or
+    unlit. Same hold as `i630p2` and `i1533p1`."""
 
 
 @power(
@@ -2077,11 +2277,13 @@ def i2635x1(c: Cast) -> None:
     reach=CloseBlast(5),
     target=ONE_CREATURE,
     attack=Attack(INT, vs=FORT),
-    dropped=("Attack.best_of()",),
+    dropped=("Attack.by_choice",),
 )
 def i2637p1(c: Cast) -> None:
     """"Intelligence or Charisma" is one attack line with two abilities and
-    the header holds one; Intelligence is written and the choice dropped."""
+    `Attack` holds one; Intelligence is written and the choice dropped.
+    Re-aimed onto the symbol `p1448` already carries for the same hole --
+    that racial attack prints three abilities -- so the two group."""
     if c.strike():
         c.push(c.enhancement)
         c.prone()
@@ -2249,11 +2451,16 @@ def i2782p1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.channel_divinity()",),
+    todo=("by_ref()",),
 )
 def i2801p1(c: Cast) -> None:
-    """Spends a class feature's use, past its own once-per-encounter
-    limit, on a power the spec names only in prose."""
+    """Re-aimed. The class feature is not the hold: 115 rows carry
+    `group="channel divinity"`, `c.expended(group=)` reads which are
+    gone and `c.restore_use` hands one back, so "even if you have
+    already used it this encounter" is sayable. What is missing is
+    *which* row -- the spec names the one power in prose and prints no
+    ref, and picking any channel-divinity row the bearer happens to own
+    would be a different card."""
 
 
 @power(
@@ -2281,10 +2488,21 @@ def i2803p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("by_ref()",),
 )
 def i2811x1(c: Cast) -> None:
-    """A rider on one named power the spec prints in prose with no ref."""
+    """The spec prints `p1455`. `PowerUsed` is safe to read here -- the
+    rider turns on the declaration and not on anything that row's body
+    does. "During a combat encounter" is every moment this trait is
+    armed, so it is not a second gate."""
+
+    def used(ev: PowerUsed) -> None:
+        if ev.actor != c.me or ev.power != "p1455":
+            return
+        amount = c.cha_mod + c.enhancement
+        for who in (c.me, *c.within(5, side="ally")):
+            c.temp_hp(amount, on=who)
+
+    c.watch(PowerUsed, used, until=When.ENCOUNTER)
 
 
 @power(
@@ -2406,11 +2624,24 @@ def i2898x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.tome_powers()",),
+    dropped=("c.expend_row(among=)",),
 )
 def i2898p1(c: Cast) -> None:
-    """Trades an unused daily for one of the two powers the item carries,
-    and the item carries no powers of its own."""
+    """Re-aimed and written. `c.borrow_row` is the verb for exactly this
+    shape -- the card names a *set* and asks the character to take one of
+    it -- and it reads the set off the registry by class, level and
+    usage, which is where the tome's two powers would have been chosen
+    from. `uses=1` is the printed "during this encounter".
+
+    What is dropped is the price: "expend an unused daily of an equal or
+    higher level" needs the bearer's own unspent dailies enumerated, and
+    `c.expend_row` takes one ref and nothing lists the candidates.
+
+    The set is empty in the tree today -- the only wizard daily
+    lightning power declared is level 5 and this tome is level 4 -- so
+    the row is silent until one is written. That is a content gap and
+    not a hole in the row: it fills itself the day the power lands."""
+    _tome_power(c, 4, Keyword.LIGHTNING)
 
 
 @power(
@@ -2941,14 +3172,19 @@ def i3524p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("query.is_basic_attack()",),
 )
 def i442x1(c: Cast) -> None:
-    """"Melee basic attack" narrows to melee only: nothing asks whether a
-    row *is* the basic attack, so the slide follows every melee hit."""
+    """"Melee basic attack" is askable after all: `Powers.basic` is what
+    that creature's basic attack actually is -- `"mba"` for a character,
+    one of its own abilities for a monster -- so the ref is compared
+    against that rather than against every melee row. The reach is still
+    asked, because `Powers.basic` also answers for the ranged swing."""
 
     def on_hit(ev: Hit) -> None:
         if ev.attacker != c.me:
+            return
+        mine = c.world.get(c.me, Powers)
+        if ev.power != (mine.basic if mine is not None else "mba"):
             return
         p = get(ev.power)
         if p is None or p.reach_of(getattr(ev, "branch", 0)).kind != "melee":
@@ -3559,11 +3795,15 @@ def i2717x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.SUMMONING],
-    todo=("c.tome_powers()",),
+    dropped=("c.expend_row(among=)",),
 )
 def i2717p1(c: Cast) -> None:
-    """Trades an unused daily for one of the two powers the item carries,
-    and the item carries no powers of its own."""
+    """Re-aimed and written, as `i2898p1`: `c.borrow_row` enumerates the
+    set the tome would have been stocked from. The price -- an unused
+    daily of equal or higher level -- is the dropped clause. No wizard
+    daily summoning power at or below level 5 is declared yet, so the
+    set is empty and the row is silent until one is."""
+    _tome_power(c, 5, Keyword.SUMMONING)
 
 
 @power(
@@ -3678,14 +3918,25 @@ def i2768x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you fail your first saving throw against an effect",
-    on=Trigger(SavingThrow, lambda w, me, ev: False, "you fail a saving throw"),
+    on=Trigger(
+        SavingThrow,
+        lambda w, me, ev: getattr(ev, "actor", None) == me
+        and not getattr(ev, "saved", True),
+        "you fail a saving throw",
+    ),
     todo=("c.suspend_effect()",),
 )
 def i2796p1(c: Cast) -> None:
-    """Holding an effect off without ending it has no verb -- `c.cure`
-    takes a condition away for good and nothing parks one. The first-save
-    bookkeeping has nowhere to live either, so the trigger is written
-    inert to match a row that is refused in play."""
+    """The trigger is real now -- `SavingThrow` carries `actor`, `saved`
+    and `against`, the label of the effect being rolled against, and a
+    once-per-encounter row answering a failure is the printed "first"
+    closely enough.
+
+    The payout is still missing. `c.ignore_condition` is the near
+    neighbour and suppresses a *condition* without ending it, but
+    `against` is a label and nothing reads back which conditions or
+    which burn an effect is carrying, so "that effect does not affect
+    you" cannot be aimed at the one that was failed."""
 
 
 @power(
@@ -3731,11 +3982,14 @@ def i3012x1(c: Cast) -> None:
     keywords=[
         Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.PSYCHIC, Keyword.TELEPORTATION,
     ],
-    todo=("c.tome_powers()",),
+    dropped=("c.expend_row(among=)",),
 )
 def i3012p1(c: Cast) -> None:
-    """Trades an unused daily for one of the two powers the item carries,
-    and the item carries no powers of its own."""
+    """Re-aimed and written, as `i2898p1`. "Psychic or teleportation" is
+    two sets and `c.borrow_row` narrows on one keyword, so they are
+    asked in turn and the first with anything in it answers. The price
+    -- an unused daily of equal or higher level -- is dropped."""
+    _tome_power(c, 5, Keyword.PSYCHIC, Keyword.TELEPORTATION)
 
 
 @power(
@@ -3749,11 +4003,21 @@ def i3012p1(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     trigger="you hit a target with an attack using this totem while bloodied",
     on=Trigger(Hit, by_me, "you hit with this totem"),
-    todo=("query.surges_spent()",),
 )
 def i3192p1(c: Cast) -> None:
-    """The damage is a count of surges spent since the last extended rest
-    -- a day's bookkeeping, and `Health` records only what is left."""
+    """"Surges spent since your last extended rest" needs no day's
+    bookkeeping: an extended rest hands every surge back, so the count
+    is `max_surges` less what is left, which `Health` carries both of.
+    "While you are bloodied" is a fact about the wielder at the moment
+    of the hit, so it is asked in the body rather than as a
+    `requires=`."""
+    foe = _struck(c)
+    if foe is None or not c.bloodied(on=c.me):
+        return
+    h = c.world.get(c.me, Health)
+    spent = max(0, h.max_surges - h.surges) if h is not None else 0
+    if spent:
+        c.flat(spent, dtype=DamageType.PSYCHIC, on=foe)
 
 
 @power(

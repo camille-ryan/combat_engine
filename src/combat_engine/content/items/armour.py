@@ -23,18 +23,27 @@ Three judgements run through the file.
   fear effects" too: `durations.keywords_of` reads the keywords back off
   the label, which is the ref of the row that laid the hold.
 
-Two verbs the slot keeps asking for and that do not exist: `c.escape()`
-(an escape attempt is not modelled at all, and eight blocks print a bonus
-to one) and `c.end_ongoing()` ("the ongoing damage ends", with no saving
-throw). Death saves are rolled in `turns._death_saves` with `bonus=0`, so
-a standing `c.bonus("save", ...)` never reaches them; the three blocks
-that print one ride the `SavingThrow` read-back instead.
+One verb the slot keeps asking for and that does not exist: `c.escape()`.
+An escape attempt is not modelled at all -- no action, no check -- and
+six blocks print a bonus to one. "The ongoing damage ends", which used
+to be marked beside it, is `_burn_on` plus `c.end_effect`: the burn lives
+on the hold, so having the hold is having the number and the way to end
+it.
+
+Death saves are rolled in `turns._death_saves` with `bonus=0`, so a
+standing `c.bonus("save", ...)` never reaches them; the three blocks that
+print one ride the `SavingThrow` read-back instead. The same read-back is
+how the two blocks that bargain over a *later* throw are written -- the
+throw is announced before it is acted on, so its answer can be changed.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features import CHANNEL_DIVINITY
+from combat_engine.content.powers.avenger.oath import oath_target
+from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -68,6 +77,7 @@ from combat_engine.engine import (
     DamageRolled,
     DamageType,
     Dropped,
+    Effect,
     EffectApplied,
     Healed,
     Hit,
@@ -77,6 +87,8 @@ from combat_engine.engine import (
     Miss,
     MoveEnd,
     MoveStart,
+    OpportunityWindow,
+    PowerResolved,
     Powers,
     PowerUsed,
     Ranged,
@@ -104,6 +116,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import Bloodied, Event, ForcedMove
+from combat_engine.engine.zones import Zone
 
 ITEM = "item"
 
@@ -396,6 +409,105 @@ def _spikes(c: Cast, dice: str, bonus: int, dtype: DamageType, until: When) -> N
     c.watch(Hit, sting, until=until, on=c.me)
 
 
+def _channel_divinity(world: World, me: int, ev: Event) -> bool:
+    """"You use a Channel Divinity power."
+
+    `Keyword` has no member for it and gating on `Keyword.DIVINE` would
+    fire on every cleric at-will. What the four class features share is
+    the `group=` that makes them one use an encounter, which is the same
+    fact the printed line names.
+    """
+    if getattr(ev, "actor", None) != me:
+        return False
+    p = get(getattr(ev, "power", "") or "")
+    return p is not None and p.group == CHANNEL_DIVINITY
+
+
+def _in_beast_form(c: Cast):  # noqa: ANN202
+    """Gate: the wearer is wearing a shape. The printed Beast Form keyword
+    is written as `in_beast_form` everywhere else in the tree."""
+    return lambda ctx: in_beast_form(c.world, c.me)
+
+
+def _burn_on(world: World, me: int, dtype: DamageType | None = None) -> Effect | None:
+    """The live hold carrying ongoing damage, of one type or any.
+
+    `EffectApplied` names a label and a duration and not the burn, and
+    `c.save` rolls where the card does not. The number and the way to end
+    it are both on the hold, so the rows that print "the ongoing damage
+    ends" want the hold itself.
+    """
+    for eff in sorted(world.effects.of(me), key=lambda e: e.id):
+        if eff.ended or not eff.ongoing:
+            continue
+        types = set(eff.ongoing_types or (eff.ongoing[1],))
+        if dtype is None or dtype in types:
+            return eff
+    return None
+
+
+def _gains_burn(dtype: DamageType | None = None):  # noqa: ANN202
+    """Trigger: a hold carrying ongoing damage has just landed on me.
+    Read off the creature, because the event does not carry it."""
+
+    def check(world: World, me: int, ev: Event) -> bool:
+        return (
+            getattr(ev, "target", None) == me
+            and _burn_on(world, me, dtype) is not None
+        )
+
+    return check
+
+
+def _enemy_attacks_me(world: World, me: int, ev: Event) -> bool:
+    return getattr(ev, "target", None) == me and _enemy(
+        world, me, getattr(ev, "attacker", None)
+    )
+
+
+def _erode(c: Cast, held: Effect | None, event: type, when) -> None:  # noqa: ANN001
+    """A bonus that comes down by 1 each time something happens, and ends
+    at 0.
+
+    The live `Mod` is mutated rather than relaid: two bonuses of a kind do
+    not stack and the larger wins, so a fresh smaller one would be ignored
+    in favour of the one it was meant to replace -- which is a bonus that
+    never wears off at all.
+    """
+    if held is None:
+        return
+
+    def wear(ev: Event) -> None:
+        if held.ended or not when(c.world, c.me, ev):
+            return
+        # `Effect.mods` is a list of `(holder, Mod)`, not of modifiers.
+        for _holder, mod in held.mods:
+            mod.value -= 1
+        if all(mod.value <= 0 for _holder, mod in held.mods):
+            c.end_effect(held)
+
+    c.watch(event, wear, until=When.ENCOUNTER, on=c.me)
+
+
+def _no_provoke_for_attacks(c: Cast) -> None:
+    """"Your ranged and area attacks do not provoke opportunity attacks."
+
+    `c.no_provoke` shuts every window this creature opens, walking away
+    included, which is a wider rule than the card prints. The window a
+    ranged or area power opens is `dsl._survive_provoking`'s, and it says
+    so in `why` -- so the narrow sentence is that one window and no other.
+    """
+
+    def veto(ev: OpportunityWindow) -> None:
+        if ev.provoker == c.me and str(ev.why).endswith("is a ranged power"):
+            ev.cancel("this armour's ranged attacks do not provoke")
+
+    c.watch(
+        OpportunityWindow, veto, until=When.ENCOUNTER, on=c.me,
+        window=Window.BEFORE,
+    )
+
+
 # -- level 2 ----------------------------------------------------------------
 
 
@@ -449,11 +561,15 @@ def i1198p1(c: Cast) -> None:
 
 @power("i1212p1", level=2, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING],
-       todo=("Keyword.CHANNEL_DIVINITY",))
+       trigger="you use a channel divinity power",
+       on=Trigger(PowerUsed, _channel_divinity,
+                  "you use a channel divinity power"))
 def i1212p1(c: Cast) -> None:
-    """The trigger is the whole row: nothing marks a power as Channel
-    Divinity, and gating on `Keyword.DIVINE` would fire on every cleric
-    at-will."""
+    """"A bonus to AC", with no type word, so it is untyped. The four
+    class features the card names are one `group=` -- see
+    `_channel_divinity`."""
+    c.bonus(AC, 2, on=c.me, until=When.ENCOUNTER)
+    c.heal(5, on=c.me)
 
 
 @power("i1423p1", level=2, cls=ITEM, usage=ENCOUNTER, action=REACTION,
@@ -525,16 +641,21 @@ def i1569p1(c: Cast) -> None:
 
 
 @power("i1586x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.in_form()",))
+       reach=PERSONAL, target=SELF)
 def i1586x1(c: Cast) -> None:
-    """`c.form` assumes a shape and nothing asks which one is on, so
-    "while you are in beast form" has no gate."""
+    """A defence bonus takes a `when=`, so the shape is asked at the roll
+    rather than once when the fight starts -- which is what a property
+    that turns on a shape assumed later needs."""
+    c.bonus(REF, 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_in_beast_form(c))
 
 
 @power("i1586p1", level=2, cls=ITEM, usage=ENCOUNTER, action=MOVE,
-       reach=PERSONAL, target=SELF, dropped=("c.in_form()",))
+       reach=PERSONAL, target=SELF, requires=in_beast_form)
 def i1586p1(c: Cast) -> None:
-    """Beast form is the usage restriction, not the effect."""
+    """The printed Beast Form keyword is a Requirement -- that is what the
+    keyword means -- so the interface refuses the row out of shape rather
+    than the body quietly doing nothing."""
     c.shift(2)
 
 
@@ -545,10 +666,15 @@ def i1600x1(c: Cast) -> None:
 
 
 @power("i1600p1", level=2, cls=ITEM, usage=ENCOUNTER, action=REACTION,
-       reach=PERSONAL, target=SELF, todo=("c.end_ongoing()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you gain ongoing poison damage",
+       on=Trigger(EffectApplied, _gains_burn(DamageType.POISON),
+                  "you gain ongoing poison damage"))
 def i1600p1(c: Cast) -> None:
-    """Ending a burn outright, with no saving throw, has no verb:
-    `c.cure` takes conditions and `c.save` rolls."""
+    """Ending the burn is ending the hold that carries it. The predicate
+    reads the hold off the creature rather than off `EffectApplied`, which
+    announces a label and a duration and not the number."""
+    c.end_effect(_burn_on(c.world, c.me, DamageType.POISON))
 
 
 @power("i1617x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -659,16 +785,19 @@ def i2285p1(c: Cast) -> None:
 
 @power("i2285p2", level=2, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(2), target=EACH_ENEMY, keywords=[Keyword.RADIANT],
-       attack=Attack(INT, vs=WILL), dropped=("Attack.best_of()",))
+       attack=Attack(INT, vs=WILL))
 def i2285p2(c: Cast) -> None:
     """"Intelligence or Charisma" is one attack line with two abilities and
-    the header holds one; Intelligence is written. The printed enhancement
-    bonus to the roll is the armour's own plus, laid on the attack rather
-    than on AC, so `kind="enhancement"` is free here."""
+    the header holds one, so Intelligence is written and the difference to
+    Charisma goes to `c.strike(plus=)` when Charisma is the better. `c.int_`
+    and `c.cha_` are whole attack bonuses, so their difference is exactly
+    what swapping the ability is worth. The printed enhancement bonus to
+    the roll is the armour's own plus, laid on the attack rather than on
+    AC, so `kind="enhancement"` is free here."""
     if c.first:
         c.bonus("attack", c.enhancement, on=c.me, until=When.EOT,
                 kind="enhancement")
-    if c.strike():
+    if c.strike(plus=max(0, c.cha_ - c.int_)):
         c.dazed(until=When.SAVE_ENDS)
 
 
@@ -810,9 +939,19 @@ def i544x1(c: Cast) -> None:
 
 
 @power("i561x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Keyword.CHANNEL_DIVINITY",))
+       reach=PERSONAL, target=SELF)
 def i561x1(c: Cast) -> None:
-    """Nothing marks a power as Channel Divinity."""
+    """A property, so the rider is a watch rather than a declared trigger
+    -- the row has standing content and a printed occasion both, and a
+    declared trigger would keep the body from ever laying the modifiers."""
+
+    def channelled(ev: PowerUsed) -> None:
+        if not _channel_divinity(c.world, c.me, ev):
+            return
+        for d in (AC, FORT):
+            c.bonus(d, 2, on=c.me, until=When.EONT, kind="item")
+
+    c.watch(PowerUsed, channelled, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i579x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -845,15 +984,28 @@ def i960p1(c: Cast) -> None:
 
 @power("i1001p1", level=3, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=NO_TARGET, trigger="an enemy hits you",
-       on=Trigger(Hit, targets_me, "an enemy hits you"),
-       dropped=("c.on_save()",))
+       on=Trigger(Hit, targets_me, "an enemy hits you"))
 def i1001p1(c: Cast) -> None:
-    """The second, weaker penalty arrives when the first one is saved
-    against, and nothing runs on a *successful* save -- `escalate` is the
-    failed one."""
+    """`Effect.escalate` is the *failed* save, and this pays on the
+    successful one -- which `SavingThrow` announces before it is acted on,
+    with `against` spelling out the hold, label and all. Latched, because
+    the weaker penalty wears the same label and would otherwise breed a
+    third and a fourth."""
     foe = _foe(c)
-    if foe is not None:
-        c.penalty("attack", 2, on=foe, until=When.SAVE_ENDS)
+    if foe is None:
+        return
+    c.penalty("attack", 2, on=foe, until=When.SAVE_ENDS)
+    again = [False]
+
+    def shrugged(ev: SavingThrow) -> None:
+        if ev.actor != foe or not ev.saved or again[0]:
+            return
+        if c.ref not in ev.against:
+            return
+        again[0] = True
+        c.penalty("attack", 1, on=foe, until=When.SAVE_ENDS)
+
+    c.watch(SavingThrow, shrugged, until=When.ENCOUNTER, on=foe)
 
 
 @power("i1055p1", level=3, cls=ITEM, usage=DAILY, action=INTERRUPT,
@@ -930,11 +1082,13 @@ def i1529x1(c: Cast) -> None:
 
 
 @power("i1558p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF,
-       todo=("c.oath_target()", "c.resist_from()"))
+       reach=PERSONAL, target=SELF, todo=("c.resist_from()",))
 def i1558p1(c: Cast) -> None:
-    """Resistance against one creature's attacks: the damage context has
-    no attacker, and nothing names an oath of enmity target."""
+    """Half the marker is gone: `powers.avenger.oath.oath_target` names
+    the sworn enemy. What is still missing is the gate -- `resolve` builds
+    no `attacker` into the damage context, so "resistance against attacks
+    by that one creature" cannot be told from resistance against
+    everything, which is strictly stronger than print."""
 
 
 @power("i1654p1", level=3, cls=ITEM, usage=DAILY, action=FREE,
@@ -998,9 +1152,12 @@ def i1911x1(c: Cast) -> None:
 
 
 @power("i2094x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.in_form()",))
+       reach=PERSONAL, target=SELF)
 def i2094x1(c: Cast) -> None:
-    """Nothing asks which shape a creature is wearing."""
+    """See `i1586x1`: the shape is asked at the roll, not at arming."""
+    for d in (FORT, WILL):
+        c.bonus(d, 1, on=c.me, until=When.ENCOUNTER, kind="item",
+                when=_in_beast_form(c))
 
 
 @power("i2094p1", level=3, cls=ITEM, usage=DAILY, action=REACTION,
@@ -1008,7 +1165,7 @@ def i2094x1(c: Cast) -> None:
        trigger="an enemy adjacent to you shifts",
        on=Trigger(MoveStart, _adjacent_enemy_moves("shift"),
                   "an adjacent enemy shifts"),
-       dropped=("c.in_form()",))
+       requires=in_beast_form)
 def i2094p1(c: Cast) -> None:
     """`MoveStart`, because by the end of a shift the enemy is no longer
     adjacent and the trigger would be false exactly when it matters."""
@@ -1073,9 +1230,18 @@ def i2366x1(c: Cast) -> None:
 
 
 @power("i2391x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.oath_target()",))
+       reach=PERSONAL, target=SELF)
 def i2391x1(c: Cast) -> None:
-    """Nothing names an oath of enmity target."""
+    """`oath_target` reads the sworn enemy back off the relation the oath
+    lays, and who that is changes during the fight -- so the gate is a
+    `when=` asked at the roll rather than a creature read once. "A +1
+    bonus" prints no type word, so all four are untyped."""
+
+    def sworn_bloodied(ctx: dict[str, Any]) -> bool:
+        victim = oath_target(c)
+        return victim is not None and c.bloodied(on=victim)
+
+    _defences(c, 1, on=c.me, until=When.ENCOUNTER, when=sworn_bloodied)
 
 
 @power("i2434p1", level=3, cls=ITEM, usage=DAILY, action=MOVE,
@@ -1088,11 +1254,17 @@ def i2434p1(c: Cast) -> None:
 
 @power("i2460p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       keywords=[Keyword.ILLUSION], dropped=("c.decay_bonus()",))
+       keywords=[Keyword.ILLUSION])
 def i2460p1(c: Cast) -> None:
-    """A bonus that wears down by 1 per attack has no verb: `stacks=False`
-    keeps the *larger*, which is the wrong direction."""
-    c.bonus(AC, 4 if c.spend_points(1) else 2, on=c.me, until=When.ENCOUNTER)
+    """See `_erode`. Augment 1 buys the larger starting number, and the
+    hold ends itself when it reaches nothing."""
+    _erode(
+        c,
+        c.bonus(AC, 4 if c.spend_points(1) else 2, on=c.me,
+                until=When.ENCOUNTER),
+        AttackDeclared,
+        _enemy_attacks_me,
+    )
 
 
 @power("i2519x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -1115,11 +1287,13 @@ def i2519p1(c: Cast) -> None:
 
 
 @power("i2582p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, dropped=("c.escape()",))
+       reach=PERSONAL, target=SELF)
 def i2582p1(c: Cast) -> None:
-    """The grab is lifted with `c.cure`, which is the outcome; the escape
-    *attempt* -- a contested check somebody can fail -- is what is
-    missing."""
+    """No check is printed. The Effect line is "you escape the grab", flat,
+    so the grab is simply lifted -- the marker here was for the escape
+    *action*, which this card does not ask anybody to attempt. The
+    Requirement is asked in the body because a grab is a condition rather
+    than something `requires=` would read."""
     if not c.is_(Condition.GRABBED, on=c.me):
         return
     holder = next((f for f in c.enemies() if c.me in c.grabbing(of=f)), None)
@@ -1231,16 +1405,20 @@ def i3072x1(c: Cast) -> None:
 
 
 @power("i3072p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.end_resist()",))
+       reach=PERSONAL, target=SELF)
 def i3072p1(c: Cast) -> None:
-    """The new resistance is laid on; taking the radiant one *off* needs a
-    verb that cancels another row's standing hold."""
+    """"Change the type" is two operations. `c.resist` files an undo on
+    the hold it lays, so ending `i3072x1`'s hold by label puts the radiant
+    resistance back where it came from and the new one is laid on top of
+    nothing."""
     dtype = c.choose(
         [DamageType.FIRE, DamageType.LIGHTNING, DamageType.THUNDER],
         "what this armour turns instead",
     )
-    if dtype is not None:
-        c.resist(5, dtype, until=When.ENCOUNTER)
+    if dtype is None:
+        return
+    c.end_effect(on=c.me, against="i3072x1")
+    c.resist(5, dtype, until=When.ENCOUNTER)
 
 
 @power("i3123x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -1299,11 +1477,18 @@ def i549x1(c: Cast) -> None:
 
 
 @power("i549p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING],
-       todo=("c.end_ongoing()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING])
 def i549p1(c: Cast) -> None:
-    """Both halves need the burn in hand: one to end it, the other to read
-    the number off it, and nothing hands a body its own effects."""
+    """Both halves come off the hold: the number is `Effect.ongoing` and
+    ending it is `c.end_effect`. "You can use this power when you are
+    taking ongoing damage" is left as a body check rather than a
+    `requires=`, because the burn is a hold and not a condition."""
+    burn = _burn_on(c.world, c.me)
+    if burn is None:
+        return
+    amount = burn.ongoing[0]
+    c.end_effect(burn)
+    c.regeneration(amount, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i664p1", level=3, cls=ITEM, usage=DAILY, action=FREE,
@@ -1420,10 +1605,22 @@ def i1324p1(c: Cast) -> None:
 
 
 @power("i1352x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.uncrit()",))
+       reach=PERSONAL, target=SELF)
 def i1352x1(c: Cast) -> None:
-    """A critical cannot be demoted: `resolve` branches on its own local
-    after `Hit` is announced."""
+    """The live `AttackResult` rides on `Hit` as a plain attribute and
+    `Cast.crit` reads the flag back off it, so clearing it in the window
+    before the hit is acted on is exactly `c.maximise(critical=True)` run
+    backwards. The event's own copy goes too, for anything reading that."""
+
+    def soften(ev: Hit) -> None:
+        result = getattr(ev, "result", None)
+        if result is None or not _crit_on_me(c.world, c.me, ev):
+            return
+        if c.roll("1d20") >= 16:
+            result.critical = False
+            ev.critical = False
+
+    c.watch(Hit, soften, until=When.ENCOUNTER, on=c.me, window=Window.BEFORE)
 
 
 @power("i1366x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -1516,16 +1713,23 @@ def i1731x1(c: Cast) -> None:
 
 
 @power("i1731p1", level=4, cls=ITEM, usage=DAILY, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.save_all()",))
+       reach=PERSONAL, target=SELF, trigger="you start your turn",
+       on=Trigger(TurnStart, about_me, "you start your turn"))
 def i1731p1(c: Cast) -> None:
-    """`c.save` rolls against one effect and there is no "against each",
-    which is the whole of what this daily buys over the feature it names.
+    """"Against each" is `c.save` once per hold, each named by its own
+    label: with no `against` the call takes whichever save-ends hold it
+    finds first, so a failed one would be found again and the loop would
+    never reach the second. The holds are snapshotted before rolling,
+    because a successful save takes one out from under the walk.
 
-    The class-feature half of the marker is gone: `cf:warden-f0` is a ref
-    with a row behind it, so "and have the class feature" is a look in
-    `Powers.known`, the same question the property beside this one asks.
-    What is left is the plural."""
+    `cf:warden-f0` is a ref with a row behind it, so "and have the class
+    feature" is a look in `Powers.known`."""
+    known = c.world.get(c.me, Powers)
+    if known is None or "cf:warden-f0" not in known.known:
+        return
+    for eff in sorted(c.world.effects.of(c.me), key=lambda e: e.id):
+        if not eff.ended and eff.when is When.SAVE_ENDS:
+            c.save(on=c.me, against=eff.label)
 
 
 @power("i1870p1", level=4, cls=ITEM, usage=DAILY, action=REACTION,
@@ -1595,17 +1799,37 @@ def i2088p2(c: Cast) -> None:
 
 
 @power("i2089x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.in_form()",))
+       reach=PERSONAL, target=SELF)
 def i2089x1(c: Cast) -> None:
-    """Nothing announces a change of shape."""
+    """`PowerResolved`, not `PowerUsed`: the announcement comes *before*
+    the body runs, so on the earlier event the new shape is not on yet and
+    the shift would be taken out of the old one."""
+
+    def changed(ev: PowerResolved) -> None:
+        if ev.actor == c.me and ev.power == "p5032":
+            c.shift(1)
+
+    c.watch(PowerResolved, changed, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i2089p1", level=4, cls=ITEM, usage=DAILY, action=MOVE,
-       reach=PERSONAL, target=SELF, dropped=("c.in_form()",))
+       reach=PERSONAL, target=SELF, requires=in_beast_form)
 def i2089p1(c: Cast) -> None:
-    """"Must end adjacent to an enemy" is left to the shift's decider,
-    which already prefers a square it can reach."""
-    c.shift(5)
+    """"Must end adjacent to an enemy" is the destination, not advice, so
+    the square is chosen here rather than left to the decider. With no
+    such square reachable the printed move cannot be made at all."""
+    beside = [
+        sq for sq in c.world.reachable_squares(c.me, 5)
+        if any(
+            query.distance_between(c.world, c.me, foe) >= 0
+            and max(abs(sq[0] - s[0]), abs(sq[1] - s[1])) <= 1
+            for foe in c.enemies()
+            for s in query.squares(c.world, foe)
+        )
+    ]
+    if not beside:
+        return
+    c.shift(5, to=c.choose(sorted(beside), "where to land"))
 
 
 @power("i2151x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -1716,11 +1940,11 @@ def i2431p1(c: Cast) -> None:
 
 
 @power("i2491x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_provoke_for()",))
+       reach=PERSONAL, target=SELF)
 def i2491x1(c: Cast) -> None:
-    """`c.no_provoke` closes every window this creature opens, not the
-    ones a particular kind of action opens, so writing it here would also
-    make walking away free."""
+    """See `_no_provoke_for_attacks`: the narrow sentence is one window
+    and not every window, which is what `c.no_provoke` would have shut."""
+    _no_provoke_for_attacks(c)
 
 
 @power("i2887x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -1767,11 +1991,22 @@ def i3132x1(c: Cast) -> None:
 
 
 @power("i3132p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.difficult_aura()",))
+       reach=PERSONAL, target=SELF)
 def i3132p1(c: Cast) -> None:
-    """The aura follows you, which is the half that plays; `c.zone` takes
-    `difficult` and `c.aura` does not, and a zone would stay put."""
-    c.aura(1, until=When.ENCOUNTER)
+    """`c.aura` takes no `difficult`, but the `Zone` it spawns carries the
+    flag and `Zones.difficult_squares` reads it off every zone, aura or
+    not -- so the missing verb was a keyword argument and not a mechanism.
+    "For creatures other than you" is the exemption rather than a second
+    zone, and the printed minor action to switch it off is `c.endable` on
+    the zone's own hold."""
+    zid = c.aura(1, until=When.ENCOUNTER)
+    zone = c.world.get(zid, Zone)
+    if zone is None:
+        return
+    zone.difficult = True
+    c.world.zones.refresh()
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
+    c.endable(zone.effect, MINOR)
 
 
 @power("i451x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -1803,13 +2038,15 @@ def i530x1(c: Cast) -> None:
 @power("i530p1", level=4, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="you take damage of a type this armour does not turn",
-       on=Trigger(DamageApplied, targets_me, "you take damage"),
-       dropped=("c.end_resist()",))
+       on=Trigger(DamageApplied, targets_me, "you take damage"))
 def i530p1(c: Cast) -> None:
-    """The new resistance is laid on; the old one cannot be taken off."""
+    """"The armour's resistance changes" is two operations: `i530x1`'s
+    hold goes -- `c.resist` files an undo on it, so ending it puts the old
+    number back -- and the new one is laid in its place."""
     dtype = getattr(c.trigger, "dtype", None)
     if dtype is None:
         return
+    c.end_effect(on=c.me, against="i530x1")
     c.resist(5, dtype, until=When.ENCOUNTER)
     if c.spend_points(1):
         c.resist(5, dtype, until=When.EONT)
@@ -1916,9 +2153,17 @@ def i1041p1(c: Cast) -> None:
 
 
 @power("i1211x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.in_form()",))
+       reach=PERSONAL, target=SELF)
 def i1211x1(c: Cast) -> None:
-    """Nothing asks which shape a creature is wearing."""
+    """`SurgeSpent` rather than `Healed`: the card pays on the surge, so a
+    second wind and an ally's heal that spends one both count, and a heal
+    that spends none does not."""
+
+    def spent(ev: SurgeSpent) -> None:
+        if ev.actor == c.me and in_beast_form(c.world, c.me):
+            c.heal(2, on=c.me)
+
+    c.watch(SurgeSpent, spent, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i1211p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1959,10 +2204,16 @@ def i1522x1(c: Cast) -> None:
 
 @power("i2013p1", level=5, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.HEALING],
-       todo=("query.flanking(world, a, b)", "Hit.damage"))
+       todo=("Hit.damage",))
 def i2013p1(c: Cast) -> None:
-    """Both halves are missing: nothing asks whether two creatures are
-    flanking, and `Hit` carries no number to halve."""
+    """Half the marker named something that already exists under another
+    name: `query.flanked_by(world, victim, attacker)` answers the flanking
+    clause, and the rest of the trigger -- an ally within 5, a melee
+    attack -- is ordinary.
+
+    What is left is the number. The heal is half the attack's damage and
+    `Hit` carries none; `DamageApplied` carries one and names no power, so
+    it cannot tell a melee attack from a burst or a burn."""
 
 
 @power("i2049p1", level=5, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
@@ -2004,10 +2255,11 @@ def i2445p1(c: Cast) -> None:
 
 
 @power("i2446x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_provoke_for()",))
+       reach=PERSONAL, target=SELF)
 def i2446x1(c: Cast) -> None:
-    """`c.no_provoke` shuts every window, not the ones a ranged or area
-    attack opens."""
+    """See `_no_provoke_for_attacks`, and `i2491x1`, which prints the same
+    sentence the other way round."""
+    _no_provoke_for_attacks(c)
 
 
 @power("i2446p1", level=5, cls=ITEM, usage=DAILY, action=FREE,
@@ -2017,10 +2269,18 @@ def i2446p1(c: Cast) -> None:
 
 
 @power("i2465p1", level=5, cls=ITEM, usage=ENCOUNTER, action=REACTION,
-       reach=PERSONAL, target=NO_TARGET, todo=("EffectApplied.ongoing",))
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="an attack gives you ongoing damage",
+       on=Trigger(EffectApplied, _gains_burn(), "you gain ongoing damage"))
 def i2465p1(c: Cast) -> None:
-    """The row pays back "an equal amount", and the announcement of a
-    burn landing carries a label rather than the number."""
+    """"An equal amount" is read off the hold rather than off
+    `EffectApplied`, which announces a label and a duration and not the
+    number -- see `_burn_on`. Untyped going back, as the card prints."""
+    burn = _burn_on(c.world, c.me)
+    foe = _foe(c)
+    if burn is None or foe is None:
+        return
+    c.ongoing(burn.ongoing[0], on=foe, until=When.SAVE_ENDS)
 
 
 @power("i2497x1", level=5, cls=ITEM, action=ActionType.NONE,
@@ -2182,10 +2442,37 @@ def i466x1(c: Cast) -> None:
 
 
 @power("i545p1", level=5, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=Melee(1), target=ONE_CREATURE, todo=("c.effects_on()",))
+       reach=Melee(1), target=ONE_CREATURE)
 def i545p1(c: Cast) -> None:
-    """`c.transfer` moves a hold once you have it, and nothing hands a
-    body the effects standing on somebody else."""
+    """`world.effects.of` is how the rest of the tree reads somebody
+    else's holds, so the marker was asking for a reader that is already
+    reachable; `c.transfer` then moves one intact -- conditions, burn and
+    saving throw together.
+
+    The last clause rides the `SavingThrow` read-back: the throw is
+    announced before it is acted on, so refusing it until the end of my
+    next turn is `ev.saved = False` and not a modifier, which could only
+    make the throw harder and never impossible."""
+    mate = c.target
+    if mate is None or not c.adjacent(mate):
+        return
+    held = [
+        eff for eff in sorted(c.world.effects.of(mate), key=lambda e: e.id)
+        if not eff.ended and eff.when is When.SAVE_ENDS
+    ]
+    picked = c.choose(held, "which effect to take on")
+    if picked is None:
+        return
+    moved = c.transfer(picked, to=c.me)
+    if moved is None:
+        return
+    mine = f"e{moved.id}["
+
+    def too_soon(ev: SavingThrow) -> None:
+        if ev.actor == c.me and mine in ev.against:
+            ev.saved = False
+
+    c.watch(SavingThrow, too_soon, until=When.EONT, on=c.me)
 
 
 @power("i545p2", level=5, cls=ITEM, usage=DAILY, action=MINOR,
@@ -2200,10 +2487,16 @@ def i545p2(c: Cast) -> None:
 
 
 @power("i603p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.decay_bonus()",))
+       reach=PERSONAL, target=SELF)
 def i603p1(c: Cast) -> None:
-    """A bonus that erodes by 1 per hit has no verb."""
-    c.bonus(AC, 2, on=c.me, until=When.ENCOUNTER, kind="power")
+    """See `_erode`. "Each time an attack hits your AC", so the trigger is
+    the hit and the defence it was aimed at, not every attack."""
+    _erode(
+        c,
+        c.bonus(AC, 2, on=c.me, until=When.ENCOUNTER, kind="power"),
+        Hit,
+        _hit_my_ac,
+    )
 
 
 @power("i626x1", level=5, cls=ITEM, action=ActionType.NONE,
@@ -2231,20 +2524,54 @@ def i721x1(c: Cast) -> None:
 
 
 @power("i1375x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.save_order()",))
+       reach=PERSONAL, target=SELF)
 def i1375x1(c: Cast) -> None:
-    """The bargain is between the first and the second throw of a turn,
-    and nothing counts them."""
+    """The bargain is between the first throw of a turn and the second, so
+    the count resets when the turn does. Written on the `SavingThrow`
+    read-back for the same reason `_death_save` is: a standing modifier
+    cannot tell one throw from the next, and this one has to pay the
+    second throw back for what the first was lent.
+
+    Death saves are left out. There is only ever one a turn, so the second
+    half of the bargain could never be collected."""
+    run = {"n": 0, "taken": False}
+
+    def reset(ev: TurnStart) -> None:
+        if ev.actor == c.me and not getattr(ev, "ghost", False):
+            run["n"], run["taken"] = 0, False
+
+    def rider(ev: SavingThrow) -> None:
+        if ev.actor != c.me or ev.against == "death":
+            return
+        run["n"] += 1
+        if run["n"] == 1:
+            run["taken"] = c.may("gamble on the first saving throw", who=c.me)
+            if not run["taken"]:
+                return
+            ev.bonus += 2
+        elif run["n"] == 2 and run["taken"]:
+            ev.bonus -= 2
+        else:
+            return
+        ev.saved = ev.natural + ev.bonus >= 10
+
+    c.watch(TurnStart, reset, until=When.ENCOUNTER, on=c.me)
+    c.watch(SavingThrow, rider, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i1375p1", level=6, cls=ITEM, usage=DAILY, action=INTERRUPT,
        reach=PERSONAL, target=SELF, trigger="an enemy hits you",
-       on=Trigger(AttackRolled, _rolled_on_me, "an enemy hits you"),
-       dropped=("c.make_critical()",))
+       on=Trigger(AttackRolled, _rolled_on_me, "an enemy hits you"))
 def i1375p1(c: Cast) -> None:
-    """The gamble is the printed point of the row and the losing half of
-    it -- the second result becoming a critical -- cannot be said."""
-    c.reroll_attack(keep="new")
+    """`c.reroll_attack` sets `critical` from the new face; the card says
+    the second result crits whatever it shows, so the flag is set again
+    afterwards. `AttackRolled` is the window for both: `Hit` is announced
+    with the flag already copied off the result."""
+    if not c.reroll_attack(keep="new"):
+        return
+    result = getattr(c.trigger, "result", None)
+    if result is not None and result.hit:
+        result.critical = True
 
 
 @power("i1615p1", level=6, cls=ITEM, usage=AT_WILL, action=MINOR,
@@ -2603,11 +2930,25 @@ def i2581p1(c: Cast) -> None:
 
 
 @power("i2686p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.expend()",))
+       reach=PERSONAL, target=SELF)
 def i2686p1(c: Cast) -> None:
-    """Burning another row for fuel has no verb: `c.forbid` takes one
-    away for a while and `c.expended` only reports."""
-    c.resist(5, until=When.EONT)
+    """`c.expend_row` is the verb the marker wanted: a use goes and the
+    row never runs, which is exactly the price this card charges. The
+    choice is optional, because the card's "you can" is, and declining
+    leaves the base resistance standing."""
+    resist = 5
+    known = c.world.get(c.me, Powers)
+    fuel = sorted(
+        ref
+        for ref in (known.known if known is not None else ())
+        if (p := get(ref)) is not None
+        and p.usage in (ENCOUNTER, DAILY)
+        and Keyword.ARCANE in p.keywords
+    )
+    picked = c.choose(fuel, "a power to burn for resistance", optional=True)
+    if picked is not None and c.expend_row(picked):
+        resist += 5
+    c.resist(resist, until=When.EONT)
 
 
 @power("i3124x1", level=8, cls=ITEM, action=ActionType.NONE,
@@ -2982,24 +3323,31 @@ def i1729x1(c: Cast) -> None:
 
 
 @power("i2444x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.effects_on()",))
+       reach=PERSONAL, target=SELF)
 def i2444x1(c: Cast) -> None:
-    """Both refs the card prints now resolve, and the row is still held.
+    """The gate was thought unsayable and is not. `c.conceal` is
+    `c.bonus`, so the concealment `cf:warlock-f3` grants is a hold wearing
+    that feature's ref as its label -- which is what tells it from
+    concealment out of a spell, a zone or the dark. The modifier itself
+    records no source; the hold that carries it does.
 
-    The payout half is sayable: "affected by your `cf:warlock-f4c0`" is
-    the warlock's curse, `c.cursed(foe)` asks it, and
-    `c.grants_advantage(on=foe, to=me)` lays the answer -- except that
-    `cf:warlock-f4c0` is a ref no row declares; the curse in the tree is
-    `cf:warlock-f4`.
+    Laid on `AttackDeclared` rather than as a standing relation because
+    both halves come and go within a turn and `c.grants_advantage` takes
+    no `when=`. `once=True`, so the grant is spent on the attack that
+    asked for it."""
 
-    The gate is the harder half and is the one this waits on.
-    `cf:warlock-f3` is declared and grants concealment three squares out
-    from where the turn began, but concealment is a modifier with no
-    source recorded and no way to ask whether a creature has one, so
-    "while you have concealment **from that feature**" cannot be
-    distinguished from concealment out of a spell, a zone or the dark.
-    Without it the property would hand out combat advantage against every
-    cursed enemy all fight."""
+    def shadowed(ev: AttackDeclared) -> None:
+        if ev.attacker != c.me or not c.cursed(ev.target):
+            return
+        if not any(
+            e.label.startswith("cf:warlock-f3") and not e.ended
+            for e in c.world.effects.of(c.me)
+        ):
+            return
+        c.grants_advantage(on=ev.target, to=c.me, until=When.EONT, once=True)
+
+    c.watch(AttackDeclared, shadowed, until=When.ENCOUNTER, on=c.me,
+            window=Window.BEFORE)
 
 
 @power("i3043p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,

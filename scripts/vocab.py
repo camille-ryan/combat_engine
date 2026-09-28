@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import re
+import sys
 
 from combat_engine.engine import types as T
 from combat_engine.engine.cast import Cast
@@ -28,6 +29,10 @@ from combat_engine.engine.dsl import Attack, Damage, Range, Target, power
 from combat_engine.engine.durations import When
 
 #: The order a body tends to need them in, so the page reads like the work.
+#: Fields `Cast` has grown that `CONTEXT` does not describe. Collected
+#: rather than raised, and reported after everything has been printed.
+_GREW: list[str] = []
+
 GROUPS = [
     ("attacking", ["strike", "attack", "landed", "crit"]),
     ("damage and healing", ["hit", "damage", "half_damage", "flat", "heal",
@@ -93,6 +98,12 @@ def main() -> int:
     _header()
     if not args.brief:
         _examples()
+    if _GREW:
+        print(
+            f"\nvocab.py: Cast grew {_GREW}; describe them in CONTEXT.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
@@ -166,17 +177,32 @@ CONTEXT = {
     "charge": "is this use a charge?",
     "opportunity": "is this use an opportunity attack?",
     "branch": "which half of a melee-or-ranged row is being used.",
+    "augment": "how many power points this use was augmented by, or 0.",
+    "granted_by": "who handed this creature the basic attack, or -1.",
+    "granted_via": "the ref of the row that handed it over, or empty.",
     "world": "the world itself. Prefer the methods above; reach for this last.",
 }
 
 
 def _context() -> None:
-    """What the `c` handed to a body already knows, before it calls anything."""
+    """What the `c` handed to a body already knows, before it calls anything.
+
+    **This used to `SystemExit` when `Cast` grew a field, and it is called
+    from the middle of `main`.** So the moment three fields landed, the
+    whole "everything else" section below it -- about two hundred of
+    `Cast`'s three hundred members -- stopped being printed, and the
+    document every author is told to grep before marking a row quietly
+    became a third of itself. Six verbs that exist were marked missing
+    by four different agents in one afternoon because of it.
+
+    A tool that hides what it knows is worse than one that complains, so
+    it complains at the end and prints everything either way.
+    """
     import dataclasses
 
     fields = {f.name for f in dataclasses.fields(Cast)}
     if missing := fields - set(CONTEXT):
-        raise SystemExit(f"vocab.py: Cast grew {sorted(missing)}; add to CONTEXT")
+        _GREW.extend(sorted(missing))
 
     print("\n## what `c` already knows\n")
     for name, note in CONTEXT.items():

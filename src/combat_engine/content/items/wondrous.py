@@ -56,6 +56,7 @@ from combat_engine.engine import (
     ActionType,
     Attack,
     AttackDeclared,
+    AttackRolled,
     Bloodied,
     Cast,
     CloseBlast,
@@ -64,11 +65,15 @@ from combat_engine.engine import (
     DamageApplied,
     DamageRolled,
     DamageType,
+    Effect,
+    Gear,
     Health,
     Hit,
+    Ident,
     Keyword,
     Melee,
     Miss,
+    PowerResolved,
     PowerUsed,
     Ranged,
     SavingThrow,
@@ -222,6 +227,74 @@ def _allies_with(c: Cast, ref: str) -> list[int]:
     ]
 
 
+def _missed_everything(world: World, me: int, ev: Any) -> bool:
+    """"You miss all targets with an encounter power of level 3 or lower."
+
+    Read off `PowerResolved`, whose `rolls` is the attack result for each
+    target the use actually reached. A `Miss` cannot answer it: it is one
+    event per target, so the first of them is true while the use as a
+    whole is not.
+    """
+    if getattr(ev, "actor", None) != me:
+        return False
+    row = get(getattr(ev, "power", "") or "")
+    if row is None or row.usage is not Usage.ENCOUNTER or row.level > 3:
+        return False
+    rolls = [r for r in getattr(ev, "rolls", ()) if r is not None]
+    return bool(rolls) and not any(getattr(r, "hit", False) for r in rolls)
+
+
+def _gap(a: Square, b: Square) -> int:
+    """How far apart two squares are, the way the grid counts."""
+    return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+
+
+def _shift_by_distance(c: Cast, who: int, *, closer: bool) -> bool:
+    """"Shift 1 square closer to you", and its opposite.
+
+    `c.shift` picks its square through the world's decider and takes no
+    direction -- but it takes `to=`, so a direction is said by naming the
+    square rather than by asking for one. Nothing moves unless a square
+    that genuinely improves the distance exists: the printed line is
+    permissive, and standing still is the right answer when it does not.
+    """
+    options = c.world.reachable_squares(who, 1)
+    if not options:
+        return False
+    now = c.distance(who)
+    ranked = sorted(options, key=lambda sq: (_gap(sq, c.here), sq))
+    pick = ranked[0] if closer else ranked[-1]
+    step = _gap(pick, c.here)
+    if (step < now) if closer else (step > now):
+        return c.shift(1, who=who, to=pick)
+    return False
+
+
+def _steam(c: Cast, dice: str) -> None:
+    """A zone that burns whoever starts a turn in it, the caster excepted.
+
+    `c.hazard` is the obvious tool and is wrong twice over here: it burns
+    on entering as well, which neither card prints, and it takes no
+    exemption for "any creature other than you". A plain zone plus a
+    `TurnStart` watch says both.
+
+    The watch is clocked on the encounter and gated on the zone still
+    standing, because sustaining refreshes the *zone's* clock and would
+    leave a watch clocked on the same duration to lapse under it.
+    """
+    area = c.area()
+    zone = c.zone(area, until=When.EONT, sustain=MINOR)
+    c.cover_in(zone, side="any")
+
+    def burn(ev: TurnStart) -> None:
+        if ev.actor == c.me or zone not in c.my_zones():
+            return
+        if ev.actor in c.in_squares(area, side="any"):
+            c.damage(dice, dtype=DamageType.FIRE, on=ev.actor)
+
+    c.watch(TurnStart, burn, until=When.ENCOUNTER)
+
+
 def _figurine(c: Cast, **kw: Any) -> int:
     """The shared body of a figurine: a beast, and the optional surge."""
     made = c.summon_inline(Summon(**kw))
@@ -283,12 +356,21 @@ def i3005x1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    todo=("c.stabilise()", "c.end_ongoing()"),
+    dropped=("c.stabilise()",),
 )
 def i3094p1(c: Cast) -> None:
-    """Both halves are unsayable: nothing stops a dying creature rolling
-    death saves short of healing it, and no method takes a standing
-    ongoing-damage effect off without a save."""
+    """The ongoing half is `c.end_effect`, which takes a live hold off
+    early: the burns are found by the type they tick in, since `Effect`
+    carries `ongoing` as an amount and a type and the card names the
+    untyped ones only. Stopping death saves is still unsayable -- nothing
+    holds a dying creature short of healing it."""
+    who = c.target
+    if who is None:
+        return
+    for eff in list(c.world.effects.of(who)):
+        burn = getattr(eff, "ongoing", None)
+        if burn and burn[1] is DamageType.UNTYPED:
+            c.end_effect(eff, why=f"{c.ref} ended it")
 
 
 @power("i3269x1", level=1, cls=ITEM, action=ActionType.NONE,
@@ -364,15 +446,19 @@ def i1584p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.raging()",),
 )
 def i2050x1(c: Cast) -> None:
-    """Untyped: the card prints a bare "+2 bonus". The rage half is dropped
-    -- nothing asks whether a barbarian is raging. Paragon numbers are out
+    """Untyped: the card prints a bare "+2 bonus". "If you are raging" is
+    `powers.barbarian.rage.in_rage`, which the class wrote for the two
+    dozen rows that print the same requirement -- imported inside the body
+    because both files are loaded by the same walk. Paragon numbers are out
     of scope."""
+    from combat_engine.content.powers.barbarian.rage import in_rage
 
     def paid() -> None:
         c.bonus("damage", 2, on=c.me, until=When.EONT, once=True)
+        if in_rage(c):
+            c.bonus("attack", 2, on=c.me, until=When.EONT, once=True)
 
     _on_second_wind(c, paid)
 
@@ -514,12 +600,31 @@ def i1219x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.grant_inline()",),
 )
 def i1312x1(c: Cast) -> None:
-    """The elixir's whole benefit is a power the page prints inline with no
-    ref of its own, so there is nothing for `c.grant_row` to name and no
-    card to write beside this one."""
+    """The power the page prints inline has no ref, so `c.grant_row` has
+    nothing to name -- but `c.give` takes the payout as a function instead
+    of a ref, which is exactly the shape of a one-shot with no card. Its
+    `cost` is the printed minor action; drinking and using are collapsed
+    into that one spend, since the elixir is drunk to be used.
+
+    "Level + 5" is the character's level, and the blast is aimed at the
+    nearest enemy -- `c.area()` reads the row's own reach and this row is
+    the property, not the power."""
+    def swallow(spender: int) -> None:
+        from combat_engine.engine import Position
+        from combat_engine.engine.grid import blast
+
+        foes = sorted(c.enemies(), key=lambda f: c.distance(f))
+        spot = c.world.get(foes[0], Position) if foes else None
+        if spot is None:
+            return
+        area = blast({c.here}, 3, spot.square)
+        for foe in c.in_squares(area, side="enemy"):
+            if c.attack(c.level + 5, REF, on=foe):
+                c.damage("1d6", c.con_mod, dtype=DamageType.FIRE, on=foe)
+
+    c.give(fn=swallow, on=c.me, uses=1, cost=MINOR)
 
 
 @power("i1321x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -571,11 +676,27 @@ def i1509x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.use_row()",),
 )
 def i1509p1(c: Cast) -> None:
-    """A wrapper whose whole Effect is "you use one of your blessings", and
-    nothing lets a body spend another row."""
+    """"You use one of the blessings you have gained" is `c.use_power`,
+    which spends another row at this row's action cost. "That you have
+    gained" is read off the board rather than assumed: `i1509x1` grants
+    exactly one, and a blessing standing on somebody else is not this
+    character's. One of the three carries a `todo` and `dsl.usable`
+    refuses it, so it is left out of the choice rather than offered and
+    then declined."""
+    mine = [
+        ref
+        for ref in ("i1509p2", "i1509p3", "i1509p4")
+        if c.knows(ref) == c.me
+        and (row := get(ref)) is not None
+        and not row.todo
+    ]
+    if not mine:
+        return
+    pick = c.choose(mine, "which blessing to use")
+    if pick is not None:
+        c.use_power(pick)
 
 
 @power(
@@ -1051,11 +1172,13 @@ def i2361p1(c: Cast) -> None:
     target=SELF,
     trigger="you score a critical hit on your turn",
     on=Trigger(Hit, _my_crit_on_my_turn, "you score a critical hit"),
-    todo=("c.add_dtype()",),
+    todo=("c.deals(add=True)",),
 )
 def i2550p1(c: Cast) -> None:
-    """Adding a damage type to an attack already rolled is not `c.deals`,
-    which changes every future swing, and there is nothing else."""
+    """"In addition to its normal damage types" is the one thing `c.deals`
+    will not do: it is an override by design and ends whatever type was
+    standing, so writing it here would take the attack's own type away
+    rather than add to it."""
 
 
 @power(
@@ -1252,17 +1375,16 @@ def i2548p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.shift(toward=)",),
 )
 def i2825x1(c: Cast) -> None:
-    """"Closer to you" cannot be said -- `c.shift` picks its square through
-    the world's decider and takes no direction."""
+    """"Closer to you" is `_shift_by_distance`: the direction is said by
+    naming the square, which `c.shift` takes."""
 
     def bled(ev: Bloodied) -> None:
         if ev.actor != c.me:
             return
         for friend in _allies_with(c, "i2825"):
-            c.shift(1, who=friend)
+            _shift_by_distance(c, friend, closer=True)
 
     c.watch(Bloodied, bled, until=When.ENCOUNTER, once=True)
 
@@ -1274,16 +1396,15 @@ def i2825x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.shift(toward=)",),
 )
 def i2826x1(c: Cast) -> None:
-    """"Farther from you" cannot be said, as above."""
+    """"Farther from you", as above and the other way round."""
 
     def bled(ev: Bloodied) -> None:
         if ev.actor != c.me:
             return
         for friend in _allies_with(c, "i2826"):
-            c.shift(1, who=friend)
+            _shift_by_distance(c, friend, closer=False)
 
     c.watch(Bloodied, bled, until=When.ENCOUNTER, once=True)
 
@@ -1350,11 +1471,19 @@ def i523p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.cosmic_phase()",),
+    todo=("events.ShortRested",),
 )
 def i961x1(c: Cast) -> None:
-    """The whole benefit is a change to a sorcerer class feature that has
-    no representation at all."""
+    """The whole benefit steps the phase of the source the card names by
+    ref, and that row is itself refused: `cf:sorcerer-f0s0` is a state
+    machine clocked on a rest nothing announces, so there is no phase to
+    step.
+
+    The marker named that row, which went red the day it was written --
+    a ref resolves against the registry, and a row that is declared but
+    refused is still declared. So it names what the row is *waiting on*
+    instead, which is the same thing this one waits on and is the honest
+    answer: nothing announces a rest, so no row can run inside one."""
 
 
 # -- level 7 ----------------------------------------------------------------
@@ -1388,19 +1517,34 @@ def i1213x1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ILLUSION],
-    dropped=("c.end_on_attack()",),
 )
 def i1213p1(c: Cast) -> None:
     """"Invisible to those outside the area" is exactly `c.invisible(to=)`,
     one pairing per outsider, which is why this is a nested loop rather
-    than a blanket hide. The candle going out the moment anybody inside
-    attacks is dropped: nothing ends an effect on somebody else's swing."""
+    than a blanket hide.
+
+    The candle going out is `c.on_attack` -- which watches everybody, not
+    just the caster -- plus `c.end_effect` on each hold it laid. The holds
+    are kept in a local for that: everything that lays one hands one back,
+    which is the shape `c.end_effect` documents."""
     area = spread({c.here}, 2)
     inside = c.in_squares(area)
     outside = [w for w in c.within(20, side="any") if w not in inside]
+    holds: list[Effect] = []
     for who in inside:
         for watcher in outside:
-            c.invisible(on=who, to=watcher, until=When.ENCOUNTER)
+            hold = c.invisible(on=who, to=watcher, until=When.ENCOUNTER)
+            if hold is not None:
+                holds.append(hold)
+
+    def snuffed(ev: AttackDeclared) -> None:
+        if ev.attacker not in inside:
+            return
+        for hold in holds:
+            c.end_effect(hold, why=f"{c.ref} was put out")
+        holds.clear()
+
+    c.on_attack(snuffed, until=When.ENCOUNTER)
 
 
 @power("i1574p1", level=7, cls=ITEM, usage=ENCOUNTER, action=STANDARD,
@@ -1418,16 +1562,11 @@ def i1574p1(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.hazard(except_=)",),
 )
 def i1666p1(c: Cast) -> None:
-    """The steam burns everyone standing in it, the caster included: a
-    hazard takes no exemption, and "any creature other than you" is the
-    half that cannot be said."""
-    zone = c.hazard(
-        c.area(), "1d6", DamageType.FIRE, until=When.EONT, sustain=MINOR
-    )
-    c.cover_in(zone, side="any")
+    """"Any creature other than you that starts its turn" -- see `_steam`,
+    which is why this is not `c.hazard`."""
+    _steam(c, "1d6")
 
 
 @power("i1718p1", level=7, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -1611,21 +1750,21 @@ def i3261p1(c: Cast) -> None:
     target=SELF,
     trigger="you miss all targets with an encounter power of level 3 or lower",
     on=Trigger(
-        Miss,
-        lambda world, me, ev: (
-            getattr(ev, "attacker", None) == me
-            and (row := get(getattr(ev, "power", "") or "")) is not None
-            and row.usage is Usage.ENCOUNTER
-            and row.level <= 3
-        ),
-        "you miss with an encounter power of level 3 or lower",
+        PowerResolved,
+        _missed_everything,
+        "you miss all targets with an encounter power of level 3 or lower",
     ),
-    dropped=("Miss.all_targets",),
 )
 def i3271p1(c: Cast) -> None:
-    """"All targets" cannot be asked of a `Miss`, which is announced once
-    per target; the first miss of a multi-target power answers here even
-    if a later one lands. Paragon levels are out of scope."""
+    """Asked of `PowerResolved` rather than of `Miss`, because "all
+    targets" is a question about a use and a `Miss` is announced once per
+    target -- declared there, the first miss of a multi-target power
+    answered even when a later one landed.
+
+    `PowerResolved` is emitted after the body has run and after the use
+    was noted, so the roll per target is on `rolls` and there is a spent
+    use for `c.restore_use` to hand back. Paragon levels are out of
+    scope."""
     ref = getattr(c.trigger, "power", "")
     if ref:
         c.restore_use(ref, on=c.me)
@@ -1725,15 +1864,10 @@ def i3440p1(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.FIRE, Keyword.ZONE],
-    dropped=("c.hazard(except_=)",),
 )
 def i777p1(c: Cast) -> None:
-    """As i1666p1: a hazard burns whoever stands in it and cannot spare the
-    caster. Paragon numbers are out of scope."""
-    zone = c.hazard(
-        c.area(), "1d6", DamageType.FIRE, until=When.EONT, sustain=MINOR
-    )
-    c.cover_in(zone, side="any")
+    """As i1666p1. Paragon numbers are out of scope."""
+    _steam(c, "1d6")
 
 
 # -- level 8 ----------------------------------------------------------------
@@ -1748,29 +1882,42 @@ def i777p1(c: Cast) -> None:
     reach=CloseBurst(10),
     target=NO_TARGET,
     keywords=[Keyword.NECROTIC],
-    dropped=("c.bonus(sustain=)",),
 )
 def i1031p1(c: Cast) -> None:
     """The attack half gates on the power's keywords and the damage half on
     the damage type, because those are the two contexts' words for the same
-    sentence. Sustain is dropped -- a modifier's duration cannot be held."""
-    for who in [c.me, *c.within(10, side="ally")]:
-        c.bonus(
-            "attack",
-            1,
-            on=who,
-            until=When.EONT,
-            kind="power",
-            when=_keyword_gate(Keyword.NECROTIC),
-        )
-        c.bonus(
-            "damage",
-            1,
-            on=who,
-            until=When.EONT,
-            kind="power",
-            when=_dtype_gate(DamageType.NECROTIC),
-        )
+    sentence.
+
+    A modifier carries no sustain cost, but `c.effect(sustain=)` does: a
+    bare hold is what the minor action pays for and `c.on_sustain` lays
+    the bonuses again each time it is paid. Laying them again rather than
+    extending them is the same thing here -- they are gated, not
+    one-shot, so a second copy of the same `kind` does not add."""
+
+    def lay() -> None:
+        for who in [c.me, *c.within(10, side="ally")]:
+            c.bonus(
+                "attack",
+                1,
+                on=who,
+                until=When.EONT,
+                kind="power",
+                when=_keyword_gate(Keyword.NECROTIC),
+            )
+            c.bonus(
+                "damage",
+                1,
+                on=who,
+                until=When.EONT,
+                kind="power",
+                when=_dtype_gate(DamageType.NECROTIC),
+            )
+
+    lay()
+    held = c.effect(
+        f"{c.ref} sustained", until=When.SUSTAIN, on=c.me, sustain=MINOR
+    )
+    c.on_sustain(held, lay)
 
 
 @power("i1142p1", level=8, cls=ITEM, usage=AT_WILL, action=STANDARD,
@@ -1817,19 +1964,35 @@ def i1315x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.resist(once=)",),
 )
 def i1655x1(c: Cast) -> None:
-    """"Against the next damage dealt to you" cannot be said: resistance
-    has a duration and no spend, so this runs to the end of the fight and
-    is renewed by each surge. Paragon multipliers are out of scope."""
+    """Resistance has a duration and no spend, so "against the next damage
+    dealt to you" is not `c.resist` at all: it is `c.reduce` in the
+    before-window of the one blow, which is the same arithmetic and does
+    happen once.
+
+    The latch is by hand rather than `once=True`, because `c.reduce`
+    changes a number and announces nothing -- and `c.watch`'s `once`
+    reads whether the handler did anything off the log, so a reduction
+    would never spend the hold. Paragon multipliers are out of scope."""
 
     def surged(ev: SurgeSpent) -> None:
         if ev.actor != c.me:
             return
         gone = _spent_surges(c)
-        if gone:
-            c.resist(gone, on=c.me, until=When.ENCOUNTER)
+        if not gone:
+            return
+        used: list[bool] = []
+
+        def soak(hurt: DamageRolled) -> None:
+            if used or hurt.target != c.me:
+                return
+            if c.reduce(gone, hurt):
+                used.append(True)
+
+        c.watch(
+            DamageRolled, soak, until=When.ENCOUNTER, window=Window.BEFORE
+        )
 
     c.watch(SurgeSpent, surged, until=When.ENCOUNTER)
 
@@ -1872,12 +2035,33 @@ def i1663p1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.recharge_power()",),
 )
 def i1663p2(c: Cast) -> None:
-    """`c.restore_use` needs the ref of the row being handed back and the
-    page names it only in prose, which is not a thing this project reads.
-    Nothing asks a creature which of its rows recharges."""
+    """The row being handed back is named only in prose, which this
+    project does not read -- but it does not have to be named: the beast
+    is the one creature `i1663p1` put on the board by ref, and the row
+    wanted is the recharge power it has spent. `c.expended` asks the
+    board that question and `c.restore_use` answers it."""
+    beast = next(
+        (
+            a
+            for a in c.allies()
+            if (who := c.world.get(a, Ident)) is not None and who.ref == "m324"
+        ),
+        None,
+    )
+    if beast is None:
+        return
+    spent = [
+        ref
+        for ref in c.expended(on=beast)
+        if (row := get(ref)) is not None and row.usage is Usage.RECHARGE
+    ]
+    if not spent:
+        return
+    pick = c.choose(spent, "which of the beast's powers recharges")
+    if pick is not None:
+        c.restore_use(pick, on=beast)
 
 
 @power("i1750p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -1899,11 +2083,13 @@ def i2490x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.storms_embrace()",),
+    todo=("cf:sorcerer-soul-nat20",),
 )
 def i2693x1(c: Cast) -> None:
-    """The whole benefit widens the trigger of a sorcerer class feature
-    that has no representation."""
+    """The whole benefit widens a trigger that is not laid. The storm
+    source is `cf:sorcerer-f0s2`, which plays -- but the natural-20 rider
+    this card loosens to a 16 is that row's own dropped clause, so there
+    is nothing standing for a wider trigger to fire."""
 
 
 @power("i2708x1", level=8, cls=ITEM, action=ActionType.NONE,
@@ -1946,13 +2132,15 @@ def i2830x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.raging()", "c.is_minion()"),
+    dropped=("c.is_minion()",),
 )
 def i2948x1(c: Cast) -> None:
-    """Both bonuses untyped. Paragon numbers are out of scope."""
+    """Both bonuses untyped. "While you are raging" is the class's own
+    `rage.raging`, as in i2050x1. Paragon numbers are out of scope."""
+    from combat_engine.content.powers.barbarian.rage import raging
 
     def crit(ev: Hit) -> None:
-        if not _crit_on_me(c.world, c.me, ev):
+        if not _crit_on_me(c.world, c.me, ev) or not raging(c.world, c.me):
             return
         c.bonus(
             "attack", 1, on=c.me, until=When.ENCOUNTER,
@@ -2006,12 +2194,13 @@ def i3111p1(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    dropped=("c.vulnerable(dice=)",),
 )
 def i3115p1(c: Cast) -> None:
-    """Face 4-5 reads "the first attack that hits the target", by anybody;
-    only the wielder's own is expressible, since a rolled rider on a
-    creature's *incoming* damage has no method."""
+    """Face 4-5 reads "the first attack that hits the target", by anybody
+    -- so it is a `Hit` watch on the victim rather than a bonus on the
+    wielder, which would only have covered the wielder's own swings.
+    `once=True` is safe with the guard: the hold is spent by the first
+    event that actually pays out, not by the first `Hit` of any kind."""
     roll = c.roll("1d6")
     if roll == 1:
         c.penalty("attack", 2, until=When.EOTNT)
@@ -2025,10 +2214,14 @@ def i3115p1(c: Cast) -> None:
         c.prone()
     elif roll in (4, 5):
         foe = c.target
-        c.bonus(
-            "damage", 0, dice="2d6", on=c.me, until=When.EONT, once=True,
-            when=_against(foe) if foe is not None else None,
-        )
+        if foe is None:
+            return
+
+        def struck(ev: Hit) -> None:
+            if ev.target == foe:
+                c.flat(c.roll("2d6"), on=foe)
+
+        c.watch(Hit, struck, until=When.EONT, once=True)
     else:
         c.damage("1d10", dtype=DamageType.LIGHTNING)
         for near in c.within(1, of=c.target, side="any"):
@@ -2095,12 +2288,15 @@ def i475x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.boost_reroll()",),
+    todo=("c.boost_attack()",),
 )
 def i780x1(c: Cast) -> None:
-    """The whole benefit adds to somebody else's reroll after the die is
-    down. `c.reroll_attack` takes a bonus for the roll it makes itself;
-    nothing modifies a reroll another row is making."""
+    """The whole benefit adds to a roll after the die is down, which is
+    the same gap `i1509p2` names -- so it names it with the same symbol.
+    `c.reroll_attack` takes a bonus for the roll *it* makes; the reroll
+    here is p1450's, made inside another row's body, and a `c.bonus` laid
+    around it is read by the next attack rather than by that one.
+    `c.boost_check` is the shape, for skill checks."""
 
 
 @power(
@@ -2358,13 +2554,18 @@ def i3045p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.wearing()",),
 )
 def i3262x1(c: Cast) -> None:
-    """`c.wielding` reads what is in hand, not what is worn, so the "light
-    armour or none" condition cannot be checked. Paragon numbers are out
-    of scope; this is the heroic +1."""
-    c.bonus(AC, 1, on=c.me, until=When.ENCOUNTER, kind="item")
+    """`c.wielding` reads what is in hand, but what is *worn* is
+    `Gear.armour` and `chargen.LIGHT` is the set of weights that count as
+    light -- the same pair four class features and two monsters already
+    ask. No armour at all is cloth, which is in that set. Paragon numbers
+    are out of scope; this is the heroic +1."""
+    from combat_engine.content.chargen import LIGHT
+
+    gear = c.world.get(c.me, Gear)
+    if gear is None or gear.armour in LIGHT:
+        c.bonus(AC, 1, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 @power("i3351p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -2440,26 +2641,67 @@ def i3538p1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("c.bonus(decay=)",),
 )
 def i3559p1(c: Cast) -> None:
-    """Four satyrs are four +1 item bonuses, and two of a kind do not stack
-    -- so it has to be laid as one +4 or the whole thing is worth +1. The
-    countdown that spends a satyr on each miss and each successful save
-    cannot be said: a modifier has no way to lose a point."""
-    made = 0
+    """Four satyrs are four +1 item bonuses, and two of a kind do not
+    stack -- so the bonus has to be one number, or the whole thing is
+    worth +1. A modifier cannot lose a point, so the countdown is written
+    as taking the holds down and laying them again one lower, which comes
+    to the same number and keeps the printed `kind`.
+
+    A satyr goes with each point: they are conjurations, so `c.dispel` is
+    what removes one. They are given a label of their own, and that is
+    load-bearing: `c.dispel` unwinds every effect its maker laid whose
+    label begins with the conjuration's ref, so an unlabelled satyr would
+    take this row's own bonuses -- and its two watchers -- down with the
+    first one to leave."""
+    satyrs: list[int] = []
     for sq in sorted(spread({c.here}, 1)):
-        if made >= 4:
+        if len(satyrs) >= 4:
             break
         if sq == c.here or c.world.grid.occupant(sq) is not None:
             continue
-        if c.conjure(at=sq, until=When.ENCOUNTER, sustain=None, solid=True):
-            made += 1
-    if not made:
+        made = c.conjure(
+            at=sq, label=f"{c.ref} satyr", until=When.ENCOUNTER,
+            sustain=None, solid=True,
+        )
+        if made:
+            satyrs.append(made)
+    if not satyrs:
         return
-    for what in (AC, FORT, REF, WILL):
-        c.bonus(what, made, on=c.me, until=When.ENCOUNTER, kind="item")
-    c.bonus("save", made, on=c.me, until=When.ENCOUNTER, kind="item")
+    holds: list[Effect] = []
+
+    def lay() -> None:
+        for hold in holds:
+            c.end_effect(hold, why=f"{c.ref} lost a satyr")
+        holds.clear()
+        left = len(satyrs)
+        if not left:
+            return
+        for what in (AC, FORT, REF, WILL, "save"):
+            hold = c.bonus(
+                what, left, on=c.me, until=When.ENCOUNTER, kind="item"
+            )
+            if hold is not None:
+                holds.append(hold)
+
+    def spend() -> None:
+        if not satyrs:
+            return
+        c.dispel(satyrs.pop())
+        lay()
+
+    def missed(ev: Miss) -> None:
+        if ev.target == c.me:
+            spend()
+
+    def saved(ev: SavingThrow) -> None:
+        if ev.actor == c.me and ev.saved:
+            spend()
+
+    lay()
+    c.watch(Miss, missed, until=When.ENCOUNTER)
+    c.watch(SavingThrow, saved, until=When.ENCOUNTER)
 
 
 @power("i583x1", level=9, cls=ITEM, action=ActionType.NONE,
@@ -2506,12 +2748,33 @@ def i619p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.chaos_burst()",),
 )
 def i857x1(c: Cast) -> None:
-    """Every clause modifies a sorcerer class feature with no
-    representation: when it triggers, what its AC bonus is, and what it
-    does when the roll offers a saving throw instead."""
+    """The chaos source is the `wild` leg of `cf:sorcerer-f0`, whose burst
+    is a latch on the first attack roll of each turn. This card's clause
+    is a *second* burst rather than a change to that one -- it fires
+    "even if it has already triggered this turn" -- so it is written as
+    its own watch with its own numbers and the feature's latch is left
+    alone. Both bonuses are untyped, as the class prints them, so a turn
+    in which the feature's own burst also lands adds its +1 on top; the
+    card says the bonus "increases to +3" and there is no kind to say it
+    with."""
+
+    def spent(ev: ActionPointSpent) -> None:
+        if ev.actor != c.me or not c.build("wild"):
+            return
+
+        def rolled(swing: AttackRolled) -> None:
+            if swing.attacker != c.me:
+                return
+            if swing.natural % 2 == 0:
+                c.bonus(AC, 3, on=c.me, until=When.SONT, kind="untyped")
+            else:
+                c.save(on=c.me, bonus=2)
+
+        c.watch(AttackRolled, rolled, until=When.EOT, once=True)
+
+    c.watch(ActionPointSpent, spent, until=When.ENCOUNTER)
 
 
 # -- level 10 ---------------------------------------------------------------
@@ -2761,13 +3024,19 @@ def i2594p2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.is_minion()", "c.absorb(part=)"),
+    dropped=("c.is_minion()",),
 )
 def i2827x1(c: Cast) -> None:
     """Two watches, because `DamageRolled` does not say the blow was a
     critical and `Hit` comes too early to move the number: the crit arms a
-    one-shot interrupt and the interrupt does the absorbing. "By any
-    amount" is dropped -- `c.absorb` moves the whole blow or none of it."""
+    one-shot interrupt and the interrupt moves the damage.
+
+    "By any amount" is not `c.absorb`, which moves the whole blow or none
+    of it -- it is `c.reduce` for the share and `c.flat` for the ally who
+    takes it, which is the same pair `c.absorb` is built from. The share
+    is offered largest first, so a board with nobody to ask still soaks
+    the whole blow, which is the choice an ally with the item is
+    presumably wearing it to make."""
 
     def crit(ev: Hit) -> None:
         if not _crit_on_me(c.world, c.me, ev):
@@ -2777,8 +3046,16 @@ def i2827x1(c: Cast) -> None:
             return
 
         def soak(hurt: DamageRolled) -> None:
-            if hurt.target == c.me:
-                c.absorb(hurt, on=helpers[0])
+            if hurt.target != c.me or hurt.amount <= 0:
+                return
+            share = c.choose(
+                list(range(hurt.amount, -1, -1)), "how much of the blow to take"
+            )
+            if not share:
+                return
+            taken = c.reduce(share, hurt)
+            if taken:
+                c.flat(taken, on=helpers[0])
 
         c.watch(
             DamageRolled, soak, until=When.EOT, window=Window.BEFORE,
@@ -2884,12 +3161,16 @@ def i779p1(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(ends_on=)",),
 )
 def i871p1(c: Cast) -> None:
     """The zone attacks what walks into it, which is `ZoneEntered` and not
-    a hazard -- a hazard deals damage and this rolls. The zone ending the
-    moment you or an ally attacks from inside it is dropped."""
+    a hazard -- a hazard deals damage and this rolls.
+
+    "The effect ends if you or an ally attacks while in the zone" is
+    `c.dispel`, which takes the zone down and unwinds the holds it laid;
+    `c.on_attack` is the watch, since the swing may be anybody's on the
+    team. It fires in the declaration window, so the zone is gone before
+    the attack it answers resolves -- which is the printed order."""
     area = c.area()
     here = c.here
     zone = c.zone(area, until=When.EONT, sustain=STANDARD)
@@ -2901,7 +3182,13 @@ def i871p1(c: Cast) -> None:
             c.push(1, on=ev.actor, anchor=here)
             c.immobilized(on=ev.actor, until=When.SOTNT)
 
-    c.watch(ZoneEntered, entered, until=When.EONT)
+    c.watch(ZoneEntered, entered, until=When.ENCOUNTER)
+
+    def struck(ev: AttackDeclared) -> None:
+        if zone in c.my_zones() and ev.attacker in c.in_squares(area, side="team"):
+            c.dispel(zone)
+
+    c.on_attack(struck, until=When.ENCOUNTER)
 
 
 @power("i994x1", level=10, cls=ITEM, action=ActionType.NONE,

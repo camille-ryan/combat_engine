@@ -127,10 +127,23 @@ COMBINED = ("c.combined_attack()",)
 MODE = ("c.familiar_state()",)
 #: A printed weapon the engine has no group and no ref for.
 WEAPON_REF = ("spec.weapon_ref()",)
-#: Concealment is not a state a creature can be put into.
-CONCEAL = ("c.obscure(level=)",)
 #: Lengthening somebody else's printed shift.
 EXTEND = ("c.extend_shift()",)
+
+
+def _concealed_by(c: Cast, ref: str) -> bool:
+    """Concealment laid by one named row, not concealment from anywhere.
+
+    `query.concealment_of` answers the wide question. `c.conceal` is a
+    modifier and `c.bonus` labels what it lays `"<ref> <key><amount>"`, so
+    the one row's concealment is the effect on the caster whose label opens
+    that way. The bare ref will not do: a row arms watches too, and those
+    are effects carrying the ref as their whole label.
+    """
+    return any(
+        eff.label.startswith(f"{ref} concealment")
+        for eff in c.world.effects.of(c.me)
+    )
 
 #: The five the two spellscarred riders name.
 ELEMENTS = (
@@ -434,15 +447,20 @@ f3696 = _grants("f3696", "f3696b")
 
 @power("f3696b", level=1, cls="", usage=ENCOUNTER, action=FREE,
        reach=CloseBurst(5), target=ONE_ALLY, keywords=DIVINE,
-       group=CHANNEL_DIVINITY, dropped=CONCEAL,
+       group=CHANNEL_DIVINITY,
        trigger="an ally within 5 squares of you drops a creature",
        on=Trigger(Dropped, _ally_dropped(5), "an ally drops a creature"))
 def f3696b(c: Cast) -> None:
     """"A creature granting combat advantage to him or her" cannot be
     asked once it is down: `query.enemies` filters out the dead and the
     grant went with the creature. Heroic tier, so 5 temporary hit points.
+
+    `c.conceal` with `total` left off is the printed partial kind, and
+    `When.EOTNT` is "his or her next turn" -- the ally's, not mine.
     """
-    c.temp_hp(5, on=c.trigger.source)
+    friend = c.trigger.source
+    c.temp_hp(5, on=friend)
+    c.conceal(on=friend, until=When.EOTNT)
 
 
 # -- monk -------------------------------------------------------------------
@@ -579,11 +597,18 @@ def f3709(c: Cast) -> None:
 
 @power("f3710", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_skill_check()", "c.grant_action('second wind')"))
+       todo=("c.heal_check()",))
 def f3710(c: Cast) -> None:
-    """Both halves hang off a Heal check made in a fight to hand somebody
-    a second wind or a saving throw, and neither the check nor the action
-    it buys exists here."""
+    """Re-aimed twice over. `events.SkillCheck` exists and is declarable,
+    so "when you succeed on a check" is not the gap; `c.second_wind` is
+    the one door to a second wind and already lays the defence bonus the
+    first clause is about, so `c.grant_action('second wind')` is not it
+    either.
+
+    What is missing is the Heal check as an action in a fight: nothing
+    offers one, so no `SkillCheck` with that skill is ever announced, and
+    the event names an `actor` and no patient -- the same absence `f1390`
+    and `i650x1` carry."""
 
 
 @power("f3711", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -669,17 +694,20 @@ def f3720(c: Cast) -> None:
 
 
 @power("f3721", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.counts_as(kind=)",))
+       reach=PERSONAL, target=SELF)
 def f3721(c: Cast) -> None:
-    """The swim speed and the aquatic attack bonus both land; "you count
-    as having the aquatic keyword" is a type word laid on the creature,
-    which only the database sets.
+    """All three halves. "You count as having the aquatic keyword" is a
+    type word laid on the creature, and `c.set_origin` is where a word a
+    character's row cannot carry is written: `c.kinds_of` reads it back
+    for character and monster alike, which is what `c.is_kind("aquatic")`
+    asks below.
 
     The bonus is gated rather than skipped outside water because
     `c.terrain` is a fact about the fight and is true or false for all of
     it -- so asking once, when the trait is armed, is the same answer.
     """
     c.mode("swim", c.speed_of(), on=c.me, until=When.ENCOUNTER)
+    c.set_origin("aquatic", on=c.me, until=When.ENCOUNTER)
     if c.terrain("aquatic"):
         c.bonus(
             "attack", 2, on=c.me, until=When.ENCOUNTER,
@@ -790,15 +818,19 @@ def f3733(c: Cast) -> None:
 
 @power("f3736", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(*WEAPON_REF, "query.immunities()"))
+       dropped=(*WEAPON_REF, "Defences.immune_keywords"))
 def f3736(c: Cast) -> None:
     """A tome is one implement among many and the engine's only implement
     group is "implement", so the accuracy half cannot be narrowed to it.
 
     The conjuration half is re-laid at the start of each of my turns
     rather than once: a conjuration put down on round three has to start
-    granting then, and enemies walk in and out of the ring. "Immune to
-    fear is immune to this" needs a creature's immunities read back.
+    granting then, and enemies walk in and out of the ring.
+
+    "Immune to fear is immune to this" is re-aimed: `query.immune_to`
+    exists and answers for a `Condition`, and fear is a `Keyword` with no
+    condition to stand for it, so the gap is keyword immunity on the
+    creature and not a reader.
     """
 
     def ring(ev: Any) -> None:
@@ -865,7 +897,7 @@ def _one_handed_melee(c: Cast) -> bool:
 
 @power("f3741", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.as_implement(holy symbol)",))
+       dropped=WEAPON_REF)
 def f3741(c: Cast) -> None:
     """The shield half is a bonus laid on everybody else and typed
     `shield`, so a second source of one does not stack with it -- which
@@ -873,6 +905,8 @@ def f3741(c: Cast) -> None:
 
     A holy symbol is one implement among many and the engine carries only
     the group, so the implement half of the accuracy cannot be narrowed.
+    Named `spec.weapon_ref()` with the tomes and the sickles rather than
+    a second spelling of its own: it is the same absence.
     """
     c.bonus("attack", 1, kind="feat", on=c.me, until=When.ENCOUNTER,
             when=lambda ctx: _one_handed_melee(c))
@@ -884,11 +918,12 @@ def f3741(c: Cast) -> None:
 
 @power("f3742", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.as_implement(holy symbol)", "c.no_provoke(when=)"))
+       dropped=(*WEAPON_REF, "c.no_provoke(when=)"))
 def f3742(c: Cast) -> None:
     """`c.no_provoke` names a creature you may walk away from, not a shape
     of attack you may make, so "ranged and area attacks do not provoke"
-    has nowhere to go."""
+    has nowhere to go. The holy symbol is `spec.weapon_ref()`, as in
+    `f3741`."""
     c.bonus(
         "attack", 1, kind="feat", on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: _holding_two_handed(c),
@@ -903,19 +938,41 @@ def _holding_two_handed(c: Cast) -> bool:
 
 
 @power("f3743", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(against=)",))
+       reach=PERSONAL, target=SELF)
 def f3743(c: Cast) -> None:
-    """Light blade and heavy blade are both groups, so the accuracy half
-    is exact. The -5 against your own allies needs a modifier that knows
-    which side the creature it is about to hit is on; the attack context
-    carries the target but a modifier cannot be narrowed by it."""
-    c.bonus(
-        "attack", 1, kind="feat", on=c.me, until=When.ENCOUNTER,
-        when=lambda ctx: (
+    """Both halves. Light blade and heavy blade are both groups, so the
+    accuracy half is exact -- and it is "arcane powers **and basic
+    attacks**", which the gate had lost: a basic attack carries no
+    keywords, so asking for `Keyword.ARCANE` alone answered false for
+    half the printed sentence.
+
+    The -5 is a gate on the attack context, which carries `target`; it is
+    the damage side that is thin. Penalties take no `kind`, and the
+    narrower "arcane attack power" is the printed wording of that clause
+    -- a basic attack does not carry it.
+    """
+    me = c.me
+
+    def blade(ctx: dict[str, Any]) -> bool:
+        return _holding(c, "light blade", "heavy blade")
+
+    def arcane_or_basic(ctx: dict[str, Any]) -> bool:
+        ref = ctx.get("power", "")
+        return (ref in BASICS or _keyword(ref, Keyword.ARCANE)) and blade(ctx)
+
+    def at_a_friend(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("target")
+        return (
             _keyword(ctx.get("power", ""), Keyword.ARCANE)
-            and _holding(c, "light blade", "heavy blade")
-        ),
-    )
+            and blade(ctx)
+            and who is not None
+            and who != me
+            and team(c.world, who) is team(c.world, me)
+        )
+
+    c.bonus("attack", 1, kind="feat", on=me, until=When.ENCOUNTER,
+            when=arcane_or_basic)
+    c.penalty("attack", 5, on=me, until=When.ENCOUNTER, when=at_a_friend)
 
 
 # -- the goblin run ---------------------------------------------------------
@@ -962,16 +1019,38 @@ def f3746(c: Cast) -> None:
 
 
 @power("f3747", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.triggering_attacker()",))
+       reach=PERSONAL, target=SELF)
 def f3747(c: Cast) -> None:
     """"The enemy that missed you" is the creature p1489 was itself a
-    reaction to, and nothing hands one row the trigger of another."""
+    reaction to, and `PowerUsed.trigger` is that event now -- a `Miss`,
+    whose `attacker` is the enemy. `ev.targets` would be no use: p1489
+    is `target=SELF` and never names the creature it answers."""
+    me = c.me
+
+    def used(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p1489":
+            return
+        foe = getattr(getattr(ev, "trigger", None), "attacker", None)
+        if foe is not None:
+            c.grants_advantage(on=foe, to=me, until=When.EONT)
+
+    c.watch(PowerUsed, used, until=When.ENCOUNTER)
 
 
 @power("f3748", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*EXTEND, *CONCEAL))
+       reach=PERSONAL, target=SELF, dropped=EXTEND)
 def f3748(c: Cast) -> None:
-    """An extra square on p1489's shift, and concealment afterwards."""
+    """The concealment half lands: `c.conceal` with `total` left off is
+    the printed partial kind. The extra square on p1489's shift is
+    dropped -- `PowerUsed` is announced before the body runs, so there is
+    nothing yet to lengthen, and by `PowerResolved` the shift is spent."""
+    me = c.me
+
+    def used(ev: Any) -> None:
+        if ev.actor == me and ev.power == "p1489":
+            c.conceal(on=me, until=When.EONT)
+
+    c.watch(PowerUsed, used, until=When.ENCOUNTER)
 
 
 @power("f3749", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -982,10 +1061,27 @@ def f3749(c: Cast) -> None:
 
 
 @power("f3750", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.triggering_attacker()",))
+       reach=PERSONAL, target=SELF)
 def f3750(c: Cast) -> None:
-    """The damage lands on whoever p1489 was answering, which is a fact
-    about that row's trigger and not about this one."""
+    """"Right before you shift" is the one place `PowerUsed` firing ahead
+    of the body is the wanted order rather than the trap: the
+    announcement is made above `p.body`, so the damage lands while p1489
+    has not moved yet. `PowerUsed.trigger` is the `Miss` it answered and
+    `attacker` is the enemy; heroic tier, so 1d4.
+
+    Adjacency is asked with `c.adjacent_to`, which names both creatures:
+    the bare `c.adjacent` measures from `c.target`, which a watcher has
+    not got."""
+    me = c.me
+
+    def used(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p1489":
+            return
+        foe = getattr(getattr(ev, "trigger", None), "attacker", None)
+        if foe is not None and c.adjacent_to(foe, me):
+            c.damage("1d4", on=foe)
+
+    c.watch(PowerUsed, used, until=When.ENCOUNTER)
 
 
 @power("f3751", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1101,19 +1197,65 @@ def f3758(c: Cast) -> None:
 
 
 @power("f3759", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=CONCEAL)
+       reach=PERSONAL, target=SELF)
 def f3759(c: Cast) -> None:
-    """The trigger is "while you have partial concealment", which is a
-    state nothing can put a creature into or read back off one."""
+    """p16469 lays its concealment with `c.conceal`, so the narrow
+    question -- concealment *from that row* rather than from anywhere --
+    is the label `c.bonus` wrote, which is what `_concealed_by` reads.
+    `query.concealment_of` would answer the wider one and pay out for
+    dim light the card says nothing about.
+
+    "Or until you attack" is a second end, so the hold is kept and ended
+    on the first swing rather than left to run its duration."""
+    me = c.me
+
+    def struck(ev: Any) -> None:
+        if ev.target != me or not _concealed_by(c, "p16469"):
+            return
+        hidden = c.invisible(on=me, until=When.EONT)
+        if hidden is None:
+            return
+
+        def swung(attack: Any) -> None:
+            if attack.attacker == me:
+                c.end_effect(hidden)
+
+        c.watch(AttackDeclared, swung, until=When.EONT, once=True)
+
+    c.watch(Hit, struck, until=When.ENCOUNTER)
 
 
 @power("f3761", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.grants_ca_to(ally)", "c.aid_another()"))
+       dropped=("c.aid_another()",))
 def f3761(c: Cast) -> None:
-    """Both halves turn on what p16541 did -- which enemy it made grant
-    combat advantage, and whether it was used to aid an attack. Neither
-    the relation's cause nor the aid action is readable."""
+    """"Which enemy p16541 made grant combat advantage" is `c.suffering`:
+    `c.grants_advantage` labels the effect it lays `"<ref> advantage"`,
+    so the relation's cause is readable after all and the first half
+    lands. Watched on `PowerResolved`, because p16541 chooses inside its
+    body and there is nothing to find before it runs.
+
+    Filtered to enemies because p16541's other branch lays a +3 on an
+    ally under the same label, and `c.suffering` matches by substring.
+
+    The aid half is dropped: the aid another action is not on the menu,
+    so p16541's second branch is a bonus laid directly and there is no
+    "used it to aid" to answer."""
+    me = c.me
+
+    def resolved(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p16541":
+            return
+        foes = set(c.enemies())
+        for foe in c.suffering("p16541"):
+            if foe not in foes:
+                continue
+            c.bonus(
+                "damage", 3, kind="feat", on=me, until=When.SONT,
+                when=lambda ctx, foe=foe: ctx.get("target") == foe,
+            )
+
+    c.watch(PowerResolved, resolved, until=When.ENCOUNTER)
 
 
 @power("f3762", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1159,8 +1301,11 @@ def f3767(c: Cast) -> None:
 @power("f3768", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=PROFICIENCY)
 def f3768(c: Cast) -> None:
-    """The spec names these two by weapon ref, so what is in hand can be
-    asked exactly -- unusually for this file. Heroic tier, so +2."""
+    """The spec names these two by weapon ref, so the gate is exact --
+    and false for every character `chargen` can build today, because
+    neither ref is in the weapon table `chargen.PRINTED` loads. The same
+    shape `general_q.py`'s `_wielding` documents: the row reports UNUSED
+    rather than wrong. Heroic tier, so +2."""
     c.bonus(
         "damage", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: _holding_ref(c, "m5495a1", "m5732a1"),
@@ -1400,12 +1545,16 @@ def f3787(c: Cast) -> None:
 
 
 @power("f3788", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.racial_row()",))
+       reach=PERSONAL, target=SELF, todo=("spec.feature_ref()",))
 def f3788(c: Cast) -> None:
     """`engine/equipment.py` puts no speed penalty on heavy armour, so the
     first clause has nothing to cancel. What is left is an altitude limit
-    on a *racial* trait, not a class feature: the race's traits were never
-    imported, so there is no `rt:` row here to raise a ceiling on."""
+    on a *racial* trait.
+
+    Re-aimed: racial traits are imported now and `rt:` rows exist, but not
+    for this race -- r68 has two racial powers in `content/races/` and no
+    trait row at all, so the thing this raises a ceiling on has no ref.
+    The same absence a dozen rows carry as `spec.feature_ref()`."""
 
 
 @power("f3789", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1491,7 +1640,6 @@ def _a_drop_near_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 @power("f3795b", level=1, cls="", usage=ENCOUNTER,
        action=ActionType.IMMEDIATE_REACTION, reach=PERSONAL, target=SELF,
        keywords=[Keyword.DIVINE, Keyword.NECROTIC], group=CHANNEL_DIVINITY,
-       dropped=CONCEAL,
        trigger="you drop an enemy, or an enemy adjacent to you drops",
        on=Trigger(Dropped, _a_drop_near_me, "a creature near you drops"))
 def f3795b(c: Cast) -> None:
@@ -1501,9 +1649,18 @@ def f3795b(c: Cast) -> None:
 
     Both payouts are hung on the aura's own duration, so when it lapses
     the watchers go with it.
+
+    "Partial concealment against enemies in the aura" is `c.conceal` with
+    a gate: the *attack* context carries `attacker`, which the damage one
+    does not, and `query.concealment_of` is handed that context -- so the
+    narrowing the card prints is sayable rather than a blanket -2.
     """
     ring = c.aura(1, label=c.ref, until=When.EONT)
     paid: set[int] = set()
+
+    def in_the_ring(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("attacker")
+        return who is not None and c.in_my_aura(who, label=c.ref)
 
     def bite(who: int) -> None:
         if who in paid or who == c.me or not c.in_my_aura(who, label=c.ref):
@@ -1522,6 +1679,7 @@ def f3795b(c: Cast) -> None:
             bite(ev.attacker)
 
     if ring:
+        c.conceal(on=c.me, until=When.EONT, when=in_the_ring)
         c.watch(TurnEnd, turn_ended, until=When.EONT)
         c.watch(AttackDeclared, swung, until=When.EONT)
 
