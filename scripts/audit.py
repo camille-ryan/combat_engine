@@ -4,6 +4,8 @@
     uv run scripts/audit.py                          every row; ~10 minutes
     uv run scripts/audit.py --changed                rows in changed files
     uv run scripts/audit.py --calls 'c.shove()'      rows that name a verb
+    uv run scripts/audit.py --verdicts               is the verdict honest?
+    uv run scripts/audit.py --sample 300             a direction, cheaply
     uv run scripts/audit.py --class wizard
     uv run scripts/audit.py --level 1 --verbose
 
@@ -1735,6 +1737,21 @@ def _changed() -> list[str]:
     fires costs all **24** -- three gear faces by eight seeds. The rows
     this instrument exists to find are the ones it spends its time on.
 
+    **Do not try to tune the pool; it has been measured and there is
+    nothing there.** On the 4-performance-plus-6-efficiency-core machine
+    this was written on, `chunksize=8` across ten workers looked like the
+    obvious suspect -- six workers a third as fast, and a pre-partitioned
+    chunk landing on one stalls the whole map. Over a fixed 600-row sample:
+
+        jobs 10, chunksize 8  (current)   40.8s
+        jobs 10, chunksize 1              42.8s
+        jobs 4 / 8 / 14 / 20              68.9 / 51.8 / 53.6 / 62.7s
+
+    and repeat runs of the *same* config vary by 15%, so the first result
+    was noise. The current setting is the best available. **Make the sweep
+    rare, not fast**: `--verdicts` for the verdict itself, `--sample` for a
+    direction, `--calls` for a new verb, `--changed` otherwise.
+
     An engine change that moves every row at once is not narrowable, so
     touching `engine/` widens this back to everything. **But most engine
     changes are additive** -- a new `Cast` verb nothing called yesterday
@@ -1796,6 +1813,106 @@ def _attempts(out: Result):  # noqa: ANN202
             if out.fired and (out.events & DID_SOMETHING):
                 break
             yield seed, face
+
+
+@contextlib.contextmanager
+def hollowed(ref: str):  # noqa: ANN201
+    """Run with this row's body replaced by one that does nothing.
+
+    **The negative control.** A row is supposed to be credited with what
+    *it* did, so replacing only its body must take all of its credit away:
+    the offer still happens, the budget is still spent, `PowerUsed` is
+    still emitted, and the log differs from the positive run by exactly the
+    row's own output. Anything still credited afterwards was never the
+    row's.
+
+    Preferred over flipping `Trigger.when` or returning `""` from
+    `world.decider`, both of which stop the row being *offered* and so
+    change the shape of the run. This also works for a trait, which neither
+    of those reaches: a trait is armed through `dsl.use` and never offered.
+
+    Restores in a `finally` and it matters: `REGISTRY` is module-global and
+    a pool worker handles about eight refs per chunk, so a leaked swap
+    would quietly hollow somebody else's row.
+    """
+    p = get(ref)
+    if p is None:
+        yield
+        return
+    was = p.body
+
+    def nothing(c: Cast) -> None:
+        """Deliberately empty. See `hollowed`."""
+
+    p.body = nothing
+    try:
+        yield
+    finally:
+        p.body = was
+
+
+#: Rows with a **known** correct answer, for developing the verdict itself.
+#:
+#: Every one of these is run twice: as written, and `hollowed` -- its body
+#: replaced by one that does nothing. The invariant is the whole of #216:
+#:
+#:     a row that does nothing must never report `ok`
+#:
+#: which needs no hand-edited gate and no judgement about what each row
+#: ought to do. Chosen to cover every path through `audit`: a trait, a
+#: `Hit`-triggered row, an ordinary attack, a burst, a mover, a healer.
+#:
+#: `f1305` is #216's own example -- the row whose gate was flipped to a
+#: nonsense value by hand and which still reported
+#: `ok  ConditionApplied, DamageApplied`.
+VERDICT_ROWS = (
+    "f1305",     # hangs both clauses on a Hit -- the issue's example
+    "f172",      # a trait gated on gear, credited with the board's setup
+    "f139",      # the same shape
+    "f2206",     # a trait laying a standing modifier
+    "f2896",     # a trait laying a conditional one
+    "p14271",    # an ordinary melee attack
+    "p14262",    # a close burst that lays resist and vulnerability
+    "mba",       # the engine's own melee basic
+    "rba",       # and the ranged one
+    "p1333",     # an attack whose damage rides on the attack ability
+)
+
+
+def verdicts(refs: tuple[str, ...] = VERDICT_ROWS) -> list[str]:
+    """Check the verdict against rows whose right answer is known.
+
+    Seconds rather than the ten minutes a full sweep costs, which is the
+    point: `audit.py` is in `WIDE`, so every edit to it widens `--changed`
+    back to all 12,197 rows and there is otherwise no way to iterate on the
+    verdict at all.
+
+    Returns the complaints. Empty is good.
+    """
+    wrong: list[str] = []
+    for ref in refs:
+        if get(ref) is None:
+            wrong.append(f"{ref} is not a declared row")
+            continue
+        live = audit(ref)
+        with hollowed(ref):
+            dead = audit(ref)
+        if live.error:
+            wrong.append(f"{ref} raises as written: {live.error.strip()[-200:]}")
+        # The invariant. A hollowed row emits its `PowerUsed` and nothing
+        # else, so anything in `DID_SOMETHING` here is credit the row did
+        # not earn -- the harness's own provocation, or the board's setup.
+        if not dead.silent:
+            wrong.append(
+                f"{ref} still credited with "
+                f"{', '.join(sorted(dead.events & DID_SOMETHING))} "
+                f"after its body was emptied"
+            )
+        # And the positive half, so the check cannot pass by crediting
+        # nothing to anybody.
+        if live.fired and live.silent and ref not in KNOWN_SILENT:
+            wrong.append(f"{ref} is credited with nothing as written")
+    return wrong
 
 
 def audit(ref: str) -> Result:
@@ -1930,6 +2047,13 @@ def main() -> int:
     ap.add_argument("--verbose", action="store_true", help="say what each row did")
     ap.add_argument("--changed", action="store_true",
                     help="only rows in content files that differ from HEAD")
+    ap.add_argument("--verdicts", action="store_true",
+                    help="check the verdict against rows whose right answer is "
+                         "known. Seconds, and the only way to iterate on "
+                         "audit.py itself -- see `verdicts`")
+    ap.add_argument("--sample", type=int, metavar="N",
+                    help="a deterministic random N rows. For seeing whether a "
+                         "number moved before paying for the exact one")
     ap.add_argument("--calls", action="append", metavar="SYMBOL",
                     help="only rows whose source or whose todo=/dropped= "
                          "marker names this verb; repeatable. For adding a "
@@ -1938,11 +2062,27 @@ def main() -> int:
                     help="worker processes; 0 picks one per core, 1 stays serial")
     args = ap.parse_args()
 
+    if args.verdicts:
+        wrong = verdicts()
+        for line in wrong:
+            print(f"  FAIL  {line}")
+        print(f"\n{len(VERDICT_ROWS) - len(wrong)} of {len(VERDICT_ROWS)} "
+              f"pinned rows verdict correctly")
+        return 1 if wrong else 0
+
     wanted = args.refs or (
         _calls(args.calls) if args.calls
         else _changed() if args.changed
         else sorted(REGISTRY)
     )
+    if args.sample and not args.refs:
+        import random
+
+        # Seeded, so two runs compare. A moving sample cannot show a number
+        # moving.
+        wanted = sorted(random.Random(0xA0D17).sample(wanted, min(args.sample, len(wanted))))
+        print(f"# a {len(wanted)}-row sample of {len(REGISTRY)}. For a "
+              f"direction, not a number.\n")
     if args.calls and not args.refs:
         print(f"# {len(wanted)} row(s) name {', '.join(args.calls)} -- in their "
               f"source or in a marker. --all is {len(REGISTRY)}.\n"
