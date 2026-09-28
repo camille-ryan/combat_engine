@@ -396,10 +396,30 @@ class Session:
         """Advance past anything the player does not control."""
         try:
             if choice is not None and choice.kind == "end":
-                self.encounter.advance()
+                self._advance()
             self._run_monsters()
         finally:
             self._write_log()
+
+    def _advance(self) -> None:
+        """Step the turn with the same guard `_run_monsters` uses.
+
+        **The advance is not the player's move either.** Ending a turn
+        emits `TurnEnd` and then `TurnStart`, and a character's triggered
+        row offered from there reaches `gate.decide` on *this* thread --
+        which blocks on an answer that can only arrive on a request this
+        one is holding open. `_run_monsters` states that rule and wraps
+        its loop; these two call sites ran the advance just outside it.
+
+        Nothing offered it until races were dealt, because no raceless
+        character in the fixtures carried a row that answers a turn
+        boundary. The hole was there the whole time.
+        """
+        self._theirs = True
+        try:
+            self.encounter.advance()
+        finally:
+            self._theirs = False
 
     def _run_monsters(self) -> None:
         """Play every non-character turn until it is a character's move again."""
@@ -430,7 +450,7 @@ class Session:
 
     def end_turn(self) -> None:
         try:
-            self.encounter.advance()
+            self._advance()
             self._run_monsters()
         finally:
             self._write_log()
