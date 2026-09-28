@@ -1904,13 +1904,11 @@ def i1231x1(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.NECROTIC],
     trigger="you hit an enemy with this weapon",
     on=Trigger(Hit, by_me, "you hit an enemy with this weapon"),
-    dropped=("c.flat(dtypes=)",),
 )
 def i1231p1(c: Cast) -> None:
-    """A blow of two types at once has no spelling: damage carries one
-    `DamageType`. Dealt as the first of the pair, which is a resistance
-    the target may have and the other may not."""
-    c.flat(2 * c.enhancement, dtype=DamageType.FIRE)
+    """One blow that is fire and necrotic at once -- shrugged off only as
+    far as the target resists both, which is the printed rule."""
+    c.flat(2 * c.enhancement, dtypes=(DamageType.FIRE, DamageType.NECROTIC))
     c.dazed(until=When.EONT)
 
 
@@ -5110,13 +5108,12 @@ def i1890p1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.ACID, Keyword.POISON],
     attack=Attack(STR, vs=FORT),
-    dropped=("c.damage(dtypes=)",),
 )
 def i1890p2(c: Cast) -> None:
-    """A blow of two types at once has no spelling, so it lands as the
-    first of the pair."""
+    """One blow that is acid and poison at once, not two rolls: `dtypes=`
+    carries both and resistance has to cover both to count."""
     if c.strike():
-        c.damage("2d8", c.str_mod, dtype=DamageType.ACID)
+        c.damage("2d8", c.str_mod, dtypes=(DamageType.ACID, DamageType.POISON))
 
 
 @power(

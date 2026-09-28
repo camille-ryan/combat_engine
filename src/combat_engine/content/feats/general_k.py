@@ -64,6 +64,7 @@ from combat_engine.engine import (
     Condition,
     ConditionApplied,
     DamageApplied,
+    DamageRolled,
     DamageType,
     Dropped,
     EffectApplied,
@@ -87,6 +88,7 @@ from combat_engine.engine import (
     Usage,
     Wall,
     When,
+    Window,
     about_me,
     get,
     power,
@@ -390,13 +392,25 @@ def f1704(c: Cast) -> None:
 
 @power("f1751", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.deals(ref=)", "DamageType.pair()"))
+       dropped=("c.counts_as(keyword=)",))
 def f1751(c: Cast) -> None:
-    """Adds a second damage type to the one already chosen for p1448.
-    The ref is no longer the gap; the two that remain are. `c.deals`
-    retypes this creature's *weapon* attacks rather than one named row,
-    and `c.damage` rolls one type at a time, so nothing can say "radiant
-    as well as whatever it already was"."""
+    """Adds radiant to whatever `p1448` already deals -- "as well as", not
+    "instead of", which is `DamageRolled.dtypes` and not `c.deals`. The
+    type chosen for the racial power is read off the blow rather than
+    asked for: whatever it rolled out as, radiant joins it.
+
+    The second sentence gives `p1448` the radiant keyword too. A row's
+    keywords are its header and nothing rewrites one, so that half is
+    named and dropped.
+    """
+    me = c.me
+
+    def gild(ev: DamageRolled) -> None:
+        if ev.source == me and ev.detail == "p1448":
+            ev.dtypes = (*ev.types(), DamageType.RADIANT)
+
+    c.watch(DamageRolled, gild, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
 
 
 @power("f1773", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -529,10 +543,13 @@ def f2092(c: Cast) -> None:
 
 
 @power("f1938", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("feat.associated_powers",))
+       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
 def f1938(c: Cast) -> None:
-    """Grants another class's power, named in prose. `c.grant_row` is the
-    verb and the ref is what is missing."""
+    """**Re-aimed off `feat.associated_powers`.** This card prints no
+    Associated Powers list and never did -- it names one power, in prose
+    and in lower case, as "the <class> power <name>". That is
+    `spec.power_ref()`, the group the other fifty prose-named powers are
+    in. `c.grant_row` is the verb and the ref is what is missing."""
 
 
 @power("f1939", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

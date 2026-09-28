@@ -79,6 +79,7 @@ from combat_engine.engine import (
     SurgeSpent,
     Swap,
     Trigger,
+    TurnEnd,
     TurnStart,
     Usage,
     When,
@@ -117,9 +118,6 @@ R44 = ("p7441", "p7442", "p7443")
 #: offer to another row's augment. Same symbol the five psionic aspect
 #: dailies in `docs/blocked.json` already name, so they group.
 AUGMENT = ("c.lend_augment(ref, clause)",)
-#: Two damage types on one roll. `c.damage` takes one `dtype`.
-PAIR = ("DamageType.pair()",)
-
 MELEE_REACH = ("melee", "close_burst", "close_blast")
 ALL_DEFENCES = (AC, FORT, REF, WILL)
 FORCED = ("push", "pull", "slide")
@@ -652,14 +650,21 @@ def f3015b(c: Cast) -> None:
 @power("f3016", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use f3015b",
-       on=Trigger(PowerResolved, _used("f3015b"), "you use that power"),
-       dropped=("c.end_effect()",))
+       on=Trigger(PowerResolved, _used("f3015b"), "you use that power"))
 def f3016(c: Cast) -> None:
-    """Relays the vulnerability for the rest of the fight. The second
-    half -- it ends early if you lose sight of the target -- would need
-    a named hold to reach back into, and nothing ends one by name."""
+    """Relays the vulnerability for the rest of the fight, or until sight
+    of the target is lost. There is no event for losing sight of
+    somebody, so it is asked at the end of every turn -- which is as
+    often as anything on the board has moved."""
     for who in c.trigger.targets:
-        c.vulnerable(c.level // 2 + c.int_mod, on=who, until=When.ENCOUNTER)
+        hold = c.vulnerable(c.level // 2 + c.int_mod, on=who,
+                            until=When.ENCOUNTER)
+
+        def lost(ev: TurnEnd, who: int = who, hold: Any = hold) -> None:
+            if not c.can_see(who):
+                c.end_effect(hold)
+
+        c.watch(TurnEnd, lost, until=When.ENCOUNTER, once=True)
 
 
 # -- the q248 batch: what an ally beside you gets ---------------------------
@@ -794,13 +799,16 @@ def f3046(c: Cast) -> None:
 
 @power("f3047", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.end_effect()",))
+       todo=("c.effects_on()",))
 def f3047(c: Cast) -> None:
-    """Rewrites what an ally gets for *ending* two of `cf:artificer-f2`'s
-    infusions early. `p7635` and `p10187` are the rows and both are
-    written; the cash-in they print is the clause `level_0.py` leaves out
-    of the infusions themselves, for want of anything that ends a live
-    effect."""
+    """Re-aimed. Rewrites what an ally gets for *ending* two of
+    `cf:artificer-f2`'s infusions early -- `p7635` and `p10187`, both
+    written. Ending one is `c.end_effect` now, and the card prints no
+    moment for it: the ally may take the trade at any time, which is
+    `c.endable` with `then=` as the teleport. That wants the effect
+    itself, and nothing asks what a creature is currently under --
+    `c.end_effect` finds one by label and ends what it finds, which is
+    the wrong half of the operation to arm a choice with."""
 
 
 # -- the shadow batch -------------------------------------------------------
@@ -822,16 +830,17 @@ _granted("f3065", "f3065b", swap=Swap(3, Usage.ENCOUNTER))
        reach=Melee(1), target=ONE_CREATURE,
        keywords=[Keyword.COLD, Keyword.NECROTIC, Keyword.SHADOW,
                  Keyword.WEAPON],
-       attack=Attack(DEX, vs=REF), dropped=PAIR)
+       attack=Attack(DEX, vs=REF))
 def f3065b(c: Cast) -> None:
     """"Dexterity or Charisma" is the higher of the two, carried as
-    `plus=` because the header names one. The 1d6 is printed as cold
-    *and* necrotic on one roll and `c.damage` takes a single type, so it
-    is rolled as cold and the pairing is named."""
+    `plus=` because the header names one. The 1d6 is one roll that is
+    cold *and* necrotic, so it is its own `c.damage` with both types
+    rather than two rolls; the weapon damage keeps the weapon's own type.
+    Paragon swaps are out of scope."""
     best = max(c.dex_mod, c.cha_mod)
     if c.strike(plus=best - c.attack_mod):
         c.damage(c.w(), best)
-        c.damage("1d6", dtype=DamageType.COLD)
+        c.damage("1d6", dtypes=(DamageType.COLD, DamageType.NECROTIC))
         c.insubstantial(on=c.me, until=When.EONT)
 
 
@@ -857,15 +866,17 @@ _granted("f3067", "f3067b", swap=Swap(9, Usage.DAILY))
        keywords=[Keyword.COLD, Keyword.NECROTIC, Keyword.SHADOW,
                  Keyword.WEAPON],
        attack=Attack(DEX, vs=FORT),
-       dropped=("DamageType.pair()", "c.low_light()"))
+       dropped=("c.low_light()",))
 def f3067b(c: Cast) -> None:
-    """The Effect line happens whether or not anything is hit, so it sits
+    """The damage is one roll that is cold *and* necrotic, which is what
+    `dtypes=` says: a creature resisting only one of them takes all of
+    it. The Effect line happens whether or not anything is hit, so it sits
     outside the hit branch under `c.first`. The last sentence turns dim
     light into total concealment for the rest of the fight, and lighting
     is not on the board."""
     best = max(c.dex_mod, c.cha_mod)
     if c.strike(plus=best - c.attack_mod):
-        c.damage(c.w(), best, dtype=DamageType.COLD)
+        c.damage(c.w(), best, dtypes=(DamageType.COLD, DamageType.NECROTIC))
         c.dazed(until=When.SAVE_ENDS)
     if c.first:
         c.invisible(on=c.me, until=When.EONT)
@@ -1524,20 +1535,25 @@ def f3153(c: Cast) -> None:
 
 
 @power("f3154", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.end_effect()",))
+       reach=PERSONAL, target=SELF)
 def f3154(c: Cast) -> None:
-    """The early saving throw plays against a daze or a stun that a save
-    can end. The printed line goes further -- "even if the effect
-    doesn't normally end on a save" -- and `c.save` only finds save-ends
-    effects; `bare=True` rolls against nothing and ends nothing."""
+    """"Even if the effect doesn't normally end on a save" is why this is
+    not `c.save`: that one only finds save-ends effects and would never
+    reach a daze clocked on a turn. The roll is `bare=True`, which still
+    totals the caster's save modifiers, and what it ends is found by the
+    condition rather than by the row that laid it."""
     me = c.me
     c.bonus(WILL, 2, on=me, until=When.ENCOUNTER, kind="feat")
 
     def early(ev: Any) -> None:
         if ev.actor != me or ev.ghost:
             return
-        if c.is_(Condition.DAZED, on=me) or c.is_(Condition.STUNNED, on=me):
-            c.save(on=me)
+        for cond in (Condition.DAZED, Condition.STUNNED):
+            if not c.is_(cond, on=me):
+                continue
+            if c.save(on=me, bare=True, against=c.ref):
+                c.end_effect(on=me, carrying=cond)
+            return
 
     c.watch(TurnStart, early, on=me, until=When.ENCOUNTER)
 

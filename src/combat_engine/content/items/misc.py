@@ -832,11 +832,11 @@ def i2426p1(c: Cast) -> None:
 
 
 @power("i2858x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i2858x1(c: Cast) -> None:
-    """"An Athletics check to jump" is a circumstance, and laying the +5 on
-    every Athletics check instead would be a bigger lie than not laying
-    it. The running start is the same clause."""
+    """`c.jump` rolls nothing and charges no running start, so both halves
+    of this property are bonuses to a check that never happens in a
+    fight."""
 
 
 @power("i2858p1", level=3, cls=ITEM, usage=ENCOUNTER, action=FREE,
@@ -2102,10 +2102,12 @@ def i2419x1(c: Cast) -> None:
 @power("i2419p1", level=7, cls=ITEM, usage=ENCOUNTER, action=FREE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.PSIONIC],
        trigger="you hit with an unaugmented at-will attack power",
-       todo=("c.skill_circumstance()",))
+       out_of_combat=True)
 def i2419p1(c: Cast) -> None:
     """`c.jump` asks for no check and needs no running start, so the whole
-    printed benefit is the removal of a cost the engine never charges."""
+    printed benefit is the removal of a cost the engine never charges.
+    Inert by construction rather than unwritten: there is no jump action
+    and no Athletics roll for a circumstance to be carved out of."""
 
 
 @power("i2967p1", level=7, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -2182,11 +2184,10 @@ def i3443p1(c: Cast) -> None:
 
 
 @power("i455x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i455x1(c: Cast) -> None:
-    """Both bonuses are circumstance bonuses -- traps, foraging,
-    navigating -- and laying them on every Thievery and Dungeoneering
-    check would be larger than the card."""
+    """Traps, foraging and navigating underground. No fight rolls Thievery
+    or Dungeoneering, so the whole property is narrative."""
 
 
 @power("i455p1", level=7, cls=ITEM, usage=ENCOUNTER, action=FREE,
@@ -2608,16 +2609,16 @@ def i3455x1(c: Cast) -> None:
 @power("i3455p1", level=9, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.FIRE, Keyword.RADIANT],
-       dropped=("DamageType.pair()",),
        trigger="you use an at-will attack power and hit at least one target",
        on=Trigger(Hit, _at_will_hit, "you hit with an at-will attack power"))
 def i3455p1(c: Cast) -> None:
-    """"Ongoing 5 fire and radiant" is one effect of two types, and the
-    engine has no pair -- two ongoings of 5 would tick for 10, so the
-    radiant half goes unwritten rather than doubling the card."""
+    """"Ongoing 5 fire and radiant" is one burn of two types -- five a
+    turn, one save, and shrugged off only as far as the creature resists
+    both. The d6 is rolled per target hit, and the trigger fires once per
+    hit, so it is rolled here."""
     foe = getattr(c.trigger, "target", None)
     if foe is not None and c.roll("1d6") >= 3:
-        c.ongoing(5, DamageType.FIRE, on=foe)
+        c.ongoing(5, dtypes=(DamageType.FIRE, DamageType.RADIANT), on=foe)
 
 
 @power("i512x1", level=9, cls=ITEM, action=ActionType.NONE,

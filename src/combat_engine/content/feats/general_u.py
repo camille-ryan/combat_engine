@@ -200,7 +200,12 @@ def f3424(c: Cast) -> None:
 def f3425(c: Cast) -> None:
     """`Dropped` carries `source` as well as `actor`, so `by_me` reads the
     killer and `cursed_by_me` the creature going down -- which is the two
-    halves of the printed sentence and the reason both are declared."""
+    halves of the printed sentence and the reason both are declared.
+
+    This is the one of the three whose page prints **no** Associated
+    Powers list at all -- its two siblings print one and it arrived as
+    refs -- so `feat.associated_powers` here is permanent rather than
+    pending."""
     c.shift(3 + c.int_mod)
 
 
@@ -213,13 +218,17 @@ def f3426(c: Cast) -> None:
 
 @power("f3427", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=AUGMENT + ASSOCIATED + ABILITY_SWAP,
+       dropped=AUGMENT + ABILITY_SWAP,
        trigger="you drop an enemy you have cursed to 0 hit points",
        on=Trigger(Dropped, both(by_me, cursed_by_me),
                   "you drop an enemy you have cursed"))
 def f3427(c: Cast) -> None:
     """"Each enemy cursed by you" is every live enemy carrying my curse,
-    which the one going down no longer is."""
+    which the one going down no longer is.
+
+    `feat.associated_powers` is gone from the marker: the card's list is
+    refs now, and both clauses that wanted it are held by something else
+    -- one by the augment nothing lends, one by the ability swap."""
     for foe in _cursed(c):
         c.penalty("attack", 2, on=foe, until=When.EONT)
 
@@ -233,13 +242,17 @@ def f3428(c: Cast) -> None:
 
 @power("f3429", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=AUGMENT + ASSOCIATED + ABILITY_SWAP,
+       dropped=AUGMENT + ABILITY_SWAP,
        trigger="you drop an enemy you have cursed to 0 hit points",
        on=Trigger(Dropped, both(by_me, cursed_by_me),
                   "you drop an enemy you have cursed"))
 def f3429(c: Cast) -> None:
     """The enemy picks, not the warlock, so the choice is put to it with
-    `c.may(who=)` rather than taken with `c.choose`."""
+    `c.may(who=)` rather than taken with `c.choose`.
+
+    `feat.associated_powers` is gone from the marker for the same reason
+    as `f3427`: the list is refs now, and the clauses reading it are held
+    by the augment and the ability swap instead."""
     for foe in _cursed(c):
         if c.may("fall prone", who=foe):
             c.prone(on=foe)
@@ -268,11 +281,19 @@ def f3434(c: Cast) -> None:
 
 
 @power("f3435", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*REACH, "DamageType.pair()"))
+       reach=PERSONAL, target=SELF,
+       todo=(*REACH, "dsl.Power.energy_types"))
 def f3435(c: Cast) -> None:
-    """Same missing trigger as `f3434`, and a second hold beside it: a
-    power with a variable energy type offers no pair of types to roll
-    between -- `c.element` reads a build's single sworn element."""
+    """Same missing trigger as `f3434`, and a second hold beside it.
+
+    Re-aimed: the second hold was never a blow of two types at once --
+    this is "roll twice and choose **either** result", which `c.choose`
+    over damage types already says (`psion_b.f3307` does exactly that).
+    What is missing is the list to choose from. A power "that has a
+    variable energy type" declares no such set anywhere in the header,
+    and `c.element` answers a build's single sworn element, which is a
+    different question.
+    """
 
 
 # -- eladrin ----------------------------------------------------------------
@@ -383,12 +404,13 @@ def f3446(c: Cast) -> None:
 
 
 @power("f3447", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=CIRCUMSTANCE)
+       reach=PERSONAL, target=SELF, todo=("c.escape()",))
 def f3447(c: Cast) -> None:
-    """Every clause is a skill bonus narrowed to one use of the skill --
-    locks, sleight of hand, escaping a grab. Laying the bonus flat would
-    be a +4 to Acrobatics and Athletics in every check in the game, which
-    is strictly stronger than print, so nothing is laid."""
+    """Locks, sleight of hand and restraints are not fought over. The one
+    clause a board would read is the +4 to escape a grab, and there is no
+    escape attempt to add it to -- nothing in the engine rolls a check
+    against `Relation.GRABBED_BY`. Re-aimed off the skill circumstance,
+    which was never the missing piece, onto the missing action."""
 
 
 @power("f3448", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

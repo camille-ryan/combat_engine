@@ -258,10 +258,10 @@ def i756p1(c: Cast) -> None:
 
 
 @power("i2743x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i2743x1(c: Cast) -> None:
-    _skills(c, 2, "athletics")
+    """`c.jump` crosses ground and asks for no check, so a bonus to the
+    Athletics behind a jump has nothing to land on."""
 
 
 @power("i2743p1", level=3, cls=ITEM, usage=DAILY, action=MOVE,
@@ -372,10 +372,10 @@ def i2509p1(c: Cast) -> None:
 
 
 @power("i2583x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i2583x1(c: Cast) -> None:
-    _skills(c, 5, "athletics")
+    """Climbing costs no check here -- `movement.walk` never rolls one --
+    so the whole printed property is out of combat."""
 
 
 @power("i2583p1", level=5, cls=ITEM, usage=ENCOUNTER, action=REACTION,
@@ -529,10 +529,10 @@ def i3220x1(c: Cast) -> None:
 
 
 @power("i748x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i748x1(c: Cast) -> None:
-    _skills(c, 2, "athletics")
+    """`c.jump` asks for no Athletics check, so the printed bonus has no
+    roll in a fight to reach."""
 
 
 @power("i748p1", level=6, cls=ITEM, usage=ENCOUNTER, action=MOVE,
@@ -794,10 +794,10 @@ def i840p1(c: Cast) -> None:
 
 
 @power("i3215x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i3215x1(c: Cast) -> None:
-    _skills(c, 2, "athletics")
+    """`c.jump` asks for no Athletics check, so the printed bonus has no
+    roll in a fight to reach."""
 
 
 @power("i3215p1", level=9, cls=ITEM, usage=ENCOUNTER, action=MOVE,
@@ -907,11 +907,11 @@ def i761x1(c: Cast) -> None:
 
 
 @power("i761p1", level=10, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i761p1(c: Cast) -> None:
-    c.bonus("skill:athletics", 5, on=c.me, until=When.ENCOUNTER,
-            kind="power", once=True)
+    """Swimming, which no fight rolls. Declared inert so the action menu
+    stops offering a free action whose whole payout is a bonus to a check
+    that never happens."""
 
 
 @power("i776x1", level=10, cls=ITEM, action=ActionType.NONE,

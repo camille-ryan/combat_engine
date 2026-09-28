@@ -539,7 +539,8 @@ class Encounter:
         bonus = mods.total(
             "save",
             {"actor": ev.actor, "label": "death", "conditions": frozenset(),
-             "ongoing": False, "dtype": None, "keywords": frozenset()},
+             "ongoing": False, "dtype": None, "dtypes": (),
+             "keywords": frozenset()},
         ) if mods is not None and mods.items else 0
         saved = roll.total + bonus >= 10
         rolled = self.world.bus.emit(

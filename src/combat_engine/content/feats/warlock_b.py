@@ -45,6 +45,7 @@ from combat_engine.engine import (
     Cast,
     Condition,
     DamageApplied,
+    DamageRolled,
     DamageType,
     Dropped,
     EffectApplied,
@@ -55,12 +56,13 @@ from combat_engine.engine import (
     SurgeSpent,
     Trigger,
     When,
+    Window,
     about_me,
     cursed_by_me,
+    get,
     power,
 )
 from combat_engine.engine.components import Health, Position
-from combat_engine.engine.dsl import get
 
 #: The class feature that lays the curse, and the name its extra damage
 #: reads its bonus under. `extra_damage` pays
@@ -434,12 +436,29 @@ def f2286(c: Cast) -> None:
 
 
 @power("f2083", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("DamageType.pair()",))
+       reach=PERSONAL, target=SELF)
 def f2083(c: Cast) -> None:
-    """Necrotic *or* poison becomes necrotic *and* poison. A blow carries
-    one `DamageType` and resistance is read per type, so a blow that is
-    both cannot be expressed -- the whole of this row is that pairing,
-    which is why it is a `todo` and not a dropped clause."""
+    """Necrotic *or* poison becomes necrotic *and* poison. `DamageRolled`
+    carries the whole type of a blow now, so the pairing is one
+    assignment; the creature has to resist both to shrug off any of it,
+    which is the point of the feat.
+
+    Written on the roll rather than as a standing `c.deals`, because the
+    card narrows to warlock powers and `deals:` is every weapon attack
+    the creature makes.
+    """
+    me = c.me
+    pair = (DamageType.NECROTIC, DamageType.POISON)
+
+    def spread(ev: DamageRolled) -> None:
+        if ev.source != me or ev.dtype not in pair:
+            return
+        p = get(ev.detail or "")
+        if p is not None and p.cls == "warlock":
+            ev.dtypes = pair
+
+    c.watch(DamageRolled, spread, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
 
 
 # -- the shadow, which is a labelled modifier and so readable ---------------

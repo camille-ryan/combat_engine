@@ -354,17 +354,18 @@ def f387(c: Cast) -> None:
 
 
 @power("f602", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.on_granted_basic()", "c.race_option()"))
+       reach=PERSONAL, target=SELF, todo=("c.race_option()",))
 def f602(c: Cast) -> None:
-    """Damage of a type chosen by a racial manifestation, on a basic
-    attack a class feature granted.
+    """**Re-aimed: half of what held this has arrived.** A use now
+    carries who granted it and through which row, so "the melee basic
+    attack granted by your `p3322`" is an ordinary gate -- `f603` is
+    written against exactly that.
 
-    The manifestation is `rt:r33-manifestation`, which is a declared row
-    -- and that row's own marker says why this one cannot read it:
-    thirteen manifestations, one choice, recorded nowhere. So the damage
-    type has no source, and the granted swing still announces itself as
-    an ordinary basic attack."""
+    What is left is the whole payload. The bonus is +3 *of a type chosen
+    by the manifestation*, and `rt:r33-manifestation` is the declared
+    row whose own marker says why: thirteen manifestations, one choice,
+    recorded nowhere. `c.element` reads a build's element and a genasi
+    has none, so the type has no source and there is no bonus to lay."""
 
 
 @power("f604", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

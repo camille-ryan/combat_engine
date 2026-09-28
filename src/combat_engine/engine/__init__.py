@@ -145,6 +145,8 @@ from .triggers import (
     either,
     enemy_target_within,
     enemy_within,
+    granted_by_me,
+    granted_via,
     hits_me,
     hits_my_companion,
     leaves_me_out,

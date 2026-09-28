@@ -558,11 +558,11 @@ def f2074(c: Cast) -> None:
 @power("f2354", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("feat.associated_powers",))
 def f2354(c: Cast) -> None:
-    """The one style feat in this batch whose list does not resolve: the
-    benefit says "powers associated with this feat" and no
-    `Associated Powers:` line follows it. `c.ignore_cover(partial=True)`
-    is the whole of the benefit and has nowhere to aim. The fighter's
-    f2071 is the same case."""
+    """The list is absent from the spec and present on the page: an
+    errata block sits between the benefit and it, and `etl/feat._benefit`
+    breaks at an errata heading and drops the rest of that paragraph. So
+    `c.ignore_cover(partial=True)` is the whole of the benefit and has
+    nowhere to aim. The fighter's `f2071` is cut off the same way."""
 
 
 @power("f2405", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -157,11 +157,35 @@ def f756(c: Cast) -> None:
 
 
 @power("f797", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
+       reach=PERSONAL, target=SELF)
 def f797(c: Cast) -> None:
-    """A bonus on an attack granted by one of this character's own
-    powers. A granted swing is announced as the row it is, not as a
-    grant, so there is nothing to tell it from any other attack."""
+    """An attack bonus on a swing one of *my warlord powers* handed an
+    ally.
+
+    Three separate narrowings and each is now a field: `granted_by` is
+    whose grant it was, `granted_via` is the row that made it -- asked
+    for its declared class, which is what "one of your warlord powers"
+    means -- and the target adjacency is asked of the board when the
+    grant is announced.
+
+    A one-shot, so it pays for the granted attack and not for the
+    ally's own turn afterwards. No type word is printed.
+    """
+    def granted(ev: Any) -> None:
+        source = get(ev.granted_via)
+        if ev.granted_by != c.me or ev.actor == c.me:
+            return
+        if source is None or source.cls != "warlord":
+            return
+        if not any(c.adjacent(foe) for foe in ev.targets):
+            return
+        c.bonus(
+            "attack", 1, on=ev.actor, until=When.EOT, once=True,
+            when=lambda ctx: ctx.get("granted_by") == c.me,
+        )
+
+    c.watch(PowerUsed, granted, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} granted attack")
 
 
 def _feature(ref: str, what: str, marker: tuple[str, ...] = FEATURE) -> None:

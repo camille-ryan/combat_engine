@@ -324,6 +324,13 @@ def _spent_once_a_fight() -> list[tuple[str, str]]:
             continue
         if p.usage.name != "ENCOUNTER" or p.unfinished:
             continue
+        # A row in a `group` shares one budget with its siblings -- "you
+        # can use only one channel divinity power per encounter" -- so the
+        # limit is printed and declared, just not in these words. Without
+        # this the check called a correct row wrong the moment its marker
+        # came off, which is how the check gets ignored.
+        if p.group:
+            continue
         text = spec.get(ref) or spec.get(ref.rstrip("b")) or ""
         if _PRINTED_LIMIT.search(text):
             continue

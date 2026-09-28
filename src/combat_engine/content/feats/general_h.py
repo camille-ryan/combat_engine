@@ -44,7 +44,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.feats.exotic import _swap
-from combat_engine.content.feats.exploits import _riders
+from combat_engine.content.feats.exploits import _hits, _riders
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -65,6 +65,7 @@ from combat_engine.engine import (
     ActionType,
     Attack,
     AttackDeclared,
+    Bloodied,
     Cast,
     Condition,
     ConditionApplied,
@@ -1085,8 +1086,7 @@ def _rattle_in_cloud(c: Cast, ev: Any) -> None:
 # -- the rows ---------------------------------------------------------------
 
 
-@_trait("f1237", todo=("c.split_weapon()", "c.on_granted_basic()",
-                       "c.instead_of()"))
+@_trait("f1237", todo=("c.split_weapon()", "c.instead_of()"))
 def f1237(c: Cast) -> None:
     """Re-aimed: the bracketed capitalised class no longer defeats the
     label matcher and all four refs are in the spec, so the naming gap
@@ -1094,10 +1094,12 @@ def f1237(c: Cast) -> None:
 
     Not one of the four clauses is a rider on a hit. Two of them --
     `p2104`'s and `p87`'s -- ask for one weapon to count as both hands
-    at once, `p4541`'s waits on the attack that row hands an ally, and
-    `p971`'s rewrites the movement its own row prints. All four are
-    also about a weapon the table does not carry, which `exotic.py`
-    states at length and deliberately does not mark."""
+    at once, and `p971`'s rewrites the movement its own row prints.
+    `p4541`'s is **no longer one of the holds**: the swing that row
+    hands over carries `granted_via` now, so "the attack granted by this
+    power" is readable. All four clauses are still about a weapon the
+    table does not carry, which `exotic.py` states at length and
+    deliberately does not mark."""
 
 
 @_trait("f1296", todo=("c.cover_from()", "c.forgo_attack()"))
@@ -1117,25 +1119,72 @@ _riders("f1297", {
     "p2248": _slide_if_open,
 }, dropped=(*NAMED, "c.instead_of()"))
 
+def _ally_adds_half_int(c: Cast, ev: Any) -> None:
+    """Half the caster's Intelligence on the granted swing's attack roll.
+
+    Laid on the ally rather than on the warlord, because the modifier is
+    read off whoever is rolling. A one-shot gated on the grant, so an
+    ordinary swing the ally takes later does not spend it.
+    """
+    half = -(-c.int_mod // 2)  # "round up", as printed
+    if half <= 0 or not any(_is_named_kind(c, foe) for foe in ev.targets):
+        return
+    c.bonus(
+        "attack", half, on=ev.actor, until=When.EOT, once=True,
+        when=lambda ctx: ctx.get("granted_by") == c.me,
+    )
+
+
+def _ally_adds_con(c: Cast, ev: Any) -> None:
+    """The caster's Constitution on the granted swing, against a target
+    that is being held still."""
+    if c.con_mod <= 0:
+        return
+    if not any(
+        any(c.is_(hold, on=foe) for hold in _HELD_FAST) for foe in ev.targets
+    ):
+        return
+    c.bonus(
+        "attack", c.con_mod, on=ev.actor, until=When.EOT, once=True,
+        when=lambda ctx: ctx.get("granted_by") == c.me,
+    )
+
+
+def _ongoing_on_granted_hit(c: Cast, ev: Any) -> None:
+    """Ongoing damage on whoever the granted swing caught."""
+    if c.wis_mod > 0:
+        for foe in _hits(ev):
+            c.ongoing(c.wis_mod, on=foe)
+
+
+def _cow_on_granted_hit(c: Cast, ev: Any) -> None:
+    for foe in _hits(ev):
+        c.penalty("attack", 2, on=foe, until=When.EONT)
+
+
 # p1061 adds to the attack roll of the basic attack that row hands an
-# ally; p653's clause rides the riposte, which shares its row's `Hit`.
+# ally, which is now an ordinary read; p653's clause rides the riposte,
+# which shares its row's `Hit`.
 _riders("f1298", {
     "p2099": _temp_hp_off_kind,
     "p87": _extra_off_kind,
-}, dropped=("c.on_granted_basic()", "c.on_riposte()"))
+}, granted={"p1061": _ally_adds_half_int},
+   dropped=("c.on_riposte()",))
 
-# p315 is the granted-attack hold again, p653 the riposte, and the
-# ranger's beast clause is still a printed name.
+# p315's clause rides the swing that row hands an ally, p653 the
+# riposte, and the ranger's beast clause is still a printed name.
 _riders("f1299", {
     "p992": _ongoing_if_alone,
-}, dropped=(*NAMED, "c.on_granted_basic()", "c.on_riposte()"))
+}, landed={"p315": _ongoing_on_granted_hit},
+   dropped=(*NAMED, "c.on_riposte()"))
 
 # p997's clause pays out **on a miss**, which a rider hung on `Hit` never
-# sees; p1061 is the granted attack again.
+# sees; p1061 is the granted attack, which is readable now.
 _riders("f1300", {
     "p917": _extra_if_held,
     "p704": _extra_if_held,
-}, dropped=("c.on_granted_basic()", "c.on_miss(ref)"))
+}, granted={"p1061": _ally_adds_con},
+   dropped=("c.on_miss(ref)",))
 
 
 @_trait("f1301", todo=("c.instead_of()",))
@@ -1193,11 +1242,13 @@ def f1303(c: Cast) -> None:
     c.as_basic("p2099", window="charge")
 
 
-# p4541's clause waits on the basic attack that row hands an ally, p653's
-# on the riposte, and p87's on both of its two attacks landing.
+# p4541's clause rides the basic attack that row hands an ally -- which
+# `granted_via` names now -- p653's the riposte, and p87's both of its
+# two attacks landing.
 _riders("f1304", {
     "p992": _mark_the_hit,
-}, dropped=("c.on_granted_basic()", "c.on_riposte()", "c.hit_twice()"))
+}, landed={"p4541": _cow_on_granted_hit},
+   dropped=("c.on_riposte()", "c.hit_twice()"))
 
 # All four clauses are about the zone `p2473` lays. The two splash ones
 # are riders on a hit inside it and are written; p87's wants the zone to
@@ -1219,15 +1270,18 @@ _riders("f1306", {
 }, dropped=("When.SURPRISE",))
 
 
-@_trait("f1307", todo=("c.apply_poison()", "c.on_shift_away()", "c.instead_of()"))
+@_trait("f1307", todo=("c.stored_dose()", "c.on_shift_away()", "c.instead_of()"))
 def f1307(c: Cast) -> None:
-    """All four refs resolve. Three clauses are about a poison applied to
-    a weapon and the secondary attack it makes, which is not modelled;
-    the fourth waits for the target to shift after the fact, the hold
-    four other rows in the tree already carry."""
+    """All four refs resolve. Re-aimed off `c.apply_poison`, which coats a
+    weapon now: what these clauses want is the dose itself. Two of them
+    raise the attack roll of a secondary poison attack, which only exists
+    once a dose has been applied and is not labelled when it is; one
+    trades a power's printed move for applying a poison you possess; the
+    fourth waits for the target to shift after the fact, the hold four
+    other rows in the tree already carry."""
 
 
-@_trait("f1308", dropped=("c.on_granted_basic()", "c.on_riposte()"))
+@_trait("f1308", dropped=("c.on_riposte()",))
 def f1308(c: Cast) -> None:
     """Written by hand rather than through `_riders`: p4368's clause needs
     a memory of what happened on somebody else's turn, which a table of
@@ -1241,16 +1295,25 @@ def f1308(c: Cast) -> None:
     p2620 goes in the place of the melee basic Combat Challenge allows,
     which is the window `c.as_basic` calls `"challenge"`.
 
-    Dropped: p1061 hands an ally combat advantage for the attack it
-    grants, and p653's clause rides the riposte, whose `Hit` carries the
+    p1061's clause hands the ally combat advantage for the swing that
+    row grants it, and the grant is readable now: the use carries who
+    handed it over and through which row. `PowerUsed` is announced
+    before the swing is rolled, which is exactly the window a one-shot
+    grant of combat advantage has to be in.
+
+    Dropped: p653's clause rides the riposte, whose `Hit` carries the
     same `power` as the opening swing.
     """
     me = c.me
     c.as_basic("p2620", window="challenge")
     #: enemy -> the round in which it hit me or my beast, on its own turn.
     stung: dict[int, int] = {}
+    #: (enemy, victim) -> the round in which it hit that victim, likewise.
+    struck: dict[tuple[int, int], int] = {}
 
     def watch_hits(ev: Hit) -> None:
+        if c.turn_of() == ev.attacker and ev.attacker != ev.target:
+            struck[(ev.attacker, ev.target)] = c.world.round
         mine = {me, c.beast()} - {None}
         if ev.target in mine and ev.attacker not in mine:
             if c.turn_of() == ev.attacker:
@@ -1262,7 +1325,18 @@ def f1308(c: Cast) -> None:
         if armed is not None and c.world.round <= armed + 1:
             c.flat(c.wis_mod, on=ev.target)
 
+    def on_grant(ev: Any) -> None:
+        """"On its last turn" is the same window `stung` measures: the
+        round the blow landed in, or the one before this."""
+        if ev.granted_by != me or ev.actor == me or ev.granted_via != "p1061":
+            return
+        for foe in ev.targets:
+            hit_then = struck.get((foe, ev.actor))
+            if hit_then is not None and c.world.round <= hit_then + 1:
+                c.grants_advantage(on=foe, to=ev.actor, once=True)
+
     c.watch(Hit, watch_hits, on=me, until=When.ENCOUNTER)
+    c.watch(PowerUsed, on_grant, on=me, until=When.ENCOUNTER)
 
 
 # -- the fellowship family --------------------------------------------------
@@ -1507,7 +1581,7 @@ _swap("f1347", "f1347b")
        target=SELF, keywords=[Keyword.STANCE],
        requires=lambda world, eid: not _is_bloodied(world, eid),
        requires_text="you must be not bloodied",
-       dropped=("c.end_effect()",))
+       dropped=("c.light()",))
 def f1347b(c: Cast) -> None:
     """"Enemies take a -2 penalty to attack rolls made against you" is
     written as +2 to each of your defences, which is the same arithmetic
@@ -1515,13 +1589,24 @@ def f1347b(c: Cast) -> None:
     after the stance is taken. A penalty laid on each enemy present
     would miss every latecomer.
 
-    Dropped: the Special line ending the stance when you become
-    bloodied. Nothing takes a live effect off its holder early. The
-    light it sheds lights nothing the engine models.
+    The Special line ends the stance the moment you are bloodied, and
+    the four bonuses go with it -- they are separate effects clocked on
+    the stance, and nothing else would come for them.
+
+    Dropped, and re-aimed off `c.end_effect`: the light it sheds lights
+    nothing the engine models.
     """
-    c.stance(on=c.me, label=c.ref)
+    holds = [c.stance(on=c.me, label=c.ref)]
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 2, on=c.me, until=When.STANCE)
+        holds.append(c.bonus(defence, 2, on=c.me, until=When.STANCE))
+
+    def bled(ev: Bloodied) -> None:
+        if ev.actor != c.me:
+            return
+        for hold in holds:
+            c.end_effect(hold)
+
+    holds.append(c.watch(Bloodied, bled, until=When.STANCE, on=c.me))
 
 
 def _is_bloodied(world, eid: int) -> bool:  # noqa: ANN001

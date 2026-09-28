@@ -431,14 +431,21 @@ def i1583p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with an attack using this ki focus",
     on=HIT_BY_ME,
-    dropped=("c.end_effect()",),
 )
 def i1587p1(c: Cast) -> None:
-    """"Until it hits you" is not a duration the engine has, and nothing can
-    end a live effect early, so this runs to the end of the fight."""
+    """"Until it hits you" is not a duration the engine has, so it is the
+    encounter clock plus a watch that ends the hold on the first blow the
+    target lands on the wearer."""
     foe = _struck(c)
-    if foe is not None:
-        c.no_cover(on=foe, until=When.ENCOUNTER)
+    if foe is None:
+        return
+    blind = c.no_cover(on=foe, until=When.ENCOUNTER)
+
+    def repaid(ev: Hit) -> None:
+        if ev.attacker == foe and ev.target == c.me:
+            c.end_effect(blind)
+
+    c.watch(Hit, repaid, until=When.ENCOUNTER, once=True)
 
 
 @power(

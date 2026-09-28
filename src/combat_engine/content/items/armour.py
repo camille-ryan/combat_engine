@@ -487,11 +487,24 @@ def i1552x1(c: Cast) -> None:
 @power("i1552p1", level=2, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you spend an action point",
-       on=Trigger(ActionPointSpent, about_me, "you spend an action point"),
-       dropped=("c.end_effect()",))
+       on=Trigger(ActionPointSpent, about_me, "you spend an action point"))
 def i1552p1(c: Cast) -> None:
-    """Forgoing the property's bonus needs a live hold to be cancelled by
-    another row, and nothing takes one off."""
+    """Forgoing the property's bonus is `c.end_effect` against i1552x1's
+    label, and it is done twice: both rows answer the same
+    `ActionPointSpent` and nothing fixes which of the two the dispatcher
+    reaches first, so the bonuses are taken off if they are already there
+    and taken off again as they land."""
+    def forgo() -> None:
+        while c.end_effect(on=c.me, against="i1552x1") is not None:
+            pass
+
+    forgo()
+
+    def landed(ev: EffectApplied) -> None:
+        if ev.target == c.me and ev.label.startswith("i1552x1"):
+            forgo()
+
+    c.watch(EffectApplied, landed, until=When.EOT, on=c.me)
     mate = next(iter(c.within(5, side="ally")), None)
     if mate is not None:
         c.second_wind(on=mate)
@@ -2100,12 +2113,13 @@ def i3125x1(c: Cast) -> None:
 
 
 @power("i3125p1", level=5, cls=ITEM, usage=ENCOUNTER, action=STANDARD,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.ILLUSION],
-       dropped=("c.end_effect()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.ILLUSION])
 def i3125p1(c: Cast) -> None:
-    """"Until you attack" and "you can end it as a minor action" both
-    want a live hold cancelled from outside its duration."""
-    c.invisible(on=c.me, until=When.ENCOUNTER)
+    """"Until you attack" wants no watch: invisibility is `HIDDEN_FROM`
+    and `resolve.attack` clears it for whoever swung, after the swing has
+    had the benefit. "You can end this effect as a minor action" is
+    `c.endable`, which puts a `drop` on the wearer's action menu."""
+    c.endable(c.invisible(on=c.me, until=When.ENCOUNTER))
 
 
 @power("i3424x1", level=5, cls=ITEM, action=ActionType.NONE,

@@ -841,16 +841,20 @@ def f2993(c: Cast) -> None:
 
 @power("f2994", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.on_granted_basic()", COUNTS_AS),
+       dropped=("c.instead_of()", COUNTS_AS),
        trigger="you use p7441",
        on=Trigger(PowerUsed, _used("p7441"), "you use that racial power"))
 def f2994(c: Cast) -> None:
     """Three riders on three racial powers, all named by ref.
 
-    `p7441`'s is written. `p7442`'s -- swapping a ranged basic in for the
-    melee basic that power grants -- and `p7443`'s -- retyping that power's
-    extra damage and adding a keyword to it -- are both dropped: the first
-    is the gap eight other rows name, and nothing adds a keyword to a row.
+    `p7441`'s is written. `p7442`'s and `p7443`'s are dropped, and the
+    first has been **re-aimed**: a granted swing is readable now, but
+    this clause does not read one -- it *replaces* the melee basic and
+    the charge that `p7442` makes from inside its own body with a ranged
+    basic. `c.as_basic` files stand-ins by window, and `p7442` names no
+    window, so filing one there would swap the swing in every grant the
+    character is ever handed. `p7443`'s wants a keyword added to a row,
+    which nothing does.
     """
     for foe in c.trigger.targets:
         c.penalty("attack", 1, on=foe, until=When.SONT)

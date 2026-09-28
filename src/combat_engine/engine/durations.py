@@ -81,6 +81,13 @@ class Effect:
     mods: list[tuple[int, Mod]] = field(default_factory=list)
     relations: list[tuple[Relation, int, int]] = field(default_factory=list)
     ongoing: tuple[int, DamageType] | None = None
+    #: The whole type of the burn, for one that is more than a single type
+    #: -- "ongoing 5 fire and radiant damage" is five points a turn that
+    #: are both, and it is shrugged off only as far as the creature
+    #: resists both. Empty means "just `ongoing[1]`", which is every burn
+    #: that is of one type. Kept beside `ongoing` rather than inside it so
+    #: that the readers asking `eff.ongoing[1]` go on answering.
+    ongoing_types: tuple[DamageType, ...] = ()
     save_mod: int = 0
     #: Runs on a failed save. This is how "and worsens" powers are written.
     escalate: Callable[[Effect], None] | None = None
@@ -99,12 +106,22 @@ class Effect:
     #: that -- "reverting to your normal form is a minor action". Distinct
     #: from `sustain_cost`: one keeps a thing alive, the other kills it.
     drop_cost: ActionType | None = None
+    #: What ending it deliberately *buys*, when the printed line offers a
+    #: trade rather than a dismissal -- "the ally can end the effect as a
+    #: free action to teleport", "the target can end the effect by taking
+    #: 5 damage". Runs only for a deliberate drop, which is why it cannot
+    #: be an `on_end`: those fire for the clock and the saving throw too,
+    #: and a payout owed for choosing is not owed for waiting.
+    drop_then: Callable[[], None] | None = None
     ended: bool = False
 
     def __str__(self) -> str:
         bits = [self.label or "effect", self.when.value]
         if self.ongoing:
-            bits.append(f"ongoing {self.ongoing[0]} {self.ongoing[1]}")
+            kinds = " and ".join(
+                t.value for t in (self.ongoing_types or (self.ongoing[1],))
+            )
+            bits.append(f"ongoing {self.ongoing[0]} {kinds}")
         return f"e{self.id}[{', '.join(bits)}]"
 
 
@@ -161,6 +178,7 @@ class Effects:
         mods: Iterable[tuple[int, Mod]] = (),
         relations: Iterable[tuple[Relation, int, int]] = (),
         ongoing: tuple[int, DamageType] | None = None,
+        ongoing_types: tuple[DamageType, ...] = (),
         save_mod: int = 0,
         escalate: Callable[[Effect], None] | None = None,
         subs: Iterable[Sub] = (),
@@ -176,8 +194,15 @@ class Effects:
         # `c.ongoing` correctly refused the second.
         if ongoing is not None:
             amount, dtype = ongoing
+            # **Same type** means the same *set* of types. A burn that is
+            # fire and radiant at once is not the fire burn already
+            # standing -- neither supersedes the other, and the printed
+            # rule only ever compares like with like.
+            mine = tuple(ongoing_types) or (dtype,)
             standing = [
-                e for e in self.of(owner) if e.ongoing is not None and e.ongoing[1] is dtype
+                e for e in self.of(owner)
+                if e.ongoing is not None
+                and (tuple(e.ongoing_types) or (e.ongoing[1],)) == mine
             ]
             worst = max((e.ongoing[0] for e in standing), default=0)
             if worst >= amount:
@@ -185,6 +210,7 @@ class Effects:
                 # row that applies a condition alongside its burn is not
                 # silently dropped -- only the burn is.
                 ongoing = None
+                ongoing_types = ()
             else:
                 for e in standing:
                     self.end(e, "superseded by worse of the same type")
@@ -218,6 +244,7 @@ class Effects:
             mods=list(mods),
             relations=list(relations),
             ongoing=ongoing,
+            ongoing_types=tuple(ongoing_types) if ongoing else (),
             save_mod=save_mod,
             escalate=escalate,
             subs=list(subs),
@@ -431,7 +458,10 @@ class Effects:
         for eff in list(self.live.values()):
             if eff.ongoing is not None and eff.owner == ev.actor:
                 amount, dtype = eff.ongoing
-                self.world.damage(eff.source, eff.owner, amount, dtype, detail=str(eff))
+                self.world.damage(
+                    eff.source, eff.owner, amount, dtype, detail=str(eff),
+                    dtypes=eff.ongoing_types,
+                )
             if eff.when is When.SONT and eff.clock == ev.actor:
                 self.end(eff, "start of turn")
             elif eff.when is When.SOTNT and eff.clock == ev.actor:
@@ -520,6 +550,12 @@ class Effects:
             "conditions": frozenset(eff.conditions),
             "ongoing": eff.ongoing is not None,
             "dtype": eff.ongoing[1] if eff.ongoing else None,
+            # Every type the burn is, for one that is more than one. A
+            # gate meaning "against ongoing fire damage" asks here, since
+            # `ctx["dtype"] is FIRE` is false for a fire-and-radiant burn.
+            "dtypes": eff.ongoing_types or (
+                (eff.ongoing[1],) if eff.ongoing else ()
+            ),
             # Read off the row that laid it -- see `keywords_of`. The
             # printed lines that want this say "against charm effects",
             # "against poison", "against fear", and there were eighteen

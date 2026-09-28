@@ -272,11 +272,10 @@ def i663x1(c: Cast) -> None:
 
 
 @power("i525x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i525x1(c: Cast) -> None:
-    """"To detect magic" is the circumstance that cannot be said."""
-    _skills(c, 3, "arcana")
+    """Detecting magic, which nothing on a board asks, and no Arcana check
+    is rolled in a fight for the flat version to reach."""
 
 
 @power("i888p1", level=3, cls=ITEM, usage=DAILY, action=ActionType.NONE,
@@ -541,10 +540,11 @@ def i841p1(c: Cast) -> None:
 
 
 @power("i976x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i976x1(c: Cast) -> None:
-    _skills(c, 2, "perception")
+    """Secret doors and hidden passages, not hidden creatures. The flat +2
+    that stood here was a bonus to spotting a hider, which the card does
+    not print."""
 
 
 # -- level 7 ----------------------------------------------------------------
@@ -564,10 +564,9 @@ def i1545p1(c: Cast) -> None:
 
 
 @power("i1585x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i1585x1(c: Cast) -> None:
-    _skills(c, 5, "dungeoneering", "nature")
+    """Foraging, and neither skill is rolled on a board."""
 
 
 @power("i2042x1", level=7, cls=ITEM, action=ActionType.NONE,
@@ -708,10 +707,11 @@ def i1268x1(c: Cast) -> None:
 
 
 @power("i1371x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i1371x1(c: Cast) -> None:
-    _skills(c, 4, "perception", "thievery")
+    """Finding and disabling traps, both halves. The flat +4 that stood
+    here was read by the one Perception a fight does consult -- the passive
+    a hider is measured against -- which this item does not grant."""
 
 
 @power("i1371p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,
@@ -823,12 +823,11 @@ def i1372x1(c: Cast) -> None:
 
 
 @power("i1449x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i1449x1(c: Cast) -> None:
-    """"Monster knowledge" is the five knowledge skills asked about a
-    creature, and a check does not know what it is about."""
-    _skills(c, 3, *_KNOWLEDGE)
+    """Recalling what a creature is, which no fight asks. The flat +3 that
+    stood here reached the passive History a monster reads to choose whom
+    to go for, and that is not a bonus this item prints."""
 
 
 @power("i1449p1", level=9, cls=ITEM, usage=ENCOUNTER, action=MINOR,
@@ -887,12 +886,11 @@ def i979x1(c: Cast) -> None:
 
 
 @power("i1512x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i1512x1(c: Cast) -> None:
-    """Both halves of the circumstance -- the disguise and the item's own
-    power being up -- are outside what a check's context carries."""
-    _skills(c, 5, "bluff")
+    """Passing off a disguise is not a combat circumstance. The flat +5
+    that stood here landed on the one Bluff a fight rolls -- the one to
+    gain combat advantage -- which is a different card entirely."""
 
 
 @power("i1512p1", level=10, cls=ITEM, usage=AT_WILL, action=STANDARD,
@@ -932,10 +930,18 @@ def i1541x1(c: Cast) -> None:
 
 
 @power("i1541p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
+       reach=PERSONAL, target=SELF, todo=("c.instead_of()",))
 def i1541p1(c: Cast) -> None:
-    """Nothing announces the moment an ally is handed a basic attack, so
-    the trigger this whole row hangs from cannot be declared."""
+    """**Re-aimed: the trigger arrived and the payload did not.**
+
+    "When you grant an ally a basic attack" is declarable now --
+    `PowerUsed.granted_by` names the granter -- but what this row then
+    does is take the granted swing away and put a standard action in its
+    place. `c.grant_action` understands `shift` and `stand` and eats
+    anything else, and nothing withdraws a swing another row is in the
+    middle of handing over. That second half is the printed line
+    entirely; writing the trigger alone would be a free daily that does
+    nothing."""
 
 
 @power("i1548p1", level=10, cls=ITEM, usage=DAILY, action=FREE,

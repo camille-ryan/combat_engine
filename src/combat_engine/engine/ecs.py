@@ -123,11 +123,15 @@ class World:
         dtype: Any = None,
         *,
         detail: str = "",
+        dtypes: Any = (),
     ) -> int:
         from .resolve import deal_damage
         from .types import DamageType
 
-        return deal_damage(self, source, target, amount, dtype or DamageType.UNTYPED, detail)
+        return deal_damage(
+            self, source, target, amount, dtype or DamageType.UNTYPED, detail,
+            dtypes=dtypes,
+        )
 
     def heal(self, source: int, target: int, amount: int) -> int:
         from .resolve import heal

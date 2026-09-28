@@ -76,6 +76,7 @@ from combat_engine.engine import (
     Keyword,
     MoveEnd,
     PowerResolved,
+    PowerUsed,
     SecondWind,
     SurgeSpent,
     Swap,
@@ -399,14 +400,21 @@ def _melee_hit_adjacent(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 
 @power("f3693b", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET, keywords=DIVINE,
-       group=CHANNEL_DIVINITY, dropped=("c.end_effect()",),
+       group=CHANNEL_DIVINITY,
        trigger="you hit an adjacent enemy with a melee attack",
        on=Trigger(Hit, _melee_hit_adjacent, "you hit an adjacent enemy"))
 def f3693b(c: Cast) -> None:
-    """The escape clause -- "the target can end the effect by taking 5
-    damage as a free action" -- is a hold the creature buys its way out
-    of, and nothing can end a named effect from outside its own save."""
-    c.immobilized(on=c.trigger.target, until=When.SAVE_ENDS)
+    """The escape clause is a hold the creature buys its way out of:
+    `c.endable` puts the free action on the target's own menu, because
+    the hold sits on the target, and `then=` is the five damage it costs
+    to take it. Heroic number only -- the two tiers above are out of
+    scope."""
+    foe = c.trigger.target
+    c.endable(
+        c.immobilized(on=foe, until=When.SAVE_ENDS),
+        ActionType.FREE,
+        then=lambda: c.flat(5, on=foe),
+    )
 
 
 @power("f3695", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1270,27 +1278,38 @@ def f3777(c: Cast) -> None:
 
 
 @power("f3778", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.end_effect()",))
+       reach=PERSONAL, target=SELF)
 def f3778(c: Cast) -> None:
-    """A point of everything for the beast, while it stands beside you.
+    """A point of everything for the beast while it stands beside you,
+    and a second effect shaken off the beast when p2478 fires.
+
+    The card prints standing modifiers *and* a rider on another row, so
+    the modifiers are the trait and the rider is a `c.watch`: declaring
+    `on=Trigger(...)` would mean the bonuses were never laid at all.
 
     "Feat bonus", printed, so `kind="feat"`. Read `c.beast()` inside the
-    gate: the beast can be killed and called again and a captured id goes
-    quietly stale.
-
-    Dropped, and re-aimed: `p2478` is declared, so the first sentence
-    has a row to hang on -- but ending a save-ends effect outright is
-    not rolling a saving throw, and only the roll can be asked for.
-    `p2478` itself carries the same marker for the same sentence."""
+    gate rather than capturing it: the beast can be killed and called
+    again and a captured id goes quietly stale. The watcher reads it
+    afresh for the same reason."""
     pet = c.beast()
     if pet is None:
         return
+
     def at_heel(ctx: dict[str, Any]) -> bool:
         return c.adjacent_to(pet, c.me)
 
     for where in (AC, FORT, REF, WILL):
         c.bonus(where, 1, on=pet, until=When.ENCOUNTER, kind="feat",
                 when=at_heel)
+
+    def alongside(ev: PowerUsed) -> None:
+        if ev.actor != c.me or ev.power != "p2478":
+            return
+        beast = c.beast()
+        if beast is not None and c.adjacent_to(beast, c.me):
+            c.end_effect(on=beast, save_ends=True)
+
+    c.watch(PowerUsed, alongside, until=When.ENCOUNTER, on=c.me)
 
 
 @power("f3779", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

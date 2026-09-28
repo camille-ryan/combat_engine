@@ -43,6 +43,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Health
 from combat_engine.engine.dsl import get
+from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.query import distance_between, team
 
 
@@ -57,9 +58,6 @@ FEATURE = ("c.class_feature()",)
 #: "Use it as a heavy thrown weapon, normal range 5 and long range 10":
 #: a change to what the weapon *is*, which nothing in `Gear` rewrites.
 THROWN = ("c.make_thrown()", "c.weapon_range()")
-#: An attack somebody's class feature handed out is announced as an
-#: ordinary basic attack, with nothing recording where it came from.
-GRANTED = ("c.on_granted_basic()",)
 #: "Instead of": a printed swap for something a class feature does inside
 #: its own body. The feature has a ref now; declining half of what it does
 #: is the operation nothing has.
@@ -329,20 +327,60 @@ def f1880(c: Cast) -> None:
     c.watch(Bloodied, on_bloodied, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
+#: The class feature both rows below ride on. Its body calls `c.basic`,
+#: so the swing it hands over is stamped with this ref.
+RAMPAGE = "cf:barbarian-f3"
+
+
 @power("f2707", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=GRANTED)
+       reach=PERSONAL, target=SELF)
 def f2707(c: Cast) -> None:
-    """A damage bonus on the free basic attack a class feature grants,
-    at exactly 2 squares. The feature is a ref in the prerequisite, so
-    this is not a naming gap -- the free attack is simply announced as
-    an ordinary one."""
+    """A damage bonus on the free basic attack the class feature grants,
+    at exactly 2 squares.
+
+    The grip and the reach are asked inside the gate rather than when
+    the trait arms: a barbarian can change hands, and the gate is read
+    at the moment the damage is rolled. "2 squares away" is exactly 2 --
+    the printed line is about a reach weapon's outer square, not about
+    anything at 2 or more.
+    """
+    def far_enough(ctx: dict[str, Any]) -> bool:
+        foe = ctx.get("target")
+        return (
+            ctx.get("granted_via") == RAMPAGE
+            and ctx.get("granted_by") == c.me
+            and c.wielding("two-handed")
+            and c.wielding("reach")
+            and foe is not None
+            and distance_between(c.world, c.me, foe) == 2
+        )
+
+    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=far_enough)
 
 
 @power("f2884", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=GRANTED)
+       reach=PERSONAL, target=SELF,
+       dropped=("Defences.immune_keywords",))
 def f2884(c: Cast) -> None:
-    """Same gap as f2707, paying an attack penalty that fear-immune
-    creatures shrug off."""
+    """An attack penalty on whoever the class feature's free swing hits.
+
+    Read off `PowerResolved` rather than the `Hit`: the use is what
+    carries where the swing came from.
+
+    Dropped: "a creature immune to fear is not subject to this penalty".
+    `Defences` holds immunity per damage type and nothing records
+    immunity to a *keyword*, so the narrowing has nothing to ask. Gating
+    on it anyway would be silently false one way or the other.
+    """
+    def punished(ev: Any) -> None:
+        if ev.actor != c.me or ev.granted_via != RAMPAGE or ev.granted_by != c.me:
+            return
+        for roll in ev.rolls:
+            if roll.hit:
+                c.penalty("attack", 2, on=roll.target, until=When.EONT)
+
+    c.watch(PowerResolved, punished, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} rampage rider")
 
 
 # -- weapons treated as something they are not -----------------------------

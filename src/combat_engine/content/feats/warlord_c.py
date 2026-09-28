@@ -58,6 +58,7 @@ from combat_engine.engine import (
     When,
     power,
 )
+from combat_engine.engine.basic import BEAST, MELEE, RANGED
 from combat_engine.engine.dsl import get
 from combat_engine.engine.query import allies, distance_between, enemies
 from combat_engine.engine.types import Forced
@@ -82,8 +83,10 @@ R33 = (
 #: answer it with `c.watch`, the shape `p7419` already uses.
 #: …nor turn a melee row into a ranged one.
 AS_RANGED = ("c.recast(reach=)",)
-#: A swing the warlord handed somebody is announced as the row it is.
-GRANTED = ("c.on_granted_basic()",)
+#: The basic attacks. A grant hands over whichever of these the
+#: creature's own is, so "you grant an ally a basic attack" is the ref
+#: being one of them.
+BASICS = (MELEE, RANGED, BEAST)
 
 #: Inspiring word, named by ref in three of these prerequisites.
 WORD = "p1590"
@@ -363,10 +366,11 @@ def f2713(c: Cast) -> None:
 @power("f2716", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("feat.associated_powers",))
 def f2716(c: Cast) -> None:
-    """The one style feat in this batch whose list does not resolve: the
-    page prints the preamble and no `Associated Powers:` line, so there
-    is nothing to widen the critical range of. `f2071` and `f974` are
-    the same case."""
+    """The page prints a list; the spec does not carry it. An errata
+    block sits between the benefit and the list, and `etl/feat._benefit`
+    breaks at an errata heading and takes the rest of that paragraph with
+    it -- so there is nothing to widen the critical range of. `f2071`,
+    `f2354` and `f974` are cut off the same way."""
 
 
 # -- inspiring word, which is a ref -----------------------------------------
@@ -559,19 +563,69 @@ def f2396(c: Cast) -> None:
     surges spent against a maximum that no verb moves."""
 
 
+def _my_grant(c: Cast, ev: Any, *refs: str) -> bool:
+    """Is this use a swing *I* handed an ally, with one of these rows?
+
+    `granted_by` is set for a self-grant too -- a defender punishing an
+    opening hands itself a swing -- so the ally test is separate and is
+    the printed "an ally".
+    """
+    return (
+        ev.granted_by == c.me
+        and ev.actor != c.me
+        and ev.power in refs
+    )
+
+
 @power("f2423", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=GRANTED)
+       reach=PERSONAL, target=SELF)
 def f2423(c: Cast) -> None:
-    """A granted ranged basic ignores cover. A swing the warlord hands
-    somebody is announced as the row it is, not as a grant, so there is
-    nothing to tell it from any other attack -- `f797`'s gap."""
+    """A ranged basic the warlord hands over ignores cover.
+
+    Laid on the ally the moment the grant is announced -- `PowerUsed`
+    comes before the body, so the waiver is standing by the time the
+    shot is rolled -- and gated on the grant so it cannot be spent by an
+    ordinary shot the ally takes later in the same turn.
+
+    `partial=True` is the printed parenthetical: superior cover and
+    total concealment still stand.
+    """
+    def granted(ev: Any) -> None:
+        if not _my_grant(c, ev, RANGED):
+            return
+        c.ignore_cover(
+            on=ev.actor, until=When.EOT, partial=True,
+            when=lambda ctx: ctx.get("granted_by") == c.me,
+        )
+
+    c.watch(PowerUsed, granted, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} granted shot")
 
 
 @power("f2436", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=GRANTED)
+       reach=PERSONAL, target=SELF)
 def f2436(c: Cast) -> None:
     """A damage bonus on a granted basic against an enemy beside you.
-    The adjacency is askable; the grant is not."""
+
+    The adjacency is judged when the grant is made, which is the printed
+    "against an enemy that is adjacent to you" -- the enemy can be
+    pushed out of reach by the swing itself. A one-shot, so it pays for
+    the granted blow and not for whatever the ally does next.
+
+    No type word is printed, so it is untyped.
+    """
+    def granted(ev: Any) -> None:
+        if not _my_grant(c, ev, *BASICS):
+            return
+        if not any(c.adjacent(foe) for foe in ev.targets):
+            return
+        c.bonus(
+            "damage", 2, on=ev.actor, until=When.EOT, once=True,
+            when=lambda ctx: ctx.get("granted_by") == c.me,
+        )
+
+    c.watch(PowerUsed, granted, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} granted swing")
 
 
 @power("f2424", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

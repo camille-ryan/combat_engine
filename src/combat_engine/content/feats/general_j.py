@@ -90,6 +90,8 @@ from combat_engine.engine.query import (
     team,
 )
 
+from .styles import among
+
 DIVINE = [Keyword.DIVINE]
 DIVINE_HEAL = [Keyword.DIVINE, Keyword.HEALING]
 DEFENCES = (AC, FORT, REF, WILL)
@@ -329,11 +331,33 @@ _assoc("f1484", "nature", 2, {
     "p5137": _ignore_rough, "p835": _ignore_rough,
 })
 
-# The three whose card prints the preamble and no list under it. The
-# skill half plays; there is nothing to hang the rider on.
+# The two whose *spec* carries the preamble and no list under it. The
+# card prints one in both cases: an errata block sits between the
+# benefit and the list, and `etl/feat._benefit` breaks at an errata
+# heading and takes the rest of that paragraph with it. The skill half
+# plays; there is nothing to hang the rider on until that stops.
 _assoc("f1455", "bluff", 2, {}, dropped=(*NO_LIST, *RETYPE))
 _assoc("f1478", "religion", 2, {}, dropped=(*NO_LIST, *RETYPE))
-_assoc("f1486", "endurance", 2, {}, dropped=(*NO_LIST, *RETYPE))
+
+
+@power("f1486", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=RETYPE)
+def f1486(c: Cast) -> None:
+    """The third of that trio, and its list arrived: four refs under the
+    preamble instead of four printed names, so the damage half has
+    something to hang on.
+
+    A standing modifier rather than a rider, because the card says "when
+    you **use**" and the bonus is read while the damage is rolled. Both
+    halves are laid here, which is why the row may not carry a trigger.
+
+    Dropped: the damage type changing to cold is an override on one named
+    row rather than on this creature's weapon, which is what `c.deals`
+    says."""
+    me = c.me
+    c.bonus("skill:endurance", 2, on=me, until=When.ENCOUNTER, kind="feat")
+    c.bonus("damage", 2, on=me, until=When.ENCOUNTER,
+            when=among("p6980", "p836", "p7151", "p841"))
 
 
 # -- associated-power feats that are standing modifiers, not riders ---------

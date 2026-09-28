@@ -70,6 +70,7 @@ from combat_engine.engine import (
     ActionType,
     AreaBurst,
     Attack,
+    AttackRolled,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -219,22 +220,24 @@ def _reagent_targets(c: Cast) -> list[int]:
 
 
 @power("i1483p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON],
-       dropped=("c.apply_poison()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON])
 def i1483p1(c: Cast) -> None:
+    """The card offers a melee weapon or a piece of ammunition; the row
+    coats the weapon, which is one of the two printed answers."""
 
     def coated(ev: Hit) -> None:
         c.flat(10, dtype=DamageType.POISON, on=ev.target)
         c.no_healing(on=ev.target, until=When.SAVE_ENDS)
 
-    _on_my_next_hit(c, coated)
+    c.apply_poison(coated)
 
 
 @power("i1483p2", level=1, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.POISON],
-       todo=("c.apply_poison()",))
+       out_of_combat=True)
 def i1483p2(c: Cast) -> None:
-    """Poison in a meal, paid out an hour later and for a rest."""
+    """Poison in a meal, paid out an hour later and for a rest.
+    Deliberately inert: no clause of it lands inside a fight."""
 
 
 @power("i1595p1", level=1, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -253,28 +256,33 @@ def i1595p1(c: Cast) -> None:
 
 
 @power("i1595p2", level=1, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=NO_TARGET, todo=("c.apply_poison()",))
+       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
 def i1595p2(c: Cast) -> None:
-    """A trapped container, sprung within the hour."""
+    """A trapped container, sprung within the hour. Deliberately inert:
+    a board has no containers and no hour."""
 
 
 @power("i1919p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=[Keyword.POISON],
-       dropped=("c.apply_poison()", "c.ongoing(on_tick=)"))
+       dropped=("c.ongoing(on_tick=)",))
 def i1919p1(c: Cast) -> None:
-    """Five pieces of ammunition is every hit for the fight, not one."""
+    """Five pieces of ammunition is every hit for the fight, not one, so
+    the coating is `once=False`. The first-failed-save step up to ongoing
+    5 is the dropped clause: `escalate` runs on the effect `c.condition`
+    lays and `c.ongoing` takes no hook of its own."""
 
     def coated(ev: Hit) -> None:
         c.ongoing(2, DamageType.POISON, on=ev.target)
 
-    _on_each_hit(c, coated)
+    c.apply_poison(coated, once=False)
 
 
 @power("i1919p2", level=1, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.POISON],
-       todo=("c.apply_poison()",))
+       out_of_combat=True)
 def i1919p2(c: Cast) -> None:
-    """A poisoned doorhandle, on an hour's clock."""
+    """A poisoned doorhandle, on an hour's clock and paying out until an
+    extended rest. Deliberately inert."""
 
 
 @power("i2955p1", level=1, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -290,9 +298,10 @@ def i2955p1(c: Cast) -> None:
 
 
 @power("i2955p2", level=1, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=NO_TARGET, todo=("c.apply_poison()",))
+       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
 def i2955p2(c: Cast) -> None:
-    """A trapped container, sprung within the hour."""
+    """A trapped container, sprung within the hour. Deliberately inert:
+    a board has no containers and no hour."""
 
 
 @power("i3288p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
@@ -306,41 +315,43 @@ def i3288p1(c: Cast) -> None:
 
 
 @power("i710p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON],
-       dropped=("c.apply_poison()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON])
 def i710p1(c: Cast) -> None:
 
     def coated(ev: Hit) -> None:
         c.flat(6, dtype=DamageType.POISON, on=ev.target)
         c.dazed(on=ev.target, until=When.SAVE_ENDS)
 
-    _on_my_next_hit(c, coated)
+    c.apply_poison(coated)
 
 
 @power("i710p2", level=1, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.POISON],
-       todo=("c.apply_poison()",))
+       out_of_combat=True)
 def i710p2(c: Cast) -> None:
-    """Poison in a meal."""
+    """Poison in a meal, paying out until an extended rest.
+    Deliberately inert."""
 
 
 @power("i835p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON],
-       dropped=("c.apply_poison()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON])
 def i835p1(c: Cast) -> None:
+    """Five pieces of ammunition is every hit for the fight, so the
+    coating is `once=False`."""
 
     def coated(ev: Hit) -> None:
         c.flat(4, dtype=DamageType.POISON, on=ev.target)
         c.slowed(on=ev.target, until=When.EONT)
 
-    _on_each_hit(c, coated)
+    c.apply_poison(coated, once=False)
 
 
 @power("i835p2", level=1, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.POISON],
-       todo=("c.apply_poison()",))
+       out_of_combat=True)
 def i835p2(c: Cast) -> None:
-    """A poisoned handheld object, on an hour's clock."""
+    """A poisoned handheld object, on an hour's clock and paying out
+    until an extended rest. Deliberately inert."""
 
 
 # -- level 2 ----------------------------------------------------------------
@@ -1130,23 +1141,33 @@ def i3296p1(c: Cast) -> None:
 
 
 @power("i3299p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.FIRE],
-       dropped=("c.apply_poison()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.FIRE])
 def i3299p1(c: Cast) -> None:
 
     def coated(ev: Hit) -> None:
         c.ongoing(5, DamageType.FIRE, on=ev.target)
 
-    _on_my_next_hit(c, coated)
+    c.apply_poison(coated)
 
 
 @power("i3300p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
        reach=CloseBlast(3), target=EACH_CREATURE,
-       dropped=("c.end_effect()",))
+       dropped=("c.effects_on()",))
 def i3300p1(c: Cast) -> None:
-    """Barring concealment is `c.no_cover`. Taking a standing invisibility
-    off is the half with no hold: nothing ends a named effect."""
+    """Barring concealment is `c.no_cover`. Losing what is already up is
+    `c.end_effect` over the holds that grant it, found by the label
+    `c.invisible` and `c.conceal` stamp -- so an invisibility or a
+    concealment a row laid comes off.
+
+    Dropped, and re-aimed off `c.end_effect`, which exists now: what is
+    still missing is a way to ask what effects a creature is under.
+    Matching on a label fragment reaches the two spellings those verbs
+    happen to use and nothing else, so concealment from terrain or from
+    a monster trait stands."""
     c.no_cover(until=When.SAVE_ENDS)
+    for word in ("unseen", "concealment"):
+        while c.end_effect(against=word) is not None:
+            pass
 
 
 @power("i3569p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -1235,26 +1256,37 @@ def i2852p1(c: Cast) -> None:
 
 
 @power("i3064p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON],
-       dropped=("c.apply_poison()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON])
 def i3064p1(c: Cast) -> None:
 
     def coated(ev: Hit) -> None:
         c.ongoing(5, DamageType.POISON, on=ev.target)
 
-    _on_my_next_hit(c, coated)
+    c.apply_poison(coated)
 
 
 @power("i3278p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("query.is_basic_attack()", "c.end_effect()"))
+       dropped=("query.is_basic_attack()",))
 def i3278p1(c: Cast) -> None:
-    """Two gaps: nothing asks whether an attack was a basic one, so the
-    damage bonus applies to every attack, and nothing ends a standing
-    effect on a natural 1 or 2."""
-    c.bonus("skill:athletics", 2, on=c.me, kind="power",
-            until=When.ENCOUNTER)
-    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER)
+    """The draught ends itself on a natural 1 or 2, which is read off
+    `AttackRolled.natural` -- both bonuses go together.
+
+    Dropped: nothing asks whether an attack was a basic one, so the
+    damage bonus applies to every attack rather than only to basics."""
+    holds = [
+        c.bonus("skill:athletics", 2, on=c.me, kind="power",
+                until=When.ENCOUNTER),
+        c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER),
+    ]
+
+    def fumbled(ev: AttackRolled) -> None:
+        if ev.attacker != c.me or ev.natural > 2:
+            return
+        for hold in holds:
+            c.end_effect(hold)
+
+    c.watch(AttackRolled, fumbled, until=When.ENCOUNTER, on=c.me, once=True)
 
 
 @power("i463p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,

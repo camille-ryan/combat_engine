@@ -1010,18 +1010,17 @@ def p15831(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POISON],
-    dropped=("c.apply_poison()",),
 )
 def p16655(c: Cast) -> None:
-    """The poison rides the next hit rather than the named weapon: nothing
-    ties a held effect to one blade. `escalate` is the first-failed-save
-    line, which is one effect with two faces rather than two effects."""
-    armed = [True]
+    """The printed target is one of five weapon groups, or an arrow or a
+    bolt; `c.apply_poison(groups=)` coats one of them and the poison rides
+    only blows made with it. Ammunition is not modelled and the card's
+    other answer is a weapon, so nothing of the sentence is lost.
+
+    `escalate` is the first-failed-save line, which is one effect with two
+    faces rather than two effects."""
 
     def bite(ev: Any) -> None:
-        if ev.attacker != c.me or not armed[0]:
-            return
-        armed[0] = False
         victim = ev.target
         c.flat(c.roll("1d6"), dtype=DamageType.POISON, on=victim)
 
@@ -1030,7 +1029,10 @@ def p16655(c: Cast) -> None:
 
         c.condition(Condition.SLOWED, until=When.SAVE_ENDS, on=victim, escalate=worse)
 
-    c.watch(Hit, bite, until=When.ENCOUNTER)
+    c.apply_poison(
+        bite,
+        groups=("axe", "heavy blade", "light blade", "pick", "spear"),
+    )
 
 
 @power(
@@ -1138,6 +1140,21 @@ def p16044(c: Cast) -> None:
     `PowerUsed` fires above the body of the row that would have rolled."""
 
 
+def _under_a_save(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """"You start your turn subject to an effect that a save can end."
+
+    `about_me` is only the first half of that sentence. The second is a
+    question about what is standing on the creature, which nothing in
+    `triggers` asks, and without it the power is offered every turn and
+    spends itself ending nothing.
+    """
+    from combat_engine.engine.durations import When as _When
+
+    return ev.actor == me and any(
+        eff.when is _When.SAVE_ENDS for eff in world.effects.of(me)
+    )
+
+
 @power(
     "p2478",
     level=0,
@@ -1147,12 +1164,16 @@ def p16044(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you start your turn subject to an effect a save can end",
-    on=Trigger(TurnStart, about_me, "you start your turn"),
-    todo=("c.end_effect()",),
+    on=Trigger(TurnStart, _under_a_save, "you start your turn under one"),
 )
 def p2478(c: Cast) -> None:
-    """Ending a save-ends effect outright is not rolling a saving throw,
-    and only the roll can be asked for."""
+    """Ending a save-ends effect outright is not rolling a saving throw:
+    it cannot fail, so `c.save` is the wrong verb for it.
+
+    The printed Trigger is two clauses -- the turn starting *and* being
+    subject to such an effect -- and declaring only the first would offer
+    the power on every turn of the fight and spend it on nothing."""
+    c.end_effect(on=c.me, save_ends=True)
 
 
 @power(

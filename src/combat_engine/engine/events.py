@@ -284,12 +284,30 @@ class PowerUsed(Event):
     creatures exactly when the distinction matters.
 
     None for an ordinary use -- a power nobody provoked.
+
+    `granted_by` and `granted_via` are the other half of the same
+    omission, and the bigger one. A great many cards let one creature
+    hand another a swing -- a warlord's command, a defender's
+    punishment, a charge somebody else is sent on -- and the swing was
+    announced as `mba` like any other use, with nothing saying whose
+    doing it was. So "when an ally makes a basic attack you granted" and
+    "an attack granted by your Combat Challenge" both had nothing to
+    read, and twenty-seven rows were waiting on it.
+
+    `granted_by` is the creature that handed it over and `granted_via`
+    the ref of the row that did. **Both are needed and neither implies
+    the other**: a defender's punishment is a self-grant, so the granter
+    alone cannot tell it from an ordinary swing, and a warlord grants
+    through a dozen different rows, so the ref alone cannot say whose.
+    -1 and "" mean nobody granted this -- an ordinary use.
     """
 
     actor: int
     power: str
     targets: list[int]
     trigger: Any = None
+    granted_by: int = -1
+    granted_via: str = ""
 
 
 @dataclass
@@ -327,6 +345,9 @@ class PowerResolved(Event):
     `trigger` is the same field `PowerUsed` carries and for the same
     reason; a row that has to see the consequence *and* name what
     provoked it would otherwise have to watch both events and pair them.
+    `granted_by`/`granted_via` are carried here for the same reason
+    again -- "if your ally hits with the attack this exploit provides"
+    reads the outcome, not the declaration.
     """
 
     actor: int
@@ -334,6 +355,8 @@ class PowerResolved(Event):
     targets: list[int]
     rolls: list[Any] = field(default_factory=list)
     trigger: Any = None
+    granted_by: int = -1
+    granted_via: str = ""
 
 
 @dataclass
@@ -382,6 +405,21 @@ class DamageRolled(Decision):
     amount: int
     dtype: DamageType
     detail: str
+    #: The **whole** type of the blow, for a blow that is more than one --
+    #: "1d8 lightning and thunder damage" is one roll of two types, which
+    #: resistance reads as a unit. Empty is the ordinary case and means
+    #: "just `dtype`", so every reader that asks `ev.dtype is
+    #: DamageType.FIRE` goes on answering for the blows it always did.
+    #:
+    #: **Writable, and the way a listener retypes a blow to a pair.** A
+    #: listener setting `dtype` alone still *overrides* the whole type,
+    #: which is what "this weapon deals fire instead" means; set this to
+    #: say "and", not "instead".
+    dtypes: tuple[DamageType, ...] = ()
+
+    def types(self) -> tuple[DamageType, ...]:
+        """Every type this blow is, whether it is one or several."""
+        return tuple(self.dtypes) if self.dtypes else (self.dtype,)
 
 
 @dataclass
@@ -405,6 +443,13 @@ class DamageApplied(Event):
     #: this event -- and one content row had already been routed off `Hit`
     #: to work around it without anyone noticing why.
     detail: str = ""
+    #: The whole type of the blow, as on `DamageRolled`. Empty means "just
+    #: `dtype`", which is every blow that is of one type.
+    dtypes: tuple[DamageType, ...] = ()
+
+    def types(self) -> tuple[DamageType, ...]:
+        """Every type this blow was, whether it was one or several."""
+        return tuple(self.dtypes) if self.dtypes else (self.dtype,)
 
 
 @dataclass

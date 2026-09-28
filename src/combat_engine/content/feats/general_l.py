@@ -13,7 +13,8 @@ of them ends "If you have the Student of the Plague feat, ...". That feat
 is named in prose with no ref, so `c.feat` has nothing to ask about and
 the clause is dropped as `spec.feat_ref()` throughout. Several of the
 same rows also deal "fire and necrotic damage", which is one blow of two
-types -- `DamageType.pair()`, the symbol earlier waves named.
+types -- `c.flat(dtypes=)` and `c.ongoing(dtypes=)` now say that, and it
+is no longer a hold on any row here.
 
 **Weapon groups are a closed set**: axe, bow, crossbow, heavy blade,
 implement, light blade, mace, spear, staff, unarmed. Hammers, picks and
@@ -56,6 +57,7 @@ from combat_engine.engine import (
     Condition,
     ConditionApplied,
     ConditionEnded,
+    DamageRolled,
     DamageType,
     Dropped,
     Forced,
@@ -74,6 +76,7 @@ from combat_engine.engine import (
     Trigger,
     Usage,
     When,
+    Window,
     get,
     hits_me,
     power,
@@ -100,8 +103,6 @@ PROFICIENCY = ("chargen.proficiency()",)
 FEATURE = ("spec.feature_ref()",)
 #: "If you have the <named> feat" -- the spec gives no ref for it.
 PLAGUE = ("spec.feat_ref()",)
-#: One blow of two damage types at once.
-PAIR = ("DamageType.pair()",)
 #: Total defence is not an action this engine has.
 TOTAL_DEFENCE = ("c.total_defence()",)
 #: Nothing models a bull rush.
@@ -812,16 +813,19 @@ def f2753(c: Cast) -> None:
 
 
 @power("f2846", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*REROLL, *PAIR, *PLAGUE))
+       reach=PERSONAL, target=SELF, todo=(*REROLL, *PLAGUE))
 def f2846(c: Cast) -> None:
-    """Damage to the attacker when `p1452`'s rerolled roll misses. Same
-    reroll gap as f2753, and the damage is two types at once."""
+    """Damage to the attacker when `p1452`'s rerolled roll misses. The
+    two-type damage is writable now (`c.flat(dtypes=)`); what is left is
+    the same reroll gap as f2753 -- nothing announces that a roll is a
+    reroll, so the moment the whole row hangs on never comes."""
 
 
 @power("f2849", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*REROLL, *PAIR, *PLAGUE))
+       reach=PERSONAL, target=SELF, todo=(*REROLL, *PLAGUE))
 def f2849(c: Cast) -> None:
-    """Rides on `p1450`'s reroll. Same gap from the other side."""
+    """Rides on `p1450`'s reroll. Same gap from the other side, and the
+    pair of damage types it used to also want is no longer one."""
 
 
 # -- the racial powers that are refs, so the rider is ordinary --------------
@@ -906,12 +910,19 @@ def f2843(c: Cast) -> None:
 
 
 @power("f2847", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=(*PAIR, *PLAGUE))
+       reach=PERSONAL, target=SELF, dropped=PLAGUE)
 def f2847(c: Cast) -> None:
-    """The bloodied half plays. Adding a second damage type to one the
-    power already deals is one blow of two types, which `c.damage` and
-    `c.bonus` both take one of."""
+    """"In addition to the damage type it already deals" is one blow of
+    two types, which is `DamageRolled.dtypes` -- the creature has to
+    resist both to shrug off any of it. The bloodied half is unchanged."""
     me = c.me
+
+    def rot(ev: DamageRolled) -> None:
+        if ev.source == me and ev.detail == "p1448":
+            ev.dtypes = (*ev.types(), DamageType.NECROTIC)
+
+    c.watch(DamageRolled, rot, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
     c.bonus(
         "damage", 2, on=me, until=When.ENCOUNTER,
         when=lambda ctx: ctx.get("power") == "p1448" and c.bloodied(on=me),
@@ -929,11 +940,21 @@ def f2848(c: Cast) -> None:
 
 
 @power("f2855", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=(*PAIR, *PLAGUE))
+       reach=PERSONAL, target=SELF, dropped=PLAGUE)
 def f2855(c: Cast) -> None:
-    """The +2 plays, gated on the ref the spec gives."""
+    """"Becomes cold and necrotic" is an override of the whole type, not
+    an addition, so the pair replaces what `p8278` rolled rather than
+    joining it. The +2 is gated on the same ref."""
+    me = c.me
+
+    def chill(ev: DamageRolled) -> None:
+        if ev.source == me and ev.detail == "p8278":
+            ev.dtypes = (DamageType.COLD, DamageType.NECROTIC)
+
+    c.watch(DamageRolled, chill, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
     c.bonus(
-        "damage", 2, on=c.me, until=When.ENCOUNTER,
+        "damage", 2, on=me, until=When.ENCOUNTER,
         when=lambda ctx: ctx.get("power") == "p8278",
     )
 
@@ -1610,7 +1631,7 @@ def f2850(c: Cast) -> None:
 
 
 @power("f2856", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=(*PAIR, *PLAGUE),
+       reach=PERSONAL, target=NO_TARGET, dropped=PLAGUE,
        trigger="you use a channel divinity power",
        on=Trigger(
            PowerUsed,
@@ -1620,19 +1641,34 @@ def f2850(c: Cast) -> None:
            "you use a channelled power",
        ))
 def f2856(c: Cast) -> None:
-    """The enemy half of the choice. `Power.group` is what the card's own
-    "one power per encounter" line is written as, so "a cf:avenger-f2
-    power" is a question the header answers. The ally half hands out one
-    blow of two damage types, which nothing says."""
+    """Both halves now. `Power.group` is what the card's own "one power
+    per encounter" line is written as, so "a cf:avenger-f2 power" is a
+    question the header answers.
+
+    The ally half is a rider of two types at once -- four extra points
+    that are fire *and* necrotic, which `c.bonus(dtype=)` carries as one
+    part of the blow rather than as two. Printed as a choice, so it is
+    offered as one; an option with nobody to aim it at is not.
+    """
     foe = next((f for f in c.enemies() if c.adjacent(to=f)), None)
-    if foe is None:
+    friend = next((a for a in c.allies() if c.adjacent(to=a)), None)
+    options = [w for w in ("the enemy", "the ally")
+               if (foe if w == "the enemy" else friend) is not None]
+    if not options:
         return
-    for defence in (AC, FORT, REF, WILL):
-        c.penalty(defence, 2, on=foe, until=When.EONT)
+    picked = c.choose(options, "which half of the benefit")
+    if picked == "the enemy" and foe is not None:
+        for defence in (AC, FORT, REF, WILL):
+            c.penalty(defence, 2, on=foe, until=When.EONT)
+    elif picked == "the ally" and friend is not None:
+        c.bonus(
+            "damage", 4, on=friend, until=When.EONT,
+            dtype=(DamageType.FIRE, DamageType.NECROTIC),
+        )
 
 
 @power("f2881", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=(*PAIR, *PLAGUE),
+       reach=PERSONAL, target=NO_TARGET, dropped=PLAGUE,
        trigger="a creature marked by you attacks without including you",
        on=Trigger(
            AttackDeclared,
@@ -1644,8 +1680,12 @@ def f2856(c: Cast) -> None:
 def f2881(c: Cast) -> None:
     """Declared on `AttackDeclared` rather than `Hit`, because the
     printed line turns on the attack being *made* and a miss is still an
-    attack. The point of necrotic is one of the two types printed."""
-    c.flat(1, dtype=DamageType.NECROTIC, on=c.trigger.attacker)
+    attack. The one point is fire and necrotic at once, so a creature
+    resisting only one of them still takes it."""
+    c.flat(
+        1, dtypes=(DamageType.FIRE, DamageType.NECROTIC),
+        on=c.trigger.attacker,
+    )
     c.heal(1, on=c.me)
 
 
@@ -2055,11 +2095,14 @@ def f2868(c: Cast) -> None:
 
 @power("f2845", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("SavingThrow.effect", *PAIR, *PLAGUE))
+       todo=("SavingThrow.effect", *PLAGUE))
 def f2845(c: Cast) -> None:
     """Splash damage equal to the ongoing damage a failed save leaves
     standing. `SavingThrow` carries the label it was rolled against and
-    not the effect, so there is no number to copy."""
+    not the effect, so there is no number to copy.
+
+    The two-type damage is no longer a hold -- `c.flat(dtypes=)` says it
+    -- so the marker is only the number and the named feat now."""
 
 
 @power("f2858", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

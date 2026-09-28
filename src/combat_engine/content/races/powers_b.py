@@ -771,14 +771,13 @@ def p14073(c: Cast) -> None:
     attack=Attack(STR, vs=REF, plus=2),
     trigger="you are hit by an attack while bloodied",
     on=Trigger(Hit, _hit_me_bloodied, "you are hit while bloodied"),
-    dropped=("c.damage(dtypes=)",),
 )
 def p14076(c: Cast) -> None:
-    """One blow of two types is one type here; the fire half is dealt and the
-    radiant half is dropped rather than dealt twice."""
+    """One blow of two types, which is `dtypes=`: a creature resisting
+    only fire or only radiant takes all of it."""
     best = _best_of(c, c.str_mod, c.con_mod, c.dex_mod)
     if c.strike(plus=max(0, best - c.str_mod)):
-        c.damage(0, best, dtype=DamageType.FIRE)
+        c.damage(0, best, dtypes=(DamageType.FIRE, DamageType.RADIANT))
         c.penalty("attack", 2, until=When.EOTNT)
         if c.bloodied():
             c.blinded(until=When.EOTNT)

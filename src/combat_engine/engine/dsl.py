@@ -1423,6 +1423,8 @@ def use(
     trigger: Any = None,
     opportunity: bool = False,
     charge: bool = False,
+    granted_by: int = -1,
+    granted_via: str = "",
     branch: int = 0,
     augment: int = 0,
     reentrant: bool = False,
@@ -1435,6 +1437,12 @@ def use(
     `trigger` is the event being answered, for a row the dispatcher is
     offering. The body reads it as `c.trigger` and an interrupt stops it with
     `c.cancel()`.
+
+    `granted_by`/`granted_via` are who handed this use over and through
+    which row -- set by `c.grant_attack`, `c.basic` and `c.charge_at`,
+    and by nothing else. A swing somebody was *given* was announced as
+    an ordinary `mba`, so every card reading "the basic attack granted
+    by X" had nothing to tell it apart from a swing taken freely.
 
     `branch` picks which half of a "Melee or Ranged weapon" line is being
     used. 0 is the printed first one and is what every single-branch row
@@ -1504,6 +1512,8 @@ def use(
         trigger=trigger,
         opportunity=opportunity,
         charge=charge,
+        granted_by=granted_by,
+        granted_via=granted_via,
         branch=branch,
         augment=augment,
     )
@@ -1599,6 +1609,7 @@ def use(
             PowerResolved(
                 actor=actor, power=ref, targets=list(chosen), rolls=rolls,
                 trigger=trigger,
+                granted_by=granted_by, granted_via=granted_via,
             )
         )
     finally:

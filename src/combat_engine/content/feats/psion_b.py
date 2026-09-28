@@ -32,6 +32,8 @@ from combat_engine.engine import (
     SELF,
     ActionType,
     Cast,
+    DamageApplied,
+    DamageRolled,
     DamageType,
     Dropped,
     Hit,
@@ -41,6 +43,7 @@ from combat_engine.engine import (
     Trigger,
     Usage,
     When,
+    Window,
     get,
     power,
 )
@@ -54,6 +57,8 @@ DISTRACT = "p8224"
 #: A racial zone named by ref. `Cast.zone` defaults a zone's label to the
 #: ref that laid it, so the zone that row makes carries this string.
 CLOUD = "p2473"
+#: The racial attack power `f3172` retypes and hands back.
+RACIAL = "p8278"
 
 #: The discipline focus is a build the chassis does not deal.
 BUILDS = ("chargen.BUILDS",)
@@ -407,15 +412,44 @@ def f2608(c: Cast) -> None:
 
 
 @power("f3172", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET,
-       todo=("DamageType.pair()",))
+       reach=PERSONAL, target=NO_TARGET)
 def f3172(c: Cast) -> None:
     """A racial power that deals two types at once, and comes back and
-    fires again when it kills. Re-aimed: the second half is
-    `c.restore_use` plus `c.use_power` now, and what is still missing is
-    the first -- a damage instance carries one type, so "deals necrotic
-    and psychic damage" cannot be said, and that is the clause the whole
-    row turns on."""
+    fires again when it kills. Both halves are writable now.
+
+    The retype is `DamageRolled.dtypes`, which is the blow being both at
+    once rather than one instead of the other. The kill is read off
+    `DamageApplied` -- `Dropped` does not say who did it -- and the
+    window is the watch's own `EONT`, laid when the racial power is used
+    so that the creatures it aimed at are the ones being counted.
+    """
+    me = c.me
+    pair = (DamageType.NECROTIC, DamageType.PSYCHIC)
+
+    def retype(ev: DamageRolled) -> None:
+        if ev.source == me and ev.detail == RACIAL:
+            ev.dtypes = pair
+
+    c.watch(DamageRolled, retype, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
+
+    def aimed(ev: PowerUsed) -> None:
+        if ev.actor != me or ev.power != RACIAL:
+            return
+        # Chosen before the body runs, so `ev.targets` is trustworthy here
+        # where nothing the body did would be.
+        marks = set(ev.targets)
+
+        def felled(blow: DamageApplied) -> None:
+            if blow.source != me or blow.target not in marks or blow.hp > 0:
+                return
+            marks.discard(blow.target)
+            if c.restore_use(RACIAL, on=me):
+                c.use_power(RACIAL)
+
+        c.watch(DamageApplied, felled, until=When.EONT, on=me, label=c.ref)
+
+    c.watch(PowerUsed, aimed, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f3275", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

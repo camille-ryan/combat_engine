@@ -14,6 +14,7 @@ Two deliberate seams for triggered effects to reach into:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -115,6 +116,8 @@ def attack(
     branch: int = 0,
     dying: bool = False,
     charge: bool = False,
+    granted_by: int = -1,
+    granted_via: str = "",
     keep: str = "",
     hand: str = "main",
 ) -> AttackResult:
@@ -161,6 +164,13 @@ def attack(
             "advantage": ca,
             "opportunity": opportunity,
             "charge": charge,
+            # Who handed this swing over, and through which row. A bonus
+            # to "the melee basic attack granted by your Combat
+            # Challenge" is a gate on these two and nothing else, and
+            # the keys were simply absent -- silently false, which is
+            # what an inert feat looks like.
+            "granted_by": granted_by,
+            "granted_via": granted_via,
             "action_point": bought,
             # What shape the attack is, so "ranged attacks against this
             # target take +4" is a one-line gate rather than a registry
@@ -259,6 +269,8 @@ def attack(
         # a creature could not react to being hit by one.
         rolled.opportunity = opportunity
         rolled.charge = charge
+        rolled.granted_by = granted_by
+        rolled.granted_via = granted_via
         rolled.action_point = bought
         # The context the modifiers were actually read with. `c.bonus(
         # once=True)` has to decide whether the bonus it is watching for
@@ -300,6 +312,8 @@ def attack(
         landed.branch = branch
         landed.opportunity = opportunity
         landed.charge = charge
+        landed.granted_by = granted_by
+        landed.granted_via = granted_via
         landed.action_point = bought
         # Which defence was attacked. `AttackDeclared` and `AttackRolled`
         # carry it as a field; the outcome did not, so "an attack against
@@ -334,6 +348,8 @@ def attack(
             ev.branch = branch
             ev.opportunity = opportunity
             ev.charge = charge
+            ev.granted_by = granted_by
+            ev.granted_via = granted_via
             ev.action_point = bought
             ev.vs = vs
             return ev
@@ -368,6 +384,8 @@ def attack(
     announced.branch = branch
     announced.opportunity = opportunity
     announced.charge = charge
+    announced.granted_by = granted_by
+    announced.granted_via = granted_via
     announced.action_point = bought
     declared = world.bus.emit(announced, roll)
     if declared.cancelled:
@@ -589,16 +607,35 @@ def deal_damage(
     from_attack: bool = True,
     opportunity: bool = False,
     charge: bool = False,
+    granted_by: int = -1,
+    granted_via: str = "",
     miss: bool = False,
     crit: bool = False,
+    dtypes: Sequence[DamageType] = (),
 ) -> int:
     """Apply damage, honouring weakened, resistance, vulnerability and temp hp.
+
+    `dtypes` is for a blow that is **several types at once** -- "1d8
+    lightning and thunder damage" is one roll of two types, not two rolls.
+    The printed rule is that such a blow is resisted only as far as the
+    target resists *every* type in it, and is ignored only by an immunity
+    covering all of them, which is exactly what the per-part arithmetic
+    below already does for a typed rider. `dtype` stays the blow's primary
+    type, which is what the events carry and what every existing reader
+    asks about; leave `dtypes` empty for the ordinary one-type blow and
+    nothing below changes by so much as a point.
 
     Returns what actually came off hit points.
     """
     health = world.get(target, Health)
     if health is None or not alive(world, target):
         return 0
+
+    # Duplicates dropped rather than kept: "cold and cold" is cold, and a
+    # repeated type would have `min(resist)` and `all(immune)` read the
+    # same entry twice for no change and one more chance to be wrong.
+    types: tuple[DamageType, ...] = tuple(dict.fromkeys(dtypes)) or (dtype,)
+    dtype = types[0]
 
     # `opportunity` and `charge` too: a flat rider on either could not be
     # gated without them, since the ctx named only the first two. A gate on
@@ -621,6 +658,11 @@ def deal_damage(
         "power": detail,
         "opportunity": opportunity,
         "charge": charge,
+        # The provenance of a granted swing, the same two keys the attack
+        # context carries. "+2 to the damage roll of the basic attack you
+        # granted" is a damage-side rider and had nothing to gate on.
+        "granted_by": granted_by,
+        "granted_via": granted_via,
         "dtype": dtype,
         "crit": crit,
         # **Asked of the board, not carried from the roll.** "+2 damage
@@ -652,6 +694,12 @@ def deal_damage(
         # first -- wrong for the handful that do, and right for
         # everything else.
         "ranged": _is_ranged(detail),
+        # **Every type the blow is**, for the handful that are more than
+        # one. `dtype` above is the primary and answers for all the blows
+        # it always did; a gate that means "is there any thunder in this"
+        # asks here, because `ctx["dtype"] is DamageType.THUNDER` is
+        # silently false for a lightning-and-thunder blow.
+        "dtypes": types,
     }
     # **The blow is a list of typed parts, not one number.** `parts[0]` is
     # what the power itself rolled, of the power's own type; a rider that
@@ -661,7 +709,7 @@ def deal_damage(
     # exists only because some row asked for one, so a blow with no typed
     # rider is a single part and comes out of the arithmetic below
     # bit-for-bit what it did before this existed.
-    parts: list[tuple[tuple[DamageType, ...], int]] = [((dtype,), amount)]
+    parts: list[tuple[tuple[DamageType, ...], int]] = [(types, amount)]
     if from_attack:
         # A bonus to damage is a thing powers grant constantly -- "+4 damage
         # against the target until the end of the encounter" -- and for a
@@ -686,7 +734,11 @@ def deal_damage(
         parts = _rescale(parts, amount)
 
     announce = DamageRolled(
-        source=source, target=target, amount=amount, dtype=dtype, detail=detail
+        source=source, target=target, amount=amount, dtype=dtype, detail=detail,
+        # Empty for a one-type blow, so a listener that retypes by setting
+        # `dtype` alone -- which is every one of them in the tree -- keeps
+        # meaning what it has always meant.
+        dtypes=types if len(types) > 1 else (),
     )
     # The context these mods were read with, for the same reason the attack
     # roll carries its own: `c.bonus(once=True)` decides whether the bonus
@@ -701,12 +753,27 @@ def deal_damage(
     # -- immunity, resistance, vulnerability, and the DamageApplied that is
     # announced -- used the local, so "its weapon attacks deal fire damage"
     # set the field and changed nothing.
-    if rolled.dtype != dtype:
-        dtype = rolled.dtype
+    #
+    # Two ways to say it and they mean different things. Setting `dtypes`
+    # is "this blow is necrotic **and** poison" -- one part of two types,
+    # which resistance reads as a unit. Setting `dtype` alone is the older
+    # and commoner sentence, "this weapon deals fire **instead**", and it
+    # overrides whatever the blow was, pair included.
+    said = tuple(dict.fromkeys(rolled.dtypes))
+    if said and said != types:
+        new_types = said
+    elif rolled.dtype != dtype:
+        new_types = (rolled.dtype,)
+    else:
+        new_types = types
+    if new_types != types:
+        types = new_types
+        dtype = types[0]
+        rolled.dtype = dtype
         # Only the power's own part is retyped. A listener saying "this
         # attack deals cold" is speaking about the attack, not about the
         # fire rider a feat hung off it.
-        parts = [((dtype,), parts[0][1]), *parts[1:]]
+        parts = [(types, parts[0][1]), *parts[1:]]
     # Read back off the event, the way the attack reads its target back. A
     # listener may move the blow onto somebody else -- one creature stepping
     # in front of another -- and everything below this line used the local.
@@ -752,22 +819,26 @@ def deal_damage(
         # highest applies.
         live: list[list[int]] = []
         worst_vuln = 0
-        for types, value in parts:
-            resist = min(defences.resist.get(t, 0) for t in types)
-            if all(t in defences.immune for t in types):
+        # Not `types`: that is the blow's own, read again below, and the
+        # loop variable used to be spelled the same.
+        for part_types, value in parts:
+            resist = min(defences.resist.get(t, 0) for t in part_types)
+            if all(t in defences.immune for t in part_types):
                 # Immunity is not resistance and is not capped with it: a
                 # part the target is immune to is simply not there.
                 # `c.ignore_resistance(immunity=...)` is the only thing
                 # that reopens it, and the printed form of that line is
                 # usually "treat immunity as resist 20" rather than a
                 # blanket ignore.
-                becomes = _immunity_ignored(world, source, types, dmg_ctx)
+                becomes = _immunity_ignored(world, source, part_types, dmg_ctx)
                 if becomes is None:
                     continue
                 resist = max(resist, becomes)
-            resist = max(0, resist - _ignored_resist(world, source, types, dmg_ctx))
+            resist = max(
+                0, resist - _ignored_resist(world, source, part_types, dmg_ctx)
+            )
             worst_vuln = max(
-                worst_vuln, max(defences.vulnerable.get(t, 0) for t in types)
+                worst_vuln, max(defences.vulnerable.get(t, 0) for t in part_types)
             )
             live.append([value, resist])
         if not live:
@@ -790,27 +861,40 @@ def deal_damage(
     # gated resistance written there would have shrugged off everything and
     # been strictly stronger than the printed line. `c.resist(when=...)`
     # lays a modifier instead and this is the only thing that reads it.
-    if amount and dtype not in (getattr(world.get(target, Defences), "immune", ())):
+    immune_to_all = all(
+        t in getattr(world.get(target, Defences), "immune", ()) for t in types
+    )
+    if amount and not immune_to_all:
         gated = _mods(
             world, target, "resist",
             {
                 "source": source,
                 "power": detail,
                 "dtype": dtype.value,
+                "dtypes": types,
                 "opportunity": opportunity,
                 "charge": charge,
             },
-        ) + _mods(
-            world, target, f"resist {dtype.value}",
-            {
-                "source": source,
-                "power": detail,
-                "opportunity": opportunity,
-                "charge": charge,
-            },
+        ) + min(
+            # **The smallest of the per-type resistances, not their sum.**
+            # A blow that is lightning *and* thunder is shrugged off only
+            # as far as the target resists both, so a gated "resist 10
+            # lightning" and nothing against thunder stops none of it.
+            # One type in `types` is every blow in the tree that is not a
+            # pair, and `min` over one is that number.
+            _mods(
+                world, target, f"resist {t.value}",
+                {
+                    "source": source,
+                    "power": detail,
+                    "opportunity": opportunity,
+                    "charge": charge,
+                },
+            )
+            for t in types
         )
         amount = max(
-            0, amount - max(0, gated - _ignored_resist(world, source, (dtype,), dmg_ctx))
+            0, amount - max(0, gated - _ignored_resist(world, source, types, dmg_ctx))
         )
 
     # "The creature takes no damage from an attack that misses" -- the
@@ -835,6 +919,7 @@ def deal_damage(
             absorbed=absorbed,
             hp=health.hp,
             detail=detail,
+            dtypes=types if len(types) > 1 else (),
         )
     )
     if not was_bloodied and health.bloodied and health.hp > 0:

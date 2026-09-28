@@ -390,7 +390,6 @@ def druid_shape_grant(c: Cast) -> None:
         "c.improvised()",
         "Weapon.proficiency",
         "c.chosen_weapon_group()",
-        "feat.associated_powers",
     ),
 )
 def fighter_talent_arena(c: Cast) -> None:
@@ -410,8 +409,13 @@ def fighter_talent_arena(c: Cast) -> None:
       something a feature can raise.
     * Two chosen weapons become proficient. `c.chosen_weapon_group()` is the
       standing request for "a weapon this character picked at build time".
-    * Feat bonuses earned for one of the two apply to the other, which needs
-      a feat to know which rows it granted: `feat.associated_powers`.
+    * Feat bonuses earned for one of the two apply to the other. This used
+      to be marked `feat.associated_powers`, which was simply the wrong
+      symbol -- this card prints no Associated Powers list and the clause
+      is not about one. It is downstream of the bullet above: until a
+      character records which two weapons it chose there is no "other" to
+      carry a bonus to, so `c.chosen_weapon_group()` is the whole of the
+      hold and the marker says it once.
 
     The AC bonus is untyped -- the card prints "+1 bonus" with no type word
     -- and climbs the usual ladder. A fighter's chassis wears scale, so the

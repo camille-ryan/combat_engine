@@ -102,6 +102,13 @@ class Cast:
     #: True when this use *is* an opportunity attack. Read by the attack
     #: context, so "+2 to AC against opportunity attacks" can be written.
     opportunity: bool = False
+    #: Who handed this use over, and through which row. Set by the three
+    #: methods that make somebody swing out of turn -- `c.grant_attack`,
+    #: `c.basic` and `c.charge_at` -- and carried onto `PowerUsed`,
+    #: `PowerResolved`, all four attack events and both modifier
+    #: contexts. -1 and "" mean nobody granted it.
+    granted_by: int = -1
+    granted_via: str = ""
     #: Which half of a "Melee or Ranged weapon" line is being used. 0 is the
     #: printed first one. A body almost never reads this -- `c.w()` and
     #: `c.strike()` already honour it, which is the point.
@@ -683,6 +690,98 @@ class Cast:
             who, self.me, until, label=label, sustain_cost=sustain
         )
 
+    def end_effect(
+        self,
+        effect: Effect | None = None,
+        *,
+        on: int | None = None,
+        against: str = "",
+        save_ends: bool = False,
+        carrying: Condition | None = None,
+        why: str = "",
+    ) -> Effect | None:
+        """Take a live effect off early, before its duration runs out.
+
+        An effect was only ever ended by its clock or by a saving throw, so
+        every printed "until you attack", "the effect ends if the target
+        takes damage" and "you can end one effect that a save can end" had
+        nowhere to go. Two shapes, because the cards print two.
+
+        **Hand it the effect.** Everything that lays one hands one back, so
+        a row keeps its own hold in a local and ends it from a `c.watch`.
+        That is the commonest half by a long way.
+
+        **Or name a category and let somebody pick.** "One effect that a
+        save can end" is not an effect, it is a choice among the ones
+        standing, so `save_ends=True` collects them and `c.choose` asks --
+        a headless run takes the oldest, which is the one that has had the
+        most chances to lapse on its own. `against` narrows by label
+        fragment the way `c.save` does, and `carrying` by a condition the
+        effect imposes -- "you can make a saving throw to end that daze"
+        names the daze and not the row that laid it.
+
+        Returns what went, or None if there was nothing to end. **Ending is
+        not saving**: none of the printed lines here roll, and a row that
+        reaches for `c.save` instead has written a rule that can fail.
+
+        Follows `c.target` and falls back to the caster, as `c.save` does:
+        "the target can end the effect" is the usual printing. A row that
+        means the caster on a board where somebody else is targeted says
+        `on=c.me`.
+        """
+        if effect is not None:
+            if effect.ended:
+                return None
+            self.world.effects.end(effect, why or f"{self.ref} ended it")
+            return effect
+        who = self._who(on) or self.me
+        if who is None:
+            return None
+        pool = [
+            eff
+            for eff in sorted(self.world.effects.of(who), key=lambda e: e.id)
+            if not eff.ended
+            and (not save_ends or eff.when is When.SAVE_ENDS)
+            and (not against or against in eff.label)
+            and (carrying is None or carrying in eff.conditions)
+        ]
+        picked = self.choose(pool, f"{self.ref}: which effect to end")
+        if picked is None:
+            return None
+        self.world.effects.end(picked, why or f"{self.ref} ended it")
+        return picked
+
+    def endable(
+        self,
+        effect: Effect | None,
+        cost: ActionType = ActionType.MINOR,
+        *,
+        then: Callable[[], None] | None = None,
+    ) -> Effect | None:
+        """Let whoever holds this effect end it deliberately, for an action.
+
+        "You can end this effect as a minor action" and "it can use a
+        standard action to end this effect" are one printed line seen from
+        the two sides, and both are `Effect.drop_cost`: `actions.legal`
+        offers a `drop` to the effect's **owner** when it carries one.
+
+        So this is aimed by whose effect it is and takes no `on=` -- an
+        immobilisation the target shakes off is endable by the target
+        because the hold sits on the target, and a self-buff you can
+        dismiss is yours for the same reason.
+
+        `then` is what ending it deliberately *buys*, for the printed
+        lines that are a trade rather than a dismissal: "end the effect as
+        a free action to teleport", "end the effect by taking 5 damage".
+        It runs for the deliberate drop and for nothing else -- not for
+        the clock and not for a saving throw -- because a payout owed for
+        choosing is not owed for waiting.
+        """
+        if effect is not None:
+            effect.drop_cost = cost
+            effect.drop_then = then
+        return effect
+
     def invisible(
         self,
         *,
@@ -1107,6 +1206,7 @@ class Cast:
             return use(
                 self.world, who, chosen, targets=[target], spend=False,
                 trigger=trigger if trigger is not None else self.trigger,
+                granted_by=self.me, granted_via=self.ref,
                 reentrant=reentrant,
             )
         finally:
@@ -1298,7 +1398,13 @@ class Cast:
         )
         if len(offered) > 1:
             ref = self.choose(offered, "which attack to make") or ref
-        return use(self.world, attacker, ref, targets=[target], spend=False)
+        # Marked as granted even when the swinger is the caster: the
+        # defender's punishment is a self-grant, and eight feats are
+        # about exactly that swing and no other.
+        return use(
+            self.world, attacker, ref, targets=[target], spend=False,
+            granted_by=self.me, granted_via=self.ref,
+        )
 
     def attack(
         self,
@@ -1323,6 +1429,7 @@ class Cast:
             advantage=advantage, opportunity=self.opportunity,
             among=tuple(self.targets) or (who,), branch=self.branch,
             ignore_cover=ignore_cover, dying=self.dying, charge=self.charge,
+            granted_by=self.granted_by, granted_via=self.granted_via,
             keep=keep, hand=hand,
         )
         # An interrupt may have moved the blow onto somebody else. The roll
@@ -1403,10 +1510,24 @@ class Cast:
         bonus: int = 0,
         *,
         dtype: DamageType = DamageType.UNTYPED,
+        dtypes: Sequence[DamageType] = (),
         on: int | None = None,
         detail: str = "",
     ) -> int:
-        """Roll and apply damage. A critical hit maxes the dice, as printed."""
+        """Roll and apply damage. A critical hit maxes the dice, as printed.
+
+        `dtypes` is a blow that is **several types at once** -- "1[W] cold
+        and necrotic damage" is one roll of two types, not two rolls of
+        one, and the printed rule is that the target shrugs off only as
+        much of it as it resists *every* type in it. Pass it instead of
+        `dtype`, never beside it: two `c.damage` calls deal the damage
+        twice, and a single type meets a resistance the card says does not
+        apply.
+
+        A **rider** of a type the power itself is not -- "your attacks
+        deal 2 extra fire damage" -- is `c.bonus("damage", ..., dtype=)`
+        and not this.
+        """
         who = self._who(on)
         if who is None:
             return 0
@@ -1415,10 +1536,15 @@ class Cast:
         else:
             amount = self._roll_damage(dice) + bonus if dice else bonus
         amount += self._enhancement()
-        dtype = self._typed(dtype)
+        # A card naming two types has said what it deals, so the weapon's
+        # own type gets no vote -- the rule `_typed` already applies to one
+        # named type.
+        dtype = dtype if dtypes else self._typed(dtype)
         dealt = deal_damage(
             self.world, self.me, who, amount, dtype, detail or self.ref,
-            opportunity=self.opportunity, charge=self.charge, crit=self.crit,
+            dtypes=dtypes,
+            opportunity=self.opportunity, charge=self.charge,
+            granted_by=self.granted_by, granted_via=self.granted_via, crit=self.crit,
         )
         if dealt:
             self._rattle(who)
@@ -1430,17 +1556,23 @@ class Cast:
         bonus: int = 0,
         *,
         dtype: DamageType = DamageType.UNTYPED,
+        dtypes: Sequence[DamageType] = (),
         on: int | None = None,
     ) -> int:
-        """"Miss: half damage" -- rolled, then halved, as the rule reads."""
+        """"Miss: half damage" -- rolled, then halved, as the rule reads.
+
+        `dtypes` is one blow of several types, as on `c.damage`.
+        """
         who = self._who(on)
         if who is None:
             return 0
         amount = (self._roll_damage(dice) + bonus) // 2 if dice else bonus // 2
-        dtype = self._typed(dtype)
+        dtype = dtype if dtypes else self._typed(dtype)
         dealt = deal_damage(
             self.world, self.me, who, amount, dtype, f"{self.ref} (half)",
-            opportunity=self.opportunity, charge=self.charge, miss=True,
+            dtypes=dtypes,
+            opportunity=self.opportunity, charge=self.charge,
+            granted_by=self.granted_by, granted_via=self.granted_via, miss=True,
         )
         # "Miss: half damage" still deals damage, and the rattling keyword
         # asks nothing about hitting.
@@ -1449,13 +1581,21 @@ class Cast:
         return dealt
 
     def flat(self, amount: int, *, dtype: DamageType = DamageType.UNTYPED,
+             dtypes: Sequence[DamageType] = (),
              on: int | None = None) -> int:
+        """Damage that is not rolled. `dtypes` is one blow of several types.
+
+        "The attacker takes 10 lightning and thunder damage" is ten points
+        that are both, not ten of each -- see `c.damage`.
+        """
         who = self._who(on)
         if who is None:
             return 0
         return deal_damage(
             self.world, self.me, who, amount, dtype, self.ref,
+            dtypes=dtypes,
             opportunity=self.opportunity, charge=self.charge,
+            granted_by=self.granted_by, granted_via=self.granted_via,
         )
 
     def heal(self, amount: int, *, on: int | None = None) -> int:
@@ -1483,10 +1623,16 @@ class Cast:
         amount: int,
         dtype: DamageType = DamageType.UNTYPED,
         *,
+        dtypes: Sequence[DamageType] = (),
         on: int | None = None,
         until: When = When.SAVE_ENDS,
     ) -> Effect | None:
         """Ongoing damage. **Of one type, only the highest applies.**
+
+        `dtypes` is a burn of several types at once -- "ongoing 5 fire and
+        radiant damage" is five points a turn that are both, not five of
+        each. Two `c.ongoing` calls would tick for ten and take two saves
+        to shake off, which is the shape this replaces.
 
         That is the printed rule and the engine stacked them: four burns of
         the same type left four separate holds and four saving throws to
@@ -1503,7 +1649,9 @@ class Cast:
         # only door: a "save ends both" hold carrying a burn and a condition
         # goes straight there.
         return self.world.effects.apply(
-            who, self.me, until, label=f"ongoing {amount}", ongoing=(amount, dtype)
+            who, self.me, until, label=f"ongoing {amount}",
+            ongoing=(amount, dtypes[0] if dtypes else dtype),
+            ongoing_types=tuple(dtypes),
         )
 
     # -- moving things around ------------------------------------------------
@@ -3615,7 +3763,8 @@ class Cast:
                     runner, "choose", offered, "which attack to make"
                 )
         return use(
-            self.world, runner, ref, targets=[victim], spend=False, charge=True
+            self.world, runner, ref, targets=[victim], spend=False, charge=True,
+            granted_by=self.me, granted_via=self.ref,
         )
 
     def overrun(self, to: Square | None = None) -> list[int]:
@@ -5262,6 +5411,7 @@ class Cast:
             PowerUsed(
                 actor=self.me, power=self.ref, targets=list(self.targets),
                 trigger=self.trigger,
+                granted_by=self.granted_by, granted_via=self.granted_via,
             )
         )
         owner = self._item_owner()
@@ -6334,6 +6484,79 @@ class Cast:
 
         who = self._who(on)
         return holding(self.world, who, what) if who is not None else []
+
+    def weapon_of(self, ev: Any = None) -> Weapon | None:
+        """Which weapon the attack behind this event was swung with.
+
+        `c.struck_with` answers a looser question -- it prefers whatever
+        magic thing the attacker is holding, which is right for "an attack
+        using this ki focus" and wrong for a coated blade: a poison is on
+        one weapon and the other must not carry it. This one picks the way
+        the attack itself did, off the reach of the row that made it.
+        """
+        from .dsl import get
+
+        ev = ev if ev is not None else self.trigger
+        attacker = getattr(ev, "attacker", None) if ev is not None else None
+        gear = self.world.get(attacker, Gear) if attacker is not None else None
+        if gear is None:
+            return None
+        p = get(getattr(ev, "power", "") or "")
+        fired = p is not None and p.reach.kind == "ranged"
+        return gear.ranged if fired and gear.ranged else gear.main
+
+    def apply_poison(
+        self,
+        bite: Callable[[Any], None],
+        *,
+        weapon: Weapon | None = None,
+        groups: Sequence[str] = (),
+        until: When = When.ENCOUNTER,
+        once: bool = True,
+    ) -> Effect | None:
+        """Coat a weapon in hand. `bite(ev)` runs on the next hit with it.
+
+        The printed line is "apply the poison to your weapon or one piece
+        of ammunition, and the next creature you hit with the coated item
+        takes...". **Ammunition is not modelled**, and it does not need to
+        be for these: the card offers the wielder a choice of two and the
+        row takes the weapon, which is one of the printed answers rather
+        than an approximation of both.
+
+        What was missing was the tie. Every one of these rows was written
+        as a bare `c.watch(Hit, ...)`, so the poison rode whichever weapon
+        the wielder happened to swing next -- a ranger who coated a blade
+        and then shot somebody got the poison for free off the bow. The
+        hold now names the weapon and `c.weapon_of` checks the blow.
+
+        `groups` narrows what may be coated to the printed list of weapon
+        groups; `once=False` is the "five pieces of ammunition" printing,
+        which is every hit for the rest of the fight rather than one.
+
+        Returns the hold, so a row can end it early with `c.end_effect`, or
+        None when there is nothing in hand to coat.
+        """
+        from .events import Hit
+
+        coated = weapon
+        if coated is None:
+            # `c.held` follows `c.target`, and the wielder is the caster.
+            pool = [
+                w for w in self.held(on=self.me) if not groups or w.group in groups
+            ]
+            coated = self.choose(pool, f"{self.ref}: what to coat")
+        if coated is None:
+            return None
+
+        def struck(ev: Any) -> None:
+            if ev.attacker != self.me or self.weapon_of(ev) is not coated:
+                return
+            bite(ev)
+
+        return self.watch(
+            Hit, struck, until=until, once=once,
+            label=f"{self.ref} coated {coated.ref}",
+        )
 
     def deals(
         self,

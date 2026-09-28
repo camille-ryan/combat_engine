@@ -2,11 +2,10 @@
 
 Three families, and two of them share one gap.
 
-**"An attack granted by Combat Challenge."** Five rows turn on it. The
-feature's ref is in their own prerequisite, so it is not a naming
-problem -- the problem is that a granted basic attack is announced as
-`mba` like any other, and nothing records who granted it. Marked
-`c.on_granted_basic()`, the same symbol two general feats already name.
+**"An attack granted by Combat Challenge."** Four rows turn on it, and
+they are written now: a use carries `granted_by`/`granted_via`, so the
+swing `p7419` hands the fighter is no longer indistinguishable from a
+standard-action `mba`. `CHALLENGE` below is that ref.
 
 **The invigorating keyword.** Four rows turn on a keyword the engine
 does not have, and `Keyword` is read off the enum so the gap is exact.
@@ -222,34 +221,94 @@ def f402(c: Cast) -> None:
     )
 
 
-# -- the two families that are waiting on something -------------------------
+# -- the family that was waiting on a granted swing -------------------------
+
+#: **The row Combat Challenge's punishment is written as.** The feature
+#: itself is the mark (`cf:fighter-weaponmaster-f1`, which is what these
+#: prerequisites name); the swing it allows is `p7419`, and `p7419` is
+#: what calls `c.basic` -- so that is the ref the grant is stamped with.
+CHALLENGE = "p7419"
+
+
+def _challenged(c: Cast, ev: Any) -> list[int]:
+    """Who this use hit, if it was the swing Combat Challenge granted.
+
+    Read off `PowerResolved` rather than `Hit`, because every clause
+    here is "*if you hit*, then ..." and two of them happen after the
+    damage: `Hit` is announced with the blow still in the air and the
+    body has not paid out yet.
+    """
+    if ev.actor != c.me or ev.granted_by != c.me or ev.granted_via != CHALLENGE:
+        return []
+    return [roll.target for roll in ev.rolls if roll.hit]
+
+
+def _granted_swing(c: Cast, ctx: dict[str, Any]) -> bool:
+    """The modifier-context half of the same question."""
+    return (
+        ctx.get("granted_by") == c.me and ctx.get("granted_via") == CHALLENGE
+    )
 
 
 @power("f286", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
+       reach=PERSONAL, target=SELF)
 def f286(c: Cast) -> None:
-    """A rider on the attack one class feature grants. The feature's ref
-    is in this feat's own prerequisite, so it is not a naming problem --
-    a granted basic is announced as `mba` like any other and nothing
-    records who granted it."""
+    """A rider on the swing Combat Challenge grants.
+
+    The Special line -- a shield must be equipped -- is asked when the
+    swing lands rather than when the trait arms, because a fighter can
+    put a shield down mid-fight and the printed condition is about the
+    moment of the blow.
+    """
+    def punished(ev: Any) -> None:
+        if not c.wielding("shield"):
+            return
+        for foe in _challenged(c, ev):
+            c.penalty("attack", 2, on=foe, until=When.SONT)
+
+    c.watch(PowerResolved, punished, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} riposte rider")
 
 
 @power("f300", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
+       reach=PERSONAL, target=SELF)
 def f300(c: Cast) -> None:
-    """Same shape as f286, paying damage rather than a penalty."""
+    """Constitution on the damage of the granted swing, two-handed only.
+
+    A standing modifier rather than a rider on the hit: the printed line
+    adds to the *damage roll*, so it has to be in the roll rather than a
+    second packet after it. The grip is asked inside the gate, which is
+    read at the moment the damage is rolled.
+    """
+    c.bonus(
+        "damage", c.con_mod, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: _granted_swing(c, ctx) and c.wielding("two-handed"),
+    )
 
 
 @power("f306", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
+       reach=PERSONAL, target=SELF)
 def f306(c: Cast) -> None:
-    """Same shape as f286, pushing rather than paying."""
+    """"After dealing damage" is why this waits for the use to resolve
+    rather than answering the `Hit`, which fires before the body pays."""
+    def shoved(ev: Any) -> None:
+        if not c.wielding("shield"):
+            return
+        for foe in _challenged(c, ev):
+            c.push(1, on=foe)
+
+    c.watch(PowerResolved, shoved, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} riposte push")
 
 
 @power("f771", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
+       reach=PERSONAL, target=SELF)
 def f771(c: Cast) -> None:
-    """Same shape as f286, adding a modifier to the granted swing."""
+    """Wisdom on both rolls of the granted swing. No type word is
+    printed, so both are untyped."""
+    gate = lambda ctx: _granted_swing(c, ctx)  # noqa: E731
+    c.bonus("attack", c.wis_mod, on=c.me, until=When.ENCOUNTER, when=gate)
+    c.bonus("damage", c.wis_mod, on=c.me, until=When.ENCOUNTER, when=gate)
 
 
 @power("f755", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -92,7 +92,7 @@ from combat_engine.engine.events import (
     PowerUsed,
     SkillCheck,
 )
-from combat_engine.engine.query import alive, distance_between, holding, team
+from combat_engine.engine.query import alive, allies, distance_between, holding, team
 
 #: A power the spec names in prose with no ref, so nothing can watch it.
 PROSE = ("spec.power_ref()",)
@@ -223,12 +223,12 @@ def f3176(c: Cast) -> None:
 
 
 @power("f3177", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def f3177(c: Cast) -> None:
-    """Four skill bonuses that apply only to one subject matter. Written
-    plain they would be a flat +5 to four skills in every check the
-    character ever makes, which is a much larger feat than the printed
-    one."""
+    """Four lore bonuses about one subject matter. Nothing on a board rolls
+    Arcana, History or Dungeoneering, and the only Insight a fight reads is
+    the passive DC of a bluff -- never a question about a creature's
+    origin. Narrative, not unwritten."""
 
 
 @power("f3178", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -509,10 +509,22 @@ def f3197(c: Cast) -> None:
 
 
 @power("f3198", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
+       reach=PERSONAL, target=SELF)
 def f3198(c: Cast) -> None:
-    """An attack an ally's power hands you is not marked as one when it
-    is rolled, so there is nothing for the bonus to gate on."""
+    """An attack bonus on whatever an ally's power hands this character.
+
+    `granted_by` is on the attack context now. An *ally's* power, so a
+    self-grant is excluded -- a defender punishing an opening hands
+    itself a swing and it carries the same field. Asked per roll, since
+    who is an ally does not change but who granted does.
+    """
+    c.bonus(
+        "attack", 1, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("granted_by", -1) != c.me
+            and ctx.get("granted_by", -1) in allies(c.world, c.me)
+        ),
+    )
 
 
 _F3199 = ("p10592", "p653", "p1000", "p620")
@@ -797,8 +809,11 @@ def f3217(c: Cast) -> None:
 @power("f3218", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=ASSOCIATED)
 def f3218(c: Cast) -> None:
-    """The block prints no Associated Powers line, so the rider has no
-    set of refs to watch. The skill bonus is the whole of what plays."""
+    """The block *does* print an Associated Powers line; the spec does
+    not carry it. An errata block sits between the benefit and the list,
+    and `etl/feat._benefit` breaks at an errata heading and drops the
+    rest of that paragraph -- so the rider has no set of refs to watch.
+    The skill bonus is the whole of what plays."""
     c.bonus("skill:perception", 1, on=c.me, until=When.ENCOUNTER,
             kind="feat")
 
@@ -929,8 +944,10 @@ def f3228(c: Cast) -> None:
 @power("f3230", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=ASSOCIATED)
 def f3230(c: Cast) -> None:
-    """No Associated Powers line, so the once-per-encounter advantage has
-    nothing to hang on. The skill bonus plays."""
+    """No Associated Powers line *in the spec* -- the page prints one and
+    the errata truncation in `etl/feat._benefit` eats it, same as
+    `f3218`. So the once-per-encounter advantage has nothing to hang on.
+    The skill bonus plays."""
     c.bonus("skill:endurance", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
@@ -1093,7 +1110,9 @@ def f3248(c: Cast) -> None:
 @power("f3249", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=ASSOCIATED)
 def f3249(c: Cast) -> None:
-    """No Associated Powers line, so the shift has nothing to ride on."""
+    """No Associated Powers line *in the spec*; the page prints one and
+    the errata truncation in `etl/feat._benefit` eats it, same as
+    `f3218` and `f3230`. So the shift has nothing to ride on."""
     c.bonus("skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER,
             kind="feat")
 

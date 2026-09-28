@@ -611,16 +611,29 @@ def f1851(c: Cast) -> None:
             when=lambda ctx: ctx.get("power") == "p5388")
 
 
-@power("f3051", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
+@power("f3051", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f3051(c: Cast) -> None:
     """A damage bonus on the ranged basic attack `p9732` hands an ally.
 
-    Re-aimed: the ref arrived and was never the hold. `p9732` calls
-    `c.grant_attack(friend, ref=RANGED)` and the shot is rolled inside
-    that call, so the only thing a bonus could gate on is the basic
-    attack's own ref -- which would also pay for every ordinary ranged
-    basic the ally makes, and that is more often than printed."""
+    The hold was real and is closed: the shot `p9732` grants now carries
+    the ref of the row that granted it, so the bonus gates on that
+    rather than on `rba`, which would also have paid for every ordinary
+    shot the ally took.
+
+    A trait rather than an at-will, and the usage goes back to
+    ENCOUNTER with it: nothing here is chosen on a turn.
+    """
+    def granted(ev: Any) -> None:
+        if ev.granted_via != "p9732" or ev.granted_by != c.me:
+            return
+        c.bonus(
+            "damage", 2, kind="power", on=ev.actor, until=When.EOT, once=True,
+            when=lambda ctx: ctx.get("granted_via") == "p9732",
+        )
+
+    c.watch(PowerUsed, granted, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} spirit shot")
 
 
 @power("f1867", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

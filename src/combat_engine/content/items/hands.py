@@ -305,16 +305,19 @@ def i2061p1(c: Cast) -> None:
 
 
 @power("i2061p2", level=4, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.apply_poison()",))
+       reach=PERSONAL, target=SELF, todo=("c.stored_dose()",))
 def i2061p2(c: Cast) -> None:
-    """A dose of poison on a blade has no object and no effect to lay."""
+    """Re-aimed. `c.apply_poison` coats a weapon now, but it coats it with
+    a rider the row supplies -- and this row supplies none. What it
+    applies is whatever dose i2061p1 loaded, and a dose of poison is not
+    a thing the engine counts: the consumable that would be spent has no
+    identity a second row can reach for."""
 
 
 @power("i2673x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i2673x1(c: Cast) -> None:
-    _skills(c, 1, "nature")
+    """Handling animals, and no fight rolls Nature."""
 
 
 @power("i2673p1", level=4, cls=ITEM, usage=DAILY, action=INTERRUPT,
@@ -468,10 +471,10 @@ def i2179x1(c: Cast) -> None:
 
 
 @power("i839x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i839x1(c: Cast) -> None:
-    _skills(c, 2, "athletics")
+    """Climbing. `movement.walk` charges no Athletics check in any mode, so
+    there is no roll in a fight for this to reach."""
 
 
 @power("i839p1", level=5, cls=ITEM, usage=DAILY, action=FREE,
@@ -680,9 +683,11 @@ def i1137p1(c: Cast) -> None:
 
 
 @power("i1259x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF)
 def i1259x1(c: Cast) -> None:
+    """Gaining combat advantage is the only thing this engine rolls a Bluff
+    check for -- against a defender's passive Insight -- so the flat bonus
+    is the printed one and the circumstance excludes nothing."""
     _skills(c, 2, "bluff")
 
 

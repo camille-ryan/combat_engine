@@ -39,6 +39,7 @@ from combat_engine.engine import (
     Cast,
     Condition,
     ConditionEnded,
+    DamageType,
     Dropped,
     Gear,
     Hit,
@@ -54,7 +55,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Position
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import ForcedMove, Moved
+from combat_engine.engine.events import ForcedMove, Moved, PowerResolved
 from combat_engine.engine.grid import distance, neighbours
 from combat_engine.engine.query import allies, enemies, flanked_by, holding
 from combat_engine.engine.types import Forced
@@ -68,9 +69,6 @@ from .styles import among, hit_with_one_of, used_one_of
 #: is -- is never armed. Those rows keep the printed Trigger as text
 #: and answer it with `c.watch`, the shape `p7419` already uses.
 
-#: A swing handed to you by Combat Challenge is announced as `mba` like
-#: any other, and nothing records who granted it. Seven rows already.
-GRANTED = ("c.on_granted_basic()",)
 
 _BIG = (Size.LARGE, Size.HUGE, Size.GARGANTUAN)
 
@@ -702,10 +700,13 @@ def f2331(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        todo=("feat.associated_powers", "c.coup_de_grace(bonus=)"))
 def f2071(c: Cast) -> None:
-    """The one style feat whose list does not resolve, because the page
-    prints none: the benefit says "a power associated with this feat"
-    and no `Associated Powers:` line follows it. So this really is the
-    unknowable case the other thirty were mistaken for.
+    """The list is absent from the spec, but **not** from the page --
+    that diagnosis was wrong. The card prints three members; an errata
+    block sits between the benefit and the list, and `etl/feat._benefit`
+    stops at an errata heading and takes the rest of its paragraph with
+    it, so the list is cut off before the sanitiser ever sees it. Twelve
+    other rows lose theirs the same way. Nothing here can be written
+    until that truncation stops.
 
     Its other clause -- extra damage on a coup de grace -- has the verb
     but no way to add to what one deals.
@@ -723,27 +724,76 @@ def f2332(c: Cast) -> None:
     nothing about which creature it went away from."""
 
 
-# -- everything waiting on a granted basic ----------------------------------
+# -- the swings Combat Challenge hands over ---------------------------------
+
+#: The row the punishment is written as. The feature these prerequisites
+#: name is the mark; `p7419` is the swing it allows, and `p7419` is what
+#: calls `c.basic`, so that is the ref the grant is stamped with.
+CHALLENGE = "p7419"
 
 
-def _granted(ref: str, what: str, *, wants: tuple[str, ...] = GRANTED) -> None:
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=wants)
-    def feat(c: Cast) -> None: ...
+def _challenged(c: Cast, ev: Any) -> list[int]:
+    """Who the swing Combat Challenge granted actually hit."""
+    if ev.actor != c.me or ev.granted_by != c.me or ev.granted_via != CHALLENGE:
+        return []
+    return [roll.target for roll in ev.rolls if roll.hit]
 
-    feat.__name__ = ref
-    feat.__doc__ = (
-        f"{what} A swing handed over by Combat Challenge is announced as "
-        "`mba` like any other and nothing records who granted it."
+
+@power("f1732", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f1732(c: Cast) -> None:
+    """Resistance is shrugged off inside `deal_damage`, so this is a
+    standing waiver gated on the damage context rather than anything
+    hung on the hit. No amount and no type: "all resistances"."""
+    c.ignore_resistance(
+        on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("granted_by") == c.me and ctx.get("granted_via") == CHALLENGE
+        ),
     )
 
 
-_granted("f1732", "Those swings ignore resistance.",
-         wants=("c.on_granted_basic()",))
-_granted("f1736", "A shift after one of them hits.")
-_granted("f2180", "One of them carries a racial power's damage type.")
-_granted("f795", "One of them may switch to thunder or lightning.",
-         wants=("c.on_granted_basic()", "c.deals(when=)"))
+@power("f1736", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f1736(c: Cast) -> None:
+    """"After you hit" -- so the use, not the `Hit`, which is announced
+    with the blow still in the air."""
+    def after(ev: Any) -> None:
+        if _challenged(c, ev):
+            c.shift(1)
+
+    c.watch(PowerResolved, after, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} riposte shift")
+
+
+@power("f2180", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2180(c: Cast) -> None:
+    """Extra damage of the racial power's own type, which is a build
+    choice `c.element` records -- the same read `p1448` itself makes.
+
+    A separate packet rather than a damage modifier, because the type
+    differs from the swing's and `deal_damage` takes one type per
+    packet. The paragon and epic steps are out of scope.
+    """
+    def after(ev: Any) -> None:
+        for foe in _challenged(c, ev):
+            c.flat(3, dtype=c.element(on=c.me) or DamageType.UNTYPED, on=foe)
+
+    c.watch(PowerResolved, after, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} riposte damage")
+
+
+@power("f795", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       todo=("c.race_option()", "c.deals(when=)"))
+def f795(c: Cast) -> None:
+    """**Re-aimed.** The granted swing is readable now -- it carries
+    `granted_via`, and `f1732` beside it gates on exactly that. What is
+    left is the other two thirds of the sentence: which manifestation a
+    genasi is currently in is the choice `rt:r33-manifestation` says is
+    recorded nowhere, and retyping one attack's damage is `c.deals` with
+    a gate, which it does not take."""
 
 
 # -- the rest of the gaps, each named exactly -------------------------------

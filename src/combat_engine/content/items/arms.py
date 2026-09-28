@@ -1096,15 +1096,16 @@ def i2692x1(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        keywords=[Keyword.LIGHTNING, Keyword.THUNDER],
        trigger="you are hit by a melee attack",
-       on=Trigger(Hit, both(targets_me, by_melee), "a melee attack hits you"),
-       dropped=("DamageType.pair()",))
+       on=Trigger(Hit, both(targets_me, by_melee), "a melee attack hits you"))
 def i2692p1(c: Cast) -> None:
-    """Damage of two types at once is one blow that either resistance
-    reduces only if the creature has both, and a `DamageType` is one
-    value -- so it lands as lightning alone."""
+    """The parenthesis on the card is the general rule for a blow of two
+    types, and `dtypes=` is it: resistance and immunity count only as far
+    as they cover both. Paragon numbers are out of scope."""
     foe = _foe(c)
     if foe is not None:
-        c.damage("2d6", dtype=DamageType.LIGHTNING, on=foe)
+        c.damage(
+            "2d6", dtypes=(DamageType.LIGHTNING, DamageType.THUNDER), on=foe
+        )
 
 
 @power("i3101p1", level=8, cls=ITEM, usage=DAILY, action=INTERRUPT,
@@ -1125,12 +1126,27 @@ def i3206x1(c: Cast) -> None:
        reach=Ranged(10), target=NO_TARGET,
        keywords=[Keyword.LIGHTNING, Keyword.THUNDER],
        trigger="an enemy within 10 squares hits you",
-       on=Trigger(Hit, _enemy_within_10_hits_me, "an enemy within 10 hits you"),
-       dropped=("DamageType.pair()", "c.refund_use()"))
+       on=Trigger(Hit, _enemy_within_10_hits_me, "an enemy within 10 hits you"))
 def i3206p1(c: Cast) -> None:
+    """Ten points that are lightning and thunder at once. The second
+    sentence hands the use back rather than never spending it, which is
+    the same outcome a round later than the card describes: `c.restore_use`
+    is the only door, and the use is already gone by the time a row runs.
+
+    What the triggering attack dealt is read off the `Hit`'s live
+    `AttackResult`... which does not carry a type, so it is read off the
+    attacking power's keywords instead -- the card's "deals lightning or
+    thunder damage" and the keyword line are the same sentence.
+    """
     foe = _foe(c)
-    if foe is not None:
-        c.flat(10, dtype=DamageType.LIGHTNING, on=foe)
+    if foe is None:
+        return
+    c.flat(10, dtypes=(DamageType.LIGHTNING, DamageType.THUNDER), on=foe)
+    theirs = get(getattr(c.trigger, "power", "") or "")
+    if theirs is not None and (
+        Keyword.LIGHTNING in theirs.keywords or Keyword.THUNDER in theirs.keywords
+    ):
+        c.restore_use(c.ref)
 
 
 @power("i3212p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,

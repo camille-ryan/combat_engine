@@ -342,6 +342,10 @@ def _wider_crit(c: Cast) -> None:
     )
 
 
+# `f1361` and `f1433` both print a four-member list on the card. Neither
+# list reaches the spec: an errata block sits between the benefit and the
+# list, and `etl/feat._benefit` breaks at an errata heading and takes the
+# rest of that paragraph with it. The skill half of each plays.
 _divine("f1361", "religion", dropped=("feat.associated_powers",))
 _divine("f1363", "insight", clauses={
     "p6980": _bloodied_allies_attack,

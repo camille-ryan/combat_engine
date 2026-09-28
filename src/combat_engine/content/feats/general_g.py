@@ -103,6 +103,14 @@ REROLL = ("c.on_reroll()",)
 PROFICIENCY = ("chargen.proficiency()",)
 #: The preamble and a list of refs, with no clause printed per ref.
 ASSOCIATED = ("feat.associated_powers",)
+#: **The clause a member of the list carries, which is thrown away.**
+#: These cards set the list one member per line as `<name> : <clause>`,
+#: and the clause *is* the feat -- the preamble says only "you gain a
+#: benefit". `build._associated_refs` keeps `part.split(":")[0]` and
+#: drops the rest, and it splits the list on commas where these are
+#: split on newlines, so a clause's own commas are read as members.
+#: What arrives is a list of refs and no rules at all.
+CLAUSE = ("spec.associated_clause()",)
 #: "While you are under the effect of your <power>." Nothing asks which
 #: row laid a live effect.
 UNDER = ("c.effects_on()",)
@@ -926,29 +934,40 @@ def f1071(c: Cast) -> None:
     rather than one working clause and two checks."""
 
 
-# -- the Associated Powers family, printed with no clause -------------------
+# -- the Associated Powers family, whose clauses are thrown away ------------
 
 
-def _associated(ref: str) -> None:
-    """The preamble, a resolved list of refs, and nothing to hang.
+def _associated(ref: str, *, listed: bool = True) -> None:
+    """The preamble, a list of refs, and the rules discarded in transit.
 
-    `f974` carries the same marker because its list is empty; these nine
-    have a list and no benefit printed against any member of it.
+    **Re-aimed.** The old reading was that these cards print no benefit
+    against any member of the list. They do: each member is set on its
+    own line as `<name> : <clause>`, and the clause is the entire feat --
+    the preamble says only "you gain a benefit with any of the following".
+    `build._associated_refs` takes `part.split(":")[0]` and throws the
+    clause away, and it splits on commas where these lists are split on
+    newlines, so the sentences are shredded into fragments and the
+    `(+N above heroic)` count is counting those fragments. So the marker
+    is `spec.associated_clause()`, not the list.
+
+    `listed=False` for the three that lose the whole block as well: an
+    errata paragraph sits above the list and `etl/feat._benefit` breaks
+    at an errata heading, taking the rest of that paragraph with it.
     """
 
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=ASSOCIATED)
+           reach=PERSONAL, target=SELF,
+           todo=CLAUSE if listed else (*ASSOCIATED, *CLAUSE))
     def feat(c: Cast) -> None: ...
 
     feat.__name__ = ref
     feat.__doc__ = _associated.__doc__
 
 
-for _ref in (
-    "f972", "f977", "f980", "f981", "f982",
-    "f985", "f988", "f992", "f994",
-):
+for _ref in ("f972", "f980", "f981", "f982", "f985", "f992", "f994"):
     _associated(_ref)
+for _ref in ("f977", "f988"):
+    _associated(_ref, listed=False)
 
 
 @power("f1113", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1263,10 +1282,20 @@ def f1063(c: Cast) -> None:
 
 
 @power("f1066", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
+       reach=PERSONAL, target=SELF)
 def f1066(c: Cast) -> None:
-    """A bonus on the basic attack a racial feature hands out. Nothing
-    announces a granted basic as distinct from any other."""
+    """Both rolls of the basic attack the racial feature hands out.
+
+    `rt:r24-ferocity` calls `c.basic`, so the swing carries that ref and
+    the gate is the ref rather than "a basic attack", which would also
+    pay for every ordinary one. No type word is printed.
+    """
+    gate = lambda ctx: (  # noqa: E731
+        ctx.get("granted_via") == "rt:r24-ferocity"
+        and ctx.get("granted_by") == c.me
+    )
+    c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER, when=gate)
+    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=gate)
 
 
 @power("f1026", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -424,15 +424,15 @@ def f3562(c: Cast) -> None:
 
 
 @power("f3563", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=CIRCUMSTANCE)
+       reach=PERSONAL, target=SELF)
 def f3563(c: Cast) -> None:
     """"A +2 bonus to attack rolls" with no type word, so untyped; the
     Perception half prints "feat" and gets it. `query.unseen_by` is the
     one question that answers "invisible to me" -- there is no
     `Condition.INVISIBLE`, it is a relation plus what sees through it.
-    The Perception bonus is widened to every Perception check: "actively
-    made to find creatures hidden from you" is finer than `skill:<name>`
-    can cut."""
+    The Perception half is laid flat because the only Perception this
+    engine ever consults is a creature looking for a hider -- there is no
+    other check for the circumstance to exclude."""
     me = c.me
     c.bonus(
         "attack", 2, on=me, until=When.ENCOUNTER,
@@ -1087,16 +1087,20 @@ def f3615(c: Cast) -> None:
 
 @power("f3616", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.power_choice()", "c.apply_poison()"))
+       todo=("chargen.power_choice()",))
 def f3616(c: Cast) -> None:
     """A daily power chosen at build time, paid for with a vial of poison
-    that is prepared during an extended rest. Both ends are `chargen`."""
+    that is prepared during an extended rest. Both ends are `chargen`;
+    re-aimed off `c.apply_poison`, which is about a coated blade in a
+    fight and not about what is in the pack before one."""
 
 
 @power("f3617", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=("c.apply_poison()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def f3617(c: Cast) -> None:
-    """Entirely a recipe learned and a vial made between fights."""
+    """Entirely a recipe learned and a vial made between fights, at the
+    cost of a daily power the character chooses not to keep. Deliberately
+    inert: every clause of it happens during an extended rest."""
 
 
 @power("f3618", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -1366,12 +1370,12 @@ def f3639(c: Cast) -> None:
             when=shadow_through_the_focus)
 
 @power("f3640", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.ability_for(ref)", *CIRCUMSTANCE))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def f3640(c: Cast) -> None:
-    """One half swaps the ability a skill is rolled with, the other is an
-    Arcana check "related to traps or hazards". Neither is a grain
-    `skills.modifier` cuts at."""
+    """Opening a lock and disabling a trap are not fought over, and no
+    fight rolls Thievery or Arcana at all. Both halves are narrative, so
+    the row is declared inert rather than left waiting on an ability swap
+    no check would ever reach."""
 
 
 @power("f3641", level=1, cls="", usage=ENCOUNTER, action=NONE,

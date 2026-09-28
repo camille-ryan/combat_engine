@@ -346,11 +346,14 @@ def f1145(c: Cast) -> None:
 
 
 @power("f1231", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("feat.associated_powers",))
+       reach=PERSONAL, target=SELF, todo=("spec.associated_clause()",))
 def f1231(c: Cast) -> None:
-    """The preamble prints and the clause does not: "you gain a benefit"
-    with one power listed and nothing said about it. Same shape as f974
-    -- the list resolves and there is nothing to hang on it."""
+    """**Re-aimed off `feat.associated_powers`.** The list is not what is
+    missing -- it resolved, and the spec carries the ref. What is missing
+    is the clause beside it: this card sets each member on its own line
+    as `<name> : <clause>`, the clause is the whole benefit, and
+    `build._associated_refs` keeps only the name before the colon. The
+    style family in `general_g` loses its rules the same way."""
 
 
 @power("f2091", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

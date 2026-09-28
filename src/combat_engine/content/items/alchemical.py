@@ -13,16 +13,17 @@ Six judgements run through the file.
 * **"The item's level + 3" is `Attack(printed=)`.** Every attack in the
   slot is that number -- +4 at level 1, +8 at level 5, +13 at level 10 --
   and the printed form says exactly what the page says.
-* **A coating cannot be tied to a weapon.** "Apply this to your weapon or
-  one piece of ammunition, then make a secondary attack against the next
-  creature you hit with it" has no way to ask *which* weapon the swing
-  came from: there is nothing that marks an item as coated. Those rows
-  play, firing on the wielder's next hit whatever it was made with, and
-  carry `dropped=("c.apply_poison()",)`.
-* **Poison in a meal is refused outright.** "The first creature to consume
-  the food or drink within the next hour" is not a thing a fight contains
-  and not a thing a board can answer, so those rows carry
-  `todo=("c.apply_poison()",)` and never play.
+* **A coating is tied to the weapon it is on.** "Apply this to your weapon
+  or one piece of ammunition, then make a secondary attack against the
+  next creature you hit with it" is `c.apply_poison`, which coats one of
+  the things in hand and checks the blow against it. Ammunition is not
+  modelled and does not have to be: the card offers two answers and the
+  row takes the weapon.
+* **Poison in a meal has no combat consequence at all.** "The first
+  creature to consume the food or drink within the next hour" is not a
+  thing a fight contains, and the payout is measured in hours or in
+  extended rests, so those rows are `out_of_combat=True` -- deliberately
+  inert rather than unwritten.
 * **A zone of smoke is two different sentences.** "Totally obscured" is
   `c.zone(blocks_sight=True)`, which the engine has; "lightly obscured" is
   concealment for whoever stands in it, which it does not -- there is no
@@ -352,19 +353,30 @@ def i1299p1(c: Cast) -> None:
 
 @power("i1403p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=PERSONAL, target=SELF,
-       todo=("c.apply_poison()", "c.ignore_insubstantial()"))
+       dropped=("c.ignore_insubstantial()",))
 def i1403p1(c: Cast) -> None:
-    """Both halves are missing: nothing marks a weapon as coated, and
-    nothing sets a creature's resistance to insubstantial aside for one
-    attack."""
+    """The coating and its secondary attack play; what the hit buys does
+    not. Nothing sets a creature's insubstantiality aside for one attack
+    -- `c.ignore_resistance` takes a `DamageType`, and halving every blow
+    is a condition rather than a resistance to a type."""
+
+    def coated(ev: Hit) -> None:
+        if not c.is_kind("undead", on=ev.target):
+            return
+        if not c.is_(Condition.INSUBSTANTIAL, on=ev.target):
+            return
+        c.attack(6, FORT, on=ev.target)
+
+    c.apply_poison(coated)
 
 
 @power("i1530p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.POISON],
-       todo=("c.apply_poison()",))
+       out_of_combat=True)
 def i1530p1(c: Cast) -> None:
-    """Poison in a meal: the attack is made on whoever eats it, which is
-    not a moment a fight has."""
+    """Poison in a meal. Deliberately inert: the attack is made on
+    whoever eats it, against a Perception check, and no creature on a
+    board eats anything. There is no combat clause here to write."""
 
 
 @power("i1551p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -376,16 +388,17 @@ def i1551p1(c: Cast) -> None:
 
 
 @power("i2539p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, dropped=("c.apply_poison()",))
+       reach=PERSONAL, target=SELF)
 def i2539p1(c: Cast) -> None:
-    """The secondary attack fires on the wielder's next hit, whatever it
-    was made with: nothing marks the coated weapon."""
+    """The secondary attack fires on the next hit made with the coated
+    weapon. The card offers a weapon or a piece of ammunition; the row
+    takes the weapon, which is one of the two printed answers."""
 
     def coated(ev: Hit) -> None:
         if c.attack(6, FORT, on=ev.target):
             c.slowed(on=ev.target, until=When.SAVE_ENDS)
 
-    _on_my_next_hit(c, coated)
+    c.apply_poison(coated)
 
 
 @power("i2854p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -474,15 +487,14 @@ def i687p1(c: Cast) -> None:
 
 
 @power("i715p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON],
-       dropped=("c.apply_poison()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON])
 def i715p1(c: Cast) -> None:
 
     def coated(ev: Hit) -> None:
         if c.attack(6, FORT, on=ev.target):
             c.ongoing(5, DamageType.POISON, on=ev.target)
 
-    _on_my_next_hit(c, coated)
+    c.apply_poison(coated)
 
 
 @power("i803p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
@@ -662,7 +674,7 @@ def i925p1(c: Cast) -> None:
 
 
 @power("i1622p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, dropped=("c.apply_poison()",))
+       reach=PERSONAL, target=SELF)
 def i1622p1(c: Cast) -> None:
 
     def coated(ev: Hit) -> None:
@@ -670,7 +682,7 @@ def i1622p1(c: Cast) -> None:
             c.vulnerable(5, DamageType.FIRE, on=ev.target,
                          until=When.SAVE_ENDS)
 
-    _on_my_next_hit(c, coated)
+    c.apply_poison(coated)
 
 
 @power("i1753p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
@@ -705,9 +717,10 @@ def i2883p1(c: Cast) -> None:
 
 @power("i3014p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.POISON],
-       todo=("c.apply_poison()",))
+       out_of_combat=True)
 def i3014p1(c: Cast) -> None:
-    """Poison in a meal, and the attack it makes is 1d6 hours later."""
+    """Poison in a meal, and the attack it makes is 1d6 hours later.
+    Deliberately inert: nothing of it lands inside a fight."""
 
 
 @power("i3312p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -789,9 +802,11 @@ def i469p1(c: Cast) -> None:
 
 
 @power("i1456p1", level=6, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=Melee(1), target=NO_TARGET, todo=("c.apply_poison()",))
+       reach=Melee(1), target=NO_TARGET, out_of_combat=True)
 def i1456p1(c: Cast) -> None:
-    """Poison in a meal, on a one-minute fuse."""
+    """Poison in a meal, on a one-minute fuse and paying out an hour of
+    unconsciousness. Deliberately inert: both clocks are longer than any
+    fight and the eating is not an action a board has."""
 
 
 @power("i2540p1", level=6, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -938,15 +953,14 @@ def i1681p1(c: Cast) -> None:
 
 
 @power("i2591p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON],
-       dropped=("c.apply_poison()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON])
 def i2591p1(c: Cast) -> None:
 
     def coated(ev: Hit) -> None:
         if c.attack(13, FORT, on=ev.target):
             c.weakened(on=ev.target, until=When.EONT)
 
-    _on_my_next_hit(c, coated)
+    c.apply_poison(coated)
 
 
 @power("i2958p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,

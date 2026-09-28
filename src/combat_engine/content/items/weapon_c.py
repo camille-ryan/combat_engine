@@ -98,7 +98,7 @@ from combat_engine.engine import (
 #: package does not re-export. It is the only place "you miss **every**
 #: target" can be asked, so it is imported from the module it lives in
 #: rather than approximated off a single `Miss`.
-from combat_engine.engine.events import PowerResolved
+from combat_engine.engine.events import DamageRolled, PowerResolved
 
 ITEM = "item"
 
@@ -1146,15 +1146,34 @@ def i1676p1(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.THUNDER],
     trigger="you deal damage using this weapon",
     on=Trigger(Hit, by_me, "you hit with this weapon"),
-    dropped=("DamageType.pair()",),
 )
 def i1702p1(c: Cast) -> None:
     """Declared on the `Hit` rather than on `DamageRolled`: the body of the
     attack rolls its damage after the hit is announced, so a one-shot
-    modifier laid here is read by the roll it is meant for. Damage of two
-    types at once cannot be said -- `DamageType` is one word."""
+    modifier laid here is read by the roll it is meant for.
+
+    The retype is the same one-shot, written on the roll itself --
+    `DamageRolled.dtypes` is the blow being two types at once rather than
+    one instead of another, which is what "to fire and thunder" means.
+    "You **can**" is a real choice, so it is offered.
+    """
+    me = c.me
     c.bonus(
-        "damage", 2 * c.enhancement, kind="item", on=c.me, until=When.EOT, once=True
+        "damage", 2 * c.enhancement, kind="item", on=me, until=When.EOT, once=True
+    )
+    if not c.may("make the damage fire and thunder", who=me):
+        return
+    spent: list[bool] = []
+
+    def recolour(ev: DamageRolled) -> None:
+        if ev.source != me or spent:
+            return
+        ev.dtypes = (DamageType.FIRE, DamageType.THUNDER)
+        spent.append(True)
+
+    c.watch(
+        DamageRolled, recolour, until=When.EOT, on=me,
+        window=Window.BEFORE, label=c.ref,
     )
 
 

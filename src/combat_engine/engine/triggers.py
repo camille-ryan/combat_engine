@@ -435,6 +435,32 @@ def by_charge(world: World, me: int, ev: Event) -> bool:
     return bool(getattr(ev, "charge", False))
 
 
+def granted_by_me(world: World, me: int, ev: Event) -> bool:
+    """"When an ally makes an attack you granted." Whose doing was it?
+
+    Reads the provenance `c.grant_attack`, `c.basic` and `c.charge_at`
+    now put on the use. Not `ev.actor`, which names the creature
+    swinging -- the whole point of the question is that those are two
+    different creatures.
+    """
+    return getattr(ev, "granted_by", -1) == me
+
+
+def granted_via(*refs: str) -> Callable[[World, int, Event], bool]:
+    """"The melee basic attack granted by <that row>."
+
+    The ref, not the granter: a defender's punishment grants the
+    defender its own swing, so "granted by me" is true of half the
+    fighter's turn and says nothing. Several refs because one printed
+    feature is sometimes two rows.
+    """
+
+    def check(world: World, me: int, ev: Event) -> bool:
+        return getattr(ev, "granted_via", "") in refs
+
+    return check
+
+
 def leaves_me_out(world: World, me: int, ev: Event) -> bool:
     """Did this attack miss me out entirely?
 

@@ -15,12 +15,15 @@ The other three class-page features are `cf:artificer-items` in
 feat riding on one carries `c.class_feature()` and plays as nothing.
 That is eight of the thirty-seven.
 
-The next commonest gap is the cash-in all three infusions print -- "the
-target can end the effect as a free action to ..." -- which
-`level_0.py` already leaves out of the infusions themselves. Nothing
-ends a live effect early, so those feats carry `c.end_effect()`; without
-it the ally would keep the bonus *and* take the payout, which is the
-one reading of the clause that is certainly wrong.
+The next commonest shape is the cash-in all three infusions print --
+"the target can end the effect as a free action to ..." -- which
+`level_0.py` still leaves out of the infusions themselves. `c.end_effect`
+is the trade and its `None` is the guard: without it the ally would keep
+the bonus *and* take the payout, which is the one reading of the clause
+that is certainly wrong. The two that are still marked are the two the
+card gives **no moment** for -- the ally may take the trade at any time,
+which is `c.endable` with a payout, and nothing can hand `c.endable` the
+effect to arm because nothing asks what a creature is under.
 """
 
 from __future__ import annotations
@@ -45,10 +48,12 @@ from combat_engine.engine import (
     Keyword,
     Moved,
     PowerUsed,
+    SavingThrow,
     Summoned,
     TempHP,
     Trigger,
     When,
+    Window,
     power,
 )
 from combat_engine.engine.dsl import get
@@ -64,8 +69,6 @@ INFUSIONS = (HEAL_INFUSION, AC_INFUSION, RESIST_INFUSION)
 
 #: A class-page feature with no row: `cf:artificer-items` in blocked.json.
 FEATURE = ("c.class_feature()",)
-#: "The target can end the effect as a free action to ...".
-CASH_IN = ("c.end_effect()",)
 
 
 def _ladder(level: int) -> int:
@@ -290,45 +293,91 @@ def f2111(c: Cast) -> None:
     hold f822 named on the other side."""
 
 
-@power("f3023", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=CASH_IN,
+@power("f3023", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you use p10187",
        on=Trigger(PowerUsed, _used(RESIST_INFUSION), "you use that infusion"))
 def f3023(c: Cast) -> None:
     """A second resistance beside the one the power grants, "equal to the
     resistance ordinarily granted" -- so the same ladder, read off level.
 
-    The saving-throw clause is dropped: it trades the effect away for a
-    1d6, and nothing ends a live effect early.
+    The saving-throw clause trades the infusion away for a 1d6 on the
+    roll. `SavingThrow` is announced before it is acted on and `saved` is
+    read back, so the extra die is applied there rather than by rolling
+    again. Offered only on a save that is failing: adding to one that has
+    already succeeded spends the infusion for nothing, and the printed
+    "can" is a choice rather than a reflex.
     """
     for who in c.trigger.targets:
         c.resist(_ladder(c.level), DamageType.RADIANT,
                  until=When.ENCOUNTER, on=who)
 
+        def steady(ev: SavingThrow, who: int = who) -> None:
+            if ev.actor != who or ev.saved:
+                return
+            if not c.may("spend the infusion for 1d6", who=who, default=False):
+                return
+            if c.end_effect(on=who, against=RESIST_INFUSION) is None:
+                return
+            ev.saved = ev.natural + ev.bonus + c.roll("1d6") >= 10
+
+        c.watch(SavingThrow, steady, until=When.ENCOUNTER,
+                window=Window.BEFORE)
+
 
 @power("f3033", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=CASH_IN)
+       reach=PERSONAL, target=SELF)
 def f3033(c: Cast) -> None:
-    """An ally trades the infusion in for 1d8 on a melee hit. The hit is
-    declarable and `c.may` asks the ally -- but the trade is the whole
-    point, and without ending the effect the 1d8 would be free on every
-    melee hit for the rest of the fight."""
+    """An ally trades the infusion in for 1d8 on a melee hit.
+
+    The printed moment is the hit, so this is a watch rather than a
+    granted free action, and the trade is `c.end_effect` -- its `None`
+    is the ally not being under either infusion, which is what stops the
+    1d8 being free on every melee hit for the rest of the fight.
+
+    Melee is read off the row that made the hit: the damage context
+    carries no reach and `Hit` carries no branch."""
+    me = c.me
+
+    def cash_in(ev: Hit) -> None:
+        if ev.attacker == me or ev.attacker not in c.allies():
+            return
+        p = get(ev.power)
+        if p is None or p.reach.kind != "melee":
+            return
+        if not c.may("spend the infusion for 1d8", who=ev.attacker,
+                     default=False):
+            return
+        for infusion in (AC_INFUSION, RESIST_INFUSION):
+            if c.end_effect(on=ev.attacker, against=infusion) is not None:
+                c.flat(c.roll("1d8"), on=ev.target)
+                return
+
+    c.watch(Hit, cash_in, until=When.ENCOUNTER, on=me)
 
 
 @power("f3034", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=CASH_IN)
+       reach=PERSONAL, target=SELF, todo=("c.effects_on()",))
 def f3034(c: Cast) -> None:
-    """The same trade paying insubstantial instead, gated on a racial
-    power still being unspent -- which `c.expended` could answer."""
+    """Re-aimed. The card prints no moment for this trade: the ally may
+    take it as a free action whenever it likes, which is `c.endable` --
+    a `drop` on the ally's own action menu with `then=` as the payout.
+
+    What is missing is a step before that. `c.endable` takes the effect
+    itself, `c.end_effect` is the only thing that finds one by label and
+    it ends what it finds, and nothing asks what a creature is currently
+    under. The gate on p2482 being unspent is `c.expended` and works."""
 
 
 @power("f3038", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.end_effect()", "c.reroll_attack(on=)"))
+       todo=("c.reroll_attack(on=)",))
 def f3038(c: Cast) -> None:
-    """The same trade, paying a forced reroll of the attack that hit the
-    ally. Two holds rather than one: `c.reroll_attack` rerolls the
-    caster's own roll and takes no other creature."""
+    """Re-aimed. The trade itself is `c.end_effect` now and the moment is
+    printed -- the ally is hit by a melee attack -- but the whole payout
+    is a reroll of somebody else's attack roll, and `c.reroll_attack`
+    rerolls the caster's own and takes no other creature. Writing the
+    row without it would spend the infusion and buy nothing."""
 
 
 # -- riders on the infusion that heals --------------------------------------

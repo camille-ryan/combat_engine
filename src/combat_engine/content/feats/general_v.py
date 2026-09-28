@@ -1539,13 +1539,21 @@ def f3554(c: Cast) -> None:
 
 
 @power("f3555", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF)
 def f3555(c: Cast) -> None:
-    """A bonus that depends on what the check is *for* -- detecting a
-    hidden enemy rather than noticing anything at all -- has nowhere to
-    hang: `c.check` takes a skill and a DC and no purpose. Sleep is not a
-    state a fight has."""
-    c.bonus("skill:perception", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
+    """Every Perception this engine consults is one creature looking for a
+    hidden one, so "to detect a hidden enemy" narrows nothing here and the
+    whole condition left to say is the adjacent ally holding the same feat,
+    which `c.feat` asks. Two feat bonuses do not stack, so the second is
+    the full +4 rather than another +2. Sleep is not a state a fight has."""
+    me = c.me
+    c.bonus("skill:perception", 2, kind="feat", on=me, until=When.ENCOUNTER)
+    c.bonus(
+        "skill:perception", 4, kind="feat", on=me, until=When.ENCOUNTER,
+        when=lambda ctx: any(
+            c.adjacent(to=a) and c.feat("f3555", on=a) for a in c.allies()
+        ),
+    )
 
 
 @power("f3556", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -908,7 +908,13 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         eff = world.effects.live.get(action.subject or -1)
         if eff is None:
             return False
+        payout = eff.drop_then
         world.effects.end(eff, "ended deliberately")
+        # After the end, not before: the printed trades read "end the
+        # effect to gain X", and a payout that lays an effect of its own
+        # must not be swept up by the ending it was paid for.
+        if payout is not None:
+            payout()
         return True
 
     if action.kind == "second_wind":

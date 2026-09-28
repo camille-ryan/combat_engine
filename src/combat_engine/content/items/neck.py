@@ -971,14 +971,25 @@ def i502x1(c: Cast) -> None:
 @power("i502p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(1), target=ONE_CREATURE, keywords=[Keyword.CHARM],
        attack=Attack(CHA, vs=WILL),
-       dropped=("c.interpose()", "c.end_effect()"))
+       dropped=("c.interpose()",))
 def i502p1(c: Cast) -> None:
     """"The amulet's enhancement bonus" is added through `c.strike(plus=)`,
-    because the header is data and the plus is a column. The interposition
-    and the clause that ends the hold when the target takes damage both
-    want verbs the engine has not got."""
-    if c.strike(plus=c.enhancement):
-        c.cannot_attack(against=c.me, until=When.SAVE_ENDS)
+    because the header is data and the plus is a column. The hold ends the
+    first time the target takes damage from anything at all, which is the
+    printed "from any source".
+
+    Dropped: the interposition, which retargets somebody else's attack
+    onto the charmed creature."""
+    if not c.strike(plus=c.enhancement):
+        return
+    foe = c.target
+    charmed = c.cannot_attack(against=c.me, until=When.SAVE_ENDS)
+
+    def struck(ev: DamageApplied) -> None:
+        if ev.target == foe:
+            c.end_effect(charmed)
+
+    c.watch(DamageApplied, struck, until=When.ENCOUNTER, once=True)
 
 
 @power("i832p1", level=5, cls=ITEM, usage=DAILY, action=REACTION,
@@ -1510,15 +1521,15 @@ def i914p1(c: Cast) -> None:
 
 
 @power("i916p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.end_effect()",))
+       reach=PERSONAL, target=SELF)
 def i916p1(c: Cast) -> None:
-    """The stun is laid by the watch; ending the speed bonus early is the
-    clause with no verb, so a wearer who attacks is stunned and fast rather
-    than stunned and slow."""
-    c.bonus("speed", 5, on=c.me, until=When.EONT, kind="power")
+    """A wearer who attacks is stunned and loses the speed in the same
+    breath -- "this effect ends and you are stunned"."""
+    fast = c.bonus("speed", 5, on=c.me, until=When.EONT, kind="power")
 
     def swung(ev: AttackDeclared) -> None:
         if ev.attacker == c.me:
+            c.end_effect(fast)
             c.stunned(on=c.me, until=When.EONT)
 
     c.watch(AttackDeclared, swung, until=When.EONT, on=c.me, once=True)

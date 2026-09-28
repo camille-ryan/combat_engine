@@ -38,7 +38,9 @@ from combat_engine.engine import (
     Cast,
     CloseBurst,
     Keyword,
+    PowerResolved,
     Trigger,
+    TurnEnd,
     When,
     get,
     power,
@@ -156,15 +158,36 @@ def f669b(c: Cast) -> None:
 
 
 @power("f670", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.end_effect()",))
+       reach=PERSONAL, target=SELF)
 def f670(c: Cast) -> None:
     """Another class's oath once per encounter, and the spec names it by
     ref. The granted row is an encounter power of its own, so it carries
     the printed limit and needs no `uses=`.
 
-    Dropped: the feat shortens the oath to the end of your next turn,
-    and nothing cuts a duration another row laid."""
+    The feat shortens the oath to the end of your next turn. Nothing
+    re-clocks an effect another row laid, so the shortening is a clock of
+    its own: a turn counter carrying the same latch `When.EONT` has --
+    sworn on your own turn, the current turn's end is skipped -- which
+    then ends every hold p3069 stamped with its ref."""
     c.grant_row("p3069", on=c.me, until=When.ENCOUNTER)
+
+    def sworn(ev: PowerResolved) -> None:
+        if ev.actor != c.me or ev.power != "p3069":
+            return
+        skip = [c.turn_of() == c.me]
+
+        def expire(end: TurnEnd) -> None:
+            if end.actor != c.me:
+                return
+            if skip[0]:
+                skip[0] = False
+                return
+            while c.end_effect(on=c.me, against="p3069") is not None:
+                pass
+
+        c.watch(TurnEnd, expire, until=When.ENCOUNTER, on=c.me)
+
+    c.watch(PowerResolved, sworn, until=When.ENCOUNTER, on=c.me)
 
 
 @power("f671", level=1, cls="", usage=ENCOUNTER, action=FREE,

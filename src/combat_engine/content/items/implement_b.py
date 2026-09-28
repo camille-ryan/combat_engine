@@ -26,8 +26,8 @@ Three judgements run through the whole file.
 Recurring gaps, each marked with the symbol it wants rather than
 approximated: `c.flurry_of_blows()`, `c.pact_boon()`, `c.fell_might()`,
 `c.dragon_breath()`, `c.regain_points()`, `c.store_points()`,
-`c.tome_powers()` and `DamageType.pair()` -- the last for "ongoing 5 fire
-and radiant damage", which is one number of two types and not two numbers.
+and `c.tome_powers()`. "Ongoing 5 fire and radiant damage" is one number
+of two types and not two numbers, and `c.ongoing(dtypes=)` is it.
 """
 
 from __future__ import annotations
@@ -1046,15 +1046,18 @@ def i1588p1(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.RADIANT],
     trigger="you hit an enemy with an implement power using this holy symbol",
     on=Trigger(Hit, by_me, "you hit with this holy symbol"),
-    dropped=("DamageType.pair()",),
 )
 def i1594p1(c: Cast) -> None:
     """"Ongoing 5 fire and radiant" is five damage of two types at once,
-    not five of each: two `c.ongoing` calls would be ten a turn and would
-    take two saves to shake off. The radiant half is dropped."""
+    not five of each, and `c.ongoing(dtypes=)` is that: one burn, one
+    save, shrugged off only as far as the creature resists both. Paragon
+    numbers are out of scope."""
     foe = _struck(c)
     if foe is not None:
-        c.ongoing(5, DamageType.FIRE, on=foe, until=When.SAVE_ENDS)
+        c.ongoing(
+            5, dtypes=(DamageType.FIRE, DamageType.RADIANT),
+            on=foe, until=When.SAVE_ENDS,
+        )
 
 
 @power(
@@ -2629,13 +2632,14 @@ def i3175x1(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     trigger="you hit a target with an attack using this orb",
     on=Trigger(Hit, by_me, "you hit with this orb"),
-    dropped=("c.end_effect()",),
 )
 def i3175p1(c: Cast) -> None:
     """"During which it hit you or one of your allies" is a fact about a
     whole turn, so a flag is set on the hit and read at the turn's end.
-    Ending the effect early as a minor action is the dropped clause --
-    nothing takes a standing watch back off."""
+
+    Three watches hold the power up and all three have to go together, so
+    the first is the one made `c.endable` and its deliberate end takes the
+    other two with it."""
     foe = _struck(c)
     if foe is None:
         return
@@ -2655,9 +2659,17 @@ def i3175p1(c: Cast) -> None:
         if ev.actor == foe:
             c.spend_surge(on=c.me)
 
-    c.watch(Hit, hit_us, until=When.ENCOUNTER)
-    c.watch(TurnEnd, turn_over, until=When.ENCOUNTER)
-    c.watch(Dropped, fell, until=When.ENCOUNTER)
+    holds = [
+        c.watch(Hit, hit_us, until=When.ENCOUNTER),
+        c.watch(TurnEnd, turn_over, until=When.ENCOUNTER),
+        c.watch(Dropped, fell, until=When.ENCOUNTER),
+    ]
+
+    def dismiss() -> None:
+        for hold in holds[1:]:
+            c.end_effect(hold)
+
+    c.endable(holds[0], then=dismiss)
 
 
 @power(
@@ -2872,17 +2884,19 @@ def i3432x1(c: Cast) -> None:
     keywords=[Keyword.COLD],
     trigger="you hit an adjacent enemy with an attack using this ki focus",
     on=Trigger(Hit, by_me, "you hit with this ki focus"),
-    dropped=("c.end_effect()",),
 )
 def i3432p1(c: Cast) -> None:
     """"Until it takes damage" is `c.cure` on a damage watch; the extra
     cold is a second watch with the shorter duration, because only that
-    half stops at the end of your next turn. Shaking it off with a
-    standard action is the dropped clause."""
+    half stops at the end of your next turn. "Until it uses a standard
+    action to end this effect" is `c.endable`, and it is the target who is
+    offered the drop because the hold sits on the target."""
     foe = _struck(c)
     if foe is None or not c.adjacent(to=foe):
         return
-    c.immobilized(on=foe, until=When.ENCOUNTER)
+    c.endable(
+        c.immobilized(on=foe, until=When.ENCOUNTER), ActionType.STANDARD
+    )
     freed: list[int] = []
     paid: list[int] = []
 
@@ -3439,17 +3453,18 @@ def i2624p1(c: Cast) -> None:
         _resolved_by_me(Keyword.LIGHTNING, Keyword.THUNDER),
         "a lightning or thunder power of yours resolves",
     ),
-    dropped=("DamageType.pair()",),
 )
 def i2629p1(c: Cast) -> None:
-    """One 1d8 of two types, not two rolls; the thunder half of the type
-    is dropped. "Every creature" includes allies. A free action answering
-    a trigger is not aimed anywhere, so `c.area` can come back empty and
-    the blast is measured from the wielder instead."""
+    """One 1d8 that is lightning *and* thunder, not two rolls. "Every
+    creature" includes allies. A free action answering a trigger is not
+    aimed anywhere, so `c.area` can come back empty and the blast is
+    measured from the wielder instead."""
     area = c.area() or spread({c.here}, 3)
     for who in c.in_squares(area):
         if who != c.me:
-            c.damage("1d8", dtype=DamageType.LIGHTNING, on=who)
+            c.damage(
+                "1d8", dtypes=(DamageType.LIGHTNING, DamageType.THUNDER), on=who
+            )
 
 
 @power(
@@ -3580,16 +3595,18 @@ def i2724x1(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.RADIANT],
     trigger="you hit an enemy with a primal daily attack power using this totem",
     on=Trigger(Hit, by_me, "you hit with this totem"),
-    dropped=("DamageType.pair()",),
 )
 def i2724p1(c: Cast) -> None:
-    """One burn of two types, not two burns; the radiant half of the type
-    is dropped rather than doubling the damage and the saves."""
+    """One burn of two types, not two burns -- so one number a turn and
+    one saving throw, which is what `dtypes=` says."""
     foe = _struck(c)
     if foe is None:
         return
     c.blinded(on=foe, until=When.SAVE_ENDS)
-    c.ongoing(2 * c.enhancement, DamageType.FIRE, on=foe, until=When.SAVE_ENDS)
+    c.ongoing(
+        2 * c.enhancement, dtypes=(DamageType.FIRE, DamageType.RADIANT),
+        on=foe, until=When.SAVE_ENDS,
+    )
 
 
 @power(
@@ -3893,16 +3910,17 @@ def i3435x1(c: Cast) -> None:
     keywords=[Keyword.ACID, Keyword.FIRE],
     trigger="you bloody an enemy with an implement attack using this ki focus",
     on=Trigger(DamageApplied, by_me, "you damage an enemy"),
-    dropped=("DamageType.pair()",),
 )
 def i3435p1(c: Cast) -> None:
     """"You bloody" is read off the damage -- `Bloodied` names no source.
-    One burn of two types; the fire half of the type is dropped."""
+    One burn that is acid and fire at once, which is one save and one
+    number rather than two of each."""
     ev = c.trigger
     if not _just_bloodied(c, ev):
         return
     c.ongoing(
-        2 + c.enhancement, DamageType.ACID, on=ev.target, until=When.SAVE_ENDS
+        2 + c.enhancement, dtypes=(DamageType.ACID, DamageType.FIRE),
+        on=ev.target, until=When.SAVE_ENDS,
     )
 
 

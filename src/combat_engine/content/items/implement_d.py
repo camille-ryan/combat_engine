@@ -29,9 +29,9 @@ these rows:
 
 Recurring gaps, each named with the symbol it wants rather than
 approximated: `c.ignore_resistance()`, `c.ignore_insubstantial()`,
-`c.tome_powers()`, `c.reshape_area()`, `c.make_critical()`,
-`DamageType.pair()` -- the last for "ongoing 5 fire **and** necrotic
-damage", which is one number of two types and not two numbers.
+`c.tome_powers()`, `c.reshape_area()` and `c.make_critical()`. "Ongoing 5
+fire **and** necrotic damage" is one number of two types and not two
+numbers, and `c.ongoing(dtypes=)` is it.
 """
 
 from __future__ import annotations
@@ -600,16 +600,20 @@ def i3201p2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("DamageType.pair()",),
 )
 def i3461x1(c: Cast) -> None:
     """`AttackRolled` carries the die itself, which is the only place a
-    natural 1 can be read. "Cold and lightning damage" is one number of two
-    types and the engine has one type per blow, so it lands as cold."""
+    natural 1 can be read. "Cold and lightning damage" is one number that
+    is both, so the wielder's own cold resistance alone does not stop
+    it."""
 
     def fumble(ev: AttackRolled) -> None:
         if ev.attacker == c.me and ev.natural == 1:
-            c.flat(_item_level(c), dtype=DamageType.COLD, on=c.me)
+            c.flat(
+                _item_level(c),
+                dtypes=(DamageType.COLD, DamageType.LIGHTNING),
+                on=c.me,
+            )
 
     c.watch(AttackRolled, fumble, until=When.ENCOUNTER)
 
@@ -2185,16 +2189,15 @@ def i3343x1(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.NECROTIC],
     trigger="you hit with a m880a0 power using this ki focus",
     on=Trigger(Hit, _hit_with("m880a0"), "you hit with that power"),
-    dropped=("DamageType.pair()",),
 )
 def i3343p1(c: Cast) -> None:
     """The trigger is declared against the ref the spec prints. "Ongoing 5
-    fire and necrotic damage" is one number of two types and `c.ongoing`
-    takes one, so it burns as fire. Paragon numbers are out of scope."""
+    fire and necrotic damage" is one number of two types, which is one
+    burn and one save. Paragon numbers are out of scope."""
     foe = _struck(c)
     if foe is None:
         return
-    c.ongoing(5, DamageType.FIRE, on=foe)
+    c.ongoing(5, dtypes=(DamageType.FIRE, DamageType.NECROTIC), on=foe)
     c.no_healing(on=foe, until=When.SAVE_ENDS)
 
 

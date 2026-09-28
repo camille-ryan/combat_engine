@@ -36,6 +36,8 @@ from combat_engine.engine import (
     ActionType,
     AreaBurst,
     Attack,
+    AttackDeclared,
+    AttackRolled,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -827,12 +829,19 @@ def p16541(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ILLUSION, Keyword.SHADOW],
-    dropped=("c.end_effect()",),
 )
 def p16544(c: Cast) -> None:
-    """"Until you attack" needs an effect a body can end; the clock half of
-    the duration stands."""
-    c.conceal(on=c.me, until=When.EONT, total=True)
+    """Concealment is a modifier rather than the `HIDDEN_FROM` relation
+    `resolve.attack` clears, so "until you attack" is a watch of its own.
+    Ending it on the declaration is safe: concealment penalises attacks
+    *against* the concealed creature and is never read on its own swing."""
+    hidden = c.conceal(on=c.me, until=When.EONT, total=True)
+
+    def swung(ev: AttackDeclared) -> None:
+        if ev.attacker == c.me:
+            c.end_effect(hidden)
+
+    c.watch(AttackDeclared, swung, until=When.EONT, on=c.me, once=True)
 
 
 # -- r44 --------------------------------------------------------------------
@@ -1053,10 +1062,13 @@ def p15835(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ILLUSION],
-    dropped=("c.end_effect()",),
 )
 def p15838(c: Cast) -> None:
-    """"Until you attack" needs an effect a body can end."""
+    """"Until you attack" needs no watch here and must not have one:
+    invisibility is held as `HIDDEN_FROM` and `resolve.attack` clears it
+    for whoever swung, at the point in the swing where the attack has
+    already had the benefit. A row ending the hold on `AttackDeclared`
+    would take the advantage off the very attack that spends it."""
     c.invisible(until=When.EONT)
 
 
@@ -1162,21 +1174,33 @@ def p16472(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.CONJURATION],
-    dropped=("DamageRolled.vs", "c.end_effect()"),
+    dropped=("DamageRolled.vs",),
 )
 def p16475(c: Cast) -> None:
-    """The shield is a pool of hit points read off a healing surge. Nothing
-    on the damage event says which defence was hit, so every blow may be
-    soaked; and when the pool runs out the two bonuses should go with it."""
+    """The shield is a pool of hit points read off a healing surge, and it
+    lasts "until it is reduced to 0 hit points" -- so the two bonuses and
+    the soak all end together when the pool empties.
+
+    Dropped: nothing on the damage event says which defence was hit, so
+    every blow may be soaked rather than only those against AC or
+    Reflex."""
     pool = [c.surge_value()]
-    c.bonus(AC, 2, kind="power", on=c.me, until=When.ENCOUNTER)
-    c.bonus(REF, 2, kind="power", on=c.me, until=When.ENCOUNTER)
+    holds = [
+        c.bonus(AC, 2, kind="power", on=c.me, until=When.ENCOUNTER),
+        c.bonus(REF, 2, kind="power", on=c.me, until=When.ENCOUNTER),
+    ]
 
     def soak(ev: DamageRolled) -> None:
-        if ev.target == c.me and pool[0] > 0:
-            pool[0] -= c.reduce(min(pool[0], ev.amount), ev)
+        if ev.target != c.me or pool[0] <= 0:
+            return
+        pool[0] -= c.reduce(min(pool[0], ev.amount), ev)
+        if pool[0] <= 0:
+            for hold in holds:
+                c.end_effect(hold)
 
-    c.watch(DamageRolled, soak, until=When.ENCOUNTER, window=Window.BEFORE)
+    holds.append(
+        c.watch(DamageRolled, soak, until=When.ENCOUNTER, window=Window.BEFORE)
+    )
 
 
 # -- r67 --------------------------------------------------------------------
@@ -1244,15 +1268,23 @@ def p16657(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_ALLY,
-    dropped=("Target.kind", "c.end_effect()"),
+    dropped=("Target.kind",),
 )
 def p16660(c: Cast) -> None:
     """Targets the wielder, there being no target kind for a piece of gear.
-    The armour bonus should also end when an attack against AC lands; only
-    the encounter clock ends it here. The printed requirement -- that this
-    is used during a rest -- is not a question a board can be asked."""
+    The armour bonus ends when an attack against AC hits the wearer, which
+    is read off `AttackRolled` -- `Hit` does not say which defence it beat.
+    The printed requirement -- that this is used during a rest -- is not a
+    question a board can be asked."""
     if c.choose(["armour", "weapon"], "what the power is used on") == "armour":
-        c.bonus(AC, 2, kind="power", until=When.ENCOUNTER)
+        worn = c.bonus(AC, 2, kind="power", until=When.ENCOUNTER)
+        wearer = c.target
+
+        def landed(ev: AttackRolled) -> None:
+            if ev.target == wearer and ev.vs is AC and ev.total >= ev.defence:
+                c.end_effect(worn)
+
+        c.watch(AttackRolled, landed, until=When.ENCOUNTER, once=True)
         return
     c.bonus("attack", 2, kind="power", until=When.ENCOUNTER, once=True)
     c.bonus("damage", 2, kind="power", until=When.ENCOUNTER, once=True)

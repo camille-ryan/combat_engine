@@ -44,6 +44,8 @@ from combat_engine.engine import (
     Cast,
     CloseBlast,
     CloseBurst,
+    Condition,
+    ConditionApplied,
     DamageType,
     Defences,
     Dropped,
@@ -59,6 +61,7 @@ from combat_engine.engine import (
     get,
     power,
 )
+from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.query import distance_between, team
 
 DIVINE = [Keyword.DIVINE]
@@ -420,18 +423,56 @@ def f534(c: Cast) -> None:
 
 
 @power("f603", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-    reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
+    reach=PERSONAL, target=SELF)
 def f603(c: Cast) -> None:
-    """A cumulative bonus on each melee basic attack granted by one named
-    class feature. The spec names that feature in prose with no ref, so
-    there is nothing to watch for."""
+    """A cumulative bonus on each melee basic attack `p3322` grants.
+
+    Counted on `PowerResolved` rather than `PowerUsed`, which is the
+    printed "future attack rolls": a use is announced before its own
+    roll, so counting there would pay the bonus to the swing that earned
+    it. Each step is its own untyped +1 -- untyped bonuses stack, which
+    is what "cumulative" means -- and the cap is the counter.
+
+    "Resets at the end of the encounter" is the duration; "or if you are
+    rendered unconscious" is `c.end_effect` on each step laid so far,
+    which is why they are kept rather than laid and forgotten.
+    """
+    steps: list[Any] = []
+
+    def swung(ev: Any) -> None:
+        if ev.actor != c.me or ev.granted_via != "p3322" or len(steps) >= 3:
+            return
+        steps.append(c.bonus(
+            "attack", 1, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("granted_via") == "p3322",
+        ))
+
+    def collapsed(ev: Any) -> None:
+        if ev.target != c.me or ev.condition is not Condition.UNCONSCIOUS:
+            return
+        for held in steps:
+            c.end_effect(held, why=f"{c.ref} resets")
+        steps.clear()
+
+    c.watch(PowerResolved, swung, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} aegis swings")
+    c.watch(ConditionApplied, collapsed, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} reset")
 
 
 @power("f619", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-    reach=PERSONAL, target=SELF, todo=("c.on_granted_basic()",))
+    reach=PERSONAL, target=SELF, todo=("c.triggering_attacker()",))
 def f619(c: Cast) -> None:
-    """Same shape as f603, on the other half of the same class feature and
-    blocked on the same missing ref."""
+    """**Re-aimed.** This was never about a granted attack -- `f603`'s
+    half of the same feature was, and that one is written now.
+
+    `p3323` is declared as a minor action that arms a watcher, because
+    what it does is stand ready; the printed immediate interrupt is that
+    watcher firing. So `PowerUsed` for `p3323` is announced when the
+    aegis is placed, hours before anything triggers it, and the foe
+    "that triggered the p3323 immediate interrupt" is a local inside a
+    closure that emits nothing. The gap is the same one four other rows
+    name: who threw the blow an interrupt answered."""
 
 
 @power("f650", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

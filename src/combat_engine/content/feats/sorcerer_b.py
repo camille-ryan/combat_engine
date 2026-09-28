@@ -356,11 +356,19 @@ def f1160(c: Cast) -> None:
 
 
 @power("f2026", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("DamageType.pair()", "c.deals(ref=)"))
+       reach=PERSONAL, target=SELF, todo=("events.ShortRested",))
 def f2026(c: Cast) -> None:
     """Gives `f2023b` a two-type damage line sized by the source's own
-    damage bonus. Both refs exist; what does not is a damage type that is
-    two types at once, or a way to hand one to a named row."""
+    damage bonus.
+
+    Re-aimed. Two types at once is `c.damage(dtypes=)` now, and handing
+    a damage line to a named row is an ordinary `Hit` trigger against
+    that ref -- `invoker_b.f2032` already rides this very card that way.
+    What is left is the number: the bonus belongs to `cf:sorcerer-f0s0`,
+    which is refused in play because its phase is chosen at a rest
+    nothing announces, so there is no amount to deal. Same symbol
+    `f1160` above waits on.
+    """
 
 
 @power("f3433", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
