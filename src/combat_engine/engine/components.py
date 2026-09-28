@@ -194,6 +194,13 @@ class Trap:
     ref: str = ""
     #: A pressure plate that has gone off and not reset.
     sprung: bool = False
+    #: The printed `Perception DC` to notice it before it fires, or `None`
+    #: for a trap whose block prints none -- 275 of the 631 do, and the
+    #: honest reading of that is **cannot be noticed in advance** rather
+    #: than a guessed number. Never derived: across the 356 that print one
+    #: the DC is not a function of level, so a formula would be wrong by
+    #: ten either way on the number that decides what a player is shown.
+    perception_dc: int | None = None
 
 
 @dataclass

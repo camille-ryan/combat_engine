@@ -349,6 +349,10 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
     _restart(page, AIMLESS_SEED)
     _check_aimless_area(page, check, served[-1] if served else None, calls)
 
+    # A trap the party has spotted must be on the board and hoverable.
+    _restart(page, TRAP_SEED)
+    _check_things(page, check, served[-1] if served else None)
+
     # Play on, so attacks happen and the log has a fight in it rather than a
     # first turn. Clicking real buttons, because that is what is being tested.
     before_lines = page.locator("#log .narration").count()
@@ -734,6 +738,54 @@ def _check_aimless_area(page, check: Checks, state: dict | None,  # noqa: ANN001
     )
 
 
+def _check_things(page, check: Checks, state: dict | None) -> None:  # noqa: ANN001
+    """A trap, a piece of scenery or a conjuration must reach the board.
+
+    None of the three has `Health`, so none arrives through `ActorDTO` and
+    the page could draw none of them. A player walked onto an invisible
+    hazard; worse, scenery and conjurations own their squares through
+    `grid.place`, so they were already blocking movement with nothing drawn
+    to explain it.
+
+    A trap is only shipped once it is sprung or somebody has noticed it, so
+    finding one here is also a check on the Perception gate: the board this
+    seed draws has one the party can see.
+    """
+    things = ((state or {}).get("board") or {}).get("things") or []
+    if not things:
+        check.that(False, "the board's non-creatures reached the page",
+                   "no trap, scenery or conjuration was served at all")
+        return
+    check.that(True, f"{len(things)} non-creature(s) served: "
+                     f"{sorted({t['kind'] for t in things})}")
+    drawn = page.locator("#board .thing")
+    check.that(
+        drawn.count() >= sum(len(t["squares"]) for t in things),
+        f"and the board drew {drawn.count()} of their squares",
+        "served but not drawn -- renderBoard is not reading board.things",
+    )
+    trap = next((t for t in things if t["kind"] == "trap"), None)
+    if trap is None:
+        check.that(True, "no trap on this board (skipped)")
+        return
+    # An unsprung trap being visible at all means a character noticed it,
+    # which is the whole of the information decision in #224.
+    check.that(
+        not trap["sprung"],
+        "the trap is one the party spotted rather than one that has fired",
+        "this seed's trap has already gone off -- the gate is untested here",
+    )
+    spot = page.locator("#board .thing-trap").first
+    spot.hover()
+    page.wait_for_timeout(300)
+    card = page.locator("#card")
+    check.that(
+        "trap" in card.inner_text().lower(),
+        "hovering it says what it is",
+        f"card read: {card.inner_text()[:60]!r}",
+    )
+
+
 def _check_enumerated_move(page, check: Checks) -> None:  # noqa: ANN001
     """The mode with the checkbox off must play the same two-step gesture.
 
@@ -804,6 +856,13 @@ BLAST_SEED = 2
 #: reason every other seed here is: whether such a row is in the kit is
 #: otherwise a coin toss, and a check that skips itself is not a check.
 AIMLESS_SEED = 1
+
+#: A fight whose board carries a trap the party's passive Perception is good
+#: enough to spot, and which has not gone off. Pinned because whether a trap
+#: is laid at all is a coin toss and whether it is *noticed* depends on the
+#: party's Wisdom -- two draws deep, so an unpinned run would check this on
+#: maybe one board in six.
+TRAP_SEED = 22
 
 #: The fight the whole run opens on. Picked because every check has its
 #: precondition met under it -- somebody with a kit is acting, there is a

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from random import Random
 
-from combat_engine.engine import REF, DamageType, World
+from combat_engine.engine import AC, FORT, REF, WILL, DamageType, World
 from combat_engine.engine.components import Health, Ident, Position, Trap
 from combat_engine.engine.events import EnterSquare, RoundStart
 from combat_engine.engine.grid import Square
@@ -37,6 +37,51 @@ from combat_engine.engine.resolve import attack
 #: nothing to be at home in. Weighted, so the labelled kinds are the
 #: exception a row can be exempt from rather than the whole floor.
 _ROUGH = ("rubble", "rubble", "mud", "shallow water")
+
+#: The word a trap block prints for what it attacks, to the enum. A block
+#: that names something else -- or names nothing, which 226 of them do -- is
+#: Reflex, which is what a trap attacks when the page does not say.
+_DEFENCES = {"ac": AC, "fortitude": FORT, "reflex": REF, "will": WILL}
+
+
+def printed_trap(level: int, pick: Random | None = None) -> dict | None:
+    """A printed trap worth this board's level, or None if the table is unread.
+
+    Bounded by level so a level-1 floor cannot arm a paragon-tier trap, and
+    **drawn from every eligible row** rather than taking the first: a
+    deterministic pick gave every board in the game the same trap, which is
+    the shape of the bug this whole change is about -- one invented answer
+    standing in for 631 real ones.
+
+    `pick` is the board's own generator, so a board is still reproducible
+    from its seed. Without one the lowest eligible row is taken, which is
+    what a caller with no seed deserves and is at least in range.
+
+    Rows whose Hit line named no dice are excluded: they would fall back to
+    the invented curve for half their numbers.
+
+    Returns a plain dict rather than a component, so `arm` stays the only
+    thing that knows which columns it wants.
+    """
+    from combat_engine.etl.build import game
+
+    try:
+        rows = list(game().execute(
+            "SELECT ref, level, perception_dc, attack, defence, damage FROM trap "
+            "WHERE attack IS NOT NULL AND level IS NOT NULL "
+            "AND damage IS NOT NULL AND level <= ? ORDER BY level DESC, ref",
+            (max(1, level),),
+        ))
+    except Exception:            # no database, or a build without the table
+        return None
+    if not rows:
+        return None
+    # Within a tier rather than across all of them: a level-10 board should
+    # not arm a level-1 pit just because the draw landed there.
+    top = rows[0]["level"]
+    tier = [r for r in rows if r["level"] >= min(top, max(1, level - 2))]
+    chosen = pick.choice(tier) if pick is not None else tier[0]
+    return dict(chosen)
 
 
 def dress(world: World, seed: int, *, density: float = 0.06, level: int = 1) -> None:
@@ -79,12 +124,13 @@ def dress(world: World, seed: int, *, density: float = 0.06, level: int = 1) -> 
     def lay(_: RoundStart) -> None:
         for sq in chosen:
             if sq is not None and world.grid.occupant(sq) is None:
-                arm(world, sq, level=level)
+                arm(world, sq, level=level, pick=pick)
 
     world.bus.on(RoundStart, lay, once=True)
 
 
-def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap") -> int:
+def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap",
+        pick: Random | None = None) -> int:
     """Put a trap in `square` and have it attack whoever steps on it.
 
     Deliberately **not** in the occupancy index: a trap that owned its
@@ -93,19 +139,35 @@ def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap") -> i
     kind of reason -- a zone belongs to a caster and lives on an effect's
     duration, and nobody cast this.
 
-    The numbers come off the monster curve because there is no row to read
-    them from: the ETL keeps traps as names only, so a trap has a level and
-    nothing else. One attack, then `sprung` stays set: a plate that goes
-    off and does not reset is what the flag was written for, and a trap
-    that fires every time something crosses it grinds a creature down for
-    walking.
+    **The numbers come off the printed row.** They used to come off the
+    monster curve, and this docstring used to explain why -- "the ETL keeps
+    traps as names only, so a trap has a level and nothing else". That was
+    true and is not: the compendium's 631-row `Trap` table is imported now,
+    and `printed_trap` picks one worth this board's level. The curve is kept
+    only as the fallback for a tree with no database built.
+
+    One attack, then `sprung` stays set: a plate that goes off and does not
+    reset is what the flag was written for, and a trap that fires every time
+    something crosses it grinds a creature down for walking.
     """
+    printed = printed_trap(level, pick)
     eid = world.spawn(
-        Ident(ref=f"t:{ref}"),
+        Ident(ref=printed["ref"] if printed else f"t:{ref}"),
         Position(square=square),
-        Trap(ref=ref),
+        Trap(
+            ref=printed["ref"] if printed else ref,
+            perception_dc=printed["perception_dc"] if printed else None,
+        ),
     )
     trap = world.need(eid, Trap)
+    # **Off the row where there is one.** These three numbers were invented
+    # -- `level + 5` to hit, `1d10 + level` damage, Reflex always -- because
+    # the `Trap` table was never imported and this had nothing to read. It
+    # does now, and the attack bonus is stored as printed so `world.scaling`
+    # takes the level back out of it exactly as it does for a monster.
+    bonus = printed["attack"] if printed and printed["attack"] is not None else level + 5
+    hurts = printed["damage"] if printed and printed["damage"] else f"1d10+{level}"
+    against = _DEFENCES.get((printed or {}).get("defence") or "", REF)
 
     def stepped(ev: EnterSquare) -> None:
         if trap.sprung or ev.square != square:
@@ -119,9 +181,9 @@ def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap") -> i
         # `is_trap(ctx["attacker"])` is true for the rows that ask and an
         # attack bonus hung on the trap by a power is read like anyone
         # else's.
-        if attack(world, eid, ev.actor, level + 5, REF, power=f"t:{ref}"):
-            hurt = world.rng.roll(f"1d10+{level}").total
-            world.damage(eid, ev.actor, hurt, DamageType.UNTYPED, detail=f"t:{ref}")
+        if attack(world, eid, ev.actor, bonus, against, power=trap.ref):
+            hurt = world.rng.roll(hurts).total
+            world.damage(eid, ev.actor, hurt, DamageType.UNTYPED, detail=trap.ref)
 
     world.bus.on(EnterSquare, stepped, owner=eid)
     return eid

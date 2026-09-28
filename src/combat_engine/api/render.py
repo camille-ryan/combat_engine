@@ -115,7 +115,79 @@ def board(session: Session) -> dto.BoardDTO:
             )
             for eid, zone in world.each(Zone)
         ],
+        things=_things(session),
     )
+
+
+def _noticed(world, trap) -> bool:  # noqa: ANN001
+    """Would anybody on the party's side spot this before it fires?
+
+    **Passive Perception against the trap's own printed DC.** Not a roll and
+    no stored discovery state: passive is 10 + the modifier, which is the
+    convention `skills.py` states -- a row that must beat somebody's notice
+    "asks `passive` rather than inventing a DC" -- and computing it per
+    render means there is nothing to keep in sync.
+
+    Any living character, because the board is shown to whoever plays the
+    party and one of them noticing is the party noticing.
+
+    `None` is **not** "everybody sees it". 275 of the 631 printed traps give
+    no Perception DC, and the honest reading of a block that prints none is
+    that it cannot be found in advance -- so it stays off the wire until it
+    springs.
+    """
+    from combat_engine.engine.skills import passive
+
+    if trap.perception_dc is None:
+        return False
+    return any(
+        passive(world, eid, "perception") >= trap.perception_dc
+        for eid in creatures(world)
+        if alive(world, eid)
+        and (side := world.get(eid, Side)) is not None
+        and side.team is Team.PC
+    )
+
+
+def _things(session: Session) -> list[dto.ThingDTO]:
+    """Traps, scenery and conjurations -- the board's non-creatures.
+
+    Scenery and conjurations always. They hold their squares through
+    `grid.place`, so they have been blocking movement with nothing drawn to
+    say why, which is the more visible half of the bug.
+
+    A trap only once it is `sprung` or somebody has noticed it: an unsprung
+    one is hidden by construction, and shipping every trap's square would
+    tell the player something no character has discovered.
+    """
+    from combat_engine.engine.components import Conjuration, Scenery, Trap
+
+    world, wire = session.world, session.wire
+    out: list[dto.ThingDTO] = []
+    for eid, trap in world.each(Trap):
+        if not (trap.sprung or _noticed(world, trap)):
+            continue
+        pos = world.get(eid, Position)
+        out.append(dto.ThingDTO(
+            id=wire.thing(eid), kind="trap",
+            squares=sorted(pos.squares) if pos else [],
+            label=wire.power(trap.ref), sprung=trap.sprung,
+        ))
+    for eid, prop in world.each(Scenery):
+        pos = world.get(eid, Position)
+        out.append(dto.ThingDTO(
+            id=wire.thing(eid), kind="scenery",
+            squares=sorted(pos.squares) if pos else [],
+            label=prop.kind or "object",
+        ))
+    for eid, conj in world.each(Conjuration):
+        pos = world.get(eid, Position)
+        out.append(dto.ThingDTO(
+            id=wire.thing(eid), kind="conjuration",
+            squares=sorted(pos.squares) if pos else [],
+            label=wire.power(conj.ref),
+        ))
+    return out
 
 
 def actor_dto(session: Session, eid: int) -> dto.ActorDTO:

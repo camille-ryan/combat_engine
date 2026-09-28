@@ -1291,3 +1291,27 @@ main {
     height: 30vh;
   }
 }
+
+/* Traps, scenery and conjurations. Distinct from a zone, which is an area a
+   power owns: these are objects standing on squares. A trap that has been
+   spotted but not yet sprung is outlined rather than filled — it is a
+   warning, and filling it would read as "already happened". */
+.thing {
+  position: absolute;
+  pointer-events: auto;
+}
+.thing-trap {
+  box-shadow: inset 0 0 0 2px rgba(230, 90, 70, 0.85);
+  background: rgba(230, 90, 70, 0.1);
+}
+.thing-trap.sprung {
+  background: rgba(230, 90, 70, 0.34);
+}
+.thing-scenery {
+  background: rgba(150, 140, 120, 0.3);
+  box-shadow: inset 0 0 0 1px rgba(190, 180, 160, 0.6);
+}
+.thing-conjuration {
+  background: rgba(120, 170, 240, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(150, 200, 255, 0.6);
+}

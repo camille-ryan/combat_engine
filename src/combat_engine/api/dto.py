@@ -26,13 +26,39 @@ class ZoneDTO(BaseModel):
     label: str
 
 
+class ThingDTO(BaseModel):
+    """Something on the board that is not a creature and not a zone.
+
+    A trap, a piece of scenery, a conjuration. None of them has `Health`, so
+    none arrives through `ActorDTO` -- `query.creatures` is
+    `having(Health, Position)` -- and the page could not draw any of them.
+    Scenery and conjurations are the worse half: they own their squares via
+    `grid.place`, so they were already blocking movement with nothing on the
+    board to explain why.
+
+    Its `id` comes from a namespace of its own for the same reason a zone's
+    does: `Wire._creatures` filters on `Health`, so `wire.id` returns `None`
+    for all three.
+    """
+
+    id: str
+    #: `trap`, `scenery` or `conjuration`.
+    kind: str
+    squares: list[Square]
+    label: str
+    #: Trap only: it has fired and not reset. A sprung trap is still drawn --
+    #: the flag never clears and a landmark is worth seeing.
+    sprung: bool = False
+
+
 class BoardDTO(BaseModel):
     width: int
     height: int
     blocking: list[Square]
     difficult: list[Square]
     obscuring: list[Square] = Field(default_factory=list)
-    zones: list[ZoneDTO] = Field(default_factory=list)
+    zones: list[ZoneDTO]
+    things: list[ThingDTO] = Field(default_factory=list)
 
 
 class ConditionDTO(BaseModel):

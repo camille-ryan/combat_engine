@@ -209,6 +209,29 @@ CREATE TABLE weapon (
   reach INTEGER, range_short INTEGER, range_long INTEGER, properties TEXT
 );
 CREATE INDEX weapon_group ON weapon(grp, category);
+
+-- Traps and hazards. **631 of these were never read**, and `terrain.arm`
+-- said so in a docstring that read as a design choice: "the numbers come
+-- off the monster curve because there is no row to read them from: the ETL
+-- keeps traps as names only, so a trap has a level and nothing else." There
+-- is a row, and it carries the attack line, the damage, the trigger and the
+-- target.
+--
+-- `perception_dc` is the number that matters most and the one that cannot
+-- be derived. 356 of the rows print `Perception DC N`; across them the DC
+-- is **not** a function of level -- level-1 traps print anything from 9 to
+-- 22, and the per-level median wanders from level+3.5 to level+18. So a
+-- formula would be wrong by ten either way on the number that decides
+-- whether a player is shown a hazard at all.
+--
+-- **NULL means "cannot be noticed in advance"**, which is the honest
+-- reading of a block that prints no DC. Not 0, which would mean everybody
+-- notices it.
+CREATE TABLE trap (
+  ref TEXT PRIMARY KEY, id INTEGER, level INTEGER, role TEXT, kind TEXT,
+  perception_dc INTEGER, attack INTEGER, defence TEXT, damage TEXT, spec TEXT
+);
+CREATE INDEX trap_level ON trap(level);
 """
 
 
@@ -223,6 +246,7 @@ class Report:
     seconds: int = 0
     crossed: int = 0
     companions: int = 0
+    traps: int = 0
     build_powers: int = 0
     items: int = 0
     item_blocks: int = 0
@@ -253,6 +277,7 @@ class Report:
             f"second cards  {self.seconds:6d}  (a card printed inside another entry)",
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
             f"companions    {self.companions:6d}  (familiars and beasts, new)",
+            f"traps         {self.traps:6d}  (with a printed Perception DC where one is given)",
             f"build powers  {self.build_powers:6d}  (which build lists which row)",
             f"items         {self.items:6d}  (heroic magic items)",
             f"  blocks      {self.item_blocks:6d}  (a Property or a Power: the work unit)",
@@ -316,6 +341,7 @@ def build() -> Report:
     report.weapons = _weapons(source, out)
     report.features = _features(source, out, names)
     report.companions = _companions(source, out, names)
+    report.traps = _traps(source, out, names)
     report.build_powers = _build_powers(source, out, names)
     # Every other name the compendium prints, so the scrubber can see
     # them. These tables are not imported as content and never will be --
@@ -1004,6 +1030,69 @@ def _theme_of(plain: str, longest: list[str]) -> str:
         if head.startswith(name):
             return name
     return ""
+
+
+#: `Perception DC 22: The character notices the false stonework.` 356 of the
+#: 631 trap blocks carry one; the rest print none and are unnoticeable in
+#: advance by construction.
+_TRAP_DC = re.compile(r"Perception\s+DC\s+(\d+)", re.I)
+#: `Attack: +4 vs. Reflex`. The bonus is printed as a finished total the way a
+#: monster's is, so `world.scaling` takes the level back out of it.
+_TRAP_ATTACK = re.compile(r"Attack:?\s*([+-]\s*\d+)\s*vs\.?\s*(\w+)", re.I)
+#: `Hit: ... takes 3d10 damage`. The dice only -- the rest of the Hit line is
+#: rules text for somebody to write as code, like a monster's.
+_TRAP_DAMAGE = re.compile(r"(\d+d\d+(?:\s*\+\s*\d+)?)\s+damage", re.I)
+
+
+def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
+           names: dict[str, dict[str, str]]) -> int:
+    """Every trap and hazard block, which nothing had ever read.
+
+    `content/terrain.py` puts traps on real boards and invents their numbers
+    off the monster curve -- `level + 5` to hit, `1d10 + level` damage --
+    because it had nothing to read. This is the row it needed.
+
+    Four numbers are parsed and the rest is kept as a sanitised block, which
+    is the split `monster.py` makes between a stat block and its abilities.
+    The attack bonus is stored **as printed**, level included, for the same
+    reason a monster's is: `world.scaling` takes the level back out, so the
+    two sides of a fight move together when the treadmill is turned down.
+    """
+    written = 0
+    for tid, name, level, role, kind, plain in source.execute(
+        "SELECT ID, Name, Level, Role, Type, PlainTxt FROM Trap ORDER BY ID"
+    ):
+        spec = " ".join((plain or "").split())
+        # The page opens by repeating its own name, sometimes twice, the way
+        # a companion's does.
+        for _ in range(3):
+            if name and spec.startswith(name):
+                spec = spec[len(name):].lstrip()
+        spec = re.split(r"\s*Published in\b", spec)[0].strip()
+        if len(spec) < 20:
+            continue
+        ref = f"t:{tid}"
+        dc = _TRAP_DC.search(spec)
+        hit = _TRAP_ATTACK.search(spec)
+        dmg = _TRAP_DAMAGE.search(spec)
+        out.execute(
+            "INSERT OR REPLACE INTO trap VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (
+                ref,
+                tid,
+                int(m.group()) if (m := re.search(r'\d+', str(level or ''))) else None,
+                (role or "").strip().lower(),
+                (kind or "").strip().lower(),
+                int(dc.group(1)) if dc else None,
+                int(hit.group(1).replace(" ", "")) if hit else None,
+                hit.group(2).strip().lower() if hit else None,
+                dmg.group(1).replace(" ", "") if dmg else None,
+                sanitise.scrub(spec, {name: ref}),
+            ),
+        )
+        names[ref] = {"name": name}
+        written += 1
+    return written
 
 
 def _companions(source: sqlite3.Connection, out: sqlite3.Connection,

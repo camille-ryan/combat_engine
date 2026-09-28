@@ -67,7 +67,13 @@ def build(
     # Something to take cover behind and something to wade through.
     # Without it cover, concealment, hiding and difficult terrain are all
     # modelled and none of them ever comes up.
-    terrain.dress(world, seed)
+    #
+    # **`level=` matters and was missing.** `dress` takes it to decide what a
+    # trap on this board is worth, and `api/session.py` passes it -- so every
+    # fight run from here, at every level, armed a **level-1** trap. A
+    # level-5 party walked onto a hazard built for a level-1 one, which is
+    # the sort of thing #217 is trying to read round-counts out of.
+    terrain.dress(world, seed, level=level)
 
     for i, cls in enumerate(PARTY):
         chargen.spawn(

@@ -225,6 +225,27 @@ export function zoneCard(zone, ownerLabel) {
 }
 
 /**
+ * A trap, a piece of scenery or a conjuration.
+ *
+ * Says which it is, because the three are drawn differently and a player who
+ * cannot tell a sprung trap from a pillar cannot plan around either. A trap
+ * only reaches the page once it is sprung or somebody has noticed it, so its
+ * presence here is itself information.
+ */
+export function thingCard(thing) {
+  const card = div("card-body");
+  const head = div("card-head");
+  head.appendChild(div("card-name", thing.label || thing.kind || "something"));
+  head.appendChild(div("card-id", thing.id));
+  card.appendChild(head);
+  card.appendChild(div("card-kind", thing.kind === "trap"
+    ? (thing.sprung ? "trap — sprung" : "trap — spotted, not yet sprung")
+    : thing.kind));
+  card.appendChild(div("card-lead", `${(thing.squares || []).length} squares`));
+  return card;
+}
+
+/**
  * Traits and auras — what the creature does without choosing to.
  *
  * An aura shades squares on the board, and until now nothing anywhere said

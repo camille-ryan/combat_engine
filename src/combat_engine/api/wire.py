@@ -40,6 +40,7 @@ class Wire:
     to_eid: dict[str, int] = field(default_factory=dict)
     labels: dict[str, str] = field(default_factory=dict)
     zones: dict[int, str] = field(default_factory=dict)
+    things: dict[int, str] = field(default_factory=dict)
     show_names: bool = True
 
     @classmethod
@@ -88,6 +89,16 @@ class Wire:
 
     def zone(self, eid: int) -> str:
         return self.zones.setdefault(eid, f"zone_{eid}")
+
+    def thing(self, eid: int) -> str:
+        """An id for a trap, a piece of scenery or a conjuration.
+
+        Its own namespace, and it has to be: `_creatures` filters on
+        `Health` and none of the three has any, so `id()` answers `None`
+        for all of them and an `npc_*` id would be a lie about what they
+        are.
+        """
+        return self.things.setdefault(eid, f"thing_{eid}")
 
     def power(self, ref: str) -> str:
         """A power's name, or its id when there is no localisation."""

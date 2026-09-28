@@ -20,6 +20,7 @@ import {
   powerCard,
   showCard,
   zoneCard,
+  thingCard,
 } from "./card.js";
 import {
   boardPixelSize,
@@ -239,6 +240,22 @@ function renderBoard(s) {
       el.board.appendChild(tag);
     }
   });
+
+  // Traps, scenery and conjurations. Appended after the zones and before the
+  // tokens, so a creature standing on one still wins the hover — the same
+  // ordering argument the zone loop makes.
+  //
+  // A trap only arrives here once it is sprung or somebody has noticed it;
+  // the server decides that, because passive Perception is a rule and this
+  // file does not know any.
+  for (const thing of board.things || []) {
+    for (const sq of thing.squares || []) {
+      const t = div(`thing thing-${thing.kind}${thing.sprung ? " sprung" : ""}`);
+      place(t, squareRect(sq[0], sq[1]));
+      hovers(t, () => thingCard(thing));
+      el.board.appendChild(t);
+    }
+  }
 
   for (const actor of s.actors || []) {
     const squares =
