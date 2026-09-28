@@ -89,14 +89,26 @@ that never applies.
   false under it forever. Use `targets_me` there. `lint.py` now catches this
   statically, so a bad one fails the run rather than shipping.
 * **A gate on a key the context does not carry is false, not an error.**
-  The damage context has `target`, `power`, `opportunity`, `charge` -- and
-  **no `attacker`, no `ranged`**. "Melee attacks deal N extra" has to gate
-  on `get(ctx["power"]).reach.kind`.
+  So the two lists below are load-bearing, and this passage was wrong
+  about them for two sessions -- it said the damage side had no `ranged`
+  and no `advantage`, and three separate rows dropped a clause on the
+  strength of it. Read them from `resolve.py`, not from here, if you are
+  about to mark a row.
 
-  The *attack* context is richer, and this reads as if it were not:
-  `query.defence` is handed it, so `c.bonus(AC, n, when=...)` gated on
-  `opportunity`, `charge` or `ranged` does work. Gate defences freely;
-  it is the damage side that is thin.
+  The **damage** context (`resolve.deal_damage`): `target`, `power`,
+  `opportunity`, `charge`, `granted_by`, `granted_via`, `dtype`,
+  `dtypes`, `crit`, `advantage`, `ranged`.
+
+  The **attack** context (`resolve.attack`) has all of those but the
+  damage-only three, plus `attacker`, `action_point` and `branch`.
+
+  Two that still catch people. Neither context carries an `attacker` on
+  the damage side, so "damage against a creature *you* have marked" asks
+  the board rather than the context. And `power` on the damage side is
+  the `detail` of whatever rolled the blow -- which is the *row's* ref,
+  so a striker's extra damage arrives under `cf:rogue-scoundrel-f4` and
+  not under the attack that carried it. That is a feature: it is how a
+  rider knows which feature paid.
 * **Defaults differ, and the split is about whose thing it is.**
 
   **Yours, so they default to the caster:** `c.resist`, `c.stance`,
@@ -191,11 +203,17 @@ that never applies.
   and immunity took off before any of it reached hit points. A row gating
   on `absorbed > 0` to mean "my resistance ate some of this" is false in
   every fight without temp hp, which is nearly all of them.
-* **`c.grant_action` understands `shift` and `stand`, and silently eats
-  anything else.** Its own docstring says so: another value "is carried,
-  costs nothing and does nothing". "You can escape a grab as a minor
-  action" written with it is a finished-looking row that never does
-  anything. That clause is a `dropped=`, not a `c.grant_action`.
+* **`c.grant_action` understands `shift`, `stand`, `escape` and
+  `second_wind`, and silently eats anything else.** A word it does not
+  know "is carried, costs nothing and does nothing", so a row written
+  with one is finished-looking and inert -- check `actions.legal`
+  against the word before you use it.
+
+  This passage used to name only `shift` and `stand`, and offered "you
+  can escape a grab as a minor action" as its example of a clause that
+  must be a `dropped=`. That is now precisely the clause that works,
+  and a row was left marked on the strength of the sentence. The list
+  above is the one in `actions.legal`; when it grows, this grows.
 * **A bonus's `kind` is the word the card prints in front of "bonus".**
   Not a guess, not a default, and not the class's name. Two of the same
   kind do not stack and the larger wins, so a wrong one is a number that
