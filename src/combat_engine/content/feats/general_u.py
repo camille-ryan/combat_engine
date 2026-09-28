@@ -22,9 +22,11 @@ Marked with the same symbol rather than approximated as "any hit".
 
 **The shadow-race run (`f3456`-`f3463`).** `p2482` is the racial power by
 ref, so "replace your racial power with this card" is `c.forbid` plus
-`c.grant_row` and needs no marker. What three of them do need is
-*which effect* made the caster insubstantial: `c.is_` answers whether,
-never why, and `c.effects_on()` is the symbol for the difference.
+`c.grant_row` and needs no marker. "Insubstantial **due to** `p2482`"
+needed one until this pass and no longer does: an effect's label is the
+ref of the row that laid it, so `c.suffering(p2482, include_self=True)`
+answers which effect made the caster insubstantial. `c.is_` alone would
+have counted the insubstantiality `f3459` and `f3460` lay as well.
 
 **A `when=` gate may only read a key its own context carries.** The save
 context carries `conditions`, `keywords`, `label` and `dtype`; the damage
@@ -99,8 +101,6 @@ FORGO = ("c.forgo_damage()",)
 #: `f1028`'s own hold: a power's reach is header data and is never rewritten
 #: for one use, so no attack is ever "made using" it.
 REACH = ("c.reach_of(power=)",)
-#: Which effect put a condition on a creature. `c.is_` says whether, not why.
-WHY = ("c.effects_on()",)
 #: A skill bonus that applies only in a named circumstance.
 CIRCUMSTANCE = ("c.skill_circumstance()",)
 
@@ -163,17 +163,24 @@ def _cursed(c: Cast) -> list[int]:
     return [foe for foe in c.enemies() if c.cursed(on=foe)]
 
 
-def _while_insubstantial(c: Cast, fn) -> None:  # noqa: ANN001
+def _while_insubstantial(c: Cast, fn, *, due_to: str = "") -> None:  # noqa: ANN001
     """"When you hit an enemy with an attack while you are insubstantial".
 
     Asked at the moment of the hit rather than when the trait is armed --
     the caster is almost never insubstantial at the start of the fight.
+
+    `due_to` is the narrower printed form, "insubstantial due to your
+    <ref>". An effect's label is the ref of the row that laid it and
+    `c.suffering` matches on that label, so the one insubstantiality that
+    counts is told from the two other rows in this file that lay one.
     """
 
     def on_hit(ev: Any) -> None:
         if ev.attacker != c.me or ev.target == c.me:
             return
         if not c.is_(Condition.INSUBSTANTIAL, on=c.me):
+            return
+        if due_to and c.me not in c.suffering(due_to, include_self=True):
             return
         fn(ev)
 
@@ -264,11 +271,23 @@ def f3429(c: Cast) -> None:
 
 
 @power("f3432", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*REACH, "c.cosmic_phase()"))
+       reach=PERSONAL, target=SELF, todo=(*REACH, "events.ShortRested"))
 def f3432(c: Cast) -> None:
     """Two holds, either of which is fatal on its own: no attack is ever
     made *using* `f1028`, and nothing reports which phase is current, so
-    all three branches of the payout are unreachable."""
+    all three branches of the payout are unreachable.
+
+    **Re-aimed.** The second hold was `c.cosmic_phase()`, a symbol only
+    this row named. The phase is not a reader that is missing -- it is a
+    state nothing keeps, because `cf:sorcerer-f0s0` cannot maintain it:
+    the phase is picked at the end of a rest that emits no event, and
+    that feature is itself marked `events.ShortRested`.
+
+    Naming the feature was the obvious move and it is the wrong one: a
+    ref resolves against the registry, and `cf:sorcerer-f0s0` **is**
+    declared -- refused in play, but declared -- so the marker read as
+    arrived the moment anybody ran the tracker. It names what that row
+    is waiting on instead, which is the same thing this one waits on."""
 
 
 @power("f3434", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -377,12 +396,32 @@ def f3443(c: Cast) -> None:
 
 @power("f3444", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.racial_row()", "c.restore_use(racial)", "c.on_pact_boon()"))
+       todo=("c.on_pact_boon()",),
+       trigger="you drop an enemy you have cursed to 0 hit points",
+       on=Trigger(Dropped, both(by_me, cursed_by_me),
+                  "you drop an enemy you have cursed"))
 def f3444(c: Cast) -> None:
-    """Hands back the racial power in place of the pact boon. Three holds
-    and the whole row is one of them: the racial power has no ref to
-    restore, `c.restore_use` cannot be pointed at a racial row, and
-    nothing announces or suppresses a pact boon."""
+    """Hands back the racial power in place of the pact boon.
+
+    **Re-aimed, and the payout is written.** Two of the three holds were
+    stale. The spec names the racial power by ref -- `p1449`, the same
+    row `f3439` and `f3446` already spend and read -- so there is nothing
+    to look up, and `c.restore_use` is ref-agnostic: it reaches the
+    `Powers` store, which does not care that the row is racial. What is
+    genuinely missing is the price. "Instead of gaining your normal pact
+    boon" suppresses whichever pact the warlock took -- the card names no
+    one of them -- and nothing announces a pact boon or stands in its
+    way, so this row is free where the card charges for it.
+
+    `ENCOUNTER` on a triggered trait is the card's own "once per
+    encounter" and not the #210 accident. "If you have already used it"
+    is the gate: `c.restore_use` would answer False anyway, but asking
+    first keeps the choice off the player when there is nothing to
+    choose."""
+    if "p1449" not in c.expended(on=c.me):
+        return
+    if c.may("regain p1449 instead of the pact boon"):
+        c.restore_use("p1449")
 
 
 @power("f3446", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -404,13 +443,18 @@ def f3446(c: Cast) -> None:
 
 
 @power("f3447", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.check(circumstance=)",))
+       reach=PERSONAL, target=SELF, dropped=CIRCUMSTANCE)
 def f3447(c: Cast) -> None:
     """The escape half plays. The Thievery half is narrowed to opening
     locks and sleight of hand, and a check's circumstance is not
     sayable -- a blanket bonus to the skill would raise every use of it
     -- so that clause is dropped rather than widened. Restraints other
-    than a grab are not a hold anything rolls against."""
+    than a grab are not a hold anything rolls against.
+
+    **Re-aimed.** The marker read `c.check(circumstance=)`, which no
+    other row in the tree named; eleven rows name `c.skill_circumstance()`
+    for the same gap, and this file already declared that constant and
+    never used it."""
     c.bonus("escape", 4, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
@@ -520,13 +564,15 @@ def f3454b(c: Cast) -> None:
 
 
 @power("f3456", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=WHY)
+       reach=PERSONAL, target=SELF)
 def f3456(c: Cast) -> None:
-    """"Insubstantial due to your shadow jaunt" is narrower than
-    insubstantial: `c.is_` answers whether the condition is on, never
-    which effect put it there."""
+    """"Insubstantial due to your `p2482`" is narrower than insubstantial,
+    and the narrowing is sayable: the effect `p2482` lays is labelled with
+    its own ref, so `c.suffering` tells it from the insubstantiality
+    `f3459` and `f3460` lay on the same creature."""
     c.bonus("skill:stealth", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
-    _while_insubstantial(c, lambda ev: c.prone(on=ev.target))
+    _while_insubstantial(c, lambda ev: c.prone(on=ev.target),
+                         due_to=SHADOW_JAUNT)
 
 
 @power("f3457", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -544,16 +590,18 @@ def f3457(c: Cast) -> None:
 
 
 @power("f3458", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=WHY)
+       reach=PERSONAL, target=SELF)
 def f3458(c: Cast) -> None:
-    """"Until the end of its next turn" is the enemy's clock, not mine."""
+    """"Until the end of its next turn" is the enemy's clock, not mine.
+
+    Same `due_to` narrowing as `f3456`, and for the same reason."""
     c.bonus("skill:arcana", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
 
     def rider(ev: Any) -> None:
         c.slide(1, on=ev.target)
         c.penalty("attack", 2, on=ev.target, until=When.EOTNT)
 
-    _while_insubstantial(c, rider)
+    _while_insubstantial(c, rider, due_to=SHADOW_JAUNT)
 
 
 @power("f3459", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -622,7 +670,7 @@ def f3462b(c: Cast) -> None:
 
 
 @power("f3463", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.forgo_teleport()",),
+       reach=PERSONAL, target=SELF, dropped=("c.instead_of()",),
        trigger="you use your shadow jaunt",
        on=Trigger(PowerUsed, _used(SHADOW_JAUNT), "you use that power"))
 def f3463(c: Cast) -> None:
@@ -633,6 +681,11 @@ def f3463(c: Cast) -> None:
     The teleport it is meant to replace still happens: `PowerUsed` is
     announced before the body runs and is not a decision anything can
     stop, so the substitution is the dropped half.
+
+    **Re-aimed.** That half is not a teleport problem, it is the
+    twenty-three-row `c.instead_of()` gap -- a clause of another row
+    that cannot be suppressed from outside it. `c.forgo_teleport()` was
+    named by this row and one other and hid the group it belongs to.
     """
     c.condition(Condition.REMOVED, on=c.me, until=When.SONT)
 

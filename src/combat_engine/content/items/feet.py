@@ -12,15 +12,19 @@ Four judgements run through the file.
   fall and you land on your feet" is exactly `ev.squares //= 2` with
   `ev.prone = False`, and "no damage at all" is `c.cushion()`. Nothing
   here has to guess at a number.
-* **A shove is negotiated too, and only in the interrupt window.**
-  `movement._shove` settles the distance inside its resolve callback, so
-  an *immediate interrupt* can shorten or refuse a push and an *immediate
-  reaction* cannot -- it resolves once the creature has already moved.
-  The one row that prints "immediate reaction: you ignore the forced
-  movement" therefore keeps the half it can do and carries a marker.
-* **Running is not a move the engine has.** Four blocks are entirely
-  about what running costs and what it gives, and all four carry
-  `todo=("c.run()",)` rather than an approximation of a double move.
+* **A shove is negotiated, and the whole of it happens inside the emit.**
+  `movement._shove` settles the distance in its resolve callback and then
+  reads `.cancelled` off the *returned* event, stepping the creature only
+  after that -- so an interrupt shortens a push (`ev.squares`) and a
+  reaction still refuses one outright (`c.cancel`). The note that used to
+  stand here said a reaction was too late, and it was wrong: nothing has
+  moved when either window runs.
+* **Running is a move action.** `actions._moves` offers it at speed + 2,
+  where the 2 is `c.bonus("run")`, and the combat advantage it grants is
+  suppressed by a negative `"run_exposed"`. A run announces itself as
+  `kind_ == "run"` on `MoveStart` and `MoveEnd`. What is still missing is
+  the printed attack penalty for running: nothing applies one, so the one
+  block that discounts it has nothing to cut.
 * **A skill modifier is real** and its context is `{actor, skill}` only,
   so "+2 to Athletics checks" is exact and "+2 to Athletics checks **to
   jump**" is the same flat modifier plus
@@ -36,6 +40,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.chargen import LIGHT
+from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -59,16 +65,24 @@ from combat_engine.engine import (
     Fell,
     Forced,
     ForcedMove,
+    Gear,
     Hit,
     Keyword,
     Miss,
+    Moved,
     MoveEnd,
     MoveStart,
     Position,
+    PowerResolved,
+    Powers,
+    PowerUsed,
     SecondWind,
+    SkillCheck,
     Square,
     Trigger,
+    TurnStart,
     When,
+    Window,
     World,
     about_me,
     both,
@@ -122,6 +136,68 @@ def _enemy_shifts(world: World, me: int, ev: Any) -> bool:
         and ev.actor != me
         and ev.actor in query.enemies(world, me)
     )
+
+
+def _running(world: World, me: int, ev: Any) -> bool:
+    """"When you run", asked of a move event that carries the word."""
+    return ev.actor == me and ev.kind_ == "run"
+
+
+def _light_armour(c: Cast) -> bool:
+    """"While wearing light or no armour", off `Gear.armour`.
+
+    A creature with no `Gear` at all is wearing nothing, which the card
+    counts."""
+    gear = c.world.get(c.me, Gear)
+    return gear is None or gear.armour in LIGHT
+
+
+def _charge_swings(c: Cast) -> list[str]:
+    """"Any at-will or encounter melee or close weapon attack power."
+
+    `c.borrowed_rows` is the near miss -- it takes one usage and one range
+    at a time and knows nothing about the weapon keyword -- so the filter
+    is written out. Nothing is checked beyond the card's own words:
+    `dsl.basic_options` drops a row the wearer cannot use at the moment
+    the swing is offered."""
+    from combat_engine.engine import get
+
+    known = c.world.get(c.me, Powers)
+    out: list[str] = []
+    for ref in known.all if known else ():
+        p = get(ref)
+        if p is None or p.attack_of(0) is None or p.reach is None:
+            continue
+        if p.usage not in (AT_WILL, ENCOUNTER) or Keyword.WEAPON not in p.keywords:
+            continue
+        if p.reach_of(0).kind.startswith(("melee", "close")):
+            out.append(ref)
+    return out
+
+
+def _moved_by_attack(world: World, eid: int) -> bool:
+    """"You must have used an attack power that allows you to move this turn."
+
+    Nothing labels a move with the row that caused it, but `bus.log` keeps
+    the turn in order: a `Moved` between an attack row's `PowerUsed` and
+    its `PowerResolved` is that row moving the creature, which is the
+    Requirement without a flag for it."""
+    from combat_engine.engine import get
+
+    start = 0
+    for i, ev in enumerate(world.bus.log):
+        if isinstance(ev, TurnStart) and ev.actor == eid:
+            start = i
+    inside = False
+    for ev in world.bus.log[start:]:
+        if isinstance(ev, PowerUsed) and ev.actor == eid:
+            row = get(ev.power)
+            inside = row is not None and row.attack_of(0) is not None
+        elif isinstance(ev, PowerResolved) and ev.actor == eid:
+            inside = False
+        elif inside and isinstance(ev, Moved) and ev.actor == eid:
+            return True
+    return False
 
 
 def _foe(c: Cast) -> int | None:
@@ -322,38 +398,51 @@ def i3052p1(c: Cast) -> None:
 
 
 @power("i3077x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.run()",))
+       reach=PERSONAL, target=SELF)
 def i3077x1(c: Cast) -> None:
-    """Running is not a move the engine makes, so there is no distance
-    for this to lengthen."""
+    """The run menu measures speed + 2 + `c.bonus("run")`, so speed + 4 is
+    a +2 on that key. A speed bonus would be the wrong tool: it would
+    lengthen an ordinary walk as well."""
+    # Untyped: the card prints no bonus at all, only a longer run.
+    c.bonus("run", 2, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i3077p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.run()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you run",
+       on=Trigger(MoveStart, _running, "you run"))
 def i3077p1(c: Cast) -> None:
-    """Same gap: the trigger is a run, and nothing runs."""
+    """The run action asks `"run_exposed"` *after* the move and grants the
+    combat advantage only where it is not negative, so a penalty laid in
+    the trigger window is standing when the question is asked. It holds to
+    the start of the next turn because that is how long the grant it
+    cancels would have lasted."""
+    c.penalty("run_exposed", 1, on=c.me, until=When.SONT)
 
 
 # -- level 5 ----------------------------------------------------------------
 
 
 @power("i1316x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.run()",))
+       reach=PERSONAL, target=SELF, todo=("query.run_penalty()",))
 def i1316x1(c: Cast) -> None:
-    """The whole property is a discount on a penalty nothing applies."""
+    """A run is a move action now, but the only thing it costs is the
+    combat advantage it grants: nothing applies the printed attack penalty
+    for running, so there is no penalty here to cut down to -2. Writing
+    the discount as a bonus would be three points out of nowhere."""
 
 
 @power("i2012p1", level=5, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="an enemy adjacent to you shifts",
-       on=Trigger(MoveStart, _enemy_shifts, "an adjacent enemy shifts"),
-       dropped=("c.in_form()",))
+       on=Trigger(MoveStart, _enemy_shifts, "an adjacent enemy shifts"))
 def i2012p1(c: Cast) -> None:
     """`MoveStart`, not `MoveEnd`: by the time the shift has finished the
     enemy is no longer adjacent, which is precisely when the row should
-    fire. Beast form is the half with no question to ask."""
+    fire. Beast form is the druid's own label and `in_beast_form` is what
+    every beast form row is gated on, so the longer shift is askable."""
     if c.adjacent(getattr(c.trigger, "actor", None)):
-        c.shift(1)
+        c.shift(3 if in_beast_form(c.world, c.me) else 1)
 
 
 @power("i2509x1", level=5, cls=ITEM, action=ActionType.NONE,
@@ -381,13 +470,14 @@ def i2583x1(c: Cast) -> None:
 @power("i2583p1", level=5, cls=ITEM, usage=ENCOUNTER, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="you are hit by an effect that pushes, pulls or slides you",
-       on=Trigger(ForcedMove, targets_me, "you are pushed, pulled or slid"),
-       dropped=("c.cancel_forced()",))
+       on=Trigger(ForcedMove, targets_me, "you are pushed, pulled or slid"))
 def i2583p1(c: Cast) -> None:
-    """Printed as an immediate *reaction*, and a shove settles its
-    distance in the interrupt window -- so by the time this runs the
-    creature has already been moved. The cost the row charges still
-    lands."""
+    """Printed as an immediate *reaction*, and it still refuses the shove:
+    `movement._shove` reads `.cancelled` off the event the bus hands back,
+    which is after the reaction window has run, and it steps the creature
+    only once it has read it. So the declared window stays the printed one
+    and nothing has moved when this fires."""
+    c.cancel()
     c.slowed(on=c.me, until=When.SONT)
 
 
@@ -485,9 +575,32 @@ def i1333p1(c: Cast) -> None:
 
 
 @power("i1402x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.run()",))
+       reach=PERSONAL, target=SELF)
 def i1402x1(c: Cast) -> None:
-    """Both halves are gated on running, which nothing does."""
+    """"While you are running" is the span of the run itself and not the
+    turn it happens in, so the pair is laid on `MoveStart` and taken off
+    again on `MoveEnd` -- both fire inside their own emit, which is before
+    the first step and after the last. That is exactly the window the
+    opportunity attacks a run provokes are rolled in, which is the only
+    window the two halves are worth anything in."""
+    held: list[Any] = []
+
+    def began(ev: MoveStart) -> None:
+        if ev.actor != c.me or ev.kind_ != "run":
+            return
+        held.extend(e for e in (
+            c.bonus(AC, 1, on=c.me, until=When.EOT, kind="item"),
+            c.insubstantial(on=c.me, until=When.EOT),
+        ) if e is not None)
+
+    def ended(ev: MoveEnd) -> None:
+        if ev.actor != c.me or ev.kind_ != "run":
+            return
+        while held:
+            c.end_effect(held.pop(), on=c.me)
+
+    c.watch(MoveStart, began, until=When.ENCOUNTER, on=c.me)
+    c.watch(MoveEnd, ended, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i1445p1", level=6, cls=ITEM, usage=ENCOUNTER, action=REACTION,
@@ -714,10 +827,12 @@ def i3219x1(c: Cast) -> None:
 
 @power("i3462p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MOVE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
-       dropped=("c.moved_by_power()",))
+       requires=_moved_by_attack,
+       requires_text="an attack power must have moved you this turn")
 def i3462p1(c: Cast) -> None:
-    """The Requirement is that an attack power moved you this turn, and
-    nothing records why a creature moved."""
+    """The Requirement is read off `bus.log` rather than off a flag: no
+    event says why a creature moved, but a `Moved` between an attack
+    row's `PowerUsed` and its `PowerResolved` is that row moving it."""
     c.teleport(c.speed_of())
 
 
@@ -849,11 +964,14 @@ def i757x1(c: Cast) -> None:
 
 
 @power("i765x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.wearing()",))
+       reach=PERSONAL, target=SELF)
 def i765x1(c: Cast) -> None:
-    """Which armour a character has on is not a question the engine
-    answers, so the bonus stands whatever is worn."""
-    c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER, kind="item")
+    """`Gear.armour` is the suit the character is in and `chargen.LIGHT`
+    is the set the card means by "light or no armour". Armour does not
+    change mid-fight, so the gate is asked once when the trait is armed
+    rather than each time the speed is read."""
+    if _light_armour(c):
+        c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 @power("i774x1", level=9, cls=ITEM, action=ActionType.NONE,
@@ -874,11 +992,23 @@ def i774p1(c: Cast) -> None:
 
 
 @power("i2518p1", level=10, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=("c.roll_gate()",))
+       reach=PERSONAL, target=SELF)
 def i2518p1(c: Cast) -> None:
-    """"Roll 5 or lower and you may reroll" is a condition on the die, and
-    a modifier is decided before the die is read."""
+    """"Roll 5 or lower and you can reroll" is a condition on the die, and
+    the die is readable: `SkillCheck` announces `natural` before
+    `skills.check` totals it in the resolve callback, so a listener in the
+    window before that writes the second die over the first and the total
+    is built from it. Watched only as long as the bonus stands, which is
+    what "while this bonus is in effect" says."""
     c.bonus("speed", 2, on=c.me, until=When.EONT, kind="power")
+
+    def low(ev: SkillCheck) -> None:
+        if ev.actor != c.me or ev.skill not in ("acrobatics", "athletics"):
+            return
+        if ev.natural <= 5 and c.may("reroll the check", who=c.me):
+            ev.natural = c.roll("1d20")
+
+    c.watch(SkillCheck, low, until=When.EONT, on=c.me, window=Window.BEFORE)
 
 
 @power("i3016x1", level=10, cls=ITEM, action=ActionType.NONE,
@@ -901,9 +1031,10 @@ def i570x1(c: Cast) -> None:
 
 
 @power("i761x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.wearing()",))
+       reach=PERSONAL, target=SELF)
 def i761x1(c: Cast) -> None:
-    c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER, kind="item")
+    if _light_armour(c):
+        c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 @power("i761p1", level=10, cls=ITEM, usage=ENCOUNTER, action=FREE,
@@ -922,10 +1053,17 @@ def i776x1(c: Cast) -> None:
 
 
 @power("i776p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.charge_with()",))
+       reach=PERSONAL, target=SELF)
 def i776p1(c: Cast) -> None:
-    """A charge ends in a basic attack or a bull rush and nothing lets
-    another row be substituted for the swing."""
+    """"You are not restricted to a melee basic attack" is `c.as_basic`
+    filed under the charge window, which is where `dsl.basic_options`
+    looks when the charge menu is built -- and the menu is built before
+    the charge, so the free action arms this turn's charge rather than
+    answering one that has already been declared. The printed trigger is
+    the charge itself, and no move event can say so."""
+    rows = _charge_swings(c)
+    if rows:
+        c.as_basic(*rows, window="charge", on=c.me, until=When.EOT)
 
 
 @power("i802x1", level=10, cls=ITEM, action=ActionType.NONE,

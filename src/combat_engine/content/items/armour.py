@@ -853,8 +853,11 @@ def i2534x1(c: Cast) -> None:
     """The card narrows this to Acrobatics and the escape action offers
     two skills; `escape` is one key for the attempt however it is rolled,
     so the Athletics half of the choice gets the bonus too."""
-    c.bonus("escape", 2 * c.enhancement, on=c.me, until=When.ENCOUNTER,
-            kind="item")
+    # Untyped: the card prints no type word. "Twice the armour's
+    # enhancement bonus" is where the *number* comes from, not what kind
+    # of bonus this one is -- an item bonus here would refuse to stack
+    # with the armour's own.
+    c.bonus("escape", 2 * c.enhancement, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i2986x1", level=2, cls=ITEM, action=ActionType.NONE,

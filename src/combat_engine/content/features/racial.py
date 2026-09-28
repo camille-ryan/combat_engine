@@ -24,14 +24,25 @@ same one-line body; thirty-odd print a trait whose whole content is a
 rest rule, a language or a skill choice. Copying either fifty times
 would be fifty chances to mistype a ref and nothing gained.
 
-What the engine cannot say, and what is therefore marked:
+**A choice the page makes you record was already recorded.** Every
+racial option in the book is "choose one of these *powers*", and
+`RaceLine.one_of` says which races mean it: `RaceLine.granted` picks one
+of the list and puts it in `Powers.known`. So the pick is written down,
+by ref, in the place the compendium's own feats read it from -- their
+prerequisite line is `race r33 & has p10043`, not a build leg. `_holds`
+is that read, and the four rows that carried `c.race_option()` all use
+it: three fork on which power arrived, and the fourth is inert because
+the power *is* the whole benefit.
 
-* **A choice the page makes you record.** Thirteen elemental
-  manifestations, three aspects, an at-will borrowed from another class:
-  each is a build decision with no leg and no component --
-  `c.race_option()`.
-* **Escaping a grab** announces nothing, so a trait that pays out when
-  you do cannot hear it -- `c.on_escape()`.
+What is still missing there is smaller than a verb. `Character` has no
+field naming which option was taken, so `granted` always deals the first
+of the list and a player cannot pick. That is one field in `chargen.py`
+beside `race`, and no row waits on it: a row reading `Powers.known` is
+right whichever one is dealt.
+
+What the engine still cannot say, and what is therefore marked, is in
+each row's own docstring; nothing in this file is blocked on a symbol
+more than two rows want.
 """
 
 from __future__ import annotations
@@ -53,20 +64,29 @@ from combat_engine.engine import (
     Bloodied,
     Cast,
     Condition,
+    ConditionEnded,
+    Cover,
+    DamageApplied,
     DamageType,
     Dropped,
+    Escaped,
     Gear,
+    Ident,
+    InitiativeRolled,
     Keyword,
+    Powers,
+    SavingThrow,
     SecondWind,
     SurgeSpent,
     Trigger,
     TurnStart,
     When,
+    Window,
     about_me,
     power,
 )
 from combat_engine.engine.durations import keywords_of
-from combat_engine.engine.query import flanked_by
+from combat_engine.engine.query import concealment_of, cover_between, flanked_by
 
 #: A trait is armed once at the start of the fight and holds all fight.
 _HOLDS = When.ENCOUNTER
@@ -97,6 +117,49 @@ def _shielded(c: Cast, eid: int) -> bool:
 def _melee(ctx: dict[str, Any]) -> bool:
     """A damage context's "this was a melee attack"."""
     return not ctx.get("ranged", False)
+
+
+def _ongoing(*types: DamageType) -> Callable[[dict[str, Any]], bool]:
+    """A save-context gate on ongoing damage, of these types or of any.
+
+    The save context carries `ongoing`, `dtype` and `dtypes`, which is both
+    halves of "saving throws against ongoing fire damage".
+    """
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        if not ctx.get("ongoing"):
+            return False
+        if not types:
+            return True
+        carried = set(ctx.get("dtypes") or ())
+        if ctx.get("dtype") is not None:
+            carried.add(ctx["dtype"])
+        return bool(carried & set(types))
+
+    return gate
+
+
+def _holds(c: Cast, ref: str) -> bool:
+    """Does **this** creature have that row?
+
+    Not `c.knows`, which answers who *on the board* has it and is true for
+    a character standing next to somebody else's manifestation. A race's
+    option is recorded as the power `RaceLine.granted` dealt, so this is
+    the read that tells one leg of a racial fork from another.
+    """
+    known = c.world.get(c.me, Powers)
+    return known is not None and ref in known.all
+
+
+def _my_class(c: Cast) -> str:
+    """The character's class, off `Ident.ref` -- `chargen` writes `c:<cls>`.
+
+    Empty for anything that is not a built character, which is what the two
+    rows reading it want: neither has anything to borrow from.
+    """
+    ident = c.world.get(c.me, Ident)
+    ref = ident.ref if ident is not None else ""
+    return ref[2:] if ref.startswith("c:") else ""
 
 
 def _origin(
@@ -155,27 +218,6 @@ def _inert(ref: str, why: str, **header: Any) -> None:
         ref,
         level=0, cls="", usage=AT_WILL, action=ActionType.NONE,
         reach=PERSONAL, target=SELF, out_of_combat=True, **header,
-    )(body)
-
-
-def _option(ref: str, why: str) -> None:
-    """A choice the page makes a player record, with nowhere to record it.
-
-    An elemental manifestation, an aspect of nature, an at-will borrowed
-    from another class: each picks one of a printed set, and each set
-    hands out a different resistance, defence bonus and power. A build
-    leg is the machinery for exactly this and a race has none.
-    """
-
-    def body(c: Cast) -> None:
-        pass
-
-    body.__name__ = ref.replace(":", "_").replace("-", "_")
-    body.__doc__ = why
-    power(
-        ref,
-        level=0, cls="", usage=AT_WILL, action=ActionType.NONE,
-        reach=PERSONAL, target=SELF, todo=("c.race_option()",),
     )(body)
 
 
@@ -291,8 +333,13 @@ def rt_r4_group_perception(c: Cast) -> None:
     within 5 squares, so it has to end when an ally walks out, which is
     what `c.grants_in` says and a plain `c.bonus` cannot.
 
-    "Non-<race> allies" is dropped -- nothing on a creature records its
-    race, so the exclusion has no subject.
+    "Non-<race> allies" is dropped, and **not for want of a race on the
+    creature** -- `chargen.Character.choices` carries `race:<ref>` on
+    `Build.choices`, so `c.build("race:r4", on=ally)` is the question.
+    It is that `c.grants_in` takes a side and no predicate: the exclusion
+    has a subject and nowhere to sit. `c.bonus(on=ally, when=...)` laid
+    per ally is not a substitute -- it would snapshot the allies standing
+    there when the trait was armed and miss anything summoned later.
     """
     c.grants_in(c.aura(5, label=c.ref, until=_HOLDS),
                 "skill:perception", 1, side="ally", kind="racial")
@@ -304,7 +351,18 @@ def rt_r4_group_perception(c: Cast) -> None:
 def rt_r4_wild_step(c: Cast) -> None:
     """`c.ignores_difficult` is per terrain kind and board-wide, and the
     printed line is per *kind of move*. Laid blanket it would exempt a
-    full run as well as a shift, which is a much larger rule."""
+    full run as well as a shift, which is a much larger rule.
+
+    Not a `when=` either, and the marker should not be re-aimed at one:
+    `Movement.ignores` is a flat set of terrain words read by the cost
+    function with no context to gate on. `Movement.using` says how the
+    creature is moving right now, so the piece that is missing is small,
+    but it is an engine change and not a keyword this row can pass.
+
+    Three rows elsewhere spell the same gap `c.ignores_difficult(
+    while_shifting=)`; whoever owns them should fold the two names into
+    one so the group counts four rather than two and two.
+    """
 
 
 # -- r5 ----------------------------------------------------------------
@@ -333,10 +391,38 @@ _inert("rt:r6-dual-heritage",
        "Which feats a character may take. `chargen.meets` reads one race "
        "off `Character.race`; counting as two is a second field there, "
        "not a thing that happens in a fight.")
-_option("rt:r6-dilettante",
-        "A 1st-level at-will from another class, used as an encounter "
-        "power. The card is chosen when the character is built and "
-        "nothing records the choice.")
+
+
+@power("rt:r6-dilettante", level=0, cls="", usage=AT_WILL,
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
+def rt_r6_dilettante(c: Cast) -> None:
+    """"A 1st-level at-will attack power from a class different from
+    yours, which you can use as an encounter power" -- the multiclass
+    sentence, and `c.borrow_row` is the verb nineteen feats already say
+    it with. `uses=1` is the printed cadence laid over an at-will row.
+
+    The set is built here rather than passed as `cls=`, because the
+    printed narrowing is *every* class but this character's and
+    `c.borrow_row` takes one name.
+
+    The page prints this **or** a racial power and means one of them, so
+    the row stands down for a character `RaceLine.granted` dealt the
+    power: which one arrived is the record of the choice, the same way
+    the compendium's own feats gate on it.
+    """
+    if _holds(c, "p13689"):
+        return
+    from combat_engine.engine.dsl import REGISTRY
+
+    mine = _my_class(c)
+    among = [
+        ref
+        for ref, p in REGISTRY.items()
+        if p.cls and p.cls != mine and p.level == 1
+        and p.usage is AT_WILL and p.attack is not None
+        and not ref.startswith("cf:")
+    ]
+    c.borrow_row(among=among, uses=1)
 
 
 @power("rt:r6-group-diplomacy", level=0, cls="", usage=AT_WILL,
@@ -356,9 +442,26 @@ _inert("rt:r7-bonus-feat",
        "belongs.")
 _inert("rt:r7-bonus-skill",
        "Training in one more skill, and there is no training model.")
-_option("rt:r7-bonus-at-will",
-        "One extra 1st-level at-will from your own class, which is a "
-        "slot `chargen.loadout` would have to deal rather than a row.")
+
+
+@power("rt:r7-bonus-at-will", level=0, cls="", usage=AT_WILL,
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
+def rt_r7_bonus_at_will(c: Cast) -> None:
+    """"One extra 1st-level at-will attack power from your class."
+
+    `c.borrow_row` reads that set off the registry by class, level and
+    usage -- the same read `chargen.loadout` makes -- and `uses=0` leaves
+    the row its own printed cadence, which for an at-will is the whole
+    benefit: an extra one, every turn.
+
+    The other leg of the fork is the racial power the page offers
+    instead, read off `Powers.known` the way `rt:r6-dilettante` reads it.
+    """
+    if _holds(c, "p13213"):
+        return
+    mine = _my_class(c)
+    if mine:
+        c.borrow_row(mine, level=1, usage=AT_WILL, uses=0)
 
 
 @power("rt:r7-defences", level=0, cls="", usage=AT_WILL,
@@ -508,12 +611,38 @@ def rt_r20_illusion_save(c: Cast) -> None:
 
 
 @power("rt:r20-reactive-stealth", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.on_initiative()",))
+       action=ActionType.FREE, reach=PERSONAL, target=NO_TARGET,
+       trigger="you make an initiative check",
+       on=Trigger(InitiativeRolled, about_me, "you make an initiative check"))
 def rt_r20_reactive_stealth(c: Cast) -> None:
-    """`Encounter.start` rolls initiative and arms traits afterwards, so
-    a trait cannot be present at the moment the check is made. Nothing
-    hands a row the initiative roll."""
+    """Written as a **triggered** row rather than a trait, which is what
+    reaches the moment the card names.
+
+    `Encounter.start` arms triggers *before* it rolls initiative and arms
+    traits after, deliberately and in a comment saying so -- so a trait
+    really cannot be present for the check, and a trigger on
+    `InitiativeRolled` can. The old note here claimed neither the event
+    nor the ordering existed.
+
+    "Any cover or concealment" is asked of both: concealment is carried
+    on the creature, cover is traced from an attacker, so any enemy the
+    check could be made against will do. The Stealth check is rolled
+    against the best passive Perception watching, which is the shape
+    `cf:rogue-tactic-stealth` already uses.
+
+    Not `ENCOUNTER` (#210): the card prints no limit, and initiative is
+    rolled once a fight anyway.
+    """
+    me = c.me
+    foes = c.enemies()
+    sheltered = concealment_of(c.world, me) is not Cover.NONE or any(
+        cover_between(c.world, foe, me) is not Cover.NONE for foe in foes
+    )
+    if not sheltered:
+        return
+    watching = [c.passive("perception", of=foe) for foe in foes]
+    if c.check("stealth", max(watching) if watching else 10):
+        c.hide()
 
 
 # -- r21 ---------------------------------------------------------------
@@ -591,7 +720,13 @@ def rt_r24_heedless_charge(c: Cast) -> None:
     printed narrowing is to opportunity attacks provoked during **your**
     charge -- which nothing records. Widened to every opportunity attack
     would be the other race's trait, so the narrowing is dropped and the
-    bonus is laid on what can be asked."""
+    bonus is laid on what can be asked.
+
+    `OpportunityWindow.why` is not the missing piece, checked: the only
+    thing `movement` ever puts in it is "moved away". `c.charge_at` runs
+    the walk through `run_at` and only then sets the flag on the *swing*,
+    so the run itself is an ordinary move to everything watching it.
+    """
     c.bonus(AC, 2, kind="racial", on=c.me, until=_HOLDS,
             when=lambda ctx: bool(ctx.get("opportunity")))
 
@@ -643,23 +778,129 @@ def rt_r28_mind(c: Cast) -> None:
 
 
 @power("rt:r28-resilience", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       dropped=("c.floor_save()",))
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r28_resilience(c: Cast) -> None:
-    """The save context says whether the effect carries ongoing damage.
-    Taking the better of the die and 10 on a death save is a floor on the
-    roll, and a save is rolled and then announced -- a listener can change
-    whether it succeeded and not what the die came to."""
-    c.bonus("save", 2, kind="racial", on=c.me, until=_HOLDS,
+    """Two printed halves. The first is a gate: the save context says
+    whether the effect carries ongoing damage.
+
+    The second -- "take the better result of your die roll or 10" on a
+    death save -- was marked `c.floor_save()` on the grounds that a
+    listener can change whether a save succeeded and not what the die
+    came to. **That is true and it is enough.** `turns._death_saves`
+    beats 10, so a floor of 10 on the die is a save that cannot fail
+    unless something else is dragging it down, and `SavingThrow` is a
+    `Decision` whose `saved` is read back after the window. Taking 10
+    also never takes the natural 20, so the surge that comes with one is
+    untouched.
+    """
+    me = c.me
+    c.bonus("save", 2, kind="racial", on=me, until=_HOLDS,
             when=lambda ctx: bool(ctx.get("ongoing")))
+
+    def floor(ev: SavingThrow) -> None:
+        if ev.actor == me and ev.against == "death" and not ev.saved:
+            ev.saved = max(ev.natural, 10) + ev.bonus >= 10
+
+    c.watch(SavingThrow, floor, until=_HOLDS, on=me, label=c.ref,
+            window=Window.BEFORE)
 
 
 # -- r33 ---------------------------------------------------------------
 
 _origin("r33", "elemental")
-_option("rt:r33-manifestation",
-        "Thirteen manifestations, each a different resistance, defence "
-        "bonus and encounter power. One choice, recorded nowhere.")
+
+
+def _magma(c: Cast) -> None:
+    """"Whenever you take fire damage, your melee attacks deal 1d6 extra
+    fire damage until the end of your next turn." A listener, because the
+    moment is a blow landing and not the top of the fight."""
+    me = c.me
+
+    def stoked(ev: DamageApplied) -> None:
+        if ev.target == me and DamageType.FIRE in ev.types():
+            c.bonus("damage", 0, dice="1d6", dtype=DamageType.FIRE, on=me,
+                    until=When.EONT, when=_melee)
+
+    c.watch(DamageApplied, stoked, until=_HOLDS, on=me, label=c.ref)
+
+
+#: The thirteen manifestations, by the ref of the power each comes with.
+#:
+#: `RaceLine.one_of` is true for this race and `RaceLine.granted` deals
+#: exactly one of these, so the ref in `Powers.known` *is* the choice --
+#: which is how the compendium's own feats read it, their prerequisite
+#: line being "race r33 & has p10044".
+_MANIFESTATIONS = (
+    "p1766", "p1767", "p1769", "p1770", "p1828", "p10043", "p10044",
+    "p10045", "p10046", "p14073", "p14074", "p14075", "p14076",
+)
+
+
+@power("rt:r33-manifestation", level=0, cls="", usage=AT_WILL,
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
+def rt_r33_manifestation(c: Cast) -> None:
+    """Thirteen legs, and the one taken is the one `Powers.known` holds.
+
+    This carried `c.race_option()` on the grounds that a choice made when
+    the character is built has nowhere to live. It has one: the whole of
+    the choice is which of the thirteen *powers* comes with it, and
+    `RaceLine.granted` already puts that one ref and no other in
+    `Powers.known`. Nothing new had to be recorded.
+
+    Resistances are flat 5 through heroic, as `rt:r49-crystalline-mind`'s
+    is: each block prints a step at 11th and another at 21st and both are
+    out of scope. Breathing underwater and shrugging off the weather are
+    printed on three of these legs and are not written -- no fight
+    reaches either.
+    """
+    me = c.me
+    taken = next((ref for ref in _MANIFESTATIONS if _holds(c, ref)), "")
+
+    # The one leg printing no word in front of its defence bonus where
+    # every other prints "racial". Untyped, therefore, and it stacks.
+    if taken == "p1766":
+        c.bonus(REF, 1, on=me, until=_HOLDS)
+        c.resist(5, DamageType.FIRE, on=me, until=_HOLDS)
+    elif taken == "p1767":
+        c.bonus(FORT, 1, kind="racial", on=me, until=_HOLDS)
+        c.bonus("save", 1, kind="racial", on=me, until=_HOLDS)
+    elif taken == "p1769":
+        c.bonus(FORT, 1, kind="racial", on=me, until=_HOLDS)
+        c.resist(5, DamageType.LIGHTNING, on=me, until=_HOLDS)
+    elif taken == "p1770":
+        c.bonus("save", 2, kind="racial", on=me, until=_HOLDS,
+                when=_ongoing())
+    elif taken == "p1828":
+        c.resist(5, DamageType.COLD, on=me, until=_HOLDS)
+    elif taken == "p10043":
+        c.resist(5, DamageType.ACID, on=me, until=_HOLDS)
+    elif taken == "p10044":
+        c.bonus(FORT, 1, kind="racial", on=me, until=_HOLDS)
+        c.resist(5, DamageType.FIRE, on=me, until=_HOLDS)
+    elif taken == "p10045":
+        c.resist(5, DamageType.POISON, on=me, until=_HOLDS)
+        c.bonus("save", 5, kind="racial", on=me, until=_HOLDS,
+                when=_keyword(Keyword.DISEASE))
+    elif taken == "p10046":
+        c.resist(5, DamageType.PSYCHIC, on=me, until=_HOLDS)
+        c.bonus(WILL, 1, kind="racial", on=me, until=_HOLDS)
+    elif taken == "p14073":
+        c.bonus(REF, 1, kind="racial", on=me, until=_HOLDS)
+        c.bonus("save", 2, kind="racial", on=me, until=_HOLDS,
+                when=_ongoing(DamageType.FIRE))
+    elif taken == "p14074":
+        c.bonus(FORT, 1, kind="racial", on=me, until=_HOLDS)
+        _magma(c)
+    elif taken == "p14075":
+        # `escape` and not `skill:athletics`: `engine/escape.py` keeps a
+        # key of its own for exactly this, so a bonus to getting out of a
+        # grab does not raise every tumble the character ever makes.
+        c.bonus("escape", 4, kind="racial", on=me, until=_HOLDS)
+        c.bonus("save", 2, kind="racial", on=me, until=_HOLDS,
+                when=_against(*_HELD))
+    elif taken == "p14076":
+        c.bonus("save", 2, kind="racial", on=me, until=_HOLDS,
+                when=_ongoing(DamageType.FIRE, DamageType.RADIANT))
 
 
 # -- r35 ---------------------------------------------------------------
@@ -739,11 +980,34 @@ def rt_r38_acid_resist(c: Cast) -> None:
 
 
 @power("rt:r38-barbed-body", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.on_escape()",))
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r38_barbed_body(c: Cast) -> None:
-    """Escaping a grab announces nothing, in either direction, so the
-    damage has no moment to happen in."""
+    """**Escaping a grab announces itself now.** `engine/escape.py` emits
+    `Escaped`, carrying `actor` (whoever struggled), `holder` (the
+    grabber) and `success` -- which is both printed directions in one
+    event, and it is only emitted for an attempt that was actually
+    rolled.
+
+    "Whenever you escape a creature's grab **on your turn**" is
+    `c.turn_of`; the other half, a creature escaping *your* grab, has no
+    such narrowing and is read off `holder`.
+
+    The armour clause -- "if you are wearing barbed armour the creature
+    takes this damage only once" -- is not written: `Gear.armour` holds
+    the printed armour kinds and there is no barbed one, so the
+    condition is never true and the unqualified line is the whole of it.
+    """
+    me = c.me
+
+    def barbs(ev: Escaped) -> None:
+        if not ev.success:
+            return
+        if ev.actor == me and ev.holder != me and c.turn_of() == me:
+            c.flat(2 + c.level // 2, on=ev.holder)
+        elif ev.holder == me and ev.actor != me:
+            c.flat(2 + c.level // 2, on=ev.actor)
+
+    c.watch(Escaped, barbs, until=_HOLDS, on=me, label=c.ref)
 
 
 # -- r41 ---------------------------------------------------------------
@@ -807,9 +1071,15 @@ def rt_r43_flock_effect(c: Cast) -> None:
 # -- r44 ---------------------------------------------------------------
 
 _origin("r44", "fey")
-_option("rt:r44-aspects",
-        "An aspect of nature chosen at every extended rest, each one a "
-        "different power. Nothing records which is up.")
+_inert("rt:r44-aspects",
+       "An aspect of nature chosen at every extended rest, and each of "
+       "the three is a power and nothing else -- 'you can use p744N "
+       "while you are in this aspect' is the whole of every one of them. "
+       "`RaceLine.one_of` is true for this race, so `RaceLine.granted` "
+       "already deals exactly one of the three and the choice is made "
+       "and recorded in `Powers.known`. There is nothing left for the "
+       "row to lay. Re-choosing is an extended-rest rule and no fight "
+       "reaches it.")
 
 
 @power("rt:r44-hardy-form", level=0, cls="", usage=AT_WILL,
@@ -855,11 +1125,50 @@ _origin("r47", "undead", "living", dropped=("query.living()",), why=_BOTH)
 
 
 @power("rt:r47-unnatural-vitality", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.dying_as()",))
+       action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
+       trigger="you drop to 0 hit points or fewer",
+       on=Trigger(Dropped, about_me, "you drop to 0 hit points or fewer"))
 def rt_r47_unnatural_vitality(c: Cast) -> None:
-    """Being dazed instead of unconscious while dying. `resolve` applies
-    the dying condition itself and nothing chooses what comes with it."""
+    """Dazed instead of unconscious while dying.
+
+    `resolve` lays one effect labelled "dropped" carrying all three of
+    unconscious, prone and dying, and nothing chooses what comes with
+    it -- which is what `c.dying_as()` was asking for. It does not have
+    to: `c.ignore_condition` **suppresses** a condition without ending
+    the effect that carries it, which is exactly "you fall dazed instead
+    of unconscious, and you make death saving throws as normal".
+
+    Written as a trigger rather than a trait because the moment is the
+    drop; `ev.dead` keeps it off a creature that was killed outright,
+    which has no dying condition to soften.
+
+    "If you fail a death saving throw you fall unconscious instead of
+    being dazed" is the second listener, and being healed out of it is
+    the third -- `_revive` ends the "dropped" effect, which announces
+    `ConditionEnded` for each condition it held.
+    """
+    ev = c.trigger
+    if ev is None or getattr(ev, "dead", False):
+        return
+    me = c.me
+    hushed = c.ignore_condition(Condition.UNCONSCIOUS, on=me, until=_HOLDS)
+    c.dazed(on=me, until=_HOLDS)
+
+    def wake_up(why: str) -> None:
+        if hushed is not None:
+            c.end_effect(hushed, why=why)
+        c.cure(Condition.DAZED, on=me)
+
+    def failed(saved: SavingThrow) -> None:
+        if saved.actor == me and saved.against == "death" and not saved.saved:
+            wake_up("a death save was failed")
+
+    def revived(ended: ConditionEnded) -> None:
+        if ended.target == me and ended.condition is Condition.DYING:
+            wake_up("no longer dying")
+
+    c.watch(SavingThrow, failed, until=_HOLDS, on=me, label=c.ref)
+    c.watch(ConditionEnded, revived, until=_HOLDS, on=me, label=c.ref)
 
 
 # -- r49 ---------------------------------------------------------------
@@ -893,11 +1202,17 @@ _inert("rt:r51-torpor", "A rest rule.")
 
 @power("rt:r51-multiple-arms", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.stow()",))
+       todo=("c.draw()",))
 def rt_r51_multiple_arms(c: Cast) -> None:
     """Drawing or sheathing a weapon costs nothing here because it is not
     an action the engine has: `Gear.stowed` is set when the character is
-    built and nothing moves a weapon in or out of it mid-fight."""
+    built and nothing moves a weapon in or out of it mid-fight.
+
+    Re-aimed from `c.stow()`, which was this row alone, to `c.draw()`,
+    which twelve rows in the tree already name for the same missing
+    action. Sheathing is the same verb read backwards and does not need
+    a second symbol.
+    """
 
 
 @power("rt:r51-natural-jumper", level=0, cls="", usage=AT_WILL,
@@ -1020,13 +1335,20 @@ _origin("r65", "fey", "beast", "humanoid", "shapechanger",
 
 
 @power("rt:r65-elusive", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       dropped=("c.on_escape()",))
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r65_elusive(c: Cast) -> None:
     """The saving-throw half is a gate on the conditions the effect
-    carries. The escape-check half is dropped: an escape attempt is not a
-    skill check any row can reach."""
-    c.bonus("save", 2, kind="racial", on=c.me, until=_HOLDS,
+    carries.
+
+    The escape half was dropped as unreachable. **It is reachable now**:
+    `engine/escape.py` rolls the check through `skills.check` and reads
+    an `escape` modifier off the struggling creature, a key it keeps
+    apart from `skill:acrobatics` on purpose -- a bonus to getting out of
+    a grab is not a bonus to tumbling.
+    """
+    me = c.me
+    c.bonus("escape", 2, kind="racial", on=me, until=_HOLDS)
+    c.bonus("save", 2, kind="racial", on=me, until=_HOLDS,
             when=_against(*_HELD))
 
 

@@ -486,7 +486,7 @@ def f2338(c: Cast) -> None:
 
 @power("f2354", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("query.cover_waived()",))
+       dropped=("c.ignore_cover(reduce=)",))
 def f2354(c: Cast) -> None:
     """Cover and concealment do not count on the two shots this names.
 
@@ -501,6 +501,11 @@ def f2354(c: Cast) -> None:
     penalty when the waiver reaches it and otherwise leaves it whole --
     so the only numbers available are "all of it" and "none of it", and
     the full waiver would beat superior cover outright.
+
+    The marker names the argument that is missing rather than the reader
+    that is present: `query.cover_waived` exists, which made the marker
+    read as arrived the moment anybody looked at it. What no call can
+    say is *reduce this penalty by two*.
     """
     if not _holding(c, "crossbow", "bow", "sling"):
         return

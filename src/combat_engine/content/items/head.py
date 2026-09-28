@@ -6,7 +6,7 @@ enhancement bonus, so `c.enhancement` is 0 here and every number below is
 the heroic one the card prints. A `Level 11:` line is paragon and out of
 scope.
 
-Four judgements run through the file.
+Five judgements run through the file.
 
 * **A skill modifier is real** -- `skills.modifier` reads `skill:<name>`
   off `Mods` -- but the only context it is handed is `{actor, skill}`.
@@ -26,6 +26,12 @@ Four judgements run through the file.
   squares" has no standing membership test -- `c.aura` carries no
   modifier -- so those rows lay the bonus on whoever is in range when the
   trait arms, and say so.
+* **A race survives onto the board only as its traits.** `c.kinds_of`
+  reads a *stat block's* type line, so it answers a monster's race and
+  never a character's -- only the nineteen races printing an origin
+  sentence give a character even a word. A race's traits are
+  `rt:<race>-<what>` and are known rows, so a clause naming a race by ref
+  is exact and one naming it in words is not.
 
 One item keeps a counter of its own: `i3230` captures souls in seven gems
 and two of its powers ask how many are held. The count is an untyped
@@ -38,6 +44,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AT_WILL,
     CHA,
@@ -87,7 +94,8 @@ from combat_engine.engine import (
     query,
     targets_me,
 )
-from combat_engine.engine.components import Mods
+from combat_engine.engine.basic import RANGED as RANGED_BASIC
+from combat_engine.engine.components import Mods, Powers
 from combat_engine.engine.durations import keywords_of
 
 ITEM = "item"
@@ -193,6 +201,80 @@ def _holding(*conditions: Condition) -> Callable[[dict[str, Any]], bool]:
     return gate
 
 
+def _ranged_basic(c: Cast) -> Callable[[dict[str, Any]], bool]:
+    """"A ranged basic attack" -- the attack context names both the row and
+    the creature swinging it, and `Powers` says which row that creature's
+    ranged basic is: `rba` for a character, its own line for a monster,
+    plus whatever `c.as_basic` has filed under the bow's window."""
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        ref = ctx.get("power") or ""
+        who = ctx.get("attacker")
+        if not ref:
+            return False
+        known = c.world.get(who, Powers) if who is not None else None
+        if known is None:
+            return ref == RANGED_BASIC
+        return ref in {RANGED_BASIC, known.ranged,
+                       *known.instead_of_basic("ranged")}
+
+    return gate
+
+
+def _carrying_keywords(c: Cast, *words: Keyword) -> Callable[
+        [dict[str, Any]], bool]:
+    """"While you are affected by a <keyword> power". An effect's label is
+    the ref of the row that laid it, so `keywords_of` reads the keywords
+    back off whatever is standing on the wearer right now -- the gate is
+    asked at read time, not when the trait armed."""
+    wanted = set(words)
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return any(wanted <= keywords_of(eff.label)
+                   for eff in c.world.effects.of(c.me))
+
+    return gate
+
+
+def _undead_foe(c: Cast) -> Callable[[dict[str, Any]], bool]:
+    """"Against undead enemies", on either side of the roll: the attack
+    and the damage context both carry `target`."""
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("target")
+        return (who is not None and c.is_kind("undead", on=who)
+                and who in c.enemies())
+
+    return gate
+
+
+def _has_race(c: Cast, race: str, who: int) -> bool:
+    """Is that creature of this race, named by ref?
+
+    `c.kinds_of` answers a race's *origin* -- fey, shadow, immortal -- and
+    a character has no type line otherwise, so "an r3 ally" had nothing to
+    match on. A race's traits are `rt:<race>-<what>` and go into
+    `Powers.known` when the character is built, which is the one place the
+    race's own ref survives onto the board."""
+    known = c.world.get(who, Powers)
+    return known is not None and any(
+        r.startswith(f"rt:{race}-") for r in known.known
+    )
+
+
+def _channelled(world: World, me: int, ev: PowerUsed) -> bool:
+    """A channelled row being used. The four class features the card names
+    are the *permission* to channel; what is used is one of the 115 rows
+    that declare `group=CHANNEL_DIVINITY`."""
+    row = get(ev.power)
+    return ev.actor == me and row is not None and row.group == CHANNEL_DIVINITY
+
+
+def _granted_swing(world: World, me: int, ev: PowerUsed) -> bool:
+    """An ally swinging a basic attack this creature handed over."""
+    return ev.granted_by == me and ev.actor != me
+
+
 def _foe(c: Cast) -> int | None:
     """The other creature in whatever event this row is answering."""
     ev = c.trigger
@@ -230,13 +312,14 @@ def i1520x1(c: Cast) -> None:
 
 
 @power("i1156x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("query.is_basic_attack()",))
+       reach=PERSONAL, target=SELF)
 def i1156x1(c: Cast) -> None:
-    """The attack context knows the shot was ranged and not that it was a
-    *basic* one, so this reaches every ranged attack."""
+    """Narrowed to the *basic* shot. The attack context carries `attacker`
+    as well as `power`, so the creature's own `Powers.ranged` -- and the
+    rows `c.as_basic` filed under the bow's window -- answer which row
+    counts, rather than the bonus reaching every ranged attack."""
     c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="item",
-            when=lambda ctx: bool(ctx.get("ranged")))
+            when=_ranged_basic(c))
 
 
 @power("i1390x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -431,10 +514,14 @@ def i3230p4(c: Cast) -> None:
 
 
 @power("i878p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.extend_range()",))
+       reach=PERSONAL, target=SELF)
 def i878p1(c: Cast) -> None:
-    """Lengthening a power's range is the whole of it and nothing says
-    it."""
+    """A `"range"` modifier is read where a ranged line's reach is worked
+    out, so the extra five squares decide what may be aimed at and not
+    merely what the body may touch. That reader is handed the row being
+    measured, which is what narrows this to the arcane ones."""
+    c.bonus("range", 5, on=c.me, until=When.EOT,
+            when=_keyword_gate(Keyword.ARCANE))
 
 
 @power("i938x1", level=5, cls=ITEM, action=ActionType.NONE,
@@ -723,20 +810,33 @@ def i1371p1(c: Cast) -> None:
 
 @power("i1816p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(1), target=ONE_CREATURE,
-       dropped=("Attack.best_of()", "c.darkvision()"))
+       dropped=("c.darkvision()",))
 def i1816p1(c: Cast) -> None:
-    """The choice of three abilities is written as the Intelligence one;
-    borrowing the target's sight while it is blinded has no verb. The
-    sustain repeats the attack, which `c.on_sustain` cannot re-roll."""
-    if c.attack(c.int_mod + c.level // 2 + 2, WILL).hit:
+    """"Intelligence, Wisdom, or Charisma" is a choice with no downside,
+    so it is the best of the three and needs no verb of its own.
+    Borrowing the target's sight while it is blinded is the half that has
+    none. The sustain repeats the attack, which `c.on_sustain` runs with
+    no target of its own."""
+    best = max(c.int_mod, c.wis_mod, c.cha_mod)
+    if c.attack(best + c.level // 2 + 2, WILL).hit:
         c.blinded(until=When.EONT)
 
 
-@power("i2372x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Keyword.CHANNEL_DIVINITY",))
+@power("i2372x1", level=8, cls=ITEM, usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use one of the four class features the card names",
+       on=Trigger(PowerUsed, _channelled, "you use a channelled row"))
 def i2372x1(c: Cast) -> None:
-    """Nothing marks a Channel Divinity use, so the trigger the whole
-    property hangs from cannot be declared."""
+    """A channelled use *is* marked, by `group=CHANNEL_DIVINITY` on each
+    of the rows the four named features hand over -- the features
+    themselves are the permission and are never used. 18-20 is a
+    `crit_range` of 2, read off the attacker's modifiers with the attack
+    context, and both halves gate on the target, which the attack and the
+    damage context each carry."""
+    undead = _undead_foe(c)
+    c.bonus("damage", 0, dice="1d6", dtype=DamageType.RADIANT, on=c.me,
+            until=When.EONT, when=undead)
+    c.bonus("crit_range", 2, on=c.me, until=When.EONT, when=undead)
 
 
 @power("i2668x1", level=8, cls=ITEM, action=ActionType.NONE,
@@ -773,10 +873,13 @@ def i3470p1(c: Cast) -> None:
 
 
 @power("i693x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.save_order()",))
+       reach=PERSONAL, target=SELF,
+       todo=("c.save_order()", "c.skill_circumstance()"))
 def i693x1(c: Cast) -> None:
-    """Light and a circumstantial Charisma bonus aside, the whole of this
-    is *when* a saving throw is rolled, and the turn's shape is fixed."""
+    """Nothing here plays. The light is narrative; the Charisma bonus is
+    against one sort of creature, which a check's context has no room
+    for; and the rest is *when* a saving throw is rolled -- `Effects`
+    rolls them at `TurnEnd` and nothing moves them."""
 
 
 @power("i883x1", level=8, cls=ITEM, action=ActionType.NONE,
@@ -861,11 +964,15 @@ def i1810p1(c: Cast) -> None:
 
 
 @power("i631x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.in_form()",))
+       reach=PERSONAL, target=SELF)
 def i631x1(c: Cast) -> None:
-    """`c.form` assumes a shape and nothing asks which one is on, so
-    "while affected by a primal polymorph power" has no gate."""
+    """"While affected by a primal polymorph power" is a gate after all:
+    an effect's label is the ref of the row that laid it, so the two
+    keywords are readable off whatever is standing. No type word is
+    printed in front of the Will bonus, so it is untyped."""
     _skills(c, 2, "nature")
+    c.bonus(WILL, 1, on=c.me, until=When.ENCOUNTER,
+            when=_carrying_keywords(c, Keyword.PRIMAL, Keyword.POLYMORPH))
 
 
 @power("i979x1", level=9, cls=ITEM, usage=AT_WILL, action=ActionType.NONE,
@@ -930,18 +1037,24 @@ def i1541x1(c: Cast) -> None:
 
 
 @power("i1541p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.instead_of()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you grant an ally a basic attack",
+       on=Trigger(PowerUsed, _granted_swing, "an ally swings one you gave"),
+       dropped=("c.instead_of()",))
 def i1541p1(c: Cast) -> None:
-    """**Re-aimed: the trigger arrived and the payload did not.**
+    """`PowerUsed.granted_by` names the granter, so the trigger is
+    declared, and `c.extra_action` drops the standard action into the
+    ally's budget where `Encounter.can` reads it back.
 
-    "When you grant an ally a basic attack" is declarable now --
-    `PowerUsed.granted_by` names the granter -- but what this row then
-    does is take the granted swing away and put a standard action in its
-    place. `c.grant_action` understands `shift` and `stand` and eats
-    anything else, and nothing withdraws a swing another row is in the
-    middle of handing over. That second half is the printed line
-    entirely; writing the trigger alone would be a free daily that does
-    nothing."""
+    Withdrawing the granted swing is the half with no verb: nothing takes
+    back an attack another row is in the middle of handing over, so the
+    ally is offered the standard action *beside* the basic attack rather
+    than in place of it, which is generous rather than absent."""
+    ally = getattr(c.trigger, "actor", None)
+    if ally is None:
+        return
+    c.extra_action(STANDARD, on=ally)
+    c.bonus("damage", 2, on=ally, until=When.EOT, kind="power")
 
 
 @power("i1548p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
@@ -1020,13 +1133,25 @@ def i831x1(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        dropped=("c.race_of()", "c.darkvision()"))
 def i887x1(c: Cast) -> None:
-    """Three clauses, each gated on a nearby ally's race. `c.is_kind`
-    answers the two that name one; the charm save is gated on a race
-    given only as a ref, which nothing resolves -- the save half of it
-    would be one `_save_keywords(Keyword.CHARM)` if the ally could be
-    recognised."""
+    """Three clauses, each gated on a nearby ally's race.
+
+    **The ref'd one now plays.** A race's traits are `rt:<race>-<what>`
+    and land in the character's known rows, which is the only place a
+    race ref survives onto the board, so "an r3 ally" is exact.
+
+    The other two name a race in words. `c.is_kind` reads a *stat
+    block's* type line, so those answer for a monster ally and never for
+    a character -- a character's race is not one of its kinds, and only
+    the nineteen races that print an origin sentence give it a word at
+    all. They are left standing because a monster ally does satisfy them,
+    and `c.race_of()` is what would make them true of a character. The
+    third clause was also being read off the second's gate, which gave
+    the wrong ally's race the Perception bonus."""
     near = c.within(10, side="ally")
-    if any(c.is_kind("elf", on=a) or c.is_kind("drow", on=a) for a in near):
+    if any(_has_race(c, "r3", a) for a in near):
+        c.bonus("save", 5, on=c.me, until=When.ENCOUNTER, kind="item",
+                when=_save_keywords(Keyword.CHARM))
+    if any(c.is_kind("elf", on=a) for a in near):
         for who in [c.me, *c.within(5, side="ally")]:
             c.bonus("skill:perception", 1, on=who, until=When.ENCOUNTER,
                     kind="item")

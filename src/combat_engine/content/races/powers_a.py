@@ -21,6 +21,15 @@ would be too late for the interrupt and carries neither.
 **A skill bonus is a real modifier, not an inert row.** `c.bonus("skill:x")`
 is read by `skills.check`, so only the rows whose entire printed effect is a
 Thievery check or an hour-long disguise are `out_of_combat=True`.
+
+**Four markers written here were wrong and are gone.** "Move through enemy
+spaces" is `c.phasing`, which `movement._clear` reads to waive the body as
+well as the wall; "no penalty for squeezing" is `c.ignore_condition(
+Condition.SQUEEZING)`, whose rules are exactly the three the penalty is;
+"until you attack" is a `c.watch` on `AttackRolled` plus `c.end_effect`;
+and "difficult terrain for creatures that lack earth walk" is the
+`difficult=` label, because earth walk *is* three `c.ignores_difficult`
+words and `Grid.rough` skips the ones a mover ignores.
 """
 
 from __future__ import annotations
@@ -49,10 +58,12 @@ from combat_engine.engine import (
     AreaBurst,
     Attack,
     AttackDeclared,
+    AttackRolled,
     Bloodied,
     Cast,
     CloseBurst,
     Condition,
+    DamageApplied,
     DamageRolled,
     DamageType,
     Dropped,
@@ -92,13 +103,6 @@ from combat_engine.engine.zones import Zone
 #: "Choose Strength, Constitution or Dexterity" -- one attack line, settled
 #: once when the character is built and not re-asked in play.
 ABILITY_CHOICE = ("c.ability_for(ref)",)
-#: Walking through a creature's square without displacing it. `c.overrun`
-#: tramples the whole of a move; nothing narrows it to a shift.
-THROUGH_ENEMIES = ("c.through_enemies()",)
-#: "You take no penalty for squeezing during this movement."
-SQUEEZE = ("c.ignore_squeeze_penalty()",)
-#: An invisibility that ends the moment you attack rather than on a clock.
-ENDS_ON_ATTACK = ("c.end_on_attack()",)
 #: A creature the power summons whose numbers are printed nowhere the spec
 #: carries -- no monster row behind it and no block in the entry either, so
 #: `Summon`'s defaults are all there is.
@@ -194,6 +198,26 @@ def _beside(c: Cast) -> int | None:
     return None
 
 
+def _until_you_attack(c: Cast, held: Effect | None) -> None:
+    """"...until you attack" -- an effect with no clock, ended by a watch.
+
+    `AttackRolled` rather than `AttackDeclared`, which is what `c.on_attack`
+    watches: the printed sentence is that you attack *out of* the hiding, so
+    the swing itself still has whatever the effect was worth. `advantage` is
+    settled by the time this event is announced and the invisibility is gone
+    for every swing after it.
+    """
+    if held is None:
+        return
+    me = c.me
+
+    def stop(ev: Any) -> None:
+        if ev.attacker == me:
+            c.end_effect(held, why=f"{c.ref}: you attacked")
+
+    c.watch(AttackRolled, stop, until=When.EONT, once=True)
+
+
 # -- r33: the elemental manifestations ---------------------------------------
 
 
@@ -249,14 +273,15 @@ def p10046(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=THROUGH_ENEMIES,
 )
 def p14075(c: Cast) -> None:
-    """Squeezing through a grain-sized opening has no combat consequence;
-    entering an enemy's square without provoking has two halves and only
-    the provoking half can be said."""
+    """`c.phasing` is what lets a creature enter an occupied square --
+    `movement._clear` waives both the wall and the body for a ghost -- and
+    it is also the grain-of-sand opening, which is the same sentence read
+    the other way. It has to stop somewhere legal, which the form does."""
     c.insubstantial(until=When.SONT, on=c.me)
     c.no_provoke(on=c.me, until=When.SONT)
+    c.phasing(until=When.SONT, on=c.me)
 
 
 @power(
@@ -284,13 +309,26 @@ def p1766(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=(*THROUGH_ENEMIES, *SQUEEZE),
 )
 def p1770(c: Cast) -> None:
-    """Taking no damage from the surface crossed is a property of terrain
-    the board does not deal out, so there is nothing to suppress."""
-    c.ignores_difficult(on=c.me, until=When.EOT)
-    c.shift(c.speed_of())
+    """Three clauses scoped to the one move, the way `c.jump` scopes its
+    two: `c.phasing` is "move through enemy spaces", and the squeezing
+    penalty is exactly `conditions.RULES[Condition.SQUEEZING]`, so
+    suppressing the condition is the whole of "no penalties for squeezing".
+
+    Taking no damage from the surface crossed is a property of terrain the
+    board does not deal out, so there is nothing to suppress."""
+    held = (
+        c.phasing(until=When.EOT, on=c.me),
+        c.ignores_difficult(on=c.me, until=When.EOT),
+        c.ignore_condition(Condition.SQUEEZING, on=c.me, until=When.EOT),
+    )
+    try:
+        c.shift(c.speed_of())
+    finally:
+        for one in held:
+            if one is not None:
+                c.end_effect(one, why=f"{c.ref}: the movement ended")
 
 
 # -- the movement and teleport rows ------------------------------------------
@@ -507,10 +545,10 @@ def p14384(c: Cast) -> None:
     keywords=[Keyword.ILLUSION],
     trigger="you take damage",
     on=Trigger(DamageRolled, targets_me, "you take damage"),
-    dropped=ENDS_ON_ATTACK,
 )
 def p377(c: Cast) -> None:
-    c.invisible(on=c.me, until=When.EONT)
+    """"Until you attack" is the earlier of two clocks, not a shorter one."""
+    _until_you_attack(c, c.invisible(on=c.me, until=When.EONT))
 
 
 @power(
@@ -599,15 +637,22 @@ def p16464(c: Cast) -> None:
     keywords=[Keyword.STANCE],
     requires=_bloodied,
     requires_text="must be bloodied",
-    dropped=("When.UNBLOODIED",),
 )
 def p14392(c: Cast) -> None:
-    """The stance is entered while bloodied and the bonus is printed to
-    last only while you stay that way. Nothing expires on being healed."""
-    c.stance(on=c.me, label=c.ref)
+    """"While you are bloodied" is a gate, not a duration. Written as one
+    it also survives being healed and bloodied again, which a clock that
+    expired on the first `Healed` would not -- and the closure reads the
+    board rather than a context key, so it is not silently false in the
+    thin damage context."""
+    world, me = c.world, c.me
+
+    def still(_ctx: dict[str, Any]) -> bool:
+        return _bloodied(world, me)
+
+    c.stance(on=me, label=c.ref)
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 2, kind="power", until=When.STANCE, on=c.me)
-    c.bonus("skill:stealth", 2, kind="power", until=When.STANCE, on=c.me)
+        c.bonus(defence, 2, kind="power", until=When.STANCE, on=me, when=still)
+    c.bonus("skill:stealth", 2, kind="power", until=When.STANCE, on=me, when=still)
 
 
 @power(
@@ -777,14 +822,19 @@ def p14017(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(2),
     target=NO_TARGET,
-    dropped=("c.zone_exempt()",),
 )
 def p16470(c: Cast) -> None:
     """"The outermost squares" is the ring at the burst's full radius, not
-    the whole burst. Earth walk exempts its owner and nothing says so."""
+    the whole burst.
+
+    "For creatures that lack earth walk" is the `difficult=` label rather
+    than a side: `rt:r66-earth-walk` is three `c.ignores_difficult` calls,
+    one of which is "rubble", and `Grid.rough` skips a square whose kind
+    the mover ignores. So naming the going is what exempts them, and it
+    exempts every other earth walker on the board too."""
     here = c.here
     ring = [sq for sq in c.area() if distance(sq, here) == 2]
-    c.zone(ring, difficult=True, until=When.ENCOUNTER)
+    c.zone(ring, difficult="rubble", until=When.ENCOUNTER)
 
 
 @power(
@@ -796,10 +846,9 @@ def p16470(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ILLUSION],
-    dropped=ENDS_ON_ATTACK,
 )
 def p16473(c: Cast) -> None:
-    c.invisible(on=c.me, until=When.EONT)
+    _until_you_attack(c, c.invisible(on=c.me, until=When.EONT))
 
 
 @power(
@@ -973,13 +1022,19 @@ def p16658(c: Cast) -> None:
     trigger="a creature within 10 squares regains hit points or is damaged",
     on=(
         Trigger(Healed, _subject_within(10), "a creature nearby is healed"),
-        Trigger(DamageRolled, _subject_within(10), "a creature nearby is damaged"),
+        Trigger(DamageApplied, _subject_within(10), "a creature nearby is damaged"),
     ),
-    dropped=("DamageRolled.from_attack",),
+    dropped=("DamageApplied.from_attack",),
 )
 def p15844(c: Cast) -> None:
     """Which half pays out is decided by which event was answered, so the
-    body reads the trigger rather than asking the board anything."""
+    body reads the trigger rather than asking the board anything.
+
+    `DamageApplied`, not `DamageRolled`: the printed trigger is damage that
+    landed, and a blow a resistance ate whole is not it. Neither event
+    records whether an attack was behind the blow -- `from_attack` is an
+    argument to `resolve.deal_damage` and reaches nothing -- so the
+    ongoing-damage case fires this too."""
     ev = c.trigger
     who = ev.target if ev is not None else c.target
     if who is None:
@@ -1107,11 +1162,15 @@ def p16379(c: Cast) -> None:
         Trigger(Miss, by_me, "you miss with an attack"),
         Trigger(SavingThrow, _failed_save, "you fail a saving throw"),
     ),
-    todo=("c.boost_attack()", "c.boost_roll()"),
+    todo=("c.boost_attack()", "c.boost_save()"),
 )
 def p13213(c: Cast) -> None:
     """A bonus laid on a roll already made. A reroll is a different thing
-    and would turn a near miss into a fresh die."""
+    and would turn a near miss into a fresh die.
+
+    `c.boost_check` is this verb for the third kind of roll and is the
+    shape both halves want; the attack and the saving throw have no twin,
+    so the marker names those two rather than one umbrella."""
 
 
 @power(
@@ -1124,11 +1183,14 @@ def p13213(c: Cast) -> None:
     target=SELF,
     trigger="you save against a dazing or stunning effect",
     on=Trigger(SavingThrow, _made_save, "you make a saving throw"),
-    todo=("SavingThrow.source", "SavingThrow.condition"),
+    todo=("SavingThrow.effect",),
 )
 def p16040(c: Cast) -> None:
-    """The event names neither who laid the effect nor what it was, and
-    the row is nothing but those two."""
+    """The row is "was it a daze or a stun", "who laid it" and "lay it on
+    them instead" -- all three of which are the `Effect` that was saved
+    against, and the event carries only `against=str(eff)`, a rendering.
+    One symbol rather than two: the field is the effect, and its `source`
+    and its `conditions` come with it."""
 
 
 @power(

@@ -7,18 +7,24 @@ that needs a body.
 
 "Class X can use this weapon as an implement" is the commonest property in
 the slot -- eleven blocks in the first sixty -- and `c.as_implement` is the
-verb for it. Two things the corpus keeps asking for that still cannot be
-said, each marked with the symbol it wants rather than approximated:
+verb for it. The one thing the corpus keeps asking for that still cannot be
+said is a change to the **weapon's own columns**: "this weapon can be used
+as a heavy thrown weapon, range N/M" and "increase this weapon's range",
+marked `c.make_thrown()` and `c.weapon_range()`. `Weapon.ranged` and
+`Weapon.properties` are fields on the object in `Gear`, and writing to them
+from a body is not a change a body may make: clearing `ranged` is what
+takes a weapon out of `Gear.melee`, so hanging a thrown range on a hammer
+would stop it being a hammer.
 
-* **"this weapon can be used as a heavy thrown weapon, range N/M"**, and
-  "increase this weapon's range" -- `c.make_thrown()`, `c.weapon_range()`.
-* **"the damage ignores resistance"** -- `c.ignore_resistance()`.
+"The damage ignores resistance" **is** sayable -- `c.ignore_resistance`
+landed and two rows here use it.
 
 One judgement runs through the whole file. A great many lines read "using
 this weapon", and the damage context carries `target`, `power`,
-`opportunity`, `charge`, `dtype` and `crit` -- not the weapon. A gate on
-the weapon is therefore impossible, and since the character is holding the
-item for as long as the property is armed, these are written as though
+`opportunity`, `charge`, `dtype`, `dtypes`, `crit`, `ranged`, `advantage`
+and the two granted-swing keys -- not the weapon, and not the hand. A gate
+on the weapon is therefore impossible, and since the character is holding
+the item for as long as the property is armed, these are written as though
 every swing is the item's. That over-applies only for a character wielding
 two weapons of which one is magical.
 """
@@ -51,6 +57,7 @@ from combat_engine.engine import (
     Cast,
     CloseBlast,
     DamageType,
+    EffectApplied,
     Forced,
     Hit,
     Keyword,
@@ -58,6 +65,7 @@ from combat_engine.engine import (
     Miss,
     Moved,
     Position,
+    Powers,
     Ranged,
     SecondWind,
     Size,
@@ -128,6 +136,40 @@ def _weapon_damage(ctx: dict[str, Any]) -> bool:
     """The blow being resolved came out of a weapon power."""
     p = get(ctx.get("power", ""))
     return p is not None and Keyword.WEAPON in p.keywords
+
+
+def _melee_spirit(ctx: dict[str, Any]) -> bool:
+    """The row being measured takes its range from the spirit companion.
+
+    `dsl.area_of` hands `_stretched` a context of `power` and `kind`, so a
+    reach modifier can be narrowed to "Melee spirit" rows -- which is
+    `Range.from_ == "companion"`, the same column `measured_from` reads.
+    """
+    p = get(ctx.get("power", ""))
+    return p is not None and p.reach is not None and p.reach.from_ == "companion"
+
+
+def _hit_already(world: World, me: int, foe: int) -> bool:
+    """Has this creature already landed a blow on that one this fight?
+
+    `world.bus.log` is the tally, which is the only record of what has
+    happened: nothing on a creature counts who it has hit.
+    """
+    return any(
+        isinstance(past, Hit) and past.attacker == me and past.target == foe
+        for past in world.bus.log
+    )
+
+
+def _bard_power(world: World, me: int, ev: Any) -> bool:
+    """Was the row that caused this a bard attack power?
+
+    `Hit` carries `power` and `Power.cls` is the column, the same lookup
+    `by_melee` and `by_keyword` make for the reach and the keywords. A
+    `Hit` is already an attack landing, so the class is the whole gate.
+    """
+    p = get(getattr(ev, "power", ""))
+    return p is not None and p.cls == "bard"
 
 
 def _crit_by_me(world: World, me: int, ev: Any) -> bool:
@@ -557,12 +599,45 @@ def i1446x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.on_form()", "c.in_form()"),
 )
 def i1490x1(c: Cast) -> None:
-    """A defence bonus that begins when a particular kind of form is
-    assumed and lasts only while it is held. `c.form` installs one and
-    nothing announces it or asks which one is on."""
+    """Both halves are readable and the marker was stale.
+
+    A guardian form is a **stance** -- `powers/warden/__init__.assume`
+    writes it, labelled with the form row's own ref -- and `EffectApplied`
+    announces every effect that lands, its `label` included. So the form
+    going on is an event, and "while you're in *that* form" is the stance
+    object itself: the bonus is hung on its `on_end`, which is how the
+    class's own rows bind a modifier to a form.
+
+    `PowerUsed` is the wrong seam here even though a feat uses it: it
+    fires **before** the body, so the stance is not up yet and there is
+    nothing to hang the bonus on."""
+
+    def took_form(ev: EffectApplied) -> None:
+        if ev.target != c.me:
+            return
+        row = get(ev.label)
+        if row is None or row.cls != "warden" or Keyword.POLYMORPH not in row.keywords:
+            return
+        # Found by **label**, not by `Effects.stance_of`: that one returns
+        # the first stance it happens to find, and the form is only
+        # reliably the only one because `c.stance` ends the previous
+        # first. Hanging the bonus on the wrong stance is silent, and the
+        # bonus then outlives the form it was printed for.
+        form = next(
+            (e for e in c.world.effects.of(c.me) if e.label == ev.label), None
+        )
+        which = c.choose([FORT, REF, WILL], "which defence the form guards")
+        if form is None or which is None:
+            return
+        held = c.bonus(which, 2, on=c.me, until=When.ENCOUNTER)
+        if held is not None:
+            form.on_end.append(
+                lambda: c.world.effects.end(held, "the form ended")
+            )
+
+    c.watch(EffectApplied, took_form, until=When.ENCOUNTER)
 
 
 @power(
@@ -601,11 +676,18 @@ def i1505p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.heal_bonus()",),
+    todo=("Healed.power",),
 )
 def i1561x1(c: Cast) -> None:
-    """Adds to the amount one named healing row restores. Healing is not
-    read through `Mods`, so there is no key to write a bonus under."""
+    """Adds to the amount one **named** healing row restores.
+
+    Re-aimed. The old marker said healing has no seam at all, which is no
+    longer true: `resolve.heal` announces `Healed` *before* the hit points
+    go on and reads `amount` back off the event, so a listener may raise
+    it. What is missing is narrowing it to the row the card names --
+    `Healed` carries `source`, `target`, `amount` and `hp` and nothing
+    saying which power healed. Ungated this would fatten every heal the
+    wielder ever gave, which is far more than the card grants."""
 
 
 @power(
@@ -732,12 +814,50 @@ def i1771x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.expend()",),
 )
 def i1771p1(c: Cast) -> None:
-    """Trades one spent encounter power for another. `c.restore_use` hands
-    a use back; nothing burns one, so only half the trade can be said and
-    half of it is a straight gift."""
+    """The marker was stale: `c.expend_row` is the half that was missing.
+
+    A use is spent and the row never runs, which is exactly the price this
+    card charges. The pair it buys back is chosen before anything is paid
+    -- `c.expend_row` returns False when there is no use to spend, and a
+    trade with nothing on the other side is not one the card offers.
+
+    "Of up to the same level" is read off the row that was burned. An
+    *attack* power is one with a printed `Attack` line, which is the
+    column; `Power.is_attack` is a different question -- it asks whether
+    the row aims at anybody, and a utility that buffs an ally does."""
+    known = c.world.get(c.me, Powers)
+    if known is None:
+        return
+
+    def encounter_attacks(word: Keyword) -> list[str]:
+        out = []
+        for ref in known.all:
+            p = get(ref)
+            if (
+                p is not None
+                and p.usage is ENCOUNTER
+                and p.attack is not None
+                and word in p.keywords
+            ):
+                out.append(ref)
+        return out
+
+    spendable = [r for r in encounter_attacks(Keyword.ARCANE) if not known.times(r)]
+    spent = [r for r in encounter_attacks(Keyword.MARTIAL) if known.times(r)]
+    if not spendable or not spent:
+        return
+    paid = c.choose(spendable, "which arcane power is given up")
+    if paid is None:
+        return
+    cap = get(paid).level
+    back = [r for r in spent if (p := get(r)) is not None and p.level <= cap]
+    if not back or not c.expend_row(paid):
+        return
+    chosen = c.choose(back, "which martial power comes back")
+    if chosen is not None:
+        c.restore_use(chosen)
 
 
 @power(
@@ -748,12 +868,17 @@ def i1771p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.grant_points()",),
+    todo=("c.regain_points()",),
 )
 def i1793p1(c: Cast) -> None:
-    """A power point out of nowhere, restricted to augmenting.
-    `c.transfer_points` moves points between creatures and `c.spend_points`
-    spends them; neither creates one."""
+    """A power point out of nowhere, held until the end of your next turn.
+
+    Re-aimed on to the eleven-row group that names the same gap.
+    `c.transfer_points` moves a point between creatures and
+    `c.spend_points` spends one; nothing puts one into a pool, whether
+    that is a point regained or -- as here -- one over the maximum. The
+    "only to augment a psionic attack power" half rides on the same verb:
+    a point nothing can create cannot be earmarked either."""
 
 
 @power(
@@ -1083,13 +1208,22 @@ def i2657p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.spirit_reach()",),
 )
 def i2926x1(c: Cast) -> None:
-    """The widening of a "melee spirit" reach cannot be said: `Range.from_`
-    names the origin and nothing changes how far from it a target may
-    stand."""
+    """The reach *can* be widened, and the dropped marker was wrong.
+
+    `dsl.area_of` stretches a melee range by `Mods.total("reach", ctx)`
+    and hands the gate a context carrying the row being measured, so an
+    ordinary `c.bonus("reach", ...)` narrowed to rows whose `Range.from_`
+    is the companion says this and only this -- the wielder's own reach is
+    untouched.
+
+    A printed "Melee spirit" is reach 1, so "within 2 squares of your
+    spirit" is +1. The card states a distance rather than an increase, so
+    a hypothetical Melee spirit 2 row would come out at 3; there is no
+    such row, and a bonus is the only shape the modifier has."""
     c.as_implement(on=c.me)
+    c.bonus("reach", 1, on=c.me, until=When.ENCOUNTER, when=_melee_spirit)
 
 
 @power(
@@ -1137,14 +1271,26 @@ def i3011x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.hit_before()",),
 )
 def i3011p1(c: Cast) -> None:
-    """The printed entry condition -- you must already have hit this target
-    once this encounter -- is a fact about a creature the row does not
-    name, and dropping it makes the row freely usable rather than earned.
-    `c.ignore_cover` waives concealment as well, which is the effect."""
-    c.ignore_cover(on=c.me, until=When.EONT)
+    """The entry condition is back: the bus log is the tally.
+
+    The clause was dropped as a fact about a creature the row does not
+    name, and that is the wrong way round -- the row need not name the
+    target, because `c.ignore_cover` takes a `when` and the attack
+    context carries `target`. So the question is asked when the modifier
+    is read, against whoever is actually being shot at, which is the
+    moment the card means.
+
+    `once=True` is "your next attack roll"; `c.ignore_cover` waives cover
+    as well as concealment, which is wider than printed and the only
+    shape the verb has."""
+    me = c.me
+    c.ignore_cover(
+        on=me, until=When.EONT, once=True,
+        when=lambda ctx: ctx.get("target") is not None
+        and _hit_already(c.world, me, ctx["target"]),
+    )
 
 
 @power(
@@ -1188,14 +1334,18 @@ def i3069x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    trigger="you attack an enemy with a power using this weapon",
-    on=Trigger(Hit, by_me, "you attack an enemy with this weapon"),
-    dropped=("by_class()",),
+    trigger="you attack an enemy with a bard attack power using this weapon",
+    on=Trigger(Hit, both(by_me, _bard_power), "you attack with a bard power"),
 )
 def i3069p1(c: Cast) -> None:
-    """"With a bard attack power" is a class gate no predicate can ask of
-    the power that fired, so any attack of the wielder's arms it. The
-    bonus is aimed at one enemy, which the attack context carries as
+    """The class gate is back: `Hit` carries `power`.
+
+    It was dropped as a question no predicate could ask, and the event has
+    named the row that landed it all along -- `by_melee` and `by_keyword`
+    read the same field. `Power.cls` is the column, so "a bard attack
+    power" is one lookup.
+
+    The bonus is aimed at one enemy, which the attack context carries as
     `target`."""
     foe = _struck(c)
     if foe is None:
@@ -1219,8 +1369,19 @@ def i3069p1(c: Cast) -> None:
 )
 def i3074p1(c: Cast) -> None:
     """Trades a saving throw one class feature would hand you for extra
-    damage. `c.unsave` fails a save being rolled; declining one that has
-    been offered is a different thing, and the feature is not modelled."""
+    damage.
+
+    The feature **is** modelled -- the old docstring said otherwise and
+    was wrong. `powers/sorcerer/souls._chaos_burst` is the wild soul's
+    half of `cf:sorcerer-f0`: it watches `AttackRolled` and, on an odd
+    natural, calls `c.save(on=me)`.
+
+    What is missing is declining it. `c.save` picks the first save-ends
+    effect and rolls; `SavingThrow` is announced, but only in the `bare`
+    branch and the caller ignores its `cancelled` either way, so an
+    interrupt could not stop the throw and a free action certainly
+    cannot. `c.unsave` fails a save that is happening, which spends the
+    effect's chance rather than keeping it."""
 
 
 @power(
@@ -1230,12 +1391,28 @@ def i3074p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.strip_resistance()",),
 )
 def i3103x1(c: Cast) -> None:
-    """A critical takes the target's resistances away for a while.
-    `c.resist` grants one and `c.vulnerable` offsets one; neither removes
-    what a creature already has."""
+    """A critical takes the target's resistances away until it saves.
+
+    The marker was stale twice over. `c.resistances` reads back what a
+    creature shrugs off, by type -- its own docstring says it exists for
+    "the target loses that resistance" -- and a **negative** amount to
+    `c.resist` stays arithmetic rather than taking the highest, which is
+    the subtraction. The hold puts back exactly what it took when the
+    save lands.
+
+    One call per type it actually has, because the delta differs per
+    type; a blanket negative would drive every other type below zero and
+    turn a resistance into a vulnerability."""
+
+    def on_crit(ev: Hit) -> None:
+        if ev.attacker != c.me or not ev.critical:
+            return
+        for dtype, amount in c.resistances(on=ev.target).items():
+            c.resist(-amount, dtype, on=ev.target, until=When.SAVE_ENDS)
+
+    c.watch(Hit, on_crit, until=When.ENCOUNTER)
 
 
 @power(
@@ -1319,12 +1496,25 @@ def i528x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.maximise(when=)",),
 )
 def i581x1(c: Cast) -> None:
-    """Maximum damage against objects needs a gate `c.maximise` does not
-    take, and an ungated one would maximise every swing. The item bonus
-    against animates is the rest of the card."""
+    """Both halves land, and the gate `c.maximise` lacks is not needed.
+
+    It was dropped because `c.maximise` takes no `when` and an ungated
+    one maximises every swing. But `c.maximise` is already a **one-shot**
+    -- it tops up the next roll and spends itself -- so arming it at the
+    moment the swing is declared at an object is the same sentence with
+    no gate at all. `AttackDeclared` carries `target` and is announced
+    before the roll; "an object" is `c.scenery`, as it is one row up.
+
+    `until=When.EOT` is the cleanup for a swing that misses and rolls no
+    damage to top up."""
+
+    def at_an_object(ev: AttackDeclared) -> None:
+        if ev.attacker == c.me and ev.target in c.scenery():
+            c.maximise(on=c.me, until=When.EOT)
+
+    c.watch(AttackDeclared, at_an_object, until=When.ENCOUNTER, window=Window.BEFORE)
     c.bonus(
         "damage", 2, kind="item", on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: "animate" in c.kinds_of(on=ctx.get("target"))
@@ -1370,13 +1560,46 @@ def i696p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.on_feature()",),
 )
 def i1120x1(c: Cast) -> None:
-    """Rides on a class feature firing. A feature is an ordinary row, but
-    nothing announces one going off in a way a second row can answer --
-    `PowerUsed` is emitted before the body and only for a row that was
-    used, not for a trait that simply became true."""
+    """Rides on a class feature firing -- and the feature's own trigger is
+    an event, so the row does not need the feature to announce itself.
+
+    The marker was right that nothing says "a trait became true". It was
+    wrong that this row needed one: the feature it names is the dragon
+    soul's half of `cf:sorcerer-f0`, whose printed trigger is *the first
+    time you are bloodied in an encounter*, and `Bloodied` names its
+    subject `actor`. So the condition is "the wielder has that feature on
+    that build" plus the same event, with the same once-a-fight latch the
+    feature keeps -- kept here rather than `once=True` on the watch,
+    because a bloodied ally is not this sentence.
+
+    "Melee and close attacks" is read off the row's range line, the way
+    `by_melee` reads it: the attack context's `ranged` is false for a
+    close burst as well as for a swing, so it cannot tell the two
+    from an area attack on its own."""
+    me = c.me
+    # `c.feat`, not `c.knows`: a feature is an ordinary row in
+    # `Powers.known` and `c.feat` asks the caster's own list, where
+    # `c.knows` answers with whoever on the board has it first -- an ally
+    # sorcerer would have armed this dagger for a fighter.
+    if not (c.build("dragon") and c.feat("cf:sorcerer-f0")):
+        return
+    done: list[bool] = []
+
+    def in_reach(ctx: dict[str, Any]) -> bool:
+        p = get(ctx.get("power") or "")
+        return p is not None and p.reach_of(ctx.get("branch", 0)).kind in (
+            "melee", "close_burst", "close_blast",
+        )
+
+    def on_blood(ev: Bloodied) -> None:
+        if ev.actor != me or done:
+            return
+        done.append(True)
+        c.bonus("attack", 1, kind="item", on=me, until=When.EONT, when=in_reach)
+
+    c.watch(Bloodied, on_blood, until=When.ENCOUNTER, on=me)
 
 
 @power(

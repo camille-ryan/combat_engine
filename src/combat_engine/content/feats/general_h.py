@@ -37,6 +37,29 @@ hung. `exploits._riders` is the machine for that shape and they use it.
 The six that stay marked are re-aimed at what the clause actually wants
 -- only f1237, whose brackets carry a capitalised class, is still
 waiting on a name.
+
+A later sweep of the markers closed four more, and all four were a
+docstring asserting a limit rather than a limit.
+
+**A failed saving throw is answerable.** `Effect.escalate` is a field on
+every effect, not only on one carrying a condition, and `durations.save`
+runs it on any failure -- so the "First Failed Saving Throw" line on
+f1295b hangs off the *modifier* that row lays. `c.penalty` takes no
+`escalate=`, so it is set on the hold that comes back.
+
+**A striker's extra damage names itself.** `extra_damage` stamps the
+blow's `detail` with the label it was armed under, and any row may arm
+it, so f1225 both grants `cf:warlock-f4` and answers "the first time you
+deal the extra damage".
+
+**A familiar's mode is a field.** `Companion.passive` is what
+`c.familiar_mode` moves and a `requires=` gate can read, which is
+f1334b's whole Requirement.
+
+**Two markers named things that already existed** and are re-aimed:
+`c.grants_ca_to(ally)` on f1270 (`c.grants_advantage(to=<eid>)` takes an
+ally) and `c.on_shift_away()` on f1307 (`Moved` carries `kind_`, and
+`"shift"` is one of its words).
 """
 
 from __future__ import annotations
@@ -94,6 +117,12 @@ from combat_engine.engine.query import allies, distance_between
 
 #: The racial zone `p2473` lays, by the label it carries.
 CLOUD = "p2473"
+
+#: The class feature f1225 hands over, and the label its extra damage is
+#: filed under -- `features/strikers.py:extra_damage` stamps it as the
+#: `detail` of the blow, which is how "the first time you deal the extra
+#: damage" is recognised from outside the feature.
+CURSE = "cf:warlock-f4"
 
 #: Another class's feature **named in prose**, with no ref in the brief
 #: and nothing in the tree answering to it. What is left of the old
@@ -261,20 +290,44 @@ def f1224(c: Cast) -> None:
 
 
 @power("f1225", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=Ranged(10), target=ONE_CREATURE,
-       dropped=("c.curse_damage()",), proficiency=("w:rod", "w:wand"))
+       reach=Ranged(10), target=ONE_CREATURE, proficiency=("w:rod", "w:wand"))
 def f1225(c: Cast) -> None:
-    """The one row here that costs an action. `c.curse` is an ordinary
-    relational verb -- two cursers on a board read their own -- so the
-    grant itself is writable.
+    """The one row here that costs an action, and the whole of
+    `cf:warlock-f4` once a fight: the curse, and the extra damage that
+    comes with it.
 
-    Dropped: "the curse ends the first time you deal the extra damage".
-    The extra damage belongs to the warlock's own feature, which a
-    character taking this feat does not have, and nothing announces it.
+    **The dropped clause is written.** It was held on the ground that the
+    extra damage belongs to a feature this character has not got and that
+    nothing announces it -- both halves are false now. `extra_damage` is
+    an ordinary helper any row may arm, and it stamps the blow's `detail`
+    with the label it was armed under, so "the first time you deal the
+    extra damage" is a thing that can be recognised and answered.
+
+    Armed here by hand rather than through `c.use_power(CURSE)`: that
+    feature's own rider pays once a **round** for the rest of the fight,
+    and this card's whole difference is that it pays once and then the
+    curse is over. Using the row would leave its rider behind, still
+    paying, after the curse this feat laid had ended.
+
+    `c.total(f"{CURSE} damage")` is the same number the feature rolls, so
+    a build feature that raises a warlock's curse damage raises this too.
     """
     foe = c.target
-    if foe is not None:
-        c.curse(on=foe)
+    if foe is None:
+        return
+    me = c.me
+    hold = c.curse(on=foe)
+    paid = False
+
+    def on_hit(ev: Hit) -> None:
+        nonlocal paid
+        if paid or ev.attacker != me or ev.target != foe:
+            return
+        paid = True
+        c.damage("1d6", c.total(f"{CURSE} damage"), on=foe, detail=CURSE)
+        c.end_effect(hold)
+
+    c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label=CURSE)
 
 
 @_trait("f1226")
@@ -451,11 +504,24 @@ def f1259(c: Cast) -> None:
     c.use_power("p1449")
 
 
-@_trait("f1270", todo=("c.grants_ca_to(ally)",))
+@_trait("f1270", todo=("actions.bluff()", "c.instead_of()"))
 def f1270(c: Cast) -> None:
     """Hands the combat advantage a Bluff check would win to an ally
-    instead of taking it. Bluffing for advantage is not an action the
-    engine has, so there is nothing to redirect."""
+    instead of taking it.
+
+    **Re-aimed off `c.grants_ca_to(ally)`**, which names a thing that
+    exists: `c.grants_advantage(on=foe, to=<eid>)` takes an ally's eid
+    and f2092 already wins the advantage with
+    `c.check("bluff", c.passive("insight", of=foe))`. So the contest is
+    sayable and so is giving the result away.
+
+    What is missing is the action itself. Bluffing for combat advantage
+    is a standard action `engine/actions.py` does not offer -- f2092 only
+    gets to make the check because its own card hands it one off a
+    trigger -- so this trait has no action to intercept, and "instead of
+    for yourself" is the beneficiary of an action, which is the hold
+    twenty-odd other rows name.
+    """
 
 
 # -- the exotic weapon chains -----------------------------------------------
@@ -539,12 +605,21 @@ def f1255b(c: Cast) -> None:
     c.on_sustain(hold, lambda: c.damage(c.w(), on=victim))
 
 
-@_trait("f1277", todo=("c.weapon_range()",),
+@_trait("f1277", todo=("c.weapon_range()", "c.counts_as(property=)",
+                       "c.counts_as(group=)"),
         proficiency=("w:blowgun",))
 def f1277(c: Cast) -> None:
     """The proficiency lands. What is left is the clauses that rewrite
-    the weapon itself -- a free-action reload, a longer range, the high
-    crit property -- and nothing edits a `Weapon` in place."""
+    the weapon itself, and they are three different rewrites rather than
+    one: the range (`Weapon.ranged`), the high crit property
+    (`Weapon.properties`), and re-filing the weapon so a class feature
+    and a group-gated power will take it (`Weapon.group`). Each field is
+    there and nothing edits a `Weapon` in place, so all three are named
+    -- a marker naming only the first would go quiet the day a range
+    verb landed and two clauses would still be gone.
+
+    The free-action reload is not marked: nothing in the engine makes a
+    blowgun cost an action to load, so there is no cost to remove."""
 
 
 _swap("f1276", "f1276b")
@@ -675,15 +750,23 @@ def f1291b(c: Cast) -> None:
     once: the daze replaces itself with a stun, and the stun with
     unconsciousness. The maintained-grab damage is the same sustained
     hold f1255b uses. Strength is taken for the same reason as f1289b.
+
+    Each step ends the one before it, which the card prints as "instead
+    of". Left standing, the lighter condition is invisible while the
+    heavier one is on and then outlives it -- a target that saves
+    against the stun is still dazed, off a line that said it would not
+    be.
     """
     victim = c.target
     if victim is None:
         return
 
     def worse(eff: Effect) -> None:
+        c.end_effect(eff)
         c.condition(Condition.UNCONSCIOUS, until=When.SAVE_ENDS, on=eff.owner)
 
     def stun(eff: Effect) -> None:
+        c.end_effect(eff)
         c.condition(Condition.STUNNED, until=When.SAVE_ENDS, on=eff.owner,
                     escalate=worse)
 
@@ -929,17 +1012,24 @@ _swap("f1295", "f1295b")
 
 
 @power("f1295b", level=1, cls="", usage=DAILY, action=STANDARD,
-       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.POISON],
-       dropped=("c.on_save()",))
+       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.POISON])
 def f1295b(c: Cast) -> None:
     """Same shape as f1293b, and it pays out on a miss as well, which is
     why the two branches are written rather than one guarded block.
 
-    Dropped: the two aftereffects. "On a first failed saving throw the
-    target is blinded **instead of** taking the penalty" is a rider that
-    replaces one effect with another when a save is failed, and nothing
-    watches a failed save -- `c.condition(escalate=)` grows a condition
-    the row already applied and does not swap one effect for a second.
+    **The two aftereffects are written.** They were dropped on the
+    reading that `escalate` only grows a condition a row already applied
+    -- but `Effect.escalate` is a field on every effect, not only on one
+    carrying a condition, and `durations.save` runs it on any failed
+    save. A modifier is an effect, so the penalty this row lays can carry
+    its own worsening; `c.penalty` takes no `escalate=` keyword, so it is
+    set on the hold that comes back, which is how f1279b reaches
+    `on_end` two rows up.
+
+    "Blinded **instead of** taking the penalty" is the end of the old
+    effect and the start of the new one in the same breath -- unlike
+    f1291b's daze-into-stun, where the card prints "instead" and the
+    heavier condition swallows the lighter one anyway.
 
     The printed "Miss: half damage" belongs to the borrowed row's own
     damage roll and is not this row's to halve."""
@@ -949,7 +1039,20 @@ def f1295b(c: Cast) -> None:
     if c.may("change the damage type to poison", who=c.me):
         c.deals(DamageType.POISON, until=When.EOT, on=c.me)
     c.use_power(chosen, on=c.target)
-    c.penalty("attack", 2, until=When.SAVE_ENDS)
+
+    def twice_over(eff: Effect) -> None:
+        c.end_effect(eff)
+        c.condition(Condition.BLINDED, Condition.WEAKENED,
+                    until=When.SAVE_ENDS, on=eff.owner)
+
+    def blinded_instead(eff: Effect) -> None:
+        c.end_effect(eff)
+        c.condition(Condition.BLINDED, until=When.SAVE_ENDS, on=eff.owner,
+                    escalate=twice_over)
+
+    hold = c.penalty("attack", 2, until=When.SAVE_ENDS)
+    if hold is not None:
+        hold.escalate = blinded_instead
     c.ongoing(10 if c.landed else 5, DamageType.POISON)
 
 
@@ -1284,15 +1387,23 @@ _riders("f1306", {
 }, dropped=("When.SURPRISE",))
 
 
-@_trait("f1307", todo=("c.stored_dose()", "c.on_shift_away()", "c.instead_of()"))
+@_trait("f1307", todo=("c.stored_dose()", "c.effects_on()", "c.instead_of()"))
 def f1307(c: Cast) -> None:
     """All four refs resolve. Re-aimed off `c.apply_poison`, which coats a
     weapon now: what these clauses want is the dose itself. Two of them
     raise the attack roll of a secondary poison attack, which only exists
     once a dose has been applied and is not labelled when it is; one
-    trades a power's printed move for applying a poison you possess; the
-    fourth waits for the target to shift after the fact, the hold four
-    other rows in the tree already carry."""
+    trades a power's printed move for applying a poison you possess.
+
+    **The fourth is re-aimed off `c.on_shift_away()`**, which names a
+    thing that exists: `MoveStart`, `MoveEnd` and `Moved` all carry
+    `kind_`, and `"shift"` is one of its six words, so "if it shifts
+    before the start of your next turn" is an ordinary `c.watch`. The
+    half that cannot be asked is the other one -- "if the target suffers
+    from a poison effect" -- because `c.suffering` matches an effect's
+    label, which is the ref of the row that laid it, and nothing reads
+    back what effects a creature is under or what type their burn is.
+    """
 
 
 @_trait("f1308", dropped=("c.on_riposte()",))
@@ -1456,14 +1567,59 @@ def f1275(c: Cast) -> None:
 # -- the familiar feats -----------------------------------------------------
 
 
+def _familiar_is_active(world, eid: int) -> bool:  # noqa: ANN001
+    """Does this creature keep a familiar, and is it on the board?
+
+    A `requires=` gate gets `(world, eid)` and no `Cast`, so `c.familiar`
+    is out of reach; the component is not. `passive` is the mode word the
+    cards print, and `c.familiar_mode` is what moves it.
+    """
+    from combat_engine.engine.components import Companion
+
+    return any(
+        (pet := world.get(who, Companion)) is not None
+        and pet.owner == eid
+        and pet.kind == "familiar"
+        and not pet.passive
+        for who in world.having(Companion)
+    )
+
+
 @power("f1334b", level=1, cls="", usage=DAILY, action=FREE, reach=PERSONAL,
        target=SELF, keywords=[Keyword.ARCANE],
-       todo=("c.familiar_state()",))
+       requires=_familiar_is_active,
+       requires_text="your familiar must be in its active state")
 def f1334b(c: Cast) -> None:
     """Destroys the familiar for a damage bonus against whatever stood
-    next to it. Its Requirement is the active state f740b and f741 were
-    blocked on, and writing the payout alone would make a card free that
-    is printed as conditional."""
+    next to it.
+
+    **The Requirement is askable.** `c.familiar_state()` named a verb
+    that does not exist, but the state does: `Companion.passive` is the
+    field `c.familiar_mode` moves, and a passive familiar is lifted off
+    the grid entirely. So the printed "must be in its active state" is a
+    `requires=` gate reading it, the same shape f1347b's "you must be
+    not bloodied" uses at the foot of this file.
+
+    Adjacency is read **before** the familiar goes, which is the printed
+    "creatures that were adjacent". `side="other"` leaves the familiar
+    itself out of its own circle.
+
+    Destroyed rather than dismissed: `c.dismiss_companion` walks
+    `c.companion`, which is whatever single body the caster keeps, and a
+    sorcerer with both a familiar and something else would lose the
+    wrong one. Coming back is a matter for the rest, not the board.
+    """
+    pet = c.familiar()
+    if pet is None:
+        return
+    near = {who for who in c.within(1, of=pet, side="other") if who != c.me}
+    c.world.despawn(pet)
+    if not near:
+        return
+    c.bonus(
+        "damage", 5, on=c.me, until=When.EOT, kind="power",
+        when=lambda ctx: ctx.get("target") in near,
+    )
 
 
 @_trait("f1336", todo=("c.grant_action(familiar=)",))

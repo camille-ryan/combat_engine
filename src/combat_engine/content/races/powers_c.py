@@ -45,11 +45,14 @@ from combat_engine.engine import (
     DamageRolled,
     DamageType,
     Dropped,
+    EnterSquare,
+    ForcedMove,
     Health,
     Hit,
     Keyword,
     Melee,
     Miss,
+    MoveEnd,
     Ranged,
     SavingThrow,
     Size,
@@ -64,15 +67,16 @@ from combat_engine.engine import (
     both,
     by_me,
     by_melee,
+    by_ranged,
     check_failed,
     get,
     my_check,
-    not_me,
     power,
     spread,
     targets_me,
 )
-from combat_engine.engine.query import squares
+from combat_engine.engine.query import line_of_effect, squares, unseen_by
+from combat_engine.engine.skills import modifier
 
 if TYPE_CHECKING:
     from combat_engine.engine import World
@@ -106,6 +110,37 @@ def _melee_hit_on_me(c: Cast, ev: Any) -> bool:
     )
 
 
+def _seen_by_me(world: World, me: int, ev: Any) -> bool:
+    """"A creature you can see" -- somebody else, in sight, on a live turn.
+
+    No ready-made predicate says this; the question itself is settled,
+    and `Cast.can_see` is these same two calls.
+    """
+    who = getattr(ev, "actor", None)
+    return (
+        who is not None
+        and who != me
+        and not getattr(ev, "ghost", False)
+        and line_of_effect(world, me, who)
+        and not unseen_by(world, me, who)
+    )
+
+
+def _close_or_area(world: World, me: int, ev: Any) -> bool:
+    """Was the blow dealt by a close or an area attack?
+
+    `triggers._power_of` reads `detail` on a damage event, which is what
+    makes the reach askable there at all. `by_melee` and `by_ranged` each
+    cover part of this shape and neither covers it alone.
+    """
+    row = get(getattr(ev, "detail", "") or getattr(ev, "power", "") or "")
+    return row is not None and row.reach_of(getattr(ev, "branch", 0)).kind in (
+        "close_burst",
+        "close_blast",
+        "area_burst",
+    )
+
+
 # -- r1 ---------------------------------------------------------------------
 
 
@@ -118,13 +153,14 @@ def _melee_hit_on_me(c: Cast, ev: Any) -> bool:
     reach=CloseBlast(3),
     target=EACH_CREATURE,
     attack=Attack(CON, vs=REF, plus=2),
-    dropped=("Attack.by_choice",),
+    dropped=("c.race_option()",),
 )
 def p1448(c: Cast) -> None:
-    """The card binds the attack to Strength, Constitution or Dexterity at
-    character creation; the header holds one, and Constitution is the score
-    the damage line names anyway. The damage type is the other half of that
-    one choice and `c.element` is where it is recorded."""
+    """The card binds the attack ability and the damage type at character
+    creation, and a racial choice is recorded nowhere -- so the header
+    holds one ability, Constitution, which the damage line names anyway.
+    `c.element` answers for a character whose *class* build bound an
+    element and is the nearest standing reading of the second half."""
     if c.strike():
         c.damage("1d6", c.con_mod, dtype=c.element(on=c.me) or DamageType.UNTYPED)
 
@@ -256,11 +292,12 @@ def p1452(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="a creature you can see starts its turn",
-    on=Trigger(TurnStart, not_me, "a creature other than you starts its turn"),
-    dropped=("triggers.seen_by_me",),
+    on=Trigger(TurnStart, _seen_by_me, "a creature you can see starts its turn"),
 )
 def p14391(c: Cast) -> None:
-    """No predicate narrows a trigger to what the responder can see."""
+    """Re-aimed: no *ready-made* predicate narrows a trigger to what the
+    responder can see, but `query.unseen_by` is the question and a local
+    one asks it, so the printed trigger is declared rather than widened."""
     c.shift(2)
 
 
@@ -361,15 +398,23 @@ def p7546(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     attack=Attack(CHA, vs=REF, plus=4),
-    dropped=("Attack.by_choice", "c.ignore_concealment()"),
+    dropped=("c.race_option()",),
 )
 def p1831(c: Cast) -> None:
     """"All attacks against the target" is written as the caster's side,
-    which is every attacker that matters on a two-sided board. Cover is
-    taken off the target for everybody; concealment has no such reader."""
+    which is every attacker that matters on a two-sided board.
+
+    `c.ignore_concealment()` was stale: `c.no_cover` is the concealment
+    half as well as the cover one -- `resolve.attack` takes the larger of
+    the two and `query.cover_waived` waives whichever it was. The
+    invisibility half is truesight aimed at this one creature, which is
+    the shape `c.truesight(of=)` prints."""
     if c.strike():
         c.grants_advantage(to="team", until=When.EONT)
         c.no_cover(until=When.EONT)
+        foe = c.target
+        for watcher in (c.me, *c.allies()):
+            c.truesight(of=foe, on=watcher, until=When.EONT)
 
 
 @power(
@@ -380,16 +425,28 @@ def p1831(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(1),
     target=NO_TARGET,
-    dropped=("c.blind_in(zone)",),
 )
 def p2473(c: Cast) -> None:
     """The cloud blocks sight for everyone, which is terrain and so is a
-    zone. Blinding is laid on whoever is standing in it as it forms: nothing
-    blinds by occupancy, and the caster is exempt either way."""
-    c.zone(c.area(), until=When.EONT, blocks_sight=True)
-    for who in c.in_squares(c.area()):
-        if who != c.me:
-            c.blinded(on=who, until=When.EONT)
+    zone. "Blinded until they exit" is occupancy and not a sweep at the
+    moment it forms, so each creature's blindness is held and ended when
+    it leaves; the caster is exempt either way."""
+    area = c.area()
+    c.zone(area, until=When.EONT, blocks_sight=True)
+    held: dict[int, Any] = {}
+
+    def refresh(_ev: Any = None) -> None:
+        inside = {w for w in c.in_squares(area) if w != c.me}
+        for who in inside - set(held):
+            blind = c.blinded(on=who, until=When.EONT)
+            if blind is not None:
+                held[who] = blind
+        for who in set(held) - inside:
+            c.end_effect(held.pop(who), why=c.ref)
+
+    refresh()
+    c.watch(MoveEnd, refresh, until=When.EONT)
+    c.watch(EnterSquare, refresh, until=When.EONT)
 
 
 @power(
@@ -474,12 +531,18 @@ def p2476(c: Cast) -> None:
         both(my_check("bluff", "diplomacy", "intimidate"), check_failed),
         "you fail one of three checks",
     ),
-    dropped=("c.reroll_check(skill=)",),
 )
 def p16460(c: Cast) -> None:
-    """Rolling the other two under the Bluff modifier needs a reroll that
-    can change which skill is being rolled."""
+    """Re-aimed: the reroll needs no new argument. `skills.check` has
+    already totalled the modifier for the skill that was rolled, so
+    "use your Bluff modifier instead" is the difference between the two
+    laid on top, which `c.boost_check` reaches after the die is down."""
+    ev = c.trigger
     c.reroll_check()
+    if ev is not None and ev.skill in ("diplomacy", "intimidate"):
+        c.boost_check(
+            modifier(c.world, c.me, "bluff") - modifier(c.world, c.me, ev.skill)
+        )
 
 
 @power(
@@ -649,17 +712,25 @@ def p10045(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE, Keyword.POLYMORPH],
-    dropped=("c.immovable(optional=)",),
 )
 def p14074(c: Cast) -> None:
     """Immunity to fire is resistance large enough to swallow any heroic
     burn. The ability choice takes the best of the three, which is what a
     player picks. The aura bites at the *end* of a turn, which `c.burns`
-    does not do, so it is a watcher over the aura's occupants."""
+    does not do, so it is a watcher over the aura's occupants.
+
+    "Unless you choose to be" is `c.may`, so the refusal is written out
+    rather than taken from `c.immovable`, which never declines. `default`
+    is False: a headless run should keep the shove off, not wave it in."""
     burn = max(c.str_mod, c.con_mod, c.dex_mod)
     c.form(conditions=[Condition.SLOWED], until=When.EONT, label=c.ref)
     c.resist(100, DamageType.FIRE, until=When.EONT, on=c.me)
-    c.immovable(until=When.EONT)
+
+    def refuse(ev: ForcedMove) -> None:
+        if ev.target == c.me and not c.may("be moved", who=c.me, default=False):
+            ev.cancel(c.ref)
+
+    c.watch(ForcedMove, refuse, until=When.EONT, window=Window.BEFORE, on=c.me)
     c.aura(1, until=When.EONT)
 
     def scorch(ev: TurnEnd) -> None:
@@ -683,11 +754,18 @@ def p14074(c: Cast) -> None:
     trigger="you make an attack roll, a saving throw, a skill check or an "
     "ability check and dislike the result",
     on=Trigger(SkillCheck, about_me, "you make a skill check"),
-    dropped=("c.boost_attack()", "c.boost_save()"),
+    dropped=("c.boost_roll()",),
 )
 def p6186(c: Cast) -> None:
     """Only the skill-check branch can be answered once the die is down:
-    `c.boost_check` is the one verb that reaches a settled roll."""
+    `c.boost_check` is the one verb that reaches a settled roll.
+
+    Re-aimed off the two half-symbols onto the one the rest of the tree
+    names. The printed line is "add 1d6 to the triggering roll", whatever
+    the roll was, and both `AttackResult.total` and `SavingThrow.saved`
+    are read back -- so the hold is a verb, not an engine limit. The
+    `c.reroll_save` docstring says why it must be a verb: five rows
+    reaching into an event by hand is five chances to double a modifier."""
     c.boost_check(c.roll("1d6"))
 
 
@@ -771,15 +849,24 @@ def p16639(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.POISON],
     attack=Attack(CON, vs=AC, plus=2),
-    dropped=("c.ongoing(with_=)",),
 )
 def p27(c: Cast) -> None:
-    """"Save ends both" is one throw over two clauses; they are laid as two
-    effects here and so are saved against separately."""
+    """"Save ends both" is one throw over two clauses, and only the burn
+    can carry one. So the burn holds the save and the penalty runs to the
+    end of the encounter gated on the burn still standing -- the one save
+    ends both, which two save-ends effects side by side did not."""
     if c.strike():
         c.damage("1d8", c.con_mod, dtype=DamageType.POISON)
-        c.penalty("attack", 2, until=When.SAVE_ENDS)
-        c.ongoing(2, DamageType.POISON, until=When.SAVE_ENDS)
+        burn = c.ongoing(2, DamageType.POISON, until=When.SAVE_ENDS)
+        if burn is None:
+            c.penalty("attack", 2, until=When.SAVE_ENDS)
+        else:
+            c.penalty(
+                "attack",
+                2,
+                until=When.ENCOUNTER,
+                when=lambda _ctx, e=burn: not e.ended,
+            )
 
 
 # -- r43 --------------------------------------------------------------------
@@ -889,10 +976,12 @@ def p7441(c: Cast) -> None:
     target=SELF,
     trigger="you start your turn",
     on=Trigger(TurnStart, about_me, "you start your turn"),
-    dropped=("c.end_ongoing()",),
 )
 def p11738(c: Cast) -> None:
-    """The four conditions go; nothing ends ongoing damage outright."""
+    """Re-aimed: a burn is not a condition but it is an `Effect`, and one
+    that carries `ongoing` is exactly what the printed line ends. So the
+    four conditions are cured and every burn standing on the caster is
+    ended outright -- no saving throw, which is what the card says."""
     c.cure(
         Condition.DAZED,
         Condition.SLOWED,
@@ -900,6 +989,9 @@ def p11738(c: Cast) -> None:
         Condition.WEAKENED,
         on=c.me,
     )
+    for eff in list(c.world.effects.of(c.me)):
+        if not eff.ended and eff.ongoing is not None:
+            c.end_effect(eff, why=c.ref)
 
 
 # -- r51 --------------------------------------------------------------------
@@ -929,12 +1021,19 @@ def p16547(c: Cast) -> None:
     target=SELF,
     no_provoke=True,
     trigger="you take damage from an area or a ranged attack against AC or Reflex",
-    on=Trigger(DamageRolled, targets_me, "you take damage"),
-    dropped=("DamageRolled.vs", "DamageRolled.power"),
+    on=Trigger(
+        DamageRolled,
+        both(targets_me, by_ranged),
+        "a ranged or area attack damages you",
+    ),
+    dropped=("DamageRolled.vs",),
 )
 def p16550(c: Cast) -> None:
-    """Which attacks qualify cannot be read off the damage event, so every
-    blow is halved rather than only the two printed shapes."""
+    """Re-aimed. `DamageRolled.power` was stale: `triggers._power_of`
+    reads the row off `detail`, so `by_ranged` -- which is "ranged" and
+    "area_burst" together, exactly the printed pair -- declares the shape
+    half. Which defence the attack was aimed at still cannot be read off
+    a damage event, so a Fortitude or Will shot is halved too."""
     c.halve()
     c.jump(max(1, c.speed_of() // 2))
 
@@ -993,9 +1092,13 @@ def p14032(c: Cast) -> None:
 def p14021(c: Cast) -> None:
     """Eating and breathing are not on a board. The nonminion half of the
     trigger is asked in the body, where there is a `Cast` to ask with; the
-    melee half cannot be -- `Dropped` names no power."""
+    melee half cannot be -- `Dropped` names no power.
+
+    `c.is_kind("minion")` was wrong and silently false: `c.kinds_of` holds
+    origin and type words and never the minion column, which is what
+    `c.is_minion` reads."""
     ev = c.trigger
-    if ev is None or c.is_kind("minion", on=ev.actor):
+    if ev is None or c.is_minion(on=ev.actor):
         return
     c.bonus(
         "save",
@@ -1104,30 +1207,47 @@ def p15843(c: Cast) -> None:
     target=SELF,
     keywords=[Keyword.POLYMORPH],
     once_per_round=True,
-    dropped=("c.form(speed=)",),
 )
 def p16360(c: Cast) -> None:
     """The two humanoid shapes change no statistic, so only the animal one
-    is written: a way of moving, and the bar on attack powers that rides
-    with it. The land speeds the card also changes have no hold -- `c.mode`
-    grants a mode and cannot take walking away."""
+    is written: a way of moving, what the shape does to the land speed,
+    and the bar on attack powers that rides with it.
+
+    Re-aimed: `query.speed` reads a `speed` modifier, so "your land speed
+    becomes 1" and "your speed increases by 2" are `c.bonus("speed", ...)`
+    and want nothing new on `c.form`. Both of those and the attack bar
+    hang off the form's own effect, so reverting takes all three off
+    together -- the bar alone used to outlive the shape."""
     pace = c.speed_of()
+    #: mode speed, and what the shape does to the land speed.
     shapes = {
-        "burrow": max(1, pace // 2),
-        "climb": pace,
-        "fly": 1 + pace // 2,
-        "swim": pace,
+        "burrow": (max(1, pace // 2), 0),
+        "climb": (pace, 0),
+        "fly": (1 + pace // 2, 1 - pace),
+        "swim": (pace, 1 - pace),
+        "walk": (0, 2),
     }
     pick = c.choose(sorted(shapes), "which animal shape", optional=True)
     if pick is None:
         return
-    c.form(
-        modes={pick: shapes[pick]},
+    mode, land = shapes[pick]
+    shape = c.form(
+        modes={pick: mode} if mode else None,
         until=When.ENCOUNTER,
         revert=ActionType.MINOR,
         label=c.ref,
     )
-    c.cannot_attack(on=c.me, until=When.ENCOUNTER)
+    rides = [c.cannot_attack(on=c.me, until=When.ENCOUNTER)]
+    if land:
+        rides.append(c.bonus("speed", land, on=c.me, until=When.ENCOUNTER))
+
+    def drop(hold: Any) -> None:
+        if not hold.ended:
+            c.world.effects.end(hold, f"{c.ref} ended")
+
+    for hold in rides:
+        if hold is not None:
+            shape.on_end.append(lambda h=hold: drop(h))
 
 
 # -- r66 --------------------------------------------------------------------
@@ -1216,11 +1336,19 @@ def p16475(c: Cast) -> None:
     target=EACH_CREATURE,
     keywords=[Keyword.THUNDER],
     attack=Attack(CON, vs=REF, plus=2),
-    dropped=("c.flat(unreducible=)", "c.on_death(ref)"),
+    dropped=("c.flat(unpreventable=)", "c.on_death(ref)", "c.race_option()"),
 )
 def p16654(c: Cast) -> None:
     """Bloodied value is half the maximum. The Effect line lands once and
-    last, so the burst is rolled against a caster who is still standing."""
+    last, so the burst is rolled against a caster who is still standing.
+
+    Re-aimed onto the names the rest of the tree uses: seven rows already
+    want `c.flat(unpreventable=)` for "cannot be reduced by any means",
+    and the attack line's choice of Strength, Constitution or Dexterity
+    is the racial build decision nothing records. The Special -- this
+    power firing by itself when you die -- needs a second hook, because
+    a row declaring `on=` runs only when the trigger fires and this one
+    is also an ordinary standard action."""
     health = c.world.get(c.me, Health)
     val = (health.max_hp // 2) if health else 0
     if c.strike():
@@ -1246,16 +1374,24 @@ def p16654(c: Cast) -> None:
     target=SELF,
     trigger="an area or close attack hits or misses you, or any attack misses you",
     on=(
-        Trigger(DamageRolled, targets_me, "you take damage"),
+        Trigger(
+            DamageRolled,
+            both(targets_me, _close_or_area),
+            "a close or area attack damages you",
+        ),
         Trigger(Miss, targets_me, "an attack misses you"),
     ),
-    dropped=("DamageRolled.power",),
 )
 def p16657(c: Cast) -> None:
     """Two triggers for one printed sentence: the damage half is where the
     halving can happen -- `deal_damage` reads the amount back after both
     windows -- and the miss half carries none, so only the shift lands
-    there. Which attacks qualify cannot be read off the damage event."""
+    there.
+
+    Re-aimed: `DamageRolled.power` was stale. `triggers._power_of` reads
+    the row off `detail`, so the close-or-area half of the first trigger
+    is asked there; the second half, "any attack misses you", is the
+    `Miss` and carries no shape test at all."""
     c.halve()
     c.shift(max(1, c.speed_of() // 2))
 

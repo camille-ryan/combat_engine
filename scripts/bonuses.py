@@ -73,6 +73,7 @@ MECHANICS = ("cover", "shield", "proficiency", "concealment")
 BORROWED = {
     ("f2095", "racial"),   # extends rt:r39-bold's save bonus
     ("f3163", "racial"),   # replaces rt:r24-heedless-charge's +2
+    ("f2398", "racial"),   # raises rt:r8-bloodied-enemies' +1 to +2
 }
 
 #: Rows whose card names a type for a bonus that is **not** laid by a

@@ -12,7 +12,13 @@ say is the middle one: "while your beast companion acts independently it
 need not move adjacent to you". The beast takes no turn of its own, so
 there is no independent mode and no leash to lengthen.
 
-Two things this batch found that were thought to be gaps.
+**An `x_` token is the extractor's, not a missing row.** Two feats here
+name one -- `x_m1031a4`, `x_m5139a3` -- and neither matches a ref. The
+race's own spec line resolves both: it reads "p6188 : You have the
+x_m5139a3 power", and the trait is `rt:r8-bloodied-enemies`. Read the
+race before concluding a racial thing is undeclared.
+
+Four things this batch found that were thought to be gaps.
 
 **Standing up is announced.** `actions.legal` offers a `stand`, and
 performing it ends the prone effect with `why="stood up"` -- so
@@ -25,6 +31,15 @@ hand, `c.provoke` opens the window. `f2712` writes it.
 choice.** `c.shift(to=)` takes the square, and `World.reachable_squares`
 gives the candidates, so `_shift_beside` narrows them rather than
 handing the decider a free shift that may walk the other way.
+
+**High crit is a weapon property like any other.** Six heavy blades in
+the table carry it, so a row that asks for "a heavy blade with the high
+crit property" can ask for both.
+
+**The opportunity window is public and cancellable.** `_survive_provoking`
+opens one per adjacent enemy with `why` naming the ranged row, so a
+narrowed exemption `c.no_provoke` cannot express is a `Window.BEFORE`
+watch that cancels the ones the card names. `f2406` writes it.
 """
 
 from __future__ import annotations
@@ -39,6 +54,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     ActionType,
+    AttackDeclared,
     Cast,
     Condition,
     ConditionEnded,
@@ -47,11 +63,13 @@ from combat_engine.engine import (
     Keyword,
     Miss,
     Moved,
+    OpportunityWindow,
     PowerUsed,
     Relation,
     SurgeSpent,
     Trigger,
     When,
+    Window,
     power,
 )
 from combat_engine.engine.dsl import get
@@ -60,18 +78,21 @@ from combat_engine.engine.query import squares
 
 from .styles import used_one_of
 
-#: Nothing announces that the class's extra damage was about to be paid.
-EXTRA = ("c.on_extra_damage()",)
-#: `c.no_provoke` exempts a creature or everything, and nothing between.
-NARROW = ("c.no_provoke(when=)",)
+#: "Forgo one die of that damage". The payout **is** announced -- the
+#: rider pays through `c.damage(detail="cf:ranger-f1")` and `DamageRolled`
+#: is a `Decision` carrying that detail -- but it arrives as one number
+#: with the rider's modifiers folded into it, so one die has no price.
+FORGO = ("c.forgo_damage()",)
 
 
-def _holding(c: Cast, *groups: str) -> bool:
+def _holding(c: Cast, *groups: str, prop: str = "") -> bool:
     gear = c.world.get(c.me, Gear)
     if gear is None:
         return False
     carried = (*gear.melee, *([gear.ranged] if gear.ranged else ()))
-    return any(w.group in groups for w in carried)
+    return any(
+        w.group in groups and (not prop or prop in w.properties) for w in carried
+    )
 
 
 def _grip(c: Cast, *groups: str, hands: int) -> bool:
@@ -104,6 +125,42 @@ def _missed_my_quarry_charging(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 
 def _i_crit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.attacker == me and ev.critical
+
+
+def _my_melee_attack(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    p = get(ev.power)
+    return ev.attacker == me and p is not None and p.reach.kind == "melee"
+
+
+def _quarry_hit_me_in_melee(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    p = get(ev.power)
+    return (
+        ev.target == me
+        and p is not None
+        and p.reach.kind == "melee"
+        and world.relations.holds(Relation.QUARRY_OF, me, ev.attacker)
+    )
+
+
+def _thrown_shot(c: Cast, ref: str) -> bool:
+    """Was that ranged power a thrown weapon's rather than a bow's?
+
+    `thrown_by_hand` is the header field for a row printed "Ranged
+    weapon" that a *melee* weapon is hurled with, and fifteen rows carry
+    it. It is not the whole sentence: an ordinary ranged basic attack
+    thrown from the hand carries no such flag, and the only thing that
+    separates a javelin from an arrow there is what is being held -- no
+    ranged weapon, and a melee one the table calls thrown.
+    """
+    p = get(ref)
+    if p is None or not p.provokes_on():
+        return False
+    if p.thrown_by_hand:
+        return True
+    gear = c.world.get(c.me, Gear)
+    if gear is None or gear.ranged is not None:
+        return False
+    return any(prop.endswith("thrown") for w in gear.melee for prop in w.properties)
 
 
 def _martial_encounter(ref: str) -> bool:
@@ -180,20 +237,32 @@ def f2391(c: Cast) -> None:
     c.shift(1)
 
 
-@power("f2406", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=NARROW,
+@power("f2406", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you make a melee attack",
-       on=Trigger(Hit, lambda w, me, ev: (
-           ev.attacker == me
-           and (p := get(ev.power)) is not None and p.reach.kind == "melee"
-       ), "you attack in melee"))
+       on=Trigger(AttackDeclared, _my_melee_attack, "you attack in melee"))
 def f2406(c: Cast) -> None:
-    """The exemption is granted to everybody rather than to thrown
-    attacks only: `c.no_provoke` names one creature to be exempt from,
-    or all of them, and carries no gate on what the shot was made with.
-    So the clause plays and the narrowing to thrown weapons is what is
-    dropped."""
-    c.no_provoke(on=c.me, until=When.SONT)
+    """Thrown shots stop provoking once you have swung in melee.
+
+    `c.no_provoke` was the wrong tool and the narrowing it could not
+    make was dropped: it exempts the caster from one creature or from
+    everybody and carries no gate on what the shot was made with. The
+    window it cancels is public -- `_survive_provoking` opens one per
+    adjacent enemy with `why` naming the ranged row -- so the veto is
+    written out here with the gate the card prints.
+
+    Declared on `AttackDeclared` rather than on a hit: the card says
+    "whenever you make a melee attack", which a miss is.
+    """
+    me = c.me
+
+    def veto(ev: OpportunityWindow) -> None:
+        ref = ev.why.removesuffix(" is a ranged power")
+        if ev.provoker == me and ref != ev.why and _thrown_shot(c, ref):
+            ev.cancel(c.ref)
+
+    c.watch(OpportunityWindow, veto, on=me, until=When.SONT,
+            window=Window.BEFORE, label=f"{c.ref} thrown")
 
 
 @power("f2439", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -235,8 +304,8 @@ def f2439(c: Cast) -> None:
 # -- the style feats, now that the associated lists resolve ----------------
 
 
-@power("f2708", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Weapon.high_crit",),
+@power("f2708", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="an enemy misses you, or you use an associated power",
        on=(Trigger(Miss, lambda w, me, ev: (
                ev.target == me
@@ -250,16 +319,17 @@ def f2708(c: Cast) -> None:
     which fired. "Before your attack" is sayable because `PowerUsed` is
     announced above the body.
 
-    What is dropped is the narrowing: the printed weapon is a heavy
-    blade *with the high crit property*, and no weapon in the tree
-    carries that property, so the row asks only for the group.
+    The high crit narrowing was dropped on the claim that no weapon
+    carries the property. Six heavy blades do -- it is a `Weapon`
+    property like "versatile", loaded from the table -- so the row asks
+    for the group *and* the property, as printed.
     """
-    if not _holding(c, "heavy blade"):
+    if not _holding(c, "heavy blade", prop="high crit"):
         return
     c.shift(1 if isinstance(c.trigger, Miss) else 2)
 
 
-@power("f2712", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2712", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("c.ability_for(ref)",),
        trigger="you score a critical hit with a one-handed axe",
        on=Trigger(Hit, _i_crit, "you crit"))
@@ -312,32 +382,69 @@ def f2803(c: Cast) -> None:
 
 
 @power("f2398", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_racial_bonus()",))
+       reach=PERSONAL, target=SELF)
 def f2398(c: Cast) -> None:
-    """Raises the attack bonus a racial trait grants, against the
-    quarry. The quarry half is a relation and readable; the trait is a
-    ref with no row behind it, so there is no bonus to find and raise
-    and no circumstance to copy."""
+    """The racial attack bonus, raised against the quarry.
+
+    The trait the card names has a row -- `rt:r8-bloodied-enemies`,
+    which lays +1 `kind="racial"` gated on the target being bloodied.
+    Two bonuses of one kind do not add and the larger wins, so
+    "increases to +2" is a second racial bonus of 2 and not a second +1.
+
+    Gated on bloodied as well as on the quarry, because the bonus this
+    raises exists nowhere else: a quarry that is not bloodied never had
+    the +1 for the card to increase.
+    """
+    me = c.me
+    c.bonus(
+        "attack", 2, kind="racial", on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            (foe := ctx.get("target")) is not None
+            and c.bloodied(foe)
+            and c.is_quarry(foe)
+        ),
+    )
 
 
-@power("f2415", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("m5139a3",))
+@power("f2415", level=1, cls="", usage=AT_WILL,
+       action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL, target=SELF,
+       trigger="your quarry hits you with a melee attack",
+       on=Trigger(Hit, _quarry_hit_me_in_melee,
+                  "your quarry hits you in melee"))
 def f2415(c: Cast) -> None:
-    """Re-aimed at the row itself. `c.use_power` exists now and would
-    turn the racial power into an immediate interrupt against the
-    quarry in one line -- but `x_m5139a3` is not declared anywhere in
-    the tree, so there is nothing to use. The marker names the missing
-    row rather than a missing verb."""
+    """The racial power, spent off the quarry's blow.
+
+    `x_m5139a3` is an extractor token and matches no ref, which is what
+    the old marker named. The race's own line is "p6188: you have the
+    x_m5139a3 power", so p6188 *is* that power, it is written, and
+    `c.use_power` uses it here at this row's action cost.
+
+    At-will, because the limit the card prints is p6188's own encounter
+    use and `c.use_power` spends it. An interrupt on `Hit` still pays:
+    `Hit` is announced before the damage is rolled.
+    """
+    c.use_power("p6188")
 
 
 @power("f2417", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=NARROW)
+       reach=PERSONAL, target=SELF,
+       todo=("movement.step(per_square=True)",))
 def f2417(c: Cast) -> None:
     """No opportunity attack for circling an enemy you are already
-    beside. `c.no_provoke` is a standing exemption from one creature or
-    from all, and this one holds only for a move that ends adjacent to
-    the same enemy -- which is not known at `MoveStart` and is too late
-    at `MoveEnd`."""
+    beside -- which every creature on the board already has.
+
+    `movement.step` opens the window only when the mover leaves the
+    watcher's *reach*, never when it merely leaves a threatened square:
+    `left` is computed against the destination, so a step from one
+    square adjacent to an enemy to another provokes nothing from that
+    enemy for anybody. `risk_along` and `_provokes_step` make the same
+    test, so the interface and the pathfinder agree with it.
+
+    Writing the row would grant a permission already held. The marker
+    names the rule whose absence makes the feat free, the way f2462
+    names the restriction it lifts, so the day the engine counts
+    squares this is the row that exempts the ranger.
+    """
 
 
 @power("f2419", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -369,16 +476,23 @@ def f2419(c: Cast) -> None:
 
 
 @power("f2428", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTRA)
+       reach=PERSONAL, target=SELF, todo=FORGO)
 def f2428(c: Cast) -> None:
-    """Trades one die of the class's extra damage for a slow. The dice
-    live in a closure inside `cf:ranger-f1` and nothing announces
-    that they are about to be paid, so there is no moment to intercept
-    and nothing to take a die off."""
+    """Trades one die of the class's extra damage for a slow.
+
+    The payout is announced, which the old marker denied: `cf:ranger-f1`
+    pays through `c.damage(..., detail="cf:ranger-f1")`, `DamageRolled`
+    carries that detail, and it is a `Decision` whose `amount` a
+    listener may write. What cannot be said is the price. The event
+    holds one number with the rider's own modifier, the enhancement and
+    every "damage" bonus already folded into it, so there is no die in
+    it to take out and `c.quarry_damage()` only says what was rolled,
+    not what it came up.
+    """
 
 
 @power("f2467", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTRA)
+       reach=PERSONAL, target=SELF, todo=FORGO)
 def f2467(c: Cast) -> None:
     """The same trade as f2428, bought for a push instead of a slow."""
 
