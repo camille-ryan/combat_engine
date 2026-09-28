@@ -332,6 +332,8 @@ ITEM_BLOCK = re.compile(r"^(i\d+)[a-z]\d+[a-z]?$")
 #: What a racial power puts in `cls`. A race is not a class and
 #: `chargen.CLASSES` raises on one.
 RACE_REF = re.compile(r"^r\d+$")
+#: A theme's alias ref, which is what a theme power carries in `cls`.
+THEME_REF = re.compile(r"^x\d+_\d+$")
 
 
 def _event_names() -> set[str]:
@@ -507,6 +509,20 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
         # raised; fielded as a race that does not exist it is a raceless
         # character, which is the honest answer.
         racial = bool(RACE_REF.match(declared.cls))
+        # **Nor is a theme.** A theme power carries the theme's alias ref
+        # in `cls` -- `x7_642` -- for exactly the reason a racial power
+        # carries its race's: a printed name in that column would be a
+        # leak. `chargen.CLASSES[...]` raised on every one of the 509 of
+        # them, so the whole theme wave audited as broken rows rather
+        # than as rows nobody could board. `wild talent` is the same
+        # thing with no owner entity to alias, and is spelled in lower
+        # case so it can never read as one of the 25 classes.
+        #
+        # Nothing selects a theme, so unlike a race there is nothing to
+        # put on the character: it takes the classless fallback, which
+        # is the honest answer for a row a character reaches by a route
+        # that does not exist yet.
+        themed = bool(THEME_REF.match(declared.cls)) or declared.cls == "wild talent"
         wears = ref[3:].split("-")[0] if ref.startswith("rt:") else declared.cls
         worn_race = wears if wears in chargen.RACES else ""
         gate = _gates().get(ref)
@@ -516,7 +532,7 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
         # fighter that could never satisfy it. `feat.prereq` names the
         # class for 1,022 of them and every name it uses is a real one.
         gated = next((c for c in _atoms(gate, "class") if c in chargen.CLASSES), "")
-        cls = (not carried and not racial and declared.cls) or gated or (
+        cls = (not carried and not racial and not themed and declared.cls) or gated or (
             "ranger" if declared.reach.kind in ("ranged", "area_burst") else "fighter"
         )
         # Its class features come too. A row that triggers on a *cursed*
