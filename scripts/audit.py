@@ -1,9 +1,18 @@
 #!/usr/bin/env python
 """Fire every declared row and report the two ways one can be wrong.
 
-    uv run scripts/audit.py
+    uv run scripts/audit.py                          every row; ~10 minutes
+    uv run scripts/audit.py --changed                rows in changed files
+    uv run scripts/audit.py --calls 'c.shove()'      rows that name a verb
     uv run scripts/audit.py --class wizard
     uv run scripts/audit.py --level 1 --verbose
+
+**Pick the narrowest one that is still honest.** A full sweep is ten
+minutes across ten cores and is the right thing after a large content
+wave, not after adding one verb -- `--calls` is seconds and is what a new
+`Cast` method wants, since a row can only reach a verb by naming it.
+`--changed` is what `check.py` runs, and it widens to everything by
+design when `engine/` moves.
 
 This is what makes writing a hundred powers at a time safe. Two failures
 matter and nothing else does:
@@ -1578,18 +1587,73 @@ def _fired(world, ref: str, cursor: int) -> bool:  # noqa: ANN001
 WIDE = ("src/combat_engine/engine/", "scripts/audit.py")
 
 
+def _calls(symbols: list[str]) -> list[str]:
+    """Rows that touch a named verb, plus the rows waiting for one.
+
+    **For adding a verb, not for changing what one means.** `_changed`
+    widens to all 12,197 rows the moment anything under `engine/` moves,
+    which is right when a change moves every row at once -- a different
+    attack resolution, a different arming order -- and far too wide for
+    the commonest engine change there is, which is a new `Cast` method
+    nothing called yesterday. A new verb can only reach a row that calls
+    it, and that is a fact about the text.
+
+    Two sets, because they fail differently:
+
+    * rows whose **source** names it, which is the regression risk;
+    * rows whose `todo=`/`dropped=` **marker** names it, which is the
+      sweep -- those are the rows that should go from refused to firing,
+      and auditing them is how you find out whether they did.
+
+    The caveat is the whole of the honesty here: this is blind to a row
+    that changes behaviour **without naming the verb** -- one calling
+    something else that now routes through it, or reading state the verb
+    writes. So a narrowed run is evidence a verb works, never evidence
+    that nothing else broke. When a change is not purely additive, take
+    the wide run and pay for it.
+    """
+    import inspect
+
+    needles = [s.split("(")[0].strip() for s in symbols]
+    needles = [n for n in needles if n]
+    out: list[str] = []
+    for ref, p in REGISTRY.items():
+        if any(n in want for n in needles for want in p.unfinished):
+            out.append(ref)
+            continue
+        body = getattr(p, "body", None)
+        if body is None:
+            continue
+        try:
+            source = inspect.getsource(body)
+        except (OSError, TypeError):
+            continue
+        if any(n in source for n in needles):
+            out.append(ref)
+    return sorted(set(out))
+
+
 def _changed() -> list[str]:
     """Rows declared in files that differ from HEAD.
 
-    At a hundred milliseconds a row, auditing everything is twenty seconds
-    today and about five minutes once PHB1 is written. Most runs have
-    touched a handful of rows and re-firing the other three thousand buys
-    nothing -- which is exactly how the first attempt's suite grew until
-    nobody could afford to run it.
+    At about 160ms a row, auditing all 12,197 is **half an hour serial
+    and around ten minutes across ten cores** -- the estimate this said
+    when it was written ("twenty seconds today, five minutes once PHB1 is
+    written") was overtaken long ago. Most runs have touched a handful of
+    rows and re-firing the other twelve thousand buys nothing, which is
+    exactly how the first attempt's suite grew until nobody could afford
+    to run it.
 
-    An engine change is not narrowable: it moves every row at once, so
-    touching `engine/` widens this back to everything rather than quietly
-    checking a tenth of what it should.
+    The cost is all in the tail: `_attempts` gives up as soon as a row
+    fires, so a working row costs **one** board and a row that never
+    fires costs all **24** -- three gear faces by eight seeds. The rows
+    this instrument exists to find are the ones it spends its time on.
+
+    An engine change that moves every row at once is not narrowable, so
+    touching `engine/` widens this back to everything. **But most engine
+    changes are additive** -- a new `Cast` verb nothing called yesterday
+    -- and for those `--calls` is the narrow run, because a row can only
+    use a verb by naming it. See `_calls`, including what it is blind to.
     """
     import re
     import subprocess
@@ -1780,15 +1844,29 @@ def main() -> int:
     ap.add_argument("--verbose", action="store_true", help="say what each row did")
     ap.add_argument("--changed", action="store_true",
                     help="only rows in content files that differ from HEAD")
+    ap.add_argument("--calls", action="append", metavar="SYMBOL",
+                    help="only rows whose source or whose todo=/dropped= "
+                         "marker names this verb; repeatable. For adding a "
+                         "verb -- see `_calls` for when it is not enough")
     ap.add_argument("--jobs", type=int, default=0,
                     help="worker processes; 0 picks one per core, 1 stays serial")
     args = ap.parse_args()
 
-    wanted = args.refs or (_changed() if args.changed else sorted(REGISTRY))
+    wanted = args.refs or (
+        _calls(args.calls) if args.calls
+        else _changed() if args.changed
+        else sorted(REGISTRY)
+    )
+    if args.calls and not args.refs:
+        print(f"# {len(wanted)} row(s) name {', '.join(args.calls)} -- in their "
+              f"source or in a marker. --all is {len(REGISTRY)}.\n"
+              f"# Blind to a row that changes without naming it, so this is "
+              f"evidence the verb works, not that nothing else broke.\n")
     if args.changed and not args.refs:
         print(f"# {len(wanted)} row(s) in changed files. "
               f"--all is {len(REGISTRY)} and takes about "
-              f"{len(REGISTRY) * 0.1:.0f}s\n")
+              f"{len(REGISTRY) * 0.05:.0f}s across ten cores.\n"
+              f"# Adding a verb? `--calls <symbol>` is seconds.\n")
     chosen: list[str] = []
     inert: list[str] = []
     partial: list[tuple[str, tuple[str, ...], str]] = []
