@@ -964,15 +964,13 @@ RACES: dict[str, RaceLine] = _races_from_the_book()
 
 #: Deal a race to a `Character` that names none.
 #:
-#: **Off, and it is one line to turn on.** A race is +2 to two ability
-#: scores, a size, a speed and a handful of traits, so dealing one moves
-#: every number on every sheet and with them every roll in every fight --
-#: which is six recorded fixtures diverging at their first attack. The
-#: divergence is expected and harmless and it is also exactly what a real
-#: regression looks like, so re-recording under it would hide one. Flip
-#: this and run `scripts/replay.py record` in the same commit, on purpose,
-#: with nothing else in it.
-DEAL_RACES = False
+#: **On.** A race is +2 to two ability scores, a size, a speed and a
+#: handful of traits, so dealing one moves every number on every sheet and
+#: with them every roll in every fight. The six fixtures were re-recorded
+#: in the commit that flipped this, on purpose and with nothing else in
+#: it, because that divergence is indistinguishable from a real regression
+#: and re-recording under it in a mixed commit would hide one.
+DEAL_RACES = True
 
 
 def deal_race(rng: Random) -> str:
