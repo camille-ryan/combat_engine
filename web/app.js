@@ -744,9 +744,14 @@ function renderFreeform(s) {
 
 /** One power in freeform: click it, then click a square. */
 function freeformPower(s, p) {
-  // A power with nowhere to aim cannot be pointed anywhere, so it is shown the
-  // same way the enumerated mode shows it: greyed, with the reason.
-  if (!p.available || !(p.squares || []).length) return unavailableRow(p);
+  // Greyed only when it genuinely cannot be used. It used to also grey any
+  // row with no aim squares, which greyed **263 burst and blast rows that
+  // take no aim** — a channel divinity buffing everyone within 5 has
+  // nowhere to point and is perfectly usable. Worse than greyed: the
+  // plain-button fallback skips anything a roster row has claimed, so those
+  // rows were unreachable in this mode altogether.
+  if (!p.available) return unavailableRow(p);
+  const aimless = !(p.squares || []).length;
 
   const i = (s.roster || []).indexOf(p);
   const b = document.createElement("button");
@@ -763,8 +768,12 @@ function freeformPower(s, p) {
   b.appendChild(usageBar(p));
   const foot = div("option-line");
   foot.appendChild(div("power-range", p.range_text || ""));
-  const n = p.squares.length;
-  foot.appendChild(div("power-link", `${n} square${n === 1 ? "" : "s"}`));
+  const n = (aimless ? (p.shows || []) : p.squares).length;
+  foot.appendChild(div(
+    "power-link",
+    aimless ? `covers ${n} square${n === 1 ? "" : "s"}`
+            : `${n} square${n === 1 ? "" : "s"}`,
+  ));
   b.appendChild(foot);
   // Same sentence the enumerated list shows, for the same reason: freeform is
   // the surface being played, and it was the one with no price on it at all.
@@ -789,6 +798,14 @@ function freeformPower(s, p) {
   b.addEventListener("focus", () => showAimable(p));
   b.addEventListener("blur", restore);
   b.addEventListener("click", () => {
+    // Nothing to aim: fire it. Picking it and waiting for a square would
+    // wait forever, since no square is one `Session.aim` accepts for a row
+    // with neither an origin nor targets.
+    if (aimless) {
+      aiming = null;
+      act(s.current, p.option_index);
+      return;
+    }
     aiming = aiming === i ? null : i;
     render();
     if (typeof aiming === "number") showAimable((state.roster || [])[aiming]);
@@ -895,7 +912,12 @@ function showAimable(power, at) {
   aimed = power || null;
   aimedAt = null;
   if (!power) return;
-  for (const sq of power.squares || []) {
+  // `shows` when there is nothing to aim: a non-attack burst covers an area
+  // and takes no aim square, so `squares` is empty and the board used to
+  // draw nothing at all for it. Never both — `shows` is only sent for the
+  // rows `squares` is empty for, and these squares are not clickable.
+  const lit = (power.squares || []).length ? power.squares : (power.shows || []);
+  for (const sq of lit) {
     const h = div("hl hl-affected");
     place(h, squareRect(sq[0], sq[1]));
     el.highlights.appendChild(h);

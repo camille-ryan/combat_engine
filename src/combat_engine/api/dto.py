@@ -82,6 +82,13 @@ class PowerDTO(BaseModel):
     #: keyed `"x,y"`. Empty for everything else. `squares` says where a blast
     #: may be *pointed*, which is not where it lands, and the shape it makes
     #: is a rule -- so the page is handed it rather than working it out.
+    #: What this power **covers**, for a row there is nothing to click on.
+    #: A non-attack burst or blast takes no aim, so `squares` is empty and
+    #: the board drew nothing at all -- 263 rows of the 1441 burst and blast
+    #: rows. Kept separate from `squares` on purpose: that field also decides
+    #: what a board click will accept, and a square lit there but refused by
+    #: `Session.aim` is the dead click #139 removed.
+    shows: list[Square] = Field(default_factory=list)
     footprints: dict[str, list[Square]] = Field(default_factory=dict)
     aimed: list[int] = Field(default_factory=list)
     option_index: int | None = None

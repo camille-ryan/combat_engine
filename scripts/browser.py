@@ -344,6 +344,11 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
     _restart(page, BLAST_SEED)
     _check_footprint(page, check, served[-1] if served else None)
 
+    # A burst that takes no aim must still show what it covers, and must fire
+    # when pressed rather than waiting for a square nobody can give it.
+    _restart(page, AIMLESS_SEED)
+    _check_aimless_area(page, check, served[-1] if served else None, calls)
+
     # Play on, so attacks happen and the log has a fight in it rather than a
     # first turn. Clicking real buttons, because that is what is being tested.
     before_lines = page.locator("#log .narration").count()
@@ -659,6 +664,76 @@ def _check_area_aiming(check: Checks, state: dict | None) -> None:
             check.that(far <= limit, f"{p['name']} aims no further than {limit}", f"got {far}")
 
 
+def _check_aimless_area(page, check: Checks, state: dict | None,  # noqa: ANN001
+                        calls: list[str]) -> None:
+    """A non-attack burst covers an area and has nothing to aim at.
+
+    263 of the 1441 burst and blast rows roll no attack, so `_clickable`
+    hands back no squares -- correctly, there is nothing to click -- and the
+    board therefore drew **nothing at all** for them. Worse in freeform: the
+    row was greyed for having no squares, and the plain-button fallback skips
+    anything a roster row has claimed, so it could not be used at all.
+
+    Three things, and the third is the one that was broken: it lights, it
+    does not ask for an aim, and pressing it **acts**.
+    """
+    if not state or not state.get("roster"):
+        check.that(True, "nobody with a kit is acting just now (skipped)")
+        return
+    row = next(
+        (p for p in state["roster"]
+         if p.get("available") and not p.get("squares") and p.get("shows")),
+        None,
+    )
+    if row is None:
+        check.that(True, "the acting creature has no aimless area power (skipped)")
+        return
+    check.that(
+        len(row["shows"]) > 1,
+        f"{row['name']} covers {len(row['shows'])} squares with nothing to aim at",
+    )
+    buttons = page.locator("#actions .option")
+    mine = None
+    for i in range(buttons.count()):
+        if row["name"] and row["name"] in buttons.nth(i).inner_text():
+            mine = buttons.nth(i)
+            break
+    if mine is None:
+        check.that(False, f"{row['name']} has a row in freeform",
+                   "greyed or missing -- the 263 rows this check exists for")
+        return
+    check.that(True, f"{row['name']} is offered rather than greyed")
+    mine.hover()
+    page.wait_for_timeout(300)
+    check.that(
+        page.locator("#highlights .hl-affected").count() > 0,
+        f"hovering it lights the {len(row['shows'])} squares it covers",
+        "the board drew nothing, which is the bug",
+    )
+    # Asked before clicking, because a greyed row makes Playwright retry for
+    # thirty seconds and then raise -- so the regression this check exists to
+    # catch reported itself as a timeout in the harness rather than as a
+    # failure in the page. Which is true, and useless to read.
+    if not mine.is_enabled():
+        check.that(False, "pressing it acts",
+                   "the row is disabled, so it cannot be pressed at all")
+        return
+    sent = len(calls)
+    mine.click()
+    page.wait_for_timeout(900)
+    after = calls[sent:]
+    check.that(
+        any("/act" in c for c in after),
+        "pressing it acts",
+        f"calls: {after or None}",
+    )
+    check.that(
+        not any("/aim" in c for c in after),
+        "and never asks for an aim square",
+        f"calls: {after or None}",
+    )
+
+
 def _check_enumerated_move(page, check: Checks) -> None:  # noqa: ANN001
     """The mode with the checkbox off must play the same two-step gesture.
 
@@ -723,6 +798,12 @@ def _check_enumerated_move(page, check: Checks) -> None:  # noqa: ANN001
 #: A fight whose first turn belongs to somebody holding an area power. The
 #: form's own fields, so this is the fight a player typing this seed gets.
 BLAST_SEED = 2
+
+#: A fight whose first actor carries a burst that takes no aim -- a close
+#: burst 5 covering 88 squares with nothing to point at. Pinned for the same
+#: reason every other seed here is: whether such a row is in the kit is
+#: otherwise a coin toss, and a check that skips itself is not a check.
+AIMLESS_SEED = 1
 
 #: The fight the whole run opens on. Picked because every check has its
 #: precondition met under it -- somebody with a kit is acting, there is a

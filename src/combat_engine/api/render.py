@@ -562,6 +562,9 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
                 available=bool(indices),
                 reason=None if indices else (why or "cannot be used here"),
                 squares=aims_at,
+                shows=sorted(
+                    {sq for b in p.branches for sq in _shows(world, actor, p, b)}
+                ),
                 footprints=_footprints(world, actor, p, aims_at),
                 aimed=[],
                 option_index=indices[0] if indices else None,
@@ -593,6 +596,30 @@ def _clickable(world, actor: int, p, branch: int = 0) -> list:  # noqa: ANN001
         return []
     if p.reach_of(branch).kind in ("area_burst", "close_blast"):
         return aim_points(world, actor, p)
+    return sorted(area_of(world, actor, p, None, branch))
+
+
+def _shows(world, actor: int, p, branch: int = 0) -> list:  # noqa: ANN001
+    """What a power covers, for a row there is nothing to click on.
+
+    **Not `squares`, and that is the whole point.** `squares` carries three
+    jobs on the page -- what to light, what a board click will accept, and
+    whether the row is offered at all -- so filling it for a row that takes
+    no aim invents a clickable square `Session.aim` then refuses, which is
+    the dead click #139 existed to remove.
+
+    263 of the 1441 burst and blast rows are not attacks: a channel
+    divinity handing every ally resist 5, a burst that buffs. `_clickable`
+    returns nothing for them, correctly, and the board drew nothing at all
+    -- so a player picking a burst 5 could not see who was caught. The
+    squares were computable the whole time; `area_of` has never cared
+    whether the row rolls an attack, which is why `option_dto.affected`
+    gets this right and the enumerated mode was never broken.
+    """
+    if p.is_attack:
+        return []
+    if p.reach_of(branch).kind not in ("close_burst", "close_blast", "area_burst"):
+        return []
     return sorted(area_of(world, actor, p, None, branch))
 
 
