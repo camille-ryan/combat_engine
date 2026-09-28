@@ -6,13 +6,14 @@ in the tree under their own `p` refs** -- `powers/battlemind/level_0.py`,
 them -- so nothing here re-declares one. A sub-option that reads "you gain
 <card>" hands over the `p` ref that already exists.
 
-Two of the three pages print the same power-point paragraph, and it is the
-one thing on either page the engine cannot say.
-`chargen.CLASSES[...].power_points` is already a column, so a character
-*has* the points; what is missing is the spend -- `dsl.use(augment=)` --
-which is the symbol eight earlier waves named and issue #170 tracks. Both
-parent rows carry it as `todo=`, because without it there is nothing else in
-them at all.
+Two of the three pages print the same power-point paragraph, and it used
+to be the one thing on either page the engine could not say.
+`chargen.CLASSES[...].power_points` was already a column, so a character
+*had* the points; what was missing was the spend. `dsl.use(augment=)` is
+that spend -- it settles how many points buy a use **before** the targets
+are chosen, which is the only moment an augment that widens a target line
+can be honoured -- so both parent rows are now `out_of_combat=True`: their
+printed content is a resource and a rule, and neither is a body.
 
 The other shape that recurs here is a **choice**, and it now has legs to
 stand on. The monk prints five traditions, the psion three disciplines and
@@ -53,10 +54,6 @@ from combat_engine.engine.components import Defences
 
 PSIONIC = [Keyword.PSIONIC]
 
-#: The augment machinery, named the way the rest of the tree names it so
-#: `todo.py` groups these two with the other fifty.
-AUGMENT = ("dsl.use(augment=)",)
-
 # -- battlemind -------------------------------------------------------------
 
 
@@ -69,16 +66,24 @@ AUGMENT = ("dsl.use(augment=)",)
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    todo=AUGMENT,
+    out_of_combat=True,
 )
 def battlemind_augment(c: Cast) -> None:
-    """The whole feature is the power-point economy.
+    """Power points and the augmentable keyword, and both are now real.
 
-    The reservoir itself is data -- `chargen.CLASSES["battlemind"].power_points`
-    is 2 -- and `c.points` and `c.spend_points` can read and drain it. What
-    does not exist is the door a *use* goes through: nothing lets a player
-    declare "this at-will, augmented by 2" before targets are chosen, which
-    is the whole of the printed rule. Issue #170.
+    The pool was always data -- `chargen.CLASSES[...].power_points` --
+    and what was missing was the door a *use* goes through. It exists:
+    `dsl.use(augment=)` settles the spend **before** targets are chosen,
+    `dsl.Augment` is how a row declares the forms that spend buys, and
+    `actions.legal` offers each affordable one as its own entry so that
+    picking an augment is something the player does.
+
+    Which leaves this row holding nothing to run. Its whole printed
+    content is a resource the character is built with and a rule the
+    engine now keeps, exactly as `cf:battlemind-f2`'s content is the word
+    *one* and its children say it. `out_of_combat=True` is the flag for
+    that -- deliberately inert rather than unwritten -- and it is the
+    honest end of issue #170 for this row.
     """
 
 
@@ -448,10 +453,10 @@ def psion_discipline_telepath(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    todo=AUGMENT,
+    out_of_combat=True,
 )
 def psion_augment(c: Cast) -> None:
-    """The same paragraph the battlemind prints, and the same gap.
-    `chargen.CLASSES["psion"].power_points` is 2 and nothing can spend it on
-    a use. Issue #170; see `cf:battlemind-f0`.
+    """The same paragraph the battlemind prints, and it is closed the same
+    way. See `cf:battlemind-f0`: the pool is chargen's, the spend is
+    `dsl.use(augment=)`, and nothing is left for a body. Issue #170.
     """

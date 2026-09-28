@@ -494,11 +494,16 @@ def i3374x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.use_power()", "c.kill()"),
+    dropped=("c.kill()",),
 )
 def i3406p1(c: Cast) -> None:
-    """The whole printed Effect is another class's power, named in prose
-    with no ref, plus an outright death at a hit-point threshold."""
+    """Re-aimed. The Effect is p416, declared and finished, so the attack
+    half plays now. What is still missing is the rider: "if this attack
+    reduces the creature to 5 hit points or fewer, the creature dies" --
+    nothing on `Cast` kills outright, and `c.damage` for the remaining
+    hit points is a different thing (it is damage, so it can be resisted
+    and it feeds every "when you damage" rider on the board)."""
+    c.use_power("p416", on=c.target, spend=False)
 
 
 @power(
@@ -561,13 +566,15 @@ def i3465x1(c: Cast) -> None:
     cls=ITEM,
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(10),
-    target=ONE_CREATURE,
-    todo=("c.use_power()",),
+    reach=PERSONAL,
+    target=NO_TARGET,
 )
 def i3465p1(c: Cast) -> None:
-    """The whole printed Effect is another class's power, named in prose
-    with no ref."""
+    """The whole printed Effect is p10137, declared and finished. That
+    row is an area burst hitting everything in it, so the aiming belongs
+    to it: `NO_TARGET` here and no `on=`, rather than the single ranged
+    target this header guessed while the block had nothing to name."""
+    c.use_power("p10137", spend=False)
 
 
 @power(
@@ -858,11 +865,12 @@ def i1085x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.use_power()",),
 )
 def i1085p1(c: Cast) -> None:
-    """The whole printed Effect is another class's power, named in prose
-    with no ref."""
+    """The printed Effect is p4200, which is declared and finished, so
+    `c.use_power` is the whole block. Lent and not spent: the item's own
+    daily use is the price, and the bearer does not own that row."""
+    c.use_power("p4200", on=c.target, spend=False)
 
 
 @power(
@@ -1070,11 +1078,11 @@ def i1825x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.use_power()",),
 )
 def i1825p1(c: Cast) -> None:
-    """The whole printed Effect is another class's power, named in prose
-    with no ref."""
+    """The whole printed Effect is p6855, declared and finished. Lent for
+    the one use and not spent: the wand's encounter use is the price."""
+    c.use_power("p6855", on=c.target, spend=False)
 
 
 @power(
@@ -1098,11 +1106,10 @@ def i1827x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.use_power()",),
 )
 def i1827p1(c: Cast) -> None:
-    """The whole printed Effect is another class's power, named in prose
-    with no ref."""
+    """The whole printed Effect is p3214, declared and finished."""
+    c.use_power("p3214", on=c.target, spend=False)
 
 
 @power(
@@ -1171,11 +1178,10 @@ def i1830x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.use_power()",),
 )
 def i1830p1(c: Cast) -> None:
-    """The whole printed Effect is another class's power, named in prose
-    with no ref."""
+    """The whole printed Effect is p4305, declared and finished."""
+    c.use_power("p4305", on=c.target, spend=False)
 
 
 @power(
@@ -1227,14 +1233,15 @@ def i1834x1(c: Cast) -> None:
     cls=ITEM,
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=Melee(5),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.LIGHTNING],
-    todo=("c.use_power()",),
 )
 def i1834p1(c: Cast) -> None:
-    """The whole printed Effect is another class's power, named in prose
-    with no ref."""
+    """The whole printed Effect is p7636, declared and finished. The
+    reach is that row's -- a melee 5 -- rather than the ranged 10 this
+    header guessed while the block had nothing to point at."""
+    c.use_power("p7636", on=c.target, spend=False)
 
 
 @power(
@@ -1256,14 +1263,16 @@ def i1835x1(c: Cast) -> None:
     cls=ITEM,
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(10),
-    target=ONE_CREATURE,
+    reach=PERSONAL,
+    target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.THUNDER],
-    todo=("c.use_power()",),
 )
 def i1835p1(c: Cast) -> None:
-    """The whole printed Effect is another class's power, named in prose
-    with no ref."""
+    """The whole printed Effect is p4199, declared and finished. That row
+    is a close burst picking an ally out of it, not the ranged single
+    target this header guessed, so the aiming is left to it: `NO_TARGET`
+    here and no `on=`, and p4199 chooses the way it does on any turn."""
+    c.use_power("p4199", spend=False)
 
 
 @power(
@@ -1288,11 +1297,10 @@ def i1837x1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.CHARM, Keyword.IMPLEMENT, Keyword.PSYCHIC],
-    todo=("c.use_power()",),
 )
 def i1837p1(c: Cast) -> None:
-    """The whole printed Effect is another class's power, named in prose
-    with no ref."""
+    """The whole printed Effect is p2780, declared and finished."""
+    c.use_power("p2780", on=c.target, spend=False)
 
 
 @power(
@@ -1318,12 +1326,16 @@ def i1856x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with a melee attack using this ki focus",
     on=Trigger(Hit, both(by_me, by_melee), "you hit with a melee attack"),
-    todo=("c.ignore_resistance()",),
 )
 def i1856p1(c: Cast) -> None:
-    """`c.resist` grants resistance and `c.vulnerable` adds to the damage;
-    neither bypasses one that is already standing, and immunity has no
-    door at all."""
+    """"You ignore **the enemy's** immunities and resistances", so the
+    hold is gated on the creature that was hit rather than laid against
+    everybody. Blanket, because no number is printed."""
+    foe = c.trigger.target
+    c.ignore_resistance(
+        None, on=c.me, until=When.EONT, immunity=True,
+        when=lambda ctx: ctx.get("target") == foe,
+    )
 
 
 @power(
@@ -1862,11 +1874,10 @@ def i2489x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.use_power()",),
 )
 def i2489p1(c: Cast) -> None:
-    """The whole printed Effect is another class's power, named in prose
-    with no ref."""
+    """The whole printed Effect is p4133, declared and finished."""
+    c.use_power("p4133", on=c.target, spend=False)
 
 
 @power(
@@ -2451,14 +2462,14 @@ def i3017x1(c: Cast) -> None:
     cls=ITEM,
     usage=DAILY,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=Ranged(5),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.CHARM, Keyword.IMPLEMENT],
-    todo=("c.use_power()",),
 )
 def i3017p1(c: Cast) -> None:
-    """The whole printed Effect is another class's power, named in prose
-    with no ref."""
+    """The whole printed Effect is p2346, declared and finished. The
+    range is that row's 5, not the 10 this header guessed."""
+    c.use_power("p2346", on=c.target, spend=False)
 
 
 @power(
@@ -2839,15 +2850,14 @@ def i3431x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.bonus(dtype=)",),
     trigger="you use your second wind",
     on=Trigger(SecondWind, about_me, "you use your second wind"),
 )
 def i3432x1(c: Cast) -> None:
     """"Using this ki focus" is the implement keyword: one focus is held
-    at a time. The extra damage keeps the blow's own type, because nothing
-    types a damage modifier -- that is the dropped half."""
+    at a time. The extra damage is cold and carries that type."""
     c.bonus("damage", c.enhancement, on=c.me, until=When.EONT,
+            dtype=DamageType.COLD,
             when=_has_keyword(Keyword.IMPLEMENT))
 
 

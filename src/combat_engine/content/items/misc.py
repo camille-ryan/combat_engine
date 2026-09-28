@@ -1481,25 +1481,28 @@ def i3518p1(c: Cast) -> None:
 
 
 @power("i686x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF)
 def i686x1(c: Cast) -> None:
-    """A damage bonus has no type of its own, so "you can choose to make
-    this extra damage fire damage" is the clause that goes unwritten."""
+    """"You can choose to make this extra damage fire damage" is a choice
+    with one interesting side, and the row takes it: an untyped rider is
+    shrugged off by a creature resisting everything and a fire one is
+    not, and the wearer is already standing in fire to have this at all."""
 
     def burned(ev: DamageApplied) -> None:
         if ev.target == c.me and ev.dtype is DamageType.FIRE:
-            c.bonus("damage", 2, on=c.me, until=When.EONT)
+            c.bonus("damage", 2, on=c.me, until=When.EONT,
+                    dtype=DamageType.FIRE)
 
     c.watch(DamageApplied, burned, until=When.ENCOUNTER)
 
 
 @power("i686p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.FIRE],
-       dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.FIRE])
 def i686p1(c: Cast) -> None:
-    """The die is right and untyped: extra damage cannot be given a type
-    of its own, so the fire keyword is on the card and not on the dice."""
-    c.bonus("damage", 0, dice="1d12", on=c.me, until=When.EONT, once=True)
+    """The die is fire and carries that type, so the fire keyword on the
+    card and the dice agree."""
+    c.bonus("damage", 0, dice="1d12", on=c.me, until=When.EONT, once=True,
+            dtype=DamageType.FIRE)
 
 
 def _beside_something_bigger(world: World, eid: int) -> bool:
@@ -1680,10 +1683,14 @@ def i3398x1(c: Cast) -> None:
 
 
 @power("i3398p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.expend_row()",))
+       reach=PERSONAL, target=SELF, dropped=("c.expended(unspent=)",))
 def i3398p1(c: Cast) -> None:
-    """The half that pays -- an ally losing a use -- has no method; the
-    half that gains does, so the row plays and the cost is not charged."""
+    """The half that gains plays. The half that pays is re-aimed:
+    `c.expend_row` takes a use off any creature by ref now, so spending
+    is no longer the hold -- what is missing is *which* ref. The cost
+    is "one ally loses a use of a daily magic item power", and nothing
+    lists the rows a **different** creature still has unspent.
+    `c.expended` reads the opposite set and only that one."""
     spent = _restorable(c, Usage.DAILY)
     if spent:
         c.restore_use(spent[0], on=c.me)
@@ -1763,13 +1770,13 @@ def i1409x1(c: Cast) -> None:
 
 
 @power("i1409p1", level=6, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.FIRE],
-       dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.FIRE])
 def i1409p1(c: Cast) -> None:
     """One weapon rather than all of them is not a distinction a damage
-    bonus can draw either, but the wearer swings one thing; the type of
-    the extra die is the clause that goes unwritten."""
-    c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EONT)
+    bonus can draw, but the wearer swings one thing. The die is fire and
+    carries that type."""
+    c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EONT,
+            dtype=DamageType.FIRE)
 
 
 @power("i1411p1", level=6, cls=ITEM, usage=DAILY, action=FREE,
@@ -2141,10 +2148,15 @@ def i3384p1(c: Cast) -> None:
 
 
 @power("i3443x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_resistance()",))
+       reach=PERSONAL, target=SELF)
 def i3443x1(c: Cast) -> None:
-    """Resistance is read off the defender and nothing lets an attacker
-    spend past part of it."""
+    """Five points of fire resistance, and only on a fire attack -- which
+    is the damage type the context carries, not the power's keywords:
+    "your fire attacks" is about what the blow deals."""
+    c.ignore_resistance(
+        5, DamageType.FIRE, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("dtype") is DamageType.FIRE,
+    )
 
 
 @power("i3443p1", level=7, cls=ITEM, usage=DAILY, action=REACTION,
@@ -2379,13 +2391,21 @@ def i3401x1(c: Cast) -> None:
 
 @power("i3401p1", level=8, cls=ITEM, usage=ENCOUNTER, action=FREE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.POISON],
-       dropped=("c.ignore_resistance()",),
        trigger="you hit a creature with a melee or a ranged attack",
        on=Trigger(Hit, by_me, "you hit a creature with an attack"))
 def i3401p1(c: Cast) -> None:
+    """Ongoing damage is dealt with the creature that laid it as the
+    source -- `durations` hands `eff.source` to `world.damage` -- so an
+    ignore laid on the wearer reaches it. Gated on the burning creature
+    rather than on the power, because the burn's `detail` is the effect's
+    own description and not a ref."""
     foe = getattr(c.trigger, "target", None)
     if foe is not None:
         c.ongoing(5, DamageType.POISON, on=foe)
+        c.ignore_resistance(
+            None, DamageType.POISON, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("target") == foe,
+        )
 
 
 @power("i3445p1", level=8, cls=ITEM, usage=DAILY, action=REACTION,
@@ -2563,15 +2583,16 @@ def i3400x1(c: Cast) -> None:
 
 
 @power("i3400p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=Ranged(5), target=ONE_ALLY, dropped=("c.bonus(dtype=)",))
+       reach=Ranged(5), target=ONE_ALLY)
 def i3400p1(c: Cast) -> None:
-    """The vulnerability and the resistance are exact; the extra die
-    cannot be given a type, so it lands untyped on necrotic attacks."""
+    """The vulnerability and the resistance are exact, and the extra die
+    is necrotic like the attacks it rides on."""
     c.vulnerable(5, DamageType.NECROTIC, until=When.ENCOUNTER)
     if not c.first:
         return
     c.resist(10, DamageType.NECROTIC, on=c.me, until=When.ENCOUNTER)
     c.bonus("damage", 0, dice="1d6", on=c.me, until=When.ENCOUNTER,
+            dtype=DamageType.NECROTIC,
             when=_dtype_gate(DamageType.NECROTIC))
 
 

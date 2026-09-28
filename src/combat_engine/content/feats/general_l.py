@@ -92,8 +92,12 @@ R44 = ("p7441", "p7442", "p7443")
 REROLL = ("c.on_reroll()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
-#: A class feature named in prose, with no `cf:` ref to borrow.
-FEATURE = ("c.borrow_feature()",)
+#: A class feature or power the card names **by name**, with no ref in
+#: the brief and nothing in the tree answering to it. The borrowing
+#: itself is no longer the gap -- `c.grant_row` hands a declared feature
+#: over and `c.borrow_row` picks one out of a class's list -- so what is
+#: left of the old `c.borrow_feature()` group is only the naming.
+FEATURE = ("spec.feature_ref()",)
 #: "If you have the <named> feat" -- the spec gives no ref for it.
 PLAGUE = ("spec.feat_ref()",)
 #: One blow of two damage types at once.
@@ -369,61 +373,118 @@ def f2570(c: Cast) -> None:
 
 
 @power("f2542", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF)
 def f2542(c: Cast) -> None:
-    """A named fighter class feature with no `cf:` ref, which is the same
-    gap five rows in `general_d.py` carry."""
+    """A fighter class feature, and the spec names it by ref now --
+    which is what the five rows in `general_d.py` were waiting for as
+    well. One `c.grant_row` is the whole benefit."""
+    c.grant_row("cf:fighter-weaponmaster-f0", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2549", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF)
 def f2549(c: Cast) -> None:
-    """The benefit of a named rogue class feature for a turn. Same gap."""
+    """The benefit of a rogue class feature for a turn, and the spec
+    names it by ref.
+
+    Handed over for the encounter rather than for the turn: the printed
+    line is a free action taken once a fight to gain the benefit until
+    the end of that turn, and nothing cuts a duration a granted row
+    lays. Since the row is spent once either way, the difference is the
+    tail of one turn.
+
+    That feature carries a `todo` of its own, so it is refused in play
+    until that clears -- the ref still lands in `Powers.known`, which is
+    what any later feat's prerequisite reads."""
+    c.grant_row("cf:rogue-scoundrel-f1s2", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2628", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, dropped=("c.extend_effect()",))
 def f2628(c: Cast) -> None:
-    """A named battlemind power with a lengthened mark. No ref for the
-    power, so there is nothing for `c.grant_row` to hand over."""
+    """A battlemind power with a lengthened mark, named by ref now.
+
+    `uses=1` is load-bearing: the granted row is an **at-will** on its
+    own card and the feat gives it once per encounter, so handed over
+    bare it would be a minor-action mark every turn for one feat.
+
+    Dropped: the feat *lengthens* the mark the granted row lays, and
+    nothing stretches a duration another row wrote -- three item
+    blocks want the same verb."""
+    c.grant_row("p10438", on=c.me, until=When.ENCOUNTER, uses=1)
 
 
 @power("f2694", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=FEATURE)
 def f2694(c: Cast) -> None:
     """One of the monk's named powers, chosen at build time, plus a
-    proficiency. Neither the power nor the choice has a ref."""
+    proficiency.
+
+    Re-aimed rather than written. `c.borrow_row` reads a set off the
+    registry by class, level and usage, and the set this card names is
+    none of those -- it is the powers belonging to one named class
+    feature, and that feature deals no cards in the tree. Compare f3392
+    below, which asks for a 1st-level at-will of the same class and is
+    written."""
 
 
 @power("f2731", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, dropped=("c.no_augment(ref)",))
 def f2731(c: Cast) -> None:
-    """A chosen psion at-will, named in prose. Same gap."""
+    """A chosen 1st-level at-will of another class, once per encounter.
+
+    The card names a set, not a ref, and `c.borrow_row` reads the set
+    off the registry the way `chargen.loadout` does.
+
+    Dropped, and **re-aimed**: the missing half is "and you cannot
+    augment it". `dsl.use(augment=)` was the old marker and it has
+    arrived, so the augment now exists and is offered -- which is
+    precisely what makes the clause say something. What has no verb is
+    taking the offer away again for one creature's copy of one row.
+    `c.forbid` removes a row whole; nothing removes a form of one."""
+    c.borrow_row("psion", level=1, uses=1)
 
 
 @power("f2859", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*FEATURE, *PLAGUE))
+       reach=PERSONAL, target=SELF, dropped=PLAGUE)
 def f2859(c: Cast) -> None:
-    """A chosen arcane at-will used as an encounter power. The choice has
-    no ref and the spellscar clause names a feat that has none either."""
+    """A chosen arcane at-will used as an encounter power.
+
+    The set is "any arcane class" rather than one named class, so it is
+    gathered by keyword across the registry and handed to `among=`.
+    Dropped: the second sentence keys off another feat the spec names
+    by name and gives no ref for."""
+    from combat_engine.engine.dsl import REGISTRY
+
+    arcane = [
+        ref
+        for ref, row in REGISTRY.items()
+        if row.level == 1
+        and row.usage is Usage.AT_WILL
+        and row.attack is not None
+        and not row.todo
+        and not ref.startswith("cf:")
+        and Keyword.ARCANE in row.keywords
+    ]
+    c.borrow_row(among=arcane, uses=1)
 
 
 @power("f2697", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*BUILD, "dsl.use(augment=)"))
+       reach=PERSONAL, target=SELF, todo=(*BUILD, "chargen.power_swap(pool=)"))
 def f2697(c: Cast) -> None:
     """Swaps one augmentable at-will for another class's. Both the swap
     and the augmentation are build-time, and `dsl.use` has no augment."""
 
 
 @power("f2698", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*BUILD, "dsl.use(augment=)"))
+       reach=PERSONAL, target=SELF, todo=(*BUILD, "chargen.power_swap(pool=)"))
 def f2698(c: Cast) -> None:
     """Same shape as f2697, trading an encounter power instead, and
     handing out power points for it."""
 
 
 @power("f2732", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*BUILD, "dsl.use(augment=)"))
+       reach=PERSONAL, target=SELF, todo=(*BUILD, "chargen.power_swap(pool=)"))
 def f2732(c: Cast) -> None:
     """Same shape as f2697, in the other direction, and it costs points
     rather than granting them."""
@@ -456,11 +517,16 @@ def f2693(c: Cast) -> None:
 
 
 @power("f2695", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=FEATURE)
+       reach=PERSONAL, target=SELF, dropped=("c.no_action_point_refresh()",))
 def f2695(c: Cast) -> None:
     """The daily has a ref and is handed over; the "choose one 1st-level
-    at-will" half is prose with no id."""
+    at-will" half names a set rather than a ref and is `c.borrow_row`.
+
+    Dropped: "you do not regain the use of that power when you spend an
+    action point", which is a narrowing of the action-point refresh and
+    has nothing to hang on."""
     c.grant_row("p9501", on=c.me, until=When.ENCOUNTER)
+    c.borrow_row("seeker", level=1, uses=1)
 
 
 @power("f2696", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1517,13 +1583,13 @@ def f2839(c: Cast) -> None:
 
 @power("f2844", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.bonus(dtype=)", *PLAGUE))
+       dropped=PLAGUE)
 def f2844(c: Cast) -> None:
-    """The extra point plays; its being fire does not. `c.bonus` adds to
-    whatever the power was already rolling and cannot name a type of its
-    own, which is the hold six other rows in the tree carry."""
+    """The extra point is fire and carries its own type. Only the second
+    sentence is dropped: nothing says whether the character also holds
+    the other feat, so the point does not double."""
     c.bonus(
-        "damage", 1, on=c.me, until=When.ENCOUNTER,
+        "damage", 1, on=c.me, until=When.ENCOUNTER, dtype=DamageType.FIRE,
         when=lambda ctx: (p := get(ctx.get("power", ""))) is not None
         and p.usage in (Usage.ENCOUNTER, Usage.DAILY),
     )
@@ -1531,11 +1597,13 @@ def f2844(c: Cast) -> None:
 
 @power("f2850", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.bonus(dtype=)", *PLAGUE))
+       dropped=PLAGUE)
 def f2850(c: Cast) -> None:
-    """Same hold as f2844: the three points land, the necrotic does not."""
+    """Same hold as f2844, and only the second sentence: the three points
+    are necrotic, and whether the other feat makes them fire as well is
+    what nothing can ask."""
     c.bonus(
-        "damage", 3, on=c.me, until=When.ENCOUNTER,
+        "damage", 3, on=c.me, until=When.ENCOUNTER, dtype=DamageType.NECROTIC,
         when=lambda ctx: (t := ctx.get("target")) is not None
         and c.bloodied(on=t),
     )

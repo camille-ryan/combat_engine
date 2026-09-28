@@ -36,6 +36,7 @@ from combat_engine.engine import (
     ActionType,
     AreaBurst,
     Cast,
+    DamageType,
     Dropped,
     Hit,
     Keyword,
@@ -51,7 +52,6 @@ from combat_engine.engine.events import PowerResolved, ZoneEntered
 #: A class feature the benefit names in prose with no ref.
 FEATURE = ("c.class_feature()",)
 #: Nothing reads past a creature's resistance or immunity.
-PIERCE = ("c.ignore_resistance()",)
 #: A `SavingThrow` says who rolled and not what laid the effect.
 ON_SAVE = ("c.on_save()",)
 
@@ -213,22 +213,29 @@ def f2135(c: Cast) -> None:
 
 
 @power("f2136", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=PIERCE)
+       reach=PERSONAL, target=SELF, dropped=("chargen.power_swap()",))
 def f2136(c: Cast) -> None:
-    """The row plays for its second clause and drops its first.
+    """Both printed clauses, and one still dropped.
 
     "You replace your racial power with this one" is what `c.grant_row`
-    says -- the replacement half is `chargen`'s and taking the old row
-    away would need its ref, which the prose does not give. Ignoring a
-    bloodied enemy's fire resistance is the dropped clause: `c.resist`
-    lays one and `resolve` subtracts it, with nothing reading past it.
+    says for the half that hands the card over; taking the old row away
+    is `chargen`'s and would need its ref, which the prose does not give.
+
+    The fire clause is blanket -- no number, and the immunity with it --
+    and gated on the target being bloodied, which the damage context
+    names.
     """
     c.grant_row("f2136b", on=c.me, until=When.ENCOUNTER)
+    c.ignore_resistance(
+        None, DamageType.FIRE, on=c.me, until=When.ENCOUNTER, immunity=True,
+        when=lambda ctx: (t := ctx.get("target")) is not None
+        and c.bloodied(on=t),
+    )
 
 
 @power("f2136b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=AreaBurst(1, within=10), target=NO_TARGET,
-       keywords=[Keyword.ARCANE, Keyword.ZONE], dropped=PIERCE)
+       keywords=[Keyword.ARCANE, Keyword.ZONE])
 def f2136b(c: Cast) -> None:
     """The card of f2136: a zone that hands you combat advantage.
 
@@ -238,10 +245,19 @@ def f2136b(c: Cast) -> None:
     to whoever walks in afterwards, which is the two halves of "targets
     in the zone" a one-shot pass over the squares would miss.
 
-    Stripping immunities and resistances is dropped, as on f2136.
+    "They lose all immunities and resistances **against your attacks**"
+    is the attacker's own ignore rather than anything taken off them, so
+    it is laid once on the caster and gated on the creature being hit
+    standing in the zone -- which answers for whoever walks in later too,
+    and for nobody once they walk out.
     """
     area = c.area()
     zone = c.zone(area, until=When.EONT, label=c.ref)
+    c.ignore_resistance(
+        None, on=c.me, until=When.EONT, immunity=True,
+        when=lambda ctx: (t := ctx.get("target")) is not None
+        and t in c.world.zones.occupants(zone),
+    )
     for foe in c.in_squares(area, side="enemy"):
         c.grants_advantage(on=foe, until=When.EONT)
 
@@ -255,13 +271,29 @@ def f2136b(c: Cast) -> None:
 
 
 @power("f3068", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PIERCE)
+       reach=PERSONAL, target=SELF)
 def f3068(c: Cast) -> None:
-    """Ignores part of a creature's fire resistance, and treats immunity
-    as a large resistance instead. Nothing reads past a resistance: it
-    is subtracted inside `resolve` from a number the creature carries,
-    and no modifier reduces it for one attacker. Same symbol f2136
-    drops."""
+    """Fire resistance worth the wizard's Intelligence modifier, walked
+    through, and immunity treated as resist 25 for the same points to
+    come off. Heroic, so no tier step.
+
+    "Arcane fire powers" is the power the damage context names read back
+    through `get`, not the damage type: a wizard's fire spell against
+    something it cannot burn still deals its damage, and the card is
+    about which power was used."""
+
+    def arcane_fire(ctx: dict[str, Any]) -> bool:
+        p = get(ctx.get("power", ""))
+        return (
+            p is not None
+            and Keyword.ARCANE in p.keywords
+            and Keyword.FIRE in p.keywords
+        )
+
+    c.ignore_resistance(
+        max(0, c.int_mod), DamageType.FIRE, on=c.me, until=When.ENCOUNTER,
+        immunity=25, when=arcane_fire,
+    )
 
 
 # -- the spellbook ---------------------------------------------------------
@@ -356,10 +388,12 @@ def f2292(c: Cast) -> None:
 
 
 @power("f2030", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("cf:wizard-arcanist-f0c3", "c.use_power()"))
+       reach=PERSONAL, target=SELF, todo=("cf:wizard-arcanist-f0c3",))
 def f2030(c: Cast) -> None:
-    """A free `f2023b` on a miss with one arcanist option. The option has
-    a ref and no row, so nothing marks which misses it modified."""
+    """A free `f2023b` on a miss with one arcanist option. Re-aimed:
+    `c.use_power` would fire f2023b in one line, so the verb is no
+    longer the hold. The option still has a ref and no row, so nothing
+    marks which misses it modified and the trigger cannot be written."""
 
 
 @power("f2034", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

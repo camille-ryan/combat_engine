@@ -32,6 +32,7 @@ from combat_engine.engine import (
     SELF,
     ActionType,
     Cast,
+    DamageType,
     Dropped,
     Hit,
     Keyword,
@@ -160,15 +161,20 @@ def f3277(c: Cast) -> None:
 @power("f3307", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit an enemy with a daily psion power",
-       on=Trigger(Hit, _daily_psionic_hit, "a daily psion hit"),
-       dropped=("c.bonus(dtype=)",))
+       on=Trigger(Hit, _daily_psionic_hit, "a daily psion hit"))
 def f3307(c: Cast) -> None:
     """"Your next attack against that enemy" is `once=True` on a gate that
-    names the creature. The extra die is force or psychic by the psion's
-    choice and a damage modifier carries no type, so it lands untyped."""
+    names the creature. The card prints force *or* psychic, so the type
+    is asked rather than picked -- `c.choose` takes damage types, and
+    writing it as both at once would be a different and harder-to-resist
+    thing than the card says."""
     me, foe = c.me, c.trigger.target
+    pick = c.choose(
+        [DamageType.FORCE, DamageType.PSYCHIC], f"{c.ref}: which damage type"
+    )
     c.bonus(
         "damage", 0, dice="1d6", on=me, until=When.EONT, once=True,
+        dtype=pick or DamageType.PSYCHIC,
         when=lambda ctx: (
             ctx.get("target") == foe and _unaugmented_at_will(me, ctx)
         ),
@@ -192,11 +198,11 @@ def f3300(c: Cast) -> None:
 
 
 @power("f3291", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF)
 def f3291(c: Cast) -> None:
     """Standing inside a zone of one's own is asked per damage roll, since
-    the psion walks in and out of it. The extra 3 is psychic and a damage
-    modifier carries no type, so that word is one half that is missing.
+    the psion walks in and out of it. The extra 3 is psychic and carries
+    that type of its own.
     """
     me = c.me
 
@@ -210,7 +216,8 @@ def f3291(c: Cast) -> None:
             for eid, zone in c.world.each(Zone)
         )
 
-    c.bonus("damage", 3, on=me, until=When.ENCOUNTER, when=inside)
+    c.bonus("damage", 3, on=me, until=When.ENCOUNTER, when=inside,
+            dtype=DamageType.PSYCHIC)
 
 
 # -- riders on send thoughts and distract ----------------------------------
@@ -401,20 +408,26 @@ def f2608(c: Cast) -> None:
 
 @power("f3172", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       todo=("DamageType.pair()", "c.use_power()"))
+       todo=("DamageType.pair()",))
 def f3172(c: Cast) -> None:
     """A racial power that deals two types at once, and comes back and
-    fires again when it kills. A damage instance carries one type, and
-    nothing calls a row from inside another row's body."""
+    fires again when it kills. Re-aimed: the second half is
+    `c.restore_use` plus `c.use_power` now, and what is still missing is
+    the first -- a damage instance carries one type, so "deals necrotic
+    and psychic damage" cannot be said, and that is the clause the whole
+    row turns on."""
 
 
 @power("f3275", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       todo=("c.use_power()", "c.extend_range()"))
+       todo=("c.recast(reach=)",))
 def f3275(c: Cast) -> None:
     """Spends one racial power to use another at a range it does not
-    print. Neither half has a verb: a row's reach is header data read
-    before its body runs."""
+    print. Re-aimed, and onto the symbol ten other rows already use:
+    `c.expend_row("p8225")` is the price and `c.use_power("p7546")` is
+    the use, so both of those halves have verbs -- what is left is
+    using a row at a reach it does not print, which is header data read
+    before the body runs."""
 
 
 @power("f3284", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

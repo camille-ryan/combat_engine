@@ -441,16 +441,16 @@ def i1337p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.bonus(dtype=)",),
 )
 def i1361x1(c: Cast) -> None:
-    """The extra damage rides on somebody else's roll, so it keeps that
-    blow's type; nothing types a modifier."""
+    """The extra damage is cold and carries its own type, so it meets a
+    cold resistance the axe's own damage does not."""
     c.bonus(
         "damage",
         c.con_mod,
         on=c.me,
         until=When.ENCOUNTER,
+        dtype=DamageType.COLD,
         when=lambda ctx: c.bloodied(on=c.me),
     )
 
@@ -2579,11 +2579,18 @@ def i2959x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with an attack using this weapon",
     on=Trigger(Hit, by_me, "you hit an enemy with this weapon"),
-    todo=("c.ignore_resistance()",),
 )
 def i2959p1(c: Cast) -> None:
-    """Damage that bypasses resistance and immunity. `c.resist` grants
-    resistance and `c.vulnerable` offsets it; neither bypasses."""
+    """"The attack ignores the enemy's immunities and resistances", so it
+    is gated on that enemy. Held to the end of the turn rather than to
+    the one blow: `Hit` is announced before the body rolls its damage, so
+    the free action answering it lands in time, and a seeker power with
+    two damage lines would otherwise cover only the first."""
+    foe = c.trigger.target
+    c.ignore_resistance(
+        None, on=c.me, until=When.EOT, immunity=True,
+        when=lambda ctx: ctx.get("target") == foe,
+    )
 
 
 @power(
@@ -2997,14 +3004,13 @@ def i3428x1(c: Cast) -> None:
     keywords=[Keyword.FIRE],
     trigger="you use your second wind on your turn",
     on=Trigger(SecondWind, _my_second_wind, "you use your second wind"),
-    dropped=("c.bonus(dtype=)",),
 )
 def i3428p1(c: Cast) -> None:
-    """The melee half of the gate is readable off the power's reach; the
-    extra damage keeps the blow's own type, because nothing types a
-    modifier."""
+    """The melee half of the gate is readable off the power's reach, and
+    the extra damage is fire and carries that type."""
     c.bonus(
-        "damage", c.enhancement, on=c.me, until=When.EONT, when=_melee_damage
+        "damage", c.enhancement, on=c.me, until=When.EONT,
+        dtype=DamageType.FIRE, when=_melee_damage
     )
 
 
@@ -3916,12 +3922,19 @@ def i3408x1(c: Cast) -> None:
     keywords=[Keyword.POISON],
     trigger="you hit an enemy with an attack using this dagger",
     on=Trigger(Hit, by_me, "you hit an enemy with this dagger"),
-    dropped=("c.ignore_resistance()",),
 )
 def i3408p1(c: Cast) -> None:
-    """The burn lands; that it should get past a resistance or an immunity
-    cannot be said."""
+    """The burn is dealt with the wielder as its source, so an ignore laid
+    on the wielder reaches it. Gated on the burning creature: the burn's
+    `detail` is the effect's description rather than a ref, so the target
+    is what identifies it."""
+    foe = c.target
     c.ongoing(5, DamageType.POISON)
+    if foe is not None:
+        c.ignore_resistance(
+            None, DamageType.POISON, on=c.me, until=When.ENCOUNTER,
+            immunity=True, when=lambda ctx: ctx.get("target") == foe,
+        )
 
 
 @power(

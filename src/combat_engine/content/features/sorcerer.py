@@ -129,7 +129,7 @@ def _on_bolt_hit(c: Cast, fn: Callable[[Hit], None]) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    todo=("chargen.BUILDS", "events.ShortRested", "c.ignore_resistance()"),
+    todo=("chargen.BUILDS", "events.ShortRested"),
 )
 def sorcerer_f0s0(c: Cast) -> None:
     """The source that cycles through three phases, and has no leg.
@@ -157,11 +157,7 @@ def sorcerer_f0s0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    dropped=(
-        "c.ignore_resistance()",
-        "c.trade_resistance()",
-        "cf:sorcerer-soul-nat20",
-    ),
+    dropped=("c.trade_resistance()", "cf:sorcerer-soul-nat20"),
 )
 def sorcerer_f0s2(c: Cast) -> None:
     """The third source: a damage modifier and two resistances at once.
@@ -174,12 +170,18 @@ def sorcerer_f0s2(c: Cast) -> None:
     flat, the way `cf:sorcerer-elementalist-f0` gates its own: a sorcerer
     swinging a mace is not casting. The paragon steps are out of scope.
 
-    Three clauses are dropped. Arcane powers ignoring a target's
-    resistance up to this one's value has no modifier to be; the printed
-    trade -- ending the resistance as an immediate interrupt for a +4
-    power bonus to all defences -- is an immediate action printed inside a
-    trait, with no card ref of its own for `c.grant_row` to hand over; and
-    the natural-20 rider is `cf:sorcerer-soul-nat20`.
+    "While this resistance is active, your arcane powers ignore all
+    targets' resistance to that damage type up to the value of your
+    resistance" is one `c.ignore_resistance` per type, capped at the same
+    5 and gated on the same arcane test, so the two halves cannot drift
+    apart. It is laid on the caster because it is a thing the caster
+    does, not a thing done to the creature being hit.
+
+    Two clauses are still dropped. The printed trade -- ending the
+    resistance as an immediate interrupt for a +4 power bonus to all
+    defences -- is an immediate action printed inside a trait, with no
+    card ref of its own for `c.grant_row` to hand over; and the
+    natural-20 rider is `cf:sorcerer-soul-nat20`.
     """
     if not c.build("f0s2"):
         return
@@ -190,6 +192,9 @@ def sorcerer_f0s2(c: Cast) -> None:
         )
     for kind in (DamageType.THUNDER, DamageType.LIGHTNING):
         c.resist(5, kind, until=When.ENCOUNTER, on=c.me)
+        c.ignore_resistance(
+            5, kind, until=When.ENCOUNTER, on=c.me, when=_arcane_power
+        )
 
 
 # -- the elementalist ------------------------------------------------------

@@ -981,11 +981,16 @@ def i2611p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
 )
 def i2614x1(c: Cast) -> None:
-    """A damage bonus gated on `ctx["power"]`, which needs the ref of the
-    power the brief names only in prose."""
+    """`p463` is a ref now, and the damage context carries `power`, so the
+    gate is the ordinary one. This is an *item* bonus on top of the
+    enhancement that row's own Special already adds -- two different
+    kinds, so they stack."""
+    c.bonus(
+        "damage", c.enhancement, on=c.me, until=When.ENCOUNTER, kind="item",
+        when=lambda ctx: ctx.get("power") == "p463",
+    )
 
 
 @power(
@@ -1981,12 +1986,14 @@ def i1821p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()", "c.movement_tax()"),
+    todo=("c.movement_tax()",),
 )
 def i1822x1(c: Cast) -> None:
-    """"Each square moved toward you costs 1 extra" is difficult terrain
-    that follows one creature and only in one direction; `c.zone` is laid
-    on squares and `c.slowed` caps a whole move instead."""
+    """Re-aimed: `p1457` is a ref now, so the naming gap is closed and was
+    never the hold. "Each square moved toward you costs 1 extra" is
+    difficult terrain that follows one creature and only in one
+    direction; `c.zone` is laid on squares and `c.slowed` caps a whole
+    move instead."""
 
 
 @power(
@@ -2888,13 +2895,15 @@ def i2626x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.use_power()", "c.on_sustain(group=)"),
+    todo=("c.on_sustain(group=)",),
 )
 def i2627x1(c: Cast) -> None:
-    """The ref is given now, and neither half of the sentence follows from
-    it. Conjuring the named row several times is running that row from
-    inside this one; folding several sustains into one minor action is a
-    second thing, since `c.on_sustain` holds one effect at a time."""
+    """Re-aimed: `c.use_power` runs the named row from inside this one,
+    so conjuring several hands is writable. Folding their sustains into
+    one minor action is not -- `c.on_sustain` holds one effect at a
+    time -- and that clause is the whole reason the property is worth
+    having, so the row stays refused rather than shipping the half that
+    makes the wizard pay a minor per hand."""
 
 
 @power(
@@ -3087,11 +3096,13 @@ def i2759p1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you hit with an attack using this holy symbol",
-    todo=("spec.power_ref()", "c.extend_effect()"),
+    todo=("c.extend_effect()",),
 )
 def i2762p1(c: Cast) -> None:
-    """Holds a class feature's mark past the moment it would lapse. The
-    feature is named in prose and nothing lengthens a live effect."""
+    """Re-aimed: the feature is `p805` and arrives as a ref now, so the
+    naming gap is closed. What is left is the whole of the row -- nothing
+    lengthens an effect that is already live, and "even if it would
+    normally end" is exactly that."""
 
 
 @power(

@@ -117,8 +117,12 @@ PROFICIENCY = ("chargen.proficiency()",)
 SWAP = ("chargen.power_swap()",)
 #: A class feature named in prose with no `cf:` row behind it.
 FEATURE = ("c.class_feature()",)
-#: Another class's feature, named by a `cf:` ref nothing declares.
-BORROW = ("c.borrow_feature()",)
+#: Another class's feature whose options each refuse themselves off
+#: `c.build`, so handing one to a character of a different class hands
+#: over a row whose body returns on its first line. The grant itself is
+#: `c.grant_row` and the choice is `c.borrow_row`; what is missing is a
+#: way to put a character on a leg of a class it did not take.
+BORROW = ("c.set_build()",)
 
 DIVINE = [Keyword.DIVINE]
 WEAPON = [Keyword.WEAPON]
@@ -885,10 +889,27 @@ _granted("f2154", "f2154b", swap=Swap(9, utility=True))
 
 
 @power("f2154b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_resistance()",))
+       reach=PERSONAL, target=SELF)
 def f2154b(c: Cast) -> None:
-    """Resistance and insubstantial are read inside `resolve.damage` and
-    neither can be bypassed by an attacker today."""
+    """"Including insubstantial" is its own argument, because insubstantial
+    is a halving read a few lines above resistance and not a resistance.
+
+    "Ranged, area, or close" is the row's own reach line, read back off
+    the power the damage context names -- `ctx["ranged"]` is melee or not
+    and would let a close burst through. Held until the end of your next
+    turn rather than spent on the first blow: a burst is announced once
+    per target and a one-shot would cover only the first of them."""
+
+    def reaching(ctx: dict[str, Any]) -> bool:
+        p = get(ctx.get("power", ""))
+        return p is not None and p.reach.kind in (
+            "ranged", "close_burst", "close_blast", "area_burst"
+        )
+
+    c.ignore_resistance(
+        None, on=c.me, until=When.EONT, immunity=True, insubstantial=True,
+        when=reaching,
+    )
 
 
 _granted("f2155", "f2155b", swap=Swap(6, utility=True))
@@ -1488,11 +1509,11 @@ def f2102(c: Cast) -> None:
 
 @power("f2408", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.expend_row()", "c.damage_of(ref)"))
+       todo=("c.damage_of(ref)",))
 def f2408(c: Cast) -> None:
-    """Trades `p1448` for extra damage on a martial hit. The ref closes
-    the naming gap and leaves two: spending a row the character owns,
-    and rolling *that row's* damage line for a blow this one deals --
+    """Trades `p1448` for extra damage on a martial hit. Re-aimed: the
+    price is `c.expend_row("p1448")` now, and what is left is rolling
+    *that row's* damage line for a blow this one deals --
     "as if you had hit with" is a whole damage expression borrowed from
     elsewhere, which neither `c.damage` nor `c.as_though_hit_by` says."""
 
@@ -1600,8 +1621,15 @@ def f2203(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=BORROW)
 def f1217(c: Cast) -> None:
     """Another class's feature hands over a power of the taker's choice.
-    The `cf:` ref names a row nothing in the tree declares, so
-    `c.grant_row` has nothing to hand over."""
+
+    Re-aimed. The `cf:` ref is declared now and so are its three
+    options, so the borrowing is no longer the hold -- `c.grant_row`
+    hands a feature over and `c.borrow_row` picks one out of a list.
+    The hold is one step further in: each option gates itself on a leg
+    of its own class, `cf:swordmage-f1s0` with a `requires=on_leg(...)`
+    in the header and the other two inside the body, so a character who
+    took this feat is handed a row that refuses itself. Nothing puts a
+    character on another class's leg."""
 
 
 @power("f1351", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -47,6 +47,7 @@ from .dsl import (
     SELF,
     AreaBurst,
     Attack,
+    Augment,
     CloseBlast,
     CloseBurst,
     Damage,

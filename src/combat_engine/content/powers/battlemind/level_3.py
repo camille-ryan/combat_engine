@@ -14,6 +14,7 @@ from combat_engine.engine import (
     STANDARD,
     WILL,
     Attack,
+    Augment,
     Cast,
     Condition,
     DamageApplied,
@@ -122,13 +123,19 @@ def p11164(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FORCE],
     attack=Attack(CON, vs=AC),
+    augments=(Augment(1, reach=Melee(2)),),
+    dropped=("dsl.Range.by_ability",),
 )
 def p12422(c: Cast) -> None:
-    """Neither augment is written: both are a longer reach for the attack,
-    and reach is the header, measured before the body is called -- the
-    stronger Hit line Augment 2 also prints is not written on its own,
-    because half a clause is worse than none. The slide is anchored on the
-    caster's square, which is what "to a square adjacent to you" means."""
+    """Augment 1 is a square of extra reach for that attack, which is the
+    header and is declared there.
+
+    Augment 2 is the `dropped` clause and its hold is not the augment
+    machinery: it lengthens the reach by *your Charisma modifier*, and a
+    `Range` holds a number that is read off the card before any creature
+    is in hand. Its stronger Hit line is not written alone, because half a
+    clause is worse than none. The slide is anchored on the caster's
+    square, which is what "to a square adjacent to you" means."""
     if c.strike():
         c.damage(c.w(), c.con_mod, dtype=DamageType.FORCE)
         c.slide(1, anchor=c.here)
@@ -144,13 +151,19 @@ def p12422(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.TELEPORTATION],
     attack=Attack(CON, vs=AC),
+    augments=(
+        Augment(1, reach=Melee(2)),
+        Augment(2),
+    ),
 )
 def p13039(c: Cast) -> None:
     """Augment 2 is 2[W] and a second recall if the target runs -- "more than
     2 squares on its next turn" measured from where its turn began, so the
-    square it started in is caught on the move itself. Augment 1 is a longer
-    reach, which is the header, and is left out."""
-    spent = augment(c, 2)
+    square it started in is caught on the move itself.
+
+    Augment 1 is a square of extra reach, which is the header, so it is
+    declared there and the spend is settled before the target is chosen."""
+    spent = augment(c, 1, 2) == 2
     victim = c.target
     if victim is None or not c.strike():
         return
@@ -217,16 +230,28 @@ def p13040(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_WEAPON,
     attack=Attack(CON, vs=WILL),
+    augments=(
+        Augment(1, reach=Melee(5)),
+        Augment(2, reach=Melee(5)),
+    ),
+    dropped=("c.confine(to=)",),
 )
 def p13041(c: Cast) -> None:
-    """Neither augment is written: both print Melee 5, which is the header's
-    reach and is measured before the body runs, so the longer pull and the
-    prone they come with are not written on their own either.
-    "The target can move only to squares adjacent to you" is dropped too:
-    nothing on `Cast` constrains where a creature may walk."""
-    if c.strike():
-        c.damage(0, c.con_mod)
-        c.pull(1)
+    """Both augments print Melee 5, which is the header's reach and is
+    measured before the body runs, so both are declared there -- and with
+    the reach declared, the longer pull and the prone that come with them
+    are writable below.
+
+    "The target can move only to squares adjacent to you" is the `dropped`
+    clause and is printed on all three forms: nothing on `Cast` constrains
+    where a creature may walk."""
+    spent = augment(c, 1, 2)
+    if not c.strike():
+        return
+    c.damage(c.w() if spent == 2 else 0, c.con_mod)
+    c.pull(4 if spent else 1)
+    if spent == 2:
+        c.prone()
 
 
 @power(

@@ -980,10 +980,11 @@ def i3324x1(c: Cast) -> None:
 
 @power("i3324p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=PERSONAL, target=NO_TARGET,
-       todo=("c.stored_row()", "c.use_power()"))
+       todo=("c.stored_row()",))
 def i3324p1(c: Cast) -> None:
-    """Setting off the linked item's power needs both the link and a way
-    to run somebody else's row."""
+    """Re-aimed: `c.use_power` runs somebody else's row now, so the hold
+    is only the link -- nothing records which item this one was tied to,
+    and without that there is no ref to set off."""
 
 
 @power("i3481p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,

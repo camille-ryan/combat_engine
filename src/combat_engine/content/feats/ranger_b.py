@@ -37,6 +37,7 @@ from combat_engine.engine import (
     Cast,
     Condition,
     DamageApplied,
+    DamageType,
     Dropped,
     Gear,
     Hit,
@@ -221,21 +222,21 @@ def f2183(c: Cast) -> None:
     )
 
 
-@power("f1665", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",),
+@power("f1665", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you hit your quarry with p8278",
        on=Trigger(Hit, _hit_quarry_with("p8278"), "you hit your quarry"))
 def f1665(c: Cast) -> None:
     """Extra damage on every later blow against that target.
 
-    The *type* is dropped rather than the clause: the printed extra is
-    necrotic and `c.bonus` carries `dice` but no damage type, so it
-    rolls untyped -- which is wrong against anything that resists
-    necrotic. The same gap the assassin's f1809 named.
+    The extra is necrotic and says so, so it is shrugged off by a
+    creature that resists necrotic even when the blow carrying it is a
+    sword.
     """
     foe = c.trigger.target
     c.bonus(
         "damage", c.con_mod, on=c.me, until=When.EONT,
+        dtype=DamageType.NECROTIC,
         when=lambda ctx: ctx.get("target") == foe,
     )
 
@@ -621,22 +622,34 @@ _WOLF = "comp:8"
 
 
 @power("f804", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.use_power()",))
+       reach=PERSONAL, target=SELF)
 def f804(c: Cast) -> None:
-    """The beast is harder to catch on the way past.
+    """The beast is harder to catch on the way past, and you can spend
+    your own racial power when something lands a blow on it.
 
     The defence side of the attack context is the rich one -- it is handed
     `opportunity` -- so this is a gate that answers rather than a bonus
     that is always on.
 
-    Dropped, and re-aimed: `p1452` is declared now, so the row has a
-    name. What is missing is one row *using* another -- and on somebody
-    else's behalf at that, which `c.grant_row` does not say either.
+    The card prints a standing modifier **and** a triggered clause, so
+    the row is the trait and `c.watch` is the trigger: a declared
+    `on=Trigger` here would mean the bonus was never laid.
+
+    "On the beast's behalf" is `who=` left alone -- p1452 is the
+    character's power and the character uses it -- and using it spends
+    it, which is the limit the card leans on.
     """
     pet = c.beast()
-    if pet is not None:
-        c.bonus(AC, 2, on=pet, until=When.ENCOUNTER,
-                when=lambda ctx: bool(ctx.get("opportunity")))
+    if pet is None:
+        return
+    c.bonus(AC, 2, on=pet, until=When.ENCOUNTER,
+            when=lambda ctx: bool(ctx.get("opportunity")))
+
+    def answer(ev: Any) -> None:
+        if ev.target == pet:
+            c.use_power("p1452")
+
+    c.watch(Hit, answer, until=When.ENCOUNTER, on=c.me)
 
 
 @power("f824", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -453,6 +453,111 @@ def _mods(world: World, eid: int, what: str, ctx: dict) -> int:
     return mods.total(what, ctx) if mods else 0
 
 
+#: "Your attacks ignore all resistances", with no number printed on the
+#: card. Stored as a number because `Mods` holds numbers, and larger than
+#: any resistance a heroic-tier creature can have.
+IGNORE_ALL = 999
+
+
+def _split_mods(
+    world: World, eid: int, what: str, ctx: dict
+) -> dict[tuple[DamageType, ...], int]:
+    from .components import Mods
+
+    mods = world.get(eid, Mods)
+    return mods.split(what, ctx) if mods else {}
+
+
+def _add_mods(
+    parts: list[tuple[tuple[DamageType, ...], int]],
+    extra: dict[tuple[DamageType, ...], int],
+) -> list[tuple[tuple[DamageType, ...], int]]:
+    """Fold a `Mods.split` result into the blow.
+
+    An untyped rider joins the power's own part, because it is whatever
+    the power is. A typed one becomes a part of its own, merging with any
+    earlier rider of exactly the same types.
+    """
+    if not extra:
+        return parts
+    out = list(parts)
+    out[0] = (out[0][0], out[0][1] + extra.get((), 0))
+    for types, value in extra.items():
+        if not types or not value:
+            continue
+        for i, (had, seen) in enumerate(out[1:], start=1):
+            if had == types:
+                out[i] = (had, seen + value)
+                break
+        else:
+            out.append((types, value))
+    return out
+
+
+def _rescale(
+    parts: list[tuple[tuple[DamageType, ...], int]], total: int
+) -> list[tuple[tuple[DamageType, ...], int]]:
+    """Hold the typed split steady when something changes the total.
+
+    Halving and "reduce the damage by 5" are written against one number
+    and know nothing about parts, so the split is kept in proportion and
+    the power's own part absorbs the rounding. Exact for the single-part
+    case, which is every blow that has no typed rider.
+    """
+    was = sum(v for _, v in parts)
+    if was == total:
+        return parts
+    if len(parts) == 1 or was <= 0:
+        return [(parts[0][0], total), *((t, 0) for t, _ in parts[1:])]
+    rest = [(t, v * total // was) for t, v in parts[1:]]
+    return [(parts[0][0], total - sum(v for _, v in rest)), *rest]
+
+
+def _ignored_resist(
+    world: World, source: int, types: tuple[DamageType, ...], ctx: dict
+) -> int:
+    """How much of the target's resistance the attacker simply walks through.
+
+    Read off the **attacker**, unlike every other term in `deal_damage`'s
+    resistance arithmetic: "your attacks ignore the first 5 points of
+    necrotic resistance" is a thing the character has, not a thing done to
+    the creature in front of them.
+
+    A rider of two types is walked through only as far as both are, which
+    is the same `min` the resistance itself is read with.
+    """
+    specific = min(
+        (_mods(world, source, f"ignore resist {t.value}", ctx) for t in types),
+        default=0,
+    )
+    return _mods(world, source, "ignore resist", ctx) + specific
+
+
+def _immunity_ignored(
+    world: World, source: int, types: tuple[DamageType, ...], ctx: dict
+) -> int | None:
+    """`None` if the immunity stands, else the resistance it counts as instead.
+
+    Two numbers rather than one flag because the cards print it both ways:
+    "your attacks ignore poison immunity" is a zero, and "treat a creature
+    immune to poison as if it had resist poison 20" is a twenty that the
+    ignored points are then taken off.
+    """
+    on = _mods(world, source, "ignore immunity", ctx) or min(
+        (_mods(world, source, f"ignore immunity {t.value}", ctx) for t in types),
+        default=0,
+    )
+    if not on:
+        return None
+    return max(
+        _mods(world, source, "immune as resist", ctx),
+        max(
+            (_mods(world, source, f"immune as resist {t.value}", ctx) for t in types),
+            default=0,
+        ),
+    )
+
+
 def _mark_penalty(world: World, attacker: int, among: tuple[int, ...]) -> int:
     """A mark costs you 2 when you attack anyone but the creature that marked you.
 
@@ -548,12 +653,22 @@ def deal_damage(
         # everything else.
         "ranged": _is_ranged(detail),
     }
+    # **The blow is a list of typed parts, not one number.** `parts[0]` is
+    # what the power itself rolled, of the power's own type; a rider that
+    # names a type of its own -- "your attacks deal 2 extra fire damage" --
+    # is its own part, because those two points meet the target's fire
+    # resistance whether or not the sword does. Every part but the first
+    # exists only because some row asked for one, so a blow with no typed
+    # rider is a single part and comes out of the arithmetic below
+    # bit-for-bit what it did before this existed.
+    parts: list[tuple[tuple[DamageType, ...], int]] = [((dtype,), amount)]
     if from_attack:
         # A bonus to damage is a thing powers grant constantly -- "+4 damage
         # against the target until the end of the encounter" -- and for a
         # while this line was missing, so every one of them was stored and
         # never read. Nothing failed; the damage was simply never larger.
-        amount += _mods(world, source, "damage", dmg_ctx)
+        parts = _add_mods(parts, _split_mods(world, source, "damage", dmg_ctx))
+        amount = sum(v for _, v in parts)
     # **What a critical hit adds beyond maximising the dice.** 734 of the
     # heroic magic items print "Critical: +1d6 damage per plus" and the
     # engine had no hook for any of them: `Cast.damage` maxed the dice and
@@ -564,9 +679,11 @@ def deal_damage(
     # crit rider is rolled (`Mod.roll` already carries "+1d6") and because
     # the two stack differently: every item you hold adds its own.
     if crit:
-        amount += _mods(world, source, "crit_damage", dmg_ctx)
+        parts = _add_mods(parts, _split_mods(world, source, "crit_damage", dmg_ctx))
+        amount = sum(v for _, v in parts)
     if from_attack and deals_half(world, source):
         amount = amount // 2
+        parts = _rescale(parts, amount)
 
     announce = DamageRolled(
         source=source, target=target, amount=amount, dtype=dtype, detail=detail
@@ -579,11 +696,17 @@ def deal_damage(
     if rolled.cancelled:
         return 0
     amount = max(0, rolled.amount)
+    parts = _rescale(parts, amount)
     # The type too. It is on the event and mutable, and every reader below
     # -- immunity, resistance, vulnerability, and the DamageApplied that is
     # announced -- used the local, so "its weapon attacks deal fire damage"
     # set the field and changed nothing.
-    dtype = rolled.dtype
+    if rolled.dtype != dtype:
+        dtype = rolled.dtype
+        # Only the power's own part is retyped. A listener saying "this
+        # attack deals cold" is speaking about the attack, not about the
+        # fire rider a feat hung off it.
+        parts = [((dtype,), parts[0][1]), *parts[1:]]
     # Read back off the event, the way the attack reads its target back. A
     # listener may move the blow onto somebody else -- one creature stepping
     # in front of another -- and everything below this line used the local.
@@ -598,10 +721,18 @@ def deal_damage(
         if health is None or not alive(world, target):
             return 0
 
-    if takes_half(world, target):
+    if takes_half(world, target) and not _mods(
+        world, source, "ignore insubstantial", dmg_ctx
+    ):
         # Insubstantial halves everything, and does it before resistance so a
         # creature with both does not get the better of the two twice.
+        #
+        # "The power deals full damage to insubstantial creatures" is the
+        # attacker's line and so it is read off the attacker, beside the
+        # resistance it is printed next to on most of the cards that have
+        # either.
         amount = amount // 2
+        parts = _rescale(parts, amount)
 
     defences = world.get(target, Defences)
     if defences is not None:
@@ -611,11 +742,47 @@ def deal_damage(
         # read for fire and ignored for a sword, which is most of the
         # damage in a fight. The entry existed and was never consulted,
         # which reads exactly like a working defence.
-        if dtype in defences.immune:
+        #
+        # **Resistance and vulnerability are each spent once per blow**,
+        # which is why the per-part figures are capped at the largest one
+        # rather than summed. A creature with resist 5 to everything, hit
+        # for 10 with a sword and 5 with a fire rider, shrugs off five
+        # points and not ten: it has one resistance, not one per part.
+        # Vulnerability is the printed version of the same rule -- only the
+        # highest applies.
+        live: list[list[int]] = []
+        worst_vuln = 0
+        for types, value in parts:
+            resist = min(defences.resist.get(t, 0) for t in types)
+            if all(t in defences.immune for t in types):
+                # Immunity is not resistance and is not capped with it: a
+                # part the target is immune to is simply not there.
+                # `c.ignore_resistance(immunity=...)` is the only thing
+                # that reopens it, and the printed form of that line is
+                # usually "treat immunity as resist 20" rather than a
+                # blanket ignore.
+                becomes = _immunity_ignored(world, source, types, dmg_ctx)
+                if becomes is None:
+                    continue
+                resist = max(resist, becomes)
+            resist = max(0, resist - _ignored_resist(world, source, types, dmg_ctx))
+            worst_vuln = max(
+                worst_vuln, max(defences.vulnerable.get(t, 0) for t in types)
+            )
+            live.append([value, resist])
+        if not live:
             amount = 0
         else:
-            amount += defences.vulnerable.get(dtype, 0)
-            amount = max(0, amount - defences.resist.get(dtype, 0))
+            # Vulnerability goes on before resistance comes off, which is
+            # the printed order, and it goes on the power's own part so
+            # that a single-part blow -- every blow in the tree that has
+            # no typed rider -- lands on exactly the arithmetic this did
+            # before parts existed.
+            live[0][0] += worst_vuln
+            shrugged = min(
+                sum(min(v, r) for v, r in live), max(r for _, r in live)
+            )
+            amount = max(0, sum(v for v, _ in live) - shrugged)
 
     # Resistance that only applies to some of the damage that comes in --
     # "but only when the damage is from ranged or area attacks". `Defences`
@@ -642,7 +809,9 @@ def deal_damage(
                 "charge": charge,
             },
         )
-        amount = max(0, amount - gated)
+        amount = max(
+            0, amount - max(0, gated - _ignored_resist(world, source, (dtype,), dmg_ctx))
+        )
 
     # "The creature takes no damage from an attack that misses" -- the
     # minion clause, printed on anything standing at one hit point. Nothing

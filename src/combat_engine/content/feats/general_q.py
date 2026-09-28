@@ -104,9 +104,19 @@ FEATURE = ("c.class_feature()",)
 #: The Associated Powers line is absent from the block.
 ASSOCIATED = ("feat.associated_powers",)
 #: Augmenting a power from outside its own card.
-AUGMENT = ("dsl.use(augment=)",)
-#: "Choose a power granted by <feature>" -- features are not rows.
-BORROW = ("c.borrow_feature()",)
+#: **Re-aimed.** `dsl.use(augment=)` arrived -- a row declares its
+#: augments in its own header and the spend is settled before targeting --
+#: and none of these is that shape. Every one of them expends the
+#: warlock's fell might on a power whose card prints no Augment line,
+#: which is an offer laid on another row from outside it. Same symbol the
+#: psionic aspect dailies in `docs/blocked.json` already name.
+AUGMENT = ("c.lend_augment(ref, clause)",)
+#: "Choose a power granted by <feature>" -- the features are rows now,
+#: and so are their options, but every option refuses itself off
+#: `c.build` on its first line. Handing one to a character of another
+#: class hands over a row that returns immediately, and nothing puts a
+#: character on a leg of a class it did not take.
+BORROW = ("c.set_build()",)
 
 MARTIAL = [Keyword.MARTIAL]
 WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
@@ -770,11 +780,18 @@ def f3216(c: Cast) -> None:
     """Extra poison damage on a power named only in words."""
 
 
-@power("f3217", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.expend_row()",))
+@power("f3217", level=1, cls="", usage=AT_WILL, action=FREE,
+       reach=PERSONAL, target=SELF)
 def f3217(c: Cast) -> None:
-    """Trades a named power's use for temporary hit points. A row can be
-    granted and forbidden; spending one without using it has no verb."""
+    """Trades a named power's use for temporary hit points.
+    `c.expend_row` is the trade: it spends p11738 without casting it and
+    returns False once there is nothing left, so the once-a-fight limit
+    is that row's and this one is the free action the card prints.
+
+    "You don't gain the normal effect" is what expending rather than
+    using means -- p11738's body never runs."""
+    if c.expend_row("p11738"):
+        c.temp_hp(5 + c.con_mod, on=c.me)
 
 
 @power("f3218", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1224,29 +1241,50 @@ def f3323(c: Cast) -> None:
 @power("f3329", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use your racial will power",
-       on=Trigger(PowerUsed, _my_use("p2475"), "you use p2475"),
-       dropped=("c.expend_row()",))
+       on=(
+           Trigger(PowerUsed, _my_use("p2475"), "you use p2475"),
+           Trigger(
+               ConditionApplied,
+               lambda w, me, ev: (
+                   ev.target == me and ev.condition is Condition.SURPRISED
+               ),
+               "you are surprised",
+           ),
+       ))
 def f3329(c: Cast) -> None:
-    """The shift is written against the ref the spec gives. Spending the
-    same row *unused* to shrug off surprise has no verb, so that half is
-    dropped."""
+    """Two printed clauses and two declared triggers -- `on=` takes a
+    sequence, and declaring one of the two would have looked finished.
+
+    The shift answers the use of p2475. The second clause spends the
+    same row **unused**, which is `c.expend_row`: the use goes, p2475's
+    own body never runs, and the surprise is shrugged off only if there
+    was a use to pay with.
+
+    `ConditionApplied` names its subject `target`, so the predicate is
+    written on `ev.target` and not `about_me`."""
+    if isinstance(c.trigger, ConditionApplied):
+        if c.expend_row("p2475"):
+            c.cure(Condition.SURPRISED, on=c.me)
+        return
     c.shift(1)
 
 
 @power("f3389", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(*AUGMENT, "c.regain_points()"))
+       dropped=("c.grant_points()", "c.regain_points()"))
 def f3389(c: Cast) -> None:
     """The feature is a row, so "you gain it" is `c.grant_row`.
 
-    `cf:psion-f1` is declared and is itself refused in play -- it waits
-    on `dsl.use(augment=)` -- so handing it over buys nothing in a fight
-    yet. It is still the printed sentence and it is still worth saying:
-    the ref lands in `Powers.known`, which is what "you also qualify for
-    feats that require that feature" reads.
+    **Re-aimed off `dsl.use(augment=)`, which arrived.** Spending a point
+    to augment is now a thing a character can do, so that half of the
+    printed sentence is no longer this row's gap -- and handing over
+    `cf:psion-f1` now buys a real feature rather than a refused row.
 
-    The point itself is dropped: nothing adds to a pool, and spending
-    one on an augment is the feature's own gap rather than this row's.
+    What is left is the point itself, and it is two separate holds.
+    Nothing *adds* to a pool: `c.transfer_points` moves points between
+    creatures and `PowerPoints.maximum` is chargen's. And this one is
+    printed as not coming back until an extended rest, where
+    `PowerPoints.refresh` restores the whole pool every encounter.
     """
     c.grant_row("cf:psion-f1", on=c.me, until=When.ENCOUNTER)
 
@@ -1254,21 +1292,34 @@ def f3389(c: Cast) -> None:
 @power("f3390", level=1, cls="", usage=DAILY, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=BORROW)
 def f3390(c: Cast) -> None:
-    """"Choose a power granted by <a feature>" -- the feature has no list
-    of rows to choose from."""
+    """"Choose a power granted by <a feature>."
+
+    Re-aimed. The feature has a list now -- its options are declared --
+    so the choosing is `c.borrow_row(among=...)` and the handing over is
+    `c.grant_row`. What is left is that each option opens with
+    `if not c.build("f0sN"): return`, which is the word *one* said where
+    a member of the class can read it and is false for everybody
+    else."""
 
 
 @power("f3391", level=1, cls="", usage=DAILY, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=BORROW)
 def f3391(c: Cast) -> None:
-    """Same shape: every power a named feature grants, once a day."""
+    """Same shape: every power a named feature grants, once a day. The
+    three options are declared and each one gates itself on a leg."""
 
 
 @power("f3392", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*BORROW, "c.lend_skills()"))
+       reach=PERSONAL, target=SELF, dropped=("c.lend_skills()",))
 def f3392(c: Cast) -> None:
-    """Training from another class's skill list, and one of its at-wills
-    chosen by level rather than by ref."""
+    """One of another class's at-wills, chosen by level rather than by
+    ref, which is exactly the set `c.borrow_row` reads off the registry.
+    `uses=1` is the printed limit: an at-will handed over bare is an
+    extra attack every turn.
+
+    Dropped: the training half, which is a skill from another class's
+    list and is not a fight."""
+    c.borrow_row("monk", level=1, uses=1)
 
 
 @power("f3393", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1283,7 +1334,9 @@ def f3393(c: Cast) -> None:
 @power("f3394", level=1, cls="", usage=DAILY, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=BORROW)
 def f3394(c: Cast) -> None:
-    """A power granted by a named feature, once a day."""
+    """A power granted by a named feature, once a day. Same as f3390:
+    the four options are declared and each refuses itself off its
+    leg."""
 
 
 @power("f3395", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1393,13 +1446,15 @@ def f3403(c: Cast) -> None:
 
 @power("f3404", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.deals(ref=)", "c.ignore_resistance()"))
+       todo=("c.deals(ref=)",))
 def f3404(c: Cast) -> None:
     """Retypes the damage of the class's level 0 feature row and makes it
-    bite the insubstantial. The feature is five refs and all five are
-    written -- what is missing is recolouring one named row's damage
-    (`c.deals` recolours everything a creature deals) and ignoring the
-    halving insubstantial applies."""
+    bite the insubstantial. The second half is writable now --
+    `c.ignore_resistance(insubstantial=True)` -- but it is the *rider* on
+    the first: "when you do" is the retyping, and nothing recolours one
+    named row's damage (`c.deals` recolours everything a creature deals).
+    Laid on its own it would make every flurry bite the insubstantial,
+    which the card does not say, so the whole row still waits."""
 
 
 @power("f3405", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1434,10 +1489,12 @@ def f3405(c: Cast) -> None:
 
 
 @power("f3416", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=(*AUGMENT, *PROSE))
+       reach=PERSONAL, target=SELF, dropped=AUGMENT)
 def f3416(c: Cast) -> None:
     """Trades an augment's extra damage for a decaying vulnerability on
-    a power the spec names in words. The skill bonus is what plays."""
+    `p12887`. Re-aimed: the ref arrives now, so the naming gap is closed
+    and the augment machinery is the whole of what is left. The skill
+    bonus is what plays."""
     c.bonus("skill:diplomacy", 2, on=c.me, until=When.ENCOUNTER,
             kind="feat")
 
@@ -1510,9 +1567,10 @@ def f3419(c: Cast) -> None:
 
 
 @power("f3420", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=(*AUGMENT, *PROSE))
+       reach=PERSONAL, target=SELF, dropped=AUGMENT)
 def f3420(c: Cast) -> None:
-    """A skill bonus and an augment that teleports instead of hurting."""
+    """A skill bonus and an augment on `p12887` that teleports instead of
+    hurting. Re-aimed with f3416: only the augment hold is left."""
     c.bonus("skill:nature", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
@@ -1531,9 +1589,10 @@ def f3421(c: Cast) -> None:
 
 
 @power("f3422", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=(*AUGMENT, *PROSE))
+       reach=PERSONAL, target=SELF, dropped=AUGMENT)
 def f3422(c: Cast) -> None:
-    """A skill bonus and an augment that weakens instead of hurting."""
+    """A skill bonus and an augment on `p12887` that weakens instead of
+    hurting. Re-aimed with f3416: only the augment hold is left."""
     c.bonus("skill:bluff", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 

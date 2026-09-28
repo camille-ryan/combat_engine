@@ -7,6 +7,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     CON,
+    EACH_ENEMY,
     FORT,
     INTERRUPT,
     ONE_CREATURE,
@@ -14,8 +15,10 @@ from combat_engine.engine import (
     STANDARD,
     Attack,
     AttackDeclared,
+    Augment,
     Budget,
     Cast,
+    CloseBurst,
     DamageType,
     Hit,
     Keyword,
@@ -49,15 +52,21 @@ from . import PSIONIC_WEAPON, shift_beside
     target=ONE_CREATURE,
     keywords=PSIONIC_WEAPON,
     attack=Attack(CON, vs=AC),
+    augments=(Augment(2, reach=CloseBurst(1), target=EACH_ENEMY),),
+    dropped=("dsl.Power.basic_for", "c.denies_advantage()"),
 )
 def p11169(c: Cast) -> None:
-    """Neither augment is written: Augment 1 is the Special that lets the row
-    stand in for an opportunity attack, which is what a row is *used as* and
-    not something a body decides, and Augment 2 is a close burst. "The target
-    cannot gain combat advantage" is dropped too -- `c.grants_advantage` hands
-    advantage out and nothing takes it away."""
+    """Augment 2 is a close burst against each enemy at 2[W], which is a
+    header line, so it is declared as one.
+
+    Two clauses are `dropped` and neither is about augmenting. Augment 1 is
+    the Special that lets the row stand in for an opportunity attack, which
+    is what a row is *used as* rather than anything its body does; nothing
+    in the header says so. And "the target cannot gain combat advantage" is
+    printed on every form -- `c.grants_advantage` hands advantage out and
+    nothing takes it away."""
     if c.strike():
-        c.damage(c.w(), c.con_mod)
+        c.damage(c.w(2) if c.augment == 2 else c.w(), c.con_mod)
 
 
 @power(
@@ -220,13 +229,21 @@ def p13051(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_WEAPON,
     attack=Attack(CON, vs=AC),
+    augments=(
+        Augment(1, reach=Melee(4)),
+        Augment(2, reach=Melee(4)),
+    ),
 )
 def p13052(c: Cast) -> None:
-    """The printed reach is weapon + 1. Both augments lengthen it to weapon
-    + 3, which is the header and measured before the body runs, so Augment
-    2's pull is not written on its own either."""
+    """The printed reach is weapon + 1 and both augments lengthen it to
+    weapon + 3, which is the header and measured before the body runs --
+    so both are declared there, and Augment 2's pull, which was the half
+    that could not stand alone, is written below."""
+    spent = augment(c, 1, 2)
     if c.strike():
         c.damage(c.w(), c.con_mod)
+        if spent == 2:
+            c.pull(4)
 
 
 @power(

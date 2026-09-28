@@ -123,6 +123,16 @@ def features(
         # action, and swapping to a bow with nobody in bowshot is worse.
         f["wield_reaches"] = float(_reaches_further(world, actor, action))
     f["targets"] = float(len(action.targets))
+    # **What the augment cost.** Every other feature here measures what an
+    # action buys; this is the only one that measures what it spends, and
+    # without it a psionic character augments everything it can afford on
+    # the first at-will of the fight -- an augmented burst scores strictly
+    # higher than the base swing it replaces, because catching more
+    # enemies is all the scorer can see. Weighted against
+    # `enemies_caught`, so a point has to buy about a target and a half
+    # before it is worth spending, and a bigger die on one creature is
+    # not.
+    f["augment_cost"] = float(action.augment)
 
     me = world.get(actor, Health)
     if me is not None:
@@ -301,6 +311,12 @@ class Memory:
 #: nothing else, which is the point of scoring through named features.
 WEIGHTS: dict[str, float] = {
     "is_power": 6.0,
+    # A power point, priced a little above what one more enemy caught is
+    # worth. Points refresh every encounter, so hoarding them to the end
+    # of a fight wastes them and the number must not be so large that
+    # nothing is ever augmented -- but an augment that buys one extra
+    # target is a wash, and one that buys three is clearly right.
+    "augment_cost": -3.0,
     # Ending the turn is mildly bad; moving is mildly bad too, so a move has
     # to earn itself through `closes_distance`. Make ending much worse than
     # moving and the creature shuffles every turn it cannot attack, which is

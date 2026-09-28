@@ -296,13 +296,27 @@ def f3296(c: Cast) -> None:
 
 
 @power("f3316", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("dsl.use(augment=)",))
+       reach=PERSONAL, target=SELF,
+       trigger="you augment p10438",
+       on=Trigger(PowerUsed, _used("p10438"), "you use p10438"))
 def f3316(c: Cast) -> None:
-    """Pays out when `p10438` is augmented, and `p10438` cannot be: its
-    only printed augment widens the target line, targeting happens before
-    the body runs, and its own docstring says so. `p10438:augment1` is
-    already on that list, so the trigger this row wants can never be
-    true."""
+    """Pays out when `p10438` is augmented, which it now can be: its one
+    printed augment widens the target line, and a target line is declared
+    in the header, so `dsl.use` settles the spend **before** `PowerUsed`
+    goes out.
+
+    That ordering is what makes this row writable at all. The trigger is
+    the use, and `c.augmented` is the question the trigger cannot ask --
+    "was *this* use bought with points", not "has this row been augmented
+    at some point in the fight", which is `c.points_spent` and would stay
+    true for the rest of the encounter after one spend.
+
+    `AT_WILL` rather than `ENCOUNTER`: a triggered `action=NONE` row spends
+    a use every time it fires, and the card prints no limit."""
+    if not c.augmented("p10438"):
+        return
+    for defence in (AC, FORT, REF, WILL):
+        c.bonus(defence, 2, on=c.me, until=When.SONT, kind="power")
 
 
 # -- wild focus, forced movement, and the marked --------------------------

@@ -124,6 +124,12 @@ def _of_type(dtype: DamageType):  # noqa: ANN202
     return gate
 
 
+def _weapon_damage(ctx: dict[str, Any]) -> bool:
+    """The blow being resolved came out of a weapon power."""
+    p = get(ctx.get("power", ""))
+    return p is not None and Keyword.WEAPON in p.keywords
+
+
 def _crit_by_me(world: World, me: int, ev: Any) -> bool:
     return getattr(ev, "attacker", None) == me and getattr(ev, "critical", False)
 
@@ -311,11 +317,14 @@ def i1028p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.ignore_resistance()",),
 )
 def i1045x1(c: Cast) -> None:
-    """Damage that ignores one resistance. `c.resist` grants resistance and
-    `c.vulnerable` adds to the damage; neither bypasses."""
+    """Necrotic resistance, walked through entirely -- no number printed,
+    so no cap. Laid on the wielder, which is where an ignore lives."""
+    c.ignore_resistance(
+        None, DamageType.NECROTIC, on=c.me, until=When.ENCOUNTER,
+        when=_weapon_damage,
+    )
 
 
 @power(
@@ -1237,11 +1246,23 @@ def i3103x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.ignore_resistance()",),
 )
 def i3103p1(c: Cast) -> None:
-    """Your powers ignore resistance for the rest of the fight -- the same
-    gap as the property above, from the attacker's side."""
+    """Sorcerer powers ignore every resistance for the rest of the fight,
+    within 10 squares. The distance is asked per blow rather than once,
+    because the enemy moves."""
+
+    def near_sorcery(ctx: dict[str, Any]) -> bool:
+        p = get(ctx.get("power", ""))
+        foe = ctx.get("target")
+        return (
+            p is not None and p.cls == "sorcerer"
+            and foe is not None and c.distance(foe) <= 10
+        )
+
+    c.ignore_resistance(
+        None, on=c.me, until=When.ENCOUNTER, when=near_sorcery
+    )
 
 
 @power(

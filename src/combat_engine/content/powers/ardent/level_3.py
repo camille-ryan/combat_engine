@@ -13,6 +13,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     CHA,
+    EACH_ENEMY,
     FORT,
     MELEE,
     ONE_CREATURE,
@@ -22,8 +23,10 @@ from combat_engine.engine import (
     WILL,
     Attack,
     AttackDeclared,
+    Augment,
     Budget,
     Cast,
+    CloseBurst,
     Condition,
     Keyword,
     Melee,
@@ -77,14 +80,23 @@ def _beside(c: Cast, anchor: int, mover: int) -> Square | None:
     target=ONE_CREATURE,
     keywords=PSIONIC_WEAPON,
     attack=Attack(CHA, vs=AC),
+    augments=(
+        Augment(1),
+        Augment(2, reach=CloseBurst(1), target=EACH_ENEMY),
+    ),
 )
 def p10281(c: Cast) -> None:
     """Augment 1 is an Effect, so it happens whether or not the swing lands:
     the marks come off your neighbours and each of them slips a square.
-    Augment 2 makes the row a close burst and is left out."""
-    spent = augment(c, 1)
+
+    Augment 2 rewrites the header -- a close burst against each enemy where
+    the base is one swing -- so it is declared rather than said in the body,
+    and everything under it is the same hit line against more creatures.
+    The Effect of Augment 1 is not printed under Augment 2, so it is gated
+    on the cheaper form exactly rather than on "augmented at all"."""
+    spent = augment(c, 1, 2)
     victim = c.target
-    if spent and c.first:
+    if spent == 1 and c.first:
         for ally in _friends(c, 1):
             c.cure(Condition.MARKED, on=ally)
             c.shift(1, who=ally)

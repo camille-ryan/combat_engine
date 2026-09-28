@@ -109,7 +109,14 @@ RACIAL = ("c.on_racial_power()",)
 R44 = ("p7441", "p7442", "p7443")
 #: An augmentable clause: spending power points to change what a named
 #: power does is the power's own business and there is no door in.
-AUGMENT = ("dsl.use(augment=)",)
+#: **Re-aimed.** `dsl.use(augment=)` arrived: a row declares its augments
+#: in its own header and the spend is settled before targeting. None of
+#: these four is that. Each hangs an augment clause on a *racial* power
+#: from outside that power's card -- "your pNNNN gains the augmentable
+#: keyword, and you can spend 1 power point to ..." -- and nothing adds an
+#: offer to another row's augment. Same symbol the five psionic aspect
+#: dailies in `docs/blocked.json` already name, so they group.
+AUGMENT = ("c.lend_augment(ref, clause)",)
 #: Two damage types on one roll. `c.damage` takes one `dtype`.
 PAIR = ("DamageType.pair()",)
 
@@ -448,11 +455,11 @@ def f2917(c: Cast) -> None:
 
 
 @power("f2943", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_resistance()",))
+       reach=PERSONAL, target=SELF)
 def f2943(c: Cast) -> None:
-    """Punches through the first 5 points of psychic resistance.
-    `Defences.resist` is read inside `resolve.damage` with nothing
-    between it and the subtraction, and the attacker is not consulted."""
+    """Punches through the first 5 points of psychic resistance. Heroic
+    tier, so 5."""
+    c.ignore_resistance(5, DamageType.PSYCHIC, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2944", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -762,14 +769,16 @@ def f3022(c: Cast) -> None:
 
 @power("f3045", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.expend_row()",))
+       todo=("c.race_option()",))
 def f3045(c: Cast) -> None:
     """Spends a racial power to buy an extra use of a feature's power.
 
-    `cf:artificer-f2`'s three cards are `p4128`, `p7635` and `p10187`
-    and `c.restore_use` would hand one of them back; what has no verb is
-    the price -- nothing expends a row a character owns and has not
-    used."""
+    Re-aimed. `cf:artificer-f2`'s three cards are `p4128`, `p7635` and
+    `p10187` and `c.restore_use` hands one of them back; `c.expend_row`
+    now charges a price. What is left is *which* row to charge: the
+    racial power is whatever the character's dilettante choice took,
+    and a build decision with nowhere to write it down is the same hold
+    nineteen other rows name."""
 
 
 @power("f3046", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -919,13 +928,17 @@ def f3074(c: Cast) -> None:
        trigger="you hit with an attack",
        on=Trigger(Hit, lambda w, me, ev: ev.attacker == me,
                   "you hit with an attack"),
-       dropped=("c.expend_row()",))
+       )
 def f3091(c: Cast) -> None:
     """`Hit` fires before the body rolls its damage, which is what makes
     "apply its damage bonus to the triggering hit" writable at all --
-    the once-shot bonus is in place for the roll that follows. Spending
-    the p1747 use it costs has no verb, so the row is free where the
-    card charges."""
+    the once-shot bonus is in place for the roll that follows.
+
+    `c.expend_row` charges the p1747 use the card charges, and refuses
+    the whole rider once that row is spent -- which is the limit, and
+    the reason this row stays `AT_WILL`."""
+    if not c.expend_row("p1747"):
+        return
     c.bonus("damage", c.str_mod, on=c.me, until=When.EOT, once=True)
 
 
@@ -1660,22 +1673,45 @@ def f3165(c: Cast) -> None:
         c.regeneration(2, on=c.me, until=When.EONT)
 
 
+#: The thirteen racial powers of `r33`, one per elemental
+#: manifestation. A character takes one, so "your racial power" is
+#: whichever of these it has -- the same list `general_g` keeps.
+_R33 = (
+    "p1766", "p1767", "p1769", "p1770", "p1828",
+    "p10043", "p10044", "p10045", "p10046",
+    "p14073", "p14074", "p14075", "p14076",
+)
+
+
 @power("f3167", level=1, cls="", usage=AT_WILL,
        action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL,
        target=NO_TARGET,
        trigger="you would take typed damage",
        on=Trigger(DamageRolled, lambda w, me, ev: (
            ev.target == me and ev.dtype is not DamageType.UNTYPED
-       ), "you would take damage of a type"),
-       dropped=("c.expend_row()",))
+       ), "you would take damage of a type"))
 def f3167(c: Cast) -> None:
     """`DamageRolled` is announced above the resistance block in
     `resolve.damage`, so resistance laid from an interrupt on it covers
-    the triggering blow as well as the rest of the round. The cost --
-    the racial power must still be unspent -- has no verb."""
-    ev = c.trigger
-    c.spend_points(1)
-    c.resist(5, ev.dtype, on=c.me, until=When.SONT)
+    the triggering blow as well as the rest of the round.
+
+    Re-read, and the marker was aimed at the wrong verb: nothing here
+    is *spent* except the power point, which `c.spend_points` already
+    took. "You have not yet expended your racial power" is a **read**,
+    and `c.expended` is the read -- the rows this creature has used up.
+    `r33` prints thirteen racial powers, one per manifestation, and a
+    character takes one, so the condition is that none of the ones it
+    knows is among them.
+
+    The point has to be there too: `c.spend_points` returns what it
+    actually took, and a pool at zero buys nothing.
+    """
+    spent = c.expended(on=c.me)
+    if any(ref in spent for ref in _R33):
+        return
+    if not c.spend_points(1):
+        return
+    c.resist(5, c.trigger.dtype, on=c.me, until=When.SONT)
 
 
 @power("f3168", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

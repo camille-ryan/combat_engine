@@ -18,7 +18,9 @@ first two is blocked on something narrower than "no ref": `-f4s0`
 decides whether it fires inside its own handler and announces nothing
 (`c.on_feature_power()`), and `-f4s3` keeps both its numbers as locals
 in a closure (`c.amplify_bonus()`). The other two are
-`c.borrow_feature()`, the same gap as any other undeclared `cf:` row.
+`spec.feature_ref()`: nothing is being borrowed -- these are the
+character's own class's presences -- and the whole hold is that the
+option has no row.
 """
 
 from __future__ import annotations
@@ -53,7 +55,10 @@ from combat_engine.engine.query import distance_between, team
 
 FEATURE = ("c.class_feature()",)
 #: A `cf:` ref the prerequisite prints and no row in the tree declares.
-BORROW = ("c.borrow_feature()",)
+#: Not a borrowing -- these are the character's own class's features --
+#: and the two that still carry it are waiting only for the option to
+#: be declared, which is what the symbol says now.
+BORROW = ("spec.feature_ref()",)
 #: Raising a number a row somebody else wrote already handed out.
 AMPLIFY = ("c.amplify_bonus()",)
 #: The feature has a ref and a row, and its firing is not announced.

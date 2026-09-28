@@ -135,16 +135,40 @@ def f1500(c: Cast) -> None:
 
 
 @power("f1087", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
+       reach=PERSONAL, target=SELF, todo=("c.on_power_bonus()",))
 def f1087(c: Cast) -> None:
-    """Extra radiant against undead on an attack one class feature
-    boosted. The prerequisite is an unparsed clause and the feature is
-    named in prose, so there is no ref to watch for -- and the bonus it
-    asks about is spent inside that feature."""
+    """Re-aimed. `p1589` is a ref now, so the naming gap this waited on is
+    closed and was never the whole of it: what the row asks is whether
+    *this* attack is the one that spent that row's `once=True` attack
+    bonus, and a bonus being laid or consumed announces nothing. `Mods`
+    records the number and its kind, not the act. Same hold as f2074."""
+
+
+def _p146_damage(ctx: dict[str, Any]) -> bool:
+    """Damage stamped by p146, including the "(half)" a miss carries."""
+    ref = str(ctx.get("power") or "")
+    return ref == "p146" or ref.startswith("p146 ")
 
 
 @power("f1089", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
+       reach=PERSONAL, target=SELF)
 def f1089(c: Cast) -> None:
-    """A push on a miss with one class feature. Prerequisite unparsed and
-    the feature named in prose: no ref to hang a `Miss` on."""
+    """A trait: the row prints no trigger of its own, so `c.watch` carries
+    the rider and the row is armed once.
+
+    `Miss` is announced inside `c.strike()`, above the body's miss branch,
+    so the suppression laid here is in place before any miss damage is
+    dealt. `deal_damage` stamps half damage as `"<ref> (half)"`, which is
+    why the gate accepts that form as well as the bare ref. The
+    immobilisation is p146's *hit* line and never reaches a miss.
+    """
+    me = c.me
+
+    def missed(ev: Miss) -> None:
+        if ev.attacker != me or ev.power != "p146":
+            return
+        c.bonus("no_miss_damage", 1, on=ev.target, until=When.EOT,
+                when=_p146_damage)
+        c.push(c.cha_mod, on=ev.target)
+
+    c.watch(Miss, missed, until=When.ENCOUNTER)

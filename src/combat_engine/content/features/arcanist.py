@@ -371,17 +371,18 @@ def wizard_tome_mastery_binding(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
-    todo=("c.stored_row()", "c.expend_row()", "c.tome_powers()"),
+    todo=("c.stored_row()", "c.tome_powers()"),
 )
 def wizard_tome_mastery_readiness(c: Cast) -> None:
     """A power the wizard does not know, held ready and paid for in kind.
 
-    Two things are missing and the row is nothing without either. There is
-    nowhere to record a power that is stored rather than known -- `Powers`
-    holds known, prepared and expended, and a stored row is a fourth state
-    the tome owns. And the cost is "expend another unused wizard encounter
-    attack power of its level or higher", which is spending a use of a row
-    the wizard is not using; nothing can mark a row spent from outside it.
+    Re-aimed off `c.expend_row()`: that verb exists now and spends a use
+    of a row from outside it, which is exactly "expend another unused
+    wizard encounter attack power" -- so the cost is writable and the
+    row is still nothing without the rest. There is nowhere to record a
+    power that is stored rather than known -- `Powers` holds known,
+    prepared and expended, and a stored row is a fourth state the tome
+    owns -- and nothing narrows a choice to the wizard's tome list.
 
     `c.prepare` is the near miss and it is the wrong tool: it swaps a row
     out of the spellbook for one that is in it, and the stored power is by

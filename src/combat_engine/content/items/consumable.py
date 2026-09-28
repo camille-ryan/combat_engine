@@ -77,6 +77,8 @@ from combat_engine.engine import (
     DamageApplied,
     DamageType,
     Event,
+    Forced,
+    ForcedMove,
     Hit,
     InitiativeRolled,
     Keyword,
@@ -159,6 +161,15 @@ def _soulfang(c: Cast) -> None:
             c.flat(max(1, c.surge_value() // 2), on=c.me)
 
     c.watch(TurnStart, bite, until=When.ENCOUNTER)
+
+
+def _is_row(ref: str) -> Callable[[dict[str, Any]], bool]:
+    """Gate a modifier on which row is in the context."""
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return ctx.get("power") == ref
+
+    return gate
 
 
 def _keyword_gate(*words: Keyword) -> Callable[[dict[str, Any]], bool]:
@@ -345,9 +356,13 @@ def i2069p1(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        dropped=("spec.power_ref()", "c.flat(unpreventable=)"))
 def i2356p1(c: Cast) -> None:
-    """The two powers the bonus applies to are printed by name and the
-    spec carries no ref for either, so the benefit has nothing to attach
-    to; the price is paid all the same."""
+    """`p5389` is a ref now, so half the benefit attaches. The second
+    power the card names is still prose, which is what stays dropped --
+    a character holding only that one gets nothing from this soulfang
+    and pays for it anyway, which is the honest half-row."""
+    for what in ("attack", "damage"):
+        c.bonus(what, 2, on=c.me, until=When.ENCOUNTER, kind="power",
+                when=_is_row("p5389"))
     _soulfang(c)
 
 
@@ -430,9 +445,18 @@ def i2815p1(c: Cast) -> None:
 
 @power("i2868p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("spec.power_ref()", "c.flat(unpreventable=)"))
+       dropped=("c.flat(unpreventable=)",))
 def i2868p1(c: Cast) -> None:
-    """The power the rider hangs on is printed by name with no ref."""
+    """`p5094` is a ref now. `ForcedMove` is where a slide is announced
+    and it is the only event carrying the ref of the row doing the
+    shoving -- `Moved` knows the kind but not what caused it."""
+    me = c.me
+
+    def bites(ev: ForcedMove) -> None:
+        if ev.source == me and ev.power == "p5094" and ev.how is Forced.SLIDE:
+            c.flat(5, on=ev.target)
+
+    c.watch(ForcedMove, bites, until=When.ENCOUNTER)
     _soulfang(c)
 
 
@@ -599,11 +623,13 @@ def i2564p1(c: Cast) -> None:
 
 @power("i2698p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("c.bonus(dtype=)", "c.flat(unpreventable=)"))
+       dropped=("c.flat(unpreventable=)",))
 def i2698p1(c: Cast) -> None:
-    """The extra point is lightning damage and a damage bonus has no type,
-    so it lands as untyped -- which matters against resistance."""
-    c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, when=_weapon_attack)
+    """The extra point is lightning and carries that type. Still dropped:
+    "damage caused by this soulfang cannot be reduced by any means", so
+    the wearer's own resistance shortens what it costs them."""
+    c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, when=_weapon_attack,
+            dtype=DamageType.LIGHTNING)
     _soulfang(c)
 
 
@@ -868,11 +894,12 @@ def i1188p1(c: Cast) -> None:
 
 
 @power("i1368p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.COLD],
-       dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.COLD])
 def i1368p1(c: Cast) -> None:
-    """The extra 2 is cold damage; a damage bonus carries no type."""
-    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=_weapon_attack)
+    """The extra 2 is cold and carries that type, so it meets a cold
+    resistance the weapon's own damage does not."""
+    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=_weapon_attack,
+            dtype=DamageType.COLD)
 
 
 @power("i1422p1", level=7, cls=ITEM, usage=DAILY, action=FREE,

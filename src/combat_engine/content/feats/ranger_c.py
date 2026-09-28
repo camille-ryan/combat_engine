@@ -321,13 +321,13 @@ def f2398(c: Cast) -> None:
 
 
 @power("f2415", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+       reach=PERSONAL, target=SELF, todo=("m5139a3",))
 def f2415(c: Cast) -> None:
-    """Turns a racial power into an immediate interrupt against the
-    quarry. The trigger is sayable and the power is a ref; what is
-    missing is a row using another row now. `c.recast` changes what an
-    action costs and `c.grant_row` hands one over -- neither fires
-    one."""
+    """Re-aimed at the row itself. `c.use_power` exists now and would
+    turn the racial power into an immediate interrupt against the
+    quarry in one line -- but `x_m5139a3` is not declared anywhere in
+    the tree, so there is nothing to use. The marker names the missing
+    row rather than a missing verb."""
 
 
 @power("f2417", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -340,25 +340,27 @@ def f2417(c: Cast) -> None:
     at `MoveEnd`."""
 
 
-@power("f2419", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.expend_row()",),
+@power("f2419", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you miss your quarry with a charge",
        on=Trigger(Miss, _missed_my_quarry_charging,
                   "you miss your quarry with a charge"))
 def f2419(c: Cast) -> None:
     """A reroll of a missed charge against the quarry.
 
-    The **price** is dropped: nothing spends a row from outside it, so
-    `p6189` is not expended and the reroll is had for nothing. That is
-    why this stays `ENCOUNTER` rather than `AT_WILL` -- the racial power
-    it should cost is an encounter power, so once a fight is the nearest
-    honest cap, and without it the row would reroll every missed charge.
+    The price is charged now: `c.expend_row("p6189")` spends the racial
+    power without casting it, and returns False when there is none
+    left, which is what stops the row rerolling every missed charge.
+    The `ENCOUNTER` that stood in for that cap is gone -- the cap is
+    p6189's own use, where the card puts it.
 
     The reroll mutates the live `AttackResult` and `resolve.attack`
     judges the defence again once the window closes, so `result.hit` is
     read back rather than `c.landed`, which is this row's own attack and
     there is not one.
     """
+    if not c.expend_row("p6189"):
+        return
     result = getattr(c.trigger, "result", None)
     if result is None or not c.reroll_attack():
         return

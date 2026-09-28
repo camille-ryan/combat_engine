@@ -47,6 +47,7 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Miss,
+    PowerResolved,
     PowerUsed,
     SecondWind,
     Trigger,
@@ -324,15 +325,18 @@ def f1806(c: Cast) -> None:
 
 
 @power("f1811", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_resistance()",))
+       reach=PERSONAL, target=SELF)
 def f1811(c: Cast) -> None:
-    """Ignores poison resistance and immunity. Five item blocks already
-    want the same verb: `Defences.resist` is read inside `deal_damage`
-    and nothing lets an attacker step around it."""
+    """No number, so all of it, and the immunity with it: `immunity=True`
+    is the blanket form rather than the "treat it as resist 20" one."""
+    c.ignore_resistance(
+        None, DamageType.POISON, on=c.me, until=When.ENCOUNTER,
+        immunity=True,
+    )
 
 
 @power("f1809", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF)
 def f1809(c: Cast) -> None:
     """One poisoned blow per rest.
 
@@ -341,14 +345,12 @@ def f1809(c: Cast) -> None:
     arms, since a fight begins after one. The dice ladder is the usual
     tier step.
 
-    The *type* is dropped. `c.bonus` carries `dice` but no `dtype`, so
-    the extra rolls untyped -- which is wrong against anything that
-    resists poison, and is a whole sentence of the card rather than a
-    rounding. `c.flat` takes a type and is not usable here: it pays
-    immediately rather than riding on the next blow.
+    The die is poison and carries its own type, so it is shrugged off by
+    a creature that resists poison and the weapon's own damage is not.
     """
     dice = "1d8" if c.level < 11 else "2d8" if c.level < 21 else "3d8"
-    c.bonus("damage", 0, dice=dice, on=c.me, until=When.ENCOUNTER, once=True)
+    c.bonus("damage", 0, dice=dice, on=c.me, until=When.ENCOUNTER,
+            once=True, dtype=DamageType.POISON)
 
 
 # -- the racial powers that arrive as refs ----------------------------------
@@ -409,21 +411,18 @@ def f2821(c: Cast) -> None:
     c.insubstantial(on=c.me, until=When.EONT)
 
 
-@power("f2815", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.expend_row()", "c.darkvision()"))
+@power("f2815", level=1, cls="", usage=AT_WILL, action=ActionType.FREE,
+       reach=PERSONAL, target=SELF, dropped=("c.darkvision()",))
 def f2815(c: Cast) -> None:
-    """Spends shade form to get a named racial power back.
+    """Spends one named row to get another back: `c.expend_row` is the
+    price, `c.restore_use` is the payout, and the order matters -- the
+    restore only happens if the payment went through.
 
-    Both are refs and `c.restore_use` takes one, so the giving half is
-    ready -- what is missing is the paying half. `c.expended` *reads*
-    which rows are spent and nothing spends one on purpose, which is the
-    symbol an item block already names. Writing the restore without the
-    cost would be the row's benefit with its price removed.
-
-    Darkvision is the smaller clause and would not make the row playable
-    on its own: sight in the dark is not modelled.
+    Dropped: darkvision is the smaller clause and sight in the dark is
+    not modelled, so it is named rather than approximated.
     """
+    if c.expend_row("p9402"):
+        c.restore_use("p2482", on=c.me)
 
 
 @power("f2229", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -547,21 +546,32 @@ def f1793(c: Cast) -> None:
     """
 
 
-@power("f1799", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+@power("f1799", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with a shadow power",
+       on=Trigger(Hit, _keyworded(Keyword.SHADOW),
+                  "you hit with a shadow power"))
 def f1799(c: Cast) -> None:
-    """A free use of `p377` after a hit with a shadow power. Both halves
-    are readable -- `Keyword.SHADOW` is on the row that was used and the
-    racial power is a ref -- and what is missing is a row using another
-    row, which sixteen rows already want."""
+    """A free use of `p377` after a hit with a shadow power, which
+    `c.use_power` now says in one line.
+
+    `AT_WILL`: a triggered `action=NONE` row spends a use every firing
+    and the card prints no limit of its own -- p377's encounter use is
+    the limit, and using it spends it."""
+    c.use_power("p377")
 
 
-@power("f1803", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+@power("f1803", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your p1452 racial power",
+       on=Trigger(PowerResolved,
+                  lambda w, me, ev: ev.actor == me and ev.power == "p1452",
+                  "you use p1452"))
 def f1803(c: Cast) -> None:
-    """A second power used free when `p1452` resolves. Same gap as f1799;
-    `PowerResolved` is the event the "when the attack is resolved" half
-    would be declared on, so the wait is not the obstacle."""
+    """A second power used free when `p1452` resolves. `PowerResolved`
+    and not `PowerUsed`, because the card says "when the attack is
+    resolved" and `PowerUsed` is announced before the body runs."""
+    c.use_power("p9401")
 
 
 @power("f1807", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -616,8 +626,10 @@ def _invoke(ref: str, what: str, *, wants: tuple[str, ...] = INVOKE) -> None:
 
 _invoke("f1797", "Extra damage when you invoke and hit at once.")
 _invoke("f1795", "A named racial power's damage invokes the shrouds too.")
-_invoke("f1804", "A racial power pays extra when a miss still invokes.",
-        wants=("c.on_invoke_shrouds()", "c.expend_row()"))
+#: Re-aimed: `c.expend_row` spends `p6189` without casting it now, so
+#: the price is written; what is left is the moment, which nothing
+#: announces.
+_invoke("f1804", "A racial power pays extra when a miss still invokes.")
 _invoke("f2233", "Leaving a named zone invokes the shrouds and clears them.",
         wants=("c.on_invoke_shrouds()", "c.on_leave_zone()"))
 
@@ -641,8 +653,10 @@ RACE_OPTION = ("c.race_option()",)
 
 _racial("f1808", "A shroud when a racial trait's borrowed power is used.",
         wants=RACE_OPTION)
-_racial("f2817", "A named racial power spent to get shade form back.",
-        wants=("c.expend_row()",))
+#: Re-aimed: `c.expend_row` is the spending and `c.restore_use` is the
+#: payout, so f2830 next door is this row written out -- the difference
+#: is that the power being spent here arrives as a name and not a ref.
+_racial("f2817", "A named racial power spent to get shade form back.")
 
 
 @power("f2813", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -690,11 +704,16 @@ def f2820(c: Cast) -> None:
 
 
 @power("f2814", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF, proficiency=("w:rod",))
 def f2814(c: Cast) -> None:
-    """Hands this character another class's feature outright. Sixteen
-    rows already want the same verb; rods as implements is the smaller
-    half and would not make the row playable on its own."""
+    """Hands this character another class's feature outright, and
+    `cf:warlock-f3` is declared now.
+
+    "If you do not already have it" needs no `if`: `c.grant_row`
+    returns `None` for a row the creature already knows rather than
+    handing it a second time. Rods as implements is header data
+    `chargen` reads when the character is built."""
+    c.grant_row("cf:warlock-f3", on=c.me, until=When.ENCOUNTER)
 
 
 #: The other class's level 0 feature row, printed once per tradition. A

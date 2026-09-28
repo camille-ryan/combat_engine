@@ -112,7 +112,13 @@ R33 = (
 R44 = ("p7441", "p7442", "p7443")
 #: A class feature named in prose, and another class's feature likewise.
 FEATURE = ("c.class_feature()",)
-BORROW = ("c.borrow_feature()",)
+#: A feature **option** the card names by name and the brief prints in
+#: prose -- a school of magic, a divine domain, a weapon specialisation.
+#: Handing a declared feature over is `c.grant_row` now and picking one
+#: out of a list is `c.borrow_row`, so these rows are not waiting on the
+#: borrowing any more; they are waiting on there being anything to point
+#: at. None of the options is a ref in the tree.
+BORROW = ("spec.feature_ref()",)
 #: The brief prints a power by name where a ref belongs.
 NAMED = ("spec.power_ref()",)
 #: Losing one known power to gain another is settled when the character
@@ -669,7 +675,12 @@ def f3582(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=BORROW)
 def f3583(c: Cast) -> None:
     """Another build's 7th-level class feature, chosen from a list the
-    brief prints in prose."""
+    brief prints in prose.
+
+    Re-aimed off the multiclass symbol. The verb is there now --
+    `c.borrow_row(among=...)` picks one of a list and hands it over --
+    and what is missing is the list: the two options are named and
+    neither is a ref, so there is nothing to put in `among`."""
 
 
 @power("f3584", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -690,7 +701,11 @@ def f3585(c: Cast) -> None:
     and `c.forbid` takes it away for the fight. The half it pays is a
     school benefit the brief prints in prose with no ref, so writing the
     cost alone would leave a wizard strictly worse off than one who never
-    took the feat. Both halves or neither."""
+    took the feat. Both halves or neither.
+
+    Re-aimed: the hold is the missing ref for the school benefit, not
+    the borrowing -- `c.grant_row` would hand one over the day one is
+    declared."""
 
 
 @power("f3586", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -718,7 +733,8 @@ def f3588(c: Cast) -> None:
 def f3589(c: Cast) -> None:
     """Trades `cf:cleric-templar-f1` -- a declared row -- for a domain
     feature chosen from a list the brief prints in prose. Same shape as
-    `f3585`: the cost is sayable and the benefit is not."""
+    `f3585`: the cost is sayable and the benefit is not, and the
+    missing half is a ref rather than a verb."""
 
 
 @power("f3590", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -852,18 +868,21 @@ def f3606(c: Cast) -> None:
 
 @power("f3607", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.retarget_defence()", "c.expend_row()"))
+       todo=("c.retarget_defence()",))
 def f3607(c: Cast) -> None:
-    """The whole benefit is "roll this attack against Reflex instead of
-    AC", and the damage bonus beside it is only paid when that happens.
-    Nothing moves an attack from one defence to another."""
+    """Re-aimed. The price is sayable now -- `c.expend_row("p12668")`
+    spends the use and skips the row's own benefit, which is the
+    printed "instead of gaining the power's normal benefit" -- and the
+    whole remaining benefit is "roll this attack against Reflex instead
+    of AC". Nothing moves an attack from one defence to another, and
+    the damage bonus beside it is only paid when that happens."""
 
 
 @power("f3608", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.retarget_defence()", "c.expend_row()"))
+       todo=("c.retarget_defence()",))
 def f3608(c: Cast) -> None:
-    """`f3607` with a mace and Fortitude, and the same gap."""
+    """`f3607` with a mace and Fortitude, re-aimed the same way."""
 
 
 @power("f3609", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -1082,19 +1101,29 @@ def f3617(c: Cast) -> None:
 
 @power("f3618", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=NO_TARGET,
-       trigger="you hit an enemy granting combat advantage with a weapon",
-       on=Trigger(
-           Hit, _i_hit_with_a_weapon_with_advantage,
-           "you hit an enemy granting you combat advantage",
-       ),
-       dropped=(*NAMED, *TRAINING), proficiency=("w:holy-symbol",))
+       dropped=TRAINING, proficiency=("w:holy-symbol",))
 def f3618(c: Cast) -> None:
-    """"Once per encounter" is the row's own `ENCOUNTER` budget -- a
-    triggered `action=NONE` row spends a use every time it fires, which
-    is exactly the printed limit here. The advantage is read off the
-    `Hit`'s live `AttackResult`; asking `has_combat_advantage` again
-    would be too late, a one-shot grant having already been spent."""
-    c.flat(c.cha_mod, on=c.trigger.target)
+    """`p13816` is a ref now, so the card's third clause is an ordinary
+    `c.grant_row` -- and that turns the row into a trait.
+
+    It prints a standing grant *and* a rider, and a row declared `on=`
+    never lays the standing half, so the trigger moves into `c.watch`.
+    "Once per encounter" is `once=True` on the watch, which is the limit
+    the card prints; the row's own `ENCOUNTER` budget no longer stands in
+    for it now that the row is armed rather than chosen.
+
+    The advantage is read off the `Hit`'s live `AttackResult`; asking
+    `has_combat_advantage` again would be too late, a one-shot grant
+    having already been spent.
+    """
+    me = c.me
+    c.grant_row("p13816", on=me, until=When.ENCOUNTER)
+
+    def bite(ev: Hit) -> None:
+        if _i_hit_with_a_weapon_with_advantage(c.world, me, ev):
+            c.flat(c.cha_mod, on=ev.target)
+
+    c.watch(Hit, bite, until=When.ENCOUNTER, once=True)
 
 
 @power("f3619", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -1220,11 +1249,13 @@ def f3628(c: Cast) -> None:
 
 @power("f3629", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(*NAMED, *TRAINING), proficiency=("w:holy-symbol",))
+       dropped=TRAINING, proficiency=("w:holy-symbol",))
 def f3629(c: Cast) -> None:
-    """`p12660` is a ref and is declared. The second power is printed by
-    name only, so there is nothing for a second `c.grant_row`."""
+    """Both powers are refs now, so both are ordinary grants. `p13554` is
+    printed as "you can use it as an encounter power" and carries its own
+    usage, so there is nothing for this row to say about the budget."""
     c.grant_row("p12660", on=c.me, until=When.ENCOUNTER)
+    c.grant_row("p13554", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3630", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -1455,18 +1486,19 @@ def f3649(c: Cast) -> None:
     c.reroll_check(keep="best")
 
 
-@power("f3650", level=1, cls="", usage=ENCOUNTER,
+@power("f3650", level=1, cls="", usage=AT_WILL,
        action=ActionType.IMMEDIATE_REACTION, reach=PERSONAL, target=NO_TARGET,
        trigger="an enemy misses you with a melee attack",
        on=Trigger(
            Miss, lambda w, me, ev: ev.target == me and ev.attacker != me,
            "an enemy misses you",
-       ),
-       todo=("c.use_power()",))
+       ))
 def f3650(c: Cast) -> None:
-    """The trigger is declared and real; what is missing is the benefit,
-    which is entirely "you can use `p377`". Nothing fires one row from
-    inside another, so there is no half of this to keep."""
+    """The trigger is declared and real, and the benefit is entirely
+    "you can use p377", which `c.use_power` now says. The use spends
+    p377, so the once-a-fight limit is that row's -- which is why the
+    header is `AT_WILL` rather than carrying a second one of its own."""
+    c.use_power("p377")
 
 
 @power("f3651", level=1, cls="", usage=AT_WILL, action=NONE,
@@ -1627,15 +1659,18 @@ f3668b = _skald_aura("f3668b")
 
 
 @power("f3665", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=AreaBurst(1, 5), target=NO_TARGET,
-       dropped=("c.expend_row()",))
+       reach=AreaBurst(1, 5), target=NO_TARGET)
 def f3665(c: Cast) -> None:
-    """The terrain plays. Re-aimed: the racial powers are `r44`'s three
-    declared refs now, so the price is no longer nameless -- what is
-    missing is a verb that spends a use of a row this one does not
-    cast. `c.forbid` takes the card away for the encounter, which is a
-    larger thing than losing one of its uses. "For your enemies" is the
-    zone plus `c.ignores_difficult_in`, which is exactly that."""
+    """The terrain plays, and the price is charged now. `c.expend_row`
+    is "lose one use of the power": it takes the use and never runs the
+    row, which `c.forbid` -- taking the card away for the encounter --
+    is a larger thing than.
+
+    The page offers three racial powers and records nowhere which one a
+    character took, so whichever of the three is still unspent pays.
+    "For your enemies" is the zone plus `c.ignores_difficult_in`."""
+    if not any(c.expend_row(ref) for ref in ("p7441", "p7442", "p7443")):
+        return
     zone = c.zone(c.area(), label=c.ref, until=When.EONT, difficult=True)
     c.ignores_difficult_in(zone, side="ally")
 

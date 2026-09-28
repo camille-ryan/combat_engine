@@ -470,10 +470,19 @@ def f274(c: Cast) -> None:
 
 
 @power("f277", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF)
 def f277(c: Cast) -> None:
-    """An at-will from another class, once per encounter. The spec names no
-    ref for the chosen row, so `c.grant_row` has nothing to be given."""
+    """An at-will from another class, once per encounter.
+
+    The spec names no ref because it names a *set* -- every 1st-level
+    at-will attack power that class has -- and `c.borrow_row` reads the
+    set off the registry the way `chargen.loadout` does. The printed
+    limit is `uses=1`: handed over bare, an at-will is an unlimited
+    extra attack every turn.
+
+    The training half is a chargen line and the implements are the
+    header's."""
+    c.borrow_row("wizard", level=1, uses=1)
 
 
 @power("f278", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -703,9 +712,14 @@ def f309(c: Cast) -> None:
 
 
 @power("f333", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF)
 def f333(c: Cast) -> None:
-    """Another class's heal, once a day. The spec names no ref for it."""
+    """Another class's heal, once a day -- and the spec does name it by
+    ref. The granted row is that class's encounter heal, and inside one
+    fight once a day and once a fight are the same limit, so the row's
+    own usage carries the cadence. The training and the implement are
+    chargen's."""
+    c.grant_row("p1455", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f334", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -729,9 +743,16 @@ def f334(c: Cast) -> None:
 
 
 @power("f335", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF)
 def f335(c: Cast) -> None:
-    """Another class's marking feature, once per encounter. No ref for it."""
+    """Another class's marking power, once per encounter, and the spec
+    names it by ref.
+
+    `uses=1` matters here and does not on f333: the granted row is an
+    **at-will** on its own card, so handing it over bare would give a
+    minor-action mark every turn for one feat rather than once a
+    fight."""
+    c.grant_row("p805", on=c.me, until=When.ENCOUNTER, uses=1)
 
 
 @power("f336", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -749,15 +770,26 @@ def f336(c: Cast) -> None:
 
 
 @power("f337", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF)
 def f337(c: Cast) -> None:
-    """A pact's at-will as an encounter power. The spec names no ref."""
+    """A pact's at-will as an encounter power.
+
+    Which pact is a choice this character makes about a class it is not
+    -- `c.build` reads the caster's own leg and there is no leg for
+    another class's fork -- so the pact is not read and the at-will is
+    chosen from that class's 1st-level at-wills directly. In this game
+    those *are* the pact rows, one per pact, so the set is right even
+    though the pact behind it is not recorded."""
+    c.borrow_row("warlock", level=1, uses=1)
 
 
 @power("f338", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF)
 def f338(c: Cast) -> None:
-    """Another class's heal, once a day. The spec names no ref for it."""
+    """Another class's heal, once a day, named by ref. Same shape as
+    f333: the granted row is an encounter power and one fight is one
+    day, so it carries its own limit."""
+    c.grant_row("p1590", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f339", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -800,9 +832,12 @@ def f419(c: Cast) -> None:
 
 
 @power("f433", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF)
 def f433(c: Cast) -> None:
-    """Another class's initiative feature. The spec names no ref for it."""
+    """Another class's feature, and the spec names it by ref --
+    `cf:warlord-marshal-f3` is declared now, so the whole printed
+    benefit is one `c.grant_row`."""
+    c.grant_row("cf:warlord-marshal-f3", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f449", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

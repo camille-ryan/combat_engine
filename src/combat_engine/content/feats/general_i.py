@@ -693,14 +693,15 @@ _granted("f1403", "f1403b")
        reach=CloseBurst(2), target=ONE_ALLY,
        keywords=[Keyword.DIVINE, Keyword.FIRE], group=CHANNEL_DIVINITY,
        trigger="you miss an enemy with a melee or ranged attack",
-       on=Trigger(Miss, _my_miss, "you miss with a melee or ranged attack"),
-       dropped=("c.bonus(dtype=)",))
+       on=Trigger(Miss, _my_miss, "you miss with a melee or ranged attack"))
 def f1403b(c: Cast) -> None:
     """"You or one ally", so the caster is the answer when the burst is
-    empty. The extra fire damage is dropped: a damage bonus carries no
-    type, and ten rows want the same argument."""
+    empty. The extra damage is fire and carries its own type, so it meets
+    a fire resistance the target has and the target's own damage does
+    not."""
     who = c.target if c.target is not None else c.me
     c.bonus(WILL, 2, on=who, until=When.EONT)
+    c.bonus("damage", 2, on=who, until=When.EONT, dtype=DamageType.FIRE)
 
 
 _granted("f1407", "f1407b")
@@ -1089,11 +1090,14 @@ def f1388(c: Cast) -> None:
 
 
 @power("f1389", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF, dropped=("spec.feat_ref()",))
 def f1389(c: Cast) -> None:
     """The two bonus clauses play. Using a creature's mount powers "as if
-    you had" another feat is dropped -- that feat is named in prose and
-    there is nothing to point `c.feat` at.
+    you had" another feat is dropped, and the marker is re-aimed at what
+    that actually wants: the clause is about a **feat**, not another
+    class's feature, and the brief prints it by name with no ref, so
+    there is nothing to point `c.feat` at. The two rituals in the last
+    line are not a fight.
 
     Armed once, so a mount taken later in the fight does not get the
     bonus; the printed line is a standing property of the pair."""
@@ -1304,9 +1308,17 @@ def f1415(c: Cast) -> None:
 
 
 @power("f1423", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF)
 def f1423(c: Cast) -> None:
     """Multiclass: a skill, an implement permission, and one use of
-    another class's feature. `cf:artificer-f2` is a ref but no row in the
-    tree carries it, so `c.grant_row` has nothing to hand over; the other
-    two clauses are build-time."""
+    another class's feature. The other two clauses are build-time, so
+    the feature is the whole row -- and `cf:artificer-f2` is declared
+    now, which makes it one `c.grant_row`.
+
+    That feature carries a `todo` of its own and so is refused in play
+    until it clears. Handing it over is still the printed sentence and
+    still worth saying: the ref lands in `Powers.known`, which is what
+    "you are considered to have the class feature" reads. The last line
+    -- the infusion cannot be replenished -- is about a clause that
+    feature has not got yet."""
+    c.grant_row("cf:artificer-f2", on=c.me, until=When.ENCOUNTER)

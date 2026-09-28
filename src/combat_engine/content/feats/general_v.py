@@ -359,9 +359,8 @@ def _proned_me(world: Any, me: int, ev: Any) -> bool:
     return ev.target == me and ev.condition is Condition.PRONE
 
 
-@power("f3482", level=1, cls="", usage=ENCOUNTER,
+@power("f3482", level=1, cls="", usage=AT_WILL,
        action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL, target=SELF,
-       dropped=EXPEND,
        trigger="an effect knocks you prone or pushes, pulls or slides you",
        on=(
            Trigger(ForcedMove, targets_me, "you are pushed, pulled or slid"),
@@ -376,8 +375,12 @@ def f3482(c: Cast) -> None:
     `Window.AFTER` and the row stands the creature back up instead, which
     is the same board a heartbeat later.
 
-    `ENCOUNTER` because the price the card prints is a use of `p11738`,
-    and `c.expend_row` is the only thing that would charge it."""
+    `AT_WILL` now that `c.expend_row` charges the printed price: the
+    limit is `p11738`'s single use and not a second one on this row,
+    and the interrupt is refused outright when there is nothing left to
+    spend -- which is the card's Requirement."""
+    if not c.expend_row("p11738"):
+        return
     ev = c.trigger
     if isinstance(ev, ForcedMove):
         c.cancel()
@@ -389,27 +392,34 @@ def _immobilised(world: Any, eid: int) -> bool:
     return is_(world, eid, Condition.IMMOBILIZED)
 
 
-@power("f3483", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=EXPEND,
+@power("f3483", level=1, cls="", usage=AT_WILL, action=FREE,
+       reach=PERSONAL, target=SELF,
        requires=_immobilised, requires_text="you must be immobilized")
 def f3483(c: Cast) -> None:
-    """`ENCOUNTER` for the same reason as `f3482`: the printed cost is a
-    use of `p11738` and nothing can spend one. The `requires=` gate is
-    what "an immobilizing effect on you" means for a row that is offered
-    rather than triggered -- without it the policy takes a free action
-    every turn to cure nothing."""
+    """`AT_WILL` for the same reason as `f3482`: the printed cost is a
+    use of `p11738` and `c.expend_row` charges it, so the cap belongs to
+    that row rather than to a stand-in on this one. The `requires=` gate
+    is what "an immobilizing effect on you" means for a row that is
+    offered rather than triggered -- without it the policy takes a free
+    action every turn to cure nothing."""
+    if not c.expend_row("p11738"):
+        return
     c.cure(Condition.IMMOBILIZED, on=c.me)
 
 
 @power("f3484", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=EXPEND,
+       reach=PERSONAL, target=NO_TARGET,
        trigger="you use p5032",
        on=Trigger(PowerResolved, _used("p5032"), "you use p5032"))
 def f3484(c: Cast) -> None:
     """"Until the end of your turn" is `When.EOT` measured from the wild
     shape, which is why this answers the resolved use rather than the
-    declaration."""
-    if c.may("expend p11738", who=c.me):
+    declaration.
+
+    `c.expend_row` is both the price and the choice: it spends the use
+    and returns False when there is none left, so the `c.may` that stood
+    in for it -- which charged nothing -- is gone."""
+    if c.expend_row("p11738"):
         c.bonus("damage", c.con_mod, kind="power", on=c.me, until=When.EOT)
 
 
@@ -1078,7 +1088,6 @@ def _elemental_blow(world: Any, me: int, ev: Any) -> bool:
 
 @power("f3529b", level=1, cls="", usage=ENCOUNTER,
        action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL, target=SELF,
-       dropped=("c.bonus(dtype=)",),
        trigger="you are hit by an attack dealing cold, fire, lightning or thunder damage",
        on=Trigger(DamageRolled, _elemental_blow, "you are hit by elemental damage"))
 def f3529b(c: Cast) -> None:
@@ -1087,10 +1096,13 @@ def f3529b(c: Cast) -> None:
     `DamageRolled` is a `Decision` announced before the hit points come
     off, which is the interrupt window "you take half damage" needs.
 
-    The extra die is `c.bonus(dice=)`, rolled afresh each time it is read;
-    giving it the type the blow dealt is the half nothing can say."""
+    The extra die is `c.bonus(dice=)`, rolled afresh each time it is
+    read, and it takes the type off the triggering `DamageRolled` -- "the
+    type or types dealt by the triggering attack" is exactly the field
+    the trigger was declared on to read."""
     c.halve(c.trigger)
-    c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EONT, once=True)
+    c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EONT, once=True,
+            dtype=c.trigger.dtype)
 
 
 @power("f3530", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1156,7 +1168,7 @@ def f3532(c: Cast) -> None:
 
 @power("f3533", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=(*ASPECT, "c.bonus(dtype=)"),
+       dropped=ASPECT,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3533(c: Cast) -> None:
@@ -1164,14 +1176,14 @@ def f3533(c: Cast) -> None:
     gate rather than a guess at which row an opportunity attack is, and
     `Hit` carries the same as a plain attribute rather than a field.
 
-    Two dropped clauses. The aspect; and the **type** of the extra
-    damage -- `c.bonus` takes no `dtype`, which is the absence thirty-one
-    rows already name, so what lands is two points of untyped damage on
-    an opportunity attack rather than two of thunder.
+    One dropped clause left, the aspect. The two points are thunder and
+    carry that type, so a creature resisting thunder shrugs them off and
+    still takes the weapon.
     """
     me = c.me
     opportune = lambda ctx: bool(ctx.get("opportunity"))  # noqa: E731
-    c.bonus("damage", 2, on=me, until=When.SONT, when=opportune)
+    c.bonus("damage", 2, on=me, until=When.SONT, when=opportune,
+            dtype=DamageType.THUNDER)
 
     def shove(ev: Any) -> None:
         if ev.attacker == me and getattr(ev, "opportunity", False):
@@ -1378,11 +1390,26 @@ def f3548(c: Cast) -> None:
     built, and counting as trained for that choice is the whole benefit."""
 
 
-@power("f3549", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_resistance()",))
+@power("f3549", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f3549(c: Cast) -> None:
-    """`deal_damage` reads resistance off `Defences.resist` and consults no
-    modifier, so nothing can shave the first five points off one type."""
+    """The first five points of a necrotic resistance, and only when the
+    blow came out of a divine power carrying the necrotic keyword --
+    which is the power the damage context names, read back through
+    `get`. A plain trait now that it has a body and no trigger."""
+
+    def divine_necrotic(ctx: dict[str, Any]) -> bool:
+        p = get(ctx.get("power", ""))
+        return (
+            p is not None
+            and Keyword.DIVINE in p.keywords
+            and Keyword.NECROTIC in p.keywords
+        )
+
+    c.ignore_resistance(
+        5, DamageType.NECROTIC, on=c.me, until=When.ENCOUNTER,
+        when=divine_necrotic,
+    )
 
 
 f3550 = _grants("f3550", "f3550b")

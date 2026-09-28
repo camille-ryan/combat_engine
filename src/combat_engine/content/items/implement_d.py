@@ -622,13 +622,15 @@ def i3461x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.bonus(dtype=)", "DamageType.pair()"),
 )
 def i3461p1(c: Cast) -> None:
-    """"Extra damage" with no type word in front of it is untyped, so the
-    modifier carries no `kind`. It also carries no damage type: a rolled
-    bonus adds to whatever the blow already deals."""
-    c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EONT, when=_is_melee)
+    """"Extra damage" with no type word in front of it is an untyped
+    *bonus*, so the modifier carries no `kind` -- which is a different
+    thing from its damage type. "Cold and lightning" is one die of two
+    types, written as a sequence, and a creature shrugs it off only if
+    it resists both."""
+    c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EONT, when=_is_melee,
+            dtype=(DamageType.COLD, DamageType.LIGHTNING))
 
 
 @power(
@@ -1057,11 +1059,16 @@ def i2303p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.ignore_resistance()",),
+    todo=("DamageApplied.resisted",),
 )
 def i2317x1(c: Cast) -> None:
-    """Both halves are out of reach: nothing announces "a resistance
-    reduced this blow", and nothing lowers a standing resistance."""
+    """The payout is writable now -- a negative `c.resist` on the enemy
+    lowers a standing resistance and `c.resistances` reads what is
+    there. The **trigger** is not: "when an enemy's resistances reduce
+    the damage of an attack you use" needs the blow to say how much
+    resistance ate, and `DamageApplied` carries the amount that landed
+    and nothing about what stopped the rest. Written without it the row
+    would fire on every invoker attack, resisted or not."""
 
 
 @power(
@@ -1432,10 +1439,11 @@ def i2923x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.ignore_resistance()",),
 )
 def i3171x1(c: Cast) -> None:
-    """`c.resist` grants a resistance and nothing spends one down."""
+    """Five points of any resistance, so no type and a cap. The paragon
+    and epic steps are out of scope."""
+    c.ignore_resistance(5, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

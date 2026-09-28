@@ -8,6 +8,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     EACH_CREATURE,
+    EACH_ENEMY,
     FORT,
     INT,
     NO_TARGET,
@@ -18,6 +19,7 @@ from combat_engine.engine import (
     ActionType,
     AreaBurst,
     Attack,
+    Augment,
     Cast,
     CloseBurst,
     DamageType,
@@ -26,6 +28,7 @@ from combat_engine.engine import (
     Ranged,
     TurnEnd,
     TurnStart,
+    UpTo,
     When,
     power,
     spread,
@@ -175,20 +178,28 @@ def p13333(c: Cast) -> None:
     target=EACH_CREATURE,
     keywords=PSIONIC_FORCE,
     attack=Attack(INT, vs=FORT),
+    augments=(
+        Augment(1, target=EACH_ENEMY),
+        Augment(2, reach=CloseBurst(2), target=EACH_ENEMY),
+    ),
 )
 def p13334(c: Cast) -> None:
     """The defence bonus is inside the Hit line, so it goes up on the first
     creature struck; re-applying it on a second is harmless, since two power
-    bonuses of the same size do not add. Augment 1 narrows the burst to
-    enemies, which a body can honour by leaving anybody else alone. Augment 2
-    widens the burst itself and is left out."""
-    if augment(c, 1) and c.target not in c.enemies():
-        return
+    bonuses of the same size do not add.
+
+    Both augments are the header. Augment 1 narrows the burst to enemies --
+    a target line, and now declared as one rather than approximated by a
+    body that leaves the allies it was already aimed at alone. Augment 2
+    widens the burst to 2 as well, doubles the dice, shoves by Wisdom and
+    holds the defences a turn longer."""
+    spent = augment(c, 1, 2)
     if c.strike():
-        c.damage("1d6", c.int_mod, dtype=DamageType.FORCE)
-        c.push(1)
+        c.damage("2d6" if spent == 2 else "1d6", c.int_mod, dtype=DamageType.FORCE)
+        c.push(max(1, c.wis_mod) if spent == 2 else 1)
+        held = When.EONT if spent == 2 else When.SONT
         for defence in (AC, FORT, REF, WILL):
-            c.bonus(defence, 2, on=c.me, until=When.SONT, kind="power")
+            c.bonus(defence, 2, on=c.me, until=held, kind="power")
 
 
 @power(
@@ -272,15 +283,30 @@ def p13444(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_FORCE,
     attack=Attack(INT, vs=FORT),
+    augments=(
+        Augment(1, target=UpTo(2)),
+        Augment(2, target=UpTo(2)),
+    ),
+    dropped=("dsl.Target.adjacent_to_each_other",),
 )
 def p8239(c: Cast) -> None:
-    """Neither augment is written: both are target lines -- a second creature
-    adjacent to the first, then any two -- and the body is called after the
-    targets have been picked. Augment 2's stronger hit is not written on its
-    own, because half a clause is worse than none."""
+    """Both augments are target lines, and a target line is read before the
+    body is called, so both are declared in the header. With the second
+    target declared, Augment 2's stronger hit -- 2[W] and immobilised
+    rather than slowed -- is writable below, which it was not on its own.
+
+    The `dropped` clause is the *shape* of Augment 1's pair: "one creature
+    or two creatures adjacent to each other". `Target` caps a count and
+    filters a side and cannot say that the two chosen must stand together,
+    so Augment 1 is offered as any two, which is Augment 2's line at a
+    cheaper price."""
+    spent = augment(c, 1, 2)
     if c.strike():
-        c.damage("1d8", c.int_mod, dtype=DamageType.FORCE)
-        c.slowed(until=When.EONT)
+        c.damage("2d8" if spent == 2 else "1d8", c.int_mod, dtype=DamageType.FORCE)
+        if spent == 2:
+            c.immobilized(until=When.EONT)
+        else:
+            c.slowed(until=When.EONT)
 
 
 @power(

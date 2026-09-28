@@ -448,6 +448,16 @@ class Mod:
     #: the way `when` closes over its own question, and it is called once per
     #: time the modifier is read, which is once per roll.
     roll: Callable[[], int] | None = None
+    #: The damage type this modifier's points come out as, for a *damage*
+    #: modifier and nothing else. Empty is the ordinary case: the rider
+    #: joins the blow and is whatever the blow already was.
+    #:
+    #: "Your attacks deal 2 extra fire damage" is not that. The two points
+    #: are fire even when the sword is not, so they meet the target's fire
+    #: resistance and its fire vulnerability and the sword's points do not.
+    #: A tuple because "1d6 extra cold **and** lightning damage" is one
+    #: rider of two types, which resistance reads as a unit.
+    dtype: tuple[DamageType, ...] = ()
 
     def applies(self, ctx: dict[str, Any]) -> bool:
         return self.when is None or self.when(ctx)
@@ -489,6 +499,44 @@ class Mods:
             else:
                 best[m.kind] = max(best.get(m.kind, 0), value)
         return out + sum(best.values()) + sum(worst.values())
+
+    def split(
+        self, what: str, ctx: dict[str, Any] | None = None
+    ) -> dict[tuple[DamageType, ...], int]:
+        """`total`, but kept apart by the damage type each modifier carries.
+
+        `()` is the untyped share and is what every existing modifier
+        contributes, so a blow with no typed rider comes back as a single
+        entry holding exactly what `total` would have returned. Only
+        `resolve.deal_damage` calls this; everything else -- the policy's
+        estimate of a hit, the UI -- still wants one number and still
+        asks `total`.
+
+        Stacking is settled **within** a type, not across: two feat bonuses
+        of extra fire damage are the same bonus and the larger applies, but
+        a feat bonus of fire and a feat bonus of cold are two different
+        riders and both land. Bucketing them together would have made a
+        character who had earned both deal one of them.
+        """
+        ctx = ctx or {}
+        out: dict[tuple[DamageType, ...], int] = {}
+        best: dict[tuple[tuple[DamageType, ...], str], int] = {}
+        worst: dict[tuple[tuple[DamageType, ...], str], int] = {}
+        for m in self.items:
+            if m.what != what or not m.applies(ctx):
+                continue
+            value = m.amount()
+            if value < 0:
+                key = (m.dtype, m.label)
+                worst[key] = min(worst.get(key, 0), value)
+            elif m.kind == "untyped":
+                out[m.dtype] = out.get(m.dtype, 0) + value
+            else:
+                key = (m.dtype, m.kind)
+                best[key] = max(best.get(key, 0), value)
+        for (types, _), value in list(best.items()) + list(worst.items()):
+            out[types] = out.get(types, 0) + value
+        return out
 
 
 @dataclass
@@ -683,10 +731,19 @@ class PowerPoints:
     points: int = 0
     maximum: int = 0
     augmented: dict[str, int] = field(default_factory=dict)
+    #: What the **most recent** use of each augmentable row was bought
+    #: with, which is a different question from `augmented` and the one
+    #: "when you augment <row>" has to ask. `augmented` is the encounter's
+    #: running total, so once a row has been augmented it reads as
+    #: augmented for the rest of the fight; this is set on every use of a
+    #: row that declares `augments=`, including the ones bought with
+    #: nothing, so a watcher can tell this use from the last.
+    last: dict[str, int] = field(default_factory=dict)
 
     def refresh(self) -> None:
         self.points = self.maximum
         self.augmented.clear()
+        self.last.clear()
 
     def spend(self, n: int) -> int:
         """Take `n` points if they are there. Returns how many actually went."""

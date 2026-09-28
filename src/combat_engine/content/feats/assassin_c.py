@@ -425,14 +425,14 @@ def f2935(c: Cast) -> None:
 # -- the rest ---------------------------------------------------------------
 
 
-@power("f2830", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.expend_row()",))
+@power("f2830", level=1, cls="", usage=AT_WILL, action=ActionType.FREE,
+       reach=PERSONAL, target=SELF)
 def f2830(c: Cast) -> None:
-    """Spends one named row to get another back. `c.restore_use` takes a
-    ref, so the giving half is ready; `c.expended` only *reads* which rows
-    are spent and nothing spends one on purpose. Writing the restore
-    without the cost would be the benefit with its price removed -- the
-    same shape assassin_b's f2815 carries."""
+    """Spends one named row to get another back -- the same shape
+    assassin_b's f2815 carries, and written the same way: the payout
+    only happens if `c.expend_row` found a use to take."""
+    if c.expend_row("p2485"):
+        c.restore_use("p9402", on=c.me)
 
 
 @power("f2837", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

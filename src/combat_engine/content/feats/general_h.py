@@ -5,12 +5,12 @@ chains, the "Associated Powers" family again, a fellowship family whose
 bonus counts nearby allies who took the same feat, and the arcane
 at-will riders. Five things decided most of the rows.
 
-**A multiclass feat names another class's feature in prose**, and the
-two that do print a ref -- `cf:swordmage-f0`, `cf:wizard-arcanist-f0` --
-name a row that is not declared anywhere in the tree, so there is
-nothing for `c.grant_row` to hand over either way.
-`c.borrow_feature()` is the symbol the earlier waves chose and it is
-what these carry.
+**A multiclass feat that names another class's feature by ref is one
+`c.grant_row`.** It was not, because the refs -- `cf:swordmage-f0`,
+`cf:wizard-arcanist-f0`, `cf:bard-f0`, `cf:warlock-f3` -- were not
+declared anywhere in the tree and `grant_row` had nothing to hand over.
+All four are declared now. Only f1219, which prints its two features by
+name and gives no ref for either, still has nothing to point at.
 
 **The exotic-weapon chains follow `assassin/level_0.py`, not
 `exotic.py`.** Spiked chain, blowgun and garrote are not in the weapon
@@ -67,6 +67,7 @@ from combat_engine.engine import (
     AttackDeclared,
     Cast,
     Condition,
+    ConditionApplied,
     DamageType,
     Effect,
     Fell,
@@ -91,9 +92,12 @@ from combat_engine.engine.query import allies, distance_between
 #: The racial zone `p2473` lays, by the label it carries.
 CLOUD = "p2473"
 
-#: Another class's feature, named in prose or pointing at a row that is
-#: not declared. The symbol the multiclass waves settled on.
-BORROW = ("c.borrow_feature()",)
+#: Another class's feature **named in prose**, with no ref in the brief
+#: and nothing in the tree answering to it. What is left of the old
+#: `c.borrow_feature()` group once the declared features were swept: the
+#: handing-over is `c.grant_row` and the choosing is `c.borrow_row`, so
+#: the only rows still stuck are the ones with nothing to point at.
+NAMED_FEATURE = ("spec.feature_ref()",)
 #: Which weapons and implements a character may pick up is settled when
 #: it is built, not on a board.
 PROFICIENCY = ("chargen.proficiency()",)
@@ -182,30 +186,41 @@ def _dtype_of(ref: str) -> DamageType:
 # -- the multiclass feats ---------------------------------------------------
 
 
-@_trait("f1218", todo=BORROW, proficiency=("w:wand",))
+@_trait("f1218", proficiency=("w:wand",))
 def f1218(c: Cast) -> None:
-    """Skill training, another class's feature named in prose, and that
-    class's implements. The implements are header data `chargen` reads
-    at build time; the training is not a fight; the feature is the one
-    marker left."""
+    """Skill training, another class's feature by ref, and that class's
+    implements. The implements are header data `chargen` reads at build
+    time and the training is not a fight, so the feature is the whole
+    row -- and it is declared now, which makes it one `c.grant_row`."""
+    c.grant_row("cf:bard-f0", on=c.me, until=When.ENCOUNTER)
 
 
-@_trait("f1219", todo=BORROW)
+@_trait("f1219", todo=NAMED_FEATURE)
 def f1219(c: Cast) -> None:
-    """Two more features of the same class, both named in prose."""
+    """Two more features of the same class, **both named in prose**. The
+    grant itself is writable now -- f1218 above is the same sentence
+    with a ref -- so what is left is only that the brief prints these
+    two by name and no id in the tree answers to either."""
 
 
-@_trait("f1220", todo=BORROW, proficiency=("w:longsword",))
+@_trait("f1220", proficiency=("w:longsword",))
 def f1220(c: Cast) -> None:
-    """The spec prints a ref for the feature -- and `cf:swordmage-f0` is
-    not declared anywhere in the tree, so the grant has nothing to hand
-    over. That class's implement is a blade, which is why the grant is
-    a weapon rather than one of the seven implements."""
+    """`cf:swordmage-f0` is declared now, so the grant has something to
+    hand over. That class's implement is a blade, which is why the
+    proficiency is a weapon rather than one of the seven implements.
+
+    The feature it hands over carries its own `todo`, so it is refused
+    in play until that clears -- the ref still lands in `Powers.known`,
+    which is what "you are considered to have the class feature" reads.
+    """
+    c.grant_row("cf:swordmage-f0", on=c.me, until=When.ENCOUNTER)
 
 
-@_trait("f1221", todo=BORROW)
+@_trait("f1221")
 def f1221(c: Cast) -> None:
-    """`cf:wizard-arcanist-f0` is undeclared as well. Same as f1220."""
+    """`cf:wizard-arcanist-f0` is declared now as well. Same as f1220,
+    and this one's feature plays."""
+    c.grant_row("cf:wizard-arcanist-f0", on=c.me, until=When.ENCOUNTER)
 
 
 @_trait("f1222", out_of_combat=True)
@@ -259,9 +274,10 @@ def f1225(c: Cast) -> None:
         c.curse(on=foe)
 
 
-@_trait("f1226", todo=BORROW)
+@_trait("f1226")
 def f1226(c: Cast) -> None:
-    """One more feature named in prose."""
+    """One more feature, and the spec names it by ref."""
+    c.grant_row("cf:warlock-f3", on=c.me, until=When.ENCOUNTER)
 
 
 # -- resistance, and saving throws against ongoing damage -------------------
@@ -306,18 +322,27 @@ def f1260(c: Cast) -> None:
     )
 
 
-@_trait("f1235", todo=("c.ignore_resistance()",))
+@_trait("f1235")
 def f1235(c: Cast) -> None:
-    """Attacks ignore the first 5 points of necrotic resistance.
-    Resistance is subtracted inside `Health` and nothing lets an
-    attacker eat into it."""
+    """The first 5 points of a target's necrotic resistance, walked
+    through. Heroic tier, so 5. Laid on the caster: an ignore is the
+    attacker's, not a change to the creature being hit."""
+    c.ignore_resistance(5, DamageType.NECROTIC, on=c.me, until=When.ENCOUNTER)
 
 
-@_trait("f1292", todo=("c.ignore_resistance()",))
+@_trait("f1292")
 def f1292(c: Cast) -> None:
-    """The same hold as f1235, for poison, plus "treat immunity as
-    resist 20" -- which is the same subtraction from the other end. The
-    skill training is not a fight."""
+    """The same as f1235 for poison, and the immunity clause with it:
+    "treat a creature immune to poison as if it had resist poison 20" is
+    what `immunity=20` says, and the five ignored points then come off
+    that twenty.
+
+    "Attacks that have a poison effect" is the blow being poison, which
+    the damage context carries. The Thievery training is not a fight."""
+    c.ignore_resistance(
+        5, DamageType.POISON, on=c.me, until=When.ENCOUNTER, immunity=20,
+        when=lambda ctx: ctx.get("dtype") is DamageType.POISON,
+    )
 
 
 @_trait("f1236", todo=("c.extend_move()",))
@@ -398,13 +423,29 @@ def f1256(c: Cast) -> None:
     window is spent on, and alchemical items are not modelled."""
 
 
-@_trait("f1259", todo=("c.use_power()",))
+#: The three holds f1259 answers, in the words the card prints.
+_HELD = (Condition.GRABBED, Condition.IMMOBILIZED, Condition.RESTRAINED)
+
+
+@_trait("f1259", usage=AT_WILL,
+        trigger="you are grabbed, immobilized or restrained",
+        on=Trigger(
+            ConditionApplied,
+            lambda w, me, ev: ev.target == me and ev.condition in _HELD,
+            "you are grabbed, immobilized or restrained",
+        ))
 def f1259(c: Cast) -> None:
-    """Re-aimed: the racial power is `p1449` and it is declared, so the
-    naming gap is closed. What is left is a row *using* another row --
-    and using it at a different action cost, in answer to a condition.
-    `c.recast` adds a cheaper menu entry and carries no trigger, so it
-    would offer the teleport at will rather than when grabbed."""
+    """`c.use_power` is the verb this waited for: the teleport is used
+    here and now, at this row's action cost rather than its own.
+
+    `ConditionApplied` names its subject `target`, so the predicate is
+    written on `ev.target` and not `about_me`, which reads `ev.actor`
+    and would be false forever.
+
+    `AT_WILL` and not `ENCOUNTER`: a triggered `action=NONE` row spends
+    a use every firing, and the card prints no limit of its own -- the
+    limit is p1449's, which using it spends."""
+    c.use_power("p1449")
 
 
 @_trait("f1270", todo=("c.grants_ca_to(ally)",))
@@ -672,13 +713,46 @@ def f1280(c: Cast) -> None:
 _swap("f1281", "f1281b")
 
 
+def _at_will_attack(c: Cast, *, melee: bool = True, ranged: bool = True) -> str:
+    """One of the character's own at-will attack powers, chosen now.
+
+    "Use a melee or ranged at-will attack power" is a choice among rows
+    the character already has, and `c.borrowed_rows` filters exactly the
+    way the printed line does -- an at-will, a standard action, carrying
+    an attack. It takes one range at a time, so both are asked for and
+    joined here; a card naming only one range passes the other as False.
+    """
+    options: list[str] = []
+    if melee:
+        options += c.borrowed_rows(c.me, melee=True)
+    if ranged:
+        options += c.borrowed_rows(c.me, melee=False)
+    if not options:
+        return ""
+    return c.choose(options, "which at-will attack to use") or options[0]
+
+
 @power("f1281b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.RATTLING],
-       todo=("c.use_power()",))
+       dropped=("c.damage_of(ref)",))
 def f1281b(c: Cast) -> None:
-    """The whole card is "use an at-will attack power on the target, and
-    it deals more". Nothing runs one row from inside another, so there is
-    no attack to add to."""
+    """"Use a melee or ranged at-will attack power on the target" is
+    `c.use_power` over a row the character already has;
+    `_at_will_attack` is the choice, and it asks for both ranges because
+    the card offers both.
+
+    The extra [W] is laid **before** the borrowed row runs and spent by
+    the first damage roll, so it needs no answer to "did it hit" -- if
+    the attack missed there is no roll to spend it on.
+
+    Dropped: "+1 die of damage if it is a nonweapon attack". That die is
+    the chosen row's own, and a row's damage expression cannot be read
+    from outside it -- the same hold `f2408` names."""
+    chosen = _at_will_attack(c)
+    if not chosen:
+        return
+    c.bonus("damage", 0, dice=c.w(), on=c.me, until=When.EOT, once=True)
+    c.use_power(chosen, on=c.target)
 
 
 _swap("f1282", "f1282b")
@@ -698,9 +772,21 @@ _swap("f1283", "f1283b")
 
 @power("f1283b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.RELIABLE],
-       todo=("c.use_power()",))
+       dropped=("c.damage_of(ref)",))
 def f1283b(c: Cast) -> None:
-    """Same shape as f1281b, one tier up."""
+    """Same shape as f1281b, one tier up, plus a daze on a hit.
+
+    `c.use_power` leaves the borrowed row's last attack in `c.result`,
+    so `c.landed` below it is the printed "if the attack hits" -- there
+    is no other way to ask, because the attack was rolled in the other
+    row's own `Cast`."""
+    chosen = _at_will_attack(c)
+    if not chosen:
+        return
+    c.bonus("damage", 0, dice=c.w(2), on=c.me, until=When.EOT, once=True)
+    c.use_power(chosen, on=c.target)
+    if c.landed:
+        c.dazed(until=When.SAVE_ENDS)
 
 
 _swap("f1285", "f1285b")
@@ -713,11 +799,20 @@ _swap("f1285", "f1285b")
        on=Trigger(AttackDeclared,
                   lambda w, me, ev: ev.target == me or ev.target in allies(w, me),
                   "you or an ally is attacked"),
-       todo=("c.use_power()",))
+       )
 def f1285b(c: Cast) -> None:
     """The trigger is declared -- an attack on anyone on my side, which
-    is what "you or an ally" is -- so the hold is only the Effect: using
-    an at-will attack power from inside this row."""
+    is what "you or an ally" is -- and `c.use_power` is the Effect.
+
+    "Target: the attacking creature" is read off `c.trigger`, not off
+    `c.target`: an immediate action is aimed at whoever set it off, and
+    the header's own targeting knows nothing about that."""
+    attacker = getattr(c.trigger, "attacker", None)
+    if attacker is None:
+        return
+    chosen = _at_will_attack(c)
+    if chosen:
+        c.use_power(chosen, on=attacker)
 
 
 _swap("f1286", "f1286b")
@@ -748,9 +843,19 @@ _swap("f1287", "f1287b")
 
 @power("f1287b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.RELIABLE],
-       todo=("c.use_power()",))
+       dropped=("c.damage_of(ref)",))
 def f1287b(c: Cast) -> None:
-    """Same shape as f1281b, against a creature that cannot sense you."""
+    """Same shape as f1281b, against a creature that cannot sense you --
+    which is `c.is_hidden(from_=...)`, the engine's only reading of "does
+    not know where you are". The rider is two dice rather than one [W],
+    because the card prints dice here and not weapons."""
+    if not c.is_hidden(from_=c.target):
+        return
+    chosen = _at_will_attack(c)
+    if not chosen:
+        return
+    c.bonus("damage", 0, dice="2d6", on=c.me, until=When.EOT, once=True)
+    c.use_power(chosen, on=c.target)
 
 
 # -- the poison chain -------------------------------------------------------
@@ -760,12 +865,26 @@ _swap("f1293", "f1293b")
 
 
 @power("f1293b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
-       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.POISON],
-       todo=("c.use_power()",))
+       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.POISON])
 def f1293b(c: Cast) -> None:
-    """Runs an at-will attack power and rewrites the type it deals. Both
-    halves want a handle on the other row: the first to run it, the
-    second to reach inside it."""
+    """Runs an at-will attack power and rewrites the type it deals.
+
+    `c.deals` is the rewrite: it is an override rather than an addition,
+    which is what "change that damage type to poison" says, and it is
+    held only to the end of this turn because the card changes one
+    attack and not the fight. "If you deal typed damage" is the
+    player's option, so it is `c.may`.
+
+    The ongoing damage waits on `c.landed`, which `c.use_power` fills in
+    from the borrowed row's own attack."""
+    chosen = _at_will_attack(c)
+    if not chosen:
+        return
+    if c.may("change the damage type to poison", who=c.me):
+        c.deals(DamageType.POISON, until=When.EOT, on=c.me)
+    c.use_power(chosen, on=c.target)
+    if c.landed:
+        c.ongoing(5, DamageType.POISON)
 
 
 _swap("f1294", "f1294b")
@@ -796,9 +915,27 @@ _swap("f1295", "f1295b")
 
 @power("f1295b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.POISON],
-       todo=("c.use_power()",))
+       dropped=("c.on_save()",))
 def f1295b(c: Cast) -> None:
-    """Same shape as f1293b, with two escalating saving throws on top."""
+    """Same shape as f1293b, and it pays out on a miss as well, which is
+    why the two branches are written rather than one guarded block.
+
+    Dropped: the two aftereffects. "On a first failed saving throw the
+    target is blinded **instead of** taking the penalty" is a rider that
+    replaces one effect with another when a save is failed, and nothing
+    watches a failed save -- `c.condition(escalate=)` grows a condition
+    the row already applied and does not swap one effect for a second.
+
+    The printed "Miss: half damage" belongs to the borrowed row's own
+    damage roll and is not this row's to halve."""
+    chosen = _at_will_attack(c)
+    if not chosen:
+        return
+    if c.may("change the damage type to poison", who=c.me):
+        c.deals(DamageType.POISON, until=When.EOT, on=c.me)
+    c.use_power(chosen, on=c.target)
+    c.penalty("attack", 2, until=When.SAVE_ENDS)
+    c.ongoing(10 if c.landed else 5, DamageType.POISON)
 
 
 # -- the Associated Powers family -------------------------------------------

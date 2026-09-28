@@ -2,9 +2,10 @@
 
 Every at-will here prints an Augment 1 and an Augment 2 line, bought with
 power points through `augment`. A clause that rewrites the **header** -- the
-burst two of these turn into -- cannot be written in a body, because targets
-are picked before the body runs; those are named per row and recorded in
-`docs/blocked.json`.
+burst two of these turn into -- is not written in a body either, because
+targets are picked before the body runs. Those clauses are declared in the
+header as `augments=`, which settles the spend above targeting; the ones
+that only change a die or add a rider stay in the body where they were.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from combat_engine.engine import (
     AT_WILL,
     CHA,
     DAILY,
+    EACH_CREATURE,
     FORT,
     MINOR,
     ONE_CREATURE,
@@ -25,7 +27,9 @@ from combat_engine.engine import (
     WILL,
     Attack,
     AttackDeclared,
+    Augment,
     Cast,
+    CloseBurst,
     Condition,
     DamageRolled,
     DamageType,
@@ -254,15 +258,27 @@ def p10278(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FEAR],
     attack=Attack(CHA, vs=AC),
+    augments=(
+        Augment(1),
+        Augment(2, reach=CloseBurst(1), target=EACH_CREATURE),
+    ),
 )
 def p11061(c: Cast) -> None:
     """Augment 1 narrows the penalty to Will and sizes it off Constitution.
-    Augment 2 makes the row a close burst and is left out."""
-    spent = augment(c, 1)
+
+    Augment 2 is the same Constitution-sized penalty across every defence,
+    against each creature in a close burst -- a target line the base card
+    has not got, so it is declared in the header and settled before the
+    burst is aimed rather than chosen by a body that runs once per target
+    already picked."""
+    spent = augment(c, 1, 2)
     if c.strike():
         c.damage(c.w(), c.cha_mod)
-        if spent:
+        if spent == 1:
             c.penalty(WILL, 1 + c.con_mod, until=When.EONT)
+        elif spent == 2:
+            for d in DEFENCES:
+                c.penalty(d, 1 + c.con_mod, until=When.EONT)
         else:
             for d in DEFENCES:
                 c.penalty(d, 2, until=When.EONT)
@@ -495,16 +511,37 @@ def p12934(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_WEAPON,
     attack=Attack(CHA, vs=AC),
+    augments=(
+        Augment(1),
+        Augment(2, reach=CloseBurst(1), target=EACH_CREATURE),
+    ),
+    dropped=("c.penalty_in(zone)",),
 )
 def p12935(c: Cast) -> None:
     """Augment 1 adds -2 to the target's opportunity attack and damage rolls;
     both contexts carry `opportunity`, so both halves are a gate rather than
-    an approximation. Augment 2 is a close burst and is left out."""
-    spent = augment(c, 1)
+    an approximation.
+
+    Augment 2 turns the swing into a close burst, which is a header line and
+    is declared as one. Its second sentence -- anybody who *starts its turn*
+    adjacent to you is slowed -- is a watcher rather than a rider on the
+    hit, because the creatures it catches are not the ones the burst hit.
+    Its first sentence is the `dropped` one: a damage penalty that applies
+    only while an enemy stands next to you is a modifier scoped to a
+    footprint, and nothing scopes one."""
+    spent = augment(c, 1, 2)
+    if spent == 2 and c.first:
+        me = c.me
+
+        def crowding(ev: TurnStart) -> None:
+            if ev.actor != me and c.adjacent_to(me, ev.actor):
+                c.slowed(on=ev.actor, until=When.EOT)
+
+        c.watch(TurnStart, crowding, until=When.EONT, label="p12935")
     if c.strike():
         c.damage(c.w(), c.cha_mod)
         c.slowed(until=When.EONT)
-        if spent:
+        if spent == 1:
             c.penalty("attack", 2, until=When.EONT, when=_vs_opportunity)
             c.penalty("damage", 2, until=When.EONT, when=_vs_opportunity)
 

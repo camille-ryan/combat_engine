@@ -26,6 +26,7 @@ from combat_engine.engine import (
     AreaBurst,
     Attack,
     AttackDeclared,
+    Augment,
     Cast,
     Damage,
     DamageType,
@@ -223,15 +224,24 @@ def p13303(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_PSYCHIC,
     attack=Attack(INT, vs=WILL),
+    augments=(
+        Augment(1),
+        Augment(2, reach=AreaBurst(1, 10), target=EACH_CREATURE),
+    ),
 )
 def p13305(c: Cast) -> None:
-    """Augment 1 roots the target as well. Augment 2 makes the row an area
-    burst, which the body cannot do, and is left out."""
-    spent = augment(c, 1)
+    """Augment 1 roots the target as well.
+
+    Augment 2 swaps the single shot for an area burst against each creature
+    in it, which is the header, so it is declared there and the points are
+    spent before the burst is aimed. It prints no Hit line of its own, so
+    the base one applies to everybody caught -- and the root is Augment 1's
+    alone."""
+    spent = augment(c, 1, 2)
     if c.strike():
         c.damage("1d8", c.int_mod, dtype=DamageType.PSYCHIC)
         c.slowed(until=When.EONT)
-        if spent:
+        if spent == 1:
             c.rooted(until=When.EONT)
 
 
@@ -428,14 +438,24 @@ def p8226(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_PSYCHIC,
     attack=Attack(INT, vs=WILL),
+    augments=(
+        Augment(1),
+        Augment(2, reach=AreaBurst(1, 10), target=EACH_CREATURE),
+    ),
 )
 def p8227(c: Cast) -> None:
-    """Augment 1 holds the invisibility a turn longer. Augment 2 makes the row
-    an area burst, which the body cannot do, and is left out."""
-    spent = augment(c, 1)
+    """Augment 1 holds the invisibility a turn longer.
+
+    Augment 2 is an area burst against each creature in it, which is the
+    header, so it is declared there; its dice are doubled and its
+    invisibility is the base card's shorter one, which is what the card
+    prints under that heading rather than "as above"."""
+    spent = augment(c, 1, 2)
     if c.strike():
-        c.damage("1d6", c.int_mod, dtype=DamageType.PSYCHIC)
-        c.invisible(to=c.target, on=c.me, until=When.EONT if spent else When.SONT)
+        c.damage("2d6" if spent == 2 else "1d6", c.int_mod, dtype=DamageType.PSYCHIC)
+        c.invisible(
+            to=c.target, on=c.me, until=When.EONT if spent == 1 else When.SONT
+        )
 
 
 @power(

@@ -736,7 +736,7 @@ def f3727b(c: Cast) -> None:
 
 
 @power("f3729", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF)
 def f3729(c: Cast) -> None:
     """`c.resist` adds to whatever is already stored for the type, which
     is exactly the printed "if you already have fire resistance, it
@@ -745,8 +745,8 @@ def f3729(c: Cast) -> None:
 
     A watcher rather than a declared trigger: the resistance has to be
     standing from the start of the fight, and a triggered row is not armed
-    until its trigger fires. The extra damage is dropped -- it is fire, and
-    a damage modifier carries no type."""
+    until its trigger fires. The extra die is fire and carries that type
+    of its own."""
     me = c.me
     c.resist(5, DamageType.FIRE, on=me, until=When.ENCOUNTER)
 
@@ -754,7 +754,7 @@ def f3729(c: Cast) -> None:
         if ev.actor != me:
             return
         c.bonus("damage", 0, dice="1d6", on=me, until=When.EONT,
-                when=_melee_or_ranged)
+                when=_melee_or_ranged, dtype=DamageType.FIRE)
 
     c.watch(SecondWind, winded, on=me, until=When.ENCOUNTER)
 
@@ -1161,11 +1161,13 @@ def f3768(c: Cast) -> None:
 
 @power("f3769", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.expend_row()", "c.points(gain=)"))
+       todo=("c.regain_points()",))
 def f3769(c: Cast) -> None:
-    """Spending a use of a row to buy something back is the opposite of
-    `c.restore_use` and has no method, and nothing puts a power point
-    back into the pool -- `c.spend_points` only takes them out."""
+    """Re-aimed. The price is writable now -- `c.expend_row` loses the
+    use of p11739 without casting it -- and what is left is the payout:
+    nothing puts a power point back into the pool, `c.spend_points`
+    only takes them out. Named with the symbol ten other rows use for
+    the same absence, rather than a second spelling of it."""
 
 
 @power("f3770", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1326,14 +1328,14 @@ def f3782(c: Cast) -> None:
     from the header when the power runs and nothing narrows it."""
 
 
-@power("f3783", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=CloseBurst(1), target=ONE_ALLY, dropped=("c.expend_row()",))
+@power("f3783", level=1, cls="", usage=AT_WILL, action=FREE,
+       reach=CloseBurst(1), target=ONE_ALLY)
 def f3783(c: Cast) -> None:
-    """The cost -- spending p2478's use to pay for this -- has no method,
-    so the row is capped at once an encounter by its own usage instead.
-    That is the same budget the printed line has when p2478 is an
-    encounter power, which is why it plays rather than being refused."""
-    c.save(on=c.target)
+    """`c.expend_row` charges the printed price, so the cap is p2478's
+    own use rather than the stand-in `ENCOUNTER` this row carried while
+    the cost could not be said. Same budget, said by the right row."""
+    if c.expend_row("p2478"):
+        c.save(on=c.target)
 
 
 # -- the unarmed run --------------------------------------------------------
@@ -1522,14 +1524,17 @@ def f3796(c: Cast) -> None:
 
 
 @power("f3797", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*COMBINED, "c.use_power()"))
+       reach=PERSONAL, target=SELF, todo=COMBINED)
 def f3797(c: Cast) -> None:
     """A combined attack -- the character and its creature swinging as one
     row -- and the right to use a second row off the back of that hit.
 
     Not the ranger's beast, which now exists: this is the animal a
     different class feature grants, and what the row turns on is the
-    pairing of the two attacks rather than the creature."""
+    pairing of the two attacks rather than the creature.
+
+    Re-aimed off `c.use_power()`: firing `p6189` is one line now, and
+    the whole remaining hold is the combined attack this rides on."""
 
 
 @power("f3798", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

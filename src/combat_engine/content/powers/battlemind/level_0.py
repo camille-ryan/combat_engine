@@ -20,6 +20,7 @@ from combat_engine.engine import (
     REACTION,
     SELF,
     Attack,
+    Augment,
     Cast,
     CloseBurst,
     DamageApplied,
@@ -33,6 +34,7 @@ from combat_engine.engine import (
     Relation,
     Trigger,
     TurnStart,
+    UpTo,
     When,
     World,
     about_me,
@@ -87,10 +89,14 @@ def _first_turn(world: World, me: int, ev: TurnStart) -> bool:
     reach=CloseBurst(3),
     target=ONE_CREATURE,
     keywords=PSIONIC,
+    augments=(Augment(1, target=UpTo(2)),),
 )
 def p10438(c: Cast) -> None:
     """Augment 1 is a wider target line -- one or two creatures in the burst
-    -- and targeting happens before the body runs, so it is left out.
+    -- and targeting happens before the body runs, so it is declared in the
+    header, where the spend is settled above targeting rather than inside a
+    body that is already being called once per chosen target.
+
     "Until you use this power again" is left to the mark's own duration --
     nothing can reach back and end the mark the last use laid."""
     c.mark(until=When.ENCOUNTER)

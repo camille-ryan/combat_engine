@@ -210,6 +210,15 @@ naming it. `vocab.txt` is the authority; this is what is easy to miss.
 * **Bringing things into a fight:** `c.summon(ref, at=)` puts a creature on
   the board **and** in the initiative order; `c.extra_turn(at=)` gives a
   solo a second slot.
+* **One row reaching another:** `c.use_power(ref, on=, spend=, again=)`
+  uses a row *now*, at this row's action cost -- "as the wizard's
+  p1227 power", "use p377 as an immediate reaction". It lends the row
+  if the creature has not got it, and it leaves the borrowed row's last
+  attack in `c.result`, so `c.landed` answers the printed "if you hit".
+  `c.expend_row(ref)` is the opposite half: it spends a use and the row
+  **never runs**, which is the price three dozen cards charge, and its
+  False is the Requirement they print. `c.restore_use` hands one back
+  and `c.expended(group=)` reads which are gone.
 * **Taking things away:** `c.forbid(ref, until=)` removes one row;
   `c.no_basic(until=)` removes what a row is *used as*, which is a
   different operation.

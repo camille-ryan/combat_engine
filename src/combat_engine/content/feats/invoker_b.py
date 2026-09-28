@@ -436,11 +436,17 @@ def f2984(c: Cast) -> None:
 
 
 @power("f2989", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF, todo=("c.set_build()",))
 def f2989(c: Cast) -> None:
     """Swaps the covenant manifestation for another covenant's between
-    fights. `c.build` reads the leg and nothing writes one, so the whole
-    benefit is the gap -- the same symbol the multiclass feats name."""
+    fights.
+
+    Re-aimed off the multiclass symbol, which covered two unrelated
+    things and this is the other one. Nothing is being borrowed here:
+    the covenants are this character's own class's, they are declared,
+    and each refuses itself on the legs it is not for. What the card
+    does is move the character onto a different leg, and `c.build`
+    only reads one."""
 
 
 # -- riders on powers the spec names in prose -------------------------------
@@ -700,17 +706,44 @@ def f2003(c: Cast) -> None:
     c.watch(PowerResolved, after, until=When.EOT, once=True)
 
 
-@power("f2874", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+def _hit_my_ally_nearby(world: object, me: int, ev: object) -> bool:
+    """"An enemy within 5 squares of you hits one of your allies."
+
+    A predicate is handed `(world, me, ev)` and no `Cast`, so the side
+    and the distance are asked of `query` directly. `Hit` carries
+    `attacker` and `target`, and the ally is the target -- not me.
+    """
+    from combat_engine.engine.query import allies, distance_between
+
+    attacker = getattr(ev, "attacker", None)
+    hurt = getattr(ev, "target", None)
+    if attacker is None or hurt is None or hurt == me:
+        return False
+    return (
+        hurt in allies(world, me)
+        and attacker not in allies(world, me)
+        and distance_between(world, me, attacker) <= 5
+    )
+
+
+@power("f2874", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="an enemy within 5 squares hits one of your allies",
+       on=Trigger(Hit, _hit_my_ally_nearby,
+                  "an enemy within 5 hits an ally"))
 def f2874(c: Cast) -> None:
     """Widens what sets that reaction off, from being hit yourself to an
     ally within 5 squares being hit.
 
-    `cf:invoker-f1c1` is a declared row and its trigger is a declared
-    `Trigger`, so the feature is no longer what this waits on. What is
-    missing is a row reaching another row: nothing uses one, and nothing
-    adds a second window to one that is already printed. The same
-    absence f3041 names."""
+    A second window on a printed trigger is written as a second row
+    carrying that window and using the first: `cf:invoker-f1c1` is a
+    declared row, `c.use_power` fires it, and the use spends its one
+    encounter use -- which is the limit the card relies on, and why
+    this header is `AT_WILL` and holds none of its own.
+
+    The triggering event goes through, so the feature reads the same
+    `c.trigger` it would have read on its own window."""
+    c.use_power("cf:invoker-f1c1")
 
 
 @power("f2987", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -210,16 +210,24 @@ def ardent_surge(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    todo=("dsl.use(augment=)",),
+    out_of_combat=True,
 )
 def ardent_power_points(c: Cast) -> None:
-    """Power points and the augmentable keyword.
+    """Power points and the augmentable keyword, and both are now real.
 
-    The pool itself is already real -- `chargen.CLASSES["ardent"]` carries
-    `power_points` and `c.points`/`c.spend_points` read and spend it. What
-    the feature is actually *for* is the thing that cannot be said: an
-    at-will whose printed entries are replaced by an augmentation bought
-    with those points. That is the gap the fifty `augmentN` rows carry.
+    The pool was always data -- `chargen.CLASSES[...].power_points` --
+    and what was missing was the door a *use* goes through. It exists:
+    `dsl.use(augment=)` settles the spend **before** targets are chosen,
+    `dsl.Augment` is how a row declares the forms that spend buys, and
+    `actions.legal` offers each affordable one as its own entry so that
+    picking an augment is something the player does.
+
+    Which leaves this row holding nothing to run. Its whole printed
+    content is a resource the character is built with and a rule the
+    engine now keeps, exactly as `cf:battlemind-f2`'s content is the word
+    *one* and its children say it. `out_of_combat=True` is the flag for
+    that -- deliberately inert rather than unwritten -- and it is the
+    honest end of issue #170 for this row.
     """
 
 

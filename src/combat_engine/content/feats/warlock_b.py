@@ -393,23 +393,20 @@ def f2079(c: Cast) -> None:
 
 
 @power("f2085", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF)
 def f2085(c: Cast) -> None:
     """Extra damage to whatever is already burning, whoever set it
     alight. The tier ladder is read off the level rather than written as
     three rows.
 
-    The *type* is dropped: the extra is printed as poison and `c.bonus`
-    carries `dice` but no `dtype`, so it rolls in as whatever the blow
-    already was. Against a creature that resists poison that is a number
-    too large, which is a whole word of the card and not a rounding.
-    `c.flat` takes a type and is not usable here -- it pays at once
-    rather than riding on the power's own damage.
+    The extra is poison and is carried as poison, so a creature that
+    resists poison shrugs it off while the warlock's own damage lands.
     """
     me = c.me
     step = 2 + (c.level >= 11) + (c.level >= 21)
     c.bonus(
         "damage", step, on=me, until=When.ENCOUNTER,
+        dtype=DamageType.POISON,
         when=lambda ctx: _warlock_attack(ctx) and _burning(c, ctx.get("target")),
     )
 
@@ -758,17 +755,17 @@ def f2765(c: Cast) -> None:
 
 @power("f2127", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.change_dice()", "spec.power_ref()"))
+       dropped=("c.change_dice()",))
 def f2127(c: Cast) -> None:
-    """Grants the card beside it, `f2127b`.
+    """Grants the card beside it, `f2127b`, and takes away the racial power
+    that card replaces -- `p1628` is a ref now, so `c.forbid` has something
+    to name and the warlock no longer keeps both.
 
-    Two clauses are dropped and neither stops the row playing. The d8s
-    are `c.change_dice()`, the same gap f2764 is entirely made of. The
-    racial power this replaces arrives as a printed name rather than a
-    ref, so there is nothing for `c.forbid` to take away -- the warlock
-    keeps both, which is a use it should not have.
+    The d8s stay dropped: `c.change_dice()`, the same gap f2764 is
+    entirely made of.
     """
     c.grant_row("f2127b", on=c.me, until=When.ENCOUNTER)
+    c.forbid("p1628", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2127b", level=1, cls="", usage=ENCOUNTER, action=ActionType.MINOR,
@@ -826,9 +823,27 @@ def f2293(c: Cast) -> None:
 
 
 @power("f2084", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
+       reach=PERSONAL, target=SELF)
 def f2084(c: Cast) -> None:
-    """Extra damage and an attack penalty on a named at-will, while you
-    are concealed from its target. Every piece is ready -- `Hit`,
-    `_shadow_concealed`, `c.penalty` -- except the row it rides on,
-    which the brief prints as a name and never as a ref."""
+    """`p1457` is a ref now, which was the only piece missing.
+
+    A trait with `c.watch`, not a declared trigger, so the row is armed
+    once at the start of the fight. The card prints plain "concealment or
+    total concealment", which is the wide question `query.concealment_of`
+    answers -- not the class feature's own, which `_shadow_concealed`
+    narrows to and which three other feats in this file print instead.
+    The 11th- and 21st-level rungs are paragon and out of scope.
+    """
+    from combat_engine.engine.query import concealment_of
+
+    me = c.me
+
+    def rider(ev: Hit) -> None:
+        if ev.attacker != me or ev.power != "p1457":
+            return
+        if int(concealment_of(c.world, me)) <= 0:
+            return
+        c.flat(2, on=ev.target)
+        c.penalty("attack", 2, on=ev.target, until=When.EONT)
+
+    c.watch(Hit, rider, until=When.ENCOUNTER)

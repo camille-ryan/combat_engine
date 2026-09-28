@@ -44,6 +44,7 @@ from combat_engine.engine import (
     SELF,
     ActionType,
     Cast,
+    DamageType,
     Gear,
     Hit,
     Keyword,
@@ -495,11 +496,20 @@ def f819(c: Cast) -> None:
 
 
 @power("f829", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_resistance()",))
+       reach=PERSONAL, target=SELF)
 def f829(c: Cast) -> None:
-    """`p1766` burns through fire resistance while you have combat
-    advantage. The ref and the advantage are both askable; resistance is
-    subtracted inside `resolve` and nothing waives it for one row."""
+    """`p1766` burns through fire resistance and immunity while you have
+    combat advantage against its target.
+
+    `advantage` is a key the damage context carries, asked of the board
+    at damage time -- which is right for a standing grant and blind to a
+    one-shot that the attack roll already spent. The narrower reading
+    would need the rolled result threaded down to here."""
+    c.ignore_resistance(
+        None, DamageType.FIRE, on=c.me, until=When.ENCOUNTER, immunity=True,
+        when=lambda ctx: ctx.get("power") == "p1766"
+        and bool(ctx.get("advantage")),
+    )
 
 
 @power("f1775", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

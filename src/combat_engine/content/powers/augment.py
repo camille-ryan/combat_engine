@@ -5,10 +5,28 @@ clauses: the caster may spend that many points out of `PowerPoints` to use
 a different form of the same power. Which form is a decision, so it goes
 through `c.choose`.
 
+**There are two places that decision can be taken, and the row picks.**
+
+A clause that only changes the dice or adds a rider is settled here, in
+the body, by `c.choose` -- the arrangement below, and the one about sixty
+rows use.
+
+A clause that rewrites the **header** cannot be: a close burst where the
+base is a melee swing, a second target, a longer reach, a charge. Targets
+are chosen before the body runs, so by the time this function could ask,
+the answer is already too late to matter. Those rows declare every one of
+their augments in the header as `dsl.Augment`, `dsl.use(augment=)` settles
+the spend above targeting, and `actions.legal` offers each affordable form
+as its own entry. `augment()` still answers for them -- it reads
+`Cast.augment`, which is already paid for -- so a body reads the spend the
+same way whichever arrangement its row uses.
+
 **The order of the options is the answer for every headless fight.**
 `World.decide` takes the first option when no decider is installed, and
 `HandPolicy.decide` does the same for a `choose` it has no rule for --
-there is no augment feature in `policy.features` for it to weigh. So the
+there is no feature in `policy.features` for a body-side augment to weigh.
+(A header-side one is a whole `Action` and *is* weighed, by
+`augment_cost`, which is why that half does not need this rule.) So the
 options run richest first: a point not spent by the end of the encounter
 is lost, which makes spending it the better default of the two, and it is
 also the only ordering under which an augment clause is ever reached.
@@ -49,6 +67,18 @@ def augment(c: Cast, *offers: int) -> int:
     `docs/blocked.json` and left out of the offer rather than
     approximated, which is why a row may offer 2 and not 1.
     """
+    from combat_engine.engine import get
+
+    declared = get(c.ref)
+    if declared is not None and declared.augments:
+        # **The header settled it, above targeting.** A row whose augment
+        # rewrites its own target line declares every one of its augments
+        # in `augments=`, the action menu offers each as a separate entry,
+        # and `dsl.use` has already spent the points by the time a body
+        # runs. Asking again here would offer the same choice twice and
+        # charge for it twice.
+        _LAST[(c.me, c.ref)] = c.augment
+        return c.augment
     held = getattr(c, "augment_spend", None)
     if held is not None:
         return held

@@ -613,9 +613,10 @@ def f2435(c: Cast) -> None:
 
 @power("f2463", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.expend_row()", "c.boost_roll()"))
+       todo=("c.boost_roll()", "m4421a6"))
 def f2463(c: Cast) -> None:
-    """Spend a racial power to add 1d6 to a neighbour's roll. The power
-    is a ref, so this is not a naming gap: nothing spends a row from
-    outside it, and `c.boost_check` reaches a skill check and neither an
-    attack roll nor a saving throw."""
+    """Re-aimed twice over. `c.expend_row` spends a row from outside it
+    now, so that half is no longer the hold -- but `x_m4421a6` is not
+    declared anywhere in the tree, so there is nothing to spend, and
+    `c.boost_check` still reaches a skill check and neither an attack
+    roll nor a saving throw."""

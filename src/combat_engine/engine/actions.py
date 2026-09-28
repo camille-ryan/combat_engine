@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .components import Budget, Build, Health, Powers
-from .dsl import aim_points, candidates, get, usable
+from .dsl import affordable, aim_points, candidates, get, usable
 from .durations import When
 from .grid import Square, spread
 from .query import alive, can_act, enemies, is_
@@ -41,6 +41,15 @@ class Action:
     #: Which half of a two-branch range line this option uses. 0 for
     #: everything that prints one range, which is almost everything.
     branch: int = 0
+    #: How many power points this option spends to augment the row. 0 for
+    #: everything that prints no Augment line, which is almost everything.
+    #:
+    #: An augment that rewrites the header -- a close burst where the base
+    #: is a melee swing -- is a different set of targets, so it cannot be
+    #: a decision the body takes afterwards. It is its own entry here, the
+    #: same way each half of a "Melee or Ranged" line is, which is what
+    #: makes both reachable by clicking and both weighable by a policy.
+    augment: int = 0
     #: What this acts on, when that is not the actor and not a square: a live
     #: effect for `sustain`, and later a conjuration to walk or command.
     #:
@@ -67,6 +76,8 @@ class Action:
             bits.append(f"on e{self.subject}")
         if self.dest:
             bits.append(f"@{self.dest}")
+        if self.augment:
+            bits.append(f"+{self.augment}pp")
         if self.blocked:
             bits.append(f"({self.blocked})")
         return " ".join(bits)
@@ -138,6 +149,16 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
             # and got taken, because a policy picks from what it is given.
             continue
         ok, why = usable(world, actor, p)
+        if not ok and p.augments:
+            # An augment can reach where the base card cannot -- a close
+            # burst over a melee swing, one more square of reach -- so a
+            # row refused at its printed form may still have a form that
+            # lands. Asking only the base hid every one of those.
+            ok = any(
+                usable(world, actor, p, augment=n)[0]
+                for n in affordable(world, actor, p)
+                if n
+            )
         if not encounter.can_spend(actor, p.action):
             ok, why = False, "no action left"
         if not ok:
@@ -335,56 +356,64 @@ def _aimings(world: World, actor: int, ref: str, *, cost: ActionType | None = No
     if p is None:
         return []
     open_branches = [b for b in p.branches if p.can_branch(world, actor, b)]
-    if len(open_branches) > 1:
-        return [
-            a
-            for b in open_branches
-            for a in _aiming_branch(world, actor, ref, p, b, cost)
-        ]
-    return _aiming_branch(
-        world, actor, ref, p, open_branches[0] if open_branches else 0, cost
-    )
+    if not open_branches:
+        open_branches = [0]
+    # Each affordable augment is its own way of using the row, exactly as
+    # each open branch is. `affordable` answers `(0,)` for every row that
+    # prints no Augment line, so nothing outside the three psionic classes
+    # gains an entry here.
+    forms = affordable(world, actor, p)
+    out: list[Action] = []
+    for spend in forms:
+        if spend and not usable(world, actor, p, augment=spend)[0]:
+            continue
+        for b in open_branches:
+            out.extend(_aiming_branch(world, actor, ref, p, b, cost, spend))
+    return out
 
 
-def _aiming_branch(world: World, actor: int, ref: str, p, branch: int, cost: ActionType | None = None) -> list[Action]:  # noqa: ANN001, E501
+def _aiming_branch(world: World, actor: int, ref: str, p, branch: int, cost: ActionType | None = None, augment: int = 0) -> list[Action]:  # noqa: ANN001, E501
     cost = cost or p.action
-    reach = p.reach_of(branch)
+    reach = p.reach_of(branch, augment)
+    aim_at = p.target_of(augment)
 
     def act(**kw) -> Action:  # noqa: ANN003
-        return Action(kind="power", cost=cost, ref=ref, branch=branch, **kw)
+        return Action(
+            kind="power", cost=cost, ref=ref, branch=branch, augment=augment, **kw
+        )
 
-    if not p.is_attack:
+    if not p.is_attack_at(augment):
         return [act()]
 
     if reach.kind == "close_blast":
         # One option per place the blast can be laid down, keyed by the square
         # it is aimed at -- for a blast 3 that is the ring two squares out.
         out = []
-        for aim in aim_points(world, actor, p):
-            hit = candidates(world, actor, p, aim, branch)
+        for aim in aim_points(world, actor, p, augment):
+            hit = candidates(world, actor, p, aim, branch, augment)
             if hit:
                 out.append(act(targets=tuple(hit), origin=aim))
         return out
 
     if reach.kind == "area_burst":
         out = []
-        for origin in _burst_origins(world, actor, p):
-            hit = candidates(world, actor, p, origin, branch)
+        for origin in _burst_origins(world, actor, p, augment):
+            hit = candidates(world, actor, p, origin, branch, augment)
             if hit:
                 out.append(act(targets=tuple(hit), origin=origin))
         return out
 
-    pool = candidates(world, actor, p, None, branch)
-    if p.target.everyone:
+    pool = candidates(world, actor, p, None, branch, augment)
+    if aim_at.everyone:
         return [act(targets=tuple(pool))] if pool else []
-    if p.target.count == 1:
+    if aim_at.count == 1:
         return [act(targets=(t,)) for t in pool]
     # "Up to N creatures": offer the whole pool, capped. A policy that wants a
     # subset asks for one; the interface lets the player click them.
-    return [act(targets=tuple(pool[: p.target.count]))]
+    return [act(targets=tuple(pool[: aim_at.count]))]
 
 
-def _burst_origins(world: World, actor: int, p) -> list[Square]:  # noqa: ANN001
+def _burst_origins(world: World, actor: int, p, augment: int = 0) -> list[Square]:  # noqa: ANN001
     """Candidate origin squares for an area burst, capped to ones that land.
 
     `aim_points` is the authority on where the power may be centred -- it
@@ -398,7 +427,7 @@ def _burst_origins(world: World, actor: int, p) -> list[Square]:  # noqa: ANN001
     """
     from .query import creatures, squares
 
-    legal_aims = set(aim_points(world, actor, p))
+    legal_aims = set(aim_points(world, actor, p, augment))
     out: set[Square] = set()
     for other in creatures(world):
         if not alive(world, other):
@@ -740,6 +769,7 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             spend=True,
             opportunity=action.cost is ActionType.OPPORTUNITY,
             branch=action.branch,
+            augment=action.augment,
         )
 
     if action.kind == "instinctive":

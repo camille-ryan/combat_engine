@@ -17,7 +17,7 @@ line and the unusual case still one line.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
@@ -106,6 +106,16 @@ class Cast:
     #: printed first one. A body almost never reads this -- `c.w()` and
     #: `c.strike()` already honour it, which is the point.
     branch: int = 0
+    #: How many power points bought this use, for a row whose header
+    #: declares `augments=`. Settled by `dsl.use` **before** the targets
+    #: were chosen, which is the only moment at which an augment that
+    #: widens the target line can be honoured, and already paid for by the
+    #: time the body sees it. 0 is the printed base card.
+    #:
+    #: The body branches on it -- `if c.augment >= 2:` -- rather than
+    #: asking `content.powers.augment.augment`, which is the older
+    #: body-side arrangement for augments that only change the dice.
+    augment: int = 0
 
     @property
     def attack_mod(self) -> int:
@@ -1684,6 +1694,136 @@ class Cast:
         self.world.bus.emit(Note(text=f"{who} regains the use of {ref}"))
         return True
 
+    def expend_row(self, ref: str, *, on: int | None = None) -> bool:
+        """"You can expend your p1449 racial power to mark each enemy."
+
+        The exact inverse of `c.restore_use`, and the price half of three
+        dozen printed lines: a use is spent and **the row never runs**.
+        Nothing that goes through `dsl.use` can say that -- using a power
+        is what those do -- and `c.forbid` says a different thing, since a
+        forbidden row is one the creature still owns and cannot reach,
+        which comes back when the effect ends.
+
+        Defaults to the **caster**, like `c.restore_use` and `c.expended`
+        beside it. Returns False when there is no use to spend -- the row
+        is not known, is already spent, or is an at-will with nothing to
+        count down -- and that False **is** the Requirement these cards
+        print, so a row buying something with it must check it:
+
+            if not c.expend_row("p1449"):
+                return
+
+        A row this creature does not own is refused rather than lent: the
+        printed line always names the character's own power, and lending
+        one in order to spend it would charge nothing.
+        """
+        from .components import Powers as _Powers
+        from .dsl import get as _get
+        from .types import Usage as _Usage
+
+        who = on if on is not None else self.me
+        powers = self.world.get(who, _Powers)
+        if powers is None or ref not in powers.all:
+            return False
+        p = _get(ref)
+        if p is not None and p.usage is _Usage.AT_WILL:
+            return False
+        if powers.times(ref) >= (p.uses if p is not None else 1):
+            return False
+        powers.note_use(ref, self.world.round)
+        self.world.bus.emit(Note(text=f"{who} expends {ref}"))
+        return True
+
+    def use_power(
+        self,
+        ref: str,
+        *,
+        on: int | None = None,
+        who: int | None = None,
+        spend: bool = True,
+        again: bool = False,
+    ) -> bool:
+        """"You can use your p1449 racial power as a free action."
+
+        One row using another. `dsl.use` is the engine's only entry point
+        for it and `Cast` could reach it three ways, all narrower than the
+        printed line: `c.grant_attack` hands *somebody else* a swing at
+        one creature, `c.charge_at` runs and swings, `c.give` puts a
+        one-shot in a pocket for later. Thirty rows want none of those --
+        "as the wizard's p1227 power", "use p377 as an immediate
+        reaction", "use a melee at-will attack power on the target".
+
+        **It never charges an action.** The card that says this has
+        already declared what it costs, in its own header.
+
+        `on` aims it at one creature; left out, the borrowed row picks its
+        own targets exactly as it would on an ordinary turn, which is what
+        a personal, close or area power wants. `who` uses it on somebody
+        else's behalf.
+
+        The row is **lent** if the creature does not have it and taken
+        back afterwards, so "as the wizard's X" works in a fighter's
+        hands -- and a lent row is never spent, because the item's own
+        use is the cost and a borrowed power is not the character's to
+        expend. `spend` therefore only decides what happens to a row the
+        creature really owns, and it defaults to spending, because "use
+        *your* p1449 racial power" spends p1449.
+
+        `again` waives the usage limit, for the one printed shape that
+        says so outright -- "even if you have already used it during this
+        encounter".
+
+        `c.trigger` goes through, so the borrowed row reads the event this
+        one is answering as its own `PowerUsed.trigger` -- which is how
+        "use it against the creature that triggered this" is written.
+
+        **The return is "was it used", not "did it hit".** `dsl.use` says
+        no more than that, and "if you hit, you also..." is half of most
+        of these cards -- so the borrowed row's last attack is read off
+        its `PowerResolved` and left in `c.result`, which makes `c.landed`
+        the answer to the printed "if you hit" in the line below the call.
+        A rider that can be laid *before* the attack should still be laid
+        before it: `c.bonus(..., once=True)` is spent by the damage roll
+        only if there is one, so it needs no hit to test.
+        """
+        from .components import Powers as _Powers
+        from .dsl import get as _get
+        from .dsl import use as _use
+        from .events import PowerResolved as _PowerResolved
+
+        # **A named row that does not exist is loud**, for the reason
+        # `c.grant_attack` says it: a row written correctly against a
+        # power nobody has imported yet is otherwise a silent no-op.
+        if _get(ref) is None:
+            raise ValueError(
+                f"{self.ref}: c.use_power({ref!r}) names a row that is not "
+                f"declared. Mark the row `todo=(\"{ref}\",)` until it lands."
+            )
+        actor = self.me if who is None else who
+        known = self.world.get(actor, _Powers)
+        lent = False
+        if known is not None and ref not in known.all:
+            known.known.append(ref)
+            lent = True
+
+        def _keep(ev: Any) -> None:
+            if ev.actor == actor and ev.power == ref and ev.rolls:
+                self.result = ev.rolls[-1]
+
+        sub = self.world.bus.on(_PowerResolved, _keep)
+        try:
+            return _use(
+                self.world, actor, ref,
+                targets=None if on is None else [on],
+                spend=spend and not lent,
+                trigger=self.trigger,
+                reentrant=again,
+            )
+        finally:
+            self.world.bus.off(sub)
+            if lent and known is not None and ref in known.known:
+                known.known.remove(ref)
+
     def expended(self, *, group: str = "", on: int | None = None) -> list[str]:
         """The rows this creature has used up, for one that hands a use back.
 
@@ -2138,8 +2278,101 @@ class Cast:
             who, self.me, until, label=f"{self.ref} resist", on_end=[undo]
         )
 
+    def ignore_resistance(
+        self,
+        amount: int | None = None,
+        dtype: DamageType | None = None,
+        *,
+        until: When = When.ENCOUNTER,
+        on: int | None = None,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+        immunity: bool | int = False,
+        insubstantial: bool = False,
+    ) -> Effect | None:
+        """"Your fire powers ignore the target's fire resistance."
+
+        **Yours, so it defaults to the caster** -- it is a property of the
+        attacker, not of the creature being hit, and that is the one thing
+        about it that is easy to get backwards. `c.resist(-n, ..., on=foe)`
+        is the *other* sentence, "the target loses resist 10 to fire", and
+        it strips the resistance for everybody rather than for you.
+
+        `amount` is the cap the card prints -- "ignore the first 5 points"
+        -- and `None` is the blanket form, "ignore all resistances".
+        `dtype` narrows it to one type; `None` is any.
+
+        `when` is handed the damage context -- `target`, `power`, `dtype`,
+        `opportunity`, `charge`, `advantage`, `ranged` -- for the printed
+        narrowings: only against a bloodied enemy, only with a particular
+        power, only when you have combat advantage. Read the keys before
+        gating on one; a gate on a key the context does not carry is
+        silently false and looks exactly like a rule that never applies.
+
+        `immunity` is the second half of the sentence on the cards that
+        have it. `True` is "ignore poison immunity"; a number is the
+        commoner "treat a creature immune to poison as if it had resist
+        poison 20", which the ignored points then come off in turn.
+
+        `insubstantial=True` is "ignores all resistances, **including
+        insubstantial**", printed on a handful and nowhere expressible --
+        it is a halving rather than a resistance and lives in a different
+        line of `deal_damage`.
+        """
+        from .resolve import IGNORE_ALL
+
+        who = on if on is not None else self.me
+        suffix = "" if dtype is None else f" {dtype.value}"
+        points = IGNORE_ALL if amount is None else amount
+        mods = [Mod(
+            what=f"ignore resist{suffix}", value=points,
+            kind="untyped", when=when, label=self.ref,
+        )]
+        if immunity is not False:
+            mods.append(Mod(
+                what=f"ignore immunity{suffix}", value=1,
+                kind="untyped", when=when, label=self.ref,
+            ))
+            if immunity is not True and immunity:
+                mods.append(Mod(
+                    what=f"immune as resist{suffix}", value=int(immunity),
+                    kind=f"{self.ref} immune as", when=when, label=self.ref,
+                ))
+        if insubstantial:
+            mods.append(Mod(
+                what="ignore insubstantial", value=1,
+                kind="untyped", when=when, label=self.ref,
+            ))
+        shown = "all" if amount is None else str(points)
+        return self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} ignores {shown} resist{suffix}",
+            mods=[(who, m) for m in mods],
+        )
+
+    def resistances(self, *, on: int | None = None) -> dict[DamageType, int]:
+        """What the creature shrugs off, by type, right now.
+
+        Theirs, so it follows `c.target`. The reader `c.resist` needed and
+        did not have: "the target **loses** that resistance" and "if it
+        already has fire resistance, increase it" are both a number this
+        row has to know before it can hand `c.resist` a delta, and four
+        rows were computing one they could not see.
+
+        A copy, and types the creature does not resist are left out.
+        """
+        from .components import Defences
+
+        who = self._who(on)
+        held = self.world.get(who, Defences) if who is not None else None
+        return {t: n for t, n in (held.resist if held else {}).items() if n}
+
     def grant_row(
-        self, ref: str, *, on: int | None = None, until: When = When.ENCOUNTER
+        self,
+        ref: str,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        uses: int = 0,
     ) -> Effect | None:
         """Let a creature use a row it does not know, for a while.
 
@@ -2169,6 +2402,19 @@ class Cast:
         exactly one ref in the whole tree is granted by name -- the rest
         of the exclusivity is written with variables, so the rows would
         simply vanish.
+
+        **`uses` is the cadence the granting card prints, not the granted
+        row's own.** Nineteen multiclass feats read "choose a 1st-level
+        at-will attack power from <another class>; you can use that power
+        once per encounter", and handing the row over bare gives an
+        at-will -- an unlimited extra attack, every turn, for one feat.
+        `dsl.usable` reads the *row's* `usage` and there is nowhere on a
+        creature to say "this one, but only twice", so the limit had no
+        home. It has one here: the grant counts the holder's own uses off
+        `PowerUsed` and forbids the row when they run out. Left at 0 the
+        granted row keeps its printed usage, which is right whenever the
+        two agree -- an encounter power granted "once per encounter" needs
+        nothing, and inside one fight so does a daily.
         """
         from .components import Powers
 
@@ -2180,9 +2426,92 @@ class Cast:
             who, self.me, until, label=f"{self.ref} grants {ref}",
             on_end=[lambda: known.known.remove(ref) if ref in known.known else None],
         )
-        if effect is not None:
-            known.known.append(ref)
+        if effect is None:
+            return None
+        known.known.append(ref)
+        if uses > 0:
+            spent = [0]
+
+            def count(ev: Any) -> None:
+                if getattr(ev, "actor", None) != who or getattr(ev, "power", "") != ref:
+                    return
+                spent[0] += 1
+                if spent[0] >= uses:
+                    self.forbid(ref, on=who, until=until)
+
+            self.watch(PowerUsed, count, until=until, on=who)
         return effect
+
+    def borrow_row(
+        self,
+        cls: str = "",
+        *,
+        level: int = 1,
+        usage: Any = None,
+        keyword: Keyword | None = None,
+        among: Sequence[str] = (),
+        attacks: bool = True,
+        uses: int = 1,
+        until: When = When.ENCOUNTER,
+    ) -> str:
+        """"Choose a 1st-level at-will attack power from <another class>."
+
+        The multiclass sentence, and it was one symbol covering two
+        different holes. The first is gone: `c.grant_row` hands a row
+        over and 124 class features were declared, so "you gain the
+        bard's <feature>" is now an ordinary one-liner. What is left is
+        this -- the card names a *set* and asks the character to take one
+        of it, and nothing could either enumerate the set or record the
+        pick.
+
+        The set is read off the registry the way `chargen.loadout` reads
+        it, by class, level and usage, because that is the only place the
+        membership is written down. Where the card names the candidates
+        outright, pass them as `among` instead.
+
+        **Which one is a build choice with nowhere to live**, so it goes
+        to `world.decide` like any other -- the same arrangement `f1224`
+        makes for "choose a damage type", and inside one encounter a
+        choice made at arming and a choice made at character creation are
+        the same choice. A campaign that carried between fights would
+        want `chargen` to record it.
+
+        `uses` is passed straight to `c.grant_row`, so the printed "once
+        per encounter" survives the row being an at-will. Returns the ref
+        taken, or `""` when the set is empty -- an empty set is a gap and
+        the caller should still be carrying a marker for it.
+        """
+        from .components import Powers
+        from .dsl import REGISTRY
+        from .types import Usage
+
+        want = usage if usage is not None else Usage.AT_WILL
+        known = self.world.get(self.me, Powers)
+        held = set(known.all) if known is not None else set()
+        pool = [
+            ref
+            for ref in (among or REGISTRY)
+            if (p := REGISTRY.get(ref)) is not None
+            and not p.todo
+            and ref not in held
+            # A class feature and the cards it deals are not powers the
+            # class *has* at a level; they arrive with the feature. Left
+            # in, "choose a 1st-level at-will of that class" offered a
+            # curse card off a feature the character cannot own.
+            and (bool(among) or not ref.startswith("cf:"))
+            and (bool(among) or p.cls == cls)
+            and (bool(among) or p.level == level)
+            and (bool(among) or p.usage is want)
+            and (bool(among) or not attacks or p.attack is not None)
+            and (keyword is None or keyword in p.keywords)
+        ]
+        if not pool:
+            return ""
+        taken = self.choose(sorted(pool), self.ref)
+        if not taken:
+            return ""
+        self.grant_row(taken, on=self.me, until=until, uses=uses)
+        return taken
 
     def conjure(
         self,
@@ -4197,6 +4526,7 @@ class Cast:
         once: bool = False,
         stacks: bool = True,
         dice: str = "",
+        dtype: DamageType | Sequence[DamageType] | None = None,
     ) -> Effect | None:
         """A numeric modifier with a duration.
 
@@ -4229,10 +4559,43 @@ class Cast:
         bonus to the roll" -- and it is rolled afresh every time the modifier
         is read, which is once per roll, because that is what the sentence
         says. `value` still adds on top, for a card printing both.
+
+        `dtype` is for `"damage"` and `"crit_damage"` only, and it is the
+        difference between "+2 damage" and "**2 extra fire damage**". The
+        second is a whole family of feats and a long tail of item riders,
+        and every one of them used to roll untyped: the points went past a
+        fire resistance that should have stopped them and missed a fire
+        vulnerability that should have caught them. Given one, the rider
+        is carried as its own typed part of the blow and meets the
+        target's defences on its own terms; the power's own damage is
+        untouched and stays whatever type the power was.
+
+        A sequence is one rider of several types -- "1d6 extra cold and
+        lightning damage" is a single 1d6, not two -- and resistance reads
+        it as a unit: it is shrugged off only as far as the target resists
+        every type in it.
+
+        **Only reach for it when the rider's type differs from the
+        power's.** "Your fire powers deal +2 damage" is a plain untyped
+        `c.bonus`, because those points are already fire: the power said
+        so. Passing `dtype=` there splits one blow into two parts that
+        meet the same resistance and changes nothing but the arithmetic's
+        shape.
         """
         who = self._who(on)
         if who is None:
             return None
+        key = what.value if isinstance(what, Defense) else what
+        if dtype is not None and key not in ("damage", "crit_damage"):
+            raise ValueError(
+                f"{self.ref}: c.bonus(dtype=) is the type of the extra "
+                f"*damage*, so it means nothing on {key!r}. "
+                f"To gate a bonus on the damage type of the blow, use "
+                f"when=lambda ctx: ctx['dtype'] is DamageType.FIRE."
+            )
+        types: tuple[DamageType, ...] = ()
+        if dtype is not None:
+            types = (dtype,) if isinstance(dtype, DamageType) else tuple(dtype)
         # `stacks=False` buckets this row's bonus under its own ref, so a
         # second one from the same row does not add -- the larger wins, the
         # way two bonuses of a type do. "This bonus increases to +4" and "a
@@ -4254,11 +4617,11 @@ class Cast:
                     f"rather than adds, `kind=` for a printed type."
                 )
             kind = self.ref
-        key = what.value if isinstance(what, Defense) else what
         rng = self.world.rng
         mod = Mod(
             what=key, value=value, kind=kind, when=when, label=self.ref,
             roll=(lambda: rng.roll(dice).total) if dice else None,
+            dtype=types,
         )
         shown = f"+{dice}" if dice else f"{value:+d}"
         effect = self.world.effects.apply(
@@ -5839,6 +6202,23 @@ class Cast:
     def points_spent(self, ref: str, *, of: int | None = None) -> int:
         """How many points augmented that row this encounter."""
         return self._pool(self.me if of is None else of).augmented.get(ref, 0)
+
+    def augmented(self, ref: str, *, of: int | None = None) -> int:
+        """What bought the **latest** use of that row. 0 for an unaugmented one.
+
+        "When you augment <row>, ..." is a rider on somebody else's card and
+        has to be able to tell this use from the last, which
+        `c.points_spent` cannot: that is the encounter's running total, so
+        once a row has been augmented it reads as augmented for the rest of
+        the fight. Recorded by `dsl.use` above the body, so a watcher on
+        `PowerUsed` -- which is announced there too -- already has the
+        answer.
+
+        Only rows that declare `augments=` in the header are recorded. One
+        whose augments live in the body settles them after `PowerUsed` has
+        gone out and there is nothing to read at that moment.
+        """
+        return self._pool(self.me if of is None else of).last.get(ref, 0)
 
     def transfer_points(self, n: int, *, on: int | None = None) -> int:
         """"You transfer 1 or 2 power points to the target."

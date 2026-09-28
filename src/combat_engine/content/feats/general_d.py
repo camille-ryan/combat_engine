@@ -271,27 +271,39 @@ def f951(c: Cast) -> None:
 
 
 @power("f910", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF)
 def f910(c: Cast) -> None:
-    """Grants a named class feature of another class. Named in prose with
-    no `cf:` ref -- the two opaque terms in its own prerequisite are the
-    same gap seen from the other side."""
+    """Grants a class feature of another class, and the spec names it by
+    ref. `cf:fighter-weaponmaster-f2` is declared now, so the whole
+    printed benefit is one `c.grant_row`. The two opaque terms in the
+    prerequisite are chargen's and not this row's."""
+    c.grant_row("cf:fighter-weaponmaster-f2", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f913", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF)
 def f913(c: Cast) -> None:
-    """Same shape as f910, a different class feature."""
+    """Same shape as f910, a different class feature.
+
+    That one carries a `requires=` of its own -- it is lost to the
+    fighting style that replaces it -- and the gate is asked of whoever
+    holds the row, so a character from another class keeps it. Handing
+    it over is still the right verb; the gate is the other class's
+    business."""
+    c.grant_row("cf:ranger-f2", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f914", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF)
 def f914(c: Cast) -> None:
     """Same shape as f910, a different class feature."""
+    c.grant_row("cf:rogue-scoundrel-f0", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f916", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF)
 def f916(c: Cast) -> None:
-    """Same shape as f910: a skill training, which is out of combat, and a
-    named class feature with no ref."""
+    """Same shape as f910: a skill training, which is not a fight, and a
+    class feature the spec names by ref. That feature carries a
+    `dropped=` of its own, so half of it plays once handed over."""
+    c.grant_row("cf:rogue-scoundrel-f1s3", on=c.me, until=When.ENCOUNTER)

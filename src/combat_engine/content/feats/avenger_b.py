@@ -239,23 +239,21 @@ def f2011(c: Cast) -> None:
     c.flat(c.roll("1d8"), dtype=DamageType.NECROTIC, on=c.trigger.target)
 
 
-@power("f2289", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",),
+@power("f2289", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you use p1628 on your oath target",
        on=Trigger(PowerUsed, _used("p1628"), "you use that racial power"))
 def f2289(c: Cast) -> None:
     """Extra damage on melee blows against the sworn enemy.
 
-    The *type* is dropped: the printed extra is fire and `c.bonus`
-    carries no damage type, so it rolls untyped -- wrong against
-    anything that resists fire. The same gap the assassin's f1809
-    named.
+    The extra is fire and says so, so a creature that resists fire
+    shrugs it off and takes the sword.
     """
     me = c.me
     if not any(sworn(c.world, me, f) for f in c.trigger.targets):
         return
     c.bonus(
-        "damage", c.int_mod, on=me, until=When.EONT,
+        "damage", c.int_mod, on=me, until=When.EONT, dtype=DamageType.FIRE,
         when=lambda ctx: (
             not ctx.get("ranged", False)
             and sworn(c.world, me, ctx.get("target"))
@@ -286,13 +284,30 @@ def f1522(c: Cast) -> None:
     """The same gap as f1524, paying out on the reroll *missing*."""
 
 
-@power("f1556", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+@power("f1556", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.class_feature()",),
+       trigger="an enemy hits you",
+       on=Trigger(Hit, lambda w, me, ev: ev.target == me,
+                  "an enemy hits you"))
 def f1556(c: Cast) -> None:
-    """Uses one of two named racial powers as an immediate reaction when
-    the sworn enemy bloodies you. Both are refs and `Bloodied` is a
-    real event -- what is missing is a row using another row, which
-    eleven item blocks also want."""
+    """Uses one of two named racial powers when a hit leaves you
+    bloodied. `c.use_power` is the verb, and the choice between the two
+    is made among the ones the character actually has.
+
+    The bloodied half is checked after the hit rather than declared on
+    `Bloodied`, because the card asks whether you *are* bloodied once
+    the blow has landed, which is the board `Hit` leaves behind.
+
+    Dropped: "your p3069 target". Which enemy a character has sworn is
+    a class feature nothing on `Cast` reads, so the row answers any
+    hit; naming it is better than a gate that is silently false."""
+    if not c.bloodied(on=c.me):
+        return
+    mine = [ref for ref in ("p2483", "p2484") if c.knows(ref) is not None]
+    if not mine:
+        return
+    chosen = c.choose(mine, "which racial power to use") or mine[0]
+    c.use_power(chosen)
 
 
 @power("f2181", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

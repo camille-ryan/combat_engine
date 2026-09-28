@@ -222,10 +222,15 @@ def i1378x1(c: Cast) -> None:
 
 
 @power("i1436p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_resistance()",))
+       reach=PERSONAL, target=SELF, dropped=("c.ignore_resistance(below=)",))
 def i1436p1(c: Cast) -> None:
-    """Resistance is subtracted inside `resolve.deal_damage` and nothing
-    on the attacker's side can reach it."""
+    """"Any resistance of 10 or lower" is a threshold and `amount=` is a
+    cap, and the two part company above ten: this walks through resist 10
+    entirely and shaves resist 15 down to 5, where the card leaves resist
+    15 alone. Nothing at heroic tier has more than 10, so the rows differ
+    only where the item never plays -- but they do differ, so the
+    threshold is named rather than quietly called the same thing."""
+    c.ignore_resistance(10, on=c.me, until=When.ENCOUNTER)
 
 
 # -- level 4 ----------------------------------------------------------------
@@ -279,18 +284,18 @@ def i1407p2(c: Cast) -> None:
 
 @power("i1532p1", level=4, cls=ITEM, usage=AT_WILL, action=STANDARD,
        reach=PERSONAL, target=NO_TARGET,
-       keywords=[Keyword.ARCANE, Keyword.CONJURATION],
-       todo=("c.use_power()",))
+       keywords=[Keyword.ARCANE, Keyword.CONJURATION])
 def i1532p1(c: Cast) -> None:
-    """The whole block is "this row is that other row", and nothing lets
-    one row resolve another by ref."""
+    """The whole block is "this row is that other row". p1227 is lent
+    for the one use and not spent -- the item's use is the price."""
+    c.use_power("p1227", spend=False)
 
 
 @power("i1532p2", level=4, cls=ITEM, usage=AT_WILL, action=STANDARD,
-       reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.ARCANE],
-       todo=("c.use_power()",))
+       reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.ARCANE])
 def i1532p2(c: Cast) -> None:
-    """As above: the block names another row and nothing runs one."""
+    """As above, with p1930."""
+    c.use_power("p1930", spend=False)
 
 
 @power("i2061p1", level=4, cls=ITEM, usage=AT_WILL, action=STANDARD,
@@ -614,10 +619,11 @@ def i476x1(c: Cast) -> None:
 
 
 @power("i806x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_resistance()",))
+       reach=PERSONAL, target=SELF)
 def i806x1(c: Cast) -> None:
-    """Resistance is subtracted inside `resolve.deal_damage` and the
-    attacker has no hook there."""
+    """One point off any resistance an enemy has against your attacks,
+    which is one point of ignore. The tier steps are out of scope."""
+    c.ignore_resistance(1, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i806p1", level=6, cls=ITEM, usage=DAILY, action=FREE,
@@ -820,10 +826,22 @@ def i1010x1(c: Cast) -> None:
 
 
 @power("i1010p1", level=9, cls=ITEM, usage=ENCOUNTER, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.expend_row()",))
+       reach=PERSONAL, target=SELF)
 def i1010p1(c: Cast) -> None:
-    """Spending one row to get the use of another has no verb: `c.forbid`
-    takes a row away and gives nothing back for it."""
+    """Both halves have verbs now: `c.expend_row` spends one of the two
+    named racial powers without casting it, and `c.use_power` fires the
+    third. Either is acceptable payment, so the first the bearer still
+    has is taken; if neither is left the block does nothing, which is
+    the Requirement the card prints.
+
+    The ally must be of the named kind and is not the bearer, so
+    `side="ally"` rather than `"team"`."""
+    if not any(c.is_kind("drow", on=a) for a in c.within(10, side="ally")):
+        return
+    for cost in ("p1450", "p1449"):
+        if c.expend_row(cost):
+            c.use_power("p1831", spend=False)
+            return
 
 
 @power("i1438p1", level=9, cls=ITEM, usage=AT_WILL, action=MINOR,
@@ -931,9 +949,13 @@ def i1151p1(c: Cast) -> None:
 
 
 @power("i1380p1", level=10, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+       reach=PERSONAL, target=SELF)
 def i1380p1(c: Cast) -> None:
-    """The block is "this row is that other row" and nothing runs one."""
+    """The block is "this row is that other row", and `c.use_power` is
+    that. p1225 picks its own square, which is the whole of it; the
+    printed "cast on the gauntlets" is where the hand comes from and
+    the engine has no notion of an origin for a row with no area."""
+    c.use_power("p1225", spend=False)
 
 
 @power("i1380p2", level=10, cls=ITEM, usage=DAILY, action=FREE,

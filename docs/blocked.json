@@ -171,113 +171,9 @@
     "wants": "the same c.secondary(ref, origin=) hook; an ActionType.NONE row with no trigger cannot be offered at all",
     "why": "'No Action', area burst 2 centred on the primary target, no Requirement and no Trigger. triggers.WINDOW_OF only offers a NONE-action row that declares a trigger; without one it is armed as a trait, which is not what the card is. The parent's 'Effect: Make the secondary attack' already resolves it inline"
   },
-  "p2622:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is a close burst where the row is a melee attack -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p8227:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is an area burst where the row is a single ranged target -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p8239:augment1": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 1 adds a second target adjacent to the first -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p8239:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is any two targets, and its stronger hit is not written on its own because half a clause is worse than none -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p10281:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is a close burst against each enemy -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p10287:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is a close burst with a zone laid over it -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p10288:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is a close burst with an attack line the unaugmented row does not have -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p10438:augment1": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 1 targets one or two creatures in the burst rather than one -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p11061:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is a close burst against each creature -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p11157:augment1": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 1 lengthens the row's reach for that attack -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p11157:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is a close blast 3 -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p11169:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is a close burst 1 -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p11275:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is an area burst with a zone -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p12419:augment1": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 1 swaps the close blast for a close burst 3 and shoves one enemy rather than each -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p12422:augment1": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 1 lengthens the reach by 1 for that attack -- targeting is done before the body is called, so a body cannot honour it"
-  },
   "p12422:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 lengthens the reach by Charisma; its stronger hit is not written alone -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p12935:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is a close burst 1 with a standing damage penalty -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p13027:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is a close burst against each enemy -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p13039:augment1": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 1 lengthens the reach by 1 -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p13041:augment1": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 1 is Melee 5, and its longer pull is not written alone -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p13041:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is Melee 5 with a pull and a prone -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p13052:augment1": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 1 is weapon + 3 reach -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p13052:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is weapon + 3 reach with a pull, not written alone -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p13305:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 is an area burst where the row is a single ranged target -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p13319:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 targets up to three creatures -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p13334:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 widens the close burst from 1 to 2 -- targeting is done before the body is called, so a body cannot honour it"
-  },
-  "p13318:augment2": {
-    "wants": "dsl.Power.reach and dsl.Power.target picked per augment, with dsl.use(augment=) settling the spend before targeting runs",
-    "why": "Augment 2 makes a secondary area burst centred on the primary target, with a target line and an attack line of its own -- targeting is done before the body is called, so a body cannot honour it"
+    "wants": "dsl.Range.by_ability, a reach sized off an ability modifier",
+    "why": "Augment 1 -- reach + 1 -- is now written as dsl.Augment(reach=); Augment 2 is reach + Charisma modifier, and a Range holds a number read off the card before any creature is in hand"
   },
   "p11158:augment1": {
     "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
@@ -335,10 +231,6 @@
     "wants": "c.penalty_in(zone, what, value) -- a modifier scoped to a zone or an aura, as c.resist_in and c.cover_in already are",
     "why": "enemies take -2 to attack rolls while adjacent to the target, and nothing scopes an attack modifier to a footprint"
   },
-  "p11104:augment1": {
-    "wants": "dsl.Power.charges chosen per augment, with dsl.use deciding reach from it",
-    "why": "Augment 1 makes the row itself a charge; charges= is read before the body to decide whether the target is in reach at all"
-  },
   "p11106:augment1": {
     "wants": "c.must_attack(on=, against=) plus a way to say that enemies provoke from a creature",
     "why": "'enemies provoke opportunity attacks from the target, and it must make those attacks' needs both halves; c.provoke opens one window for one named attacker and nothing obliges anybody to answer it"
@@ -374,10 +266,6 @@
   "p13331:augment2": {
     "wants": "augment.augment called on p13331b, the minor-action burst printed under this id",
     "why": "Augment 2 is that second card's dice"
-  },
-  "p11169:augment1": {
-    "wants": "dsl.Power.basic_for or a header field saying a row may stand in for an opportunity attack",
-    "why": "Augment 1 is the Special that lets the row be used in place of a melee basic attack when making an opportunity attack, which is what a row is used *as* rather than anything its body does"
   },
   "p8240:augment1": {
     "wants": "c.strip_resistance(dtype, on=) -- taking a standing resistance away, which c.resist only adds",

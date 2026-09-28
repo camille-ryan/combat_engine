@@ -2115,13 +2115,19 @@ def i780x1(c: Cast) -> None:
     on=Trigger(
         Miss, both(by_me, ally_within(10)), "you miss with an ally near"
     ),
-    dropped=("c.expend_row()",),
 )
 def i780p1(c: Cast) -> None:
-    """The cost -- expending a racial power the brief never names -- is
-    dropped; the reroll is the benefit. Which weapon the bowstring is
-    fitted to is not recorded either, so any miss answers."""
-    c.reroll_attack(keep="new")
+    """The cost is charged now: `c.expend_row("p1449")` takes the use of
+    the one racial power the brief names by ref, and the reroll only
+    happens if it went through.
+
+    The card offers a second, alternative price -- a racial trait's use
+    -- which arrives as a name with no ref; an either/or whose second
+    branch cannot be spelled is written as the branch that can, not as
+    no price at all. Which weapon the bowstring is fitted to is not
+    recorded either, so any miss answers."""
+    if c.expend_row("p1449"):
+        c.reroll_attack(keep="new")
 
 
 @power("i826x1", level=8, cls=ITEM, action=ActionType.NONE,

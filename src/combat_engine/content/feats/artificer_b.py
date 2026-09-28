@@ -233,12 +233,14 @@ def f1709(c: Cast) -> None:
 
 @power("f1709b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-       todo=("c.use_power()", "c.area_origin()", "c.familiar_state()"))
+       todo=("c.area_origin()", "c.familiar_state()"))
 def f1709b(c: Cast) -> None:
     """Fires an infusion from the familiar's square instead of your own.
-    Three separate holds: a row using another row, moving a declared
-    area's origin off its caster, and the familiar's active state.
-    `c.set_origin` is the creature's origin and not this one."""
+    Re-aimed: `c.use_power` fires the named row now, so that is no
+    longer one of the holds. Two are left, and the row is nothing
+    without either -- moving a declared area's origin off its caster
+    (`c.set_origin` is the creature's origin, not this one), and the
+    familiar's active state, which the Requirement turns on."""
 
 
 @power("f1710", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -395,16 +397,15 @@ def _wields_infusion(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 
 
 @power("f3042", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF)
 def f3042(c: Cast) -> None:
     """"An ally benefiting from" one of two named infusions, which needs
     a list nothing keeps -- so the row keeps its own, filled from
     `PowerUsed.targets` as the infusions go out.
 
     A trait rather than a declared trigger because it has to be watching
-    before the racial power fires. The damage *type* is dropped:
-    `c.bonus` carries a die expression but no type, the same hold f1665
-    and f2289 named.
+    before the racial power fires. The die is necrotic and carries its
+    own type.
     """
     me = c.me
     warded: list[int] = []
@@ -418,7 +419,7 @@ def f3042(c: Cast) -> None:
             return
         for who in warded:
             c.bonus("damage", 0, dice="1d6", on=who, until=When.EONT,
-                    once=True)
+                    once=True, dtype=DamageType.NECROTIC)
             return
 
     c.watch(PowerUsed, noted, until=When.ENCOUNTER, on=me, label="f3042")
@@ -478,12 +479,15 @@ def f3037(c: Cast) -> None:
 
 
 @power("f3041", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
 def f3041(c: Cast) -> None:
     """Widens the trigger of a named racial power to an ally taking
     damage, and makes both of you invisible when it goes off that way.
-    `p377` is a ref and `DamageApplied` is the event -- what is missing
-    is a row using another row, the hold eleven item blocks share."""
+    Re-aimed: `c.use_power` fires `p377` now, and `DamageApplied` is
+    the event -- but the trigger is "you or an ally **affected by your
+    shielding elixir power**", and that power arrives as a name with no
+    ref, so there is nothing to ask who is under it. Without the gate
+    the row answers every point of damage anybody on the team takes."""
 
 
 @power("f3043", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -588,19 +592,18 @@ def f3039(c: Cast) -> None:
 
 
 @power("f3040", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF)
 def f3040(c: Cast) -> None:
-    """The size of the bonus is written and its **type** is dropped: the
-    card adds fire damage and a damage modifier carries no damage type,
-    so what lands is the right number of untyped damage. Writing it as
-    the artificer's own fire damage would put it on the wrong creature.
+    """The bonus rides on the **ally**, not on the artificer, and it is
+    fire: a creature that resists fire shrugs those points off and takes
+    the rest of the ally's blow.
     """
     def paid(ev: TempHP) -> None:
         who = _paid_an_ally(c, ev)
         if who is None or c.cha_mod <= 0:
             return
-        c.bonus("damage", c.cha_mod, on=who, until=When.EOTNT)
+        c.bonus("damage", c.cha_mod, on=who, until=When.EOTNT,
+                dtype=DamageType.FIRE)
 
     c.watch(TempHP, paid, until=When.ENCOUNTER, on=c.me, label="f3040")
 

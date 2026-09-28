@@ -371,11 +371,25 @@ def i724p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.ignore_resistance()", "c.tome_powers()"),
+    dropped=("c.tome_powers()",),
 )
 def i744x1(c: Cast) -> None:
-    """Both halves are missing: nothing pierces a resistance by a number,
-    and a tome's two stored powers are not a thing the engine holds."""
+    """The first half plays: a wizard fire power used through this tome
+    reduces the target's fire resistance by 10, which from the
+    attacker's side is ten points walked through. Heroic, so 10.
+
+    The second is dropped -- a tome's two stored powers are not a thing
+    the engine holds."""
+
+    def wizard_fire(ctx: dict[str, Any]) -> bool:
+        p = get(ctx.get("power", ""))
+        return (
+            p is not None and p.cls == "wizard" and Keyword.FIRE in p.keywords
+        )
+
+    c.ignore_resistance(
+        10, DamageType.FIRE, on=c.me, until=When.ENCOUNTER, when=wizard_fire
+    )
 
 
 @power(
@@ -402,17 +416,20 @@ def i744p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.borrow_feature()",),
+    dropped=("spec.feature_ref()",),
 )
 def i859x1(c: Cast) -> None:
     """The bonus and the vulnerability are one bargain, so the second is
     armed off the hit that pays the first.
 
-    The exemptions are dropped. Having a class feature *is* askable now --
-    `Powers.known` is the list -- but the one the card names by ref,
-    `cf:sorcerer-f0s3`, is a ref no row in the tree declares, and the
-    star pact is one of `cf:warlock-f1`'s legs with nothing naming which.
-    So the bargain is charged to everybody."""
+    **One of the two exemptions plays now.** Having a class feature is
+    knowing its row, which is what `c.feat` reads off `Powers.all`, and
+    `cf:warlock-f1s5` is declared -- so a character with that feature is
+    let off the vulnerability, which is the printed line.
+
+    Dropped, and re-aimed: the other exemption names `cf:sorcerer-f0s3`,
+    and no row in the tree declares it. That is the whole remaining
+    hold, so the marker names the missing ref rather than a verb."""
     c.bonus(
         "damage",
         c.enhancement,
@@ -426,6 +443,8 @@ def i859x1(c: Cast) -> None:
         if ev.attacker != c.me:
             return
         if Keyword.PSYCHIC not in _keywords_of(ev.power):
+            return
+        if c.feat("cf:warlock-f1s5", on=c.me):
             return
         c.vulnerable(5, DamageType.PSYCHIC, on=c.me, until=When.SONT)
 
@@ -851,18 +870,18 @@ def i2600p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.bonus(dtype=)",),
 )
 def i2650x1(c: Cast) -> None:
-    """A rolled modifier is `dice=`, read afresh on every damage roll. The
-    extra dice land as untyped: a modifier carries no damage type, so the
-    poison half of "+1d6 poison damage" is dropped."""
+    """A rolled modifier is `dice=`, read afresh on every damage roll, and
+    the poison half of "+1d6 poison damage" is the `dtype`: those dice
+    meet a poison resistance the staff's own damage does not."""
     c.bonus(
         "damage",
         0,
         dice="1d6",
         on=c.me,
         until=When.ENCOUNTER,
+        dtype=DamageType.POISON,
         when=_is_melee,
     )
 
@@ -2113,14 +2132,16 @@ def i2812x1(c: Cast) -> None:
         lambda w, me, ev: ev.attacker == me and ev.critical,
         "you score a critical hit",
     ),
-    dropped=("c.bonus(dtype=)",),
 )
 def i2812p1(c: Cast) -> None:
     """The critical's own payout is a column; this row is only the clause
-    that makes it last the fight. A modifier carries no damage type, so
-    "the bonus damage is fire and radiant" is dropped."""
+    that makes it last the fight. "The bonus damage is fire and radiant"
+    is one rider of two types rather than two riders, which is what a
+    sequence of types means: it is shrugged off only by a creature that
+    resists both."""
     for mate in c.within(5, side="ally"):
-        c.bonus("damage", c.enhancement, on=mate, until=When.ENCOUNTER)
+        c.bonus("damage", c.enhancement, on=mate, until=When.ENCOUNTER,
+                dtype=(DamageType.FIRE, DamageType.RADIANT))
 
 
 @power(

@@ -18,6 +18,7 @@ from combat_engine.engine import (
     AreaBurst,
     Attack,
     AttackRolled,
+    Augment,
     Cast,
     DamageType,
     Keyword,
@@ -26,6 +27,7 @@ from combat_engine.engine import (
     Ranged,
     Target,
     TurnStart,
+    UpTo,
     When,
     distance,
     power,
@@ -52,19 +54,37 @@ PSIONIC_PSYCHIC = [Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.PSYCHIC]
         Keyword.ZONE,
     ],
     attack=Attack(INT, vs=REF),
+    augments=(
+        Augment(1),
+        Augment(2, reach=AreaBurst(1, 10), target=EACH_CREATURE),
+    ),
 )
 def p11275(c: Cast) -> None:
-    """The zone is the target's own square. "Starts its turn adjacent to it"
-    is dropped -- widening the zone to the ring would also make entering the
-    ring burn, which the printed line does not say. Augment 1 makes the zone
-    totally obscured. Augment 2 is an area burst and is left out."""
-    spent = augment(c, 1)
+    """The zone is the target's own square on the two cheaper forms.
+    "Starts its turn adjacent to it" is dropped -- widening the zone to the
+    ring would also make entering the ring burn, which the printed line
+    does not say. Augment 1 makes that one square totally obscured.
+
+    Augment 2 is an area burst against each creature in it, which is the
+    header, so it is declared there -- and with the burst declared, its
+    zone is the whole burst rather than one square, its dice are doubled,
+    and the obscuring comes with it. The zone is laid once for the use
+    rather than once per creature caught, which is what `c.first` is for.
+    """
+    spent = augment(c, 1, 2)
     where = c.there
     if c.strike():
-        c.damage("1d6", c.int_mod, dtype=DamageType.FIRE)
+        c.damage("2d6" if spent == 2 else "1d6", c.int_mod, dtype=DamageType.FIRE)
+    if spent == 2:
+        if c.first:
+            c.hazard(
+                c.area(), c.wis_mod, DamageType.FIRE, until=When.EONT,
+                sustain=None, blocks_sight=True,
+            )
+        return
     c.hazard(
         {where}, c.wis_mod, DamageType.FIRE, until=When.EONT, sustain=None,
-        blocks_sight=bool(spent),
+        blocks_sight=spent == 1,
     )
 
 
@@ -127,22 +147,39 @@ def p13317(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_IMPLEMENT,
     attack=Attack(INT, vs=FORT),
+    dropped=("c.penalty_in(zone)", "c.confine(to=)"),
 )
 def p13318(c: Cast) -> None:
     """"Moves more than 2 squares" is measured from where it stood when its
     turn began, so the square it started in has to be caught on `TurnStart`;
     `MoveEnd` alone only says where it stopped.
 
-    Neither augment is written. Augment 1 penalises the attack rolls of
+    Augment 2 is a **secondary** attack, and that is why it stays in the
+    body rather than being declared in the header: the primary target line
+    is unchanged, so nothing about the targeting of this row moves. The
+    burst is centred on the primary target and rolled against Reflex, which
+    is a second attack line the body makes for itself.
+
+    Two clauses are dropped. Augment 1 penalises the attack rolls of
     enemies *while they stand next to the target*, and nothing scopes a
-    modifier to a zone or an aura -- the four that exist are resistance,
-    cover, granting advantage and difficult terrain. Augment 2 is a second
-    attack against a burst centred on the target, with a target line of its
-    own, and then pins both ends to each other's squares."""
+    modifier to a zone or an aura. And Augment 2's mutual leash -- neither
+    end may move to a square that is not adjacent to the other -- is the
+    same hold `p13041` names: nothing constrains where a creature may
+    walk."""
+    spent = augment(c, 2)
     victim = c.target
     if not c.strike():
         return
     c.damage("1d8", c.int_mod)
+    if spent == 2 and victim is not None:
+        # The secondary is its own attack line -- Intelligence vs. Reflex
+        # where the primary rolled against Fortitude -- so its bonus is
+        # asked of that line rather than reassembled by hand.
+        secondary = Attack(INT, vs=REF)
+        bonus = secondary.bonus_for(c.world, c.me, c.ref, c.branch)
+        for other in c.within(1, of=victim, side="enemy"):
+            if other != victim and c.attack(bonus, REF, on=other).hit:
+                c.flat(5 + c.int_mod, on=other)
     began: dict[str, object] = {}
 
     def began_turn(ev: TurnStart) -> None:
@@ -170,13 +207,21 @@ def p13318(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_FORCE,
     attack=Attack(INT, vs=REF),
+    augments=(
+        Augment(1),
+        Augment(2, target=UpTo(3)),
+    ),
 )
 def p13319(c: Cast) -> None:
     """Augment 1 trips the target on any move that is not a shift, which is
     `MoveEnd.kind_` and nothing else; a shove is left out of it too, since a
-    creature that is pushed has not *made* a move. Augment 2 widens the target
-    line to three creatures and is left out."""
-    spent = augment(c, 1)
+    creature that is pushed has not *made* a move.
+
+    Augment 2 is a target line -- up to three creatures -- and a target line
+    is read before the body is called, so it is declared in the header. It
+    prints no Hit line of its own, so each of the three takes the base one:
+    the half-speed trip, not Augment 1's wider one."""
+    spent = augment(c, 1, 2) == 1
     victim = c.target
     if not c.strike():
         return

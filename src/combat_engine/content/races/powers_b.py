@@ -963,14 +963,14 @@ def p7443(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     trigger="a creature within 5 squares of you drops to 0 hit points",
     on=Trigger(Dropped, _anyone_drops_within_5, "a creature within 5 drops"),
-    dropped=("c.bonus(dtype=)",),
 )
 def p8278(c: Cast) -> None:
-    """"One creature of your choice that you hit" is the *next* one, which is
-    `once=True`. The damage type cannot ride on a modifier."""
+    """"One creature of your choice that you hit" is the *next* one, which
+    is `once=True`. The extra is necrotic and carries that type, which is
+    what the three feats riding on this power read off it."""
     c.bonus(
         "damage", max(c.con_mod, c.cha_mod), dice="1d8",
-        until=When.EONT, on=c.me, once=True,
+        until=When.EONT, on=c.me, once=True, dtype=DamageType.NECROTIC,
     )
 
 

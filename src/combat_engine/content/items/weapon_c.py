@@ -658,11 +658,15 @@ def i3451p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.ignore_resistance()",),
 )
 def i453x1(c: Cast) -> None:
-    """Damage that eats through resistance. `c.resist` grants one and
-    `c.vulnerable` offsets one; neither bypasses what a creature has."""
+    """Untyped damage only, which is a damage type like any other here --
+    `DamageType.UNTYPED` is a member, and a resistance to it is what
+    "resist 5 all" writes for a sword. Twice the enhancement, read off
+    the item's own column."""
+    c.ignore_resistance(
+        2 * c.enhancement, DamageType.UNTYPED, on=c.me, until=When.ENCOUNTER
+    )
 
 
 @power(
@@ -914,12 +918,19 @@ def i1065x1(c: Cast) -> None:
         AttackDeclared, _struck_kind("demon"), "you attack a demon",
         window=Window.BEFORE,
     ),
-    dropped=("c.ignore_resistance()",),
 )
 def i1065p1(c: Cast) -> None:
     """Declared in the `BEFORE` window so the modifier is in place for the
-    roll it was used on, and `once=True` spends it there."""
+    roll it was used on, and `once=True` spends it there.
+
+    "Ignore any resist value the demon has" is the wielder's, gated on
+    what is being hit rather than spent on one blow -- a damage rider
+    cannot be spent by the attack roll the way the attack bonus is, and
+    the hold runs out at the end of the turn either way."""
     c.bonus("attack", 5, kind="power", on=c.me, until=When.EOT, once=True)
+    c.ignore_resistance(
+        None, on=c.me, until=When.EOT, when=_against(c, "demon")
+    )
 
 
 @power(
@@ -978,12 +989,18 @@ def i1123x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.ignore_resistance()",),
 )
 def i1123p1(c: Cast) -> None:
+    """The attack bonus is spent by the roll it is printed for; the
+    resistance clause is gated on the target being a dragon instead and
+    runs out with the turn, because a damage rider has no roll to spend
+    it."""
     c.bonus(
         "attack", 5, kind="power", on=c.me, until=When.EOT, once=True,
         when=_against(c, "dragon"),
+    )
+    c.ignore_resistance(
+        None, on=c.me, until=When.EOT, when=_against(c, "dragon")
     )
 
 
@@ -1528,11 +1545,15 @@ def i3148p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.ignore_resistance()",),
 )
 def i3149x1(c: Cast) -> None:
     """"The DM chooses" is `c.choose`, which is the world's decider and is
-    exactly who that is."""
+    exactly who that is. The second sentence is the wielder walking
+    through a dragon's resistances, with no number printed and so no
+    cap."""
+    c.ignore_resistance(
+        None, on=c.me, until=When.ENCOUNTER, when=_against(c, "dragon")
+    )
     pick = c.choose(
         [
             DamageType.ACID,
@@ -1956,12 +1977,16 @@ def i1536x1(c: Cast) -> None:
     keywords=[Keyword.FIRE],
     trigger="you miss with an attack that targets AC",
     on=Trigger(Miss, by_me, "you miss with an attack"),
-    dropped=("Miss.vs", "c.bonus(dtype=)"),
+    dropped=("Miss.vs",),
 )
 def i1536p1(c: Cast) -> None:
     """`Miss` carries the attacker, the target and the power and not the
     defence it went at, so "an attack that targets AC" cannot be asked.
-    `c.grant_attack` takes a flat damage bonus and no type for it."""
+    That half is still dropped.
+
+    `c.grant_attack`'s own `damage_bonus` is a bare number, so the fire
+    is laid on the devil as a one-shot typed rider aimed at the target
+    the attack is granted against, and the granted attack spends it."""
     foe = getattr(c.trigger, "target", None)
     if foe is None:
         return
@@ -1970,7 +1995,10 @@ def i1536p1(c: Cast) -> None:
         return
     who = c.choose(devils, "which devil strikes")
     if who is not None:
-        c.grant_attack(who, on=foe, damage_bonus=2 * c.enhancement)
+        c.bonus("damage", 2 * c.enhancement, on=who, until=When.EONT,
+                once=True, dtype=DamageType.FIRE,
+                when=lambda ctx: ctx.get("target") == foe)
+        c.grant_attack(who, on=foe)
 
 
 @power(
@@ -2076,12 +2104,16 @@ def i2405p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you make a ranged basic attack using this weapon",
-    todo=("c.use_power()",),
+    todo=("c.instead_of()",),
 )
 def i2730p1(c: Cast) -> None:
     """Swaps a basic attack that is already happening for a different row
-    of the wielder's. Nothing fires one power out of another's body, and
-    `c.basic` is the basic attack rather than a chosen at-will."""
+    of the wielder's. Re-aimed: `c.use_power` fires the at-will and
+    `c.borrowed_rows` is the choice among them, so neither of those is
+    the hold. What is missing is the word **instead** -- the basic
+    attack has already been declared when this free action is taken,
+    and only an interrupt can call it off. Twenty rows want the same
+    verb."""
 
 
 @power(

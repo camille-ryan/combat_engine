@@ -63,6 +63,7 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Melee,
+    Miss,
     Powers,
     PowerUsed,
     SavingThrow,
@@ -592,20 +593,59 @@ def f719(c: Cast) -> None:
     c.watch(AttackDeclared, restore, on=me, until=When.ENCOUNTER)
 
 
-@power("f714", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.expend_row()",))
+#: "An arcane attack power" -- read off the row in the registry, the way
+#: `by_keyword` reads it, because `Miss` carries only the ref.
+def _missed_with_arcane(world: object, me: int, ev: object) -> bool:
+    from combat_engine.engine import get as _get
+
+    row = _get(getattr(ev, "power", ""))
+    return (
+        getattr(ev, "attacker", None) == me
+        and row is not None
+        and Keyword.ARCANE in row.keywords
+    )
+
+
+@power("f714", level=1, cls="", usage=AT_WILL, action=ActionType.FREE,
+       reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION])
 def f714(c: Cast) -> None:
-    """Spends `p1449` to teleport an ally instead of yourself. The power
-    is a ref, so the moment is findable; what is missing is spending a
-    row without using it."""
+    """Spends `p1449` to teleport an ally instead of yourself.
+    `c.expend_row` is the price and the Requirement at once: the use
+    goes, p1449's own teleport never happens, and the row does nothing
+    when there is no use left.
+
+    Judgement: the card picks the ally "within the area of effect
+    targeted by the arcane power", and the row is used *before* that
+    power, so the area does not exist yet to be asked about. An ally
+    you can reach is the nearest honest reading -- `side="ally"`, which
+    leaves the caster out, because the whole point is teleporting
+    somebody else."""
+    if not c.expend_row("p1449"):
+        return
+    mates = [a for a in c.within(10, side="ally") if c.can_see(a)]
+    if not mates:
+        return
+    chosen = c.choose(mates, "which ally to teleport") or mates[0]
+    c.teleport(3, who=chosen)
 
 
-@power("f717", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+@power("f717", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you miss with an arcane attack power",
+       on=Trigger(Miss, _missed_with_arcane,
+                  "you miss with an arcane attack power"))
 def f717(c: Cast) -> None:
-    """Uses `p1628` as a free action against a creature you missed, and
-    aims it there rather than at whoever hit you. Both halves need a row
-    to use another row, which is the gap f1556 names."""
+    """`c.use_power` is both halves: p1628 is used here and now, and it
+    is *aimed* at the creature this row missed rather than at whoever
+    hit you, which is what `on=` is for. The card's "treat that target
+    as the enemy that hit you" is exactly that redirection.
+
+    `AT_WILL`, because a triggered `action=NONE` row spends a use every
+    firing and the card prints no limit -- p1628's own encounter use
+    is the limit, and using it spends it."""
+    victim = getattr(c.trigger, "target", None)
+    if victim is not None:
+        c.use_power("p1628", on=victim)
 
 
 @power("f1114", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1169,29 +1209,37 @@ def f1021(c: Cast) -> None:
 
 @power("f1099", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.opt_in()", "spec.power_ref()"))
+       dropped=("c.opt_in()",))
 def f1099(c: Cast) -> None:
     """The skill bonus is the half that plays, so the row is offered rather
     than refused: it was marked `todo` whole and threw a working clause
     away.
 
-    Both riders are "you can forgo X to instead Y", which nothing offers,
-    and the second of them hangs on a feature the spec names in prose with
-    no ref. A plain "+2 bonus" with the word "bonus" and no type in front
-    of it, so untyped.
+    Re-aimed: both riders now arrive as refs, so the naming gap is closed
+    and only one hold is left. Both are "you can forgo X to instead Y",
+    which nothing offers. A plain "+2 bonus" with the word "bonus" and no
+    type in front of it, so untyped.
     """
     c.bonus("skill:intimidate", 2, on=c.me, until=When.ENCOUNTER)
 
 
+def _arcane_damage(ctx: dict[str, Any]) -> bool:
+    """The blow being resolved came out of an arcane power."""
+    p = get(ctx.get("power", ""))
+    return p is not None and Keyword.ARCANE in p.keywords
+
+
 @power("f1098", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.deals(ref=)", "c.bonus(dtype=)", "c.opt_in()"))
+       todo=("c.deals(ref=)", "c.opt_in()"))
 def f1098(c: Cast) -> None:
     """Three clauses and no two of them the same shape: change one named
     power's damage type, type an ally's damage bonus as radiant, and
-    trade a printed payout for a saving throw. `c.deals` overrides a
-    *creature's* weapon type and cannot name a row; `c.bonus` carries no
-    damage type. The Diplomacy bonus is a check."""
+    trade a printed payout for a saving throw. `c.bonus(dtype=)` arrived
+    and the radiant clause is writable now; the other two are not.
+    `c.deals` overrides a *creature's* weapon type and cannot name a row,
+    and nothing offers the p833 payout as a choice. The Diplomacy bonus
+    is a check."""
 
 
 @power("f1101", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1237,12 +1285,21 @@ def f1106(c: Cast) -> None:
     this is neither of them."""
 
 
-@power("f1148", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_resistance()",))
+@power("f1148", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your x_m5139a3 racial power",
+       on=Trigger(PowerUsed,
+                  lambda w, me, ev: ev.actor == me and ev.power == "x_m5139a3",
+                  "you use that racial power"))
 def f1148(c: Cast) -> None:
-    """The racial power is a ref, so the trigger would be ordinary --
-    but nothing makes a creature's attacks ignore resistances, and
-    `c.resist` on the other creature is the wrong end of it."""
+    """AT_WILL rather than ENCOUNTER: a triggered `action=NONE` row spends
+    a use every firing and the card prints no limit.
+
+    Laid on the caster, which is where an ignore lives -- it is the
+    attacker's property, not a change to the creature being hit. No
+    type, so it is every resistance, which is what "your enemies'
+    resistances" says."""
+    c.ignore_resistance(on=c.me, until=When.EONT, when=_arcane_damage)
 
 
 @power("f1158", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

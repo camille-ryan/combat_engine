@@ -728,11 +728,26 @@ def i727x1(c: Cast) -> None:
 
 
 @power("i727p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+       reach=PERSONAL, target=SELF)
 def i727p1(c: Cast) -> None:
-    """The jump is half of it and the attack is the other half; nothing
-    lets one row resolve another, so the jump alone would be a row that
-    spends a standard action to travel."""
+    """Jump, then use one of your own at-will attack powers. Both halves
+    of "one of your at-will attack powers" are offered -- `c.borrowed_rows`
+    filters the way the printed lines do and takes one range at a time --
+    and the +1 is `once=True` because it is for that row's attack roll
+    and not for the rest of the turn.
+
+    The chosen row picks its own targets: it is being used, not aimed by
+    this one, so no `on=`."""
+    c.jump(c.speed_of())
+    options = [
+        *c.borrowed_rows(c.me, melee=True),
+        *c.borrowed_rows(c.me, melee=False),
+    ]
+    if not options:
+        return
+    chosen = c.choose(options, "which at-will attack to use") or options[0]
+    c.bonus("attack", 1, on=c.me, until=When.EOT, kind="power", once=True)
+    c.use_power(chosen)
 
 
 @power("i755p1", level=8, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,

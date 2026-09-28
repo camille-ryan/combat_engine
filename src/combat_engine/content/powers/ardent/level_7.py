@@ -13,6 +13,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     CHA,
+    EACH_ENEMY,
     FORT,
     MOVE,
     ONE_CREATURE,
@@ -21,7 +22,9 @@ from combat_engine.engine import (
     WILL,
     Attack,
     AttackRolled,
+    Augment,
     Cast,
+    CloseBurst,
     DamageType,
     Hit,
     Keyword,
@@ -52,17 +55,37 @@ def _pick(c: Cast, pool: list[int], prompt: str) -> int | None:
     target=ONE_CREATURE,
     keywords=PSIONIC_WEAPON,
     attack=Attack(CHA, vs=AC),
+    augments=(
+        Augment(1),
+        Augment(2, reach=CloseBurst(1), target=EACH_ENEMY),
+    ),
+    dropped=("c.bonus_in(zone)",),
 )
 def p10287(c: Cast) -> None:
     """"Against the target's attacks" is a gate on the defence modifier, which
     `query.defence` is handed the attack context for. Augment 1 widens the
-    bonus to every defence. Augment 2 is a close burst with a zone and is
-    left out."""
-    spent = augment(c, 1)
+    bonus to every defence.
+
+    Augment 2 is a close burst against each enemy, which is a target line
+    and so is declared rather than said in the body. Its hit hands an
+    adjacent ally an opportunity swing at the creature. Its zone is laid --
+    the squares are real and block nothing -- but the *bonus inside it* is
+    the dropped clause: a modifier scoped to a footprint has no method,
+    which is the same hold `p13318`'s Augment 1 names from the other side.
+    The guard against the target's own attacks is not printed under
+    Augment 2, so it is gated on the cheaper form exactly."""
+    spent = augment(c, 1, 2)
     victim = c.target
     if victim is None or not c.strike():
         return
     c.damage(c.w(), c.cha_mod)
+    if spent == 2:
+        helper = _pick(c, _friends(c, 1, of=victim), "who takes the opening")
+        if helper is not None:
+            c.grant_attack(helper, on=victim)
+        if c.first:
+            c.zone(c.area(), until=When.EONT, label="p10287")
+        return
     ally = _pick(c, _friends(c, 1), "who shares the guard")
 
     def theirs(ctx: dict) -> bool:
@@ -84,16 +107,39 @@ def p10287(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC],
+    augments=(
+        Augment(1),
+        Augment(
+            2,
+            reach=CloseBurst(1),
+            target=EACH_ENEMY,
+            attack=Attack(CHA, vs=AC),
+        ),
+    ),
 )
 def p10288(c: Cast) -> None:
     """No attack line of its own -- the ally swings. Augment 1 pays +3 damage
     if that ally is the one marking the target, which `c.marked(by=)` answers.
-    Augment 2 makes the row a close burst with an attack of its own and is
-    left out."""
-    spent = augment(c, 1)
+
+    Augment 2 gives the row **an attack line the base card has not got**, on
+    top of turning it into a close burst, so both are declared in the header
+    where an attack line lives. `attack=` on the augment is what makes
+    `c.strike` have something to roll; written in the body it would have to
+    invent the line, which is the difference between a card and a guess."""
+    spent = augment(c, 1, 2)
     victim = c.target
+    if victim is None:
+        return
+    if spent == 2:
+        if not c.strike():
+            return
+        c.damage(c.w(), c.cha_mod)
+        helper = _pick(c, _friends(c, 1, of=victim), "who takes the opening")
+        if helper is not None:
+            c.grant_attack(helper, on=victim)
+        return
     ally = _pick(c, _friends(c, 1), "who swings")
-    if victim is None or ally is None:
+    if ally is None:
         return
     extra = 3 if spent and c.marked(on=victim, by=ally) else 0
 
@@ -116,16 +162,25 @@ def p10288(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_WEAPON,
     attack=Attack(CHA, vs=AC),
+    augments=(
+        Augment(1, charges=True),
+        Augment(2),
+    ),
 )
 def p11104(c: Cast) -> None:
     """Augment 2 sends one or two allies charging something else, paid a
     Constitution-sized damage bonus for it.
 
-    Augment 1 is not offered: it makes the row itself a charge, and whether a
-    row charges is `charges=` in the header, read before the body runs to
-    decide whether the target is in reach at all. Written in the body it
-    would shift and swing at a creature the targeting had already refused."""
-    spent = augment(c, 2)
+    Augment 1 makes the row itself a charge, and whether a row charges is a
+    header field -- read *before* the body, to decide whether the target is
+    in reach at all. So it is declared as one: `charges=True` on the
+    augment, which is measured only when that form is the one being used. A
+    body could not have said it. The shift is the body's half, and it
+    happens before the run, which is the order the card prints.""" 
+    spent = augment(c, 1, 2)
+    if spent == 1 and c.first and c.target is not None:
+        c.shift(1)
+        c.run_at(c.target)
     victim = c.target
     if not c.strike():
         return

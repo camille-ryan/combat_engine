@@ -165,6 +165,48 @@ PERSONAL = Range("personal", 0)
 
 
 @dataclass(frozen=True)
+class Augment:
+    """One printed "Augment N" clause, declared in the header.
+
+    A psionic at-will prints its base effect and then one or two augments:
+    spend that many power points **as you use it** and you get the
+    augmented form instead. Most of those clauses are a different die or an
+    extra rider and the body can say them on its own, asking
+    `content.powers.augment.augment` how many points went. That is the
+    older, body-side arrangement and it stays exactly as it was.
+
+    This is for the clauses a body *cannot* say, which is every one that
+    rewrites the header: a close burst where the base is a melee swing, a
+    second target, a longer reach, a charge. **Targeting happens before the
+    body runs**, so by the time a body could choose, the targets are
+    already picked -- which is why twenty-nine of these were recorded in
+    `docs/blocked.json` rather than written.
+
+    So the spend is settled *before* targeting, the same way `branch`
+    settles which half of a "Melee or Ranged" line is in play, and each
+    affordable augment is offered as its own entry in the action menu.
+    Picking one is then something the player does, and something a policy
+    scores, rather than something the body decides after the fact.
+
+    Every field left `None` falls through to the base row's, so an augment
+    that only widens the burst names only `reach`.
+    """
+
+    #: Power points this form costs. 0 is legal: a handful of rows print
+    #: "Augment 0", a free alternative form.
+    cost: int
+    reach: Range | None = None
+    target: Target | None = None
+    attack: Attack | None = None
+    damage: Damage | None = None
+    #: "You can shift and then charge, using this power in place of the
+    #: charge's melee basic attack" -- the augmented form *is* a charge
+    #: where the base is a standing swing. Read before the body, like the
+    #: header field it shadows.
+    charges: bool | None = None
+
+
+@dataclass(frozen=True)
 class Summon:
     """A creature a power puts on the board, defined by the power itself.
 
@@ -527,6 +569,18 @@ class Power:
     #: card is handed over by the body; this is the half that goes back,
     #: and `chargen.power_swap` is what applies it.
     swap: Swap | None = None
+    #: The printed "Augment N" clauses this row honours by rewriting its
+    #: own header -- a wider burst, a second target, a longer reach. The
+    #: spend is settled before targeting and each affordable one is a
+    #: separate entry in the action menu. See `Augment`.
+    #:
+    #: **Not every augment belongs here.** One that only changes the dice
+    #: or adds a rider is said in the body, through
+    #: `content.powers.augment.augment`, and declaring it in both places
+    #: would offer it twice. A row that declares any augment here declares
+    #: *all* of them here, because the choice is then made once, before the
+    #: body, and `Cast.augment` is what the body reads.
+    augments: tuple[Augment, ...] = ()
 
     @property
     def unfinished(self) -> tuple[str, ...]:
@@ -535,7 +589,13 @@ class Power:
 
     @property
     def is_attack(self) -> bool:
-        return self.target.side != "self" or self.target.count > 0
+        return self.is_attack_at(0)
+
+    def is_attack_at(self, augment: int = 0) -> bool:
+        """Does *this form* aim at somebody? An augment can add a target
+        line where the base card has none, and one does."""
+        aim = self.target_of(augment)
+        return aim.side != "self" or aim.count > 0
 
     # -- one branch of a two-branch row -------------------------------------
     #
@@ -566,13 +626,57 @@ class Power:
             return ()
         return (self.on,) if isinstance(self.on, Trigger) else tuple(self.on)
 
-    def reach_of(self, branch: int = 0) -> Range:
+    # -- one augment of an augmentable row ----------------------------------
+    #
+    # Same shape as a branch, one layer out: a printed "Augment 2" that
+    # swaps the melee swing for a close burst disagrees with the base row
+    # about reach, about who is caught and sometimes about what is rolled.
+    # Everything that asks the header a targeting question therefore asks
+    # it *of the form being used*, and `augment=0` -- the base card -- is
+    # what every non-psionic row in the tree gets without asking.
+
+    @property
+    def augment_costs(self) -> tuple[int, ...]:
+        """Every form of this row, cheapest first. `(0,)` for almost all."""
+        return (0, *sorted({a.cost for a in self.augments if a.cost}))
+
+    def augment_at(self, cost: int) -> Augment | None:
+        """The declared clause bought with that many points, if there is one."""
+        if not cost:
+            return None
+        for a in self.augments:
+            if a.cost == cost:
+                return a
+        return None
+
+    def reach_of(self, branch: int = 0, augment: int = 0) -> Range:
+        bought = self.augment_at(augment)
+        if bought is not None and bought.reach is not None:
+            return bought.reach.branch(branch)
         return self.reach.branch(branch)
 
-    def attack_of(self, branch: int = 0) -> Attack | None:
+    def target_of(self, augment: int = 0) -> Target:
+        bought = self.augment_at(augment)
+        if bought is not None and bought.target is not None:
+            return bought.target
+        return self.target
+
+    def charges_of(self, augment: int = 0) -> bool:
+        bought = self.augment_at(augment)
+        if bought is not None and bought.charges is not None:
+            return bought.charges
+        return self.charges
+
+    def attack_of(self, branch: int = 0, augment: int = 0) -> Attack | None:
+        bought = self.augment_at(augment)
+        if bought is not None and bought.attack is not None:
+            return bought.attack
         return self.attack_alt or self.attack if branch else self.attack
 
-    def damage_of(self, branch: int = 0) -> Damage | None:
+    def damage_of(self, branch: int = 0, augment: int = 0) -> Damage | None:
+        bought = self.augment_at(augment)
+        if bought is not None and bought.damage is not None:
+            return bought.damage
         return self.damage_alt or self.damage if branch else self.damage
 
     def requires_of(self, branch: int = 0) -> Callable[[World, int], bool] | None:
@@ -630,11 +734,11 @@ class Power:
             return bool(gear.melee)
         return True
 
-    def provokes_on(self, branch: int = 0) -> bool:
+    def provokes_on(self, branch: int = 0, augment: int = 0) -> bool:
         """Does *this branch* leave an opening? The melee half does not."""
         if self.no_provoke:
             return False
-        return self.reach_of(branch).kind in ("ranged", "area_burst", "wall")
+        return self.reach_of(branch, augment).kind in ("ranged", "area_burst", "wall")
 
     def label_of(self, branch: int = 0) -> str:
         """What to call this branch on the card. Empty for a single-branch row."""
@@ -659,14 +763,16 @@ class Power:
             return False
         return self.reach.kind in ("ranged", "area_burst", "wall")
 
-    def hit_chance(self, world: World, actor: int, target: int, branch: int = 0) -> float:
+    def hit_chance(
+        self, world: World, actor: int, target: int, branch: int = 0, augment: int = 0
+    ) -> float:
         """Probability this power hits, from the declared attack line.
 
         Returns 0.5 when the power did not declare one -- an honest "no idea"
         that keeps a scorer from preferring undeclared powers or avoiding
         them.
         """
-        line = self.attack_of(branch)
+        line = self.attack_of(branch, augment)
         if line is None:
             return 0.5
         from .query import cover_between, defence, has_combat_advantage
@@ -674,7 +780,7 @@ class Power:
         bonus = line.bonus_for(world, actor, self.ref, branch)
         if has_combat_advantage(world, actor, target):
             bonus += 2
-        ranged = self.reach_of(branch).kind == "ranged"
+        ranged = self.reach_of(branch, augment).kind == "ranged"
         bonus -= int(cover_between(world, actor, target, ranged=ranged))
         need = defence(world, target, line.vs) - bonus
         return min(0.95, max(0.05, (21 - need) / 20))
@@ -739,6 +845,7 @@ def power(
     dropped: Iterable[str] = (),
     proficiency: Iterable[str] = (),
     swap: Swap | None = None,
+    augments: Iterable[Augment] = (),
 ) -> Callable[[Body], Body]:
     """Declare one power or one monster ability.
 
@@ -799,6 +906,7 @@ def power(
             dropped=dropped,
             proficiency=tuple(proficiency),
             swap=swap,
+            augments=tuple(augments),
         )
         return body
 
@@ -819,7 +927,8 @@ def declared() -> list[str]:
 
 
 def area_of(
-    world: World, actor: int, p: Power, origin: Square | None = None, branch: int = 0
+    world: World, actor: int, p: Power, origin: Square | None = None, branch: int = 0,
+    augment: int = 0,
 ) -> frozenset[Square]:
     """The squares a power covers, given where its origin was placed.
 
@@ -827,7 +936,7 @@ def area_of(
     otherwise reports a reach that runs off the edge, and an interface that
     highlights what it is given lights up squares that are not there.
     """
-    r = p.reach_of(branch)
+    r = p.reach_of(branch, augment)
     mine = squares(world, measured_from(world, actor, r))
     stretch = _stretched(world, actor, r.kind, {"power": p.ref, "kind": r.kind})
     if stretch:
@@ -957,7 +1066,7 @@ def roller(world: World, actor: int, by: str) -> int:
     return actor
 
 
-def aim_points(world: World, actor: int, p: Power) -> list[Square]:
+def aim_points(world: World, actor: int, p: Power, augment: int = 0) -> list[Square]:
     """Every square this power can be pointed at.
 
     For a close blast these are the placement centres -- a blast 3 from a
@@ -966,12 +1075,16 @@ def aim_points(world: World, actor: int, p: Power) -> list[Square]:
     square and gets an empty list.
     """
     mine = squares(world, actor)
-    if p.reach.kind == "close_blast":
-        return sorted(blast_placements(mine, p.reach.size))
-    if p.reach.kind in ("area_burst", "wall"):
+    # The form being used, not the printed base: an augment that turns a
+    # melee swing into an area burst has a `within` the base row has not
+    # got, and asking the base here offered the burst nowhere to land.
+    reach = p.reach_of(0, augment)
+    if reach.kind == "close_blast":
+        return sorted(blast_placements(mine, reach.size))
+    if reach.kind in ("area_burst", "wall"):
         return sorted(
             sq
-            for sq in spread(mine, p.reach.within)
+            for sq in spread(mine, reach.within)
             if world.grid.inside(sq)
             and any(world.grid.line_of_effect(src, sq) for src in mine)
         )
@@ -1018,7 +1131,8 @@ def basic_options(world: World, actor: int, window: str, own: str = "") -> list[
 
 
 def candidates(
-    world: World, actor: int, p: Power, origin: Square | None = None, branch: int = 0
+    world: World, actor: int, p: Power, origin: Square | None = None, branch: int = 0,
+    augment: int = 0,
 ) -> list[int]:
     """Everyone this power could legally be aimed at right now.
 
@@ -1032,9 +1146,10 @@ def candidates(
     centred twenty squares away and still hit, which is a rule the printed
     range line states outright.
     """
-    if p.target.side == "self" and p.target.count == 0:
+    aim = p.target_of(augment)
+    if aim.side == "self" and aim.count == 0:
         return []
-    if p.target.side == "self":
+    if aim.side == "self":
         return [actor]
     pool = {
         "enemy": enemies(world, actor),
@@ -1044,22 +1159,22 @@ def candidates(
         "other_ally": allies(world, actor),
         # Not a creature at all, and not in any of the pools above: scenery
         # has no `Side`, so every one of them is empty for it.
-        "object": scenery(world, "object", loose=p.target.loose),
-    }[p.target.side]
-    if p.target.holding:
+        "object": scenery(world, "object", loose=aim.loose),
+    }[aim.side]
+    if aim.holding:
         from .query import holding
 
-        pool = [c for c in pool if holding(world, c, p.target.holding)]
-    if p.target.max_size is not None:
-        cap = p.target.max_size.order
+        pool = [c for c in pool if holding(world, c, aim.holding)]
+    if aim.max_size is not None:
+        cap = aim.max_size.order
         pool = [c for c in pool if _size_of(world, c).order <= cap]
 
-    reach = p.reach_of(branch)
+    reach = p.reach_of(branch, augment)
     aimed = origin is not None and reach.kind in ("area_burst", "close_blast")
-    if aimed and origin not in aim_points(world, actor, p):
+    if aimed and origin not in aim_points(world, actor, p, augment):
         return []
 
-    area = area_of(world, actor, p, origin, branch)
+    area = area_of(world, actor, p, origin, branch, augment)
     if reach.kind == "area_burst" and origin is not None:
         return [
             c
@@ -1097,8 +1212,24 @@ def unmet_requirement(world: World, actor: int, p: Power) -> bool:
     return not any(p.can_branch(world, actor, b) for b in p.branches)
 
 
+def affordable(world: World, actor: int, p: Power) -> tuple[int, ...]:
+    """Which forms of this row the creature can pay for, cheapest first.
+
+    `(0,)` for every row that prints no Augment line, which is all but a
+    handful -- so nothing non-psionic gains an entry in the action menu.
+    """
+    if not p.augments:
+        return (0,)
+    from .components import PowerPoints
+
+    pool = world.get(actor, PowerPoints)
+    have = pool.points if pool is not None else 0
+    return tuple(n for n in p.augment_costs if n <= have)
+
+
 def usable(
-    world: World, actor: int, p: Power, *, dying: bool = False, spent_ok: bool = False
+    world: World, actor: int, p: Power, *, dying: bool = False, spent_ok: bool = False,
+    augment: int = 0,
 ) -> tuple[bool, str]:
     """Can this power be used, and if not, why not?
 
@@ -1169,6 +1300,15 @@ def usable(
                     )
                 if p.group and _group_spent(world, actor, p):
                     return False, f"one {p.group} power per encounter"
+    if augment:
+        # A form that was never declared is not a refusal to explain to a
+        # player -- it is a caller asking for something that does not
+        # exist, and saying yes would run the base card while charging
+        # for the augment.
+        if p.augment_at(augment) is None:
+            return False, "no such augment"
+        if augment not in affordable(world, actor, p):
+            return False, "not enough power points"
     open_branches = [b for b in p.branches if p.can_branch(world, actor, b)]
     if not open_branches:
         # The printed sentence when there is one, because it is what the
@@ -1177,12 +1317,14 @@ def usable(
         # `requires_text` hid the failure from `chargen.build_for`, which
         # then handed a bow-only row to a two-blade ranger.
         return False, p.requires_text or "requirement not met"
-    if p.is_attack and not any(_can_land(world, actor, p, b) for b in open_branches):
+    if p.is_attack_at(augment) and not any(
+        _can_land(world, actor, p, b, augment) for b in open_branches
+    ):
         return False, _no_targets(world, actor, p)
     return True, ""
 
 
-def _can_land(world: World, actor: int, p: Power, branch: int = 0) -> bool:
+def _can_land(world: World, actor: int, p: Power, branch: int = 0, augment: int = 0) -> bool:
     """Is there any way to aim this that catches somebody?
 
     For an area power that means trying the placements, not the default one.
@@ -1190,22 +1332,23 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0) -> bool:
     adjacent square, and a blast that happens to point away from everybody
     reported itself unusable while three creatures stood in range.
     """
-    if p.reach_of(branch).kind in ("area_burst", "close_blast"):
+    if p.reach_of(branch, augment).kind in ("area_burst", "close_blast"):
         return any(
-            candidates(world, actor, p, aim, branch) for aim in aim_points(world, actor, p)
+            candidates(world, actor, p, aim, branch, augment)
+            for aim in aim_points(world, actor, p, augment)
         )
-    if p.charges:
+    if p.charges_of(augment):
         # A charge covers ground first, so the question is whether anybody
         # is within reach *after* the run. Asking about the printed melee
         # reach refused the row whenever the target was further off than a
         # sword -- which is every time a charge is the right thing to do.
         from .query import distance_between, enemies, speed
 
-        far = p.reach_of(branch).size + speed(world, actor, {"charge": True})
+        far = p.reach_of(branch, augment).size + speed(world, actor, {"charge": True})
         return any(
             distance_between(world, actor, foe) <= far for foe in enemies(world, actor)
         )
-    return bool(candidates(world, actor, p, None, branch))
+    return bool(candidates(world, actor, p, None, branch, augment))
 
 
 def _group_spent(world: World, actor: int, p: Power) -> bool:
@@ -1281,6 +1424,7 @@ def use(
     opportunity: bool = False,
     charge: bool = False,
     branch: int = 0,
+    augment: int = 0,
     reentrant: bool = False,
 ) -> bool:
     """Use a power. Returns False if it could not be used.
@@ -1295,6 +1439,13 @@ def use(
     `branch` picks which half of a "Melee or Ranged weapon" line is being
     used. 0 is the printed first one and is what every single-branch row
     gets without asking.
+
+    `augment` is how many power points this use is bought with, for a row
+    that declares `augments=` in its header. **Settled here, above
+    targeting**, because that is the whole reason the field exists: a
+    clause that swaps a melee swing for a close burst cannot be chosen by
+    a body that is only called once the targets are already picked. 0 is
+    the printed base card and is what every other row in the tree gets.
     """
     from .components import Powers
 
@@ -1309,9 +1460,27 @@ def use(
         and getattr(trigger, "actor", None) == actor
         and not alive(world, actor)
     )
-    ok, _why = usable(world, actor, p, dying=dying, spent_ok=reentrant)
+    ok, _why = usable(world, actor, p, dying=dying, spent_ok=reentrant, augment=augment)
     if not ok:
         return False
+    # **The points go before the targets are chosen.** An augmented form
+    # is a different card -- different reach, different target line -- so
+    # everything below has to be told which one is being used, and the
+    # spend is what says so. Paid here rather than in the body: a body
+    # runs once per target and would pay once per target with it.
+    if p.augments:
+        from .components import PowerPoints
+
+        pool = world.get(actor, PowerPoints) or world.add(actor, PowerPoints())
+        if augment and pool.spend(augment) < augment:
+            return False
+        if augment:
+            pool.augmented[ref] = pool.augmented.get(ref, 0) + augment
+        # Recorded for **every** use of an augmentable row, nought
+        # included, because "when you augment this" has to be able to tell
+        # this use from the last one -- and `augmented`, being the
+        # encounter's running total, cannot.
+        pool.last[ref] = augment
     # `reentrant` is "the attacker repeats the attack": the row has to run a
     # second time inside itself, which is the one case the guard below is
     # wrong about. It is never the default -- the guard exists because two
@@ -1322,7 +1491,7 @@ def use(
     if targets is not None:
         chosen = list(targets)
     else:
-        chosen, origin = _auto_targets(world, actor, p, origin, branch)
+        chosen, origin = _auto_targets(world, actor, p, origin, branch, augment)
         chosen = list(chosen)
     cast = Cast(
         world=world,
@@ -1336,6 +1505,7 @@ def use(
         opportunity=opportunity,
         charge=charge,
         branch=branch,
+        augment=augment,
     )
     # **The same hole as the `PowerResolved` emit at the bottom of this
     # function, on the other side of the body.** `cast.used()` announces
@@ -1357,7 +1527,7 @@ def use(
         if guarded:
             _IN_FLIGHT.discard((actor, ref))
 
-    if p.provokes_on(branch) and not _survive_provoking(world, actor, ref):
+    if p.provokes_on(branch, augment) and not _survive_provoking(world, actor, ref):
         # Stopped before it went off -- stunned by an interrupt, or killed.
         # The power is *not* spent: the action was lost, not used.
         return False
@@ -1469,7 +1639,8 @@ def _survive_provoking(world: World, actor: int, ref: str) -> bool:
 
 
 def _auto_targets(
-    world: World, actor: int, p: Power, origin: Square | None, branch: int = 0
+    world: World, actor: int, p: Power, origin: Square | None, branch: int = 0,
+    augment: int = 0,
 ) -> tuple[list[int], Square | None]:
     """Who this power lands on when the caller did not say, and where it aimed.
 
@@ -1484,16 +1655,17 @@ def _auto_targets(
     dropped the zone on the caster's own feet and the damage somewhere else
     entirely. Two answers to "where is this power" is one too many.
     """
-    if origin is None and p.reach_of(branch).kind in ("area_burst", "close_blast"):
+    want = p.target_of(augment)
+    if origin is None and p.reach_of(branch, augment).kind in ("area_burst", "close_blast"):
         best: list[int] = []
         chosen: Square | None = None
-        for aim in aim_points(world, actor, p):
-            hit = candidates(world, actor, p, aim, branch)
+        for aim in aim_points(world, actor, p, augment):
+            hit = candidates(world, actor, p, aim, branch, augment)
             if len(hit) > len(best):
                 best, chosen = hit, aim
         if best:
-            return (best if p.target.everyone else best[: p.target.count]), chosen
-    pool = candidates(world, actor, p, origin, branch)
-    if p.target.everyone:
+            return (best if want.everyone else best[: want.count]), chosen
+    pool = candidates(world, actor, p, origin, branch, augment)
+    if want.everyone:
         return pool, origin
-    return pool[: p.target.count], origin
+    return pool[: want.count], origin

@@ -38,6 +38,7 @@ from combat_engine.engine import (
     Cast,
     Condition,
     Gear,
+    Hit,
     Keyword,
     MoveEnd,
     PowerUsed,
@@ -299,12 +300,15 @@ def _used_my_flurry(world, me: int, ev: PowerUsed) -> bool:  # noqa: ANN001
 
 @power("f3171", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.forgo_damage()", "c.ignore_resistance()"))
+       todo=("c.forgo_damage()",))
 def f3171(c: Cast) -> None:
-    """The feature is `FLURRY` and no longer the hold. Two absences are
-    left and both are the trade this row is: a row cannot decline its own
-    damage, and stripping a creature's resistance is not a thing
-    `c.resist` can be told to undo."""
+    """The feature is `FLURRY` and no longer the hold, and stripping the
+    target's necrotic resistance is writable now -- `c.resistances` reads
+    what is standing and a negative `c.resist` takes it away. What is
+    left is the trade the whole row is: "you can choose to forgo dealing
+    damage", and a row cannot decline its own damage. Written without it
+    the row is the payout with no price, which is a strictly better
+    card than the one printed."""
 
 
 @power("f3205", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -450,13 +454,37 @@ def f3326(c: Cast) -> None:
         c.flat(c.str_mod, on=flurry.targets[0])
 
 
-@power("f3327", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_resistance()",))
+def _crit_unarmed(world: Any, me: int, ev: Any) -> bool:
+    """A critical of mine with the chassis's own `w:unarmed`.
+
+    `Hit.critical` is a field; the weapon comes off `Gear.main`, which is
+    what the unarmed strike is held as when nothing else is.
+    """
+    from combat_engine.engine.components import Gear
+
+    if ev.attacker != me or not ev.critical:
+        return False
+    gear = world.get(me, Gear)
+    return gear is not None and gear.main is not None and gear.main.group == "unarmed"
+
+
+@power("f3327", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you score a critical hit with your monk unarmed strike",
+       on=Trigger(Hit, _crit_unarmed, "a critical hit with an unarmed strike"))
 def f3327(c: Cast) -> None:
-    """The trigger is writable -- `c.struck_with` hands back the weapon a
-    `Hit` was made with, and the unarmed strike has its own group. What is
-    missing is the payout: `c.resist` lays resistance and nothing takes a
-    creature's own away."""
+    """The payout is the target's own resistance taken away rather than
+    one attacker walking through it, which is what the card says: it
+    loses it, for everybody, until the end of your next turn.
+    `c.resistances` reads what is standing and a negative `c.resist` is
+    the one arithmetic case left in it, so the hold puts back exactly
+    what this took when it ends.
+
+    AT_WILL because a triggered `action=NONE` row spends a use every
+    firing and the card prints no limit."""
+    foe = c.trigger.target
+    for dtype, amount in c.resistances(on=foe).items():
+        c.resist(-amount, dtype, on=foe, until=When.EONT)
 
 
 @power("f3401", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

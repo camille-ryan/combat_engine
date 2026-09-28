@@ -3,13 +3,14 @@ multiclass feats, and the familiar chain.
 
 Three things about this batch are worth knowing before reading it.
 
-**A multiclass feat grants another class's named power, and the spec
-gives no ref for it.** Every one of them says "you can use the bard's X
-power" in prose, which the scrubber leaves alone because the name is two
-ordinary words. There is nothing for `c.grant_row` to hand over, so the
-grant is marked and the rest of the feat -- which is usually a skill
-training and an implement proficiency, both out of combat -- is written.
-`c.borrow_feature()` is the symbol, chosen to match the earlier waves.
+**A multiclass feat grants another class's power, and the spec names
+it by ref.** It did not: the brief used to print "you can use the
+bard's X power" in prose, which the scrubber left alone because the
+name is two ordinary words, and there was nothing for `c.grant_row` to
+hand over. The refs are in the spec now and the grants are written. A
+clause naming a *set* rather than a row -- "choose a 1st-level at-will
+of that class" -- is `c.borrow_row`, which reads the set off the
+registry and carries the printed once-per-encounter limit.
 
 **The familiar chain is four feats deep and the first one is the gate.**
 `c.familiar()` exists and the `companion` table was imported, but a
@@ -127,11 +128,19 @@ def f723b(c: Cast) -> None:
 
 
 @power("f668", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF, dropped=("spec.power_ref()",))
 def f668(c: Cast) -> None:
-    """The one multiclass feat whose granted power the spec **does** name
-    by ref, so that half is written. The companion-spirit at-will and the
-    daily are still prose with no id."""
+    """One multiclass feat whose granted power the spec names by ref, so
+    that half is written.
+
+    Re-aimed: the hold is not the borrowing, which `c.grant_row` and
+    `c.borrow_row` both say now. It is that the other two clauses name
+    their powers in prose -- the at-will that comes with a chosen
+    companion spirit, and the daily -- and `c.borrow_row` cannot read a
+    set the card does not describe by class, level and usage. The
+    spirit's at-will is one particular row per option, not a free pick
+    from the class's list, so choosing freely would be a different
+    feat."""
     c.grant_row("p6515", on=c.me, until=When.ENCOUNTER)
 
 
@@ -147,10 +156,15 @@ def f669b(c: Cast) -> None:
 
 
 @power("f670", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF, dropped=("c.end_effect()",))
 def f670(c: Cast) -> None:
-    """Grants another class's marking power once per encounter, named in
-    prose with no ref."""
+    """Another class's oath once per encounter, and the spec names it by
+    ref. The granted row is an encounter power of its own, so it carries
+    the printed limit and needs no `uses=`.
+
+    Dropped: the feat shortens the oath to the end of your next turn,
+    and nothing cuts a duration another row laid."""
+    c.grant_row("p3069", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f671", level=1, cls="", usage=ENCOUNTER, action=FREE,
@@ -251,9 +265,15 @@ def f800(c: Cast) -> None:
 
 
 @power("f651", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+       reach=PERSONAL, target=SELF, todo=("c.darkvision()",))
 def f651(c: Cast) -> None:
-    """A campaign-setting option that grants a choice of three traits, one
-    of which is a speed bonus and two of which are not combat at all. The
-    choice is not recorded anywhere and the feats it qualifies you for
-    name a class the engine does not have."""
+    """A campaign-setting option offering a choice of three traits.
+
+    Re-aimed off the multiclass symbol, which was never what this row
+    wanted: its three options are spelled out in full rather than named,
+    so there is no feature to borrow and nothing to look up. Two of the
+    three have no verb -- switchable darkvision of 1 square, and adding
+    to the reach of one attack -- and `c.choose` among three where two
+    do nothing would quietly make the third compulsory. The speed option
+    alone is writable and is a third of the card, so the row stays
+    refused rather than playing a third of itself."""

@@ -739,7 +739,7 @@ def _granted(ref: str, what: str, *, wants: tuple[str, ...] = GRANTED) -> None:
 
 
 _granted("f1732", "Those swings ignore resistance.",
-         wants=("c.on_granted_basic()", "c.ignore_resistance()"))
+         wants=("c.on_granted_basic()",))
 _granted("f1736", "A shift after one of them hits.")
 _granted("f2180", "One of them carries a racial power's damage type.")
 _granted("f795", "One of them may switch to thunder or lightning.",

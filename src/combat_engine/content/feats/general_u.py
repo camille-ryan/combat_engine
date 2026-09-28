@@ -7,10 +7,12 @@ Five shapes account for the file.
 **The pact pairs (`f3424`-`f3429`).** Each prints a skill bonus *or* a
 payout when a cursed enemy drops, plus an augment clause that spends the
 warlock's fell might. Nothing augments a power from outside its own card
--- `dsl.use(augment=)` is the symbol eight earlier waves named -- and the
-"Associated Powers" line is a column the row cannot read, which is
-`feat.associated_powers`. So the half that can be said is said and the
-augment half is `dropped`.
+-- `c.lend_augment(ref, clause)`, re-aimed off `dsl.use(augment=)` once
+that arrived and turned out to be a different thing: it settles a spend of
+power points against a row that declares its own augments, and no power
+named here prints an Augment line. The "Associated Powers" line is a
+column the row cannot read, which is `feat.associated_powers`. So the half
+that can be said is said and the augment half is `dropped`.
 
 **The `f1028` riders (`f3432`, `f3434`, `f3435`).** All three read "when
 you hit with an attack made using `f1028`", and `f1028` is itself marked
@@ -80,7 +82,14 @@ from combat_engine.engine import (
 from combat_engine.engine.durations import keywords_of
 
 #: Nothing augments another row's card from outside it.
-AUGMENT = ("dsl.use(augment=)",)
+#:
+#: **Re-aimed.** `dsl.use(augment=)` arrived and is not what these want.
+#: It settles a spend of *power points* against a row that declares its
+#: own augments, before targeting. These six spend the warlock's fell
+#: might -- a different currency entirely -- on a power whose card prints
+#: no Augment line at all, which is an offer added to another row from
+#: outside it. Same symbol the psionic aspect dailies name.
+AUGMENT = ("c.lend_augment(ref, clause)",)
 #: The "Associated Powers" line is a column no row can read.
 ASSOCIATED = ("feat.associated_powers",)
 #: "You can use Charisma instead of Constitution" for a named list.
@@ -278,15 +287,19 @@ def f3438(c: Cast) -> None:
 
 @power("f3439", level=1, cls="", usage=ENCOUNTER, action=FREE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
-       dropped=("c.racial_row()", "c.expend_row()"))
+       )
 def f3439(c: Cast) -> None:
     """Moves the conjuration or the summoned creature, whichever is to
     hand; the printed size limits are checked here because both are real
     and neither is expensive.
 
-    What is dropped is the price: the racial power has no ref this row can
-    reach and nothing spends another row's use, so this is free.
+    Both markers are gone. The racial power is `p1449`, which the spec
+    names and the tree declares, and `c.expend_row` spends its use
+    without running it -- which is exactly the card, since the teleport
+    that happens is this row's and not p1449's.
     """
+    if not c.expend_row("p1449"):
+        return
     for who in c.servants():
         if c.distance(to=who) <= 5 and c.size_of(on=who) not in BIG:
             c.teleport(5, who=who)

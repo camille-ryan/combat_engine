@@ -1023,17 +1023,18 @@ def i1246x1(c: Cast) -> None:
 
 
 @power("i1290x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF)
 def i1290x1(c: Cast) -> None:
-    """The extra damage lands untyped: a damage bonus carries no type of its
-    own, so "extra fire damage" cannot be said as a modifier."""
+    """The extra damage is fire and carries that type of its own, so a
+    creature resisting fire shrugs it off and takes the rest."""
 
     def burned(ev: DamageApplied) -> None:
         if ev.target != c.me or ev.dtype is not DamageType.FIRE:
             return
         if ev.source in (None, c.me):
             return
-        c.bonus("damage", c.enhancement, on=c.me, until=When.EONT, once=True)
+        c.bonus("damage", c.enhancement, on=c.me, until=When.EONT,
+                once=True, dtype=DamageType.FIRE)
 
     c.watch(DamageApplied, burned, until=When.ENCOUNTER, on=c.me)
 

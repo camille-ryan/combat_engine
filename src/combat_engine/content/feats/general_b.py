@@ -474,22 +474,35 @@ def f664(c: Cast) -> None:
 
 
 @power("f665", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-    reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+    reach=PERSONAL, target=SELF)
 def f665(c: Cast) -> None:
-    """Multiclass: grants one named power of another class once a day. The
-    spec names it in prose and gives no ref, so `c.grant_row` has nothing
-    to hand over."""
+    """Multiclass: one power of another class, once a day, and the spec
+    names it by ref. The granted row is an encounter power of its own,
+    and one fight is one day to this engine -- see #72 -- so it carries
+    the printed limit itself. The training and the implements are
+    chargen's."""
+    c.grant_row("p2339", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f666", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-    reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+    reach=PERSONAL, target=SELF, dropped=("Keyword.BEAST_FORM",))
 def f666(c: Cast) -> None:
-    """Multiclass: a form and one at-will of that class, chosen at build
-    time. Same missing ref as f665, plus a choice nothing records."""
+    """Multiclass: that class's form power, which the spec names by ref
+    and which prints no limit of its own, plus one of its 1st-level
+    at-wills once per encounter.
+
+    Dropped: the card narrows the choice to at-wills with the beast
+    form keyword, and no keyword in the tree says so, so the set is
+    every 1st-level at-will of the class rather than the subset."""
+    c.grant_row("p5032", on=c.me, until=When.ENCOUNTER)
+    c.borrow_row("druid", level=1, uses=1)
 
 
 @power("f667", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-    reach=PERSONAL, target=SELF, todo=("c.borrow_feature()",))
+    reach=PERSONAL, target=SELF)
 def f667(c: Cast) -> None:
-    """Multiclass: one at-will of that class once per encounter, chosen at
-    build time. Same missing ref as f665."""
+    """Multiclass: one 1st-level at-will of that class, once per
+    encounter. The card names a set rather than a ref and
+    `c.borrow_row` reads the set off the registry; `uses=1` is the
+    printed limit, which an at-will handed over bare would not keep."""
+    c.borrow_row("invoker", level=1, uses=1)

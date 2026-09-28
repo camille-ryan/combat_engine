@@ -147,24 +147,24 @@ def f1233(c: Cast) -> None:
 
 
 @power("f2045", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF)
 def f2045(c: Cast) -> None:
-    """The amount is writable; the type is not.
+    """The amount and the type are both writable now.
 
     The damage the card hands `f2023b` is the wild leg's own clause --
     `soul_damage` over the ability that leg keys off -- and a feat's
     granted card is an ordinary ref, so gating a damage modifier on it is
     the whole of the first half.
 
-    The type is dropped. `c.bonus` carries `dice` and no `dtype`, so the
-    extra rolls untyped, and against anything that resists the sworn type
-    that is a printed sentence gone rather than a rounding.
+    "The same type as your current Wild Soul damage type" is the build's
+    own element and `c.element` is the reader for it. A build that
+    recorded none leaves the rider untyped, which is where it was.
     """
     if not c.build("wild"):
         return
     c.bonus(
         "damage", c.dex_mod + soul_damage(c.level), on=c.me,
-        until=When.ENCOUNTER,
+        until=When.ENCOUNTER, dtype=c.element(),
         when=lambda ctx: ctx.get("power") == "f2023b",
     )
 
@@ -248,7 +248,7 @@ def f3431(c: Cast) -> None:
 
 
 @power("f1163", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.ignore_resistance()",))
+       reach=PERSONAL, target=SELF)
 def f1163(c: Cast) -> None:
     """"The first time you become bloodied" is latched here rather than
     with `c.watch(once=True)`: that spends itself on the first `Bloodied`
@@ -256,11 +256,21 @@ def f1163(c: Cast) -> None:
 
     A plain "+1 bonus" prints no type word, so no `kind=`.
 
-    The breath weapon half is dropped. `resolve.damage` reads
-    `Defences.resist` and nothing lets an attacker step around it -- the
-    same sentence `cf:sorcerer-soul-pierce` is already blocked on.
+    The breath weapon half is one `c.ignore_resistance`, and two things
+    in it are read rather than written. The type is the build's own
+    element, which is what Dragon Soul records and `c.element` reads --
+    a build that recorded none leaves this half inert, which is right,
+    because the printed condition is the two types matching. The value
+    is the heroic 5 that the soul grants, the same number
+    `cf:sorcerer-f0s1` lays. p1448 is the breath weapon the card means.
     """
     me = c.me
+    element = c.element(on=me)
+    if element is not None:
+        c.ignore_resistance(
+            5, element, on=me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("power") == "p1448",
+        )
     done: list[bool] = []
 
     def on_blood(ev: Bloodied) -> None:

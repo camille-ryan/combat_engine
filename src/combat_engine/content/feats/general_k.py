@@ -192,19 +192,22 @@ def _primal(ctx: dict[str, Any]) -> bool:
     return p is not None and Keyword.PRIMAL in p.keywords
 
 
-@power("f1675", level=1, cls="", usage=ENCOUNTER,
+@power("f1675", level=1, cls="", usage=AT_WILL,
        action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL, target=NO_TARGET,
        trigger="you are subjected to an effect that a save can end",
        on=Trigger(EffectApplied, lambda w, me, ev: (
            ev.target == me and ev.save_ends
        ), "you are subjected to a save-ends effect"),
-       dropped=("c.expend_row()",))
+       )
 def f1675(c: Cast) -> None:
-    """Buys an immediate saving throw at +5 by spending p2475. The throw
-    is the half that plays; spending a row the character owns has no
-    verb, so the cost is dropped rather than faked -- which makes this
-    row free where the card charges for it."""
-    c.save(on=c.me, bonus=5)
+    """Buys an immediate saving throw at +5 by spending p2475.
+    `c.expend_row` charges it: the use goes and p2475's own body never
+    runs, which is the printed "instead of gaining the normal effect".
+
+    The cap is therefore p2475's single use rather than a stand-in on
+    this row, so the header is `AT_WILL`."""
+    if c.expend_row("p2475"):
+        c.save(on=c.me, bonus=5)
 
 
 @power("f1676", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -340,11 +343,22 @@ def f1859(c: Cast) -> None:
 # -- racial powers and traits named only in prose ---------------------------
 
 
-@power("f1670", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_resistance()",))
+@power("f1670", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your p8278 racial power",
+       on=Trigger(PowerUsed,
+                  lambda w, me, ev: ev.actor == me and ev.power == "p8278",
+                  "you use that racial power"))
 def f1670(c: Cast) -> None:
-    """Insubstantial is the halving sibling of resistance and is read in
-    the same place; neither can be bypassed by an attacker today."""
+    """Insubstantial is the halving sibling of resistance, read a few
+    lines above it and off the same attacker now.
+
+    "An attack with which you deal the necrotic damage from p8278" is
+    that power's own rider, which is a one-shot laid until the end of
+    your next turn -- so this rides for the same window rather than
+    trying to spot the blow it lands on. AT_WILL because a triggered
+    trait spends a use each firing and no limit is printed."""
+    c.ignore_resistance(0, on=c.me, until=When.EONT, insubstantial=True)
 
 
 @power("f1674", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -408,20 +422,21 @@ def f1832(c: Cast) -> None:
 
 
 @power("f1835", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.use_power()",),
+       reach=PERSONAL, target=SELF,
        trigger="the first time you are bloodied",
        on=Trigger(Bloodied, lambda w, me, ev: ev.actor == me,
                   "you are bloodied"))
 def f1835(c: Cast) -> None:
-    """Hands p1449 back on being bloodied. `usage=ENCOUNTER` is the
-    printed "first time during an encounter": a triggered trait spends a
-    use each firing, so the limit is the header rather than a counter.
+    """Uses p1449 on being bloodied. `usage=ENCOUNTER` is the printed
+    "first time during an encounter": a triggered trait spends a use
+    each firing, so the limit is the header rather than a counter.
 
-    Dropped: the card also *uses* the power then and there, as an
-    immediate reaction. Nothing has a row use another row, so what plays
-    is the use coming back -- the avenger's f1556 named the same gap.
+    `again=True` is the printed "even if you have already used it during
+    this encounter" -- and it is a *use*, not a restore: the card lends
+    one extra firing here and does not hand the power back for later,
+    which `c.restore_use` would have done.
     """
-    c.restore_use("p1449", on=c.me)
+    c.use_power("p1449", again=True)
 
 
 @power("f1836", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -926,18 +941,23 @@ def f1850(c: Cast) -> None:
 
 
 @power("f1870", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(dtype=)",))
+       reach=PERSONAL, target=SELF)
 def f1870(c: Cast) -> None:
     """Same shape as f1837: a trait whose once-per-encounter half is
     `once=True` on the watch. `dice=` on a bonus is the extra-damage-die
-    shape. The type is dropped -- a damage modifier carries a number and
-    no type, so the die lands untyped rather than as whatever the racial
-    power chose."""
+    shape.
+
+    "The type you initially chose for your p1448 racial power" is the
+    build's own element, which `c.element` is the reader for. A character
+    whose build recorded none leaves the die untyped, which is what it
+    was before there was anywhere to put a type."""
     me = c.me
+    element = c.element(on=me)
 
     def flare(ev: Any) -> None:
         if ev.actor == me:
-            c.bonus("damage", 0, dice="1d8", on=me, until=When.EONT)
+            c.bonus("damage", 0, dice="1d8", on=me, until=When.EONT,
+                    dtype=element)
 
     c.watch(Bloodied, flare, on=me, until=When.ENCOUNTER, once=True)
 
@@ -1266,18 +1286,21 @@ _granted("f1766", "f1766b", swap=Swap(9, Usage.DAILY))
        keywords=[Keyword.DIVINE, Keyword.HEALING, Keyword.RADIANT],
        trigger="you hit an enemy",
        on=Trigger(Hit, lambda w, me, ev: ev.attacker == me,
-                  "you hit an enemy"),
-       dropped=("c.bonus(dtype=)",))
+                  "you hit an enemy"))
 def f1766b(c: Cast) -> None:
-    """`c.grant_attack` takes a flat damage bonus, so the extra die is
-    rolled here and handed over as a number; its radiant type is the
-    clause that is dropped."""
+    """`c.grant_attack`'s own `damage_bonus` is a bare number with no type
+    to it, so the extra die is laid as a one-shot typed damage modifier on
+    the ally instead and the granted attack spends it. Same arithmetic,
+    and the radiant meets a radiant resistance the way it is printed to."""
     friend = c.target
     if friend is None:
         return
+    foe = c.trigger.target
     c.surge(on=friend)
-    c.grant_attack(friend, on=c.trigger.target, attack_bonus=2,
-                   damage_bonus=c.roll("1d10"))
+    c.bonus("damage", 0, dice="1d10", on=friend, until=When.EONT, once=True,
+            dtype=DamageType.RADIANT,
+            when=lambda ctx: ctx.get("target") == foe)
+    c.grant_attack(friend, on=foe, attack_bonus=2)
 
 
 _granted("f1767", "f1767b", swap=Swap(6, utility=True))
@@ -1398,12 +1421,19 @@ def f2041(c: Cast) -> None:
 
 
 @power("f1815", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.grant_row(uses=)",))
+       reach=PERSONAL, target=SELF)
 def f1815(c: Cast) -> None:
-    """The grant plays; the twice-per-encounter cap does not.
-    `c.grant_row` lends a row for a duration and takes no budget, so the
-    row is available as often as its own usage allows."""
-    c.grant_row("m5184a1", on=c.me, until=When.ENCOUNTER)
+    """The grant plays and the twice-per-encounter cap plays with it:
+    `c.grant_row` takes a budget now, counts the holder's uses off
+    `PowerUsed` and forbids the row when they run out. It is exactly
+    what this row needs -- the granted card is an at-will of its own,
+    so lent bare it was a free action available every turn rather than
+    twice a fight.
+
+    The ref is the one the spec prints. It used to point at a monster
+    ability, which was the nearest thing in the tree before the spec
+    carried an id for this clause."""
+    c.grant_row("p9400", on=c.me, until=When.ENCOUNTER, uses=2)
 
 
 # -- not a fight ------------------------------------------------------------

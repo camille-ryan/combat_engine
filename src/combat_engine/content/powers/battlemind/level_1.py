@@ -16,6 +16,7 @@ from combat_engine.engine import (
     REF,
     STANDARD,
     Attack,
+    Augment,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -106,11 +107,18 @@ def p11156(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_WEAPON,
     attack=Attack(CON, vs=AC),
+    augments=(
+        Augment(1, reach=Melee(2)),
+        Augment(2, reach=CloseBlast(3), target=EACH_ENEMY),
+    ),
 )
 def p11157(c: Cast) -> None:
-    """Neither augment is written: Augment 1 lengthens the row's reach for
-    that attack and Augment 2 makes it a close blast, and both are the
-    header, measured before the body is called."""
+    """Both augments are the header and neither is a body clause: Augment 1
+    lengthens the reach by a square for that attack, Augment 2 swaps the
+    swing for a close blast against each enemy in it. Reach and the target
+    line are both measured before the body is called, so both are declared
+    and the spend is settled above targeting. Neither prints a Hit line of
+    its own, so the swing below is the whole of all three forms."""
     if c.strike():
         c.damage(c.w(), c.con_mod)
         c.push(1)
@@ -184,21 +192,31 @@ def p11160(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FORCE],
     attack=Attack(CON, vs=AC),
+    augments=(
+        Augment(1, reach=CloseBurst(3)),
+        Augment(2),
+    ),
 )
 def p12419(c: Cast) -> None:
     """Augment 2 knocks the target prone and leaves the blast alone.
-    Augment 1 swaps the blast for a close burst and is left out."""
-    spent = augment(c, 2)
+
+    Augment 1 swaps the blast for a close burst 3, which is the header, so
+    it is declared there -- and it also shoves **one** enemy rather than
+    each, which is the one place the two forms disagree below."""
+    spent = augment(c, 1, 2)
     if not c.strike():
         return
     c.damage(c.w(), c.con_mod, dtype=DamageType.FORCE)
-    if spent:
+    if spent == 2:
         c.prone()
-    blast = c.area()
-    caught = c.in_squares(blast, side="enemy") if blast else c.within(3, side="enemy")
-    for other in caught:
-        if other != c.target:
-            c.push(1 + c.cha_mod, on=other)
+    area = c.area()
+    caught = c.in_squares(area, side="enemy") if area else c.within(3, side="enemy")
+    others = [o for o in caught if o != c.target]
+    if spent == 1:
+        one = c.choose(sorted(others), "who is shoved") if others else None
+        others = [one] if one is not None else []
+    for other in others:
+        c.push(1 + c.cha_mod, on=other)
 
 
 @power(
@@ -272,17 +290,29 @@ def p13025(c: Cast) -> None:
     target=UpTo(2),
     keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.PSYCHIC],
     attack=Attack(CON, vs=AC),
+    augments=(
+        Augment(1),
+        Augment(2, reach=CloseBurst(1), target=EACH_ENEMY),
+    ),
 )
 def p13027(c: Cast) -> None:
-    """Augment 1 marks one enemy standing beside the target as well. Augment 2
-    makes the row a close burst and is left out."""
-    spent = augment(c, 1)
+    """Augment 1 marks one enemy standing beside the target as well.
+
+    Augment 2 is a close burst against each enemy, which is a target line
+    and is therefore declared in the header. Its Hit is a full 1[W]
+    whatever the burst caught -- the base card's "1[W] extra if you target
+    only one creature" is a rule about the base card's *two* targets and is
+    not printed under Augment 2 -- and it adds a -2 to attack rolls beside
+    the mark."""
+    spent = augment(c, 1, 2)
     victim = c.target
     if c.strike():
-        alone = len(c.targets) == 1
+        alone = len(c.targets) == 1 or spent == 2
         c.damage(c.w() if alone else 0, c.con_mod, dtype=DamageType.PSYCHIC)
         c.mark(until=When.EONT)
-        if spent and victim is not None:
+        if spent == 2:
+            c.penalty("attack", 2, until=When.EONT)
+        if spent == 1 and victim is not None:
             beside = [
                 f for f in c.within(1, of=victim, side="enemy")
                 if f != victim and f not in c.targets
@@ -489,13 +519,30 @@ def p2621(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_WEAPON,
     attack=Attack(CON, vs=AC),
+    augments=(
+        Augment(1),
+        Augment(2, reach=CloseBurst(1), target=EACH_ENEMY),
+    ),
 )
 def p2622(c: Cast) -> None:
-    """Neither augment is written. Augment 1 pays extra damage on a later use
-    of the battlemind's own class-feature attack, and that row is named in
-    prose with no ref beside it, so there is nothing to watch for. Augment 2
-    turns the row into a close burst, which is a header the body cannot
-    rewrite."""
+    """Augment 2 is a close burst against each enemy you can see, which is a
+    header line, so it is declared as one and the swing below is the whole
+    of both forms.
+
+    Augment 1 is an Effect, so it is armed whether or not the swing lands,
+    and it waits on a **later** use of the class-feature attack the card
+    names by ref. It is hung on `Hit` rather than `PowerUsed` because the
+    payment is extra damage to whoever that attack hits, and `PowerUsed` is
+    announced before the body has chosen anything."""
+    spent = augment(c, 1, 2)
+    if spent == 1 and c.first:
+        me = c.me
+
+        def rider(ev: Hit) -> None:
+            if ev.attacker == me and getattr(ev, "power", "") == "p10440":
+                c.flat(c.cha_mod, on=ev.target)
+
+        c.watch(Hit, rider, until=When.EONT, label=c.ref)
     if c.strike():
         c.damage(c.w(), c.con_mod)
         c.mark(until=When.EONT)

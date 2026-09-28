@@ -626,20 +626,49 @@ def f2476(c: Cast) -> None:
 # -- the racial riders ------------------------------------------------------
 
 
-@power("f2401", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACIAL)
+@power("f2401", level=1, cls="", usage=AT_WILL, action=ActionType.FREE,
+       reach=PERSONAL, target=SELF)
 def f2401(c: Cast) -> None:
-    """Spends a racial power to mark your neighbours instead. The mark is
-    ordinary; the power is named in prose with no ref, and nothing
-    expends a row on another row's say-so."""
+    """Spends `p7546` to mark your neighbours instead. Both halves are
+    sayable now: the spec gives the ref, and `c.expend_row` takes the
+    use without running the row -- which *is* the printed "this effect
+    replaces the power's normal effect".
+
+    The enemies are gathered by hand rather than declared as the
+    header's targets, because the payment has to happen once for the
+    whole row and a target-shaped header runs the body once each."""
+    if not c.expend_row("p7546"):
+        return
+    for foe in c.within(1, side="enemy"):
+        c.mark(on=foe, until=When.EONT)
 
 
-@power("f2404", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.use_power()",))
+@power("f2404", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.no_provoke(when=)",),
+       trigger="you hit a creature marked by you with a melee attack",
+       on=Trigger(Hit, lambda w, me, ev: ev.attacker == me,
+                  "you hit with an attack"))
 def f2404(c: Cast) -> None:
-    """Uses `p1831` as a free action after hitting a marked creature. The
-    power is a ref and the trigger is ordinary -- what is missing is a
-    row using another row, which eleven item blocks also want."""
+    """Uses `p1831` as a free action after hitting a marked creature.
+
+    "Marked by you" and "melee" are both asked in the body rather than
+    in the predicate: the mark is a relation the `Cast` can read
+    directly, and `Hit` carries only the ref, so the reach comes off the
+    row in the registry.
+
+    Dropped: "using p1831 in this way doesn't provoke opportunity
+    attacks" -- `c.no_provoke` takes no `when=`, and a blanket one would
+    cover every use of the power rather than this one."""
+    from combat_engine.engine import get as _get
+
+    ev = c.trigger
+    row = _get(getattr(ev, "power", ""))
+    if row is None or row.reach_of(0).kind != "melee":
+        return
+    victim = getattr(ev, "target", None)
+    if victim is None or not c.marked(on=victim, by=c.me):
+        return
+    c.use_power("p1831", on=victim)
 
 
 @power("f2409", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -673,11 +702,14 @@ def f2438(c: Cast) -> None:
 
 @power("f2448", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_miss_all()", "c.expend_row()"))
+       todo=("c.on_miss_all()", "m4421a6"))
 def f2448(c: Cast) -> None:
-    """Spends `m4421a6` to reroll every attack roll of a power that
-    missed everything. `Miss` is announced per target and says nothing
-    about the others, and nothing spends a row to pay for a rider."""
+    """Spends the racial power to reroll every attack roll of a power
+    that missed everything. Re-aimed on both halves: `c.expend_row`
+    charges a row from outside it now, so the price is not the hold --
+    but `m4421a6` is not declared anywhere in the tree, so there is
+    nothing to charge, and `Miss` is still announced per target and
+    says nothing about the others."""
 
 
 @power("f2456", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -699,11 +731,13 @@ def f2456(c: Cast) -> None:
 
 
 @power("f2472", level=1, cls="", usage=ENCOUNTER, action=ActionType.MINOR,
-       reach=Ranged(10), target=ONE_CREATURE, todo=RACIAL)
+       reach=Ranged(10), target=ONE_CREATURE, todo=("c.racial_row()",))
 def f2472(c: Cast) -> None:
     """A minor action rather than a trait, which is what the card prints.
-    The mark and the range are ordinary; the cost is expending a cantrip
-    a racial trait grants, and the trait is named in prose."""
+    The mark and the range are ordinary, and `c.expend_row` would charge
+    the price -- re-aimed off that half. What is left is the row to
+    charge: the cantrip is granted by `rt:r20-master-trickster` and the
+    grant names it in prose, so there is no ref to expend."""
 
 
 @power("f2475", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

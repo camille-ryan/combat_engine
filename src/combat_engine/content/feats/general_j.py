@@ -117,7 +117,11 @@ RETYPE = ("c.deals(ref=)",)
 #: is built, not on a board with the gear already in hand.
 PROFICIENCY = ("chargen.proficiency()",)
 #: A power named in prose with no ref, so there is nothing to hand over.
-BORROW = ("c.borrow_feature()",)
+#: What is left of the old `c.borrow_feature()` group here: handing a
+#: feature over is `c.grant_row` and choosing among a class's rows is
+#: `c.borrow_row`, so the rows still stuck are the ones whose card names
+#: its powers by name and gives no id for any of them.
+BORROW = ("spec.power_ref()",)
 
 
 # -- shared machinery -------------------------------------------------------
@@ -578,26 +582,29 @@ _granted("f1464", "f1464b")
 
 @power("f1464b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=Ranged(10), target=ONE_CREATURE, keywords=DIVINE,
-       group=CHANNEL_DIVINITY, dropped=("c.ignore_resistance()",))
+       group=CHANNEL_DIVINITY)
 def f1464b(c: Cast) -> None:
-    """Your own vulnerability is the price and is not optional. Dropped:
-    stripping a resistance the target already has -- nothing takes one
-    away, only ignores it for one attacker."""
-    from combat_engine.engine.components import Defences
+    """Your own vulnerability is the price and is not optional.
 
-    for dtype in (DamageType.LIGHTNING, DamageType.THUNDER):
+    The target's side is an either/or: no resistance and it gains the
+    vulnerability, some and it loses that instead. Losing it is a
+    negative `c.resist` -- the one case `c.resist` stays arithmetic
+    rather than taking the highest -- for exactly what is standing, read
+    off `c.resistances`, so the hold puts it back when it ends."""
+    both_types = (DamageType.LIGHTNING, DamageType.THUNDER)
+    for dtype in both_types:
         c.vulnerable(5, dtype, on=c.me, until=When.EONT)
     foe = c.target
     if foe is None:
         return
-    defences = c.world.get(foe, Defences)
-    resists = any(
-        (defences.resist.get(d, 0) if defences is not None else 0) > 0
-        for d in (DamageType.LIGHTNING, DamageType.THUNDER)
-    )
-    if not resists:
-        for dtype in (DamageType.LIGHTNING, DamageType.THUNDER):
+    standing = c.resistances(on=foe)
+    held = {d: standing[d] for d in both_types if standing.get(d, 0) > 0}
+    if not held:
+        for dtype in both_types:
             c.vulnerable(5, dtype, on=foe, until=When.EONT)
+        return
+    for dtype, amount in held.items():
+        c.resist(-amount, dtype, on=foe, until=When.EONT)
 
 
 _granted("f1466", "f1466b")
@@ -988,14 +995,26 @@ def f1545(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=BORROW)
 def f1552(c: Cast) -> None:
     """Swaps between a chosen at-will of another class and the one a
-    racial feature already granted. Neither is named by ref."""
+    racial feature already granted.
+
+    Re-aimed rather than written. The chosen half alone is
+    `c.borrow_row`, but the card is an **exclusive** pair -- either that
+    power or the racial one each encounter, never both -- and the racial
+    power is named in prose with no ref, so there is nothing to make the
+    other half exclusive with. Writing the grant alone would hand out a
+    second encounter power the card does not give."""
 
 
 @power("f1557", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=BORROW)
 def f1557(c: Cast) -> None:
-    """Adds a chosen channel divinity power of another class. The choice
-    is made when the character is built and records no ref."""
+    """Adds a chosen channel divinity power of another class.
+
+    Re-aimed. `c.borrow_row` reads a set off the registry by class,
+    level and usage, and this set is none of those: the four channel
+    divinity features are declared but none of them deals a card of its
+    own, so "a power available as a class feature for that class" names
+    an empty set. The powers exist only as names in the brief."""
 
 
 @power("f1561", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1017,36 +1036,67 @@ def f1561(c: Cast) -> None:
 
 
 @power("f1622", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF, dropped=BORROW)
 def f1622(c: Cast) -> None:
-    """Hands over two named channel divinity powers of another class.
-    Both are named in prose and neither has a ref, so `c.grant_row` has
-    nothing to hand over."""
+    """Two channel divinity powers of another class, and the standing
+    that comes with them.
+
+    The second half is writable now and is the half with teeth: "if you
+    do not already have the class feature, you are considered to have
+    it" is exactly `c.grant_row`, which returns `None` when the creature
+    already knows the row rather than handing it twice. That is what
+    every later divinity feat's prerequisite reads.
+
+    Dropped: the two powers themselves, which the card names and gives
+    no ref for."""
+    c.grant_row("cf:cleric-templar-f0", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1623", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF, dropped=BORROW)
 def f1623(c: Cast) -> None:
-    """Same shape as f1622, on another class's pair."""
+    """Same shape as f1622, on another class's pair: the standing is
+    handed over and the two named powers are dropped."""
+    c.grant_row("cf:invoker-f0", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1624", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF, dropped=BORROW)
 def f1624(c: Cast) -> None:
-    """Same shape as f1622, on another class's pair."""
+    """Same shape as f1622, on another class's pair: the standing is
+    handed over and the two named powers are dropped."""
+    c.grant_row("cf:paladin-f0", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1625", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF, dropped=BORROW)
 def f1625(c: Cast) -> None:
-    """Same shape as f1622, on another class's pair."""
+    """Same shape as f1622, on another class's pair: the standing is
+    handed over and the two named powers are dropped."""
+    c.grant_row("cf:avenger-f2", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1627", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF, dropped=BORROW)
 def f1627(c: Cast) -> None:
-    """One chosen channel divinity power of another class. Same missing
-    ref as f1622, plus a choice nothing records."""
+    """One chosen channel divinity power of another class, and the same
+    standing as f1622.
+
+    The card offers a choice of four features and names no leg to read
+    it off, so it goes to the decider like any other choice the sheet
+    does not record. Dropped: the chosen power, which is a name with no
+    ref -- none of the four features deals a card."""
+    among = [
+        "cf:avenger-f2",
+        "cf:cleric-templar-f0",
+        "cf:invoker-f0",
+        "cf:paladin-f0",
+    ]
+    held = [ref for ref in among if not c.feat(ref, on=c.me)]
+    if held:
+        taken = c.choose(held, c.ref)
+        if taken:
+            c.grant_row(taken, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1628", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1079,11 +1129,13 @@ def f1630(c: Cast) -> None:
 
 
 @power("f1631", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW,
+       reach=PERSONAL, target=SELF,
        proficiency=("w:holy-symbol",))
 def f1631(c: Cast) -> None:
-    """The same shape as f1630 with the power named in prose instead of
-    by ref, which is the whole difference between the two."""
+    """The same shape as f1630, and the spec names the power by ref now,
+    which was the whole difference between the two. The granted row is a
+    daily of its own, so it carries the printed once-a-day limit."""
+    c.grant_row("p7240", on=c.me, until=When.ENCOUNTER)
 
 
 # -- the r47 run ------------------------------------------------------------
