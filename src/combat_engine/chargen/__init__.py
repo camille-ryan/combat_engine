@@ -389,11 +389,21 @@ def _abilities(printed: str) -> list[Ability]:
     return found or [STR]
 
 
+#: The standard array, **before any racial bonus**. 16 is the top, and a race
+#: raising the primary takes it to 18 for a +4.
+#:
+#: A class page prints its recommended array *after* the racial bonus -- an 18
+#: at the top -- and those numbers were being used as the base while `spawn`
+#: then added the racial +2 on top of them. A fighter of a Strength race came
+#: out with **20**, a +5, one point of attack and one of damage above what the
+#: game allows at first level, on every character that had ever been dealt.
+STANDARD_ARRAY = (16, 14, 14, 13, 10, 8)
+
+
 def _spread(order: list[Ability]) -> dict[Ability, int]:
     """The standard array, best score to the class's first-named ability."""
-    array = [18, 14, 13, 12, 10, 8]
     rest = [a for a in Ability if a not in order]
-    return dict(zip([*order, *rest], array, strict=False))
+    return dict(zip([*order, *rest], STANDARD_ARRAY, strict=False))
 
 
 #: A class's fork, as its own page draws it.
@@ -742,12 +752,17 @@ def build_of(cls: str, name: str = "") -> Build:
 def scores_for(line: ClassLine, build: Build) -> dict[Ability, int]:
     """The class's own numbers, rearranged so the build's leg is the good one.
 
-    The values are the ones read off the class page and are not invented
-    here; what the build changes is *which ability gets which*. A battle
-    cleric and a devoted cleric are the same six numbers in a different
-    order, which is exactly what picking a leg means.
+    What the build changes is *which ability gets which*. A battle cleric and
+    a devoted cleric are the same six numbers in a different order, which is
+    exactly what picking a leg means.
+
+    **The class page's own numbers give the order, not the values.** The page
+    prints its recommendation with the racial bonus already in it -- an 18 at
+    the top -- so using them as a base and then adding the race again made a
+    20. The ranking is what the page is really saying, and `STANDARD_ARRAY`
+    supplies the values a character actually buys.
     """
-    values = sorted(line.scores.values(), reverse=True)
+    values = list(STANDARD_ARRAY)
     out: dict[Ability, int] = {}
     ordered = [build.primary, build.secondary]
     ordered += [a for a in line.scores if a not in ordered]
