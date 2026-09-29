@@ -50,6 +50,7 @@ from combat_engine.engine import (
     STANDARD,
     WILL,
     ActionType,
+    Attack,
     AttackDeclared,
     Bloodied,
     Cast,
@@ -67,7 +68,9 @@ from combat_engine.engine import (
     Miss,
     Moved,
     MoveEnd,
+    Pick,
     Powers,
+    PowerUsed,
     Ranged,
     RoundStart,
     SkillCheck,
@@ -86,6 +89,7 @@ from combat_engine.engine import (
     by_melee,
     by_ranged,
     distance,
+    get,
     my_check,
     power,
     query,
@@ -149,12 +153,38 @@ def _spent_encounter_attacks(c: Cast, cap: int = 30) -> list[str]:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.THUNDER],
-    todo=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=AC),
 )
 def p12258(c: Cast) -> None:
-    """The attack line is "Primary ability vs. AC" and the mark hangs off the
-    hit, so there is no half of this row that stands without the ability."""
-    ...
+    """Thunder on a hit, and a mark that punishes being ignored.
+
+    **The mark is an Effect, not a Hit clause**, so it lands whether or not
+    the attack did -- the stub's docstring said it hung off the hit, which
+    the card does not.
+
+    The punish watches `PowerUsed` rather than `AttackDeclared`, and that is
+    the whole of the care here. An attack is announced **once per target**,
+    so a burst that leaves the marker out would pay the 5 thunder once for
+    every creature it did catch; `leaves_me_out` exists because two marks
+    had that bug the other way round. `PowerUsed` fires once per use and
+    carries the whole target list, which is the question the card asks.
+    """
+    if c.strike():
+        c.damage(c.w(1), c.attack_mod, dtype=DamageType.THUNDER)
+    foe = c.target
+    if foe is None:
+        return
+    c.mark(until=When.EONT)
+
+    def ignored(ev: PowerUsed) -> None:
+        if ev.actor != foe or c.me in (ev.targets or ()):
+            return
+        row = get(ev.power)
+        if row is None or not row.is_attack:
+            return
+        c.flat(5, on=foe, dtype=DamageType.THUNDER)
+
+    c.watch(PowerUsed, ignored, until=When.EONT, on=foe, label=c.ref)
 
 
 @power(
