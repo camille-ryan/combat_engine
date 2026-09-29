@@ -1387,24 +1387,75 @@ OUT_OF_COMBAT: dict[str, str] = {
     "p95": "warlock (pink)",
 }
 
+#: The classes a guide has actually been read for. Everything else is
+#: unrated for the plainest possible reason: nobody has written it down
+#: here yet.
+GUIDED_CLASSES: frozenset[str] = frozenset({
+    "warlock",
+    "wizard",
+})
 
-def rating(ref: str, cls: str = "") -> float:
-    """What a guide thinks of this option for this class.
 
-    `UNRATED` when nobody rated it, and also when the only ratings on
-    file are for other classes -- a wizard guide's opinion of a race says
-    nothing about that race for a fighter, and borrowing it would be
-    worse than admitting ignorance.
+def rating(ref: str, cls: str = "") -> float | None:
+    """What a guide thinks of this option for this class, or None.
+
+    **None means unrated, and unrated is not a low score.** It is absent
+    evidence. Returned rather than a number so a caller cannot read a
+    placeholder as a measurement by accident -- use `score()` if a float
+    is genuinely needed.
+
+    Also None when the only opinions on file belong to other classes: a
+    wizard guide's view of a race says nothing about that race for a
+    fighter, and borrowing it is worse than admitting ignorance.
     """
     per = RATINGS.get(ref)
     if not per:
-        return UNRATED
+        return None
     if cls and cls in per:
         return per[cls]
-    if len(per) == 1:
-        # One opinion, and for a power the class is implied by the row.
+    if len(per) == 1 and not cls:
         return next(iter(per.values()))
-    return UNRATED
+    return None
+
+
+def rated(ref: str, cls: str = "") -> bool:
+    """Did a guide actually say something about this, for this class."""
+    return rating(ref, cls) is not None
+
+
+def score(ref: str, cls: str = "") -> float:
+    """A number for callers that must have one. `UNRATED` when unrated.
+
+    The placeholder sits just below rated-average because a guide's
+    silence is weaker evidence than a guide's "average". It is **not** a
+    verdict, and a scorer that can omit a term instead should prefer to:
+    ask `rated()` first and leave the feature absent.
+    """
+    got = rating(ref, cls)
+    return UNRATED if got is None else got
+
+
+def why(ref: str, cls: str = "") -> str:
+    """Why this is unrated, in words, so a false signal can be spotted.
+
+    * `"rated"` -- a guide for this class rated it.
+    * `"no guide for this class"` -- much the commonest, and carries no
+      information whatever about the option.
+    * `"rated for another class only"` -- an opinion exists and does not
+      transfer.
+    * `"unmentioned"` -- a guide for this class exists and did not name it.
+      **Still not a negative.** The first guide read rated 136 of 3,501
+      feats; it did not consider and reject the other 3,365. Silence means
+      the author wrote about something else, or the option postdates the
+      guide, or their table bans the source.
+    """
+    if rated(ref, cls):
+        return "rated"
+    if cls and cls not in GUIDED_CLASSES:
+        return "no guide for this class"
+    if RATINGS.get(ref):
+        return "rated for another class only"
+    return "unmentioned"
 
 
 def spread(ref: str) -> float:

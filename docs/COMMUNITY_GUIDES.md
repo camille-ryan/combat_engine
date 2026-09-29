@@ -45,8 +45,37 @@ so a number can be argued with rather than trusted.
 | purple | outclassed, or only situationally good | 1.5 |
 | red | do not take this | 0.0 |
 
-Unrated sits just below rated-average on purpose: a guide's silence is weaker
-evidence than a guide's "average", and it is not evidence of badness.
+## Unrated is absent evidence, not a low score
+
+The number matters less than the marking. `rating(ref, cls)` returns **`None`**
+when nobody rated it, and `why(ref, cls)` says which kind of silence it is:
+
+| answer | what it means |
+|---|---|
+| `rated` | a guide for this class said something |
+| `no guide for this class` | by far the commonest, and carries **no** information about the option |
+| `rated for another class only` | an opinion exists and does not transfer |
+| `unmentioned` | a guide for this class exists and did not name it |
+
+`score()` exists for callers that must have a float and returns `UNRATED` (2.5),
+just below rated-average — but it is a placeholder, not a verdict. A scorer that
+can omit a term should ask `rated()` first and leave the feature absent, so other
+terms decide rather than a made-up number competing with them.
+
+**Even `unmentioned` is not a negative**, and the measurement says why: the first
+guide read rated **136 of 3,501 feats**. It did not consider and reject the other
+3,365. Silence means the author was writing about something else, or the option
+postdates the guide, or their table bans the source.
+
+A book-scope heuristic was tried and abandoned for the same reason. Deriving each
+guide's scope from the books it demonstrably rated from separates almost nothing
+for powers — 100% and 97% of the two classes' powers come from books their guide
+rated from — and for feats it leaves 2,033 "in scope but unmentioned", which a
+guide that discussed 136 plainly never weighed. Scope was the wrong mechanism;
+honesty about ignorance is the right one.
+
+Two classes have a guide so far, so for the other twenty every answer is `no
+guide for this class`. `GUIDED_CLASSES` is what a caller checks.
 
 **Black is bold with no colour on it.** The first pass here walked colour spans
 and reported zero blacks, and concluded the tier was unextractable. That was
