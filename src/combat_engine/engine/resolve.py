@@ -244,8 +244,17 @@ def attack(
         # high-crit weapons and on solos, and the number was hard-coded in
         # both of the places it is decided.
         floor = 20 - _mods(world, attacker, "crit_range", ctx)
-        result.critical = natural >= floor
-        result.hit = result.critical or (natural != 1 and total >= against)
+        # **A high roll is not enough on its own.** "If you land a natural 20,
+        # *and* the total of your attack roll is high enough to hit the
+        # target's defence, it's a critical hit" -- so the die opens the door
+        # and the total still has to walk through it. Without the second half
+        # a 20 that fell fourteen short of an AC was dealing maximum damage,
+        # and against anything far above its level a creature was critting on
+        # every 20 no matter how hopeless the swing.
+        #
+        # The **hit** is a separate question and is unchanged: a 20 hits.
+        result.critical = natural >= floor and total >= against
+        result.hit = natural >= floor or (natural != 1 and total >= against)
 
         rolled = AttackRolled(
             attacker=attacker,
@@ -307,8 +316,11 @@ def attack(
         # the locals threw the new number away and judged the old one. Every
         # reroll row in the tree was inert.
         floor = 20 - _mods(world, attacker, "crit_range", ctx)
-        result.critical = result.natural >= floor
-        result.hit = result.forced or result.critical or (
+        # See the window above: the natural opens the door, the total has to
+        # reach the defence. `forced` hits without rolling well and so is not
+        # a critical either.
+        result.critical = result.natural >= floor and result.total >= against
+        result.hit = result.forced or result.natural >= floor or (
             result.natural != 1 and result.total >= against
         )
 
