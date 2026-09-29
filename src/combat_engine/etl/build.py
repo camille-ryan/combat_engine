@@ -127,7 +127,26 @@ CREATE TABLE build_power (
 );
 
 CREATE TABLE class_feature (
-  ref TEXT PRIMARY KEY, class TEXT, ord INTEGER, build TEXT, spec TEXT
+  ref TEXT PRIMARY KEY, class TEXT, ord INTEGER, build TEXT, spec TEXT,
+  -- The `power` row this card **reprints**, where it reprints one.
+  --
+  -- A class-feature section prints the full card of the power the feature
+  -- grants, and `_card_row` reads it with the same `sanitise.power_spec` the
+  -- `power` table uses -- so the output is byte-identical and 74 of the 94
+  -- cards are a second ref for a row that already had one.
+  -- `cf:ardent-f1` says "You gain the p10273 power" and `cf:ardent-f1c0`
+  -- **is** p10273.
+  --
+  -- Recorded rather than skipped, and the refs are never renumbered: 25
+  -- `cf:...c<N>` refs are cited across the tree and docs, and
+  -- `_sub_features` already records that renumbering once "moved
+  -- `cf:rogue-scoundrel-f4` under somebody else's feet". The 20 cards with
+  -- no match are the genuine feature powers -- Hunter's Quarry, Wild Shape,
+  -- Lay On Hands, Oath of Enmity, Warlock's Curse -- and they keep theirs.
+  --
+  -- NULL means "this card is its own row". Authors should write the `p` ref
+  -- where one is named here.
+  duplicate_of TEXT
 );
 CREATE INDEX class_feature_class ON class_feature(class, ord);
 
@@ -742,8 +761,12 @@ def _feature_row(
     spec = " ".join(_text(body).split())
     if len(spec) < 20:
         return 0
+    # `duplicate_of` is NULL here on purpose: this is the prose branch --
+    # a feature or sub-option read with the flattener -- and only a *card*,
+    # read in the power dialect by `_card_row`, can be byte-identical to a
+    # `power` row.
     out.execute(
-        "INSERT OR REPLACE INTO class_feature VALUES (?,?,?,?,?)",
+        "INSERT OR REPLACE INTO class_feature VALUES (?,?,?,?,?,NULL)",
         (ref, cls, ord_, build, spec),
     )
     names[ref] = {"name": name}
@@ -824,11 +847,36 @@ def _card_row(
     if len(spec) < 20:
         return 0
     out.execute(
-        "INSERT OR REPLACE INTO class_feature VALUES (?,?,?,?,?)",
-        (ref, cls, ord_, build, spec),
+        "INSERT OR REPLACE INTO class_feature VALUES (?,?,?,?,?,?)",
+        (ref, cls, ord_, build, spec, _reprint_of(out, spec)),
     )
     names[ref] = {"name": name, "flavour": sanitise.flavour(fragment)}
     return 1
+
+
+#: `spec` -> `power.ref`, built once. Rebuilt per connection, because the
+#: build makes a fresh one.
+_BY_SPEC: dict[int, dict[str, str]] = {}
+
+
+def _reprint_of(out: sqlite3.Connection, spec: str) -> str | None:
+    """The `power` row this card is byte-identical to, if any.
+
+    **Exact match only.** Nine more cards agree with a power row on their
+    first eighty characters and diverge after; those are a tail for somebody
+    to read, not to alias automatically -- a card that has been edited is a
+    different card. Matching on *name* would be worse still, since a feature
+    and the power it grants routinely share one.
+    """
+    table = _BY_SPEC.get(id(out))
+    if table is None:
+        table = {}
+        for pref, pspec in out.execute("SELECT ref, spec FROM power"):
+            key = (pspec or "").strip()
+            if key:
+                table.setdefault(key, pref)
+        _BY_SPEC[id(out)] = table
+    return table.get((spec or "").strip())
 
 
 def _plain(fragment: str) -> str:
