@@ -109,7 +109,8 @@ def spawn(world: World, ref: str, square: tuple[int, int], *, team: Team = Team.
     known = stock.declared
     printed = world.scaling.printed_monster(row["level"])
     eid = world.spawn(
-        Ident(ref=ref, book=row["book"] or ""),
+        Ident(ref=ref, book=row["book"] or "",
+              role=(row["role"] or "").strip().lower()),
         Position(square=square, size=SIZES.get(row["size"], Size.MEDIUM)),
         Side(team=team),
         Stats(level=row["level"], scores=scores),

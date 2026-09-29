@@ -91,6 +91,15 @@ class ClassLine:
     #: How many rows a slot holds in the spellbook -- what a wizard owns
     #: per prepared power. 0 for a class that prepares nothing.
     spellbook: int = 0
+    #: What the class is *for*: defender, striker, leader or controller.
+    #: Off the compendium, which carries it on every one of the 25 classes --
+    #: 5 defenders, 8 strikers, 7 leaders, 5 controllers -- and `SELECT *`
+    #: was already fetching the column and dropping it on the floor.
+    #:
+    #: The monster half of the same idea is `Monster.role` (artillery, brute,
+    #: soldier and the rest), and the pair is what lets either side ask "which
+    #: of them is dangerous" instead of only "which of them is hurt".
+    role: str = ""
 
     @property
     def armour_bonus(self) -> int:
@@ -129,23 +138,28 @@ CLASSES: dict[str, ClassLine] = {
     "fighter": ClassLine(
         "fighter", 15, 6, 9, {"fort": 2}, "scale", 2, (LONGSWORD,), STR,
         {STR: 18, CON: 14, DEX: 13, INT: 10, WIS: 12, CHA: 8},
+        role="defender",
     ),
     "cleric": ClassLine(
         "cleric", 12, 5, 7, {"will": 2}, "chain", 0, (MACE, HOLY_SYMBOL), WIS,
         {STR: 14, CON: 13, DEX: 10, INT: 8, WIS: 18, CHA: 12},
+        role="leader",
     ),
     "rogue": ClassLine(
         "rogue", 12, 5, 6, {"ref": 2}, "leather", 0, (DAGGER, CROSSBOW), DEX,
         {STR: 12, CON: 13, DEX: 18, INT: 10, WIS: 8, CHA: 14},
+        role="striker",
     ),
     "wizard": ClassLine(
         "wizard", 10, 4, 6, {"will": 2}, "cloth", 0, (ORB,), INT,
         {STR: 10, CON: 13, DEX: 14, INT: 18, WIS: 12, CHA: 8},
+        role="controller",
     ),
     "paladin": ClassLine(
         "paladin", 15, 6, 10, {"fort": 1, "ref": 1, "will": 1}, "plate", 2,
         (LONGSWORD, HOLY_SYMBOL), STR,
         {STR: 16, CON: 13, DEX: 10, INT: 8, WIS: 12, CHA: 16},
+        role="defender",
     ),
     # Two blades and a bow. The two-weapon build is the one several of its
     # level 1 rows require outright, and a ranger carrying one sword could
@@ -154,14 +168,17 @@ CLASSES: dict[str, ClassLine] = {
         "ranger", 12, 5, 6, {"fort": 1, "ref": 1}, "leather", 0,
         (SHORTSWORD, SHORTSWORD, LONGBOW), DEX,
         {STR: 14, CON: 13, DEX: 18, INT: 8, WIS: 12, CHA: 10},
+        role="striker",
     ),
     "warlock": ClassLine(
         "warlock", 12, 5, 6, {"ref": 1, "will": 1}, "leather", 0, (ROD,), CHA,
         {STR: 10, CON: 14, DEX: 13, INT: 12, WIS: 8, CHA: 18},
+        role="striker",
     ),
     "warlord": ClassLine(
         "warlord", 12, 5, 7, {"fort": 1, "will": 1}, "chain", 1, (LONGSWORD,), STR,
         {STR: 18, CON: 12, DEX: 10, INT: 14, WIS: 8, CHA: 13},
+        role="leader",
     ),
 }
 
@@ -301,6 +318,7 @@ def _from_the_book() -> dict[str, ClassLine]:
             _arms(row["weapons"] or "", row["implements"] or ""),
             _abilities(row["abilities"] or "")[0],
             _spread(_abilities(row["abilities"] or "")),
+            role=(row["role"] or "").lower(),
         )
     return out
 
@@ -1866,7 +1884,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     speed = race.speed if race is not None else 6
 
     eid = world.spawn(
-        Ident(ref=who.ref),
+        Ident(ref=who.ref, role=line.role),
         Position(square=square, size=race.size if race is not None else Size.MEDIUM),
         Side(team=who.team),
         Stats(level=who.level, scores=scores),

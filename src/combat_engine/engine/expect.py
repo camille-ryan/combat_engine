@@ -41,9 +41,28 @@ counts the kernel differs and the scorer must score what actually happens:
 
 `high crit` contributes nothing because the kernel reads it nowhere (#240).
 
-**Two limits, both in the harness rather than the maths.** A row that reads
-`c.trigger` cannot be evaluated standing still -- there is no triggering event
-to read -- and comes back as zero; that is 5 of the 14 zeroes in a 600-row
+**The big limit: this counts only what the body itself deals.** `Ledger.attack`
+returns an `AttackResult` without going through `resolve.attack`, so no `Hit` is
+emitted and **nothing that watches for one fires** -- sneak attack, the
+fighter's class-feature mark, item and feat riders. Measured against 500 runs at
+level 1:
+
+    rogue   p7396  advantage off   model  5.70   sim  5.83
+    rogue   p7396  advantage on    model  5.70   sim 15.23
+    fighter p997   advantage off   model  8.15   sim  8.30
+
+The fighter agrees because its damage is all in its body. The rogue with combat
+advantage is 2.7x the figure, and the model does not move between its two lines
+at all, because `Ledger.attack` never sets `AttackResult.advantage` either.
+
+So: **two weapons on one character compare soundly** -- the riders are equal in
+both columns and cancel. **Two different classes do not**, and conditional
+strikers come out worst. See #249. Do not build a cross-class threat estimate on
+this until that is fixed.
+
+**Two smaller limits, both in the harness rather than the maths.** A row that
+reads `c.trigger` cannot be evaluated standing still -- there is no triggering
+event to read -- and comes back as zero; that is 5 of the 14 zeroes in a 600-row
 sample and the rest are rows whose own docstrings say they deal no damage.
 And `c.absorb` is not recorded, because it moves damage onto the caster off a
 trigger, which is neither damage dealt nor evaluable without the trigger.

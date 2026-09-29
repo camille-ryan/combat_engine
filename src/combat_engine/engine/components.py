@@ -28,6 +28,21 @@ class Ident:
     #: empty for a character. `monster_math` needs it to know what it is
     #: converting *from*.
     book: str = ""
+    #: What this creature is *for*. A monster's printed role -- artillery,
+    #: brute, controller, lurker, skirmisher, soldier -- or a character's
+    #: class role: defender, striker, leader, controller.
+    #:
+    #: Both sides carry it in the compendium already and neither reached the
+    #: board: the monster's was read only by `loader.pick` when *choosing* a
+    #: creature, and the class's was fetched by `SELECT *` and dropped. So
+    #: nothing in a fight could tell a wizard from a fighter, and the only
+    #: target discrimination `policy.features` has is `targets_bloodied` --
+    #: hit whoever is already hurt. Naming the role is what a threat estimate
+    #: has to be built on.
+    #:
+    #: Lower case on both sides. The compendium capitalises the class column
+    #: and not the monster one.
+    role: str = ""
 
     def __str__(self) -> str:
         return f"{self.ref}{('#' + self.tag) if self.tag else ''}"
