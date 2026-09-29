@@ -20,6 +20,9 @@ engine having no way to spell the line.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from combat_engine.engine import (
     AC,
     CHA,
@@ -55,6 +58,7 @@ from combat_engine.engine import (
     CloseBurst,
     Condition,
     ConditionEnded,
+    DamageApplied,
     DamageRolled,
     DamageType,
     Dropped,
@@ -68,6 +72,9 @@ from combat_engine.engine import (
     MeleeOrRanged,
     Miss,
     Moved,
+    MoveEnd,
+    MoveStart,
+    Pick,
     PowerUsed,
     Ranged,
     SavingThrow,
@@ -76,6 +83,7 @@ from combat_engine.engine import (
     TurnEnd,
     TurnStart,
     When,
+    Window,
     World,
     ZoneEntered,
     about_me,
@@ -87,6 +95,7 @@ from combat_engine.engine import (
     by_ranged,
     closed_on_me,
     either,
+    get,
     power,
     targets_me,
 )
@@ -95,6 +104,15 @@ from combat_engine.engine.skills import SKILLS
 
 #: The unnamed attack ability. See the module docstring.
 ABILITY = ("c.ability_for(ref)",)
+
+#: Where `_enhanced` remembers its answer for the rest of one use.
+_ENHANCED = "_x7_670_enhanced"
+
+#: "a -N penalty to opportunity action **and immediate action** attack
+#: rolls". The attack context carries `opportunity`, so the first half is a
+#: gate; nothing on it says an attack was an interrupt or a reaction, so the
+#: second half has no key to read.
+IMMEDIATE = ("resolve.attack(immediate=)",)
 
 MARTIAL = [Keyword.MARTIAL]
 ARCANE = [Keyword.ARCANE]
@@ -127,6 +145,131 @@ def _rolled(world: World, eid: int) -> int:
     return 0 if init is None else init.rolled
 
 
+def _enhanced(c: Cast) -> bool:
+    """"Special: You can spend a minor action when you use this power to
+    enhance it." Every x7_670 attack row prints one, each naming a different
+    enhancement.
+
+    Asked **once per use** rather than once per target. The minor is one
+    action, and a close burst 5 would otherwise offer to buy it again for
+    every enemy it caught. The answer is remembered on the cast, which works
+    because `dsl.use` hands the *same* `Cast` to each target -- it rebinds
+    `target` and `index` on one object, which is what makes `c.first` mean
+    anything -- so an attribute set on the first pass is still there on the
+    last.
+
+    `default=True`: a minor spent on a strict upgrade is nearly always right,
+    and `c.may`'s first option is the answer in every headless fight.
+    """
+    held = getattr(c, _ENHANCED, None)
+    if held is not None:
+        return bool(held)
+    enc = c.world.encounter
+    yes = bool(
+        enc is not None
+        and enc.can_spend(c.me, ActionType.MINOR)
+        and c.may("spend a minor action to enhance it")
+        and enc.spend(c.me, ActionType.MINOR)
+    )
+    setattr(c, _ENHANCED, yes)
+    return yes
+
+
+def _unless_adjacent(
+    c: Cast, foe: int, who: int
+) -> Callable[[dict[str, Any]], bool]:
+    """"All creatures that are not adjacent to it have concealment against
+    it."
+
+    Concealment is laid on the creature that has it and gated on the attack
+    context, which is the idiom `c.conceal`'s own docstring gives for
+    "concealment from creatures more than 3 squares away". So this is one
+    effect per creature, reading `attacker` to narrow it to the restrained
+    one, and re-asking adjacency on every roll rather than closing over who
+    was adjacent when the burst went off.
+
+    Laid the other way round -- as a penalty on the restrained creature's
+    own attacks -- it would be one effect covering anything that arrives
+    later, but concealment and cover take the **larger** of the two and an
+    attack penalty adds to both, so a target behind cover would be two
+    points harder to hit than the card allows.
+    """
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return ctx.get("attacker") == foe and who not in c.within(1, of=foe)
+
+    return gate
+
+
+def _vs_opportunity(ctx: dict[str, Any]) -> bool:
+    """"Against opportunity attacks": the attack context carries the flag."""
+    return bool(ctx.get("opportunity"))
+
+
+def _baited(c: Cast, foe: int, punish: Callable[[], None]) -> None:
+    """"Until the end of your next turn, if the target willingly moves more
+    than 2 squares or makes an attack, ..." -- three rows of x7_642 print it
+    and differ only in what follows.
+
+    **"Willingly" is the `MoveStart` bracket, and `Moved` alone is not it.**
+    `movement.forced` steps through `movement.step` like everything else, and
+    `step` announces a `Moved` with `kind_` set to "push" -- so counting
+    `Moved` by itself makes a shove count against the target, which is the
+    one thing the word "willingly" is there to exclude. Only `walk`, `run`,
+    `shift` and `teleport` announce a `MoveStart`, so the squares entered
+    between one and its `MoveEnd` are the willing ones. `p7014` counts the
+    same way and its module docstring is where this is written down.
+
+    Counted **across the whole duration** rather than per move: the card says
+    "moves more than 2 squares" and does not say "in a single move", which is
+    the narrower reading two other rows in the tree take because their cards
+    say "in a single move". It fires once either way.
+
+    The attack half watches `PowerUsed` and not `AttackDeclared`, because an
+    attack is announced once per *target*: a burst would otherwise be several
+    attacks and the distinction never matters here, but `AttackDeclared`
+    would also miss a row that declares an attack it never rolls.
+    """
+    hold = c.effect(f"{c.ref} bait", until=When.EONT, on=foe)
+    if hold is None:
+        return
+    walking = [False]
+    steps = [0]
+    done = [False]
+
+    def fire() -> None:
+        if done[0]:
+            return
+        done[0] = True
+        punish()
+
+    def opened(ev: MoveStart) -> None:
+        if ev.actor == foe:
+            walking[0] = True
+
+    def closed(ev: MoveEnd) -> None:
+        if ev.actor == foe:
+            walking[0] = False
+
+    def stepped(ev: Moved) -> None:
+        if ev.actor != foe or not walking[0]:
+            return
+        steps[0] += 1
+        if steps[0] > 2:
+            fire()
+
+    def swung(ev: PowerUsed) -> None:
+        row = get(ev.power) if ev.actor == foe else None
+        if row is not None and row.is_attack:
+            fire()
+
+    bus = c.world.bus
+    hold.subs.append(bus.on(MoveStart, opened, window=Window.BEFORE, owner=c.me))
+    hold.subs.append(bus.on(Moved, stepped, owner=c.me))
+    hold.subs.append(bus.on(MoveEnd, closed, owner=c.me))
+    hold.subs.append(bus.on(PowerUsed, swung, owner=c.me))
+
+
 # ==========================================================================
 # x7_642 -- a martial theme; its rows deal poison
 # ==========================================================================
@@ -141,12 +284,34 @@ def _rolled(world: World, eid: int) -> int:
     reach=MeleeOrRanged(1, 20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[Keyword.MARTIAL, Keyword.WEAPON, Keyword.POISON],
-    todo=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=AC),
 )
 def p11749(c: Cast) -> None:
-    """1[W] + 5 poison, and a delayed prone-and-immobilise if the target
-    moves far or attacks. All of it waits on the attack line."""
-    ...
+    """1[W] plus 5 poison, and a trip that waits for the target to move or
+    swing.
+
+    **No ability modifier on the damage line**, which is the card and not an
+    omission: this one prints "1[W] damage plus 5 poison damage" while the
+    level 9 row of the same theme prints "2[W] + ability modifier", so the
+    absence is deliberate where it appears.
+
+    The two amounts are dealt as two blows because the card prints them as
+    two amounts of two types -- poison resistance takes the second and has
+    no claim on the first.
+    """
+    if not c.strike():
+        return
+    c.damage(c.w(1))
+    c.flat(5, dtype=DamageType.POISON)
+    foe = c.target
+    if foe is None:
+        return
+
+    def trip() -> None:
+        c.prone(on=foe)
+        c.immobilized(until=When.EOTNT, on=foe)
+
+    _baited(c, foe, trip)
 
 
 @power(
@@ -176,11 +341,18 @@ def p11750(c: Cast) -> None:
     reach=MeleeOrRanged(1, 20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[Keyword.MARTIAL, Keyword.WEAPON, Keyword.POISON],
-    todo=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=AC),
 )
 def p11751(c: Cast) -> None:
-    """2[W] + 5 poison, with a delayed daze on the same condition."""
-    ...
+    """The level 0 row one step up: 2[W], and the bait pays a daze."""
+    if not c.strike():
+        return
+    c.damage(c.w(2))
+    c.flat(5, dtype=DamageType.POISON)
+    foe = c.target
+    if foe is None:
+        return
+    _baited(c, foe, lambda: c.dazed(until=When.EOTNT, on=foe))
 
 
 @power(
@@ -194,12 +366,56 @@ def p11751(c: Cast) -> None:
     keywords=[
         Keyword.MARTIAL, Keyword.WEAPON, Keyword.POISON, Keyword.RELIABLE,
     ],
-    todo=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=AC),
 )
 def p11754(c: Cast) -> None:
-    """2[W], ongoing 5 poison with a -4 on the first save against it, and
-    slowed to the start of the target's next turn."""
-    ...
+    """A poison burn, and a -4 on the one saving throw that follows its first
+    tick.
+
+    **The penalty goes on the burn's own `save_mod`, not on a `"save"`
+    modifier.** The printed line narrows it to saves *against the ongoing
+    damage*, and a modifier under that key applies to every save the creature
+    makes -- including the one that would end an unrelated hold.
+
+    It is handed back inside the `SavingThrow` listener. `Effects._on_turn_end`
+    computes `bonus` before it announces the event, so the roll being
+    announced has already had the -4 and the next one has not.
+
+    Tied to the tick rather than laid up front. The two are equivalent today
+    because ongoing damage is dealt at the start of a turn and the save is
+    made at its end, so the first save always follows the first tick -- but
+    that is an ordering, not the sentence the card prints.
+    """
+    if not c.strike():
+        return
+    c.damage(c.w(2))
+    foe = c.target
+    if foe is None:
+        return
+    c.slowed(until=When.SOTNT)
+    burn = c.ongoing(5, DamageType.POISON)
+    if burn is None:
+        return
+    burned = [False]
+    spent = [False]
+
+    def ticked(ev: DamageApplied) -> None:
+        if burned[0] or ev.target != foe or ev.detail != str(burn):
+            return
+        burned[0] = True
+        burn.save_mod -= 4
+
+    def rolled(ev: SavingThrow) -> None:
+        if not burned[0] or spent[0] or ev.actor != foe:
+            return
+        if ev.against != str(burn):
+            return
+        spent[0] = True
+        burn.save_mod += 4
+
+    bus = c.world.bus
+    burn.subs.append(bus.on(DamageApplied, ticked, owner=c.me))
+    burn.subs.append(bus.on(SavingThrow, rolled, owner=c.me))
 
 
 @power(
@@ -240,11 +456,18 @@ def p11762(c: Cast) -> None:
     reach=MeleeOrRanged(1, 20, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[Keyword.MARTIAL, Keyword.WEAPON, Keyword.POISON],
-    todo=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=AC),
 )
 def p11763(c: Cast) -> None:
-    """2[W] + 5 poison, with a delayed weakened on the same condition."""
-    ...
+    """The same bait again, paying weakened."""
+    if not c.strike():
+        return
+    c.damage(c.w(2))
+    c.flat(5, dtype=DamageType.POISON)
+    foe = c.target
+    if foe is None:
+        return
+    _baited(c, foe, lambda: c.weakened(until=When.EOTNT, on=foe))
 
 
 @power(
@@ -258,12 +481,45 @@ def p11763(c: Cast) -> None:
     keywords=[
         Keyword.MARTIAL, Keyword.WEAPON, Keyword.POISON, Keyword.RELIABLE,
     ],
-    todo=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=AC),
 )
 def p11766(c: Cast) -> None:
-    """2[W] + modifier, ongoing 5 poison, and no save against it on the
-    turn it is first taken."""
-    ...
+    """A poison burn that cannot be shrugged off on the turn it first bites.
+
+    **`c.unsave` is the wrong verb.** It makes the save *fail*, and a failed
+    save is what runs an effect's `escalate`; "cannot make a saving throw" is
+    the save not happening at all. `Effects._on_turn_end` reads
+    `rolled.cancelled` and leaves the effect exactly as it was, which is the
+    printed outcome, so this cancels the `SavingThrow` instead.
+    """
+    if not c.strike():
+        return
+    c.damage(c.w(2), c.attack_mod)
+    foe = c.target
+    if foe is None:
+        return
+    burn = c.ongoing(5, DamageType.POISON)
+    if burn is None:
+        return
+    burned = [False]
+    blocked = [False]
+
+    def ticked(ev: DamageApplied) -> None:
+        if burned[0] or ev.target != foe or ev.detail != str(burn):
+            return
+        burned[0] = True
+
+    def rolled(ev: SavingThrow) -> None:
+        if not burned[0] or blocked[0] or ev.actor != foe:
+            return
+        if ev.against != str(burn):
+            return
+        blocked[0] = True
+        ev.cancel("cannot save against it this turn")
+
+    bus = c.world.bus
+    burn.subs.append(bus.on(DamageApplied, ticked, owner=c.me))
+    burn.subs.append(bus.on(SavingThrow, rolled, owner=c.me))
 
 
 @power(
@@ -298,14 +554,31 @@ def p11769(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.PSYCHIC],
-    todo=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
 )
 def p12338(c: Cast) -> None:
-    """1d10 + modifier psychic, and you or an ally within 10 turns
-    invisible to the target. The printed Special -- spend a minor action to
-    add a 1-square slide -- is a second use of the same card and waits on
-    the same line."""
-    ...
+    """Psychic damage, and somebody on your side drops out of that
+    creature's sight.
+
+    `side="team"` and not `"ally"`: the card says "you **or** one ally", and
+    `"ally"` deliberately leaves the caster out.
+
+    The Special's slide is bought before the attack is rolled and paid for
+    either way, which is what "when you use this power" says -- the minor
+    buys the enhanced version of the card, not a hit.
+    """
+    better = _enhanced(c)
+    if not c.strike():
+        return
+    c.damage("1d10", c.attack_mod, dtype=DamageType.PSYCHIC)
+    foe = c.target
+    if foe is None:
+        return
+    if better:
+        c.slide(1)
+    who = c.choose(c.within(10, side="team"), "who it cannot see")
+    if who is not None:
+        c.invisible(to=foe, on=who, until=When.EONT)
 
 
 @power(
@@ -335,12 +608,31 @@ def p12339(c: Cast) -> None:
     reach=CloseBlast(5),
     target=EACH_ENEMY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT],
-    todo=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=FORT),
+    dropped=IMMEDIATE,
 )
 def p12340(c: Cast) -> None:
-    """A shift of 3 either side of the attack, then slowed and -4 to
-    opportunity and immediate attack rolls."""
-    ...
+    """A shift either side of the blast, then slowed and clumsy out of turn.
+
+    "Before or after the attack" is a choice with nowhere to be offered: the
+    body runs once the blast's targets are already chosen, so after is the
+    half that survives, and `c.first` keeps it to one shift for the whole
+    blast rather than one per enemy caught.
+
+    **The Special is deliberately not offered here**, alone in this theme.
+    It reads "the target cannot make opportunity attacks or immediate action
+    attacks *instead of* taking a penalty to attack rolls", so taking it
+    trades the penalty below for a clause the engine cannot say -- the minor
+    would be spent to make the row do less. Both halves want the same missing
+    thing, which is why one symbol covers the row.
+    """
+    if c.first:
+        c.shift(3)
+    if not c.strike():
+        return
+    c.damage("1d8", c.attack_mod, dtype=DamageType.RADIANT)
+    c.slowed(until=When.EONT)
+    c.penalty("attack", 4, until=When.EONT, when=_vs_opportunity)
 
 
 @power(
@@ -352,12 +644,48 @@ def p12340(c: Cast) -> None:
     reach=CloseBurst(5),
     target=EACH_ENEMY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.PSYCHIC],
-    todo=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
+    dropped=IMMEDIATE,
+    narrative=("skill:arcana",),
 )
 def p12341(c: Cast) -> None:
-    """Deafened and -2 to opportunity and immediate attack rolls, save
-    ends both; half damage on a miss."""
-    ...
+    """Psychic damage and a deafening, with the attack penalty on the same
+    saving throw.
+
+    **"Save ends both" is one roll, so it has to be one clock.** The penalty
+    is laid `until=When.ENCOUNTER` -- where a save-ends effect ends up anyway
+    if nothing ever saves -- and the deafening's `on_end` takes it away, so
+    the single save clears the pair. Two save-ends effects would be two rolls
+    and the card prints one.
+
+    The Special -- 5 psychic each time it fails a saving throw against this
+    power -- is `Effect.escalate`, which is run by `Effects._on_turn_end` on
+    exactly a failed save and not on a cancelled one.
+
+    The Miss clause's other half is a -2 to any check made to work out what
+    you did. That is an arcana check about a circumstance, and nothing on a
+    board rolls one, so the penalty has nowhere to go and nothing is missing.
+    """
+    better = _enhanced(c)
+    if not c.strike():
+        c.half_damage("1d10", c.attack_mod, dtype=DamageType.PSYCHIC)
+        return
+    c.damage("1d10", c.attack_mod, dtype=DamageType.PSYCHIC)
+    foe = c.target
+    if foe is None:
+        return
+    hold = c.condition(
+        Condition.DEAFENED,
+        until=When.SAVE_ENDS,
+        escalate=(
+            (lambda _eff: c.flat(5, dtype=DamageType.PSYCHIC, on=foe))
+            if better
+            else None
+        ),
+    )
+    pen = c.penalty("attack", 2, until=When.ENCOUNTER, when=_vs_opportunity)
+    if hold is not None and pen is not None:
+        hold.on_end.append(lambda: c.end_effect(pen))
 
 
 @power(
@@ -401,12 +729,22 @@ def p12342(c: Cast) -> None:
         Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.PSYCHIC,
         Keyword.TELEPORTATION,
     ],
-    todo=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=REF),
 )
 def p12343(c: Cast) -> None:
-    """1d10 + modifier psychic, and the target's sight is cut to 2
-    squares."""
-    ...
+    """Psychic damage, and the target cannot see past two squares.
+
+    The move is `c.first` for the same reason as `p12340`'s, and after the
+    attack for the same reason. The Special turns it into a teleport, which
+    is the whole of the enhancement.
+    """
+    better = _enhanced(c)
+    if c.first:
+        c.teleport(2) if better else c.shift(2)
+    if not c.strike():
+        return
+    c.damage("1d10", c.attack_mod, dtype=DamageType.PSYCHIC)
+    c.sight_range(2, until=When.EONT)
 
 
 @power(
@@ -418,12 +756,43 @@ def p12343(c: Cast) -> None:
     reach=AreaBurst(1, 10),
     target=EACH_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.PSYCHIC],
-    todo=ABILITY,
+    attack=Attack(Pick.PRIMARY, vs=FORT),
+    dropped=("c.forbid(keyword=)",),
 )
 def p12344(c: Cast) -> None:
-    """Restrained and unable to teleport, save ends both, with everything
-    non-adjacent concealed from it meanwhile."""
-    ...
+    """Restrained, and half-blind while it is.
+
+    The concealment hangs off the restraint's `on_end` so that the one save
+    the card prints clears all of it -- see `p12341` for why, and
+    `_unless_adjacent` for why it is laid one creature at a time.
+
+    The Special is a -2 to saving throws against this power, which is the
+    hold's own `save_mod` -- narrowed to this effect, where a `"save"`
+    modifier would apply to every roll the creature made.
+
+    "The target cannot teleport" is the dropped half: `c.forbid` takes one
+    row's ref, and this forbids every row carrying a keyword.
+    """
+    better = _enhanced(c)
+    if not c.strike():
+        c.half_damage("2d6", c.attack_mod, dtype=DamageType.PSYCHIC)
+        c.immobilized(until=When.SAVE_ENDS)
+        return
+    c.damage("2d6", c.attack_mod, dtype=DamageType.PSYCHIC)
+    foe = c.target
+    if foe is None:
+        return
+    hold = c.condition(
+        Condition.RESTRAINED, until=When.SAVE_ENDS, save_mod=-2 if better else 0
+    )
+    if hold is None:
+        return
+    for other in c.within(30, of=foe, side="other"):
+        veil = c.conceal(
+            on=other, until=When.ENCOUNTER, when=_unless_adjacent(c, foe, other)
+        )
+        if veil is not None:
+            hold.on_end.append(lambda v=veil: c.end_effect(v))
 
 
 @power(
