@@ -90,7 +90,7 @@ reached as the `Cast` passed into every power body, not by import.
 
 `policy.py` is its own component: **what the AI chooses**, not what the rules
 allow. One module, 599 lines, `Policy` protocol plus `LinearPolicy`. Its
-doctrine notes are in `POLICIES.md` at the repo root (tactical heuristics,
+doctrine notes are in `docs/AI_DOCTRINE.md` (tactical heuristics,
 role goals, the threat definition).
 
 Two things follow:

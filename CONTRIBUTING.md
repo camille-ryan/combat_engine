@@ -17,8 +17,8 @@ entirely only when there is nothing to decorate.
 ## Checking your work
 
 ```
-uv run scripts/check.py            # all eight instruments, ~47s
-uv run scripts/check.py --fast     # skip the two that start a server, ~3s
+uv run scripts/check.py            # all ten instruments; `--list` names them
+uv run scripts/check.py --fast     # skip the two that start a server
 uv run scripts/check.py --all      # audit every row, not just changed ones
 uv run scripts/check.py --history  # what each has cost, and what it has caught
 ```

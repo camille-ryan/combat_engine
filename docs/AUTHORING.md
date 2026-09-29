@@ -2,6 +2,21 @@
 
 Repo: `/Users/camille/proj/combat_engine`. Run everything with `uv run`.
 
+## Who this is for
+
+**A content author**, usually one of several working at the same time. That
+changes two rules, and they are the two this page and `FEAT_BRIEF.md` used to
+disagree about:
+
+* **Lint only your own file** -- `uv run ruff check --fix <your file>`, then
+  `uv run scripts/lint.py` to check the tree's structure without rewriting
+  it. A tree-wide `ruff --fix` has destroyed another agent's work.
+* **Do not touch git.** Not `add`, not `commit`, not `stash`. The session
+  that dispatched you commits.
+
+The main session does the opposite of both -- it lints the tree and it
+commits. `CONTRIBUTING.md` describes that side; this page describes yours.
+
 ## The one rule that is not negotiable
 
 **You will never be told what anything is called, and you must never go and
@@ -11,10 +26,18 @@ been stripped out and live in a separate localisation file that the engine
 never reads.
 
 So: **do not** grep `game.db` for names, **do not** open the localisation
-file, **do not** search the web, **do not** put a guessed name in a comment
-or a docstring or a variable. If a spec says `m237` you write `m237`. This
-is the whole legal basis of the project — a game system cannot be
-trademarked but the prose it is printed in can.
+file, **do not** put a guessed name in a comment or a docstring or a
+variable. If a spec says `m237` you write `m237`. This is the whole legal
+basis of the project — a game system cannot be trademarked but the prose it
+is printed in can.
+
+**Searching the web for a *mechanic* you do not understand is encouraged.
+Searching for a *name* is forbidden.** Those are different questions and only
+the second one is a leak: "how does a close burst measure from a Large
+creature" is a rule, and rules are not protectable. This passage used to say
+"do not search the web" flatly, which contradicted `FEAT_BRIEF.md` telling
+authors to look a rule up — and since that file sends you here first, the
+flat version was the one being overridden anyway.
 
 You may read `game.db` for **numbers** (defences, hp, speed) if you need to,
 though you almost never will: a monster's numbers load automatically.
@@ -223,7 +246,9 @@ that never applies.
 ### The vocabulary, beyond the basics
 
 Grown one method at a time, each because a row was left out of the tree
-naming it. `vocab.txt` is the authority; this is what is easy to miss.
+naming it. **`uv run scripts/vocab.py` is the authority** -- it is generated
+from the code, so it cannot be stale; this page can be and has been. (This
+line used to cite a `vocab.txt`, which has never existed.)
 
 * **Movement as a state:** `c.moving_as("climb")` -- what a creature is
   doing *now*, held past the end of the move, where `Movement.modes` only
@@ -294,7 +319,8 @@ content file for style**. The examples are the style.
   `combat_engine.engine.monster_math`.
 * A **minion** deals its damage on a hit and takes none of this specially —
   its 1 hp is in the database.
-* Auras, regeneration and "the first time each round" are all in `vocab.txt`.
+* Auras, regeneration and "the first time each round" are all in
+  `scripts/vocab.py`'s output.
 
 ### Magic items specifically
 

@@ -1,5 +1,11 @@
-# Policies
-This file has notes on tactical considerations to be used for generating AI policy.
+# AI doctrine
+
+Tactical notes for the AI policy — what a good square is, what threat means,
+what each monster role is trying to do. Input to `engine/policy.py`.
+
+**Renamed from `POLICIES.md`.** At the repo root that name read as project
+policy, which it is not and never was; project policy is in `CLAUDE.md`. This
+is doctrine for the thing that chooses a move.
 
 ## Good Squares
 Melee characters would like to be in melee.

@@ -20,9 +20,9 @@ Game systems are not able to be trademarked, but prose is. All potentially trade
 
  Powers and monster abilities in 4e are well defined, but often complex.
 
- The corpus of effects should grow as we implement powers, monsters, feats, etc. An entity MUST be fully implemented before it is added.
+ The corpus of effects should grow as we implement powers, monsters, feats, etc. An entity MUST be fully implemented before it is added, **or it carries a marker saying what it is waiting for** — `todo=`, `dropped=` or `narrative=`. This started life as a flat no-stubs rule; `CONTRIBUTING.md` explains why that was reversed deliberately at ~1,900 items and ~1,675 feats, and why a half-written row still cannot look finished.
 
- All powers, monsters, etc. should be *hand coded* by claude rather than produced programmatically through regex. P
+ All powers, monsters, etc. should be *hand coded* by claude rather than produced programmatically through regex. The one exception is a small `_feature(ref, what)`-style helper for a run of rows that genuinely share a marker.
 
  ## System notes
  There are several kinds of effects.

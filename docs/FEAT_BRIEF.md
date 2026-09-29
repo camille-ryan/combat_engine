@@ -6,6 +6,11 @@ says which wave gets which class or category and what to add to this.
 You are writing 4e-alike feat rows into a Python combat engine at
 `/Users/camille/proj/combat_engine`. Work from the repo root.
 
+**You are one of several agents working at once**, which is why you lint only
+your own file and never touch git. `AUTHORING.md` says the same under "Who
+this is for"; `CONTRIBUTING.md` describes the main session's rules, which are
+the opposite on both counts and are not yours.
+
 ## Read first, in this order
 1. `docs/AUTHORING.md` — the whole thing. The "Feats specifically",
    "A row with no combat consequence at all" and `todo=` / `dropped=`
@@ -46,9 +51,13 @@ work list; do not go looking for more.
   `warlord.py` and `ranger.py` for a run of rows that are genuinely the
   same marker. Read one of those before you copy the pattern.
 * **A row is fully implemented before it is added**, or it carries a
-  marker. There is no third option:
+  marker. **Three markers, not two:**
   * `todo=("c.verb()",)` — nothing here works. Refused in play.
   * `dropped=("c.verb()",)` — works, one named clause missing. Plays.
+  * `narrative=("skill:name",)` — finished, and the clause has no combat
+    meaning at all. Counted done, and it **requires** a docstring saying
+    why. See `AUTHORING.md` for the test that separates this from
+    `dropped=`; this brief used to say there was no third option.
   * Both take **symbols, never prose**. A prose marker is refused at
     import. Reuse symbols already in the tree so `todo.py` groups:
     `grep -rho 'todo=(\|dropped=(' -A1 src/combat_engine/content/feats/`
@@ -62,7 +71,9 @@ work list; do not go looking for more.
 * **The prerequisite is not yours to write.** It is a column.
 * **`_who` trap**: most `Cast` methods default to `c.target`, not `c.me`.
   If the sentence is about the caster, pass `on=c.me` explicitly.
-* If you do not know how a mechanic works, search the web for the rule.
+* If you do not know how a mechanic works, **search the web for the
+  rule** — that is encouraged. Never search for a *name*; see the one
+  rule in `AUTHORING.md`. A rule is not protectable and a name is.
 * **Read the event before you read a field off it.** `Dropped` has
   `actor` and no `target`; `PowerUsed` has `targets` and no `target`;
   `Moved` has `from_` and `to` and no `squares`. A `getattr` with a
