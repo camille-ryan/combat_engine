@@ -1532,12 +1532,39 @@ def _cross_reference_rest(
             # saying which, and without offering an author something to
             # point a row at.
             monsters_ok = table in ("monster_power",)
+            # **The creature this row belongs to**, for the guard below.
+            # `m1107a0` belongs to `m1107`; a character's row has none.
+            mine = re.match(r"^(m\d+)a\d+$", ref)
+            own_creature = mine.group(1) if mine else ""
             others = {}
             for word in here & by_word.keys():
                 for name, other in by_word[word]:
                     if other == ref or other.startswith(ref):
                         continue
-                    if other[:1] == "m" and not monsters_ok:
+                    # **A monster's ability never belongs to another
+                    # monster.** #175, and the same argument the power
+                    # cross-reference already makes about classes: "a
+                    # cross-class reference is vanishingly rare and a
+                    # one-word name is very often an ordinary verb".
+                    #
+                    # It is vanishingly rare across creatures too, and the
+                    # 103 rows that had one were all ordinary nouns
+                    # colliding with somebody's ability name -- "with its
+                    # tentacles", "must be in ooze form", "makes one
+                    # fullblade attack". A *sibling* ability of the same
+                    # creature is kept, because that is the common and
+                    # correct case.
+                    #
+                    # Opaque rather than refused, for the reason the note
+                    # above records: refusing leaves the name in the spec as
+                    # prose and `leaks.py --specs` goes red, and a leak is
+                    # worse than a bad pointer.
+                    foreign = re.match(r"^(m\d+)a\d+$", other)
+                    stranger = bool(
+                        foreign and own_creature
+                        and foreign.group(1) != own_creature
+                    )
+                    if stranger or (other[:1] == "m" and not monsters_ok):
                         other = f"x_{other}"
                         names.setdefault(other, {"name": name})
                     others[name] = other
