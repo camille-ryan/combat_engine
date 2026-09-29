@@ -399,6 +399,46 @@ def build() -> Report:
     return report
 
 
+#: Stat lines the local compendium has wrong, and what the published block
+#: actually prints. **Per ref and never a formula**, for a reason that was
+#: measured: `m3561`'s corruption is every number with the monster-maths
+#: constant added on top -- AC 18 + 14 = 32, Fortitude 15 + 12 = 27, the
+#: attack +8 + 5 = +13 -- and nine monsters in the corpus carry an AC twenty
+#: or more above their level, so a rule suggested itself. Undoing that rule on
+#: the other eight produces nonsense: `m1107` would come out with Will 0.
+#: Whatever is wrong with those is a different fault and is not this one.
+#:
+#: So an entry goes here only when the published block has been read and
+#: compared. `m3640` is **not** here for exactly that reason -- its numbers are
+#: wrong and nobody has checked what they should be, so it is refused in
+#: `loader.UNUSABLE` instead of guessed at.
+CORRECTED: dict[str, dict[str, int]] = {
+    # Level 4 minion. Local rows: AC 32, Fort 27, Ref 29, Will 26, attacks +13.
+    "m3561": {"ac": 18, "fort": 15, "ref": 17, "will": 14, "attack": 8},
+}
+
+
+def _correct(m: object, ref: str) -> None:
+    """Put a checked stat line back, in place, before the row is written."""
+    fix = CORRECTED.get(ref)
+    if not fix:
+        return
+    for name in ("ac", "fort", "ref", "will"):
+        if name in fix:
+            setattr(m, name, fix[name])
+    # The attack bonus lives in the ability's own spec text, which is what an
+    # author is shown and transcribes into `Attack(printed=)`. Left alone, the
+    # corrected creature would still hit like a paragon one.
+    now = fix.get("attack")
+    if now is None:
+        return
+    for ability in getattr(m, "abilities", ()):
+        if ability.spec:
+            ability.spec = re.sub(
+                r"\+\d+(?= vs )", f"+{now}", ability.spec
+            )
+
+
 def _monsters(
     source: sqlite3.Connection,
     out: sqlite3.Connection,
@@ -418,6 +458,7 @@ def _monsters(
     index = _creature_names(rows)
     for row in rows:
         m = monster_parser.parse(row["ID"], row["Txt"], row["Source"], others=index)
+        _correct(m, m.ref_id)
         scores.append(m.score)
         report.monsters += 1
         report.worst.append((m.ref_id, m.score))

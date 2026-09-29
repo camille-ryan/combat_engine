@@ -307,12 +307,39 @@ def spawn_companion(
     return eid
 
 
+#: Monsters nothing may field, and why. **Checked against the compendium
+#: before being listed here**, because the importer reading a block wrongly
+#: and the block itself being odd are different faults with different fixes.
+#:
+#: `m3561` is deliberately *not* here. It is a level 4 minion with AC 32 and
+#: attack +13, which reads as an extraction fault and is not one -- the page
+#: prints exactly those numbers. An outlier in the source is somebody else's
+#: decision and this engine's job is to reproduce it.
+UNUSABLE: dict[str, str] = {
+    # Every number zero -- AC, all three non-AC defences, and hit points --
+    # with no role. Not an empty row: four of its abilities parsed, so the
+    # block yielded its powers and nothing for its stat line. A creature with
+    # AC 0 and 0 hit points is not a fight.
+    "m5452": "stat line parsed to all zeroes, including hit points",
+    # Level 4 minion carrying AC 30 and non-AC defences of 26-28, which is
+    # paragon maths twelve above where level 4 sits. Unlike `m3561` the page
+    # does not print these, so something read the wrong block.
+    "m3640": "defences are twelve above its level and the page does not say so",
+}
+
+
+def usable(ref: str) -> bool:
+    """Is this monster fit to put on a board? See `UNUSABLE`."""
+    return ref not in UNUSABLE
+
+
 def pick(level: int, *, role: str | None = None, limit: int = 20) -> list[str]:
     """Monsters at a level whose abilities are all written.
 
     A monster is only offered once every ability on its stat block has a
     function, so a fight never quietly leaves out the thing that makes a
-    monster interesting.
+    monster interesting -- and never if it is in `UNUSABLE`, which is the
+    stronger statement: those are not unfinished, they are wrong.
     """
     db = game()
     sql = "SELECT ref FROM monster WHERE level = ? AND minion = 0"
@@ -322,7 +349,7 @@ def pick(level: int, *, role: str | None = None, limit: int = 20) -> list[str]:
         params.append(role)
     out = []
     for row in db.execute(sql + " ORDER BY ref", params):
-        if not load(row["ref"]).missing:
+        if usable(row["ref"]) and not load(row["ref"]).missing:
             out.append(row["ref"])
         if len(out) >= limit:
             break
