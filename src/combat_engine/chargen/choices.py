@@ -133,8 +133,9 @@ WEIGHTS: dict[str, float] = {
     # Requirement its own class rows are written against with it. So count
     # them -- one point per row of the character's own that would still work.
     "keeps_class_rows": 3.0,
-    # Bigger die, mildly better. Small on purpose: this is the term that,
-    # left large, produces exactly the mistake above.
+    # Average damage of the printed expression, mildly better when higher.
+    # Small on purpose: this is the term that, left large, produces exactly
+    # the mistake above.
     "damage_die": 0.5,
     # A property the rows care about.
     "high_crit": 1.0,
@@ -291,7 +292,7 @@ def feat_options(
 
 
 def wield_options(
-    candidates: list[Weapon], granted: list[Weapon], known: list[str]
+    candidates: list[Weapon], spent: set[str], known: list[str]
 ) -> list[Choice]:
     """Which of the weapons a character may carry it should actually hold.
 
@@ -304,15 +305,27 @@ def wield_options(
     for a spiked chain and silently kills every light-blade Requirement the
     rogue's own cards are written against. `keeps_class_rows` counts those, so
     the rule has to beat them rather than ignore them.
+
+    **`spent` is the refs a *feat* opened up, and nothing else.** A race trains
+    a character in weapons through the same header field, so the list `outfit`
+    used to build held both -- and priced a racial longsword as though a feat
+    slot had been spent on it. That is not Camille's rule and it beat a
+    ranger's own short swords with a weapon nobody chose.
+
+    **This score answers "which weapon" and cannot answer "how many".** A
+    requirement is sometimes about the count rather than the kind -- a
+    two-blade ranger's rows say "must be wielding two melee weapons" and name
+    no group, so no word here matches them. `outfit` holds the count fixed for
+    exactly that reason, and the two mechanisms together cover both shapes
+    of the sentence. Neither does the other's job.
     """
-    spent = {w.ref for w in granted}
     out: list[Choice] = []
     for arm in candidates:
         score, terms = _priced(
             {
                 "spent_a_feat": float(arm.ref in spent),
                 "keeps_class_rows": float(_rows_needing(known, arm)),
-                "damage_die": float(_die(arm.damage)),
+                "damage_die": _average(arm.damage),
                 "high_crit": float("high crit" in arm.properties),
                 "versatile": float("versatile" in arm.properties),
                 "reach_weapon": float("reach" in arm.properties),
@@ -368,10 +381,19 @@ def _rows_needing(known: list[str], arm: Weapon) -> int:
     return count
 
 
-def _die(damage: str) -> int:
-    """The face count of a printed damage die -- `1d8` is 8. 0 if unreadable."""
-    _, _, faces = (damage or "").partition("d")
-    return int(faces) if faces.isdigit() else 0
+def _average(damage: str) -> float:
+    """The average of a printed damage expression -- `1d8` is 4.5, `2d4` is 5.
+
+    **The count matters and reading only the faces inverts the answer.** A
+    spiked chain is `2d4` and a longsword `1d8`; on faces alone the longsword
+    scores twice as high and it is the weaker weapon. Caught by a fighter that
+    took the chain feat and then held a racial longsword instead.
+    """
+    count, _, faces = (damage or "").partition("d")
+    if not faces.isdigit():
+        return 0.0
+    dice = int(count) if count.isdigit() else 1
+    return dice * (int(faces) + 1) / 2
 
 
 def sample(

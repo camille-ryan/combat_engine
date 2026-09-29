@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from random import Random
 
@@ -1298,35 +1299,91 @@ def _role(w: Weapon) -> str:
     return "ranged" if w.ranged else "melee"
 
 
-def outfit(carried: list[Weapon], granted: list[Weapon]) -> list[Weapon]:
+def outfit(
+    carried: list[Weapon],
+    granted: list[Weapon],
+    known: Sequence[str] = (),
+    *,
+    spent: set[str] | None = None,
+) -> list[Weapon]:
     """What the character ends up holding, and what goes on its belt.
 
-    A granted arm is taken **in hand only when the character has nothing
-    for that job**, and goes on the belt otherwise. The tempting rule is
-    the other one -- swing whichever hits hardest -- and it is wrong in a
-    way that would never show up in a log: a spiked chain out-damages a
-    dagger, so a rogue that took the feat for it would put the dagger
-    away, and with it every light-blade Requirement its own class rows
-    are written against. Which of the weapons a character *may* carry it
-    actually wields is a build choice, and nothing records one.
+    **This is the build choice that used to have nowhere to live.** A granted
+    arm was taken in hand only when the character had nothing at all for that
+    job, and benched otherwise -- so a fighter that spent its one feat on a
+    spiked chain owned the chain, swung the greataxe, and every row gated on a
+    flail was dead. The reason given here was that "which of the weapons a
+    character *may* carry it actually wields is a build choice, and nothing
+    records one". `choices.wield_options` records one.
 
-    Held and owned are kept apart for a second reason. `_shield_for`
-    counts melee weapons to decide whether a hand is free and
-    `Gear.two_weapon` reads the same list, so a hammer merely *owned*
-    would silently take a fighter's shield away and turn every "wielding
-    two melee weapons" Requirement true.
+    The tempting rule is still wrong and is still not what this does. Swing
+    whichever hits hardest and a rogue puts its dagger away for the chain,
+    taking every light-blade Requirement its own class rows are written against
+    with it. So the score counts those rows -- `keeps_class_rows` -- and a
+    weapon has to beat them, not ignore them. `known` is what makes that
+    possible.
+
+    `spent` names the arms a **feat** opened, which is not the same as
+    `granted`: a race trains a character in weapons through the same header
+    field, and pricing a racial longsword as a spent feat slot was enough to
+    take a ranger's second short sword out of its hand. Defaults to all of
+    `granted`, which is right for a caller that has only one kind.
+
+    **The number of arms per job is preserved, and only which ones changes.**
+    A ranger carries two short swords -- the same ref twice -- and collapsing
+    that to one would turn `Gear.two_weapon` false and every "wielding two
+    melee weapons" Requirement with it. `_shield_for` counts the same list to
+    decide whether a hand is free, so the count is load-bearing twice over.
 
     Returns the belt; `carried` is edited in place.
     """
     belt: list[Weapon] = []
+    if not SCORED_CHOICES:
+        for arm in granted:
+            if any(w.ref == arm.ref for w in carried):
+                continue
+            if any(_role(w) == _role(arm) for w in carried):
+                belt.append(arm)
+            else:
+                carried.append(arm)
+        return belt
+
+    from .choices import wield_options
+
+    bought = {w.ref for w in granted} if spent is None else set(spent)
+    # Every arm the character may use, by the job it does. Duplicates inside
+    # `carried` are kept -- see the docstring; a granted one that duplicates
+    # something already owned is not a second option.
+    pool: dict[str, list[Weapon]] = {}
+    for arm in carried:
+        pool.setdefault(_role(arm), []).append(arm)
+    owned = {w.ref for w in carried}
     for arm in granted:
-        if any(w.ref == arm.ref for w in carried):
+        if arm.ref in owned:
             continue
-        if any(_role(w) == _role(arm) for w in carried):
-            belt.append(arm)
-        else:
-            carried.append(arm)
-    return belt
+        owned.add(arm.ref)
+        pool.setdefault(_role(arm), []).append(arm)
+
+    # Hands per job: what the chassis already filled, and one for a job it had
+    # nothing for -- which is the old behaviour for that case, kept.
+    hands = {
+        role: max(1, sum(1 for w in carried if _role(w) == role)) for role in pool
+    }
+    held: list[Weapon] = []
+    for role, arms in sorted(pool.items()):
+        ranked = wield_options(arms, bought, list(known))
+        order = {choice.ref: i for i, choice in enumerate(ranked)}
+        arms.sort(key=lambda w: (order.get(w.ref, len(order)), w.ref))
+        keep = hands[role]
+        held.extend(arms[:keep])
+        belt.extend(arms[keep:])
+    # **A ref cannot be held and stowed at once.** `Gear.stowed` is a set of
+    # refs, so a ranger's second short sword going on the belt stowed the twin
+    # in its hand as well -- two arms became one and `two_weapon` went false.
+    # Anything already in hand is simply not on the belt.
+    in_hand = {w.ref for w in held}
+    carried[:] = held
+    return [w for w in belt if w.ref not in in_hand]
 
 
 def power_swap(powers: list[str], feats: list[str]) -> list[str]:
@@ -1762,7 +1819,16 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # before the shield is, because what is in the other hand decides
     # whether there is room for one. A race trains a character in weapons
     # exactly as a feat does, and says so in the same header field.
-    belt = outfit(carried, proficiency([*feats, *racial]))
+    # A feat and a race both open weapons up through the same header field, and
+    # only the feat cost a slot -- see `outfit`'s `spent`.
+    from_feats = proficiency(feats)
+    from_race = proficiency(racial)
+    belt = outfit(
+        carried,
+        [*from_feats, *from_race],
+        powers,
+        spent={w.ref for w in from_feats},
+    )
     carried_shield = _shield_for(line, carried)
 
     # First level takes the whole Constitution *score*; every level after
