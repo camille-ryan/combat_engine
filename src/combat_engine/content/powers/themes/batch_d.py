@@ -24,6 +24,7 @@ from combat_engine.engine import (
     ANY_CREATURE,
     AT_WILL,
     DAILY,
+    EACH_CREATURE,
     ENCOUNTER,
     FREE,
     INTERRUPT,
@@ -36,9 +37,13 @@ from combat_engine.engine import (
     PERSONAL,
     RANGED,
     REACTION,
+    REF,
     SELF,
     STANDARD,
+    WILL,
+    Ability,
     ActionType,
+    Attack,
     Cast,
     CloseBurst,
     Condition,
@@ -47,6 +52,7 @@ from combat_engine.engine import (
     Health,
     Keyword,
     Melee,
+    Pick,
     Ranged,
     Trigger,
     Usage,
@@ -75,8 +81,10 @@ from combat_engine.engine.events import (
     Miss,
     PowerResolved,
     SavingThrow,
+    SurgeSpent,
     TurnEnd,
 )
+from combat_engine.engine.grid import spread
 
 X7_654 = "x7_654"
 X7_676 = "x7_676"
@@ -146,6 +154,27 @@ def _defences(c: Cast, value: int, *, until: When, on: int | None = None) -> Non
         c.bonus(defence, value, kind="power", on=who, until=until)
 
 
+def _primary(c: Cast) -> int:
+    """"Primary ability vs. X" as an attack bonus, for a **secondary** attack.
+
+    A row whose own action is the attack says this in its header --
+    `Attack(Pick.PRIMARY, ...)`, and then `c.attack_mod` follows whatever it
+    resolved to. The x7_654 rows print their attack inside an Effect, as
+    something the caster spends a *later* standard action on, so there is no
+    header line for it to be and the pair is joined up here: `c.primary` says
+    which ability, and the per-ability property is the whole bonus with half
+    level, proficiency and enhancement already in it.
+    """
+    return {
+        Ability.STR: c.str_,
+        Ability.CON: c.con_,
+        Ability.DEX: c.dex_,
+        Ability.INT: c.int_,
+        Ability.WIS: c.wis_,
+        Ability.CHA: c.cha_,
+    }[c.primary]
+
+
 # -- x7_654: conjured elementals ---------------------------------------------
 
 
@@ -158,16 +187,36 @@ def _defences(c: Cast, value: int, *, until: When, on: int | None = None) -> Non
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=PRIMAL_IMPL_CONJ,
-    dropped=PRIMARY,
 )
 def p11804(c: Cast) -> None:
-    """The spirit and the defence aura are exact; the standard-action
-    dismissal attack is "Primary ability vs. Reflex" and has no ability to
-    roll, so the row is offered and conjures without it."""
+    """A spirit with a defence aura, and a standard action that spends it on
+    one swing.
+
+    The dismissal is `c.endable` with a `STANDARD` cost -- the same shape
+    `p11807` uses for its minor -- so the option appears on the caster's card
+    and the payout is the attack. `from_=spirit` is what makes it a melee 1
+    from the spirit's square while the numbers stay the caster's.
+
+    The -2 is untyped: the card prints "a -2 penalty" with no type word, so it
+    must not go through `_defences`, which lays a *power* bonus.
+    """
     spirit = c.conjure(until=When.ENCOUNTER, sustain=None)
     ring = c.aura(1, on=spirit, until=When.ENCOUNTER, label=c.ref)
     for defence in Defense:
         c.grants_in(ring, defence, 1, side="team", kind="power")
+    hold = c.effect(c.ref, until=When.ENCOUNTER, on=c.me)
+
+    def dismiss() -> None:
+        near = sorted(c.within(1, of=spirit, side="enemy"))
+        foe = c.choose(near, "who to strike from it") if near else None
+        if foe is not None and c.attack(_primary(c), REF, on=foe, from_=spirit):
+            c.damage("1d10", c.primary_mod, on=foe)
+            c.penalty("attack", 2, on=foe, until=When.EONT)
+            for defence in Defense:
+                c.penalty(defence, 2, on=foe, until=When.EONT)
+        c.dispel(spirit)
+
+    c.endable(hold, STANDARD, then=dismiss)
 
 
 @power(
@@ -298,14 +347,47 @@ def p11814(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=PRIMAL_IMPL_CONJ,
-    dropped=PRIMARY,
 )
 def p11815(c: Cast) -> None:
-    """The elemental and its attack aura are exact; the melee 1 attack from
-    its square is "Primary ability vs. Will"."""
+    """An elemental with an attack aura, spent on one swing that drags its
+    target back to it.
+
+    "2 damage for each bloodied ally with line of sight to the elemental" is
+    counted at the moment the swing lands rather than when the elemental was
+    conjured, which is what the card asks and is why it is inside `strike`.
+    `query.sees_through` is the sight question asked of somebody other than
+    the caster -- `c.can_see` only ever answers for the caster.
+
+    The slide names its square rather than a distance, because "3 squares **to
+    a square adjacent to the elemental**" is a destination and `c.slide`
+    takes one.
+    """
     elemental = c.conjure(until=When.EONT, sustain=None)
     ring = c.aura(1, on=elemental, until=When.EONT, label=c.ref)
     c.grants_in(ring, "attack", 1, side="team", kind="power")
+    hold = c.effect(c.ref, until=When.EONT, on=c.me)
+
+    def strike() -> None:
+        near = sorted(c.within(1, of=elemental, side="enemy"))
+        foe = c.choose(near, "who to strike from it") if near else None
+        if foe is not None and c.attack(_primary(c), WILL, on=foe, from_=elemental):
+            watching = sum(
+                1
+                for ally in c.within(20, side="team")
+                if c.bloodied(on=ally)
+                and query.sees_through(c.world, ally, elemental)
+            )
+            c.damage("2d8", c.primary_mod + 2 * watching, on=foe)
+            beside = sorted(
+                sq
+                for sq in spread(query.squares(c.world, elemental), 1)
+                if sq not in query.squares(c.world, elemental)
+            )
+            if beside:
+                c.slide(3, on=foe, to=beside[0])
+        c.dispel(elemental)
+
+    c.endable(hold, STANDARD, then=strike)
 
 
 @power(
@@ -317,14 +399,44 @@ def p11815(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=PRIMAL_IMPL_CONJ,
-    dropped=PRIMARY,
 )
 def p11818(c: Cast) -> None:
-    """Four elementals stand; the standard-action attack made from each of
-    their squares is "Primary ability vs. Reflex" and carries the whole of
-    the restrain and the ongoing damage with it."""
-    for _ in range(4):
-        c.conjure(until=When.ENCOUNTER, sustain=None)
+    """Four elementals, and one standard action that swings from every one of
+    them still standing.
+
+    **No damage on a hit at this level.** The card's Hit line is the restrain
+    and the burn; the dice only arrive on the Level 19 and 29 lines, which are
+    out of scope. Writing `2d6` here would be a paragon number in a heroic
+    row.
+
+    "One, two, three, or four creatures, each adjacent to at least one
+    tortured elemental" is one target per elemental, chosen when the action is
+    spent -- so it is a loop over the elementals rather than a `target=` on
+    the header, which would have to name its creatures before any of them
+    stood.
+
+    An elemental is removed on a hit and stays on a miss, which is what makes
+    this spendable four times over a fight.
+    """
+    standing = [c.conjure(until=When.ENCOUNTER, sustain=None) for _ in range(4)]
+    hold = c.effect(c.ref, until=When.ENCOUNTER, on=c.me)
+
+    def swing() -> None:
+        for elemental in list(standing):
+            near = sorted(c.within(1, of=elemental, side="enemy"))
+            foe = c.choose(near, "who this one strikes") if near else None
+            if foe is None:
+                continue
+            if c.attack(_primary(c), REF, on=foe, from_=elemental):
+                c.condition(Condition.RESTRAINED, on=foe, until=When.SAVE_ENDS)
+                c.ongoing(5, on=foe)
+                standing.remove(elemental)
+                c.dispel(elemental)
+            else:
+                c.slide(1, on=foe)
+                c.slide(1, on=elemental)
+
+    c.endable(hold, STANDARD, then=swing)
 
 
 @power(
@@ -336,15 +448,34 @@ def p11818(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL, Keyword.HEALING, Keyword.CONJURATION],
-    dropped=PRIMARY,
 )
 def p11821(c: Cast) -> None:
-    """The death-save rescue is written. The extra hit points on a surge
-    spent beside the elemental are "your primary ability modifier", so the
-    watch that would pay them has no number."""
+    """An elemental that pays extra on a surge spent beside it, and can be
+    spent to catch a dying ally.
+
+    `SurgeSpent` is the event, and its docstring says why it exists: three
+    places decremented a surge silently, so "when a creature spends a healing
+    surge in this aura" could never see it. Adjacency is asked when the surge
+    is spent rather than when the elemental was conjured.
+
+    "Regains additional hit points" is healing and not temporary hit points,
+    so it is `c.heal` -- the surge itself has already been paid out by
+    whatever spent it.
+    """
     elemental = c.conjure(until=When.ENCOUNTER, sustain=None)
     c.aura(1, on=elemental, until=When.ENCOUNTER, label=c.ref)
     hold = c.effect(c.ref, until=When.ENCOUNTER, on=c.me)
+
+    def extra(ev: SurgeSpent) -> None:
+        if hold is None or hold.ended or c.primary_mod <= 0:
+            return
+        # `side="team"` is the caster **and** allies, which is exactly "you
+        # and each ally"; `"ally"` leaves the caster out and the card does not.
+        if ev.actor not in c.within(1, of=elemental, side="team"):
+            return
+        c.heal(c.primary_mod, on=ev.actor)
+
+    c.watch(SurgeSpent, extra, until=When.ENCOUNTER, on=c.me)
 
     def rescue(ev: SavingThrow) -> None:
         if ev.saved or ev.actor == c.me or hold is None or hold.ended:
@@ -371,11 +502,32 @@ def p11821(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.PSYCHIC],
-    todo=PRIMARY,
+    attack=Attack(Pick.PRIMARY, vs=REF),
 )
 def p12375(c: Cast) -> None:
-    """Attack and crit-range rider both; nothing here stands without the
-    attack, so the whole row waits on the ability."""
+    """Psychic damage, and a wider critical range against that creature.
+
+    **The modifier sits on the caster, not the target.** "*Your* attacks
+    against the target" is a fact about your rolls, and `resolve.attack` reads
+    `crit_range` off the attacker -- laid on the target it would be consulted
+    by nothing. The narrowing is the attack context's `target`.
+
+    18-20 is `crit_range` 2: `resolve.attack` computes the floor as
+    `20 - crit_range`.
+    """
+    if not c.strike():
+        return
+    c.damage("1d8", c.attack_mod, dtype=DamageType.PSYCHIC)
+    foe = c.target
+    if foe is None:
+        return
+    c.bonus(
+        "crit_range",
+        2,
+        on=c.me,
+        until=When.EONT,
+        when=lambda ctx: ctx.get("target") == foe,
+    )
 
 
 @power(
@@ -387,12 +539,23 @@ def p12375(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.PSIONIC],
-    dropped=PRIMARY,
 )
 def p12376(c: Cast) -> None:
-    """The defences are exact. The temporary hit points on a critical are
-    "5 + your primary ability modifier"."""
+    """Defences, and temporary hit points the first critical pays for.
+
+    "If you score a critical hit" is one payment, not one per critical, so the
+    watcher spends itself.
+    """
     _defences(c, 2, until=When.EONT)
+    paid = [False]
+
+    def crit(ev: Hit) -> None:
+        if paid[0] or ev.attacker != c.me or not ev.critical:
+            return
+        paid[0] = True
+        c.temp_hp(5 + c.primary_mod, on=c.me)
+
+    c.watch(Hit, crit, until=When.EONT, on=c.me)
 
 
 @power(
@@ -409,10 +572,26 @@ def p12376(c: Cast) -> None:
         Keyword.PSYCHIC,
         Keyword.FIRE,
     ],
-    todo=PRIMARY,
+    attack=Attack(Pick.PRIMARY, vs=REF),
 )
 def p12377(c: Cast) -> None:
-    """Both halves hang off the attack roll."""
+    """Psychic damage, and a critical sets the target and its neighbours
+    burning.
+
+    Read off `c.result` rather than watched on `Hit`: the question is about
+    *this* attack, which the cast is still holding, and a watcher would also
+    answer for the next one.
+    """
+    if not c.strike():
+        return
+    c.damage("2d6", c.attack_mod, dtype=DamageType.PSYCHIC)
+    foe = c.target
+    if foe is None or not getattr(c.result, "critical", False):
+        return
+    c.ongoing(5, DamageType.FIRE, on=foe)
+    for other in c.within(1, of=foe, side="enemy"):
+        if other != foe:
+            c.ongoing(5, DamageType.FIRE, on=other)
 
 
 @power(
@@ -422,7 +601,7 @@ def p12377(c: Cast) -> None:
     usage=DAILY,
     action=REACTION,
     reach=CloseBurst(2),
-    target=NO_TARGET,
+    target=EACH_CREATURE,
     keywords=[
         Keyword.PSIONIC,
         Keyword.IMPLEMENT,
@@ -431,26 +610,37 @@ def p12377(c: Cast) -> None:
     ],
     trigger="an enemy in the burst damages you with an attack",
     on=Trigger(DamageApplied, targets_me, "an enemy damages you with an attack"),
-    dropped=PRIMARY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
 )
 def p12378(c: Cast) -> None:
-    """The Effect line stands on its own and is written; the burst attack is
-    "Primary ability vs. Will". Re-laying the bonus one point larger is what
-    extends it -- two power bonuses do not add, the larger wins, so the
-    printed escalation is the same call with a bigger number."""
-    step = [2]
-    _defences(c, step[0], until=When.EONT)
+    """A burst answering whoever hurt you, and a bonus each critical renews.
 
-    def sharpen(ev: Hit) -> None:
-        if ev.attacker != c.me or not ev.critical:
-            return
-        step[0] += 1
+    Re-laying the bonus one point larger is what extends it: two power
+    bonuses do not add and the larger wins, so the printed escalation is the
+    same call with a bigger number rather than a delta.
+
+    The Effect is under `c.first` now that the header declares targets -- the
+    body runs once per creature in the burst, and the bonus is one bonus.
+    """
+    if c.first:
+        step = [2]
         _defences(c, step[0], until=When.EONT)
-        for foe in c.enemies():
-            if c.distance(foe) <= 5:
-                c.flat(5, dtype=DamageType.PSYCHIC, on=foe)
 
-    c.watch(Hit, sharpen, until=When.ENCOUNTER, on=c.me)
+        def sharpen(ev: Hit) -> None:
+            if ev.attacker != c.me or not ev.critical:
+                return
+            step[0] += 1
+            _defences(c, step[0], until=When.EONT)
+            for foe in c.enemies():
+                if c.distance(foe) <= 5:
+                    c.flat(5, dtype=DamageType.PSYCHIC, on=foe)
+
+        c.watch(Hit, sharpen, until=When.ENCOUNTER, on=c.me)
+    if c.strike():
+        c.damage("2d8", c.attack_mod, dtype=DamageType.FORCE)
+        c.push(2)
+    else:
+        c.half_damage("2d8", c.attack_mod, dtype=DamageType.FORCE)
 
 
 @power(
@@ -492,10 +682,21 @@ def p12379(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.PSYCHIC],
-    todo=PRIMARY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
 )
 def p12380(c: Cast) -> None:
-    """Hit line and critical rider both wait on the attack."""
+    """Psychic damage, and more of it plus a daze on a critical.
+
+    `c.flat` and not a bigger `c.damage`: "takes 10 extra psychic damage" is a
+    fixed amount, and `c.damage` maxes its dice on a critical -- which this
+    roll already was.
+    """
+    if not c.strike():
+        return
+    c.damage("2d8", c.attack_mod, dtype=DamageType.PSYCHIC)
+    if getattr(c.result, "critical", False):
+        c.flat(10, dtype=DamageType.PSYCHIC)
+        c.dazed(until=When.EONT)
 
 
 @power(
@@ -507,13 +708,18 @@ def p12380(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.PSYCHIC],
-    dropped=PRIMARY,
+    attack=Attack(Pick.PRIMARY, vs=WILL),
 )
 def p12381(c: Cast) -> None:
-    """The Effect line applies whether or not the attack lands, so the
-    ongoing damage, the failed-save payment and the critical daze are all
-    written; only the Hit line waits on the ability."""
+    """A burn that punishes failing to shake it off, and a daze on any
+    critical while it holds.
+
+    The Effect applies whether or not the attack landed, so the strike is
+    asked for the Hit line alone and the rest is laid either way.
+    """
     victim = c.target
+    if c.strike():
+        c.damage("1d8", c.attack_mod, dtype=DamageType.PSYCHIC)
     burn = c.ongoing(5, DamageType.PSYCHIC, on=victim)
 
     def failed(ev: SavingThrow) -> None:
