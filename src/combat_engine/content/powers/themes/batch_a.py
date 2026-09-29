@@ -40,6 +40,7 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     AdjacencyGained,
+    Attack,
     AttackRolled,
     Bloodied,
     Cast,
@@ -60,6 +61,7 @@ from combat_engine.engine import (
     Miss,
     MoveEnd,
     MoveStart,
+    Pick,
     Position,
     PowerUsed,
     Ranged,
@@ -1426,18 +1428,32 @@ ILLUSION = [Keyword.ARCANE, Keyword.ILLUSION]
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[*ILLUSION, Keyword.IMPLEMENT],
-    todo=("c.ability_for(ref)",),
+    attack=Attack(Pick.HIGHEST, vs=WILL),
 )
 def p16644(c: Cast) -> None:
-    """"Highest ability modifier vs. Will". A theme does not know which class
-    took it, so the attack line names no ability at all -- where a class row
-    printing "Charisma or Constitution" names two and one can be picked, this
-    names none, and `Attack.bonus_for` has nothing to roll. The Hit clauses
-    are sayable and cannot be reached without the roll, so the row is refused
-    whole rather than half-offered."""
-    if c.strike():
-        c.slide(3)
-        c.conceal(on=c.me, until=When.EONT)
+    """A slide, and cover of a sort from the creature slid.
+
+    **This one is `Pick.HIGHEST`, not `Pick.PRIMARY`.** The line reads
+    "Highest ability modifier vs. Will", which is a different sentence from
+    the "Primary ability" the rest of this wave prints and only accidentally
+    the same number: half level, proficiency and enhancement are common to all
+    six abilities, so the largest of them is what the line means. This row's
+    marker named `c.ability_for(ref)` along with the primary-ability rows,
+    which is the one thing it did not want.
+
+    The concealment is "from the target", so it is gated on the attack
+    context's `attacker` and not laid against everybody -- the same as
+    `p16646` below.
+    """
+    if not c.strike():
+        return
+    c.slide(3)
+    foe = c.target
+    if foe is None:
+        return
+    c.conceal(
+        on=c.me, until=When.EONT, when=lambda ctx: ctx.get("attacker") == foe
+    )
 
 
 @power(

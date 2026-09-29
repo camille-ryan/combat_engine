@@ -44,6 +44,7 @@ watch that cancels the ones the card names. `f2406` writes it.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from combat_engine.engine import (
@@ -53,6 +54,7 @@ from combat_engine.engine import (
     PERSONAL,
     REF,
     SELF,
+    Ability,
     ActionType,
     AttackDeclared,
     Cast,
@@ -70,6 +72,7 @@ from combat_engine.engine import (
     Trigger,
     When,
     Window,
+    World,
     power,
 )
 from combat_engine.engine.dsl import get
@@ -102,6 +105,25 @@ def _grip(c: Cast, *groups: str, hands: int) -> bool:
     return any(
         w.group in groups and w.two_handed == (hands == 2) for w in gear.melee
     )
+
+
+def _wielding(*groups: str, hands: int = 0) -> Callable[[World, int], bool]:
+    """`_grip` as a `(world, eid)` predicate, which is what
+    `c.rolls_with(when=)` is handed -- the swap is laid once at the start of
+    the fight and has to be re-asked on every roll, because the axe can be
+    put down.
+    """
+
+    def holds(world: World, eid: int) -> bool:
+        gear = world.get(eid, Gear)
+        if gear is None:
+            return False
+        return any(
+            w.group in groups and (not hands or w.two_handed == (hands == 2))
+            for w in gear.melee
+        )
+
+    return holds
 
 
 def _i_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -330,23 +352,40 @@ def f2708(c: Cast) -> None:
 
 
 @power("f2712", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.rolls_with(ref, ability)",),
-       trigger="you score a critical hit with a one-handed axe",
-       on=Trigger(Hit, _i_crit, "you crit"))
+       reach=PERSONAL, target=SELF,
+       trigger="you score a critical hit with a one-handed axe")
 def f2712(c: Cast) -> None:
-    """Prone, and a swing at it when it gets back up.
+    """Prone on a crit, a swing at it when it gets back up, and Strength in
+    place of Dexterity on two rows.
 
-    The second half was dropped as `c.provokes_on_stand()` by the
+    The stand half was once dropped as `c.provokes_on_stand()` by the
     fighter's f1322, and it need not be: the stand action ends the prone
     effect with `why="stood up"`, so `ConditionEnded` is the trigger and
     `c.provoke` is the window. `once=True` is "the first time".
 
-    What is dropped is Strength in place of Dexterity on the associated
-    rows, which is header data the roll reads before anything runs.
+    **The declared trigger became a watch** so that the standing swap has
+    somewhere to be laid -- a body gated on `on=Trigger(...)` runs only when
+    the trigger fires, and a swap that arrives after the first critical is
+    every roll too late. See `ranger_b.f1309`, which is the same rewrite.
+
+    This one goes the other way round from its siblings: **Strength in place
+    of Dexterity**, because a ranger's own line is Dexterity and the axe is
+    the Strength weapon.
     """
-    if not _grip(c, "axe", hands=1):
-        return
-    me, foe = c.me, c.trigger.target
+    for ref in ("p1419", "p4389"):
+        c.rolls_with(ref, Ability.STR, when=_wielding("axe", hands=1))
+
+    def crit(ev: Any) -> None:
+        if not _i_crit(c.world, c.me, ev) or not _grip(c, "axe", hands=1):
+            return
+        _knock_down(c, ev.target)
+
+    c.watch(Hit, crit, until=When.ENCOUNTER, on=c.me)
+
+
+def _knock_down(c: Cast, foe: int) -> None:
+    """`f2712`'s payout: prone, and an opportunity attack on standing up."""
+    me = c.me
     c.prone(on=foe)
 
     def stood(ev: Any) -> None:

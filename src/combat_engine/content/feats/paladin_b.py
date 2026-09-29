@@ -221,14 +221,22 @@ def f2734(c: Cast) -> None:
 
 @power("f2909", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.rolls_with(ref, ability)",))
+       todo=("c.damages_with(ref, ability)",))
 def f2909(c: Cast) -> None:
     """Swaps which ability modifier the two marks pay out from.
 
-    `cf:paladin-f1` is declared and names `p805` outright, so the
-    feature is not the hold. The number is worked out inside `p805`'s
-    own closure and nothing tells a named row to roll a different
-    ability -- the gap eighteen rows already name."""
+    **Re-aimed off `c.rolls_with`, which has arrived and is the wrong verb.**
+    That one changes the ability a named row *attacks* with, and
+    `Attack.ability_for` reads it before the header -- which is exactly what
+    fifteen other feats wanted and what this one does not. This card swaps the
+    modifier a row's **damage** adds, and says so: "in place of your Charisma
+    modifier when determining damage".
+
+    `cf:paladin-f1` is declared and names `p805` outright, so the feature is
+    not the hold either. `p805` works its number out inside its own closure --
+    `c.flat(3 + c.cha_mod, ...)` -- so there is nothing for a swap to read.
+    A row whose damage line went through the resolved attack ability would
+    need no verb at all; this one does not."""
 
 
 # -- what a marked creature owes -------------------------------------------

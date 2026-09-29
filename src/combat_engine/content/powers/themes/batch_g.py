@@ -49,6 +49,7 @@ from combat_engine.engine import (
     REGISTRY,
     STANDARD,
     WILL,
+    Ability,
     ActionType,
     Attack,
     AttackDeclared,
@@ -68,6 +69,7 @@ from combat_engine.engine import (
     Miss,
     Moved,
     MoveEnd,
+    MoveStart,
     Pick,
     Powers,
     PowerUsed,
@@ -101,6 +103,26 @@ DEFENCES = (AC, FORT, REF, WILL)
 #: The one marker this batch names again and again: which ability a theme
 #: row attacks with, decided per character rather than per card.
 ABILITY = ("c.ability_for(ref)",)
+
+
+def _primary(c: Cast) -> int:
+    """"Primary ability vs. X" as an attack bonus, for a **secondary** attack.
+
+    A row whose own action is the attack declares it in the header and reads
+    `c.attack_mod`. `p12262`'s attack is printed inside its Effect as an
+    interrupt held for later, on a `PERSONAL` row with no attack line to be,
+    so `c.primary` and the per-ability property are joined up here. The same
+    helper is in `batch_d.py`, kept local to each file because a parallel
+    author edits one file and not the tree.
+    """
+    return {
+        Ability.STR: c.str_,
+        Ability.CON: c.con_,
+        Ability.DEX: c.dex_,
+        Ability.INT: c.int_,
+        Ability.WIS: c.wis_,
+        Ability.CHA: c.cha_,
+    }[c.primary]
 
 
 def _best(c: Cast) -> int:
@@ -220,12 +242,36 @@ def p12259(c: Cast) -> None:
     reach=CloseBurst(10),
     target=ONE_ALLY,
     keywords=[Keyword.PRIMAL],
-    todo=ABILITY,
 )
 def p12260(c: Cast) -> None:
-    """The flight is "a number of squares equal to your primary ability
-    modifier", so the distance itself is the unsayable part."""
-    ...
+    """A flight the caster's own ability measures, and a push on the melee
+    hits that follow it.
+
+    `c.primary_mod` is "your primary ability modifier" -- the caster's, even
+    though the flier may be an ally, because the card measures the distance by
+    the one who used the power.
+
+    Flight is a mode plus a move, which is the shape `p6990` uses: the mode
+    ends with the turn and `movement.settle` puts the creature down, which is
+    the printed landing.
+
+    The push names `by=` the flier. `c.push` measures away from the caster's
+    square by default and the enemy is being shoved by whoever hit it, which
+    on this row is usually somebody else.
+    """
+    who = c.target
+    if who is None:
+        return
+    reach = max(1, c.primary_mod)
+    c.mode("fly", reach, until=When.EOT, on=who)
+    c.move(reach, who=who)
+
+    def shove(ev: Hit) -> None:
+        if ev.attacker != who or not by_melee(c.world, who, ev):
+            return
+        c.push(1, on=ev.target, by=who)
+
+    c.watch(Hit, shove, until=When.EONT, on=who)
 
 
 @power(
@@ -263,13 +309,40 @@ def p12261(c: Cast) -> None:
         Keyword.THUNDER,
         Keyword.WEAPON,
     ],
-    dropped=ABILITY,
 )
 def p12262(c: Cast) -> None:
-    """The form and the resistance stand on their own; the interrupt printed
-    inside the Effect attacks with the primary ability and so is dropped."""
+    """A form, resistance, and one interrupt held for an adjacent enemy that
+    moves.
+
+    **`MoveStart` is the right event twice over.** It is the interrupt window
+    -- by `MoveEnd` the enemy has left and `c.adjacent` is false exactly when
+    the row should fire -- and it is also what "moves **willingly**" means:
+    `movement.forced` steps straight through `movement.step` and announces no
+    `MoveStart` at all, so a shove never opens this window.
+
+    "Once before the end of your next turn", so the watcher spends itself.
+    """
     c.form(until=When.EONT, label=c.ref)
     c.resist(5, until=When.EONT, on=c.me)
+    fired = [False]
+
+    def gore(ev: MoveStart) -> None:
+        foe = ev.actor
+        if fired[0] or foe not in c.enemies() or not c.adjacent(foe):
+            return
+        fired[0] = True
+        if c.attack(_primary(c), FORT, on=foe):
+            c.damage(c.w(2), c.primary_mod, dtype=DamageType.THUNDER, on=foe)
+            c.prone(on=foe)
+
+    c.arm_trigger(
+        MoveStart,
+        gore,
+        cost=ActionType.IMMEDIATE_INTERRUPT,
+        until=When.EONT,
+        on=c.me,
+        label=c.ref,
+    )
 
 
 @power(

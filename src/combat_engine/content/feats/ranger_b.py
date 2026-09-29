@@ -26,6 +26,7 @@ of your next turn" is a watch laid on the creature that was hit, and
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from combat_engine.engine import (
@@ -35,6 +36,7 @@ from combat_engine.engine import (
     PERSONAL,
     REF,
     SELF,
+    Ability,
     ActionPointSpent,
     ActionType,
     Cast,
@@ -53,6 +55,7 @@ from combat_engine.engine import (
     Trigger,
     When,
     Window,
+    World,
     power,
 )
 from combat_engine.engine.dsl import get
@@ -103,6 +106,33 @@ def _holding(c: Cast, *groups: str) -> bool:
     if gear is None:
         return False
     return any(w.group in groups for w in (*gear.melee, *([gear.ranged] if gear.ranged else [])))
+
+
+def _wields(
+    *groups: str, versatile: bool = False, hands: int = 0
+) -> Callable[[World, int], bool]:
+    """`_holding` as a `(world, eid)` predicate, which is what
+    `c.rolls_with(when=)` is handed.
+
+    The style feats gate their whole benefit on what is in hand, and the swap
+    has to be re-asked on every roll rather than settled when the feat armed:
+    a ranger who sheathes the axe stops having the feat's benefit, and
+    `c.rolls_with` is laid once at the start of the fight.
+    """
+
+    def holds(world: World, eid: int) -> bool:
+        gear = world.get(eid, Gear)
+        if gear is None:
+            return False
+        carried = (*gear.melee, *([gear.ranged] if gear.ranged else []))
+        return any(
+            w.group in groups
+            and (not versatile or "versatile" in w.properties)
+            and (not hands or w.two_handed == (hands == 2))
+            for w in carried
+        )
+
+    return holds
 
 
 def _martial(p, *, usage=None) -> bool:  # noqa: ANN001
@@ -267,20 +297,36 @@ def f815(c: Cast) -> None:
 
 
 @power("f1309", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ABILITY,
-       trigger="you score a critical hit with a two-handed axe",
-       on=Trigger(Hit, _i_crit, "you crit"))
+       reach=PERSONAL, target=SELF,
+       trigger="you score a critical hit with a two-handed axe")
 def f1309(c: Cast) -> None:
-    """Splash damage on a crit. The second benefit -- Dexterity in place
-    of Strength on the associated powers -- is dropped."""
-    gear = c.world.get(c.me, Gear)
-    if gear is None or not any(
-        w.group == "axe" and w.two_handed for w in gear.melee
-    ):
-        return
-    for foe in enemies(c.world, c.me):
-        if c.adjacent(to=foe):
-            c.flat(c.dex_mod, on=foe)
+    """Splash damage on a crit, and Dexterity in place of Strength on the
+    two rows the card names.
+
+    **The declared trigger had to go for the second benefit to exist.** A row
+    with `on=Trigger(...)` runs its body only when the trigger fires, so a
+    standing swap laid there would arrive after the first critical -- which is
+    every roll too late. `turns.arm_traits_of` arms an `action=NONE` row with
+    no `on=`, so the row becomes a trait that lays a watch for the crit half
+    and the swap for the standing half. `f2328` in this file is the same shape.
+    The `trigger=` string stays as the card's own words.
+
+    The swap is gated with `when=` rather than checked once, because it is laid
+    at the start of the fight and the axe can be put down later.
+    """
+    for ref in ("p10609", "p10629"):
+        c.rolls_with(ref, Ability.DEX, when=_wields("axe", hands=2))
+
+    def splash(ev: Any) -> None:
+        if not _i_crit(c.world, c.me, ev) or not _wields("axe", hands=2)(
+            c.world, c.me
+        ):
+            return
+        for foe in enemies(c.world, c.me):
+            if c.adjacent(to=foe):
+                c.flat(c.dex_mod, on=foe)
+
+    c.watch(Hit, splash, until=When.ENCOUNTER, on=c.me)
 
 
 @power("f2328", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -386,7 +432,7 @@ def f2367(c: Cast) -> None:
 
 
 @power("f2373", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ABILITY)
+       reach=PERSONAL, target=SELF)
 def f2373(c: Cast) -> None:
     """Takes the combat-advantage bonus away from adjacent enemies.
 
@@ -395,7 +441,15 @@ def f2373(c: Cast) -> None:
     `resolve.attack` and reaches the modifiers only as the `advantage`
     key -- so the place to answer it is the same context that carries
     it.
+
+    The second benefit is the ability swap on the two rows the card names, and
+    this row needed no restructuring for it: it declares no trigger, so it is
+    armed as a trait and its body runs once at the start of the fight.
     """
+    for ref in ("p848", "p4387"):
+        c.rolls_with(
+            ref, Ability.DEX, when=_wields("heavy blade", versatile=True)
+        )
     me = c.me
     gear = c.world.get(me, Gear)
     if gear is None or not any(
@@ -415,45 +469,78 @@ def f2373(c: Cast) -> None:
 
 
 @power("f2384", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ABILITY,
-       trigger="you hit with a martial power",
-       on=Trigger(Hit, _my_martial_hit, "you hit"))
+       reach=PERSONAL, target=SELF,
+       trigger="you hit with a martial power")
 def f2384(c: Cast) -> None:
-    """Punishes the target for shifting.
+    """Punishes the target for shifting, and swaps the ability on two rows.
 
-    A watch on the creature rather than a standing modifier: the printed
-    line pays out on a *move*, and `Moved.kind_` is what separates a
-    shift from a walk. `once=True` because "it takes damage" is one
-    payment, not one per square.
+    A watch on the creature rather than a standing modifier: the printed line
+    pays out on a *move*, and `Moved.kind_` is what separates a shift from a
+    walk. `once=True` because "it takes damage" is one payment, not one per
+    square.
+
+    The declared trigger became an outer watch so the row could also hold its
+    standing half -- see `f1309` for why that is forced rather than chosen.
     """
-    if not _holding(c, "flail"):
-        return
-    foe = c.trigger.target
-    hurt = c.wis_mod
+    for ref in ("p848", "p4385"):
+        c.rolls_with(ref, Ability.DEX, when=_wields("flail"))
+    # **One debt per creature, not one per hit.** `p848` is one of this
+    # feat's own associated rows and it makes *two* attacks, so two `Hit`
+    # events named the same enemy and the shift was paid for twice -- three
+    # points became six. The declared trigger this replaced had the same
+    # shape, so the doubling is older than the rewrite.
+    owed: set[int] = set()
 
-    def on_shift(ev: Any) -> None:
-        if ev.actor == foe and getattr(ev, "kind_", "") == "shift":
-            c.flat(hurt, on=foe)
+    def punish(ev: Any) -> None:
+        if not _my_martial_hit(c.world, c.me, ev) or not _holding(c, "flail"):
+            return
+        foe = ev.target
+        if foe in owed:
+            return
+        owed.add(foe)
+        hurt = c.wis_mod
 
-    c.watch(Moved, on_shift, on=foe, until=When.EONT, once=True)
+        def on_shift(moved: Any) -> None:
+            if moved.actor == foe and getattr(moved, "kind_", "") == "shift":
+                c.flat(hurt, on=foe)
+
+        held = c.watch(Moved, on_shift, on=foe, until=When.EONT, once=True)
+        if held is not None:
+            held.on_end.append(lambda f=foe: owed.discard(f))
+
+    c.watch(Hit, punish, until=When.ENCOUNTER, on=c.me)
 
 
 @power("f2337", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ABILITY,
-       trigger="you attack with a bow or crossbow",
-       on=Trigger(AttackDeclared, lambda w, me, ev: ev.attacker == me,
-                  "you attack", window=Window.BEFORE))
+       reach=PERSONAL, target=SELF,
+       trigger="you attack with a bow or crossbow")
 def f2337(c: Cast) -> None:
-    """No opportunity attack from the creature you are shooting at.
+    """No opportunity attack from what you are shooting at, and a bow in place
+    of a thrown weapon on two rows.
 
-    Declared `BEFORE` the attack, because the provocation happens as the
-    shot is taken -- an `AFTER` window would grant the exemption once
-    the reprisal had already been made. `c.no_provoke(from_=)` names the
+    The watch is registered `BEFORE` the attack, because the provocation
+    happens as the shot is taken -- an `AFTER` window would grant the exemption
+    once the reprisal had already been made. `c.no_provoke(from_=)` names the
     one creature the printed line exempts, which is not the same as not
     provoking at all.
+
+    Of the second benefit's two clauses only the ability half is a swap: "you
+    can use your bow or crossbow instead of a thrown weapon" is what
+    `c.rolls_with(when=)` gates on, so the Dexterity holds only while one is in
+    hand -- which is the printed "if you do so".
     """
-    if _holding(c, "bow", "crossbow"):
-        c.no_provoke(from_=c.trigger.target, on=c.me, until=When.EOT)
+    for ref in ("p10628", "p10614"):
+        c.rolls_with(ref, Ability.DEX, when=_wields("bow", "crossbow"))
+
+    def exempt(ev: Any) -> None:
+        if ev.attacker != c.me or not _holding(c, "bow", "crossbow"):
+            return
+        c.no_provoke(from_=ev.target, on=c.me, until=When.EOT)
+
+    c.watch(
+        AttackDeclared, exempt, until=When.ENCOUNTER, on=c.me,
+        window=Window.BEFORE,
+    )
 
 
 # -- the style feats, now that the lists resolve ---------------------------

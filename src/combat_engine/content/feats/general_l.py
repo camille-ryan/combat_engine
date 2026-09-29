@@ -48,6 +48,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    Ability,
     ActionPointSpent,
     ActionType,
     AttackDeclared,
@@ -459,17 +460,24 @@ def f2731(c: Cast) -> None:
 
 
 @power("f2859", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.rolls_with(ref, ability)",))
+       reach=PERSONAL, target=SELF)
 def f2859(c: Cast) -> None:
-    """A chosen arcane at-will used as an encounter power.
+    """A chosen arcane at-will used as an encounter power, rolled with the
+    best ability the character has if a second feat is held.
 
     The set is "any arcane class" rather than one named class, so it is
     gathered by keyword across the registry and handed to `among=`.
 
-    Dropped, and **re-aimed**: the second sentence names `f651` by ref
-    now, so `c.feat` could ask it -- what is still missing is the
-    answer, which is rewriting one row's attack line to use the best
-    ability the character has. Eighteen rows carry that hold."""
+    The second sentence is written now, and it needed both halves that were
+    missing: `c.feat` asks whether `f651` is held, and `c.rolls_with` reaches
+    into the row that was chosen and changes the ability it rolls. "Your
+    highest ability" is the largest modifier on the sheet -- half level,
+    proficiency and enhancement are common to all six, so the largest
+    modifier is the largest bonus.
+
+    `borrow_row` returns the ref it settled on, which is what makes the swap
+    nameable: the row is not known until the choice is made.
+    """
     from combat_engine.engine.dsl import REGISTRY
 
     arcane = [
@@ -482,7 +490,16 @@ def f2859(c: Cast) -> None:
         and not ref.startswith("cf:")
         and Keyword.ARCANE in row.keywords
     ]
-    c.borrow_row(among=arcane, uses=1)
+    chosen = c.borrow_row(among=arcane, uses=1)
+    if chosen and c.feat("f651"):
+        best = max(
+            (
+                Ability.STR, Ability.CON, Ability.DEX,
+                Ability.INT, Ability.WIS, Ability.CHA,
+            ),
+            key=c.stats.mod,
+        )
+        c.rolls_with(chosen, best)
 
 
 @power("f2697", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
