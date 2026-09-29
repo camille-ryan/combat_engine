@@ -30,3 +30,12 @@ docs/blocked.csv
 
 # An empty file committed by accident; the real build is data/game.db.
 /game.db
+
+# Community-guide prose notes. The ratings themselves are tracked as
+# `ref -> integer` in `ratings.py`; the authors' text is not ours to carry and
+# the reasoning is more useful to a human than to the scorer anyway.
+/notes/
+
+# Fetched guide HTML. Static historical documents, so one fetch is enough --
+# and the pages are full of printed names.
+/.cache/
