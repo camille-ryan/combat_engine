@@ -296,6 +296,7 @@ KNOWN_SILENT = {
 DID_SOMETHING = {
     "DamageApplied", "ConditionApplied", "Healed", "TempHP", "Moved",
     "ForcedMove", "RelationSet", "ZoneCreated", "EffectExpired", "Note",
+    "EffectApplied", "ConditionEnded",
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted",
 }  # fmt: skip
@@ -1413,6 +1414,54 @@ def _area_rows(world, caster: int, exclude: str) -> list[str]:  # noqa: ANN001
     return out[:2]
 
 
+#: Kinds that only ever count when the row's own name is on them.
+#:
+#: **They cannot be taken from the window.** Every one of these fires
+#: constantly for other creatures -- 37 `EffectApplied` land while a board is
+#: being set up -- so crediting them positionally would hand a trait its
+#: neighbours' work. They are stripped from the window and added back only by
+#: `_claimed` below.
+BY_NAME = {"EffectApplied", "ConditionEnded"}
+
+
+def _claimed(world, ref: str, cursor: int) -> set[str]:  # noqa: ANN001
+    """The `BY_NAME` kinds this row can be shown to have caused.
+
+    **Why these are needed at all.** `DID_SOMETHING` had `EffectExpired` and
+    not `EffectApplied`, so a row was credited for an effect *ending* and not
+    for laying one -- and a trait whose whole content is a standing bonus had
+    to wait for its own effect to expire inside the window to count, which for
+    an encounter-long modifier never happens. 153 of the 233 rows reporting
+    SILENT lay a modifier, cure a condition, change the initiative order,
+    write a word on a creature or hand over a row. All real, none of it
+    visible.
+
+    **Attributed by label, which is a convention this now depends on.** An
+    effect's label is the ref of the row that laid it -- `c.effect`,
+    `c.bonus` and `c.condition` all stamp `label or self.ref`, and
+    `durations.keywords_of` documents it. Prefix rather than equality,
+    because plenty of sites stamp `"<ref> riders"` or `"<ref> rolls ..."`.
+
+    Deliberately **not** a new field on the event. `EffectApplied` is emitted
+    from one place but `Effects.apply` has 187 call sites, so threading a
+    `power=` through all of them to carry what the label already carries would
+    be a large change for no new information.
+
+    The cost of the convention is **under**-crediting: a row whose label does
+    not begin with its ref reports silent and gets looked at. That is the safe
+    direction; over-crediting is what #216 was.
+    """
+    out: set[str] = set()
+    for e in world.bus.log[cursor:]:
+        if e.kind == "EffectApplied" and str(getattr(e, "label", "") or "").startswith(ref):
+            out.add("EffectApplied")
+        # `ConditionEnded.why` is the ref for a cure: `c.cure` and
+        # `Effects.end` both pass the caller's ref as the reason.
+        elif e.kind == "ConditionEnded" and str(getattr(e, "why", "") or "").startswith(ref):
+            out.add("ConditionEnded")
+    return out
+
+
 def _after_its_own_use(world, ref: str, cursor: int) -> set[str]:  # noqa: ANN001
     """Event kinds this row emitted, bounded at both ends.
 
@@ -2081,9 +2130,9 @@ def audit(ref: str) -> Result:
                     for e in world.bus.log[world.fight_cursor:]
                     if e.kind in ("DamageRolled", "DamageApplied")
                 )
-                out.events |= (mine_now - PROVOKE_NOISE) | (
+                out.events |= (mine_now - PROVOKE_NOISE - BY_NAME) | (
                     {"DamageApplied"} if dealt_now else set()
-                )
+                ) | _claimed(world, ref, world.fight_cursor)
                 # A trait's effect was installed by arming, so it is measured
                 # against the board before that.
                 #
@@ -2144,9 +2193,9 @@ def audit(ref: str) -> Result:
                 # dealt it, and making the `detail` test above dead code.
                 # That one line is why #216's `f1305` reported
                 # `ok  ConditionApplied, DamageApplied` with its gate false.
-                out.events |= (mine - PROVOKE_NOISE) | (
+                out.events |= (mine - PROVOKE_NOISE - BY_NAME) | (
                     {"DamageApplied"} if dealt else set()
-                )
+                ) | _claimed(world, ref, cursor)
                 out.events |= _own_movement(world, ref, cursor, caster)
                 if set(world.effects.live) - had:
                     out.events.add("ConditionApplied")
