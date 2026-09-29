@@ -99,18 +99,6 @@ KNOWN_SILENT = {
     "i3045p1": "cures surprised or unconscious; the board produces neither",
     "i608p1": "its Requirement is being marked, and nobody here marks",
     "i3527p1": "wants an adjacent non-minion killed; the board's deaths are neither",
-    # Three more from the class-feature sweep, all Requirements the board
-    # cannot produce for an item row: the caster is a generic wielder, so
-    # it holds no class feature and has spent no channel divinity, and
-    # `_wants_expended` above cannot help -- the sibling it spends has to
-    # be in the *same printed group*, and this caster knows none.
-    #
-    # Driven by hand. `i1927p1` and `i2304p1`: with a `CHANNEL_DIVINITY`
-    # row spent, `Powers.used` goes 1 -> 0 and `dsl.usable` goes False ->
-    # True for it; with nothing spent neither row touches anything.
-    # `i3036p1`: with `f650b` in `Powers.known` the adjacent ally's AC
-    # goes 17 -> 18, and without it 17 -> 17.
-    "i1927p1": "gives a channel divinity use back; this caster has spent none",
     "i2304p1": "the same sentence as i1927p1, off a rod rather than a symbol",
     # Driven by hand too: with a `CHANNEL_DIVINITY` row spent, `Powers.used`
     # goes 1 -> 0; with nothing spent it touches nothing.
@@ -137,15 +125,9 @@ KNOWN_SILENT = {
         "installs no policy, so the windows open and nobody swings. Verified "
         "by hand with policy.install: two windows, two opportunity attacks."
     ),
-    "m297a2": "unverified",
     "m3027a3": "unverified",
-    "m4902a4": "unverified",
     "m4962a3": "unverified",
-    "m102a1": "unverified",
-    "m103a1": "unverified",
     "m3030a1": "unverified",
-    "m676a1": "unverified",
-    "m719a4": "unverified",
     # Takes one of six conditions off whoever it touches, and the creature
     # it gets aimed at here is carrying none of them -- the board's one
     # dazed ally is not in the pool this row is offered. Driven by hand:
@@ -195,33 +177,6 @@ KNOWN_SILENT = {
     # the four wounded ones are all on the other team. Driven by hand: with
     # that ally at half hit points it is granted a melee attack and swings.
     "m350a2": "grants a bloodied ally an attack; the board's only ally is unhurt",
-    # Both hand an ally a free attack against something the board does not
-    # have: a *bloodied* enemy adjacent to that ally, and an encounter power
-    # that ally has already spent. Arranging either would mean the harness
-    # deciding what an ally has done this fight, which is the fight's
-    # business rather than the instrument's.
-    # Rerolls an ally's missed attack. It emits nothing of its own -- the
-    # consequence is that the *attacking* row's Hit is announced instead of
-    # its Miss, which is credited to that row and not to this one. Driven by
-    # hand: the reroll lands and the Hit follows.
-    "m4839a4": "rerolls somebody else's attack; the resulting Hit belongs to their row",
-    # Takes away every standard-action attack that is not a basic. Verified
-    # against the board: all four dummies have exactly one standard row each
-    # (m145a0 three times, m416a1 once) and in every case it *is* that
-    # creature's basic, so the correct answer here is that nothing is taken
-    # away. The row is right; the board has nothing for it to remove.
-    "p7170": (
-        "forbids standard attacks other than basic; every dummy's only "
-        "standard row is its basic"
-    ),
-    # "You miss with a melee attack: attack again." The sweep loads the die
-    # to 1 and to 20; a 1 is the only way to produce the triggering miss,
-    # and it then makes the answering strike miss as well, while a 20 never
-    # misses in the first place. So the row cannot show itself on a loaded
-    # die however many seeds it gets. Driven by hand with the answer free to
-    # land: the target goes from 31 hit points to 11. Any "on a miss, swing
-    # again" row will read this way.
-    "p4479": "triggers on a miss and answers with an attack; the loaded 1 misses twice",
     # A long jump plus "+2 to your fly speed (if any)". The jump is a skill
     # check nothing rolls, and the board's ranger has no fly speed, so the
     # printed row correctly does nothing here -- "if any" is the card's own
@@ -232,7 +187,6 @@ KNOWN_SILENT = {
     # nearest enemy and never that one. Driven at it by hand, p12601 deals
     # radiant, pushes 4 and immobilises; the other two likewise.
     "p12601": "affects only undead; the auto-targeter never picks the board's one undead",
-    "p14293": "affects only undead; the auto-targeter never picks the board's one undead",
     "p5330": "affects only undead; the auto-targeter never picks the board's one undead",
     # Reduces a target's necrotic resistance, and nothing on the board has
     # any. Giving the undead some would change what every necrotic row in
@@ -246,19 +200,10 @@ KNOWN_SILENT = {
     # Grants an ally a step and a swing, and the board's allies stand
     # behind the caster with nothing in reach after the step.
     "m2884a3": "grants an ally a step and a swing; no ally has anything in reach",
-    # Shifts an ally on a burst-10 trigger. The allies are already packed
-    # around the caster, so the shift has nowhere to put them.
-    "p7194": "shifts an ally; the board's allies are boxed in around the caster",
     # Clears difficult terrain in a close burst 1, and the only squares
     # beside the caster have to stay smooth so a one-square shift has
     # somewhere to go. The board's rough ground is further out.
     "p15856": "clears difficult terrain within 1; the caster's neighbours must stay smooth",
-    # Reaches its own companion in a burst. The board places one, but the
-    # druid's level-0 rows now fire during setup and one of them calls a
-    # companion of its own -- which relocates the standing one out of the
-    # burst, by design. Excused rather than unwound: firing class features
-    # up front took 23 other rows from unusable to exercised.
-    "p13541": "a companion in a burst; the druid's own setup relocates it out of reach",
     # Steps inside a stone object, which here is any adjacent blocking
     # square, and the board keeps the caster's neighbours passable so that
     # a one-square shift always has somewhere to go. Driven by hand with a
@@ -269,13 +214,6 @@ KNOWN_SILENT = {
     "p14508": "steps into an adjacent blocking square; the board keeps those clear",
     "p2530": "an ally must have a bloodied enemy beside it",
     "p4572": "an ally must have already spent an encounter attack power",
-    # Its printed Target *is* the avenger's oath target, and nothing on this
-    # board has sworn one: `_use_class_features` runs inside `_provoke`, so
-    # only a row with a declared trigger ever sees its class features. A
-    # standard-action avenger row is fielded with nobody sworn. Driven by
-    # hand with the oath on a distant enemy: it flies six squares without
-    # provoking, lands adjacent and swings.
-    "p6990": "targets the avenger's oath target; nothing swears one before a standard action",
     # An escape attempt or a saving throw, on a board that holds the caster
     # with neither. The same reason as `p1515` above, and the same answer:
     # holding the caster in `board()` would break every movement row on
@@ -2328,7 +2266,7 @@ def main() -> int:
     for line in refused:
         print(f"  IGNORED {line}")
 
-    broken, silent, never, known_quiet = [], [], [], []
+    broken, silent, never, known_quiet, outgrown = [], [], [], [], []
     for r in _run_all(chosen, args.jobs):
         if r.error:
             broken.append(r)
@@ -2338,8 +2276,26 @@ def main() -> int:
             silent.append(r)
         elif r.silent:
             known_quiet.append(r)
-        elif args.verbose:
-            print(f"  ok      {r.ref:<10} {', '.join(sorted(r.events & DID_SOMETHING))}")
+        else:
+            # **An excuse that has stopped being true is a loosening already
+            # in place.** `stale` above catches an entry naming a row that no
+            # longer exists; nothing caught the commoner case -- the board
+            # grew the thing the entry said it lacked, the row began working,
+            # and the argument for it sat here unread, ready to swallow the
+            # row again the day it broke.
+            #
+            # **Thirteen of the fifty-two entries were in that state** the
+            # first time this ran, `p6990` among them: it argued that nothing
+            # on the board swears an oath, and by then `_use_class_features`
+            # was being called from `board()` and the oath was sworn on all
+            # five seeds.
+            #
+            # The same shape as `todo.py` failing when a symbol it waits for
+            # arrives. A row that works needs no argument for why it does not.
+            if r.ref in KNOWN_SILENT:
+                outgrown.append(r)
+            if args.verbose:
+                print(f"  ok      {r.ref:<10} {', '.join(sorted(r.events & DID_SOMETHING))}")
 
     for r in broken:
         print(f"\n  RAISED  {r.ref}")
@@ -2350,6 +2306,9 @@ def main() -> int:
         print(f"  UNUSED  {r.ref:<10} could not be used on the test board at all")
     for r in known_quiet:
         print(f"  quiet   {r.ref:<10} {KNOWN_SILENT[r.ref]}")
+    for r in outgrown:
+        print(f"  OUTGROWN {r.ref:<9} does something now -- delete its KNOWN_SILENT entry")
+        print(f"      the entry still argues: {KNOWN_SILENT[r.ref]}")
     # One line each, where `inert` gets a single summary line. Being
     # deliberately inert is a finished state; being unfinished is a debt,
     # and the length of the list is the pressure. A count would hide a
@@ -2361,7 +2320,13 @@ def main() -> int:
     for ref, wants, how in partial:
         print(f"  {how}    {ref:<10} wants {', '.join(wants)}")
 
-    ok = len(chosen) - len(broken) - len(silent) - len(never)
+    # **An excused row does not do something.** `known_quiet` was left in
+    # this total, so every entry in `KNOWN_SILENT` was counted in the same
+    # breath as the rows that work -- 38 of them, inside a headline that says
+    # "fire and do something". Excusing a row is an argument for why the
+    # board cannot exercise it, which is the opposite of the claim. Counted
+    # on its own line below instead.
+    ok = len(chosen) - len(broken) - len(silent) - len(never) - len(known_quiet)
     print(f"\n  {ok} of {len(chosen)} rows fire and do something")
     if inert:
         print(f"  {len(inert)} declared out of combat, not fired: {', '.join(inert[:6])}"
@@ -2386,10 +2351,14 @@ def main() -> int:
         print(f"  {len(never)} never usable here -- often a Requirement the board cannot meet")
     if refused:
         print(f"  {len(refused)} negotiable event(s) ignored a refusal")
+    if known_quiet:
+        print(f"  {len(known_quiet)} silent for a recorded reason, not counted above")
+    if outgrown:
+        print(f"  {len(outgrown)} excuse(s) outlived the thing they excused")
     # `refused` fails the run. An engine that announces a thing and then
     # does it anyway is a worse fault than any single row being wrong, and
     # it is the one that has been silent four times.
-    return 1 if (broken or silent or refused) else 0
+    return 1 if (broken or silent or refused or outgrown) else 0
 
 
 if __name__ == "__main__":
