@@ -159,6 +159,12 @@ FLOOR = 1.0
 #: take is a feat somebody would have picked on purpose.
 FEAT_TOP = 24
 
+#: `race_options` per (class, leg). The ranking is the same every time it is
+#: asked and it costs **41ms**, nearly all of it inside `RaceLine.granted`,
+#: which scans the whole 12,197-row registry for each of the 46 races to find
+#: their traits. That is 560,000 prefix tests per character built.
+_RACES: dict[tuple[str, str], list[Choice]] = {}
+
 
 def _priced(raw: dict[str, float]) -> tuple[float, dict[str, float]]:
     """Weight a raw term dict, drop what did not apply, and total it."""
@@ -193,12 +199,21 @@ def swings_a_weapon(cls: str, build: Build | None = None) -> bool:
 
 
 def race_options(cls: str, level: int = 1, build: Build | None = None) -> list[Choice]:
-    """Every race, ranked for this class and leg."""
+    """Every race, ranked for this class and leg.
+
+    Cached on (class, leg) -- see `_RACES`. `level` is not part of the key
+    because nothing here reads it yet; it is in the signature because the
+    advisor will want it the moment a race's value depends on tier, and
+    adding it then is a key change rather than a signature change.
+    """
     from combat_engine.engine.dsl import REGISTRY
 
     from . import RACES, build_of
 
     leg = build or build_of(cls)
+    key = (cls, leg.name)
+    if key in _RACES:
+        return list(_RACES[key])
     out: list[Choice] = []
     for ref, race in sorted(RACES.items()):
         raised = race.taken(leg)
@@ -219,7 +234,29 @@ def race_options(cls: str, level: int = 1, build: Build | None = None) -> list[C
             }
         )
         out.append(Choice(ref=ref, score=score, terms=terms))
-    return _ranked(out)
+    _RACES[key] = _ranked(out)
+    return list(_RACES[key])
+
+
+#: `_prerequisite_counts`, worked out once. **Measured, not tidied.** It reads
+#: every feat's gate out of the database and parses 2,077 JSON trees, and it
+#: was being called once per feat slot -- so once per character, so once per
+#: row for the audit, which builds a character each time. Uncached, scoring
+#: took a character from 27ms to 187ms and put **half an hour** on a full
+#: `audit.py` run, an instrument whose cost `scripts/CLAUDE.md` says is
+#: already the thing most likely to make this project unpleasant.
+_PREREQS: dict[str, int] | None = None
+
+#: `_leans_on` per (ref, leg). It reads the row's **source** with `inspect`,
+#: 411 times per feat draw. Same story as above and the larger half of it.
+_LEANS: dict[tuple[str, str], int] = {}
+
+#: `_hands_over_a_row` per ref -- another `inspect.getsource` per candidate,
+#: and it was missed on the first pass at this: caching only `_leans_on` took
+#: a character from 187ms to 116ms and the second read was most of what was
+#: left.
+_GRANTS: dict[str, bool] = {}
+
 
 
 def _prerequisite_counts() -> dict[str, int]:
@@ -227,8 +264,13 @@ def _prerequisite_counts() -> dict[str, int]:
 
     Read off the gates rather than kept beside them, for the reason the rest
     of this package reads the registry: a list would go stale the next time a
-    feat landed.
+    feat landed. Cached because the registry does not change while a process
+    runs -- see `_PREREQS`.
     """
+    global _PREREQS
+
+    if _PREREQS is not None:
+        return _PREREQS
     from combat_engine.etl.build import game
 
     counts: dict[str, int] = {}
@@ -244,6 +286,7 @@ def _prerequisite_counts() -> dict[str, int]:
 
     for row in game().execute("SELECT prereq FROM feat WHERE prereq != ''"):
         walk(json.loads(row["prereq"]) if row["prereq"] else None)
+    _PREREQS = counts
     return counts
 
 
@@ -258,7 +301,7 @@ def feat_options(
     """
     from combat_engine.engine.dsl import REGISTRY
 
-    from . import IMPLEMENTS, PRINTED, _leans_on, build_of
+    from . import IMPLEMENTS, PRINTED, build_of
 
     leg = build or build_of(cls)
     armed = swings_a_weapon(cls, leg)
@@ -275,13 +318,13 @@ def feat_options(
         weapons = [w for w in opened if w is not None and w.group != "implement"]
         score, terms = _priced(
             {
-                "leans_on_build": float(_leans_on(declared, leg)),
+                "leans_on_build": float(_leaning(declared, leg, ref)),
                 "opens_a_weapon": float(bool(weapons) and armed),
                 "weapon_is_superior": float(
                     armed and any(w.category == "superior" for w in weapons)
                 ),
                 "implement_only_build": float(bool(weapons) and not armed),
-                "grants_a_row": float(_hands_over_a_row(declared)),
+                "grants_a_row": float(_granting(declared, ref)),
                 "unlocks_other_feats": float(unlocks.get(ref, 0)),
                 "carries_a_marker": float(bool(getattr(declared, "dropped", ()) or ())),
                 "out_of_combat": float(getattr(declared, "out_of_combat", False)),
@@ -333,6 +376,23 @@ def wield_options(
         )
         out.append(Choice(ref=arm.ref, score=score, terms=terms))
     return _ranked(out)
+
+
+def _leaning(declared, leg: Build, ref: str) -> int:  # noqa: ANN001
+    """`chargen._leans_on`, remembered. See `_LEANS` for why that matters."""
+    from . import _leans_on
+
+    key = (ref, leg.name)
+    if key not in _LEANS:
+        _LEANS[key] = _leans_on(declared, leg)
+    return _LEANS[key]
+
+
+def _granting(declared, ref: str) -> bool:  # noqa: ANN001
+    """`_hands_over_a_row`, remembered. See `_GRANTS`."""
+    if ref not in _GRANTS:
+        _GRANTS[ref] = _hands_over_a_row(declared)
+    return _GRANTS[ref]
 
 
 def _hands_over_a_row(declared) -> bool:  # noqa: ANN001
