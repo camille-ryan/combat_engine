@@ -249,11 +249,24 @@ KNOWN_SILENT = {
 
 DID_SOMETHING = {
     "DamageApplied", "ConditionApplied", "Healed", "TempHP", "Moved",
-    "ForcedMove", "RelationSet", "ZoneCreated", "EffectExpired", "Note",
+    "ForcedMove", "RelationSet", "ZoneCreated", "EffectExpired",
     "EffectApplied", "ConditionEnded",
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted",
 }  # fmt: skip
+# **`Note` is deliberately not here**, and used to be. Its own docstring says
+# "engine commentary, carries no rules meaning", and it holds `text` and
+# nothing else -- no actor, no source, no target -- so `_after_its_own_use`
+# has nothing to attribute it with and credits whichever note lands in the
+# window. Five of the rows pinned in `--verdicts` were credited with
+# `8 carries f336 (1 left)`, emitted by another creature arming its own feat,
+# while `hollowed` had replaced their bodies with one that does nothing.
+# Over a 300-row sample, 13 were credited by `Note` alone and **11 of those 13
+# kept the credit with their body emptied**. See #245.
+#
+# A row whose only output is a log line has not done anything in the rules,
+# and this project already has the word for that case: `narrative=`. Crediting
+# it hid the rows that marker exists to describe.
 # `ActionGranted` because "you can take an extra move action" is the
 # whole printed content of a row, and `Cast.extra_action` used to add one
 # to `Budget` and announce nothing -- so the row did exactly what its card
