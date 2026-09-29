@@ -73,7 +73,16 @@ RULES: dict[Condition, Rules] = {
     Condition.PETRIFIED: Rules(cannot_act=True, cannot_move=True, helpless=True),
     Condition.PINNED: Rules(no_stand=True),
     Condition.SHAPED: Rules(no_standard=True),
-    Condition.PRONE: Rules(grants_ca=True, attack=-2),
+    # `no_shift` because the printed line is "you can't move from your space,
+    # although you can teleport, crawl, or be forced to move by a pull, a push
+    # or a slide" -- and a shift is none of those. `actions._movement` already
+    # withholds the option at the action layer, so a creature on its own turn
+    # was never offered one; `c.shift()` reaches past that, and a row saying
+    # "the target shifts" moved a prone creature one square, or three.
+    #
+    # Forced movement is untouched by this: a slide is not a shift, and
+    # `movement.forced` does not go through `can_shift`.
+    Condition.PRONE: Rules(grants_ca=True, attack=-2, no_shift=True),
     Condition.REMOVED: Rules(cannot_act=True, cannot_move=True),
     Condition.RESTRAINED: Rules(grants_ca=True, attack=-2, cannot_move=True),
     # "Cannot shift" on its own. Named for what it does rather than
