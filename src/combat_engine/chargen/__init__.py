@@ -981,11 +981,11 @@ DEAL_RACES = True
 #: character is, so all six `fixtures/` move and are re-recorded in a commit
 #: with nothing else in it. That divergence is indistinguishable from a real
 #: regression and re-recording under it in a mixed commit would hide one.
-#: Off in the commit that adds the scorer, so that commit changes no
-#: behaviour and `replay verify` proves it. Flipped on, with the six fixtures
-#: re-recorded, in a commit containing nothing else -- which is what
-#: `DEAL_RACES`' own note says it did and why.
-SCORED_CHOICES = False
+#: The six fixtures were re-recorded in the commit that flipped this, with
+#: nothing else in it and with `--redraw`, for the reason `DEAL_RACES` gives
+#: above: every dealt character changes, so every roll after the first changes
+#: with it, and that divergence is indistinguishable from a real regression.
+SCORED_CHOICES = True
 
 
 def deal_race(rng: Random, cls: str = "", build: Build | None = None) -> str:
@@ -1362,7 +1362,19 @@ def outfit(
         if arm.ref in owned:
             continue
         owned.add(arm.ref)
-        pool.setdefault(_role(arm), []).append(arm)
+        job = _role(arm)
+        # **Only a weapon a feat bought competes for a hand that is full.**
+        # Camille's rule is about the feat -- "if the character has taken the
+        # feat, it should almost certainly be taking that weapon as well" --
+        # and a race costs nothing, so its weapon has no claim on a hand the
+        # chassis already filled. Left competing, a racial longsword displaced
+        # a ranger's short sword on score alone and took **36 ranger rows**
+        # out of the audit's reach with it. It still fills an empty job, which
+        # is what this function always did with a granted arm.
+        if job in pool and arm.ref not in bought:
+            belt.append(arm)
+            continue
+        pool.setdefault(job, []).append(arm)
 
     # Hands per job: what the chassis already filled, and one for a job it had
     # nothing for -- which is the old behaviour for that case, kept.

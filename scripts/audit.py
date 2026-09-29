@@ -67,6 +67,21 @@ from combat_engine.engine.query import alive, can_act
 from combat_engine.engine.query import enemies as _foes
 from combat_engine.engine.types import ActionType, Usage
 
+# **The board deals unscored characters, deliberately.** `chargen.SCORED_CHOICES`
+# makes a dealt character *plausible* -- a race whose bonuses suit the class, a
+# feat worth taking -- and this board's job is the opposite one: to field
+# whatever lets the row under test be used at all. It already overrides half a
+# sheet for that reason, wounding the caster, hiding it from an enemy and
+# putting the weapon a row names into its hand.
+#
+# Measured, not assumed. Scored dealing took **80 rows out of reach**, 36 of
+# them the ranger's, and the cause was `chargen.build_for`: it picks a leg by
+# *spawning a character on each* and taking the first the row is usable on, so
+# a scored race draw inside that probe made the archer leg fail and the row was
+# then fielded on a two-blade ranger that could never use it. never-usable
+# 808 -> 860 and silent 219 -> 247 with it.
+chargen.SCORED_CHOICES = False
+
 ROOT = Path(__file__).resolve().parents[1]
 
 #: Events that mean the power did something. A power that emits none of
