@@ -24,6 +24,18 @@ wielding a crossbow, a light blade, or a sling" is one power under each of
 three groups, which is the only reading that answers "how many powers can this
 weapon be used for".
 
+**Two relationships, not one.** A weapon is named either as a **gate** -- the
+printed Requirement, which refuses the power without it -- or as a **rider**,
+a clause that pays out only when you happen to be holding one:
+
+    Weapon: If you're wielding an axe, a hammer, or a mace, you gain a bonus
+            to the damage roll equal to your Constitution modifier.
+
+That is not a requirement and the power works without it, so counting it in
+the same column would say a weapon is needed where it is merely rewarded.
+Riders are **59 powers the Requirement axis cannot see at all**, and the two
+sets do not overlap on a single power.
+
 The **secondary ability** is read off the power's own printed text: the
 `Attack:` line names the primary, and any other ability the card mentions is
 one the power leans on. A power that names none is counted under `--`, and that
@@ -81,6 +93,18 @@ SHAPES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 REQ = re.compile(r"^Requirements?:\s*(.+)$", re.M)
+#: A clause that pays out for holding the right thing. `Weapon:` is the label
+#: the book prints for most of them; the rest sit inside an `Effect:` or an
+#: `Attack:` line, so the label alone finds 24 of the 60.
+#:
+#: **The clause has to be about holding something, and scanning the whole card
+#: is not good enough.** `pick` is a weapon group and also an ordinary verb --
+#: "picks up an object", "pick a pocket", "You pick an adjacent enemy" -- and a
+#: bare word match counted 17 powers where 3 were real. So a rider is read only
+#: out of a sentence that says you are wielding, holding or armed with the
+#: thing.
+WIELDING = re.compile(r"\b(?:wielding|wield|armed with|holding|in your hand)\b", re.I)
+SENTENCE = re.compile(r"[^.\n]+[.\n]")
 ATTACK = re.compile(r"^Attack:\s*([^\n]+)$", re.M)
 SPLIT = re.compile(r",|\bor\b|\band\b")
 ARTICLE = re.compile(r"^(?:a|an|the|your|with|using|wielding|be|must|you)\b\s*")
@@ -167,6 +191,20 @@ def read() -> tuple[list[dict], Counter]:
         shps = _shapes_in(text) if text else set()
         if text and not grps and not shps:
             unreadable[text] += 1
+        # The rider axis: the clauses of the card, minus its Requirement, that
+        # are about what is in your hands. A `Weapon:` line is one by
+        # definition; anything else has to say so.
+        body = spec.replace(text, "") if text else spec
+        rest = " ".join(
+            part for part in SENTENCE.findall(body + "\n")
+            if WIELDING.search(part) or part.lstrip().lower().startswith("weapon:")
+        )
+        rider_g = _groups_in(rest, groups, by_name)
+        rider_s = _shapes_in(rest) & REQUIREMENT_SHAPES
+        # A group named in the gate is not also a rider -- the same sentence
+        # would otherwise be counted twice under two different relationships.
+        rider_g -= grps
+        rider_s -= shps
         # The range line says melee or ranged weapon for every weapon power,
         # not only those printing a Requirement, so the shape axis reads it.
         low = (reach or "").lower()
@@ -182,6 +220,8 @@ def read() -> tuple[list[dict], Counter]:
                 "primary": ABIL.get(primary, ""),
                 "seconds": [ABIL[s] for s in seconds],
                 "groups": sorted(grps), "shapes": sorted(shps),
+                "rider_groups": sorted(rider_g), "rider_shapes": sorted(rider_s),
+                "rewards": bool(rest.strip()),
             }
         )
     return rows, unreadable
@@ -229,6 +269,8 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--what", choices=("groups", "shapes", "both"), default="both")
+    ap.add_argument("--how", choices=("gate", "rider", "both"), default="both",
+                    help="required for the power, or merely rewarded by it")
     ap.add_argument("--class", dest="cls", default="", help="one class only")
     ap.add_argument("--lines", action="store_true",
                     help="the distinct requirement lines and their counts")
@@ -244,6 +286,11 @@ def main() -> int:
     print(f"  naming a weapon group {sum(1 for r in printed if r['groups'])}"
           f"   naming a shape {named}"
           f"   about neither {sum(unreadable.values())}")
+    riders = [r for r in rows if r["rider_groups"] or r["rider_shapes"]]
+    print(f"powers rewarding a weapon in a rider rather than requiring it: "
+          f"{len(riders)}"
+          f"   (group {sum(1 for r in riders if r['rider_groups'])}"
+          f", shape {sum(1 for r in riders if r['rider_shapes'])})")
 
     if args.lines:
         lines = Counter(r["req"] for r in printed)
@@ -252,15 +299,28 @@ def main() -> int:
             print(f"     {n:4}  {text[:96]}")
         return 0
 
+    want_gate = args.how in ("gate", "both")
+    want_rider = args.how in ("rider", "both")
     if args.what in ("groups", "both"):
-        _show("WEAPON GROUPS -- which weapon, from the printed Requirement",
-              _totals(rows, "groups", None), _cross(rows, "groups", None), args.cls)
+        if want_gate:
+            _show("WEAPON GROUPS, REQUIRED -- the power is refused without one",
+                  _totals(rows, "groups", None), _cross(rows, "groups", None),
+                  args.cls)
+        if want_rider:
+            _show("WEAPON GROUPS, REWARDED -- a rider pays out for holding one",
+                  _totals(rows, "rider_groups", None),
+                  _cross(rows, "rider_groups", None), args.cls)
     if args.what in ("shapes", "both"):
-        _show("WEAPON SHAPES -- how it is held, from the printed Requirement",
-              _totals(rows, "shapes", REQUIREMENT_SHAPES),
-              _cross(rows, "shapes", REQUIREMENT_SHAPES), args.cls)
+        if want_gate:
+            _show("WEAPON SHAPES, REQUIRED -- how it must be held",
+                  _totals(rows, "shapes", REQUIREMENT_SHAPES),
+                  _cross(rows, "shapes", REQUIREMENT_SHAPES), args.cls)
+        if want_rider:
+            _show("WEAPON SHAPES, REWARDED -- how it pays to be held",
+                  _totals(rows, "rider_shapes", None),
+                  _cross(rows, "rider_shapes", None), args.cls)
         wide = {"melee weapon", "ranged weapon", "implement"}
-        _show("DELIVERY -- from the power's own range line, not a Requirement",
+        _show("DELIVERY -- from the power's own range line, neither of the above",
               _totals(rows, "shapes", wide), _cross(rows, "shapes", wide), args.cls)
 
     if unreadable:
