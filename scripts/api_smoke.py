@@ -336,6 +336,31 @@ def check_hosted(check: Checks) -> None:
         ]
         check.that(not prose, "with names off, no printed rule text is served", str(prose[:3]))
 
+        # **The chargen advisor is the largest new name surface there is.** It
+        # is the first thing that shows a *race* and a *feat* to a human, and
+        # there are 46 and ~2,000 of them. Everything it shows goes through the
+        # same `Wire.power` the fight page uses, so with names off a label is
+        # its ref -- and that is asserted here rather than trusted, because the
+        # page was built after this check and would not otherwise be covered.
+        options = server.get("/api/chargen/options?cls=fighter")
+        shown = [
+            c["label"]
+            for kind in ("races", "feats")
+            for c in options[kind]
+            if c["label"] != c["ref"]
+        ]
+        check.that(
+            not shown,
+            "with names off, every chargen option is its ref",
+            str(shown[:3]),
+        )
+        # A score is not a name and must survive the hosted mode: a page that
+        # ranks nothing is no use to anybody running without a name table.
+        check.that(
+            options["races"] and options["races"][0]["terms"],
+            "with names off, the scores and their reasons still come through",
+        )
+
 
 #: Every shape of id the engine uses for a row. A compendium power or
 #: monster ability, a class feature the books describe on the class page and

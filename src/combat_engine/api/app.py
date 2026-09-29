@@ -248,6 +248,81 @@ async def _stream(session: Session, cursor: int, request: Request) -> AsyncItera
             )
 
 
+@app.get("/api/chargen/options")
+def chargen_options(
+    cls: str = "fighter", level: int = 1, build: str = "", race: str = ""
+) -> dto.ChargenOptionsDTO:
+    """Every race and feat this character could take, ranked, with reasons.
+
+    **Advice, not a decision.** The page sorts and explains; the human picks.
+    `chargen.choices.sample` is the other consumer of these scores and it is
+    deliberately not called here -- a dealer chooses for a fight nobody is
+    watching, and this endpoint exists precisely so somebody can watch.
+
+    Ranked once and returned whole rather than paged: 46 races and ~400 feats
+    is a list the page can hold, and a score is only readable beside the ones
+    it beat.
+    """
+    from combat_engine import chargen
+    from combat_engine.chargen import choices
+
+    from .wire import Wire, names_enabled
+
+    if cls not in chargen.CLASSES:
+        raise HTTPException(404, f"no such class: {cls}")
+    leg = chargen.build_of(cls, build)
+    # A `Wire` with no world: `power` needs only whether names are on, and
+    # with them off it answers the ref -- which is what this must serve.
+    naming = Wire(show_names=names_enabled())
+
+    def out(ranked: list) -> list[dto.ChoiceDTO]:
+        return [
+            dto.ChoiceDTO(
+                ref=choice.ref,
+                label=naming.power(choice.ref),
+                score=round(choice.score, 2),
+                terms=[
+                    dto.TermDTO(name=name, value=round(value, 2))
+                    for name, value in choice.why
+                ],
+            )
+            for choice in ranked
+        ]
+
+    return dto.ChargenOptionsDTO(
+        cls=cls,
+        level=level,
+        build=leg.name,
+        primary=leg.primary.value,
+        secondary=leg.secondary.value,
+        swings_a_weapon=choices.swings_a_weapon(cls, leg),
+        races=out(choices.race_options(cls, level, leg)),
+        feats=out(
+            choices.feat_options(
+                choices.legal_feats(cls, level, leg, race), cls, leg
+            )
+        ),
+    )
+
+
+@app.get("/api/chargen/classes")
+def chargen_classes() -> list[dict[str, object]]:
+    """The classes and their legs, which is what the page's two pickers need."""
+    from combat_engine import chargen
+
+    return [
+        {
+            "cls": name,
+            "builds": [
+                {"name": leg.name, "primary": leg.primary.value,
+                 "secondary": leg.secondary.value}
+                for leg in chargen.BUILDS.get(name, ())
+            ],
+        }
+        for name in sorted(chargen.CLASSES)
+    ]
+
+
 @app.get("/api/day")
 @app.post("/api/day")
 async def day() -> dict[str, str]:

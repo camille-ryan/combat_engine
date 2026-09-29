@@ -290,6 +290,32 @@ def _prerequisite_counts() -> dict[str, int]:
     return counts
 
 
+def legal_feats(cls: str, level: int = 1, build: Build | None = None,
+                race: str = "") -> list[str]:
+    """The feats this character's printed gates allow.
+
+    The same pool `feats_for` draws from, in one place rather than two: the
+    advisor has to rank exactly what the dealer could have taken, and a second
+    copy of "written, not `todo`, gate met" is a second thing to go stale.
+    """
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.etl.build import game
+
+    from . import Character, build_of, meets
+
+    leg = build or build_of(cls)
+    gates = {
+        row["ref"]: (json.loads(row["prereq"]) if row["prereq"] else None)
+        for row in game().execute("SELECT ref, prereq FROM feat")
+    }
+    who = Character(cls=cls, level=level, build=leg.name, race=race)
+    return [
+        ref
+        for ref in sorted(gates)
+        if ref in REGISTRY and not REGISTRY[ref].todo and meets(gates[ref], who, [])
+    ]
+
+
 def feat_options(
     legal: list[str], cls: str, build: Build | None = None
 ) -> list[Choice]:

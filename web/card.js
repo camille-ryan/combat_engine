@@ -307,3 +307,41 @@ export function powerCard(p) {
   }
   return card;
 }
+
+// ------------------------------------------------------------------ choice
+
+/**
+ * Why a build choice scores what it does (#234).
+ *
+ * The terms arrive already weighted and already sorted by size, so this draws
+ * them in the order the server ranked them and adds nothing of its own — the
+ * page does not hold the weights table and must not appear to. A term's sign
+ * is the whole of its meaning here, so it is kept: "-9.0 implement_only_build"
+ * is the reason a wizard should not take a weapon feat, and printing it as 9.0
+ * would say the opposite.
+ *
+ * The underscores are left alone. They are the names in `chargen/choices.py`'s
+ * `WEIGHTS`, and a reader who wants to argue with a number needs the name that
+ * is actually in the table rather than a prettier one that is not.
+ */
+export function choiceCard(choice) {
+  const card = div("card-body");
+  card.appendChild(div("card-title", choice.label || choice.ref));
+  card.appendChild(row("ref", choice.ref));
+  card.appendChild(row("score", String(choice.score)));
+  if (!choice.terms || !choice.terms.length) {
+    card.appendChild(prose("why", "nothing scored — every term was zero"));
+    return card;
+  }
+  const why = div("card-terms");
+  for (const term of choice.terms) {
+    const line = div("card-row");
+    line.appendChild(div("card-key", term.name));
+    const value = div("card-val", (term.value > 0 ? "+" : "") + term.value);
+    value.classList.add(term.value < 0 ? "term-bad" : "term-good");
+    line.appendChild(value);
+    why.appendChild(line);
+  }
+  card.appendChild(why);
+  return card;
+}

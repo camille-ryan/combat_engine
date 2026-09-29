@@ -204,6 +204,8 @@ def main() -> int:
         _restart(page, START_SEED)
         _play(page, check, problems, served, calls)
 
+        _check_chargen(page, check, problems)
+
         if args.shot:
             page.screenshot(path=args.shot, full_page=True)
             print(f"\n  screenshot: {args.shot}")
@@ -211,6 +213,60 @@ def main() -> int:
 
     print(f"\n{check.passed} checks passed, {len(check.failed)} failed")
     return 1 if check.failed else 0
+
+
+def _check_chargen(page, check: Checks, problems: list[str]) -> None:  # noqa: ANN001
+    """The advisor page: ranked, explained, and choosing nothing by itself.
+
+    Its own page and its own class names, so none of this touches the
+    encounter page's selectors. Run last, because it navigates away.
+    """
+    before = len(problems)
+    page.goto(page.url.split("/index.html")[0].rstrip("/") + "/chargen.html")
+    page.wait_for_selector(".choice", timeout=20000)
+
+    races = page.locator("#races .choice")
+    feats = page.locator("#feats .choice")
+    check.that(races.count() > 20 and feats.count() > 100,
+               f"chargen lists {races.count()} races and {feats.count()} feats")
+
+    # **Sorted by score is the feature**, so it is asserted rather than assumed:
+    # the page is for reading down the score column and an unsorted list of 400
+    # rows is not an advisor.
+    scores = [
+        float(races.nth(i).locator(".choice-score").inner_text())
+        for i in range(min(6, races.count()))
+    ]
+    check.that(scores == sorted(scores, reverse=True),
+               "chargen ranks best first", str(scores))
+
+    # Hovering gives the reasons. Asserting a *term name* and not merely that
+    # a card appeared: an empty card and an explained one look the same to a
+    # check that only asks whether the panel is visible.
+    races.nth(0).hover()
+    page.wait_for_selector("#card:not([hidden])", timeout=5000)
+    card = page.inner_text("#card")
+    check.that("primary_bonus" in card or "traits_written" in card,
+               "hovering a choice names the terms behind its score",
+               card.replace("\n", " ")[:80])
+
+    # Nothing is chosen until a human clicks, which is the whole difference
+    # between this page and the dealer.
+    check.that("race —" in page.inner_text("#picked"),
+               "chargen chooses nothing on its own")
+    races.nth(0).click()
+    check.that("taken" in (races.nth(0).get_attribute("class") or ""),
+               "clicking a choice keeps it")
+
+    # Switching class re-ranks rather than re-sorting what was already there.
+    page.select_option("#cls", "wizard")
+    page.wait_for_function(
+        "() => document.getElementById('leg').textContent.includes('wizard')",
+        timeout=20000)
+    check.that("implements only" in page.inner_text("#leg"),
+               "switching to an implement class says so")
+    check.that(len(problems) == before, "no script errors on the chargen page",
+               "; ".join(problems[before:][:3]))
 
 
 def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa: ANN001

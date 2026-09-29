@@ -284,3 +284,49 @@ class EncounterStateDTO(BaseModel):
     #: contract; the page ignores what it does not know, and it belongs on
     #: the wire because it changes every number the page is showing.
     scaling: str = "full"
+
+
+class TermDTO(BaseModel):
+    """One named contribution to a build choice's score.
+
+    The weight is already applied, so the terms of a choice sum to its score
+    and the page does not need the weights table to explain anything. That is
+    the whole reason this is a list of named numbers and not one number.
+    """
+
+    name: str
+    value: float
+
+
+class ChoiceDTO(BaseModel):
+    """One build option, ranked, with its reasons.
+
+    `label` goes through the same `Wire.power` the fight page uses, so with
+    `CE_NAMES=off` it is the ref and nothing else. This is the first surface
+    that shows a **race** and a **feat** to a human, which is the largest new
+    name surface the project has added, and it must not be the one that leaks.
+    """
+
+    ref: str
+    label: str
+    score: float
+    terms: list[TermDTO] = Field(default_factory=list)
+
+
+class ChargenOptionsDTO(BaseModel):
+    """What a character of this class and leg could take, best first.
+
+    **Advisory.** Nothing here is chosen: the page ranks and explains and the
+    human picks. The dealer that fields a headless fight samples from the same
+    scores, and the two must not be confused -- `sample` lives on the other
+    side of this wire and is never called here.
+    """
+
+    cls: str
+    level: int
+    build: str
+    primary: str
+    secondary: str
+    swings_a_weapon: bool
+    races: list[ChoiceDTO] = Field(default_factory=list)
+    feats: list[ChoiceDTO] = Field(default_factory=list)

@@ -24,7 +24,6 @@ being wrong, and the two look nothing alike in a list of scores.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections import Counter
 from random import Random
@@ -33,18 +32,6 @@ import combat_engine.content  # noqa: F401  (registers the rows)
 from combat_engine import chargen
 from combat_engine.chargen import choices
 from combat_engine.engine.dsl import REGISTRY
-from combat_engine.etl.build import game
-
-
-def _legal_feats(cls: str, level: int, build: chargen.Build, race: str) -> list[str]:
-    """The feats this character's gates allow, as `feats_for` computes them."""
-    gates = {
-        row["ref"]: (json.loads(row["prereq"]) if row["prereq"] else None)
-        for row in game().execute("SELECT ref, prereq FROM feat")
-    }
-    pool = sorted(r for r in gates if r in REGISTRY and not REGISTRY[r].todo)
-    who = chargen.Character(cls=cls, level=level, build=build.name, race=race)
-    return [r for r in pool if chargen.meets(gates[r], who, [])]
 
 
 def _table(ranked: list[choices.Choice], limit: int, verbose: bool) -> None:
@@ -79,7 +66,7 @@ def _draws(cls: str, level: int, build: chargen.Build, rounds: int) -> None:
     print(f"    commonest           {counted.most_common(3)}")
     print(f"    raises the primary  {hit:.1f}%   (uniform would be {base:.1f}%)")
 
-    legal = _legal_feats(cls, level, build, "")
+    legal = choices.legal_feats(cls, level, build, "")
     opens = {r for r in legal if getattr(REGISTRY[r], "proficiency", ()) or ()}
     picks = Counter(
         chargen._one_feat(legal, cls, build, Random(f"{cls}:f{i}"))
@@ -135,7 +122,7 @@ def main() -> int:
         _table(ranked, limit, args.verbose)
 
     if args.what in ("feats", "both"):
-        legal = _legal_feats(args.cls, args.level, build, args.race)
+        legal = choices.legal_feats(args.cls, args.level, build, args.race)
         ranked = choices.feat_options(legal, args.cls, build)
         print(f"\nfeats, best first ({len(ranked)} legal):")
         _table(ranked, limit, args.verbose)

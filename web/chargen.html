@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>dnd4e — chargen</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body class="chargen-page">
+    <header>
+      <h1>dnd4e</h1>
+      <span id="leg" class="turn">Loading…</span>
+
+      <!-- Class, leg and level: the three inputs every score depends on. The
+           race and the feats are what the page ranks, so they are not here. -->
+      <form id="config" class="config" onsubmit="return false">
+        <label class="field">
+          class
+          <select id="cls"></select>
+        </label>
+        <label class="field">
+          leg
+          <select id="build"></select>
+        </label>
+        <label class="field">
+          level
+          <input id="level" type="number" min="1" max="10" value="1" />
+        </label>
+      </form>
+    </header>
+
+    <p class="chargen-note">
+      Every option this character could take, best first, with the score the
+      dealer would have used. <strong>Nothing is chosen for you</strong> —
+      hover a row to see which terms made its score, click to keep it.
+    </p>
+
+    <p id="picked" class="chargen-picked">race — · feats —</p>
+
+    <main class="chargen-lists">
+      <section>
+        <h2>races <span id="race-count" class="chargen-count">0</span></h2>
+        <ol id="races" class="choice-list"></ol>
+      </section>
+      <section>
+        <h2>feats <span id="feat-count" class="chargen-count">0</span></h2>
+        <ol id="feats" class="choice-list"></ol>
+      </section>
+    </main>
+
+    <!-- `card.js` renders into this and finds it by id, the same as the
+         encounter page does. -->
+    <div id="card" class="card" hidden></div>
+
+    <script type="module" src="./chargen.js"></script>
+  </body>
+</html>
