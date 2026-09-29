@@ -293,6 +293,7 @@ def chargen_options(
         cls=cls,
         level=level,
         build=leg.name,
+        build_label=naming.build(cls, leg.name),
         primary=leg.primary.value,
         secondary=leg.secondary.value,
         swings_a_weapon=choices.swings_a_weapon(cls, leg),
@@ -310,12 +311,23 @@ def chargen_classes() -> list[dict[str, object]]:
     """The classes and their legs, which is what the page's two pickers need."""
     from combat_engine import chargen
 
+    from .wire import Wire, names_enabled
+
+    naming = Wire(show_names=names_enabled())
     return [
         {
             "cls": name,
             "builds": [
-                {"name": leg.name, "primary": leg.primary.value,
-                 "secondary": leg.secondary.value}
+                {
+                    "name": leg.name,
+                    # Named by the wire, not by the page: `web/CLAUDE.md` is
+                    # explicit that the server decides and the page draws, and
+                    # a printed name is exactly the kind of thing the page must
+                    # not work out for itself.
+                    "label": naming.build(name, leg.name),
+                    "primary": leg.primary.value,
+                    "secondary": leg.secondary.value,
+                }
                 for leg in chargen.BUILDS.get(name, ())
             ],
         }

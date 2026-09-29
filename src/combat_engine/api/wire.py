@@ -107,6 +107,37 @@ class Wire:
         entry = localisation().get(ref) or {}
         return entry.get("name") or _plain(ref)
 
+    def build(self, cls: str, leg: str) -> str:
+        """What a build leg is called on the class's page.
+
+        **Resolved here rather than spelled in `chargen`**, which is the whole
+        arrangement: the printed name lives in `localization/names.json` and is
+        looked up on display, so the repo carries a slug and the page shows the
+        book's word.
+
+        Three cases, measured over all 97 legs:
+
+        * **29** name a class-feature sub-option -- the ardent's mantles, the
+          battlemind's stances -- and `cf:<cls>-<leg>` is a declared row whose
+          printed name is already in the table. Those come back exactly as the
+          compendium prints them.
+        * **64** carry a hand-written word for the build itself,
+          `great-weapon`, `berserker`, `two-blade`. That word is in the repo
+          already, so title-casing it reveals nothing the source did not hold.
+        * **4** are the artificer's and the seeker's, named `second-<ability>`
+          on purpose -- `chargen.BUILDS` says the printed name is prose the
+          file may not carry -- so they read as the fork they are.
+
+        With names off, the first case falls back to the slug like everything
+        else, because `power` answers the ref and the ref is not a name.
+        """
+        printed = self.power(f"cf:{cls}-{leg}")
+        if printed and not printed.startswith(("cf:", "Cf:")):
+            return printed
+        if leg.startswith("second-"):
+            return f"secondary {leg[len('second-'):]}"
+        return leg.replace("-", " ")
+
     def flavour(self, ref: str) -> str:
         if not self.show_names:
             return ""

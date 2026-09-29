@@ -325,6 +325,9 @@ class ChargenOptionsDTO(BaseModel):
     cls: str
     level: int
     build: str
+    #: What the class's page calls that leg. Resolved by `Wire.build`, so it is
+    #: the slug again when names are off.
+    build_label: str = ""
     primary: str
     secondary: str
     swings_a_weapon: bool

@@ -354,6 +354,21 @@ def check_hosted(check: Checks) -> None:
             "with names off, every chargen option is its ref",
             str(shown[:3]),
         )
+        # A build leg's printed name is a name like any other, and it is the
+        # newest thing to go through `Wire`. With names off it must be the
+        # slug -- `Wire.build` falls back through `power`, so this is asserting
+        # the fallback and not merely the happy path.
+        legs = [
+            b["label"]
+            for entry in server.get("/api/chargen/classes")
+            for b in entry["builds"]
+        ]
+        leaked = [lb for lb in legs if lb != lb.lower()]
+        check.that(
+            not leaked,
+            "with names off, a build leg is its slug",
+            str(leaked[:3]),
+        )
         # A score is not a name and must survive the hosted mode: a page that
         # ranks nothing is no use to anybody running without a name table.
         check.that(
