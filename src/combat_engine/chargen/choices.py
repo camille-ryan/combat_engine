@@ -337,11 +337,22 @@ def legal_feats(
     this reason; the feat pool never did, so **the dealer has been handing
     them out as feats all along** -- 22 of 40 dealt fighters before any of this
     session's work, so it is not a scoring bug.
+
+    Recognised **by the shape of the ref** rather than by `second_card`, which
+    answers with the parent and so only knows a card whose parent is
+    *declared*. Twelve are orphans -- `f1334b`, `f3529b` and ten more whose
+    feat nobody has written -- and those went on being offered after the first
+    fix, which is how the shape rule got measured: every ref in the `feat`
+    table is either `f<digits>` or `f<digits><letters>`, and nothing that is
+    really a feat carries a suffix.
     """
+    import re
+
     from combat_engine.engine.dsl import REGISTRY
 
-    from . import Character, build_of, meets, second_card
+    from . import Character, build_of, meets
 
+    second_block = re.compile(r"f\d+[a-z]+").fullmatch
     leg = build or build_of(cls)
     gates = feat_gates()
     who = Character(cls=cls, level=level, build=leg.name, race=race)
@@ -351,7 +362,7 @@ def legal_feats(
         for ref in sorted(gates)
         if ref in REGISTRY
         and not REGISTRY[ref].todo
-        and not second_card(ref)
+        and not second_block(ref)
         and ref not in held
         and meets(gates[ref], who, held)
     ]
