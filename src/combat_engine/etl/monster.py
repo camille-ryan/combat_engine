@@ -50,6 +50,11 @@ class Monster:
     id: int
     level: int = 1
     role: str = ""
+    #: The book gives this creature **no combat role**, which is how it marks
+    #: something that is not an encounter monster -- an item's conjuration, a
+    #: mount, a summoned servant. 222 stat blocks say so and nearly all of
+    #: them come out of `Adventurer's Vault`.
+    conjuration: bool = False
     minion: bool = False
     leader: bool = False
     elite: bool = False
@@ -143,8 +148,19 @@ def parse(
     document: str,
     source: str = "",
     others: dict[str, str] | None = None,
+    *,
+    printed_level: int | None = None,
+    printed_role: str = "",
 ) -> Monster:
     """Parse one stat block.
+
+    `printed_level` and `printed_role` are the compendium's own **columns**,
+    handed in because the stat block's text cannot always be trusted for
+    either. The level is read out of a `<span class="level">`, and a
+    conjuration's block does not carry one -- so fourteen creatures silently
+    kept the default of 1 while the column said 4 to 13. A default that is
+    also a legal value is invisible, which is why the column wins when the
+    text yields nothing.
 
     `others` maps another creature's printed name to its ref. A stat block
     that references a different creature -- "any <kind> within 10 squares",
@@ -157,7 +173,8 @@ def parse(
     body = detail(document)
     m = Monster(id=row_id)
     m.book = book_of(source)
-    _header(m, body)
+    m.conjuration = printed_role.strip().lower() == "no role"
+    _header(m, body, printed_level)
     if '<h2>' in body and 'class="bodytable"' in body:
         m.dialect = "later"
         _later_stats(m, body)
@@ -269,8 +286,12 @@ def _COMMON() -> frozenset[str]:
     return _COMMON_WORDS
 
 
-def _header(m: Monster, body: str) -> None:
-    """`<h1>` carries the name, the type line and the level line."""
+def _header(m: Monster, body: str, printed_level: int | None = None) -> None:
+    """`<h1>` carries the name, the type line and the level line.
+
+    `printed_level` is the compendium's own column, and it wins when the block
+    carries no level line -- see `parse`.
+    """
     h1 = re.search(r'<h1[^>]*>(.*?)</h1>', body, re.S)
     if not h1:
         return
@@ -289,10 +310,14 @@ def _header(m: Monster, body: str) -> None:
         if words:
             m.kind = words[-1]
 
+    # The column first, so a block with no level line keeps a real level
+    # rather than the default. `first_int` then lets the text refine it.
+    if printed_level:
+        m.level = printed_level
     level_line = re.search(r'<span class="level">(.*?)</span>', inner, re.S)
     if level_line:
         line = text(level_line.group(1))
-        m.level = first_int(line, 1)
+        m.level = first_int(line, printed_level or 1)
         low = line.lower()
         m.minion = "minion" in low
         m.leader = "leader" in low

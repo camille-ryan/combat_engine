@@ -340,9 +340,17 @@ def pick(level: int, *, role: str | None = None, limit: int = 20) -> list[str]:
     function, so a fight never quietly leaves out the thing that makes a
     monster interesting -- and never if it is in `UNUSABLE`, which is the
     stronger statement: those are not unfinished, they are wrong.
+
+    Conjurations are left out too, and for a third reason again: they are
+    perfectly good rows and simply are not encounters.
     """
     db = game()
-    sql = "SELECT ref FROM monster WHERE level = ? AND minion = 0"
+    # **Not a conjuration.** The book gives some creatures no combat role at
+    # all -- what an item conjures, what a ritual calls up, what somebody
+    # rides -- and those are not an encounter. 159 of them, nearly all out of
+    # `Adventurer's Vault`, and they were eligible until now.
+    sql = ("SELECT ref FROM monster "
+           "WHERE level = ? AND minion = 0 AND conjuration = 0")
     params: list = [level]
     if role:
         sql += " AND role = ?"

@@ -70,7 +70,7 @@ CREATE TABLE monster (
   initiative INTEGER, speed INTEGER, modes TEXT, scores TEXT,
   resist TEXT, vulnerable TEXT, immune TEXT, senses TEXT,
   book TEXT, rank TEXT,
-  dialect TEXT, score REAL
+  dialect TEXT, score REAL, conjuration INTEGER
 );
 CREATE INDEX monster_book ON monster(book, level);
 CREATE INDEX monster_level ON monster(level, role);
@@ -418,6 +418,14 @@ CORRECTED: dict[str, dict[str, int]] = {
 }
 
 
+def _int_or_none(value: object) -> int | None:
+    """The compendium's own column, when it is a number."""
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def _correct(m: object, ref: str) -> None:
     """Put a checked stat line back, in place, before the row is written."""
     fix = CORRECTED.get(ref)
@@ -447,7 +455,8 @@ def _monsters(
 ) -> None:
     scores: list[float] = []
     rows = list(source.execute(
-        "SELECT ID, Txt, Source FROM Monster WHERE Level <= ? ORDER BY ID",
+        "SELECT ID, Txt, Source, Level, Role FROM Monster "
+        "WHERE Level <= ? ORDER BY ID",
         (MAX_MONSTER_LEVEL,),
     ))
     # One pass to learn every creature's name, then the real one. A stat
@@ -457,14 +466,18 @@ def _monsters(
     # author who is not allowed to see one.
     index = _creature_names(rows)
     for row in rows:
-        m = monster_parser.parse(row["ID"], row["Txt"], row["Source"], others=index)
+        m = monster_parser.parse(
+            row["ID"], row["Txt"], row["Source"], others=index,
+            printed_level=_int_or_none(row["Level"]),
+            printed_role=row["Role"] or "",
+        )
         _correct(m, m.ref_id)
         scores.append(m.score)
         report.monsters += 1
         report.worst.append((m.ref_id, m.score))
         out.execute(
             "INSERT INTO monster VALUES "
-            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 m.ref_id, m.id, m.level, m.role,
                 int(m.minion), int(m.leader), int(m.elite), int(m.solo),
@@ -473,6 +486,7 @@ def _monsters(
                 m.initiative, m.speed, json.dumps(m.modes), json.dumps(m.scores),
                 json.dumps(m.resist), json.dumps(m.vulnerable), json.dumps(m.immune),
                 m.senses, m.book, m.rank, m.dialect, m.score,
+                int(m.conjuration),
             ),
         )
         names[m.ref_id] = {"name": m.name, "flavour": m.flavour}
