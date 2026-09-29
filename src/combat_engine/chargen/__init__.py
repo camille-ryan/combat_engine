@@ -816,7 +816,8 @@ class RaceLine:
         lands. A racial trait is `rt:<race>-<what it does>`, and the dash is
         part of the prefix so that `r1` does not collect `r10`'s.
         """
-        import combat_engine.content  # noqa: F401  (registers the rows)
+        # Imported for the side effect: this is what registers the rows.
+        import combat_engine.content
         from combat_engine.engine.dsl import REGISTRY
 
         return sorted(r for r in REGISTRY if r.startswith(f"rt:{self.ref}-"))
@@ -1089,7 +1090,8 @@ def loadout(
     fill a slot, the rest of the class makes up the difference rather than
     the character going short.
     """
-    import combat_engine.content  # noqa: F401  (registers the rows)
+    # Imported for the side effect: this is what registers the rows.
+    import combat_engine.content
     from combat_engine.engine.dsl import REGISTRY
 
     pick = rng or Random(0)
@@ -1194,7 +1196,8 @@ def feats_for(
     that a feat naming another feat as its prerequisite can be taken in
     the same career as the one it needs.
     """
-    import combat_engine.content  # noqa: F401  (registers the rows)
+    # Imported for the side effect: this is what registers the rows.
+    import combat_engine.content
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.etl.build import game
 
@@ -1475,7 +1478,8 @@ def spellbook(cls: str, level: int, prepared: list[str], held: int = 2) -> list[
     Drawn from the registry for the same reason the loadout is: a written
     list of ids goes stale the moment a row lands.
     """
-    import combat_engine.content  # noqa: F401  (registers the rows)
+    # Imported for the side effect: this is what registers the rows.
+    import combat_engine.content
     from combat_engine.engine.dsl import REGISTRY
 
     out: list[str] = []

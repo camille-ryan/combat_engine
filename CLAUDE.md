@@ -93,7 +93,7 @@ say so in the commit.
 | Wire | `src/combat_engine/api/` | engine state → DTOs → the page. |
 | UI | `web/` | the page. Vanilla JS, no build step. |
 | AI Policy | `engine/policy.py` | what the AI chooses. One module, inside Engine. |
-| Chargen | `content/chargen.py` | builds every character. Persistence does not exist. |
+| Chargen | `src/combat_engine/chargen/` | builds every character. Persistence does not exist. |
 | Story Engine | — | not built. `docs/STORY_ENGINE.md` is the charter. |
 | Instruments | `scripts/` | belongs to no component. |
 

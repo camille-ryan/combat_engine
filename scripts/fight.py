@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import argparse
 
-from combat_engine.content import chargen, loader, terrain
+from combat_engine import chargen
+from combat_engine.content import loader, terrain
 from combat_engine.engine import (
     Bus,
     Encounter,

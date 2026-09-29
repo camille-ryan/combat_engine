@@ -119,7 +119,7 @@ def main() -> int:
     ap.add_argument("--class", dest="cls", help="only this class")
     args = ap.parse_args()
 
-    from combat_engine.content import chargen
+    from combat_engine import chargen
 
     wanted = asked()
     dead: list[tuple[str, str, int]] = []

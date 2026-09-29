@@ -41,7 +41,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from combat_engine.content.chargen import LIGHT
+from combat_engine.chargen import LIGHT
 from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.engine import (
     AC,

@@ -44,7 +44,8 @@ import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from combat_engine.content import chargen, loader
+from combat_engine import chargen
+from combat_engine.content import loader
 from combat_engine.engine import (
     Bus,
     Cast,
@@ -1682,7 +1683,19 @@ def _fired(world, ref: str, cursor: int) -> bool:  # noqa: ANN001
 
 #: Touching any of these changes how every row behaves, so a narrowed run
 #: is not narrowed at all -- it is wrong.
-WIDE = ("src/combat_engine/engine/", "scripts/audit.py")
+WIDE = (
+    "src/combat_engine/engine/",
+    # **`chargen/` is wide and has to be named here now that it is its own
+    # package.** The rule below that catches a cross-cutting file works by
+    # shape -- under `content/`, declaring no `@power` -- and chargen was
+    # caught by it while it lived there. Outside `content/` that test never
+    # runs, so a chargen change would have selected *zero* rows again, which
+    # is the bug that comment describes. It builds every sheet in the game, so
+    # wide is the honest answer and saying it outright is better than relying
+    # on a path it no longer matches.
+    "src/combat_engine/chargen/",
+    "scripts/audit.py",
+)
 
 #: Inside `WIDE` but not actually wide. **The AI policy cannot break a row.**
 #: It decides what the AI *chooses* among the options the rules already allow,
@@ -1803,11 +1816,12 @@ def _changed() -> list[str]:
             continue
         found = re.findall(r'@power\(\s*"([^"]+)"', path.read_text())
         # **A content file that declares no rows is cross-cutting, and used to
-        # audit nothing at all.** `chargen.py` builds every character sheet,
-        # `loader.py` spawns every monster, `terrain.py` dresses every board --
-        # none of them declares a `@power`, so `--changed` selected *zero*
-        # rows after editing them and the routine gate said nothing about a
-        # change that reaches every row in the game.
+        # audit nothing at all.** `loader.py` spawns every monster and
+        # `terrain.py` dresses every board -- neither declares a `@power`, so
+        # `--changed` selected *zero* rows after editing them and the routine
+        # gate said nothing about a change that reaches every row in the game.
+        # `chargen.py` was the third and is named in `WIDE` instead now that it
+        # lives outside `content/` and this test cannot see it.
         #
         # Detected by shape rather than by a path list, so the next one is
         # caught without editing this: under `content/`, no rows declared means

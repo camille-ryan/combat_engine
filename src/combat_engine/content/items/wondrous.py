@@ -2568,7 +2568,7 @@ def i3262x1(c: Cast) -> None:
     light -- the same pair four class features and two monsters already
     ask. No armour at all is cloth, which is in that set. Paragon numbers
     are out of scope; this is the heroic +1."""
-    from combat_engine.content.chargen import LIGHT
+    from combat_engine.chargen import LIGHT
 
     gear = c.world.get(c.me, Gear)
     if gear is None or gear.armour in LIGHT:

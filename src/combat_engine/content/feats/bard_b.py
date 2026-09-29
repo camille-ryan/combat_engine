@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat_engine.content.chargen import LONGSWORD
+from combat_engine.chargen import LONGSWORD
 from combat_engine.engine import (
     AC,
     AT_WILL,

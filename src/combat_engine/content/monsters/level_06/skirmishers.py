@@ -44,7 +44,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Any
 
-from combat_engine.content.chargen import LIGHT
+from combat_engine.chargen import LIGHT
 from combat_engine.content.monsters.level_02.skirmishers import (
     _advantage_rider,
     _beside_a_ward,

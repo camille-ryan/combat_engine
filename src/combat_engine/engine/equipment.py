@@ -24,7 +24,7 @@ already existed:
   work on them without knowing they came from an object.
 
 Nothing here reads `game.db`. A `Magic` is built by whoever is handing the
-item out -- `content/chargen.py` for treasure, a power body for a thing
+item out -- `chargen/` for treasure, a power body for a thing
 picked up off the floor -- exactly as a monster's hit points are read in
 `content/loader.py` and handed to the engine as numbers.
 """

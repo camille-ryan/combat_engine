@@ -85,19 +85,20 @@ A racial trait says its race in its own ref (`rt:r33-...`).
 **`features/`** — class features, which no spec file lists. Distinct from
 feats.
 
-## Chargen — a component inside this directory
+## Chargen has moved out
 
-`chargen.py` is its own component: it builds **every** character — scores,
-race, build leg, feats, gear, treasure — and 11 modules import it. A bug
-there is wrong on every sheet in the game.
+It used to live here as `chargen.py`. It is now
+`src/combat_engine/chargen/`, its own package, because it is its own
+component and six files *here* import it — which is the inversion that
+argued for the move: content should be the thing chargen deals, not the
+other way round.
 
-**Persistence does not exist.** Sessions live in a process-local dict and
-nothing saves a character or a fight. `transcript.py` writes a forensic
-JSONL log, not a save file. Say "does not exist" rather than implying a
-component.
+What that means for you: `from combat_engine.chargen import LIGHT` rather
+than `from combat_engine.content.chargen import LIGHT`. Six files in this
+tree do that, all for a constant.
 
-`chargen.py` declares no `@power` rows, so it is treated as cross-cutting by
-`audit.py` and widens the run — which is right, because it reaches every row.
+A prerequisite is still enforced by `chargen.meets` and is still not yours
+to write — see above.
 
 ## Checking
 
