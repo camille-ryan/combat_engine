@@ -41,17 +41,33 @@ so a number can be argued with rather than trusted.
 | sky blue | cream of the crop | 5.0 |
 | blue | good | 4.0 |
 | black | middle of the road | 3.0 |
-| *(unrated)* | | **2.5** |
+| *(unrated)* | no guide mentions it | **2.5** |
 | purple | outclassed, or only situationally good | 1.5 |
 | red | do not take this | 0.0 |
 
-**Black is invisible, and that matters.** No guide *colours* its black text —
-black is the default, so there is no span to find. Measured on the first guide:
-67 red, 90 purple, 82 blue, 46 sky, 3 gold, and **zero black**. So "the author
-called this average" and "the author never mentioned it" are indistinguishable
-in the markup, and both land in the unrated bucket. That is the argument for
-unrated sitting at 2.5 rather than at 3.0 or at 0: the bucket genuinely holds
-both, so it belongs just below rated-average and nowhere near bad.
+Unrated sits just below rated-average on purpose: a guide's silence is weaker
+evidence than a guide's "average", and it is not evidence of badness.
+
+**Black is bold with no colour on it.** The first pass here walked colour spans
+and reported zero blacks, and concluded the tier was unextractable. That was
+wrong: black is the default *colour*, but an option's name is **bold** whether it
+is rated or not, and a colour is wrapped around it only when the author is
+rating it away from average. So bold is the anchor and colour is the modifier.
+Measured on the first guide, of the bold names that resolve to a ref: 419 sit
+inside a colour and **152 do not**, and those are the blacks.
+
+Bold is the better anchor for a second reason. A coloured span often runs on
+into the prose after the name; the bold element is the name and stops there.
+Switching to it took the table from 288 refs to 374 and coverage from 55% to
+74%.
+
+One caveat that follows: bold is also used for ordinary emphasis, so some of the
+black bucket is a name mentioned in passing rather than a deliberate verdict of
+"average". The consequence is bounded — a false black moves a ref from 2.5 to
+3.0, half a point on a six-point scale — which is why it is accepted and written
+down rather than guarded against. A ref bolded in one place and coloured in
+another keeps the coloured reading, since the uncoloured mention is usually the
+incidental one.
 
 **Green is not a tier.** Several guides use it for options that are "a different
 kind of useful", and the first guide's key says outright that *a lot of
@@ -98,21 +114,23 @@ guide rates options, and widening the index had otherwise taken ambiguity from
 
 ## Measured, first guide
 
-* 836 coloured runs → **288 refs rated**, 18 out-of-combat.
-* **Accuracy 99.3%**: of 145 resolved powers, 144 belong to the class the guide
+* 1,293 bold names → **374 refs rated** (195 powers, 136 feats, 43 races), 17
+  more recorded as out-of-combat.
+* **Accuracy 99.5%**: of 195 resolved powers, 194 belong to the class the guide
   is about and one is a warlock row, which a wizard guide may legitimately
   mention. This check needs no human and no name — a wizard guide naming a
   fighter power has mis-resolved, and that is countable.
-* **Coverage 55%** of the wizard's 187 written heroic-tier rows: 66% of dailies,
-  52% of at-wills, 46% of encounter rows. Well above the 10–20% the plan
-  estimated.
-* 118 runs resolved to something out of scope and are reported as such; 405
-  matched nothing in `names.json` at all, of which 305 are distinct and almost
-  all one to three words — shorthand, headings, and options from books this
-  compendium does not hold.
-* 4 refs were rated twice at different tiers. The better reading is kept, which
-  matches the "best case" the doctrine asks for elsewhere, and the count is
-  reported rather than buried.
+* **Coverage 74%** of the wizard's 187 written heroic-tier rows: 87% of dailies,
+  68% of encounter rows, 60% of at-wills. The plan estimated 10–20%.
+* Tier spread: 65 red, 87 purple, **92 black**, 81 blue, 46 sky, 3 gold. Black
+  being the largest bucket is what a guide should look like, and its absence was
+  the signal that the first parse was wrong.
+* 147 runs resolved to something out of scope and are reported as such rather
+  than counted as misses; 714 matched nothing in `names.json` at all — shorthand,
+  prose emphasis, and options from books this compendium does not hold.
+* 28 refs were bold in more than one place at different tiers. The better reading
+  is kept, because an uncoloured mention is usually incidental bolding rather
+  than a verdict, and the count is reported rather than buried.
 
 ## What this is not
 

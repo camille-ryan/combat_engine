@@ -213,8 +213,37 @@ class Index:
         return "comp" if ref.startswith("comp") else ref[0]
 
 
-def coloured(html: str, guide: Guide) -> list[tuple[str, str, int]]:
-    """(tier, text, post index) for every coloured run in the guide's posts."""
+_COL = re.compile(r"(?<!background-)color:\s*(#[0-9a-f]{3,6})")
+
+
+def tint(el) -> str | None:  # noqa: ANN001
+    """The nearest colour this element or an ancestor sets.
+
+    Ancestors matter: the colour is on a wrapping span and the name is in a
+    `<b>` inside it, so reading the bold element's own style finds nothing.
+    """
+    cur = el
+    while cur is not None:
+        m = _COL.search((cur.get("style") or "").lower())
+        if m:
+            return m.group(1)
+        cur = cur.getparent()
+    return None
+
+
+def options(html: str, guide: Guide) -> list[tuple[str, str, int]]:
+    """(tier, text, post index) for every option the guide names.
+
+    **Bold is the anchor, not colour.** An option's name is bold; a colour is
+    wrapped around it only when the author is rating it away from average. So
+    walking the colours alone finds every rating except the commonest one --
+    black, the default, which has no colour at all and which this missed
+    entirely on the first pass. Measured on the first guide: 419 bold names sit
+    inside a colour and **152 do not**, and those 152 are the blacks.
+
+    Bold is also the cleaner anchor. A coloured span often runs on into the
+    prose after the name; the bold element is the name and stops there.
+    """
     from lxml import html as LH
 
     doc = LH.fromstring(html)
@@ -223,23 +252,24 @@ def coloured(html: str, guide: Guide) -> list[tuple[str, str, int]]:
     for i, post in enumerate(posts):
         if guide.posts and i not in guide.posts:
             continue
-        for el in post.xpath(".//*[contains(@style,'color')]"):
-            style = (el.get("style") or "").lower()
-            m = re.search(r"(?<!background-)color:\s*(#[0-9a-f]{3,6})", style)
-            if m is None:
-                continue
-            tier = guide.colours.get(m.group(1))
-            if tier is None:
-                continue
+        for el in post.xpath(".//b"):
             text = " ".join((el.text_content() or "").split())
-            if text:
-                out.append((tier, text, i))
+            if not text:
+                continue
+            hex_ = tint(el)
+            if hex_ is None:
+                tier = "black"
+            else:
+                tier = guide.colours.get(hex_)
+                if tier is None:
+                    continue          # a colour the guide's key does not claim
+            out.append((tier, text, i))
     return out
 
 
 def read(name: str, guide: Guide, index: Index) -> dict:
     """Everything one guide yields, with no name in the result."""
-    runs = coloured(fetch(guide, name), guide)
+    runs = options(fetch(guide, name), guide)
     rated: dict[str, float] = {}
     out_of_combat: list[str] = []
     why: Counter[str] = Counter()
