@@ -34,6 +34,7 @@ the only ones.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from random import Random
 from typing import TYPE_CHECKING
@@ -290,29 +291,69 @@ def _prerequisite_counts() -> dict[str, int]:
     return counts
 
 
-def legal_feats(cls: str, level: int = 1, build: Build | None = None,
-                race: str = "") -> list[str]:
-    """The feats this character's printed gates allow.
+#: Every feat's printed gate, parsed once. The query and 2,077 JSON trees are
+#: the same on every call and `feats_for` asks per slot.
+_GATES: dict[str, dict | None] | None = None
 
-    The same pool `feats_for` draws from, in one place rather than two: the
-    advisor has to rank exactly what the dealer could have taken, and a second
-    copy of "written, not `todo`, gate met" is a second thing to go stale.
+
+def feat_gates() -> dict[str, dict | None]:
+    """Every feat ref, mapped to its printed prerequisite tree."""
+    global _GATES
+
+    if _GATES is None:
+        from combat_engine.etl.build import game
+
+        _GATES = {
+            row["ref"]: (json.loads(row["prereq"]) if row["prereq"] else None)
+            for row in game().execute("SELECT ref, prereq FROM feat")
+        }
+    return _GATES
+
+
+def legal_feats(
+    cls: str,
+    level: int = 1,
+    build: Build | None = None,
+    race: str = "",
+    taken: Sequence[str] = (),
+) -> list[str]:
+    """The feats this character could actually take.
+
+    One pool, and both the dealer and the advisor draw from it: the advisor
+    has to rank exactly what the dealer could have taken, and a second copy of
+    "written, not `todo`, gate met" is a second thing to go stale. It went
+    stale immediately -- see below.
+
+    **A second card is not a feat.** `f1091b` is the card `f1091` hands over,
+    minted by the importer because the parent's columns are wrong for it, and
+    it sits in the `feat` table like any other row. Offered as a choice it is
+    wrong twice: the character cannot take it (it comes *with* something), and
+    it is shown under the granted power's name rather than the feat's -- which
+    is how this was noticed, a card's name displayed where a feat's belonged.
+
+    **210 of the 405 rows a level-1 fighter was offered were second cards**,
+    and for 209 of them the feat that grants the card was not itself in the
+    list. `loadout` has always excluded them from the *power* pool for exactly
+    this reason; the feat pool never did, so **the dealer has been handing
+    them out as feats all along** -- 22 of 40 dealt fighters before any of this
+    session's work, so it is not a scoring bug.
     """
     from combat_engine.engine.dsl import REGISTRY
-    from combat_engine.etl.build import game
 
-    from . import Character, build_of, meets
+    from . import Character, build_of, meets, second_card
 
     leg = build or build_of(cls)
-    gates = {
-        row["ref"]: (json.loads(row["prereq"]) if row["prereq"] else None)
-        for row in game().execute("SELECT ref, prereq FROM feat")
-    }
+    gates = feat_gates()
     who = Character(cls=cls, level=level, build=leg.name, race=race)
+    held = list(taken)
     return [
         ref
         for ref in sorted(gates)
-        if ref in REGISTRY and not REGISTRY[ref].todo and meets(gates[ref], who, [])
+        if ref in REGISTRY
+        and not REGISTRY[ref].todo
+        and not second_card(ref)
+        and ref not in held
+        and meets(gates[ref], who, held)
     ]
 
 

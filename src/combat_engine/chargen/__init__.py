@@ -1216,30 +1216,28 @@ def feats_for(
 ) -> list[str]:
     """The feats this character has taken, drawn like its powers are.
 
-    Only feats that are **written** and whose prerequisite this character
-    **meets**, so the draw cannot hand out a row that does nothing or one
-    the book would not allow. Taken one at a time rather than sampled, so
-    that a feat naming another feat as its prerequisite can be taken in
-    the same career as the one it needs.
+    Only feats that are **written**, that are not a card some other feat hands
+    over, and whose prerequisite this character **meets** -- so the draw cannot
+    hand out a row that does nothing, one the book would not allow, or one that
+    is not a choice at all. `choices.legal_feats` is that pool and is shared
+    with the advisor; see its docstring for what the "not a card" clause cost
+    before it existed.
+
+    Taken one at a time rather than sampled, so that a feat naming another feat
+    as its prerequisite can be taken in the same career as the one it needs.
     """
     # Imported for the side effect: this is what registers the rows.
     import combat_engine.content
-    from combat_engine.engine.dsl import REGISTRY
-    from combat_engine.etl.build import game
+
+    from .choices import legal_feats
 
     pick = rng or Random(0)
-    who = Character(cls=cls, level=level, build=(build.name if build else ""),
-                    race=race)
+    race_ref = race
     held = list(powers or [])
-    gates = {
-        r["ref"]: json.loads(r["prereq"]) if r["prereq"] else None
-        for r in game().execute("SELECT ref, prereq FROM feat")
-    }
-    pool = sorted(ref for ref in gates if ref in REGISTRY and not REGISTRY[ref].todo)
 
     taken: list[str] = []
-    for _ in range(feat_slots(level, who.race)):
-        legal = [r for r in pool if r not in taken and meets(gates[r], who, held + taken)]
+    for _ in range(feat_slots(level, race_ref)):
+        legal = legal_feats(cls, level, build, race_ref, taken=held + taken)
         if not legal:
             break
         taken.append(_one_feat(legal, cls, build, pick))

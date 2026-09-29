@@ -25,6 +25,26 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
+/**
+ * A build leg, readably.
+ *
+ * Most legs are hand-written words — "great-weapon", "two-blade", "archer" —
+ * and only need their hyphens back. Four are not: the artificer's and the
+ * seeker's are `second-con`, `second-wis`, `second-str`, `second-dex`, and
+ * `chargen.BUILDS` says why in as many words — the printed leg names are prose
+ * and that file may not carry it, so the leg is named after the ability the
+ * fork turns on instead.
+ *
+ * So this expands the slug rather than looking a name up: "secondary con"
+ * comes out of the slug and the ability is an engine word, not a printed one.
+ * Nothing here reaches for a name the server did not send.
+ */
+function legName(leg) {
+  const slug = leg.name || "";
+  if (slug.startsWith("second-")) return `secondary ${slug.slice(7)}`;
+  return slug.replace(/-/g, " ") || "(first leg)";
+}
+
 async function get(path) {
   const res = await fetch(path);
   if (!res.ok) throw new Error(`${path} -> ${res.status}`);
@@ -69,7 +89,7 @@ function draw() {
   const data = state.options;
   if (!data) return;
   $("leg").textContent =
-    `${data.cls} · ${data.build || "(first leg)"} · primary ${data.primary}` +
+    `${data.cls} · ${legName({ name: data.build })} · primary ${data.primary}` +
     ` · secondary ${data.secondary}` +
     (data.swings_a_weapon ? " · swings a weapon" : " · implements only");
 
@@ -139,7 +159,7 @@ async function start() {
     for (const leg of entry ? entry.builds : []) {
       const opt = document.createElement("option");
       opt.value = leg.name;
-      opt.textContent = `${leg.name} (${leg.primary}/${leg.secondary})`;
+      opt.textContent = `${legName(leg)} (${leg.primary}/${leg.secondary})`;
       box.appendChild(opt);
     }
     state.build = box.value || "";
