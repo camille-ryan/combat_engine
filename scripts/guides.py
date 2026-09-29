@@ -12,7 +12,10 @@ that is "doctrine based". A guide's colour is doctrine, written down by somebody
 who played the class.
 
 **What crosses into the repository, and what does not.** The output is
-`ref -> integer` and a source URL. No prose, ever: the guides are authored text
+`(ref, class) -> number` and a source URL. Keyed by the *guide's* class, because
+a race or feat is class-agnostic and gets rated in a class context: gold for an
+Intelligence class is red for a Charisma one, which is two correct answers rather
+than a disagreement. No prose, ever: the guides are authored text
 and the names in them are the thing this whole project is arranged to keep out.
 So the fetched HTML lands in git-ignored `.cache/`, the reasoning lands in
 git-ignored `notes/`, and `scripts/leaks.py` is what proves nothing slipped.
@@ -466,9 +469,9 @@ def main() -> int:
         print(f"no such guide: {args.guide}", file=sys.stderr)
         return 2
 
-    every: dict[str, float] = {}
-    sources: dict[str, str] = {}
-    disputed: dict[str, list[float]] = {}
+    every: dict[str, dict[str, float]] = {}
+    sources: dict[str, list[str]] = {}
+    spread: dict[str, list[float]] = {}
     skipped: dict[str, str] = {}
     print(f"{'guide':<10} {'runs':>6} {'rated':>6} {'aside':>6} {'unres':>6} "
           f"{'own class':>10} {'stray':>6}")
@@ -489,15 +492,17 @@ def main() -> int:
             print(f"{'':<10}   UNMAPPED colours (add an override): "
                   f"{dict(got['unmapped'].most_common(6))}")
         for ref, v in got["rated"].items():
-            if ref in every and every[ref] != v:
-                # Two guides rating the same option differently is information,
-                # not a collision to hide. Kept as the mean, and counted.
-                disputed[ref] = [*disputed.get(ref, [every[ref]]), v]
-                every[ref] = sum(disputed[ref]) / len(disputed[ref])
-                sources[ref] = f"{sources[ref]}+{name}"
-                continue
-            every[ref] = v
-            sources[ref] = name
+            # **Keyed by the guide's class, not by ref alone.** A race or a feat
+            # is class-agnostic and gets rated in a class context: one that is
+            # gold for an Intelligence class is red for a Charisma one, and that
+            # is two correct answers to different questions rather than a
+            # disagreement. Averaging them produced a mid-tier number that was
+            # wrong for both, on 33 of the 35 overlaps.
+            per = every.setdefault(ref, {})
+            if guide.cls in per and per[guide.cls] != v:
+                spread.setdefault(ref, []).append(v)
+            per[guide.cls or "any"] = v
+            sources.setdefault(ref, []).append(name)
         for tier, refs in got["aside"].items():
             for ref in refs:
                 skipped[ref] = f"{name} ({tier})"
@@ -509,15 +514,22 @@ def main() -> int:
             body += [f"* [{t}] {x}" for t, x in got["unresolved"]]
             (NOTES / f"{name}-unresolved.md").write_text("\n".join(body) + "\n")
 
+    multi = {r: v for r, v in every.items() if len(v) > 1}
     print(f"\n{len(every)} refs rated, {len(skipped)} set aside")
-    if disputed:
-        spread = [max(v) - min(v) for v in disputed.values()]
-        print(f"  {len(disputed)} rated by more than one guide with disagreement; "
-              f"mean kept. Widest gap {max(spread):.1f} of 6, "
-              f"average gap {sum(spread)/len(spread):.1f}")
+    print(f"  rated for more than one class: {len(multi)}")
+    if multi:
+        gaps = [max(v.values()) - min(v.values()) for v in multi.values()]
+        wide = sum(1 for g2 in gaps if g2 >= 2.0)
+        print(f"    widest spread across classes {max(gaps):.1f} of 6; "
+              f"{wide} differ by two tiers or more, which is why these are not "
+              f"averaged")
+    if spread:
+        print(f"  {len(spread)} rated twice for the SAME class at different "
+              f"tiers (genuine disagreement); the later guide wins")
     kinds = Counter(index.kind_of.get(r, "?") for r in every)
     print(f"  by kind: {dict(kinds)}")
-    print(f"  tiers:   {dict(Counter(every.values()))}")
+    flat = [v for per in every.values() for v in per.values()]
+    print(f"  tiers:   {dict(sorted(Counter(flat).items()))}")
 
     if args.emit:
         write_table(every, sources, skipped)
@@ -525,24 +537,37 @@ def main() -> int:
     return 0
 
 
-def write_table(rated: dict[str, float], sources: dict[str, str],
+def write_table(rated: dict[str, dict[str, float]],
+                sources: dict[str, list[str]],
                 skipped: dict[str, str]) -> None:
-    """The tracked output. Refs and numbers, and nothing else."""
+    """The tracked output. Refs, class names and numbers, and nothing else."""
     lines = [
-        '"""Community ratings for player options, as `ref -> score`.',
+        '"""Community ratings for player options, as `(ref, class) -> score`.',
         "",
         "Generated by `scripts/guides.py`. **Do not hand-edit**: re-run the",
         "instrument, which is also what records where each rating came from.",
         "",
-        "The scale is the community's six colours. `black` is the rated average",
-        "at 3.0; an option no guide mentions scores `UNRATED` at 2.5, just below",
-        "it, because a guide's silence is weaker evidence than a guide's",
-        '"average" and is not evidence of badness.',
+        "The scale is the community's six colours -- gold 6, sky blue 5, blue 4,",
+        "black 3, purple 1.5, red 0. An option no guide mentions scores",
+        "`UNRATED`, at 2.5, just below rated-average: a guide's silence is weaker",
+        'evidence than a guide\'s "average" and is not evidence of badness.',
         "",
-        "`OUT_OF_COMBAT` is the green rating several guides use for options that",
-        'are "a different kind of useful" -- mostly non-combat. Those are',
-        "excluded from the combat score rather than ranked against things they",
-        "cannot be compared to.",
+        "**Keyed by class, and that is not a detail.** A race or a feat is",
+        "class-agnostic and gets rated in a class context. One that is gold for",
+        "an Intelligence class is red for a Charisma one -- two correct answers to",
+        "different questions, not a disagreement. Averaging them gave a mid-tier",
+        "number that was wrong for both, on 33 of the first 35 overlaps. So",
+        "`rating(ref, cls)` wants the class, and returns `UNRATED` when the only",
+        "opinions on file belong to other classes rather than guessing from them.",
+        "",
+        "A power is already class-specific, so its entry has one class and the",
+        "key is redundant there -- except where a guide rates another class's row",
+        "as worth poaching, which is a real and separate judgement.",
+        "",
+        "`OUT_OF_COMBAT` holds the ratings that are not tiers at all: green for",
+        '"a different kind of useful", mostly non-combat, and pink for',
+        '"GM/table dependent". Recorded because they are real, and kept out of the',
+        "combat score because they are not comparable to it.",
         "",
         "No printed name appears here and none ever should: the names live in",
         "git-ignored `localization/`, and `scripts/leaks.py` is what proves it.",
@@ -552,24 +577,26 @@ def write_table(rated: dict[str, float], sources: dict[str, str],
         "",
         f"UNRATED = {UNRATED}",
         "",
-        "#: ref -> score, on the six-colour scale.",
-        "RATINGS: dict[str, float] = {",
+        "#: ref -> {class: score}. The class is the guide's, not the option's.",
+        "RATINGS: dict[str, dict[str, float]] = {",
     ]
     for ref in sorted(rated):
-        lines.append(f'    "{ref}": {rated[ref]},')
+        per = ", ".join(f'"{c}": {v}' for c, v in sorted(rated[ref].items()))
+        lines.append(f'    "{ref}": {{{per}}},')
     lines += [
         "}",
         "",
-        "#: ref -> which guide rated it. Provenance, so a number can be argued",
-        "#: with rather than trusted.",
-        "SOURCES: dict[str, str] = {",
+        "#: ref -> the guides that rated it. Provenance, so a number can be",
+        "#: argued with rather than trusted.",
+        "SOURCES: dict[str, tuple[str, ...]] = {",
     ]
     for ref in sorted(sources):
-        lines.append(f'    "{ref}": "{sources[ref]}",')
+        got = ", ".join(f'"{g}"' for g in sorted(set(sources[ref])))
+        lines.append(f'    "{ref}": ({got},),')
     lines += [
         "}",
         "",
-        "#: Rated green: real, and not comparable on a combat axis.",
+        "#: Rated green or pink: real, and not comparable on a combat axis.",
         "OUT_OF_COMBAT: dict[str, str] = {",
     ]
     for ref in sorted(skipped):
@@ -578,9 +605,34 @@ def write_table(rated: dict[str, float], sources: dict[str, str],
         "}",
         "",
         "",
-        "def rating(ref: str) -> float:",
-        '    """What a guide thinks of this option. `UNRATED` when none said."""',
-        "    return RATINGS.get(ref, UNRATED)",
+        '    def rating(ref: str, cls: str = "") -> float:'.strip(),
+        '    """What a guide thinks of this option for this class.',
+        "",
+        "    `UNRATED` when nobody rated it, and also when the only ratings on",
+        "    file are for other classes -- a wizard guide's opinion of a race says",
+        "    nothing about that race for a fighter, and borrowing it would be",
+        "    worse than admitting ignorance.",
+        '    """',
+        "    per = RATINGS.get(ref)",
+        "    if not per:",
+        "        return UNRATED",
+        "    if cls and cls in per:",
+        "        return per[cls]",
+        "    if len(per) == 1:",
+        "        # One opinion, and for a power the class is implied by the row.",
+        "        return next(iter(per.values()))",
+        "    return UNRATED",
+        "",
+        "",
+        "def spread(ref: str) -> float:",
+        '    """How far apart the classes are on this option. 0 when they agree.',
+        "",
+        "    Worth reading rather than smoothing away: an option two experienced",
+        "    players put two tiers apart is genuinely situational, and that is",
+        "    information a single number loses.",
+        '    """',
+        "    per = RATINGS.get(ref) or {}",
+        "    return max(per.values()) - min(per.values()) if len(per) > 1 else 0.0",
         "",
     ]
     (ROOT / "src" / "combat_engine" / "ratings.py").write_text(

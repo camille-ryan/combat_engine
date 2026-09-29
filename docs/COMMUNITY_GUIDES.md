@@ -76,6 +76,30 @@ non-combat options fall here*. That is this project's `narrative=` and
 excluded from the combat score rather than ranked against things it cannot be
 compared to.
 
+## A rating belongs to a class, not to an option
+
+`RATINGS` is keyed `ref -> {class: score}`, and that is not a detail.
+
+A power is class-specific already. A **race, a feat or an item is not** — it gets
+rated in a class context, and the same option is honestly worth different amounts
+to different classes. Measured on the first two guides: 51 refs are rated by both,
+and **13 differ by two tiers or more**. The worst is a race rated red (0.0) for
+one class and black (3.0) for the other.
+
+The first version averaged those, which produced purple — wrong for both, on 33
+of 35 overlaps. So `rating(ref, cls)` takes the class and returns `UNRATED` when
+the only opinions on file belong to other classes: a wizard guide's view of a race
+says nothing about that race for a fighter, and borrowing it is worse than
+admitting ignorance.
+
+`spread(ref)` reports how far apart the classes are, and is worth reading rather
+than smoothing away. An option two experienced players put two tiers apart is
+genuinely situational, which is information a single number loses.
+
+The one case where a power legitimately carries two classes is a guide rating
+another class's row as worth poaching — a real and separate judgement, and the
+key holds it correctly.
+
 ## Every guide needs its own colour map
 
 The scale is conventional; the hexes are not. The first guide's author states
