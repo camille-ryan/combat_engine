@@ -973,17 +973,42 @@ RACES: dict[str, RaceLine] = _races_from_the_book()
 #: and re-recording under it in a mixed commit would hide one.
 DEAL_RACES = True
 
+#: Score the build choices instead of drawing them uniformly. `choices.py`
+#: holds the terms and the weights.
+#:
+#: A flag for the same reason `DEAL_RACES` is one: it changes what every dealt
+#: character is, so all six `fixtures/` move and are re-recorded in a commit
+#: with nothing else in it. That divergence is indistinguishable from a real
+#: regression and re-recording under it in a mixed commit would hide one.
+#: Off in the commit that adds the scorer, so that commit changes no
+#: behaviour and `replay verify` proves it. Flipped on, with the six fixtures
+#: re-recorded, in a commit containing nothing else -- which is what
+#: `DEAL_RACES`' own note says it did and why.
+SCORED_CHOICES = False
 
-def deal_race(rng: Random) -> str:
+
+def deal_race(rng: Random, cls: str = "", build: Build | None = None) -> str:
     """A race, drawn like a hand of powers is.
 
-    Uniform over the ones the book prints rather than weighted towards the
-    ones whose scores suit the class. A player picks for flavour at least
-    as often as for the numbers, and a draw that always took the best pair
-    would make every fighter the same two races.
+    **Weighted towards the ones whose scores suit the class, and not decided
+    by them.** This used to be uniform over all 46, and its own docstring gave
+    the reason to keep some of that: a player picks for flavour at least as
+    often as for the numbers, and a draw that always took the best pair would
+    make every fighter the same two races. So the score ranks and `sample`
+    draws -- a Strength race is likelier for a fighter and never certain.
+
+    `cls` is optional so the old one-argument call still answers; without it
+    there is no build to score against and the draw stays uniform.
     """
     pool = sorted(RACES)
-    return rng.choice(pool) if pool else ""
+    if not pool:
+        return ""
+    if not SCORED_CHOICES or not cls:
+        return rng.choice(pool)
+    from .choices import race_options, sample
+
+    drawn = sample(race_options(cls, build=build), rng)
+    return drawn.ref if drawn is not None else rng.choice(pool)
 
 
 @dataclass
@@ -1216,8 +1241,27 @@ def feats_for(
         legal = [r for r in pool if r not in taken and meets(gates[r], who, held + taken)]
         if not legal:
             break
-        taken.append(pick.choice(legal))
+        taken.append(_one_feat(legal, cls, build, pick))
     return sorted(taken)
+
+
+def _one_feat(
+    legal: list[str], cls: str, build: Build | None, pick: Random
+) -> str:
+    """One feat from the legal pool -- scored and sampled, or uniform.
+
+    Drawn one slot at a time rather than all at once, which is what
+    `feats_for` was already doing and what lets a feat naming another as its
+    prerequisite be taken in the same career: the pool is re-scored after each
+    pick, so `unlocks_other_feats` pays out and then the feat it unlocked
+    becomes legal.
+    """
+    if not SCORED_CHOICES:
+        return pick.choice(legal)
+    from .choices import FEAT_TOP, feat_options, sample
+
+    drawn = sample(feat_options(legal, cls, build), pick, top=FEAT_TOP)
+    return drawn.ref if drawn is not None else pick.choice(legal)
 
 
 def proficiency(feats: list[str]) -> list[Weapon]:
@@ -1666,7 +1710,11 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     if DEAL_RACES and not who.race:
         who = replace(
             who,
-            race=deal_race(Random(f"{world.rng.seed}:{who.cls}:{build.name}:race")),
+            race=deal_race(
+                Random(f"{world.rng.seed}:{who.cls}:{build.name}:race"),
+                who.cls,
+                build,
+            ),
         )
     race = RACES.get(who.race)
     # **A copy each, always.** `LONGSWORD` and its siblings are module-level
