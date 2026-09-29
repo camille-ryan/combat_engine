@@ -1697,6 +1697,19 @@ def _fired(world, ref: str, cursor: int) -> bool:  # noqa: ANN001
 #: is not narrowed at all -- it is wrong.
 WIDE = ("src/combat_engine/engine/", "scripts/audit.py")
 
+#: Inside `WIDE` but not actually wide. **The AI policy cannot break a row.**
+#: It decides what the AI *chooses* among the options the rules already allow,
+#: so a change here moves no row's behaviour -- and it declares no `@power`
+#: rows of its own. Left in `WIDE` it charged ten minutes for every
+#: policy change, which is the whole cost of the instrument for none of the
+#: benefit. Its own component label is `policy`, not `engine`.
+#:
+#: **So a policy change audits nothing, and that is correct** -- but it means
+#: this instrument is not its cover. `replay` and `fight` are: both play whole
+#: fights through `LinearPolicy`, so a policy change shows up there as a
+#: diverged fixture or a fight that stops finishing. Both run in `check.py`.
+NARROW = ("src/combat_engine/engine/policy.py",)
+
 
 def _calls(symbols: list[str]) -> list[str]:
     """Rows that touch a named verb, plus the rows waiting for one.
@@ -1791,7 +1804,7 @@ def _changed() -> list[str]:
     if done.returncode != 0:
         return sorted(REGISTRY)
     files = [line[3:].strip() for line in done.stdout.splitlines() if line[3:].strip()]
-    if any(f.startswith(WIDE) for f in files):
+    if any(f.startswith(WIDE) and not f.startswith(NARROW) for f in files):
         return sorted(REGISTRY)
 
     refs: list[str] = []
@@ -1801,7 +1814,20 @@ def _changed() -> list[str]:
         path = ROOT / name
         if not path.exists():
             continue
-        refs += re.findall(r'@power\(\s*"([^"]+)"', path.read_text())
+        found = re.findall(r'@power\(\s*"([^"]+)"', path.read_text())
+        # **A content file that declares no rows is cross-cutting, and used to
+        # audit nothing at all.** `chargen.py` builds every character sheet,
+        # `loader.py` spawns every monster, `terrain.py` dresses every board --
+        # none of them declares a `@power`, so `--changed` selected *zero*
+        # rows after editing them and the routine gate said nothing about a
+        # change that reaches every row in the game.
+        #
+        # Detected by shape rather than by a path list, so the next one is
+        # caught without editing this: under `content/`, no rows declared means
+        # everything depends on it.
+        if not found:
+            return sorted(REGISTRY)
+        refs += found
     return sorted({r for r in refs if r in REGISTRY})
 
 
