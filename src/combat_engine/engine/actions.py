@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class Action:
     #: power | move | run | shift | charge | stand | escape | second_wind |
-    #: sustain | drop | wield | item | instinctive | end
+    #: sustain | drop | wield | item | instinctive | command | end
     kind: str
     cost: ActionType
     ref: str = ""
@@ -98,6 +98,7 @@ def legal(
     out.extend(_powers(world, encounter, actor, include_blocked))
     out.extend(_recasts(world, encounter, actor))
     out.extend(_instinctives(world, encounter, actor))
+    out.extend(_commands(world, encounter, actor))
     out.extend(_movement(world, encounter, actor))
     out.extend(_charges(world, encounter, actor))
     out.extend(_recovery(world, encounter, actor))
@@ -340,6 +341,85 @@ def _instinctives(world: World, encounter: Encounter, actor: int) -> list[Action
             out.append(
                 Action(kind="instinctive", cost=cost, ref=mine.ref, subject=eid)
             )
+    return out
+
+
+def _commands(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """The swing a companion takes only because its owner paid for one.
+
+    "Using your actions in combat, you control your beast companion by
+    issuing it commands", and commanding one to attack costs a **standard**
+    action. So the companion holding no initiative slot was never the missing
+    half -- `query.combatants` subtracts `Companion` and
+    `components.Companion` states it as doctrine, and both are right. The
+    missing half was this reader. Without it a beast swung only when
+    something else handed it a swing: an opportunity window,
+    `c.grant_attack`, or a row calling `c.basic(who=)`. A ranger on the
+    companion leg fielded a creature that soaked, flanked and took every buff
+    written for it, and never once attacked on its own.
+
+    A cheaper cost is offered too when something grants one, on the same
+    "<what> as <cost>" carrier `_instinctives` and `c.recast` read, with
+    `command` as the what. A 21st-level feat reprices this swing to a minor
+    and will not be the last thing that does.
+
+    Two creatures are deliberately not offered anything here:
+
+    * A **summon**, whose ref carries a `summon=` block. `Cast.command` and
+      `_instinctives` are its doors, and it is the reason a beast was offered
+      nothing -- `_instinctives` gates on that block and a companion's ref is
+      a `comp:` row without one.
+    * A companion with **no attack line of its own**, which `Companion.damage`
+      says outright: "empty for a spirit, which has no attack of its own:
+      every attack it makes is a row its owner used." Commanding one would
+      roll a basic attack for a creature whose page prints none.
+    """
+    from .components import Companion
+
+    own = world.get(actor, Powers)
+    granted = {
+        cost: n
+        for (what, cost), n in _granted(world, actor).items()
+        if what == "command"
+    }
+    costs = [ActionType.STANDARD, *sorted(granted, key=lambda a: a.value)]
+    out: list[Action] = []
+    for eid in sorted(world.having(Companion)):
+        mine = world.get(eid, Companion)
+        if mine is None or mine.owner != actor or not mine.damage:
+            continue
+        if not alive(world, eid) or not can_act(world, eid):
+            continue
+        held = get(mine.ref)
+        if held is not None and getattr(held, "summon", None) is not None:
+            continue
+        known = world.get(eid, Powers)
+        ref = (known.basic if known is not None else "") or ""
+        p = get(ref) if ref else None
+        if p is None or not usable(world, eid, p)[0]:
+            continue
+        for cost in costs:
+            if cost in granted:
+                if own is None:
+                    continue
+                key = _recast_key("command", cost)
+                if _recast_used(world, own, key) >= granted[cost]:
+                    continue
+            if not encounter.can_spend(actor, cost):
+                continue
+            # Aimed from the **beast**: reach, cover and flanking are all
+            # measured from its square, and `_aimings` already does that for
+            # whichever actor it is handed. Only the payer changes.
+            for aim in _aimings(world, eid, ref, cost=cost):
+                out.append(
+                    Action(
+                        kind="command",
+                        cost=cost,
+                        ref=ref,
+                        targets=aim.targets,
+                        subject=eid,
+                    )
+                )
     return out
 
 
@@ -798,6 +878,37 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             known.used[key] = _recast_used(world, known, key) + 1
             known.last_round[key] = world.round
         return Cast(world=world, me=actor, ref=action.ref).instinctive(action.subject)
+
+    if action.kind == "command":
+        from .components import Companion
+        from .dsl import use
+
+        if action.subject is None:
+            return False
+        beast = action.subject
+        if not alive(world, beast) or not can_act(world, beast):
+            return False
+        if action.cost is not ActionType.STANDARD:
+            # A granted cheaper command, counted on the carrier's key the way
+            # `instinctive` is. The printed standard needs no counter: the
+            # action itself is the limit.
+            known = world.get(actor, Powers)
+            if known is not None:
+                key = _recast_key("command", action.cost)
+                known.used[key] = _recast_used(world, known, key) + 1
+                known.last_round[key] = world.round
+        # "You gave it a command", which `turns._uncommanded` reads so that a
+        # creature its owner *did* direct is not also run on instinct at the
+        # end of the turn.
+        mine = world.get(beast, Companion)
+        if mine is not None:
+            mine.commanded = world.round
+        # `spend=False` because `perform` has already charged the owner, and
+        # no `granted_by`: a warlord handing an ally a swing is a different
+        # thing with riders of its own, and this swing is the beast's own.
+        return use(
+            world, beast, action.ref, targets=list(action.targets) or None, spend=False
+        )
 
     if action.kind == "move":
         walk(world, actor, list(action.path))

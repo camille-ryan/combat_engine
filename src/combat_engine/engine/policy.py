@@ -104,6 +104,7 @@ def features(
     f["is_drop"] = float(action.kind == "drop")
     f["is_item"] = float(action.kind == "item")
     f["is_instinctive"] = float(action.kind == "instinctive")
+    f["is_command"] = float(action.kind == "command")
     # Named on the day it was added, rather than six weeks later when
     # somebody notices the AI kneeling to collect litter instead of
     # fighting. That is what an unnamed kind does.
@@ -164,6 +165,17 @@ def features(
         if chances:
             f["hit_chance"] = sum(chances) / len(chances)
             f["expected_hits"] = sum(chances)
+        if action.kind == "command" and action.subject is not None:
+            # **Whose roll it is.** Every feature above measures the action
+            # from `actor`, and a command is the one kind whose attack is
+            # rolled by somebody else -- the beast's bonus off its own block,
+            # not its ranger's. Scored as the owner's it reported the wrong
+            # creature's chance to hit, and the owner's is usually the better
+            # one, so the policy would have over-valued every command.
+            theirs = [p.hit_chance(world, action.subject, t) for t in action.targets]
+            if theirs:
+                f["hit_chance"] = sum(theirs) / len(theirs)
+                f["expected_hits"] = sum(theirs)
 
     hurt = 0.0
     nearly = 0.0
@@ -397,6 +409,21 @@ WEIGHTS: dict[str, float] = {
     # A summon acting on its own is free value; the action is the
     # owner's minor, which `_instinctives` has already charged for.
     "is_instinctive": 5.0,
+    # The same shape as `is_charge`: an attack that is not a power, so the
+    # flat `is_power` bonus has to be handed back or a command is six points
+    # worse than the identical swing and nothing ever commands anything.
+    #
+    # **Level with `is_power`, not under it.** Priced at 4.0 first, to say
+    # that the beast's line is smaller than its ranger's. Measuring it showed
+    # that double-counts: `hit_chance` and `expected_hits` are computed from
+    # the *beast* for this kind, so the weaker swing is already in the score
+    # -- 0.40 against the ranger's 0.50 on the same enemy. Charging for it
+    # twice left the command strictly dominated by every at-will the ranger
+    # owns, in every board, which is how `is_wield` came to be offered all
+    # fight and taken never. So the flat part says only "this spends a
+    # standard to make one attack", which is true of both, and the features
+    # decide which attack is the better one.
+    "is_command": 6.0,
     # Enough to outweigh `is_power`, so a second stance has to be worth
     # more than an attack before the creature gives up the one it has.
     "swaps_stance": -8.0,

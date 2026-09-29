@@ -461,6 +461,10 @@ def _option_label(session: Session, action: Action, p) -> str:  # noqa: ANN001
         return f"shift to {tuple(action.dest)}"
     if action.kind == "instinctive" and action.subject is not None:
         return f"{wire.label(action.subject)} acts on instinct"
+    if action.kind == "command" and action.subject is not None:
+        who = ", ".join(wire.label(t) for t in action.targets)
+        mine = wire.label(action.subject)
+        return f"command {mine} to attack {who}" if who else f"command {mine}"
     if action.kind == "run":
         return f"run to {tuple(action.dest)}"
     if action.kind == "wield":

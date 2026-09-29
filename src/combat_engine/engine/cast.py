@@ -4061,10 +4061,30 @@ class Cast:
             return 0
         standing = self.companion()
         if standing is not None:
-            from .movement import place
+            mine = self.world.get(standing, Companion)
+            if mine is not None and mine.ref == ref:
+                from .movement import place
 
-            place(self.world, standing, where)
-            return standing
+                place(self.world, standing, where)
+                return standing
+            # **A different creature is a different companion.** This
+            # relocated whatever was already standing and returned before
+            # `ref`, `kind`, `speed` or `damage` were looked at -- those are
+            # read only in the branches below. So "you gain a familiar" on a
+            # shaman who already had a spirit moved the spirit and left it a
+            # spirit, and `call_companion(ref="comp:...", kind="beast")` over
+            # one left a spirit answering to `c.beast`. Harmless while
+            # nothing read `kind`; a command action does, and would have
+            # spent a standard rolling a beast's attack for a creature whose
+            # page prints none.
+            #
+            # Dismissed rather than reconciled in place, because the numbers
+            # are wrong too: a spirit's hit points are its shaman's surge
+            # value and a beast's come off a formula in its own table, so
+            # writing a new `kind` onto the standing body would leave a
+            # beast-labelled creature with a spirit's block. "You can call it
+            # again" is about calling *that* companion again.
+            self.dismiss_companion()
 
         side = side_of(self.world, self.me) or Team.ALLY
         if ref.startswith("comp:"):
