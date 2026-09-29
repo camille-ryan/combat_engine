@@ -204,6 +204,28 @@ def parse(
     for name, ref in (others or {}).items():
         if name.lower() in mine:
             continue
+        # **A stranger's ability is not something this creature's rules can
+        # mean.** `others` carries ability names as well as creature names --
+        # `build._creature_names` indexes both, on the sound grounds that an
+        # ability's name leaks exactly as a creature's does. The unsound half
+        # was the pointer: "with its tentacles", "must be in ooze form",
+        # "makes one fullblade attack" are ordinary nouns, and each resolved
+        # onto whichever creature happened to own an ability spelled that
+        # way. 103 specs said a monster uses somebody else's power (#175).
+        #
+        # A **sibling** ability of this creature is kept -- that is the common
+        # and correct case, and the whole reason the index holds abilities.
+        #
+        # A stranger's is demoted to that creature's own ref rather than
+        # dropped, because dropping it leaves the printed name in the spec and
+        # `leaks.py --specs` goes red: a leak is worse than a vague pointer.
+        # A bare creature ref is the sanctioned form for exactly this -- "a
+        # spec that names another creature names its id instead" -- so the
+        # spec ends up saying a name was here and whose, without claiming a
+        # power this creature does not have.
+        stranger = re.match(r"^(m\d+)a\d+$", ref)
+        if stranger and stranger.group(1) != m.ref_id:
+            ref = stranger.group(1)
         swaps.setdefault(name, ref)
     # What is printed beside the numbers is mechanics, not prose, and several
     # creatures are named after their own type. Scrubbing "goblin" out of a
