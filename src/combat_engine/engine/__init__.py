@@ -32,6 +32,7 @@ from .components import (
     Stats,
     Weapon,
 )
+from .doctrine import DoctrinePolicy
 from .dsl import (
     ANY_CREATURE,
     EACH_ALLY,

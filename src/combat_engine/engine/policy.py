@@ -585,7 +585,17 @@ class LinearPolicy:
     desperate_at: float = 0.4
 
     def score(self, world: World, encounter: Encounter, actor: int, action: Action) -> float:
-        f = features(world, encounter, actor, action)
+        return self.weigh(features(world, encounter, actor, action), action)
+
+    def weigh(self, f: dict[str, float], action: Action) -> float:
+        """The weighted sum, given features already computed.
+
+        Split out from `score` so a subclass can adjust a feature *before* it is
+        weighed without computing the dict twice -- `features` asks
+        `Power.hit_chance` once per target, so it is not free. `DoctrinePolicy`
+        is the caller: a healing row has to have `allies_caught` cleared before
+        the -7.0 lands on it.
+        """
         total = sum(self.weights.get(k, 0.0) * v for k, v in f.items())
         if self.memory is not None and action.ref:
             total += self.memory.worth(action.ref, 5.0) * f.get("expected_hits", 0.0) * 0.4

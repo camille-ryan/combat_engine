@@ -202,6 +202,18 @@ class World:
             raise KeyError(f"entity {eid} has no {ctype.__name__}")
         return got
 
+    def components_of(self, eid: int) -> list[Any]:
+        """Every component this entity carries.
+
+        For copying a creature onto another board without knowing what it is
+        made of -- `engine/threat.py` measures a creature on a board of its own
+        and a list of component types kept by hand would silently omit whatever
+        was added after it was written. A component is plain data, so copying one
+        is safe; copying a *world* is not, because bus subscriptions close over
+        the world they were made against.
+        """
+        return [store[eid] for store in self._stores.values() if eid in store]
+
     def has(self, eid: int, ctype: type) -> bool:
         return eid in self._stores.get(ctype, {})
 

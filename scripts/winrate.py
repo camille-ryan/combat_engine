@@ -86,11 +86,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import fight
 from combat_engine import chargen
-from combat_engine.engine import Ident, LinearPolicy, install, take_turn
+from combat_engine.engine import (
+    DoctrinePolicy,
+    Ident,
+    LinearPolicy,
+    install,
+    take_turn,
+)
+from combat_engine.engine import threat as threat_cache
 from combat_engine.engine.events import AttackRolled, OpportunityWindow
 from combat_engine.engine.types import Team
 
 DRAWS = ("chassis", "scored", "rated")
+
+#: `linear` is `LinearPolicy` as it has always been; `doctrine` adds threat,
+#: position and healing on top of it. Held on **both** sides of the board, so a
+#: run measures the scorer and not which side got the better one.
+POLICIES = {"linear": LinearPolicy, "doctrine": DoctrinePolicy}
 
 
 def arrange(draw: str) -> None:
@@ -102,7 +114,8 @@ def arrange(draw: str) -> None:
 
 def one(seed: int, level: int, cap: int,
         tally: dict[str, list[int]] | None = None,
-        oas: dict[str, int] | None = None) -> tuple[str, int]:
+        oas: dict[str, int] | None = None,
+        policy_name: str = "linear") -> tuple[str, int]:
     """(outcome, rounds) for a single fight. Outcome is win, loss or cap.
 
     `tally` accumulates hits and attempts per creature, keyed by what it is.
@@ -120,7 +133,11 @@ def one(seed: int, level: int, cap: int,
     it is the right one.
     """
     world, encounter = fight.build(seed, level, "full")
-    policy = LinearPolicy()
+    # A `World` that has been collected frees its `id()` for the next one, and
+    # `threat` keys its cache on that -- so a stale figure could be read as this
+    # board's. Cleared per fight rather than trusted.
+    threat_cache.clear()
+    policy = POLICIES[policy_name]()
     install(world, encounter, {}, default=policy)
     if tally is not None:
         def rolled(ev: AttackRolled) -> None:
@@ -158,7 +175,7 @@ def one(seed: int, level: int, cap: int,
 
 
 def run(draw: str, level: int, seeds: int, cap: int,
-        first: int = 1) -> dict:
+        first: int = 1, policy_name: str = "linear") -> dict:
     arrange(draw)
     tally: dict[str, list[int]] = {}
     oas: dict[str, int] = {}
@@ -166,7 +183,7 @@ def run(draw: str, level: int, seeds: int, cap: int,
     rounds: list[int] = []
     for seed in range(first, first + seeds):
         try:
-            out, n = one(seed, level, cap, tally, oas)
+            out, n = one(seed, level, cap, tally, oas, policy_name)
         except Exception as exc:
             # One unplayable seed must not cost the other fifty-nine, and a
             # silent skip would flatter the result. Counted and reported.
@@ -179,7 +196,8 @@ def run(draw: str, level: int, seeds: int, cap: int,
         capped += out == "cap"
     played = wins + losses + capped
     return {
-        "draw": draw, "level": level, "played": played, "wins": wins,
+        "draw": draw, "policy": policy_name,
+        "level": level, "played": played, "wins": wins,
         "losses": losses, "capped": capped,
         "rate": wins / played if played else 0.0,
         "rounds": statistics.median(rounds) if rounds else 0,
@@ -200,28 +218,35 @@ def main() -> int:
                     help="repeatable; defaults to 1, 5 and 10")
     ap.add_argument("--draw", choices=DRAWS, action="append",
                     help="repeatable; defaults to every one")
+    ap.add_argument("--policy", choices=sorted(POLICIES), action="append",
+                    help="repeatable; defaults to linear alone. Held on both "
+                         "sides of the board")
     ap.add_argument("--rounds", type=int, default=30, help="give up after this many")
     args = ap.parse_args()
     levels = args.level or [1, 5, 10]
     draws = args.draw or list(DRAWS)
+    policies = args.policy or ["linear"]
 
-    print(f"{args.seeds} seeds per cell, LinearPolicy both sides, "
-          f"round cap {args.rounds}")
+    print(f"{args.seeds} seeds per cell, round cap {args.rounds}, "
+          f"policy on both sides: {', '.join(policies)}")
     print(f"party: {', '.join(fight.PARTY)}\n")
-    print(f"{'draw':<9} {'lvl':>3} {'played':>6} {'wins':>5} {'rate':>6} "
-          f"{'loss':>5} {'cap':>4} {'rounds':>7} {'range':>9}")
+    print(f"{'draw':<9} {'policy':<9} {'lvl':>3} {'played':>6} {'wins':>5} "
+          f"{'rate':>6} {'loss':>5} {'cap':>4} {'rounds':>7} {'range':>9}")
     got = []
     for level in levels:
         for draw in draws:
-            r = run(draw, level, args.seeds, args.rounds, args.from_seed)
-            got.append(r)
-            print(f"{r['draw']:<9} {r['level']:>3} {r['played']:>6} {r['wins']:>5} "
-                  f"{r['rate']:>5.0%} {r['losses']:>5} {r['capped']:>4} "
-                  f"{r['rounds']:>7} {str(r['lo']) + '-' + str(r['hi']):>9}")
+            for pol in policies:
+                r = run(draw, level, args.seeds, args.rounds, args.from_seed, pol)
+                got.append(r)
+                print(f"{r['draw']:<9} {r['policy']:<9} {r['level']:>3} "
+                      f"{r['played']:>6} {r['wins']:>5} "
+                      f"{r['rate']:>5.0%} {r['losses']:>5} {r['capped']:>4} "
+                      f"{r['rounds']:>7} {str(r['lo']) + '-' + str(r['hi']):>9}")
         print()
 
     # Hit rate per creature, which is what actually moves when a draw improves.
-    print(f"{'draw':<9} {'lvl':>3}  " + "  ".join(f"{c:>9}" for c in fight.PARTY)
+    print(f"{'draw':<9} {'policy':<9} {'lvl':>3}  "
+          + "  ".join(f"{c:>9}" for c in fight.PARTY)
           + f"  {'party':>7} {'monsters':>9}")
     for r in got:
         cells = []
@@ -232,27 +257,28 @@ def main() -> int:
         pn = sum(r["hits"].get(c, [0, 0])[1] for c in fight.PARTY)
         mh = sum(v[0] for k, v in r["hits"].items() if k.startswith("monster:"))
         mn = sum(v[1] for k, v in r["hits"].items() if k.startswith("monster:"))
-        print(f"{r['draw']:<9} {r['level']:>3}  "
+        print(f"{r['draw']:<9} {r['policy']:<9} {r['level']:>3}  "
               + "  ".join(f"{c:>9}" for c in cells)
               + f"  {ph / pn if pn else 0:>6.0%} {mh / mn if mn else 0:>9.0%}")
     print()
 
     # Opportunity attacks provoked -- free damage handed to the other side.
-    print(f"{'draw':<9} {'lvl':>3} {'party provoked':>15} {'per fight':>10} "
-          f"{'monsters provoked':>18} {'per fight':>10}")
+    print(f"{'draw':<9} {'policy':<9} {'lvl':>3} {'party provoked':>15} "
+          f"{'per fight':>10} {'monsters provoked':>18} {'per fight':>10}")
     for r in got:
         pp = r["oas"].get("party", 0)
         mp = r["oas"].get("monsters", 0)
         n = max(1, r["played"])
-        print(f"{r['draw']:<9} {r['level']:>3} {pp:>15} {pp / n:>10.1f} "
-              f"{mp:>18} {mp / n:>10.1f}")
+        print(f"{r['draw']:<9} {r['policy']:<9} {r['level']:>3} {pp:>15} "
+              f"{pp / n:>10.1f} {mp:>18} {mp / n:>10.1f}")
     print()
     for r in got:
         why = {k.split(":", 1)[1]: v for k, v in r["oas"].items()
                if k.startswith("party:")}
         top = sorted(why.items(), key=lambda kv: -kv[1])[:3]
         if top:
-            print(f"  {r['draw']:<9} lvl {r['level']:>2} party provoked by: "
+            print(f"  {r['draw']:<9} {r['policy']:<9} lvl {r['level']:>2} "
+                  f"party provoked by: "
                   + ", ".join(f"{k} x{v}" for k, v in top))
     print()
 

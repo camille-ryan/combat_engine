@@ -7,6 +7,39 @@ what each monster role is trying to do. Input to `engine/policy.py`.
 policy, which it is not and never was; project policy is in `CLAUDE.md`. This
 is doctrine for the thing that chooses a move.
 
+## What of this is actually implemented
+
+Two policies exist and `LinearPolicy` is still the default.
+
+| | `LinearPolicy` | `DoctrinePolicy` |
+|---|---|---|
+| module | `engine/policy.py` | `engine/doctrine.py` |
+| threat | — | `engine/threat.py`, best case over 3 rounds |
+| threat removal, incl. hp damage | — | `threat_removed` |
+| cost of provoking | flat `-5.0` / `-4.0` | those **plus** `threat_conceded` |
+| what a move buys | — | `reach_gained` |
+| flanking, being flanked, cover | — | `takes_flank`, `becomes_flanked`, `cover_change` |
+| hostile terrain | — | `into_enemy_zone`, `into_difficult` |
+| healing | scored as friendly fire | `healing_given`, `healing_wasted`, `heals_the_dying` |
+
+`uv run scripts/doctrine.py` reports what every one of those terms contributed
+over real fights, and `uv run scripts/winrate.py --policy linear --policy
+doctrine` is the comparison between them.
+
+**Still absent, and each is a line of this document that nothing reads:**
+
+* **Target redirection** — the defender's half. "Threat should be increased by its
+  additional effects" and locking down a high-threat enemy are not scored at all;
+  `threat.CONDITION_THREAT` is a table of zeros awaiting numbers. A defender is
+  currently scored on damage prevention alone, which plays it as a striker.
+* **Role goals** — the whole of *Goals* below. `Ident.role` exists on both sides
+  of the board and no weight consults it, so a controller and a brute score
+  identically.
+* **Leaving a flank open for the rogue**, and setting up a flank for an ally.
+* **Damaging terrain** as distinct from a zone an enemy happens to own — a `Zone`
+  does not record that it deals damage, so this is not answerable today.
+* **Minion and elite/solo distinctions** in what to spend resources on.
+
 ## Good Squares
 Melee characters would like to be in melee.
 Ranged characters would like to not be in melee.
