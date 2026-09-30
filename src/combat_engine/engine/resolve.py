@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .ammunition import nock
 from .components import Defences, Health
@@ -100,6 +100,56 @@ class AttackResult:
 
     def __bool__(self) -> bool:
         return self.hit
+
+
+def situational_attack(
+    world: World,
+    attacker: int,
+    target: int,
+    power: str,
+    ctx: dict[str, Any],
+    *,
+    ca: bool = False,
+    charge: bool = False,
+    ignore_cover: bool = False,
+    branch: int = 0,
+    among: tuple[int, ...] = (),
+) -> int:
+    """Everything the *situation* adds to an attack roll, and nothing the
+    attacker brings to it.
+
+    Extracted so the closed-form model in `expect.py` reads it out of the kernel
+    rather than keeping its own copy. It had its own copy by omission -- it
+    applied `_mods` alone -- so it priced away **combat advantage's +2**, cover,
+    concealment, the prone penalty, long range and a mark. Measured on one rogue
+    row with advantage: 12.70 against a simulated 15.24, and the whole of that
+    gap was this. Two implementations of one rule is how they drift.
+    """
+    situational = attack_penalty(world, attacker)
+    situational += _mods(world, attacker, "attack", ctx)
+    if ca:
+        situational += 2
+    if charge:
+        situational += 1   # the printed charge bonus
+    if not ignore_cover:
+        # Cover and concealment do not add -- only the larger applies,
+        # which is the printed rule and also stops a creature in a fog
+        # bank behind a pillar being unhittable.
+        blocked = max(
+            int(cover_between(world, attacker, target,
+                              ranged=_is_ranged(power, branch))),
+            int(concealment_of(world, target, ctx)),
+        )
+        # A standing waiver -- `c.ignore_cover` on the attacker or
+        # `c.no_cover` on the target -- reads the same context the
+        # penalty does, so "against enemies in the zone" is a gate
+        # rather than an argument to one `c.strike`.
+        if blocked <= cover_waived(world, attacker, target, ctx):
+            blocked = 0
+        situational -= blocked
+    situational -= _long_range(world, attacker, target, power, branch, ctx)
+    situational += _mark_penalty(world, attacker, among or (target,))
+    return situational
 
 
 def attack(
@@ -195,30 +245,11 @@ def attack(
             "hand": hand,
         }
 
-        situational = attack_penalty(world, attacker)
-        situational += _mods(world, attacker, "attack", ctx)
-        if ca:
-            situational += 2
-        if charge:
-            situational += 1   # the printed charge bonus
-        if not ignore_cover:
-            # Cover and concealment do not add -- only the larger applies,
-            # which is the printed rule and also stops a creature in a fog
-            # bank behind a pillar being unhittable.
-            blocked = max(
-                int(cover_between(world, attacker, target,
-                                  ranged=_is_ranged(power, branch))),
-                int(concealment_of(world, target, ctx)),
-            )
-            # A standing waiver -- `c.ignore_cover` on the attacker or
-            # `c.no_cover` on the target -- reads the same context the
-            # penalty does, so "against enemies in the zone" is a gate
-            # rather than an argument to one `c.strike`.
-            if blocked <= cover_waived(world, attacker, target, ctx):
-                blocked = 0
-            situational -= blocked
-        situational -= _long_range(world, attacker, target, power, branch, ctx)
-        situational += _mark_penalty(world, attacker, among or (target,))
+        situational = situational_attack(
+            world, attacker, target, power, ctx,
+            ca=ca, charge=charge, ignore_cover=ignore_cover,
+            branch=branch, among=among,
+        )
 
         d20 = world.rng.d20()
         natural = d20.total
