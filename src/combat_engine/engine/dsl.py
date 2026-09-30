@@ -908,16 +908,28 @@ class Power:
 
     def hit_chance(
         self, world: World, actor: int, target: int, branch: int = 0, augment: int = 0
-    ) -> float:
-        """Probability this power hits, from the declared attack line.
+    ) -> float | None:
+        """Probability this power hits, or **None** when there is no attack line.
 
-        Returns 0.5 when the power did not declare one -- an honest "no idea"
-        that keeps a scorer from preferring undeclared powers or avoiding
-        them.
+        It used to return 0.5 for a row that declared none, described as an
+        honest "no idea". It is not honest, because 0.5 is a *score*: the caller
+        weighs it, and a row with nothing to hit was collecting `hit_chance` at
+        3.0 and `expected_hits` at 4.0 for a total of +3.50 it had not earned.
+        1,361 class rows have no attack line and do not attack -- mostly heals,
+        buffs and zones -- and `expected_hits` sums over targets, so a buff on
+        three allies took +1.5 rather than +0.5 and grew with the number of
+        allies it helped.
+
+        None instead, so a caller has to decide what no attack line means rather
+        than being handed a middling number that competes. Same reasoning as
+        `ratings.rating` returning None for an unrated option.
+
+        Both `api/render.py` callers already guard on `attack is None` and are
+        unaffected.
         """
         line = self.attack_of(branch, augment)
         if line is None:
-            return 0.5
+            return None
         from .query import cover_between, defence, has_combat_advantage
 
         bonus = line.bonus_for(world, actor, self.ref, branch)

@@ -173,7 +173,11 @@ def features(
         if f["provokes_now"]:
             f["provokes_avoidably"] = float(_could_step_out(world, encounter, actor))
 
-        chances = [p.hit_chance(world, actor, t) for t in action.targets]
+        # **None means there is nothing to hit**, and such a row gets no
+        # hit-chance feature at all rather than a phantom one. See
+        # `Power.hit_chance`.
+        chances = [c for t in action.targets
+                   if (c := p.hit_chance(world, actor, t)) is not None]
         if chances:
             f["hit_chance"] = sum(chances) / len(chances)
             f["expected_hits"] = sum(chances)
@@ -184,7 +188,8 @@ def features(
             # not its ranger's. Scored as the owner's it reported the wrong
             # creature's chance to hit, and the owner's is usually the better
             # one, so the policy would have over-valued every command.
-            theirs = [p.hit_chance(world, action.subject, t) for t in action.targets]
+            theirs = [c for t in action.targets
+                      if (c := p.hit_chance(world, action.subject, t)) is not None]
             if theirs:
                 f["hit_chance"] = sum(theirs) / len(theirs)
                 f["expected_hits"] = sum(theirs)
