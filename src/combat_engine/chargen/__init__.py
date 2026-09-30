@@ -1124,10 +1124,27 @@ class Character:
         return f"c:{self.cls}"
 
 
-#: A character's slots at level 1: two at-wills, one encounter power, one
-#: daily. Class features and the leader's heal are on top of these, because
-#: neither is a choice the book asks you to spend a slot on.
-SLOTS = ((Usage.AT_WILL, 2), (Usage.ENCOUNTER, 1), (Usage.DAILY, 1))
+#: **The level at which each power is gained, because a character keeps every
+#: one it has ever gained.** This replaced a single table of level-1 slot counts
+#: used with a `p.level == level` filter, which kept one year's worth of powers
+#: and threw away the rest -- including the at-wills, gained at first level and
+#: swung every round for the whole of a career. Level 10 prints no attack rows
+#: for any class, so a level-10 character was dealt nothing to attack with at
+#: all. See #244.
+#:
+#: A repeated level means two powers are chosen there: two at-wills at first.
+#: Heroic tier only, which is as far as the tree goes.
+ATTACK_GAINS: dict[Usage, tuple[int, ...]] = {
+    Usage.AT_WILL: (1, 1),
+    Usage.ENCOUNTER: (1, 3, 7),
+    Usage.DAILY: (1, 5, 9),
+}
+
+#: Utility powers are gained on their own levels and are not attack powers, so
+#: they are drawn without regard to usage -- a utility may be at-will,
+#: encounter or daily, and the level is what says it is a utility. These were
+#: dealt to nobody before, for the same reason the attack rows above were lost.
+UTILITY_GAINS = (2, 6, 10)
 
 
 def second_card(ref: str) -> str:
@@ -1184,17 +1201,33 @@ def loadout(
     # bard and the ardent are the two.
     out += sorted(p.ref for p in mine if _is_class_heal(p) and p.ref not in out)
 
-    for usage, count in SLOTS:
-        at_level = [p for p in mine if p.level == level and p.usage is usage]
-        on_leg = [p for p in at_level if _fits(p, build)]
-        pool = sorted(p.ref for p in (on_leg or at_level) if p.ref not in out)
-        spare = sorted(p.ref for p in at_level if p.ref not in out and p.ref not in pool)
+    def deal(at: int, usage: Usage | None, count: int) -> list[str]:
+        """`count` rows printed at level `at`, on this build's leg if it can be.
+
+        `usage` of None means "whatever is printed here", which is what a utility
+        level wants: a utility may be at-will, encounter or daily and the level is
+        what makes it a utility.
+        """
+        here = [p for p in mine
+                if p.level == at and (usage is None or p.usage is usage)]
+        on_leg = [p for p in here if _fits(p, build)]
+        pool = sorted(p.ref for p in (on_leg or here) if p.ref not in out)
+        spare = sorted(p.ref for p in here if p.ref not in out and p.ref not in pool)
         chosen = pick.sample(pool, min(count, len(pool)))
         # A thin leg is topped up from the rest of the class rather than
         # leaving the character with one at-will.
         while len(chosen) < count and spare:
             chosen.append(spare.pop(0))
-        out += sorted(chosen)
+        return sorted(chosen)
+
+    for usage, gains in ATTACK_GAINS.items():
+        for at in sorted(set(gains)):
+            if at > level:
+                continue
+            out += deal(at, usage, sum(1 for g in gains if g == at))
+    for at in UTILITY_GAINS:
+        if at <= level:
+            out += deal(at, None, 1)
     return out + sorted(r for ref in out for r in riders.get(ref, []))
 
 

@@ -38,11 +38,11 @@ What the event-count measures say, which is what to read at this sample size:
   provoke *less than half* as many opportunity attacks. Thousands of rolls.
 * **At level 5 it provokes considerably more** -- 226 against 138 -- and the party
   hits 4 points less often. That is a real regression on the cheap measures.
-* **Level 5 is not a fair test, because the party cannot fight there.** A dealt
-  level-5 wizard offered six legal actions with an enemy adjacent, none of them an
-  attack; levelling replaces a character's rows rather than adding to them, so it
-  holds no level-1 rows at all. That is #244 and it invalidates the level-5 column
-  rather than merely confounding it. Read the level-1 row.
+* **The level-5 column was measured on a party that had almost nothing to attack
+  with, and is superseded.** A dealt level-5 wizard held no attack-declaring rows
+  at all, a level-5 rogue one -- levelling replaced a character's powers instead of
+  adding to them. That was #244 and it is now fixed, so the whole table above wants
+  re-running; the level-1 row is the only one that was measuring a whole character.
 
 So: the terms are in, every one of them is measured to fire, and the thing is not
 yet better than what it replaces. `scripts/doctrine.py` is the instrument to set
@@ -160,19 +160,25 @@ from .types import Team
 #:     threat_removed      11.4       1.2
 #:
 #: The first reading of that was that a share of a health pool is not level-stable.
-#: It was wrong, and checking the characters was what showed it: **a dealt level-5
-#: wizard has six legal options with an enemy adjacent and not one of them is an
-#: attack.** Levelling *replaces* a character's rows instead of adding to them --
-#: a level-5 wizard holds no level-1 rows at all, where a level-1 wizard holds its
-#: full 2 at-will / 1 encounter / 1 daily. That is **#244**, and it is a chargen
-#: bug, not a property of the scale.
+#: It was wrong, and checking the characters was what showed it: levelling
+#: *replaced* a character's rows instead of adding to them, so a level-5 wizard
+#: held **no attack-declaring rows at all** and a level-10 rogue none either. That
+#: was #244, a chargen bug rather than a property of the scale, and it is fixed --
+#: attack rows known, before -> after:
 #:
-#: So `SHARE` should not be re-fitted until #244 is fixed, because the level-5
-#: figures above are measured on a party that cannot fight. The currency itself is
-#: expected to hold: at higher levels hit-point removal simply takes more rounds,
-#: which is also why control ought to matter *more* there -- it removes threat at
-#: once where damage removes it over time. `CONDITION_THREAT` is where that gets
-#: expressed, and it is still zeros.
+#:     wizard   L1  4 -> 4     L5  0 -> 5     L10  0 -> 7
+#:     rogue    L1  4 -> 4     L5  1 -> 6     L10  0 -> 8
+#:     fighter  L1  6 -> 6     L5  3 -> 8     L10  2 -> 10
+#:
+#: With that fixed the raw figure is roughly level-stable -- 20.6, 39.4 and 31.1
+#: hit points of best case over 3 rounds for the fighter at levels 1, 5 and 10,
+#: where it used to fall 48.7, 14.9, 6.7. So `SHARE` is still fitted on level-5
+#: numbers that have now moved, and the weights above want re-measuring.
+#:
+#: The currency is expected to hold. At higher levels hit-point removal simply
+#: takes more rounds, which is also why control ought to matter *more* there -- it
+#: removes threat at once where damage removes it over time. `CONDITION_THREAT` is
+#: where that gets expressed and it is still zeros (#263).
 SHARE = 75.0
 
 DOCTRINE: dict[str, float] = {
