@@ -9,7 +9,10 @@ is doctrine for the thing that chooses a move.
 
 ## What of this is actually implemented
 
-Two policies exist and `LinearPolicy` is still the default.
+Two policies exist. **`DoctrinePolicy` is the default**, on the measurement
+in its own module docstring — 60 of 80 wins at level 5 against
+`LinearPolicy`'s 47, and 67 against 46 at level 10, both surviving Holm.
+`LinearPolicy` stays as the baseline `--policy linear` compares against.
 
 | | `LinearPolicy` | `DoctrinePolicy` |
 |---|---|---|

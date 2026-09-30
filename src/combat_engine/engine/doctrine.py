@@ -7,10 +7,12 @@ is good**, **how dangerous a creature is**, or **whether a heal is worth casting
 nothing else.
 
 A second policy rather than more weights on the first, deliberately. Forty-five
-interacting hand-set numbers cannot be moved one at a time, so a regression in
-them cannot be attributed; two policies on the same seeds can be compared. The
-default stays `LinearPolicy` until this one is measured to be better, which also
-means `scripts/fixtures/` does not move while it is being written.
+interacting hand-set numbers cannot be moved one at a time, so a regression in them
+cannot be attributed; two policies on the same seeds can be compared. It was
+written opt-in for that reason and **is now the default**, on the measurement
+below. `LinearPolicy` stays exactly as it is -- this subclasses it and overrides
+`score` alone -- so `--policy linear` goes on being the baseline to compare against
+rather than becoming dead code.
 
 ## Where it stands, measured
 

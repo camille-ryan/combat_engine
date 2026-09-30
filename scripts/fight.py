@@ -22,10 +22,10 @@ from combat_engine import chargen
 from combat_engine.content import loader, terrain
 from combat_engine.engine import (
     Bus,
+    DoctrinePolicy,
     Encounter,
     Grid,
     Ident,
-    LinearPolicy,
     Rng,
     Team,
     World,
@@ -185,7 +185,7 @@ def main() -> int:
     args = ap.parse_args()
 
     world, encounter = build(args.seed, args.level, args.scaling, args.monster_math)
-    policy = LinearPolicy()
+    policy = DoctrinePolicy()
     install(world, encounter, {}, default=policy)
 
     caught: list[int] = []

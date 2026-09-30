@@ -736,7 +736,14 @@ def install(
     characters to a human interface and leave the monsters on a policy
     without either side knowing about the other.
     """
-    fallback = default or LinearPolicy()
+    # **`DoctrinePolicy` is the default**, on the measurement in its own docstring:
+    # 60 of 80 at level 5 against `LinearPolicy`'s 47 and 67 against 46 at level
+    # 10, both surviving Holm. Imported here rather than at the top because
+    # `doctrine` imports this module -- it subclasses `LinearPolicy`, which stays
+    # exactly as it is so the two can go on being compared.
+    from .doctrine import DoctrinePolicy
+
+    fallback = default or DoctrinePolicy()
 
     def owner(eid: int) -> Policy:
         side = world.get(eid, Side)

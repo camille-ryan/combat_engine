@@ -30,10 +30,10 @@ from combat_engine.content import loader, terrain
 from combat_engine.engine import (
     Action,
     Bus,
+    DoctrinePolicy,
     Encounter,
     Grid,
     Ident,
-    LinearPolicy,
     Rng,
     Team,
     World,
@@ -136,7 +136,7 @@ class Session:
     world: World
     encounter: Encounter
     wire: Wire
-    policy: LinearPolicy
+    policy: DoctrinePolicy
     seed: int
     level: int
     scaling: str
@@ -186,7 +186,7 @@ class Session:
 
         _tag(world)
         encounter = Encounter(world)
-        policy = LinearPolicy()
+        policy = DoctrinePolicy()
         ident = uuid.uuid4().hex[:12]
         session = cls(
             id=ident,

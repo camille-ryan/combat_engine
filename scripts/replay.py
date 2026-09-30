@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from combat_engine.engine import LinearPolicy, install, take_turn
+from combat_engine.engine import DoctrinePolicy, install, take_turn
 from fight import build
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -54,7 +54,7 @@ def play(case: dict) -> list[str]:
         case["seed"], case["level"], case["scaling"],
         feats=case.get("feats"),
     )
-    policy = LinearPolicy()
+    policy = DoctrinePolicy()
     install(world, encounter, {}, default=policy)
     encounter.start()
     while not encounter.finished and world.round <= 40:
