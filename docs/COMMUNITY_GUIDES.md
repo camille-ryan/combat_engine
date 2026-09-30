@@ -74,130 +74,11 @@ rated from — and for feats it leaves 2,033 "in scope but unmentioned", which a
 guide that discussed 136 plainly never weighed. Scope was the wrong mechanism;
 honesty about ignorance is the right one.
 
-**24 of 25 classes have a guide.** `GUIDED_CLASSES` is what a caller checks.
-
-The invoker is the one gap, and it is not fixable from this source: its guide's
-colour was **lost in a forum migration**. The page's own text says "the sky blue
-rating is based on the excellent 1-13 powers", so the ratings existed — but the
-HTML carries no colour markup at all, and every option falls through to black.
-The guide is refused rather than contributing 388 false averages. An archived
-snapshot of the original thread would be the way to recover it; none of the 16
-archive.org links in the index is that thread.
+**All 25 classes have a guide.** `GUIDED_CLASSES` is what a caller checks.
 
 The avenger came from a Google Site of **51 sub-pages**, which needed a crawl: the
-colour key is on the landing page and the ratings are spread across the rest, so
+colour key is on the landing page and the ratings are spread over the rest, so
 they are fetched and concatenated into one document.
-
-**Black is bold with no colour on it.** The first pass here walked colour spans
-and reported zero blacks, and concluded the tier was unextractable. That was
-wrong: black is the default *colour*, but an option's name is **bold** whether it
-is rated or not, and a colour is wrapped around it only when the author is
-rating it away from average. So bold is the anchor and colour is the modifier.
-Measured on the first guide, of the bold names that resolve to a ref: 419 sit
-inside a colour and **152 do not**, and those are the blacks.
-
-Bold is the better anchor for a second reason. A coloured span often runs on
-into the prose after the name; the bold element is the name and stops there.
-Switching to it took the table from 288 refs to 374 and coverage from 55% to
-74%.
-
-One caveat that follows: bold is also used for ordinary emphasis, so some of the
-black bucket is a name mentioned in passing rather than a deliberate verdict of
-"average". The consequence is bounded — a false black moves a ref from 2.5 to
-3.0, half a point on a six-point scale — which is why it is accepted and written
-down rather than guarded against. A ref bolded in one place and coloured in
-another keeps the coloured reading, since the uncoloured mention is usually the
-incidental one.
-
-**Green is not a tier.** Several guides use it for options that are "a different
-kind of useful", and the first guide's key says outright that *a lot of
-non-combat options fall here*. That is this project's `narrative=` and
-`out_of_combat=True` category, so green is recorded in `OUT_OF_COMBAT` and
-excluded from the combat score rather than ranked against things it cannot be
-compared to.
-
-## A rating belongs to a class, not to an option
-
-`RATINGS` is keyed `ref -> {class: score}`, and that is not a detail.
-
-A power is class-specific already. A **race, a feat or an item is not** — it gets
-rated in a class context, and the same option is honestly worth different amounts
-to different classes. Across all 37 guides: **831 refs are rated for more than one
-class and 344 of those differ by two tiers or more**, the widest being the full 6
-of 6. On the first two guides alone it was 51 overlapping and 13 that wide.
-
-The first version averaged those, which produced a mid-tier number wrong for both
-sides of every one of them. So `rating(ref, cls)` takes the class and returns `UNRATED` when
-the only opinions on file belong to other classes: a wizard guide's view of a race
-says nothing about that race for a fighter, and borrowing it is worse than
-admitting ignorance.
-
-`spread(ref)` reports how far apart the classes are, and is worth reading rather
-than smoothing away. An option two experienced players put two tiers apart is
-genuinely situational, which is information a single number loses.
-
-The one case where a power legitimately carries two classes is a guide rating
-another class's row as worth poaching — a real and separate judgement, and the
-key holds it correctly.
-
-## The colour map derives itself, with a floor under it
-
-The scale is conventional; the hexes are not. The first guide's author states the
-shades were chosen to suit photosensitive eyes, and uses a teal (`#33cccc`) where
-convention uses a pale blue. Hand-recording 36 keys was the plan's stated
-bottleneck.
-
-It is not needed. Nearly every guide states its key near the top and writes each
-colour word **in that colour**, so `legend()` reads the map off the document.
-Checked against the one key entered by hand: 6 of 6 agreed.
-
-`CANON` sits underneath as a floor — the six hexes the guides that *do* state a
-key agree on. That exists because deriving the key fails silently on some guides,
-and a guide with no key drops every coloured rating as unmapped. Precedence is
-canon, then the guide's own key, then a hand override. Exactly one override
-survives, for the guide whose legend swatch differs from what its body uses.
-
-Anything still unmapped is **reported**, not guessed. Inferring a tier from a hue
-is how a red becomes a gold — and inferring one from a colour *word* is the same
-mistake: `magenta` was mapped to the purple tier until a guide turned out to use
-that exact colour for "GM/table dependent".
-
-## Resolution
-
-An exact match on a normalised name, which is enough because of a measurement
-rather than a hope:
-
-| | refs | distinct names | collisions |
-|---|---|---|---|
-| powers | 4,243 | 4,243 | **0** |
-| items | 1,883 | 1,882 | 1 |
-| feats | 3,501 | 3,368 | 133 pairs |
-
-So no fuzzy matching, no confidence threshold, no reject list. A power name
-identifies a power.
-
-Every prefix in `names.json` is indexed, not just the rateable ones, so a
-coloured run naming something out of scope is *reported as such* rather than
-counted as a failure. `x` alone is 4,876 entries with no table in `game.db` —
-paragon paths and the like, which this project does not implement. A collision
-between a rateable ref and an out-of-scope one resolves to the rateable one: a
-guide rates options, and widening the index had otherwise taken ambiguity from
-6 to 63.
-
-## The registry
-
-36 guides, read from 96 candidate URLs harvested off the index thread's seven
-pages. `--discover` fetches each and reports whichever class owns most of the
-powers it rates; `REGISTRY` in `scripts/guides.py` is the result, one line per
-guide. 23 classes are covered, with three guides each for fighter, paladin,
-warlock and wizard.
-
-**The class is detected, not trusted.** The index mislabels at least one guide —
-what it lists as a seeker handbook is a warlock handbook — and the check that
-caught it works just as well with nothing claimed: 180 of its 182 apparent
-"strays" were warlock rows. Two guides resist detection because they rate mostly
-feats, items and paragon paths rather than their own class's powers; those carry
-the class stated by hand and say so in their note.
 
 ## Four things that had to be fixed, each found by a number looking wrong
 
@@ -223,10 +104,21 @@ was discarded as unmapped and only uncoloured blacks survived. **14 of 36 guides
 were reporting 95–100% black**, which is what a broken reader looks like rather
 than what a guide looks like. After the fix, three.
 
-**Refuse a guide with no colour key at all.** One does not colour-code; every
-option fell through to black and it contributed 388 false averages, which are
-worse than nothing because they look like verdicts. A guide whose ratings are
-more than 90% black is now refused and reported.
+**Read colour *names*, not only hex.** `color: DarkTurquoise` is a rating and
+`#00ccff` is the same rating, and the reader saw only the second. Over **five
+thousand** ratings were being discarded — `DeepSkyBlue` 947 times, `MediumBlue`
+756, `Purple` 602, `DarkTurquoise` 531, `Red` 333, `Crimson` 144, `GoldenRod` 48.
+`NAMED` folds each onto the canonical hex of the tier it means, so there is one
+code path and a guide's own stated key still wins: a legend written in
+`DeepSkyBlue` arrives as `#00ccff` and reads the same as a legend written in hex.
+
+This is the mistake that cost most, and it was diagnosed as the opposite. One
+guide came out 100% black, so it was **refused** as a guide whose colour had been
+lost in a forum migration — and the page's own prose, which mentions "the sky blue
+rating", was read as evidence for that story rather than against it. The colour was
+there all along in `DarkTurquoise`. Reading it recovered 388 ratings and the
+twenty-fifth class. The refusal guard stays, because a guide with genuinely no key
+would still be worth refusing, but nothing trips it now.
 
 ## A guide's title is a printed name
 
@@ -237,11 +129,13 @@ remembering for any future source — a link is not automatically name-free.
 
 ## Measured, across all 36
 
-* **4,215 refs rated** — 2,251 powers, 1,507 feats, 406 items, 51 races — plus
-  60 set aside as green or pink.
-* Tier spread: 527 red, 783 purple, 2,612 black, 1,926 blue, 935 sky, 156 gold.
+* **4,405 refs rated** — 2,359 powers, 1,585 feats, 410 items, 51 races — plus
+  60 set aside as green or pink. No guide refused.
+* Tier spread: 569 red, 860 purple, 2,486 black, 2,165 blue, 1,084 sky, 163 gold.
+  Black at 34% with blue close behind is a healthier shape than the 70% black an
+  earlier pass produced.
   Black the largest bucket at 39% is the shape a rating distribution should have.
-* **831 refs are rated for more than one class, and 344 differ by two tiers or
+* **856 refs are rated for more than one class, and 370 differ by two tiers or
   more** — the strongest evidence for keying by class. 615 are rated twice for
   the *same* class by different guides at different tiers, which is genuine
   disagreement; the later guide wins.
@@ -265,19 +159,20 @@ remembering for any future source — a link is not automatically name-free.
 ## Coverage is very uneven, and a caller has to know that
 
 Share of each class's **written heroic-tier rows** (levels 0/1/3/5/7/9) that a
-guide has rated. 55% overall, and the spread is what matters:
+guide has rated. 57% overall, and the spread is what matters:
 
 | | | | |
 |---|---|---|---|
-| fighter 90% | swordmage 88% | paladin 87% | seeker 86% |
-| sorcerer 86% | warlock 86% | rogue 84% | ardent 83% |
-| battlemind 83% | wizard 78% | psion 77% | runepriest 77% |
-| barbarian 71% | avenger 70% | assassin 62% | cleric 43% |
-| bard 30% | druid 30% | ranger 25% | monk 22% |
-| shaman 14% | warlord 7% | artificer 2% | warden 1% |
-| **invoker 0%** | | | |
+| fighter 90% | swordmage 88% | paladin 87% | warlock 86% |
+| seeker 86% | sorcerer 86% | invoker 84% | rogue 84% |
+| battlemind 83% | ardent 83% | wizard 78% | psion 77% |
+| runepriest 77% | barbarian 71% | avenger 70% | assassin 62% |
+| cleric 43% | druid 30% | bard 30% | ranger 25% |
+| monk 22% | shaman 14% | warlord 7% | artificer 2% |
+| warden 1% | | | |
 
-The four at the bottom are not failures of the reader. The artificer and warden
+The four at the bottom are not failures of the reader — unlike the invoker, which
+was, and is now at 84%. The artificer and warden
 guides rate mostly feats, items and paragon paths rather than their own class's
 powers — which is why their class could not be detected either. The warlord and
 shaman guides are simply short: 71 and 81 rated options against a fighter guide's

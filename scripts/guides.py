@@ -128,6 +128,7 @@ LEGEND_WORDS = {
 #: them. Anything outside this and the derived key is still reported unmapped
 #: rather than guessed.
 CANON: dict[str, str] = {
+    "#000000": "black",
     "#ff0000": "red",
     "#800080": "purple",
     "#0000ff": "blue",
@@ -464,7 +465,45 @@ class Index:
         return "comp" if ref.startswith("comp") else ref[0]
 
 
-_COL = re.compile(r"(?<!background-)color:\s*(#[0-9a-f]{3,6})")
+_COL = re.compile(r"(?<!background-)color:\s*(#[0-9a-f]{3,6}|[a-z]{3,24})\b")
+
+#: CSS colour *names*, folded onto the canonical hex of the tier they mean.
+#:
+#: **Over five thousand ratings were being discarded** because `_COL` matched only
+#: hex. One guide writes its sky blue as `DarkTurquoise` and its blue as
+#: `MediumBlue`, and every one of its 436 options fell through to black -- which
+#: is why it looked like a guide whose colour had been lost in a migration. It had
+#: not; the reader could not see it.
+#:
+#: Folded onto the canon rather than kept as names so there is one code path, and
+#: so a guide's own stated key still wins: a legend written in `DeepSkyBlue`
+#: arrives here as `#00ccff` and is read the same way as a legend written in hex.
+NAMED: dict[str, str] = {
+    "red": "#ff0000", "crimson": "#ff0000", "firebrick": "#ff0000",
+    "purple": "#800080", "violet": "#800080", "darkviolet": "#800080",
+    "blue": "#0000ff", "mediumblue": "#0000ff", "navy": "#0000ff",
+    "deepskyblue": "#00ccff", "darkturquoise": "#00ccff",
+    "skyblue": "#00ccff", "lightskyblue": "#00ccff",
+    "mediumturquoise": "#00ccff", "aqua": "#00ccff", "cyan": "#00ccff",
+    "goldenrod": "#ff9900", "darkgoldenrod": "#ff9900",
+    "gold": "#ff9900", "orange": "#ff9900",
+    "green": "#339966", "darkgreen": "#339966", "seagreen": "#339966",
+    "black": "#000000",
+}
+
+#: Names that are page furniture rather than a rating.
+CHROME = frozenset({"white", "inherit", "rgba", "rgb", "hsl", "hsla",
+                    "transparent", "currentcolor", "initial", "unset"})
+
+
+def _hex(token: str) -> str | None:
+    """A colour token as a canonical hex, or None when it is not a rating."""
+    t = token.strip().lower()
+    if t.startswith("#"):
+        return t
+    if t in CHROME:
+        return None
+    return NAMED.get(t)
 #: Grey and near-black are body text, not a rating.
 NEUTRAL = ("#000000", "#434343", "#666666", "#333333", "#222222", "#111111")
 
@@ -474,8 +513,9 @@ def gdoc_styles(body: str) -> dict[str, tuple[str | None, bool]]:
     out: dict[str, tuple[str | None, bool]] = {}
     for name, decls in re.findall(r"\.(c\d+)\s*\{([^}]*)\}", body):
         flat = decls.replace(" ", "")
-        m = re.search(r"(?<!background-)color:(#[0-9a-f]{6})", flat)
-        out[name] = (m.group(1) if m else None, "font-weight:700" in flat)
+        m = re.search(r"(?<!background-)color:(#[0-9a-f]{6}|[a-z]{3,24})", flat)
+        out[name] = (_hex(m.group(1)) if m else None,
+                     "font-weight:700" in flat)
     return out
 
 
@@ -516,13 +556,13 @@ def tint(el) -> str | None:  # noqa: ANN001
     cur = el
     while cur is not None:
         m = _COL.search((cur.get("style") or "").lower())
-        if m:
-            return m.group(1)
+        if m and (got := _hex(m.group(1))):
+            return got
         cur = cur.getparent()
     for kid in el.xpath(".//*[contains(@style,'color')]"):
         m = _COL.search((kid.get("style") or "").lower())
-        if m:
-            return m.group(1)
+        if m and (got := _hex(m.group(1))):
+            return got
     return None
 
 
