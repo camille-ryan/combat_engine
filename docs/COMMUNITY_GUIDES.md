@@ -74,8 +74,8 @@ rated from — and for feats it leaves 2,033 "in scope but unmentioned", which a
 guide that discussed 136 plainly never weighed. Scope was the wrong mechanism;
 honesty about ignorance is the right one.
 
-Two classes have a guide so far, so for the other twenty every answer is `no
-guide for this class`. `GUIDED_CLASSES` is what a caller checks.
+23 of 25 classes have a guide. `GUIDED_CLASSES` is what a caller checks; the
+avenger and the invoker are the gaps, for different reasons — see below.
 
 **Black is bold with no colour on it.** The first pass here walked colour spans
 and reported zero blacks, and concluded the tier was unextractable. That was
@@ -111,12 +111,12 @@ compared to.
 
 A power is class-specific already. A **race, a feat or an item is not** — it gets
 rated in a class context, and the same option is honestly worth different amounts
-to different classes. Measured on the first two guides: 51 refs are rated by both,
-and **13 differ by two tiers or more**. The worst is a race rated red (0.0) for
-one class and black (3.0) for the other.
+to different classes. Across all 36 guides: **762 refs are rated for more than one
+class and 309 of those differ by two tiers or more**, the widest being the full 6
+of 6. On the first two guides alone it was 51 overlapping and 13 that wide.
 
-The first version averaged those, which produced purple — wrong for both, on 33
-of 35 overlaps. So `rating(ref, cls)` takes the class and returns `UNRATED` when
+The first version averaged those, which produced a mid-tier number wrong for both
+sides of every one of them. So `rating(ref, cls)` takes the class and returns `UNRATED` when
 the only opinions on file belong to other classes: a wizard guide's view of a race
 says nothing about that race for a fighter, and borrowing it is worse than
 admitting ignorance.
@@ -129,13 +129,27 @@ The one case where a power legitimately carries two classes is a guide rating
 another class's row as worth poaching — a real and separate judgement, and the
 key holds it correctly.
 
-## Every guide needs its own colour map
+## The colour map derives itself, with a floor under it
 
-The scale is conventional; the hexes are not. The first guide's author states
-that the shades were chosen to suit photosensitive eyes, and uses a teal
-(`#33cccc`) where the convention would use a pale blue. So each guide's key is
-read off its own text and recorded by hand in `GUIDES`. Inferring a tier from a
-hue is how a red becomes a gold.
+The scale is conventional; the hexes are not. The first guide's author states the
+shades were chosen to suit photosensitive eyes, and uses a teal (`#33cccc`) where
+convention uses a pale blue. Hand-recording 36 keys was the plan's stated
+bottleneck.
+
+It is not needed. Nearly every guide states its key near the top and writes each
+colour word **in that colour**, so `legend()` reads the map off the document.
+Checked against the one key entered by hand: 6 of 6 agreed.
+
+`CANON` sits underneath as a floor — the six hexes the guides that *do* state a
+key agree on. That exists because deriving the key fails silently on some guides,
+and a guide with no key drops every coloured rating as unmapped. Precedence is
+canon, then the guide's own key, then a hand override. Exactly one override
+survives, for the guide whose legend swatch differs from what its body uses.
+
+Anything still unmapped is **reported**, not guessed. Inferring a tier from a hue
+is how a red becomes a gold — and inferring one from a colour *word* is the same
+mistake: `magenta` was mapped to the purple tier until a guide turned out to use
+that exact colour for "GM/table dependent".
 
 ## Resolution
 
@@ -161,14 +175,66 @@ guide rates options, and widening the index had otherwise taken ambiguity from
 
 ## The registry
 
-| guide | class | rated | note |
-|---|---|---|---|
-| `wizard` | wizard | 288 refs | states its key in full; teal is its sky blue |
+36 guides, read from 96 candidate URLs harvested off the index thread's seven
+pages. `--discover` fetches each and reports whichever class owns most of the
+powers it rates; `REGISTRY` in `scripts/guides.py` is the result, one line per
+guide. 23 classes are covered, with three guides each for fighter, paladin,
+warlock and wizard.
 
-## Measured, first guide
+**The class is detected, not trusted.** The index mislabels at least one guide —
+what it lists as a seeker handbook is a warlock handbook — and the check that
+caught it works just as well with nothing claimed: 180 of its 182 apparent
+"strays" were warlock rows. Two guides resist detection because they rate mostly
+feats, items and paragon paths rather than their own class's powers; those carry
+the class stated by hand and say so in their note.
 
-* 1,293 bold names → **374 refs rated** (195 powers, 136 feats, 43 races), 17
-  more recorded as out-of-combat.
+## Four things that had to be fixed, each found by a number looking wrong
+
+**Read the author's posts, not the first post.** 51 of 96 candidates resolved
+*nothing*. A long guide runs over five or six posts and several begin at post 2
+behind a short introduction and a table of contents. The thread starter wrote
+post 0, so every post by that author is the guide and everything else is a reply.
+Fixing it took the class-guide count from 12 to 38 and the classes covered from 8
+to 22.
+
+**Gate on the power count, not the share alone.** The share is computed over
+resolved powers, so an items compendium that happens to name two wizard powers
+read as a wizard guide at 100%. It was rating 282 options and only 4 of them were
+powers. The gate is now 60 options, at least 10 of them powers, and 80% of those
+owned by one class — which also excludes the basic-attack guide (271 powers,
+17% one class) and the item guides.
+
+**Look for the colour both above and below the name.** The wizard handbook writes
+`<span style="color"><b>name</b></span>`; the fighter handbook writes
+`<b><span style="color">name</span></b>`. Reading ancestors alone found the colour
+on 42 of the fighter guide's bold elements and missed 583 — so its every rating
+was discarded as unmapped and only uncoloured blacks survived. **14 of 36 guides
+were reporting 95–100% black**, which is what a broken reader looks like rather
+than what a guide looks like. After the fix, three.
+
+**Refuse a guide with no colour key at all.** One does not colour-code; every
+option fell through to black and it contributed 388 false averages, which are
+worse than nothing because they look like verdicts. A guide whose ratings are
+more than 90% black is now refused and reported.
+
+## A guide's title is a printed name
+
+`leaks.py` caught this and nothing else would have: the URLs carried titles, and
+one title contains an epic destiny's printed name. Every URL in the registry is
+now stripped to its bare thread id, which EnWorld serves the same page for. Worth
+remembering for any future source — a link is not automatically name-free.
+
+## Measured, across all 36
+
+* **3,966 refs rated** — 2,121 powers, 1,425 feats, 369 items, 51 races — plus
+  58 set aside as green or pink.
+* Tier spread: 495 red, 677 purple, 2,427 black, 1,728 blue, 935 sky, 153 gold.
+  Black the largest bucket at 39% is the shape a rating distribution should have.
+* **762 refs are rated for more than one class, and 309 differ by two tiers or
+  more** — the strongest evidence for keying by class. 615 are rated twice for
+  the *same* class by different guides at different tiers, which is genuine
+  disagreement; the later guide wins.
+* On the first guide alone, for comparison: 1,293 bold names → 374 refs.
 * **Accuracy 99.5%**: of 195 resolved powers, 194 belong to the class the guide
   is about and one is a warlock row, which a wizard guide may legitimately
   mention. This check needs no human and no name — a wizard guide naming a

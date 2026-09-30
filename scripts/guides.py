@@ -115,6 +115,29 @@ LEGEND_WORDS = {
 # from a hue, and this is where it would have gone wrong.
 
 
+#: The palette most EnWorld guides share, as a floor under the derived key.
+#:
+#: **Needed because deriving the key silently fails on some guides.** A guide
+#: that states its legend in an image, or in a table, or in words this code does
+#: not recognise, yields no map at all -- and then every coloured rating is
+#: dropped as unmapped and only the uncoloured blacks survive. That took 14 of
+#: 36 guides to 95-100% black, which is what a broken reader looks like rather
+#: than what a guide looks like.
+#:
+#: These six are read off the guides that *do* state a key, and agree across
+#: them. Anything outside this and the derived key is still reported unmapped
+#: rather than guessed.
+CANON: dict[str, str] = {
+    "#ff0000": "red",
+    "#800080": "purple",
+    "#0000ff": "blue",
+    "#00ccff": "sky",
+    "#33cccc": "sky",
+    "#ff9900": "gold",
+    "#339966": OUT_OF_COMBAT,
+}
+
+
 @dataclass
 class Guide:
     """One guide, and the colour key it states for itself."""
@@ -134,34 +157,158 @@ class Guide:
     #: to go through the export endpoint and read CSS classes, because the
     #: /edit URL serves 1.7MB of editor JavaScript and no content at all.
     host: str = "enworld"
-    #: Which posts hold the guide proper. Replies are other people's opinions.
-    posts: tuple[int, ...] = (0,)
+    #: Which posts hold the guide proper, as an override. Empty means **every
+    #: post by whoever started the thread**, which is the right default: a long
+    #: guide runs over several posts, and several start at post 2 behind a short
+    #: introduction and a table of contents. Reading post 0 alone found nothing
+    #: at all on 51 of 96 candidates.
+    posts: tuple[int, ...] = ()
     note: str = ""
 
 
+def host_of(url: str) -> str:
+    """Which parser a URL wants. Four hosts carry these guides."""
+    if "docs.google.com" in url:
+        return "gdocs"
+    if "web.archive.org" in url:
+        return "archive"
+    if "sites.google.com" in url:
+        return "gsites"
+    return "enworld"
+
+#: (slug, class, url, overrides, note). One line per guide, because the colour
+#: key derives itself now and the only thing left to record by hand is which
+#: class a guide is about -- and even that is *checked* rather than trusted, by
+#: `agreement()`. The host follows from the URL.
+#:
+#: The class comes from `--discover`, which reads every candidate and reports
+#: whichever class owns most of the powers it rates. The index thread mislabels
+#: at least one guide, so detecting beats believing.
+REGISTRY: tuple[tuple[str, str, str, dict[str, str], str], ...] = (
+    ("ardent", "ardent",
+     "http://www.enworld.org/forum/showthread.php?468822",
+     {}, "279 options, 79 powers, 96% ardent"),
+    ("artificer", "artificer",
+     "http://www.enworld.org/forum/showthread.php?468924",
+     {}, "class stated, not detected"),
+    ("assassin", "assassin",
+     "http://www.enworld.org/forum/showthread.php?469376",
+     {}, "220 options, 90 powers, 84% assassin"),
+    ("barbarian", "barbarian",
+     "http://www.enworld.org/forum/showthread.php?469384",
+     {}, "330 options, 143 powers, 99% barbarian"),
+    ("bard", "bard",
+     "http://www.enworld.org/forum/showthread.php?468955",
+     {}, "161 options, 51 powers, 88% bard"),
+    ("battlemind", "battlemind",
+     "http://www.enworld.org/forum/showthread.php?469129",
+     {}, "351 options, 159 powers, 97% battlemind"),
+    ("cleric", "cleric",
+     "http://www.enworld.org/forum/showthread.php?471418",
+     {}, "424 options, 102 powers, 96% cleric"),
+    ("cleric2", "cleric",
+     "http://www.enworld.org/forum/showthread.php?469235",
+     {}, "64 options, 18 powers, 100% cleric"),
+    ("druid", "druid",
+     "http://www.enworld.org/forum/showthread.php?469148",
+     {}, "151 options, 74 powers, 96% druid"),
+    ("fighter", "fighter",
+     "http://www.enworld.org/forum/showthread.php?469122",
+     {}, "570 options, 278 powers, 88% fighter"),
+    ("fighter2", "fighter",
+     "http://www.enworld.org/forum/showthread.php?517231",
+     {}, "398 options, 113 powers, 95% fighter"),
+    ("fighter3", "fighter",
+     "http://www.enworld.org/forum/showthread.php?469139",
+     {}, "377 options, 112 powers, 95% fighter"),
+    ("invoker", "invoker",
+     "http://www.enworld.org/forum/showthread.php?469150",
+     {}, "436 options, 143 powers, 99% invoker"),
+    ("monk", "monk",
+     "https://web.archive.org/web/20150916220419/http://community.wi"
+     "zards.com/content/forum-topic/3735276",
+     {}, "195 options, 67 powers, 93% monk"),
+    ("monk2", "monk",
+     "http://www.enworld.org/forum/showthread.php?468782",
+     {}, "168 options, 68 powers, 93% monk"),
+    ("paladin", "paladin",
+     "http://www.enworld.org/forum/showthread.php?471429",
+     {}, "692 options, 226 powers, 91% paladin"),
+    ("paladin2", "paladin",
+     "http://www.enworld.org/forum/showthread.php?469141",
+     {}, "437 options, 161 powers, 84% paladin"),
+    ("paladin3", "paladin",
+     "http://www.enworld.org/forum/showthread.php?469135",
+     {}, "343 options, 112 powers, 92% paladin"),
+    ("psion", "psion",
+     "http://www.enworld.org/forum/showthread.php?471677",
+     {}, "327 options, 82 powers, 94% psion"),
+    ("ranger", "ranger",
+     "http://www.enworld.org/forum/showthread.php?517233",
+     {}, "377 options, 114 powers, 89% ranger"),
+    ("ranger2", "ranger",
+     "http://www.enworld.org/forum/showthread.php?468963",
+     {}, "166 options, 63 powers, 97% ranger"),
+    ("rogue", "rogue",
+     "http://www.enworld.org/forum/showthread.php?469717",
+     {}, "385 options, 155 powers, 95% rogue"),
+    ("runepriest", "runepriest",
+     "http://www.enworld.org/forum/showthread.php?469230",
+     {}, "140 options, 42 powers, 98% runepriest"),
+    ("seeker", "seeker",
+     "http://www.enworld.org/forum/showthread.php?469092",
+     {}, "296 options, 122 powers, 96% seeker"),
+    ("seeker2", "seeker",
+     "https://www.enworld.org/threads/713594/",
+     {}, "272 options, 73 powers, 93% seeker"),
+    ("shaman", "shaman",
+     "http://www.enworld.org/forum/showthread.php?469231",
+     {}, "95 options, 23 powers, 96% shaman"),
+    ("sorcerer", "sorcerer",
+     "http://www.enworld.org/forum/showthread.php?469385",
+     {}, "149 options, 120 powers, 99% sorcerer"),
+    ("swordmage", "swordmage",
+     "http://www.enworld.org/forum/showthread.php?469143",
+     {}, "404 options, 120 powers, 89% swordmage"),
+    ("warden", "warden",
+     "http://www.enworld.org/forum/showthread.php?469144",
+     {}, "class stated, not detected"),
+    ("warlock", "warlock",
+     "http://www.enworld.org/forum/showthread.php?469339",
+     {}, "374 options, 143 powers, 94% warlock"),
+    ("warlock2", "warlock",
+     "https://docs.google.com/document/d/117rZcbx32PrhfHVcWMqm4Ucgfk"
+     "iLdWNqRzwH8Sg7hXk/edit?tab=t.0#heading=h.xr28oblc61hn",
+     {}, "335 options, 183 powers, 99% warlock"),
+    ("warlock3", "warlock",
+     "http://www.enworld.org/forum/showthread.php?471621",
+     {}, "283 options, 179 powers, 83% warlock"),
+    ("warlord", "warlord",
+     "http://www.enworld.org/forum/showthread.php?469232",
+     {}, "73 options, 15 powers, 100% warlord"),
+    ("wizard", "wizard",
+     "http://www.enworld.org/forum/showthread.php?471408",
+     {}, "360 options, 179 powers, 99% wizard"),
+    ("wizard2", "wizard",
+     "http://www.enworld.org/forum/showthread.php?471672",
+     {}, "264 options, 158 powers, 86% wizard"),
+    ("wizard3", "wizard",
+     "https://www.enworld.org/threads/469147/",
+     {}, "165 options, 79 powers, 100% wizard"),
+)
+
+#: The wizard handbook writes "Sky Blue" in one teal and rates with another, so
+#: the derived key cannot see the one it actually uses. The only override any
+#: guide has needed so far.
+OVERRIDES: dict[str, dict[str, str]] = {
+    "wizard": {"#33cccc": "sky"},
+}
+
 GUIDES: dict[str, Guide] = {
-    # States its key in full, and explains the green: "Something not easily
-    # compared to others, or of a different kind of useful. A lot of non-combat
-    # options fall here."
-    "wizard": Guide(
-        url="https://www.enworld.org/threads/"
-            "archmages-ascension-the-4e-wizards-handbook-ruinsfate.471408/",
-        cls="wizard",
-        note="shades chosen for photosensitive eyes; teal is this guide's sky blue",
-        # The legend writes "Sky Blue" in #00ccff and then rates with #33cccc.
-        # The derived key cannot see that, so it is the one override needed.
-        colours={"#33cccc": "sky"},
-    ),
-    # Labelled a seeker guide in the index; it is a warlock guide. The
-    # class-agreement check caught it at once -- 180 of 182 "strays" were warlock
-    # rows -- which is the whole reason that check exists.
-    "warlock": Guide(
-        url="https://docs.google.com/document/d/"
-            "117rZcbx32PrhfHVcWMqm4UcgfkiLdWNqRzwH8Sg7hXk/edit",
-        cls="warlock",
-        host="gdocs",
-        note="adds a seventh code, pink, for table-dependent options",
-    ),
+    slug: Guide(url=url, cls=cls,
+                colours={**over, **OVERRIDES.get(slug, {})},
+                host=host_of(url), note=note)
+    for slug, cls, url, over, note in REGISTRY
 }
 
 _WORD = re.compile(r"[^a-z0-9 ]+")
@@ -172,6 +319,8 @@ def norm(s: str) -> str:
     s = s.lower().replace("&amp;", "&").replace("\u2019", "'")
     s = s.replace("'", "").replace("-", " ").replace("/", " ")
     return " ".join(_WORD.sub(" ", s).split())
+
+
 
 
 def source_url(guide: Guide) -> str:
@@ -189,14 +338,22 @@ def source_url(guide: Guide) -> str:
     return f"https://docs.google.com/document/d/{m.group(1)}/export?format=html"
 
 
-def fetch(guide: Guide, name: str) -> str:
-    """The page, from `.cache/` if it is there. One fetch per guide, ever."""
+def fetch(guide: Guide, name: str = "") -> str:
+    """The page, from `.cache/` if it is there. One fetch per URL, ever.
+
+    Keyed on the **URL**, not on the guide's slug, so `--discover` and a run over
+    the registry share the same cache. Keyed on the slug they did not, and a
+    registry run refetched all 36 pages -- which is both rude and how a transient
+    502 killed the whole pass.
+    """
+    import hashlib
+
     CACHE.mkdir(parents=True, exist_ok=True)
-    at = CACHE / f"{name}.html"
+    src = source_url(guide)
+    at = CACHE / f"{hashlib.sha1(src.encode()).hexdigest()[:16]}.html"
     if not at.exists():
         req = urllib.request.Request(
-            source_url(guide),
-            headers={"User-Agent": "combat_engine research (ratings)"})
+            src, headers={"User-Agent": "combat_engine research (ratings)"})
         with urllib.request.urlopen(req, timeout=90) as fh:
             at.write_bytes(fh.read())
     return at.read_text(errors="replace")
@@ -289,7 +446,11 @@ def legend(doc, colour_of) -> dict[str, str]:  # noqa: ANN001
     in ordinary prose cannot overwrite the swatch.
     """
     found: dict[str, str] = {}
-    for el in doc.xpath("//*"):
+    # Only elements that *carry* a colour can be a swatch, and walking every
+    # element instead took the run over 36 guides past ten minutes.
+    cands = doc.xpath("//*[contains(@style,'color')] | //span[@class] | "
+                      "//font[@color]")
+    for el in cands:
         txt = " ".join((el.text_content() or "").split()).strip().lower()
         txt = txt.rstrip(":").strip()
         if txt in LEGEND_WORDS and len(txt) <= 12:
@@ -300,10 +461,17 @@ def legend(doc, colour_of) -> dict[str, str]:  # noqa: ANN001
 
 
 def tint(el) -> str | None:  # noqa: ANN001
-    """The nearest colour this element or an ancestor sets.
+    """The colour this element is rated in -- looking up, then down.
 
-    Ancestors matter: the colour is on a wrapping span and the name is in a
-    `<b>` inside it, so reading the bold element's own style finds nothing.
+    **Both directions, because guides nest it both ways.** The wizard handbook
+    writes `<span style="color:..."><b>name</b></span>`, so the colour is on an
+    ancestor. The fighter handbook writes `<b><span style="color:...">name</span>
+    </b>`, so it is on a descendant. Reading ancestors alone found the colour on
+    42 of its bold elements and missed 583, which left 14 of 36 guides reporting
+    95-100% black -- what a broken reader looks like, not what a guide looks like.
+
+    Ancestors win, because an explicitly wrapped rating is the more deliberate of
+    the two.
     """
     cur = el
     while cur is not None:
@@ -311,6 +479,10 @@ def tint(el) -> str | None:  # noqa: ANN001
         if m:
             return m.group(1)
         cur = cur.getparent()
+    for kid in el.xpath(".//*[contains(@style,'color')]"):
+        m = _COL.search((kid.get("style") or "").lower())
+        if m:
+            return m.group(1)
     return None
 
 
@@ -355,13 +527,32 @@ def options(html: str, guide: Guide) -> tuple[list[tuple[str, str, int]],
         colour_of = tint
 
         def is_name(el):  # noqa: ANN001, ANN202
-            return el.tag == "b"
+            if el.tag in ("b", "strong"):
+                return True
+            return "font-weight:bold" in (el.get("style") or "").replace(" ", "") \
+                or "font-weight:700" in (el.get("style") or "").replace(" ", "")
 
         roots = doc.xpath("//article[contains(@class,'message--post')]")
+        if roots and not guide.posts:
+            # **The author's own posts, not the first post.** A reply is somebody
+            # else's opinion and must not be read as the guide's rating, but the
+            # guide itself often runs over five or six posts. The thread starter
+            # wrote post 0, so that is who to keep.
+            starter = roots[0].get("data-author")
+            if starter:
+                roots = [r for r in roots if r.get("data-author") == starter]
+        if not roots:
+            # Not a forum thread. An archived WotC page or a Google Site is one
+            # document, so the whole of it is the guide.
+            roots = [doc]
         holders = None
 
-    key = dict(legend(doc, colour_of))
-    key.update(guide.colours)               # hand overrides win
+    # Canonical floor, then whatever the guide states for itself, then the hand
+    # overrides. A guide that contradicts the canon wins, which is the point of
+    # reading its own key at all.
+    key = dict(CANON)
+    key.update(legend(doc, colour_of))
+    key.update(guide.colours)
 
     out: list[tuple[str, str, int]] = []
     unmapped: Counter[str] = Counter()
@@ -369,7 +560,7 @@ def options(html: str, guide: Guide) -> tuple[list[tuple[str, str, int]],
         (i, r) for i, r in enumerate(roots) if not guide.posts or i in guide.posts]
     for i, scope in scopes:
         cands = scope.xpath(".//span[@class]") if holders is not None \
-            else scope.xpath(".//b")
+            else scope.xpath(".//b | .//strong | .//*[contains(@style,'font-weight')]")
         for el in cands:
             if not is_name(el):
                 continue
@@ -455,12 +646,103 @@ def agreement(rated: dict[str, float], guide: Guide) -> tuple[int, int, Counter]
     return ok, bad, strays
 
 
+def discover() -> int:
+    """Fetch every candidate URL and work out which class each guide is about.
+
+    **The class is detected, not trusted.** The index thread mislabels at least
+    one guide, and the check that caught it -- do the resolved powers belong to
+    the class claimed -- works just as well with nothing claimed at all: whichever
+    class owns most of the powers a guide rates is the class it is about.
+
+    Writes a candidate registry to git-ignored `notes/`, because the titles that
+    make it readable are the authors' words.
+    """
+    import time
+
+    index = Index.load()
+    urls = [u for u in (CACHE / "_urls.txt").read_text().split() if u.strip()]
+    print(f"{len(urls)} candidate URLs\n")
+    print(f"{'#':>3} {'host':<8} {'rated':>6} {'powers':>6} {'class':<12} "
+          f"{'share':>6}  url")
+    found: list[dict] = []
+    for i, url in enumerate(urls):
+        host = host_of(url)
+        slug = f"_d{i:03d}"
+        g = Guide(url=url, cls="", host=host)
+        try:
+            html = fetch(g, slug)
+        except Exception as exc:
+            print(f"{i:>3} {host:<8} {'--':>6} {'fetch failed':<12} "
+                  f"{type(exc).__name__:>6}  {url[:64]}")
+            continue
+        time.sleep(1.2)
+        try:
+            runs, _key, _un = options(html, g)
+        except Exception as exc:
+            print(f"{i:>3} {host:<8} {'--':>6} {'parse failed':<12} "
+                  f"{type(exc).__name__:>6}  {url[:64]}")
+            continue
+        owner = _power_owners()
+        who: Counter[str] = Counter()
+        n = 0
+        for tier, text, _p in runs:
+            if tier in (OUT_OF_COMBAT, TABLE_DEPENDENT):
+                continue
+            ref, why_ = index.find(text)
+            if ref is None or why_ != "ok" or Index._pre(ref) not in RATEABLE:
+                continue
+            n += 1
+            if ref.startswith("p") and owner.get(ref):
+                who[owner[ref]] += 1
+        top, share = ("", 0.0)
+        if who:
+            top, cnt = who.most_common(1)[0]
+            share = cnt / sum(who.values())
+        # **The share is over powers, so the power count has to be reported too.**
+        # An items compendium that happens to resolve two wizard powers otherwise
+        # reads as a wizard guide at 100%.
+        print(f"{i:>3} {host:<8} {n:>6} {sum(who.values()):>6} "
+              f"{top or '(none)':<12} {share:>5.0%}  {url[:60]}")
+        found.append({"url": url, "host": host, "rated": n,
+                      "powers": sum(who.values()), "cls": top, "share": share})
+    NOTES.mkdir(exist_ok=True)
+    keep = [f for f in found
+            if f["rated"] >= 60 and f["powers"] >= 10 and f["share"] >= 0.8]
+    lines = ["# Candidate class guides", "",
+             f"{len(keep)} of {len(urls)} URLs look like a class guide: at least",
+             "60 resolvable options, at least 10 of them powers, and 80% of those",
+             "powers owned by a single class.",
+             ""]
+    for f in sorted(keep, key=lambda x: (x["cls"], -x["rated"])):
+        lines.append(f'* `{f["cls"]}` {f["rated"]} rated ({f["powers"]} powers, '
+                     f'{f["share"]:.0%} that class) -- `{f["host"]}` -- {f["url"]}')
+    (NOTES / "candidates.md").write_text("\n".join(lines) + "\n")
+    print(f"\n{len(keep)} look like class guides; written to notes/candidates.md")
+    print(f"classes covered: "
+          f"{sorted({f['cls'] for f in keep if f['cls']})}")
+    return 0
+
+
+def _power_owners() -> dict[str, str]:
+    from combat_engine.etl.build import game
+
+    if not hasattr(_power_owners, "_c"):
+        _power_owners._c = {
+            r["ref"]: (r["class"] or "").lower()
+            for r in game().execute('SELECT ref, "class" FROM power')}
+    return _power_owners._c
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--discover", action="store_true",
+                    help="fetch every candidate URL and detect its class")
     ap.add_argument("--guide", default="", help="just this one")
     ap.add_argument("--emit", action="store_true",
                     help="write src/combat_engine/ratings.py and notes/")
     args = ap.parse_args()
+    if args.discover:
+        return discover()
 
     index = Index.load()
     chosen = {k: v for k, v in GUIDES.items()
@@ -469,6 +751,8 @@ def main() -> int:
         print(f"no such guide: {args.guide}", file=sys.stderr)
         return 2
 
+    failed: list[str] = []
+    refused: list[str] = []
     every: dict[str, dict[str, float]] = {}
     sources: dict[str, list[str]] = {}
     spread: dict[str, list[float]] = {}
@@ -476,7 +760,25 @@ def main() -> int:
     print(f"{'guide':<10} {'runs':>6} {'rated':>6} {'aside':>6} {'unres':>6} "
           f"{'own class':>10} {'stray':>6}")
     for name, guide in chosen.items():
-        got = read(name, guide, index)
+        try:
+            got = read(name, guide, index)
+        except Exception as exc:
+            # One unreachable page must not cost the other thirty-five.
+            print(f"{name:<12} {'--':>6} {type(exc).__name__}: "
+                  f"{str(exc)[:48]}")
+            failed.append(name)
+            continue
+        # **A guide with no colours has no ratings.** Everything falls through to
+        # black, and a few hundred false averages are worse than nothing: they
+        # look like verdicts. One guide in the set does not colour-code at all.
+        tiers = Counter(got["rated"].values())
+        n_rated = sum(tiers.values())
+        if n_rated and tiers.get(TIERS["black"], 0) / n_rated > 0.9:
+            print(f"{name:<12} {got['runs']:>6} {'--':>6}   refused: "
+                  f"{tiers.get(TIERS['black'], 0)}/{n_rated} black, so no colour "
+                  f"key was found and nothing here is a rating")
+            refused.append(name)
+            continue
         ok, bad, strays = agreement(got["rated"], guide)
         print(f"{name:<10} {got['runs']:>6} {len(got['rated']):>6} "
               f"{sum(len(v) for v in got['aside'].values()):>6} "
@@ -514,6 +816,11 @@ def main() -> int:
             body += [f"* [{t}] {x}" for t, x in got["unresolved"]]
             (NOTES / f"{name}-unresolved.md").write_text("\n".join(body) + "\n")
 
+    if failed:
+        print(f"\n{len(failed)} guide(s) could not be read: {', '.join(failed)}")
+    if refused:
+        print(f"{len(refused)} guide(s) refused for having no colour key: "
+              f"{', '.join(refused)}")
     multi = {r: v for r, v in every.items() if len(v) > 1}
     print(f"\n{len(every)} refs rated, {len(skipped)} set aside")
     print(f"  rated for more than one class: {len(multi)}")
@@ -581,8 +888,23 @@ def write_table(rated: dict[str, dict[str, float]],
         "RATINGS: dict[str, dict[str, float]] = {",
     ]
     for ref in sorted(rated):
-        per = ", ".join(f'"{c}": {v}' for c, v in sorted(rated[ref].items()))
-        lines.append(f'    "{ref}": {{{per}}},')
+        pairs = [f'"{c}": {v}' for c, v in sorted(rated[ref].items())]
+        one = f'    "{ref}": {{{", ".join(pairs)}}},'
+        if len(one) <= 96:
+            lines.append(one)
+            continue
+        # A ref a dozen guides rated does not fit on a line. Wrapped rather than
+        # left long, so the emitted file passes the same lint as everything else.
+        lines.append(f'    "{ref}": {{')
+        row = "       "
+        for pair in pairs:
+            if len(row) + len(pair) + 2 > 94:
+                lines.append(row)
+                row = "       "
+            row += f" {pair},"
+        if row.strip():
+            lines.append(row)
+        lines.append("    },")
     lines += [
         "}",
         "",
@@ -591,8 +913,22 @@ def write_table(rated: dict[str, dict[str, float]],
         "SOURCES: dict[str, tuple[str, ...]] = {",
     ]
     for ref in sorted(sources):
-        got = ", ".join(f'"{g}"' for g in sorted(set(sources[ref])))
-        lines.append(f'    "{ref}": ({got},),')
+        names = sorted(set(sources[ref]))
+        one = f'    "{ref}": ({", ".join(chr(34) + g + chr(34) for g in names)},),'
+        if len(one) <= 96:
+            lines.append(one)
+            continue
+        lines.append(f'    "{ref}": (')
+        row = "       "
+        for g in names:
+            piece = f'"{g}",'
+            if len(row) + len(piece) + 1 > 94:
+                lines.append(row)
+                row = "       "
+            row += f" {piece}"
+        if row.strip():
+            lines.append(row)
+        lines.append("    ),")
     lines += [
         "}",
         "",
