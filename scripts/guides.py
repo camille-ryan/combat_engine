@@ -197,6 +197,9 @@ REGISTRY: tuple[tuple[str, str, str, dict[str, str], str], ...] = (
     ("barbarian", "barbarian",
      "http://www.enworld.org/forum/showthread.php?469384",
      {}, "330 options, 143 powers, 99% barbarian"),
+    ("avenger", "avenger",
+     "https://sites.google.com/view/avengershandbook/",
+     {}, "a Google Site of 51 sub-pages, crawled and joined"),
     ("bard", "bard",
      "http://www.enworld.org/forum/showthread.php?468955",
      {}, "161 options, 51 powers, 88% bard"),
@@ -338,6 +341,40 @@ def source_url(guide: Guide) -> str:
     return f"https://docs.google.com/document/d/{m.group(1)}/export?format=html"
 
 
+def _crawl_gsites(url: str) -> bytes:
+    """A Google Site is many pages; fetch them all and join them.
+
+    The avenger handbook is 51 sub-pages under one site, with the colour key on
+    the landing page and the ratings spread across the rest. One document is what
+    the parser wants, so they are concatenated -- the `<article>` shape the forum
+    parser looks for is absent either way, so the whole thing is one scope.
+    """
+    import time
+    import urllib.parse
+
+    head = {"User-Agent": "combat_engine research (ratings)"}
+    root = url.rstrip("/")
+    base = urllib.parse.urlsplit(root)
+    prefix = base.path.rstrip("/")
+    with urllib.request.urlopen(
+            urllib.request.Request(root, headers=head), timeout=90) as fh:
+        first = fh.read()
+    page = first.decode("utf-8", "replace")
+    subs = sorted({m for m in re.findall(
+        rf'href="({re.escape(prefix)}/[^"#?]*)"', page)})
+    parts = [first]
+    for sub in subs:
+        u = f"{base.scheme}://{base.netloc}{sub}"
+        try:
+            with urllib.request.urlopen(
+                    urllib.request.Request(u, headers=head), timeout=90) as fh:
+                parts.append(fh.read())
+        except Exception:
+            pass                                        # one dead sub-page is fine
+        time.sleep(0.8)
+    return b"<html><body>" + b"".join(parts) + b"</body></html>"
+
+
 def fetch(guide: Guide, name: str = "") -> str:
     """The page, from `.cache/` if it is there. One fetch per URL, ever.
 
@@ -352,10 +389,13 @@ def fetch(guide: Guide, name: str = "") -> str:
     src = source_url(guide)
     at = CACHE / f"{hashlib.sha1(src.encode()).hexdigest()[:16]}.html"
     if not at.exists():
-        req = urllib.request.Request(
-            src, headers={"User-Agent": "combat_engine research (ratings)"})
-        with urllib.request.urlopen(req, timeout=90) as fh:
-            at.write_bytes(fh.read())
+        if guide.host == "gsites":
+            at.write_bytes(_crawl_gsites(src))
+        else:
+            req = urllib.request.Request(
+                src, headers={"User-Agent": "combat_engine research (ratings)"})
+            with urllib.request.urlopen(req, timeout=90) as fh:
+                at.write_bytes(fh.read())
     return at.read_text(errors="replace")
 
 

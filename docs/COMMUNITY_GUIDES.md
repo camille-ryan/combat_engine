@@ -74,8 +74,19 @@ rated from — and for feats it leaves 2,033 "in scope but unmentioned", which a
 guide that discussed 136 plainly never weighed. Scope was the wrong mechanism;
 honesty about ignorance is the right one.
 
-23 of 25 classes have a guide. `GUIDED_CLASSES` is what a caller checks; the
-avenger and the invoker are the gaps, for different reasons — see below.
+**24 of 25 classes have a guide.** `GUIDED_CLASSES` is what a caller checks.
+
+The invoker is the one gap, and it is not fixable from this source: its guide's
+colour was **lost in a forum migration**. The page's own text says "the sky blue
+rating is based on the excellent 1-13 powers", so the ratings existed — but the
+HTML carries no colour markup at all, and every option falls through to black.
+The guide is refused rather than contributing 388 false averages. An archived
+snapshot of the original thread would be the way to recover it; none of the 16
+archive.org links in the index is that thread.
+
+The avenger came from a Google Site of **51 sub-pages**, which needed a crawl: the
+colour key is on the landing page and the ratings are spread across the rest, so
+they are fetched and concatenated into one document.
 
 **Black is bold with no colour on it.** The first pass here walked colour spans
 and reported zero blacks, and concluded the tier was unextractable. That was
@@ -111,8 +122,8 @@ compared to.
 
 A power is class-specific already. A **race, a feat or an item is not** — it gets
 rated in a class context, and the same option is honestly worth different amounts
-to different classes. Across all 36 guides: **762 refs are rated for more than one
-class and 309 of those differ by two tiers or more**, the widest being the full 6
+to different classes. Across all 37 guides: **831 refs are rated for more than one
+class and 344 of those differ by two tiers or more**, the widest being the full 6
 of 6. On the first two guides alone it was 51 overlapping and 13 that wide.
 
 The first version averaged those, which produced a mid-tier number wrong for both
@@ -226,11 +237,11 @@ remembering for any future source — a link is not automatically name-free.
 
 ## Measured, across all 36
 
-* **3,966 refs rated** — 2,121 powers, 1,425 feats, 369 items, 51 races — plus
-  58 set aside as green or pink.
-* Tier spread: 495 red, 677 purple, 2,427 black, 1,728 blue, 935 sky, 153 gold.
+* **4,215 refs rated** — 2,251 powers, 1,507 feats, 406 items, 51 races — plus
+  60 set aside as green or pink.
+* Tier spread: 527 red, 783 purple, 2,612 black, 1,926 blue, 935 sky, 156 gold.
   Black the largest bucket at 39% is the shape a rating distribution should have.
-* **762 refs are rated for more than one class, and 309 differ by two tiers or
+* **831 refs are rated for more than one class, and 344 differ by two tiers or
   more** — the strongest evidence for keying by class. 615 are rated twice for
   the *same* class by different guides at different tiers, which is genuine
   disagreement; the later guide wins.
