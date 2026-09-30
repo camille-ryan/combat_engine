@@ -160,6 +160,18 @@ def features(
         f["provokes_now"] = float(
             p.provokes and any(_adjacent(world, actor, e) for e in enemies(world, actor))
         )
+        # **Avoidably**, which is the distinction a flat penalty cannot draw.
+        # A ranged attack from inside melee is sometimes the only play -- pinned,
+        # or out of move -- and sometimes a wasted hit because a one-square shift
+        # was free and would have removed the provocation entirely. Camille's
+        # rule: for a ranged character, stepping out first should usually win.
+        #
+        # This is the interaction a linear model cannot hold on its own: the shift
+        # is cheap and the attack is valuable, so the attack outbids the shift and
+        # the saving never happens. Priced on the attack instead, where the choice
+        # actually is.
+        if f["provokes_now"]:
+            f["provokes_avoidably"] = float(_could_step_out(world, encounter, actor))
 
         chances = [p.hit_chance(world, actor, t) for t in action.targets]
         if chances:
@@ -222,7 +234,114 @@ def features(
     if action.kind in ("move", "run") and action.dest is not None and foes:
         after = min(distance(action.dest, _square(world, e)) for e in foes)
         f["closes_distance"] = f.get("nearest_enemy", 0.0) - after
+
+    # **Movement provokes, and this could not see it.** `provokes_now` was
+    # computed only inside the `power` branch, off `Power.provokes` -- so the
+    # -5.0 weight existed, was documented, and never fired for the commonest way
+    # a creature provokes: walking out of an enemy's reach. Measured over 24
+    # fights, every one of the party's move-provocations had a shift available
+    # and a shift does not provoke. See #258.
+    if action.kind in _WALKS and action.dest is not None:
+        f["provokes_now"] = float(_would_provoke(world, actor, action.dest))
+    # Stepping out of reach so the *next* action does not provoke. A shift is
+    # free of provocation itself, so for a creature whose attacks would provoke
+    # from where it stands, this is the move that pays for itself -- and nothing
+    # here could express it, because the benefit lands on a later action.
+    if action.kind in _SAFE_STEPS and action.dest is not None:
+        f["leaves_melee"] = float(
+            _in_reach(world, actor, _square(world, actor))
+            and not _in_reach(world, actor, action.dest)
+            and _attacks_would_provoke(world, actor)
+        )
     return dict(f)
+
+
+#: Movement that provokes. `movement._SAFE` is the complement and a shift is in
+#: it, which is the whole reason stepping out first works.
+_WALKS = ("move", "run", "charge")
+_SAFE_STEPS = ("shift",)
+
+
+def _could_step_out(world: World, encounter: Encounter, actor: int) -> bool:
+    """Is there a shift this creature could still take that leaves melee?
+
+    Asks the movement budget as well as the board: a creature that has spent its
+    move action cannot fix its position, and penalising it for standing where it
+    is would only make it decline to attack at all.
+    """
+    from .types import ActionType
+
+    if not encounter.can_spend(actor, ActionType.MOVE):
+        return False
+    here = _square(world, actor)
+    for dest in world.reachable_squares(actor, 1):
+        if dest != here and not _in_reach(world, actor, dest):
+            return True
+    return False
+
+
+def _reach_of(world: World, other: int) -> int:
+    from .movement import _threat
+
+    return _threat(world, other)
+
+
+def _in_reach(world: World, actor: int, where) -> bool:  # noqa: ANN001
+    """Is any living enemy able to reach `where`?"""
+    from .grid import distance
+
+    for foe in enemies(world, actor):
+        if not alive(world, foe):
+            continue
+        if distance(where, _square(world, foe)) <= _reach_of(world, foe):
+            return True
+    return False
+
+
+def _would_provoke(world: World, actor: int, dest) -> bool:  # noqa: ANN001
+    """Would walking to `dest` leave an enemy's reach?
+
+    The same question `movement.step` asks before opening the window: a creature
+    provokes when it *was* in reach and is not once it arrives. Asked per enemy,
+    because leaving one reach while staying in another still provokes from the
+    one left.
+    """
+    from .grid import distance
+
+    here = _square(world, actor)
+    for foe in enemies(world, actor):
+        if not alive(world, foe):
+            continue
+        reach = _reach_of(world, foe)
+        there = _square(world, foe)
+        if distance(here, there) <= reach and distance(dest, there) > reach:
+            return True
+    return False
+
+
+def _attacks_would_provoke(world: World, actor: int) -> bool:
+    """Does this creature have an attack that provokes from where it stands?
+
+    A ranged or area power used with somebody adjacent hands them a free swing,
+    which is what makes stepping out first worth a move action. Read off the
+    rows the creature actually knows rather than from a list of caster classes.
+
+    **Not gated on a declared attack line.** That was the first version and it
+    found nothing: `Power.provokes` is derived from the range line, and a row may
+    provoke while declaring its attack in the body instead of the header -- which
+    `Attack`'s own docstring sanctions for a bonus that depends on the situation.
+    All 118 of one class's ranged rows report `attack is None` and `provokes`
+    True, so requiring both matched none of them and the feature never fired. A
+    ranged *utility* counts for the same reason: using it in melee provokes too.
+    """
+    from .components import Powers
+
+    known = world.get(actor, Powers)
+    for ref in (known.known if known else ()):
+        declared = get(ref)
+        if declared is not None and declared.provokes:
+            return True
+    return False
 
 
 
@@ -361,6 +480,23 @@ WEIGHTS: dict[str, float] = {
     "nearest_enemy": -0.1,
     # Worth about one attack, which is what it hands over.
     "provokes_now": -5.0,
+    # Provoking when a free shift would have avoided it. Stacks on top of
+    # `provokes_now`, so an avoidable provocation costs 9.0 against an
+    # unavoidable one's 5.0 -- enough to put a ranged attack from inside melee
+    # below the shift that fixes it, and not enough to stop a creature that has
+    # already moved from attacking anyway.
+    "provokes_avoidably": -4.0,
+    # Stepping out of reach so the next action does not provoke. Worth more than
+    # the -0.5 a shift costs and less than a good attack, because the point is to
+    # make "step out, then shoot" beat "shoot from inside melee" without making a
+    # ranged character spend its whole turn backing away.
+    #
+    # The arithmetic it has to win: a ranged attack from inside melee scores
+    # `provokes_now` at -5.0, so stepping out first is worth up to that much on
+    # the following action. 3.0 against the shift's own -0.5 nets +2.5, which
+    # beats a walk that closes one square (+2.0) and loses to one that closes
+    # two -- so a character still advances when advancing is the point.
+    "leaves_melee": 3.0,
     # A minor spent on nothing visible, so it has to earn itself through
     # `wield_reaches` exactly the way a move earns itself through
     # `closes_distance`.
