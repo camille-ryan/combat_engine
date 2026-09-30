@@ -12,41 +12,48 @@ them cannot be attributed; two policies on the same seeds can be compared. The
 default stays `LinearPolicy` until this one is measured to be better, which also
 means `scripts/fixtures/` does not move while it is being written.
 
-## Where it stands, measured, and it has not earned the default
+## Where it stands, measured
 
-40 seeded fights a cell, **seeds 41-80** -- held back while the weights were being
-set on seeds 1-20, because tuning and confirming on one set of seeds is how a
-scorer comes to look better than it is. Both sides of the board run the same
-policy, `--draw scored` throughout.
+**80 seeded fights a cell, seeds 41-120** -- held back while the weights were set
+on seeds 1-20, because tuning and confirming on one set of seeds is how a scorer
+comes to look better than it is. Both sides of the board run the same policy,
+`--draw scored` throughout, and this is *after* #244 was fixed, so the party holds
+the powers it is supposed to.
 
-| | level 1 linear | level 1 doctrine | level 5 linear | level 5 doctrine |
+| | level 5 linear | level 5 doctrine | level 10 linear | level 10 doctrine |
 |---|---|---|---|---|
-| wins of 40 | 40 | 40 | 11 | 14 |
-| median rounds | 3.0 | 3.0 | 8.5 | 8.5 |
-| party hit rate | 71% | **78%** | 57% | 53% |
-| party provoked | 39 | 42 | 138 | **226** |
-| monsters provoked | 34 | **14** | 78 | 103 |
+| wins of 80 | 47 (59%) | **60 (75%)** | 46 (57%) | **67 (84%)** |
+| exact p | | 0.043 | | 0.00045 |
+| median rounds | 8.5 | **8.0** | 12.0 | 10.5 |
+| party hit rate | 61% | 61% | 62% | 61% |
+| party provoked / fight | 3.6 | 4.7 | 4.0 | 6.3 |
 
-**The win-rate column is noise and should not be read.** On the tuning seeds the
-same comparison came out 9-9 and, at one point, 9-6 the other way. 11/40 against
-14/40 is p = 0.63 on an exact test, and `scripts/winrate.py`'s docstring records
-that separating 25% from 18% wants about 175 seeds a cell.
+Both differences survive **Holm** over the two comparisons, which is the bar
+`scripts/winrate.py`'s docstring sets. 40 seeds was not enough and was tried first:
+the same comparison read p = 0.062 and p = 0.027 there and neither survived
+correction.
 
-What the event-count measures say, which is what to read at this sample size:
+Three things worth reading off that table rather than the win rate alone.
 
-* **At level 1 it is better.** The party hits 7 points more often and the monsters
-  provoke *less than half* as many opportunity attacks. Thousands of rolls.
-* **At level 5 it provokes considerably more** -- 226 against 138 -- and the party
-  hits 4 points less often. That is a real regression on the cheap measures.
-* **The level-5 column was measured on a party that had almost nothing to attack
-  with, and is superseded.** A dealt level-5 wizard held no attack-declaring rows
-  at all, a level-5 rogue one -- levelling replaced a character's powers instead of
-  adding to them. That was #244 and it is now fixed, so the whole table above wants
-  re-running; the level-1 row is the only one that was measuring a whole character.
+**The gain is not accuracy.** Party hit rate is 61% either way, to the point. This
+is not hitting more often; it is choosing a better target and a better action,
+which is what the threat and healing terms were for.
 
-So: the terms are in, every one of them is measured to fire, and the thing is not
-yet better than what it replaces. `scripts/doctrine.py` is the instrument to set
-the weights against.
+**It provokes considerably more and wins anyway**, and that is Camille's point made
+by measurement. Much of this module's tuning went on pushing the opportunity-attack
+count back down to `LinearPolicy`'s, on the assumption that conceding more free
+swings must be worse. It is not: at level 10 it concedes half again as many and wins
+84% against 57%. The count was a proxy and the proxy was wrong. `threat_conceded`
+and `reach_gained` exist so that the trade is *priced* rather than avoided.
+
+**Rounds moved toward the target, not away.** #217 sets 7-8 rounds and warns that a
+rising win rate with a collapsing round count means the party has outgrown the
+encounter rather than played better. Level 5 went 8.5 -> 8.0, which is on target;
+level 10 went 12.0 -> 10.5, still long. The win rate did not come from shorter
+fights.
+
+**The weights are still the ones fitted before #244 was fixed**, on level-5 figures
+that have since moved, so `scripts/doctrine.py` has more to give here.
 
 ## What is scored, and what each rests on
 

@@ -18,8 +18,10 @@ everything else alone, so two runs over the same seeds differ in one variable:
     scored    the option scorer as it stands
     rated     the scorer plus the community ratings
 
-`LinearPolicy` is held fixed on both sides throughout. A policy change and a draw
-change measured together would tell you nothing about either.
+`--policy` is the same idea for the scorer -- `linear` or `doctrine`, held on
+**both** sides of the board so a run measures the policy and not which side got the
+better one. Change one of `--draw` and `--policy` at a time: measured together they
+would tell you nothing about either.
 
 **Rounds is reported beside the win rate and is the more trustworthy number.**
 #217 settled that the target is 7-8 rounds and that a seeded fight's round count is
@@ -65,10 +67,14 @@ want a few tens of fights.
 
 Two things to know before reading any output:
 
-* **Above level 1 the party essentially never wins.** #75 measured 2 of 30 at
-  level 5 and 0 of 30 at level 10. A difference at those levels is not
-  measurable, and level 10 is confounded further by #244 -- a dealt character
-  there has almost no attack powers.
+* **"Above level 1 the party essentially never wins" was a bug, not a balance
+  fact, and it is fixed.** This docstring carried that warning on the strength of
+  #75's 2 of 30 at level 5 and 0 of 30 at level 10. The cause was #244: `loadout`
+  dealt each character one level's worth of powers instead of everything it had
+  gained, so a level-10 rogue had no attack powers at all. With that fixed
+  (6b07c8e) the same party wins **21 of 40 at level 5 and 23 of 40 at level 10**
+  on `LinearPolicy`. Every level-5 and level-10 figure recorded anywhere before
+  that commit is measuring the bug; do not compare across it.
 * A fight that hits the round cap is recorded as **neither** a win nor a loss,
   because it is a third outcome and calling it a loss flatters anything that
   shortens fights.
