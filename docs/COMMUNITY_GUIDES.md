@@ -262,6 +262,32 @@ remembering for any future source — a link is not automatically name-free.
   is kept, because an uncoloured mention is usually incidental bolding rather
   than a verdict, and the count is reported rather than buried.
 
+## Coverage is very uneven, and a caller has to know that
+
+Share of each class's **written heroic-tier rows** (levels 0/1/3/5/7/9) that a
+guide has rated. 55% overall, and the spread is what matters:
+
+| | | | |
+|---|---|---|---|
+| fighter 90% | swordmage 88% | paladin 87% | seeker 86% |
+| sorcerer 86% | warlock 86% | rogue 84% | ardent 83% |
+| battlemind 83% | wizard 78% | psion 77% | runepriest 77% |
+| barbarian 71% | avenger 70% | assassin 62% | cleric 43% |
+| bard 30% | druid 30% | ranger 25% | monk 22% |
+| shaman 14% | warlord 7% | artificer 2% | warden 1% |
+| **invoker 0%** | | | |
+
+The four at the bottom are not failures of the reader. The artificer and warden
+guides rate mostly feats, items and paragon paths rather than their own class's
+powers — which is why their class could not be detected either. The warlord and
+shaman guides are simply short: 71 and 81 rated options against a fighter guide's
+491.
+
+**So a score built on this will be confident about a fighter and ignorant about a
+warden.** `rated()` is what distinguishes the two, and a scorer that treats an
+unrated option as average will quietly flatten half the classes in the game. This
+is the strongest practical reason the API returns `None` rather than 2.5.
+
 ## What this is not
 
 A rating is what a player optimising for victory thinks. That is not the same as
