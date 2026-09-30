@@ -57,6 +57,32 @@ fights.
 **The weights are still the ones fitted before #244 was fixed**, on level-5 figures
 that have since moved, so `scripts/doctrine.py` has more to give here.
 
+### The flanking terms were added after that table and did not improve it
+
+Camille asked whether creatures try to get into a flank at all, and whether anyone
+sets one up for an ally. Measured over 20 fights at level 5, party attacks made
+while flanking:
+
+    LinearPolicy    6.7%
+    DoctrinePolicy  8.5%
+
+So yes, and weakly. Two findings came out of asking.
+
+**`takes_flank` was paying for standing in a flank, not moving into one.** `dest`
+falls back to the square the creature already occupies, so every action taken from a
+flanking square collected it -- and the commonest chosen action it fired on was
+**`end`, 116 times against `move`'s 30**. A bonus for passing the turn, in the term
+meant to buy aggression. It is now scored only on a move *into* a flank and on an
+attack against a creature already flanked, which is the roll the +2 applies to.
+
+**`sets_up_flank` is new and has not earned its weight.** It implements the
+`AI_DOCTRINE.md` line "setting up a flank ... is nearly as good as flanking", which
+nothing read. It fires -- 43 chosen actions over 4 fights -- and on the 40 held-out
+seeds it moved the win rate *down*, 30 of 40 to 27 at level 5 and 33 to 32 at level
+10. Both differences are well inside noise, so it is kept at a low weight on
+doctrine grounds rather than on evidence, and it is the first thing to re-examine
+when the weights are re-fitted.
+
 ## What is scored, and what each rests on
 
 **Threat removal**, and hit points are part of it rather than beside it. A
@@ -131,7 +157,7 @@ from .actions import Action
 from .components import Health, Position, Side
 from .dsl import get
 from .policy import LinearPolicy, features
-from .query import alive, creatures, enemies, flankers, squares
+from .query import alive, creatures, enemies, flanked_by, flankers, squares
 from .turns import Encounter
 from .types import Team
 
@@ -225,6 +251,10 @@ DOCTRINE: dict[str, float] = {
     # Flanking is +2 to hit for two creatures rather than one, and the guides
     # treat setting one up as a striker's ordinary business.
     "takes_flank": 0.6,
+    # "Nearly as good as flanking", per `AI_DOCTRINE.md`, so a little under
+    # `takes_flank` -- it is a flank an ally still has to spend a move to take,
+    # and the enemy moves in between.
+    "sets_up_flank": 0.4,
     # Being flanked is the same +2 handed to two enemies. `AI_DOCTRINE.md` lists
     # it under bad squares in as many words.
     "becomes_flanked": -0.8,
@@ -457,6 +487,69 @@ def _would_flank(world: Any, actor: int, dest: Any, target: int) -> bool:
     return False
 
 
+def _is_attack(ref: str) -> bool:
+    """Does this row roll an attack a flank could help?
+
+    `Power.attack` being None does not settle it -- `Attack`'s own docstring
+    sanctions declaring the attack in the body, and all 118 of one class's ranged
+    rows do -- so `provokes` is read as the second signal, being derived from the
+    range line rather than from the header's attack block.
+    """
+    p = get(ref) if ref else None
+    return p is not None and (p.attack is not None or p.provokes)
+
+
+def sets_up_flank(world: Any, actor: int, dest: Any) -> bool:
+    """Would standing at `dest` leave an ally a flank it could take next turn?
+
+    `docs/AI_DOCTRINE.md`: "Setting up a flank (moving to a square where an ally can
+    shift or move into flanking) is nearly as good as flanking." Nothing scored it,
+    so a creature would only ever take a flank that was *already* available --
+    measured, 94 of 439 chosen movement actions ended in a flank and none of them
+    was chosen for what it offered anybody else.
+
+    The square that flanks with `dest` across a Medium enemy is the one diametrically
+    opposite, `2 * foe - dest`, which is what makes this cheap enough to ask of every
+    candidate square. `Grid.flanks` then confirms it, so a Large creature -- where
+    the reflection is not exact -- is answered correctly rather than approximately.
+
+    An ally counts if it could *reach* that square: within its speed, which is the
+    "move into flanking" half of the sentence, and adjacency covers the shift half
+    as a special case of it.
+    """
+    from .components import Movement
+    from .grid import distance
+
+    foes = [e for e in enemies(world, actor) if alive(world, e)]
+    mates = [m for m in flankers(world, actor) if m != actor and alive(world, m)]
+    if not mates:
+        return False
+    for foe in foes:
+        space = squares(world, foe)
+        if not space or min(distance(dest, s) for s in space) > 1:
+            continue        # not adjacent from `dest`, so no flank to offer
+        for s in space:
+            opposite = (2 * s[0] - dest[0], 2 * s[1] - dest[1])
+            if not world.grid.passable(opposite):
+                continue
+            # Free, or already held by the ally that would use it -- a mate
+            # standing there is a flank taken, not one set up, and `takes_flank`
+            # has already scored that case.
+            held = world.grid.occupant(opposite)
+            if held is not None and held not in mates:
+                continue
+            if not world.grid.flanks(dest, opposite, space):
+                continue
+            for mate in mates:
+                here = _square_of(world, mate)
+                move = world.get(mate, Movement)
+                if here is None or move is None:
+                    continue
+                if distance(here, opposite) <= move.speed:
+                    return True
+    return False
+
+
 def _would_be_flanked(world: Any, actor: int, dest: Any) -> bool:
     """Would two enemies flank `actor` at `dest`?"""
     space = frozenset({dest})
@@ -537,10 +630,36 @@ def doctrine_features(
     dest = action.dest if action.dest is not None else here
     if dest is not None and here is not None:
         foes = [e for e in enemies(world, actor) if alive(world, e)]
-        if foes:
-            if fights_in_melee(world, actor):
+        if foes and fights_in_melee(world, actor):
+            # **Only where a flank is worth something to *this* action.** `dest`
+            # falls back to the square the creature already occupies, so scoring
+            # this on every action gave a flat bonus for *standing* in a flank --
+            # including for ending the turn. Measured over 20 fights at level 5,
+            # the chosen actions it fired on were `end` 116 times against `move`
+            # 30, so the commonest thing it rewarded was passing the turn, which
+            # is the one action a flank cannot help.
+            #
+            # Two cases where it genuinely pays, and nothing else:
+            #   - moving into a flank, which is the behaviour being bought;
+            #   - attacking a creature this creature is flanking, which is the
+            #     +2 actually being spent.
+            if dest != here:
+                took = any(_would_flank(world, actor, dest, e) for e in foes)
+                f["takes_flank"] = float(took)
+                # Only when the flank is not already there to be taken: a square
+                # that flanks *and* sets one up would otherwise be paid twice for
+                # the same step, and the doctrine calls setting one up "nearly as
+                # good as flanking" -- which is less good, not additional.
+                if not took:
+                    f["sets_up_flank"] = float(sets_up_flank(world, actor, dest))
+            elif action.targets and _is_attack(action.ref):
+                # Gated on the row declaring an attack, because the +2 is a bonus
+                # *to an attack roll*. Without that a `hide` aimed at a flanked
+                # creature collected it, which is the same leak as `end` on a
+                # smaller scale.
                 f["takes_flank"] = float(
-                    any(_would_flank(world, actor, dest, e) for e in foes)
+                    any(t in foes and flanked_by(world, t, actor)
+                        for t in action.targets)
                 )
             f["becomes_flanked"] = float(_would_be_flanked(world, actor, dest))
             before = _cover_from_enemies(world, actor, here)

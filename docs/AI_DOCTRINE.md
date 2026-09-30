@@ -22,6 +22,7 @@ in its own module docstring — 60 of 80 wins at level 5 against
 | cost of provoking | flat `-5.0` / `-4.0` | those **plus** `threat_conceded` |
 | what a move buys | — | `reach_gained` |
 | flanking, being flanked, cover | — | `takes_flank`, `becomes_flanked`, `cover_change` |
+| setting up a flank for an ally | — | `sets_up_flank` (unproven, see below) |
 | hostile terrain | — | `into_enemy_zone`, `into_difficult` |
 | healing | scored as friendly fire | `healing_given`, `healing_wasted`, `heals_the_dying` |
 
@@ -38,7 +39,9 @@ doctrine` is the comparison between them.
 * **Role goals** — the whole of *Goals* below. `Ident.role` exists on both sides
   of the board and no weight consults it, so a controller and a brute score
   identically.
-* **Leaving a flank open for the rogue**, and setting up a flank for an ally.
+* **Leaving a flank open for the rogue** — the inverse of `sets_up_flank`, and
+  harder: it needs to know which ally gains more from the square than you do.
+  `Ident.role` would carry that and nothing reads it.
 * **Damaging terrain** as distinct from a zone an enemy happens to own — a `Zone`
   does not record that it deals damage, so this is not answerable today.
 * **Minion and elite/solo distinctions** in what to spend resources on.
