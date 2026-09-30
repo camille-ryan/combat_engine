@@ -27,6 +27,15 @@ readable in a way win rate is not. A run that raises the win rate while collapsi
 the round count has not improved the game; it has made the party too strong for the
 encounter, which is the thing #217 watches for.
 
+**Correct for multiple comparisons, and for having chosen what to report.**
+Three pairwise win-rate tests on one dataset need Holm or Bonferroni, and under
+Holm none of the level-5 comparisons reject -- including the one that reads
+"borderline" at a raw p of 0.066. Worse, this instrument measures win rate over
+four levels, hit rate per class, OA totals, OA reasons and round medians, and a
+reader naturally reports whichever moved. That is a garden of forking paths, not a
+test. `--from-seed` exists so a finding can be re-checked on seeds it was not found
+on, which is the only clean way out.
+
 **How many seeds a difference needs, because 30 and 40 are not enough.**
 Measured rather than assumed: at level 5 the three draws came out 10, 7 and 3 wins
 of 40, and exact two-sided tests on those give
@@ -148,13 +157,14 @@ def one(seed: int, level: int, cap: int,
     return ("win" if encounter.winner is Team.PC else "loss"), world.round
 
 
-def run(draw: str, level: int, seeds: int, cap: int) -> dict:
+def run(draw: str, level: int, seeds: int, cap: int,
+        first: int = 1) -> dict:
     arrange(draw)
     tally: dict[str, list[int]] = {}
     oas: dict[str, int] = {}
     wins = losses = capped = 0
     rounds: list[int] = []
-    for seed in range(1, seeds + 1):
+    for seed in range(first, first + seeds):
         try:
             out, n = one(seed, level, cap, tally, oas)
         except Exception as exc:
@@ -182,6 +192,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seeds", type=int, default=30)
+    ap.add_argument("--from-seed", type=int, default=1,
+                    help="first seed. Exists so a finding can be re-tested on "
+                         "seeds it was not found on, which is the only way to "
+                         "tell a result from a post-hoc selection")
     ap.add_argument("--level", type=int, action="append",
                     help="repeatable; defaults to 1, 5 and 10")
     ap.add_argument("--draw", choices=DRAWS, action="append",
@@ -199,7 +213,7 @@ def main() -> int:
     got = []
     for level in levels:
         for draw in draws:
-            r = run(draw, level, args.seeds, args.rounds)
+            r = run(draw, level, args.seeds, args.rounds, args.from_seed)
             got.append(r)
             print(f"{r['draw']:<9} {r['level']:>3} {r['played']:>6} {r['wins']:>5} "
                   f"{r['rate']:>5.0%} {r['losses']:>5} {r['capped']:>4} "
