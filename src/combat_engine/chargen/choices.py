@@ -142,6 +142,31 @@ WEIGHTS: dict[str, float] = {
     "high_crit": 1.0,
     "versatile": 0.5,
     "reach_weapon": 1.5,
+    # -- what somebody who played the class thought ------------------------
+    # From `ratings.py`, read out of 37 community guides.
+    #
+    # **Centred on black, so an average rating adds nothing.** The value fed in
+    # is `score - 3.0`, giving -3.0 for a red and +3.0 for a gold, weighted here
+    # to +-3.6. Two reasons, and the first was a measured mistake:
+    #
+    # Fed in raw, the term added 3.6 to 7.2 to *43 of 46 races* -- and a
+    # gold-rated race with no primary-ability bonus then outranked a
+    # black-rated race that had one, because 7.2 beats `primary_bonus` at 6.0.
+    # The party's hit rate fell from 63% to 57% and the fighter's from 64% to
+    # 50%. A guide rates a race for the whole class, including utility and
+    # defences; it must not be able to outweigh the one term that is worth a
+    # point of attack and a point of damage on every row.
+    #
+    # And a term that is positive almost everywhere is not a preference, it is a
+    # constant: it compresses the spread `sample` weights by and pushes the draw
+    # back toward uniform, which is the opposite of the intent.
+    #
+    # **Only applied when a guide actually rated it.** An unrated option gets
+    # no term at all rather than the 2.5 placeholder, because a made-up number
+    # competing with measured terms is worse than an absent one. 72% of written
+    # heroic rows are rated, but that runs from 93% for a fighter to 24% for a
+    # monk, so the term is present far more often for some classes than others.
+    "guide_rating": 1.2,
 }
 
 #: Every legal option keeps a floor of chance, so nothing is unreachable.
@@ -164,7 +189,75 @@ FEAT_TOP = 24
 #: asked and it costs **41ms**, nearly all of it inside `RaceLine.granted`,
 #: which scans the whole 12,197-row registry for each of the 46 races to find
 #: their traits. That is 560,000 prefix tests per character built.
-_RACES: dict[tuple[str, str], list[Choice]] = {}
+_RACES: dict[tuple[str, str, bool], list[Choice]] = {}
+
+
+def _use_ratings() -> bool:
+    """Read the package flag at call time, not at import.
+
+    `from . import USE_RATINGS` at module level would freeze the value, and
+    `scripts/winrate.py` flips it between runs inside one process.
+    """
+    from . import USE_RATINGS
+
+    return USE_RATINGS
+
+
+def _rating_term(ref: str, cls: str) -> dict[str, float]:
+    """The guide term, or nothing at all when nobody rated it."""
+    if not _use_ratings():
+        return {}
+    from combat_engine.ratings import rated, score
+
+    if not rated(ref, cls):
+        return {}
+    from . import BLACK
+
+    return {"guide_rating": score(ref, cls) - BLACK}
+
+
+def _pays_off_through(declared) -> set[str]:  # noqa: ANN001
+    """Which abilities a row's own body reads a modifier from.
+
+    Same reading `chargen._leans_on` does and for the same reason -- "a body
+    saying `c.int_mod` needs Intelligence and no header field says so" -- but
+    returning the set rather than a count, because the question here is whether
+    an option pays off through an ability this build has dumped.
+    """
+    import inspect
+
+    from combat_engine.engine.types import Ability
+
+    try:
+        body = inspect.getsource(declared.body)
+    except (OSError, TypeError):
+        return set()
+    return {a.value for a in Ability if f"c.{a.value}_mod" in body}
+
+
+def _on_a_dump_stat(declared, leg: Build) -> bool:  # noqa: ANN001
+    """Does this option pay off *only* through an ability the build dumped?
+
+    Camille's rule, and the strictest of the three readings considered: an
+    option is refused when the abilities it pays off through are all outside the
+    build's primary and secondary.
+
+    It matters most for the nineteen classes whose legs draw from one power pool
+    and differ only on the **secondary** -- for those, the other leg's secondary
+    is your dump stat. An artificer with Constitution second should not be handed
+    the Wisdom-payoff options, which is exactly the distinction one guide drew by
+    colouring the two halves of a name differently.
+
+    A row that reads no modifier at all is not refused: it pays off through
+    something else and there is no dumped ability to object to.
+    """
+    named = _pays_off_through(declared)
+    if not named:
+        return False
+    keep = {leg.primary.value}
+    if leg.secondary is not None:
+        keep.add(leg.secondary.value)
+    return named.isdisjoint(keep)
 
 
 def _priced(raw: dict[str, float]) -> tuple[float, dict[str, float]]:
@@ -212,7 +305,11 @@ def race_options(cls: str, level: int = 1, build: Build | None = None) -> list[C
     from . import RACES, build_of
 
     leg = build or build_of(cls)
-    key = (cls, leg.name)
+    # **`USE_RATINGS` is part of the key.** Without it the first mode to run
+    # poisons the cache for the second, and `scripts/winrate.py` runs both in
+    # one process -- so a before/after comparison would silently compare a mode
+    # against itself.
+    key = (cls, leg.name, _use_ratings())
     if key in _RACES:
         return list(_RACES[key])
     out: list[Choice] = []
@@ -232,6 +329,7 @@ def race_options(cls: str, level: int = 1, build: Build | None = None) -> list[C
                 "surges": float(race.surges),
                 "speed_above_six": float(max(0, race.speed - 6)),
                 "initiative": float(race.initiative),
+                **_rating_term(ref, cls),
             }
         )
         out.append(Choice(ref=ref, score=score, terms=terms))
@@ -389,6 +487,11 @@ def feat_options(
         declared = REGISTRY.get(ref)
         if declared is None:
             continue
+        if _use_ratings() and _on_a_dump_stat(declared, leg):
+            # Refused outright rather than scored down: a feat paying off only
+            # through an ability this build dumped is not a weaker choice, it is
+            # the wrong build's choice.
+            continue
         opened = [
             PRINTED.get(w) or IMPLEMENTS.get(w)
             for w in (getattr(declared, "proficiency", ()) or ())
@@ -406,6 +509,7 @@ def feat_options(
                 "unlocks_other_feats": float(unlocks.get(ref, 0)),
                 "carries_a_marker": float(bool(getattr(declared, "dropped", ()) or ())),
                 "out_of_combat": float(getattr(declared, "out_of_combat", False)),
+                **_rating_term(ref, cls),
             }
         )
         out.append(Choice(ref=ref, score=score, terms=terms))

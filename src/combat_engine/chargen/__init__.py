@@ -1020,6 +1020,21 @@ DEAL_RACES = True
 #: with it, and that divergence is indistinguishable from a real regression.
 SCORED_CHOICES = True
 
+#: Whether the draw also consults `ratings.py` -- the community guides' colour
+#: ratings for 5,240 options. Separate from `SCORED_CHOICES` so the two can be
+#: measured apart: `scripts/winrate.py --draw scored` against `--draw rated` is
+#: the comparison, and a fixture movement can be attributed to one of them
+#: rather than to both at once.
+#:
+#: Off by default. Turning it on changes every dealt character, so the six
+#: fixtures need re-recording in a commit with nothing else in it, for the
+#: reason `DEAL_RACES` and `SCORED_CHOICES` both give above.
+USE_RATINGS = False
+
+#: The rated average on the community six-colour scale. An item a guide put
+#: below this is refused outright; see `_pick_item`.
+BLACK = 3.0
+
 
 def deal_race(rng: Random, cls: str = "", build: Build | None = None) -> str:
     """A race, drawn like a hand of powers is.
@@ -1521,7 +1536,9 @@ def treasure(who: Character, rng: Random) -> list:
         ]
         if not pool:
             continue
-        row = pool[rng.randrange(len(pool))]
+        row = _pick_item(pool, who.cls, rng)
+        if row is None:
+            continue
         magic = magic_for(row["ref"], plus=row["plus"])
         if magic is None:
             continue
@@ -1529,6 +1546,45 @@ def treasure(who: Character, rng: Random) -> list:
             magic = replace(magic, slot="implement")
         out.append(magic)
     return out
+
+
+def _pick_item(pool: list, cls: str, rng: Random):  # noqa: ANN202
+    """One item from the pool, weighted by what a guide thought of it.
+
+    Camille's rule: **nothing rated below black**, and unrated items stay in the
+    pool. Rated items are weighted by their score and unrated ones at `UNRATED`,
+    so a recommendation is preferred without a slot ever emptying.
+
+    **The effect today is very nearly nothing, and that is worth saying rather
+    than discovering.** Item coverage is the thinnest part of `ratings.py`: a
+    fighter's level-1 weapon slot is 124 candidates of which *one* is rated, and
+    a warden has no rated item in any slot. Every rated item in those pools is
+    already black or better, so the floor currently excludes nothing at all. One
+    rated blue against 123 unrated is a 1.3% draw. This is scaffolding for when
+    the guides' item coverage grows, not a lever that moves anything now.
+    """
+    if not USE_RATINGS:
+        return pool[rng.randrange(len(pool))]
+    from combat_engine.ratings import UNRATED, rating
+
+    weighted = []
+    for row in pool:
+        got = rating(row["ref"], cls)
+        if got is not None and got < BLACK:
+            continue                     # a guide said not to take this
+        weighted.append((row, UNRATED if got is None else got))
+    if not weighted:
+        # Every candidate was rated below black. Refusing outright would leave
+        # the character a band cold, which is the shortfall `treasure` exists to
+        # close, so the least-bad rated item is taken and nothing is silent.
+        return max(pool, key=lambda r: rating(r["ref"], cls) or 0.0)
+    total = sum(w for _r, w in weighted)
+    cut = rng.random() * total
+    for row, w in weighted:
+        cut -= w
+        if cut <= 0:
+            return row
+    return weighted[-1][0]
 
 
 def magic_for(ref: str, *, plus: int = 0, powers: tuple[str, ...] = ()) -> Magic | None:
