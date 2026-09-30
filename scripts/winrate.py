@@ -51,7 +51,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import fight
 from combat_engine import chargen
 from combat_engine.engine import Ident, LinearPolicy, install, take_turn
-from combat_engine.engine.events import AttackRolled
+from combat_engine.engine.events import AttackRolled, OpportunityWindow
 from combat_engine.engine.types import Team
 
 DRAWS = ("chassis", "scored", "rated")
@@ -65,10 +65,17 @@ def arrange(draw: str) -> None:
 
 
 def one(seed: int, level: int, cap: int,
-        tally: dict[str, list[int]] | None = None) -> tuple[str, int]:
+        tally: dict[str, list[int]] | None = None,
+        oas: dict[str, int] | None = None) -> tuple[str, int]:
     """(outcome, rounds) for a single fight. Outcome is win, loss or cap.
 
     `tally` accumulates hits and attempts per creature, keyed by what it is.
+    `oas` counts opportunity windows by who **provoked** them, and by the reason.
+
+    An opportunity attack provoked is free damage handed to the other side, so a
+    party that provokes more of them is positioning worse -- and that shows up
+    long before a win rate does. Camille's second suggestion, and it reads a
+    different axis from hit rate: accuracy against positioning.
 
     **Hit rate is the sensitive measure and win rate is the blunt one.** A better
     draw shows up in accuracy within a handful of fights; it takes hundreds for
@@ -94,6 +101,14 @@ def one(seed: int, level: int, cap: int,
             if ev.total >= ev.defence or ev.natural == 20:
                 got[0] += 1
         world.bus.on(AttackRolled, rolled)
+    if oas is not None:
+        def window(ev: OpportunityWindow) -> None:
+            ident = world.get(ev.provoker, Ident)
+            ref = (ident.ref if ident else "?")
+            side = "monsters" if ref.startswith("m") else "party"
+            oas[side] = oas.get(side, 0) + 1
+            oas[f"{side}:{ev.why[:26]}"] = oas.get(f"{side}:{ev.why[:26]}", 0) + 1
+        world.bus.on(OpportunityWindow, window)
     encounter.start()
     while not encounter.finished and world.round <= cap:
         actor = world.turn
@@ -109,11 +124,12 @@ def one(seed: int, level: int, cap: int,
 def run(draw: str, level: int, seeds: int, cap: int) -> dict:
     arrange(draw)
     tally: dict[str, list[int]] = {}
+    oas: dict[str, int] = {}
     wins = losses = capped = 0
     rounds: list[int] = []
     for seed in range(1, seeds + 1):
         try:
-            out, n = one(seed, level, cap, tally)
+            out, n = one(seed, level, cap, tally, oas)
         except Exception as exc:
             # One unplayable seed must not cost the other fifty-nine, and a
             # silent skip would flatter the result. Counted and reported.
@@ -131,7 +147,7 @@ def run(draw: str, level: int, seeds: int, cap: int) -> dict:
         "rate": wins / played if played else 0.0,
         "rounds": statistics.median(rounds) if rounds else 0,
         "lo": min(rounds) if rounds else 0, "hi": max(rounds) if rounds else 0,
-        "hits": tally,
+        "hits": tally, "oas": oas,
     }
 
 
@@ -178,6 +194,25 @@ def main() -> int:
         print(f"{r['draw']:<9} {r['level']:>3}  "
               + "  ".join(f"{c:>9}" for c in cells)
               + f"  {ph / pn if pn else 0:>6.0%} {mh / mn if mn else 0:>9.0%}")
+    print()
+
+    # Opportunity attacks provoked -- free damage handed to the other side.
+    print(f"{'draw':<9} {'lvl':>3} {'party provoked':>15} {'per fight':>10} "
+          f"{'monsters provoked':>18} {'per fight':>10}")
+    for r in got:
+        pp = r["oas"].get("party", 0)
+        mp = r["oas"].get("monsters", 0)
+        n = max(1, r["played"])
+        print(f"{r['draw']:<9} {r['level']:>3} {pp:>15} {pp / n:>10.1f} "
+              f"{mp:>18} {mp / n:>10.1f}")
+    print()
+    for r in got:
+        why = {k.split(":", 1)[1]: v for k, v in r["oas"].items()
+               if k.startswith("party:")}
+        top = sorted(why.items(), key=lambda kv: -kv[1])[:3]
+        if top:
+            print(f"  {r['draw']:<9} lvl {r['level']:>2} party provoked by: "
+                  + ", ".join(f"{k} x{v}" for k, v in top))
     print()
 
     # The comparison the whole instrument exists for.
