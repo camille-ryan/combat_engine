@@ -104,6 +104,26 @@ was discarded as unmapped and only uncoloured blacks survived. **14 of 36 guides
 were reporting 95–100% black**, which is what a broken reader looks like rather
 than what a guide looks like. After the fix, three.
 
+**A name need not be bold.** The candidate list was bold elements only, and a
+third convention exists: the name wrapped in a colour and *not* bold —
+`<span style="color:#0000ff">name</span> (PP): commentary`. A guide written that
+way offered no candidates at all, which is why four classes looked almost unrated.
+Candidates are now bold **or** coloured. That alone took the warden from 1 rated
+row to 179, the artificer from 1 to 123 and the warlord from 10 to 138.
+
+Deliberately **not** deduplicated when both arms of the union match one element.
+`id()` on an lxml element is not stable — proxies are built on demand and the id
+is reused after collection — so deduplicating on it silently dropped about 500
+refs. A repeat offer is harmless: the "rated twice" path keeps the better tier,
+which is right when the bold says black and the coloured span inside it says blue.
+
+**A word cut in half is two ratings.** One guide colours the first half of a name
+for its Wisdom build and the second half for its Constitution build, so neither
+half resolves and the option is lost. 11 refs in that guide are written that way,
+the halves in genuinely different colours. Adjacent coloured siblings are joined
+when the concatenation resolves and the first half alone does not — that last
+condition is what stops two ordinary adjacent ratings being welded together.
+
 **Read colour *names*, not only hex.** `color: DarkTurquoise` is a rating and
 `#00ccff` is the same rating, and the reader saw only the second. Over **five
 thousand** ratings were being discarded — `DeepSkyBlue` 947 times, `MediumBlue`
@@ -129,13 +149,13 @@ remembering for any future source — a link is not automatically name-free.
 
 ## Measured, across all 36
 
-* **4,405 refs rated** — 2,359 powers, 1,585 feats, 410 items, 51 races — plus
-  60 set aside as green or pink. No guide refused.
-* Tier spread: 569 red, 860 purple, 2,486 black, 2,165 blue, 1,084 sky, 163 gold.
-  Black at 34% with blue close behind is a healthier shape than the 70% black an
-  earlier pass produced.
+* **5,240 refs rated** — 2,916 powers, 1,827 feats, 445 items, 52 races — plus
+  67 set aside as green or pink. No guide refused.
+* Tier spread: 712 red, 1,179 purple, 2,257 black, 2,952 blue, 1,553 sky, 220 gold.
+  Blue the largest bucket and black second is the shape of guides written to
+  recommend rather than to warn.
   Black the largest bucket at 39% is the shape a rating distribution should have.
-* **856 refs are rated for more than one class, and 370 differ by two tiers or
+* **1,007 refs are rated for more than one class, and 431 differ by two tiers or
   more** — the strongest evidence for keying by class. 615 are rated twice for
   the *same* class by different guides at different tiers, which is genuine
   disagreement; the later guide wins.
@@ -159,27 +179,24 @@ remembering for any future source — a link is not automatically name-free.
 ## Coverage is very uneven, and a caller has to know that
 
 Share of each class's **written heroic-tier rows** (levels 0/1/3/5/7/9) that a
-guide has rated. 57% overall, and the spread is what matters:
+guide has rated. 72% overall, and the spread is what matters:
 
 | | | | |
 |---|---|---|---|
-| fighter 90% | swordmage 88% | paladin 87% | warlock 86% |
+| fighter 93% | paladin 93% | swordmage 88% | warlock 86% |
 | seeker 86% | sorcerer 86% | invoker 84% | rogue 84% |
-| battlemind 83% | ardent 83% | wizard 78% | psion 77% |
-| runepriest 77% | barbarian 71% | avenger 70% | assassin 62% |
-| cleric 43% | druid 30% | bard 30% | ranger 25% |
-| monk 22% | shaman 14% | warlord 7% | artificer 2% |
-| warden 1% | | | |
+| battlemind 83% | ardent 83% | wizard 80% | psion 77% |
+| runepriest 77% | cleric 76% | ranger 73% | barbarian 71% |
+| avenger 70% | bard 69% | druid 68% | assassin 62% |
+| warlord 56% | shaman 52% | warden 45% | artificer 41% |
+| **monk 24%** | | | |
 
-The four at the bottom are not failures of the reader — unlike the invoker, which
-was, and is now at 84%. The artificer and warden
-guides rate mostly feats, items and paragon paths rather than their own class's
-powers — which is why their class could not be detected either. The warlord and
-shaman guides are simply short: 71 and 81 rated options against a fighter guide's
-491.
-
-**So a score built on this will be confident about a fighter and ignorant about a
-warden.** `rated()` is what distinguishes the two, and a scorer that treats an
+Every one of these rose when the reader learned a new convention, which is the
+lesson: a low number here has meant a gap in the reader far more often than a gap
+in the source. The warden went 1% → 45%, the artificer 2% → 41%, the warlord
+7% → 56%, the ranger 25% → 73%, the invoker 0% → 84%. **The monk at 24% is
+probably the next convention, not a thin guide.** **So a score built on this is confident about a fighter and much less sure about a
+monk.** `rated()` is what distinguishes the two, and a scorer that treats an
 unrated option as average will quietly flatten half the classes in the game. This
 is the strongest practical reason the API returns `None` rather than 2.5.
 

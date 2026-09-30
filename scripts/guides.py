@@ -42,6 +42,7 @@ a red gets scored as a gold.
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import pathlib
 import re
@@ -315,6 +316,12 @@ GUIDES: dict[str, Guide] = {
     for slug, cls, url, over, note in REGISTRY
 }
 
+#: Set by `main`/`discover` once the name index exists. `options` needs to ask
+#: "does this text name something" to spot a name split across two colours, and
+#: threading the index through every call site for one predicate is worse.
+def _RESOLVES(_text: str) -> bool:
+    return False
+
 _WORD = re.compile(r"[^a-z0-9 ]+")
 
 
@@ -566,6 +573,37 @@ def tint(el) -> str | None:  # noqa: ANN001
     return None
 
 
+def _joined(els, colour_of, resolves):  # noqa: ANN001, ANN202
+    """Names an author split across two coloured spans, and both their colours.
+
+    **A word cut in half is two ratings, not a broken one.** One guide colours the
+    first half of a name for its Wisdom build and the second half for its
+    Constitution build, so neither half resolves and the option is lost entirely.
+    11 refs in that guide are written this way, with the halves in genuinely
+    different colours -- red/purple, purple/red, blue/sky.
+
+    Detected rather than guessed: the two must be adjacent siblings with nothing
+    between them, the concatenation must resolve to a ref, and the first half
+    alone must *not*. That last condition is what stops two ordinary adjacent
+    ratings being welded together.
+
+    Yields (tier-bearing colour, joined text) twice, once per half, so the
+    caller's "rated twice at different tiers" path keeps the better and counts it.
+    """
+    for a, b in itertools.pairwise(els):
+        if a.getparent() is not b.getparent() or (a.tail or "").strip():
+            continue
+        ta = " ".join((a.text_content() or "").split())
+        tb = " ".join((b.text_content() or "").split())
+        if not ta or not tb or resolves(ta) or not resolves(ta + tb):
+            continue
+        ca, cb = colour_of(a), colour_of(b)
+        if ca:
+            yield ca, ta + tb
+        if cb and cb != ca:
+            yield cb, ta + tb
+
+
 def options(html: str, guide: Guide) -> tuple[list[tuple[str, str, int]],
                                               dict[str, str], Counter]:
     """(tier, text, post) for every option the guide names, plus its key.
@@ -607,10 +645,18 @@ def options(html: str, guide: Guide) -> tuple[list[tuple[str, str, int]],
         colour_of = tint
 
         def is_name(el):  # noqa: ANN001, ANN202
+            """Bold **or** coloured. Guides use one, the other, or both.
+
+            A third convention, and the one that made four classes look almost
+            unrated: the name is wrapped in a colour and is *not* bold --
+            `<span style="color:#0000ff">name</span> (PP): commentary`. Accepting
+            only bold candidates meant such a guide never offered a single one.
+            """
             if el.tag in ("b", "strong"):
                 return True
-            return "font-weight:bold" in (el.get("style") or "").replace(" ", "") \
-                or "font-weight:700" in (el.get("style") or "").replace(" ", "")
+            style = (el.get("style") or "").replace(" ", "")
+            return ("font-weight:bold" in style or "font-weight:700" in style
+                    or _COL.search(style.lower()) is not None)
 
         roots = doc.xpath("//article[contains(@class,'message--post')]")
         if roots and not guide.posts:
@@ -640,7 +686,15 @@ def options(html: str, guide: Guide) -> tuple[list[tuple[str, str, int]],
         (i, r) for i, r in enumerate(roots) if not guide.posts or i in guide.posts]
     for i, scope in scopes:
         cands = scope.xpath(".//span[@class]") if holders is not None \
-            else scope.xpath(".//b | .//strong | .//*[contains(@style,'font-weight')]")
+            else scope.xpath(".//b | .//strong | "
+                             ".//*[contains(@style,'font-weight')] | "
+                             ".//*[contains(@style,'color')]")
+        # The xpath union can offer one element twice -- a bold wrapping a
+        # coloured span matches both arms. Deliberately not deduplicated: lxml
+        # builds element proxies on demand, so `id()` is reused after collection
+        # and deduplicating on it silently dropped ~500 refs. A repeat offer is
+        # harmless, because the "rated twice" path keeps the better tier, which
+        # is exactly right when the bold says black and the span inside says blue.
         for el in cands:
             if not is_name(el):
                 continue
@@ -656,6 +710,14 @@ def options(html: str, guide: Guide) -> tuple[list[tuple[str, str, int]],
                     unmapped[hex_] += 1
                     continue
             out.append((tier, text, i))
+        # Names split across two coloured spans, which neither half resolves.
+        from_split = _joined(
+            scope.xpath(".//*[contains(@style,'color')]"), colour_of,
+            lambda t: _RESOLVES(t))
+        for hex_, text in from_split:
+            tier = key.get(hex_)
+            if tier is not None:
+                out.append((tier, text, i))
     return out, key, unmapped
 
 
@@ -740,6 +802,7 @@ def discover() -> int:
     import time
 
     index = Index.load()
+    globals()["_RESOLVES"] = lambda t: index.find(t)[1] == "ok"
     urls = [u for u in (CACHE / "_urls.txt").read_text().split() if u.strip()]
     print(f"{len(urls)} candidate URLs\n")
     print(f"{'#':>3} {'host':<8} {'rated':>6} {'powers':>6} {'class':<12} "
@@ -825,6 +888,7 @@ def main() -> int:
         return discover()
 
     index = Index.load()
+    globals()["_RESOLVES"] = lambda t: index.find(t)[1] == "ok"
     chosen = {k: v for k, v in GUIDES.items()
               if not args.guide or k == args.guide}
     if not chosen:
