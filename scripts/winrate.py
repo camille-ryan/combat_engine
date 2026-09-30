@@ -27,6 +27,33 @@ readable in a way win rate is not. A run that raises the win rate while collapsi
 the round count has not improved the game; it has made the party too strong for the
 encounter, which is the thing #217 watches for.
 
+**How many seeds a difference needs, because 30 and 40 are not enough.**
+Measured rather than assumed: at level 5 the three draws came out 10, 7 and 3 wins
+of 40, and exact two-sided tests on those give
+
+    chassis 10/40 vs rated   3/40    p = 0.066   borderline
+    scored   7/40 vs rated   3/40    p = 0.311   not significant
+    chassis 10/40 vs scored  7/40    p = 0.586   not significant
+
+So **none of them separate at 40 seeds**, and several conclusions were drawn off 30
+before that was checked. Detecting 25% against 8% at 80% power wants about 80 seeds
+per cell; 25% against 18% wants about 175. Budget accordingly, and prefer the two
+measures below when the budget is small.
+
+**Hit rate and opportunity attacks are the cheap measures, and win rate is the
+dear one.** Both rest on hundreds or thousands of events per run rather than one
+outcome per fight, so they read at sample sizes where win rate is still noise:
+
+* hit rate came out 61% / 60% / 61% across the three draws -- thousands of attack
+  rolls, and a real "no difference";
+* "moved away" provocations came out 90 / 137 / 145 over 40 fights, which *is* a
+  difference and says the scorer walks away from adjacent enemies far more.
+
+A ten-seed run once showed the rated draw provoking 44% more opportunity attacks
+than the chassis. At forty that was 6.3 against 5.5 with the monsters provoking
+more in return, so the ten-seed figure was an artefact. Even the cheap measures
+want a few tens of fights.
+
 Two things to know before reading any output:
 
 * **Above level 1 the party essentially never wins.** #75 measured 2 of 30 at
