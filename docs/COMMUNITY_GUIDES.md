@@ -191,12 +191,35 @@ guide has rated. 72% overall, and the spread is what matters:
 | warlord 56% | shaman 52% | warden 45% | artificer 41% |
 | **monk 24%** | | | |
 
-Every one of these rose when the reader learned a new convention, which is the
-lesson: a low number here has meant a gap in the reader far more often than a gap
-in the source. The warden went 1% → 45%, the artificer 2% → 41%, the warlord
-7% → 56%, the ranger 25% → 73%, the invoker 0% → 84%. **The monk at 24% is
-probably the next convention, not a thin guide.** **So a score built on this is confident about a fighter and much less sure about a
-monk.** `rated()` is what distinguishes the two, and a scorer that treats an
+Every one of these rose when the reader learned a new convention: the warden went
+1% → 45%, the artificer 2% → 41%, the warlord 7% → 56%, the ranger 25% → 73%, the
+invoker 0% → 84%.
+
+### Reader gap or source gap
+
+The share above conflates two things, so here is the number that separates them —
+of the rows a class's own guide **names at all**, how many were rated:
+
+| | | | |
+|---|---|---|---|
+| seeker 96% | fighter 95% | paladin 95% | rogue 94% |
+| avenger 93% | battlemind 93% | barbarian 91% | warlock 91% |
+| sorcerer 90% | invoker 89% | psion 89% | swordmage 89% |
+| wizard 88% | ardent 87% | runepriest 86% | **monk 84%** | 
+| cleric 83% | assassin 83% | ranger 79% | druid 75% |
+| bard 71% | warden 61% | shaman 58% | warlord 58% |
+| artificer 56% | | | |
+
+**The monk is not a reader gap.** Its guide names only 43 of the class's 137 rows
+— it discusses powers in prose ("Overview — X is clearly the best power at this
+level") rather than rating each one — and 84% of those 43 are rated. 24% absolute
+is close to that guide's ceiling. I predicted it was another convention and it is
+not; checking was what settled it.
+
+Seven classes still have a real reader gap: artificer 56%, shaman 58%, warlord
+58%, warden 61%, bard 71%, druid 75%, ranger 79%. That is roughly 200 more refs
+behind one or two more conventions. **So a score built on this is confident about a fighter and much less sure about an
+artificer.** `rated()` is what distinguishes the two, and a scorer that treats an
 unrated option as average will quietly flatten half the classes in the game. This
 is the strongest practical reason the API returns `None` rather than 2.5.
 
