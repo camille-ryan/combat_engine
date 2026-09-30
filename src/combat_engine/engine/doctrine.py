@@ -93,8 +93,19 @@ So a killing blow removes all of it and half its hit points removes half, withou
 "kill" needing to be a separate idea. This is what should make a striker finish a
 bloodied enemy rather than open on a fresh one.
 
-Conditions enter the same term through `threat.CONDITION_THREAT`, which is
-**currently all zeros** by instruction, so they contribute nothing yet.
+**Conditions do not enter this term at all, and `threat.CONDITION_THREAT` is read
+by nothing.** An earlier version of this paragraph said they entered "through"
+that table, which was false: the table exists, every entry is 0.0 by instruction,
+and no code path consults it. That is precisely the "weight nothing consults"
+failure the root `CLAUDE.md` calls this component's commonest, written into the
+module whose docstring cites it. Recorded here rather than quietly corrected.
+
+Wiring it needs a signal that does not exist yet. **No `Power` header declares the
+conditions a row applies** -- there is no such field, so `immobilized` is knowable
+only by running the body. The clean way is the scratch board `threat.board` already
+builds: run the row there and collect `ConditionApplied`, which carries the
+condition *and* its duration. See #263, and the four things that have to be settled
+before numbers go into the table.
 
 *What this axis is not.* `notes/DOCTRINE.md` §1 is that threat has two axes which
 pull against each other -- *reduction* and *redirection* -- and that a defender

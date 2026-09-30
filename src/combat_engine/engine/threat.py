@@ -56,9 +56,15 @@ from .types import Condition, Defense, Team
 #:
 #: **Every entry is deliberately zero.** Camille's instruction for this pass was
 #: to "set the conditions applied threat modifiers to 0 (so that we can edit them
-#: later)", and a table of zeros that is genuinely consulted is worth more than
-#: an absent one: the tuning is a one-line edit here rather than a new mechanism,
-#: and a reader can see at a glance that conditions currently count for nothing.
+#: later)", so the table is the shape of the answer with the numbers left out.
+#:
+#: **Nothing reads it yet.** It is consulted by no code path -- not by
+#: `DoctrinePolicy`, not by anything else -- so it is a declaration of intent and
+#: not a live weight. Said plainly because a table of zeros that *looks* wired is
+#: worse than an absent one: it reads as "conditions are priced at nothing" when
+#: the truth is "conditions are not priced". #263 carries what filling it in needs,
+#: starting with the fact that no `Power` header says which conditions a row
+#: applies, so the signal has to come from running the row.
 #:
 #: Written out rather than generated so each line is somewhere to put a number.
 #: When they are filled in, note that the ordering is contested --
