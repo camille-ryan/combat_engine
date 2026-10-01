@@ -18,7 +18,10 @@ in its own module docstring — 60 of 80 wins at level 5 against
 |---|---|---|
 | module | `engine/policy.py` | `engine/doctrine.py` |
 | threat | — | `engine/threat.py`, best case over 3 rounds |
-| threat removal, incl. hp damage | — | `threat_removed` |
+| threat removal, incl. hp damage | — | `threat_removed`, **in rounds of damage** |
+| control: immobilise, stun, slow, weaken | — | derived from `conditions.Rules`, not a table |
+| duration: save-ends vs end-of-next-turn | — | `threat.ROUNDS_OF`; a save is 55%, so 1.82 rounds |
+| making a creature easier to hit | — | `party_enabled` (AC debuff, grants combat advantage) |
 | cost of provoking | flat `-5.0` / `-4.0` | those **plus** `threat_conceded` |
 | what a move buys | — | `reach_gained` |
 | flanking, being flanked, cover | — | `takes_flank`, `becomes_flanked`, `cover_change` |
@@ -32,10 +35,15 @@ doctrine` is the comparison between them.
 
 **Still absent, and each is a line of this document that nothing reads:**
 
-* **Target redirection** — the defender's half. "Threat should be increased by its
-  additional effects" and locking down a high-threat enemy are not scored at all;
-  `threat.CONDITION_THREAT` is a table of zeros awaiting numbers. A defender is
-  currently scored on damage prevention alone, which plays it as a striker.
+* **Target redirection** — the defender's half of `notes/DOCTRINE.md` §1. Holding a
+  creature is now priced by what it can still reach, so immobilising one already in
+  contact correctly scores near zero — but *making it attack the fighter instead of
+  the wizard* is still not a term. A defender is scored on damage prevented, not on
+  who the damage lands on.
+* **Pushing a held creature out of reach.** Camille's suggestion: a prone, slowed or
+  immobilised enemy shoved away from the party cannot attack at all. The denial model
+  would price it directly — `per_round` from the square it would land in — and no
+  term reads forced movement yet.
 * **Role goals** — the whole of *Goals* below. `Ident.role` exists on both sides
   of the board and no weight consults it, so a controller and a brute score
   identically.

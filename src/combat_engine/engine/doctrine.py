@@ -16,46 +16,49 @@ rather than becoming dead code.
 
 ## Where it stands, measured
 
-**80 seeded fights a cell, seeds 41-120** -- held back while the weights were set
-on seeds 1-20, because tuning and confirming on one set of seeds is how a scorer
-comes to look better than it is. Both sides of the board run the same policy,
-`--draw scored` throughout, and this is *after* #244 was fixed, so the party holds
-the powers it is supposed to.
+**80 fights a cell, seeds 121-200** -- fresh seeds, because 41-120 had already been
+used to confirm the previous model and reusing them turns a confirmation into a
+selection. Both sides run the same policy, `--draw scored`, after #244.
 
 | | level 5 linear | level 5 doctrine | level 10 linear | level 10 doctrine |
 |---|---|---|---|---|
-| wins of 80 | 47 (59%) | **60 (75%)** | 46 (57%) | **67 (84%)** |
-| exact p | | 0.043 | | 0.00045 |
-| median rounds | 8.5 | **8.0** | 12.0 | 10.5 |
-| party hit rate | 61% | 61% | 62% | 61% |
-| party provoked / fight | 3.6 | 4.7 | 4.0 | 6.3 |
+| wins of 80 | 49 (61%) | 56 (70%) | 47 (59%) | **70 (88%)** |
+| exact p | | 0.318 | | **0.000066** |
+| median rounds | 9.0 | **8.0** | 13.0 | 10.0 |
+| party hit rate | 63% | 64% | 63% | 62% |
+| party provoked / fight | 3.8 | 4.3 | 4.0 | 5.8 |
 
-Both differences survive **Holm** over the two comparisons, which is the bar
-`scripts/winrate.py`'s docstring sets. 40 seeds was not enough and was tried first:
-the same comparison read p = 0.062 and p = 0.027 there and neither survived
-correction.
+**Level 10 rejects the null under Holm; level 5 does not.** 56 against 49 is
+p = 0.32, which is noise, and saying otherwise would be the garden of forking paths
+`scripts/winrate.py`'s docstring warns about. The honest summary is one strong result
+and one null.
 
-Three things worth reading off that table rather than the win rate alone.
+**The two models have never been compared on the same seeds**, so "the rounds model
+beats the damage-only model" is *not* a claim this table supports. The damage-only
+version measured 60/80 and 67/80 on seeds 41-120; those are different fights. What
+can be said is that each beat `LinearPolicy` on its own seeds, and that level 10 did
+so more decisively here (p = 0.000066 against 0.00045).
 
-**The gain is not accuracy.** Party hit rate is 61% either way, to the point. This
-is not hitting more often; it is choosing a better target and a better action,
-which is what the threat and healing terms were for.
+Median rounds is 8.0 at level 5, inside #217's 7-8 target, and level 10 came down
+from 13 to 10. The win rate did not come from shorter fights.
 
-**It provokes considerably more and wins anyway**, and that is Camille's point made
-by measurement. Much of this module's tuning went on pushing the opportunity-attack
-count back down to `LinearPolicy`'s, on the assumption that conceding more free
-swings must be worse. It is not: at level 10 it concedes half again as many and wins
-84% against 57%. The count was a proxy and the proxy was wrong. `threat_conceded`
-and `reach_gained` exist so that the trade is *priced* rather than avoided.
+### Pruning the destinations, which is where a turn's cost was
 
-**Rounds moved toward the target, not away.** #217 sets 7-8 rounds and warns that a
-rising win rate with a collapsing round count means the party has outgrown the
-encounter rather than played better. Level 5 went 8.5 -> 8.0, which is on target;
-level 10 went 12.0 -> 10.5, still long. The win rate did not come from shorter
-fights.
+Camille's suggestion, and it is worth as much for the quality of play as for the
+speed. `actions.legal` offers every reachable square -- measured, **210 of a
+creature's 226 options are a `move` or a `run`** -- and scoring all of them came to
+15,760 evaluations for one fight. `worth_standing` applies the rule: a creature that
+fights in melee wants to end adjacent to something, one that does not wants to be
+out of reach but in range, and approaching is considered only when neither is
+available. 15,760 -> **2,623** scored actions, and "moved away" provocations fell
+from 71 to 41 at level 5.
 
-**The weights are still the ones fitted before #244 was fixed**, on level-5 figures
-that have since moved, so `scripts/doctrine.py` has more to give here.
+A caution about the timings quoted anywhere near this: an earlier note in this
+docstring had one fight at 25 seconds against `LinearPolicy`'s 13, and that
+comparison was **measured while an 80-seed run was saturating the machine**. Both
+were about 2.5 seconds idle. The call counts are the figures to trust, being immune
+to what else is running: memoising the board facts took one fight from 128M function
+calls to 62M, with `query.enemies` going from 226,472 calls to 31,857.
 
 ### The flanking terms were added after that table and did not improve it
 
@@ -188,7 +191,15 @@ from .types import Team
 #: a tenth of one attack's damage, and one attack is a few percent of a pool, so a
 #: flank is worth a few hundredths of a share -- which is where these now sit.
 #:
-#: **75 is set by one inequality, not by taste.** `LinearPolicy` charges -9.0 for a
+#: **Re-fitted from 75 to 15 when the currency got bigger.** `potential` now counts
+#: what an area row catches and measures against real targets, so a creature's
+#: three-round threat went from a fraction of the party pool to a large share of it
+#: -- and `threat_removed`'s mean contribution to the chosen action went from 9.43 to
+#: 27.57 at the old weight. That is three times the -9.0 below, which is the one
+#: thing the inequality says it must stay under. 15 puts it near 5.5.
+#:
+#: **The inequality, which is what sets this rather than taste.** `LinearPolicy`
+#: charges -9.0 for a
 #: ranged attack made from inside melee when a shift was available (-5.0 plus
 #: -4.0), and that penalty is load-bearing: it is what stopped the party walking
 #: into free hits. Two things have to hold at once. A single attack's
@@ -225,7 +236,7 @@ from .types import Team
 #: takes more rounds, which is also why control ought to matter *more* there -- it
 #: removes threat at once where damage removes it over time. `CONDITION_THREAT` is
 #: where that gets expressed and it is still zeros (#263).
-SHARE = 75.0
+SHARE = 15.0
 
 DOCTRINE: dict[str, float] = {
     # The headline. A share of one side's whole health pool is a small number --
@@ -242,6 +253,12 @@ DOCTRINE: dict[str, float] = {
     # and a slightly *lower* hit rate. 20.0 puts its mean contribution near
     # `hit_chance`'s, which is where a tiebreaker between attacks belongs.
     "threat_removed": SHARE,
+    # **What a condition buys the party, which was worth exactly nothing.** A -2
+    # to a target's AC, or anything that makes it grant combat advantage, raises
+    # every attack the party makes at it. Same currency as the three above -- a
+    # share of a health pool -- but the *enemy's* pool, because it is our damage
+    # going up rather than theirs coming down.
+    "party_enabled": SHARE,
     # **What provoking actually costs, on top of the flat penalty rather than
     # instead of it.** Camille's point is that -5.0 cannot distinguish a brute's
     # free swing from a minion's, and this is what does -- the expected damage of
@@ -326,6 +343,44 @@ def heals(ref: str) -> bool:
     return out
 
 
+#: Living enemies, per (board, round, creature). A board fact, and it was being
+#: recomputed per candidate action: a profile of one level-5 fight found
+#: `query.enemies` called **226,472 times** for 5.2 of 18.6 seconds, with
+#: `query.creatures` behind it at 332,776. Nothing about the answer changes between
+#: two candidate actions on the same turn.
+_FOES: dict[tuple[int, int, int], tuple[int, ...]] = {}
+
+#: `best_from` per (board, round, creature, origin). The other half of the same
+#: profile: 28,278 calls for 4.7 seconds, and it is asked twice per action for the
+#: same two squares over and over.
+_BEST: dict[tuple[int, int, int, Any], float] = {}
+
+#: Cover from the nearest enemy, per (board, round, creature, square). 29,798 calls
+#: for 3.6 seconds, and `Grid.cover` traces corner to corner each time.
+_COVER: dict[tuple[int, int, int, Any], int] = {}
+
+
+def forget() -> None:
+    """Drop the per-board memos. `scripts/winrate.py` calls this between fights."""
+    _FOES.clear()
+    _BEST.clear()
+    _COVER.clear()
+
+
+def _round(world: Any) -> int:
+    return getattr(world, "round", 0)
+
+
+def foes(world: Any, actor: int) -> tuple[int, ...]:
+    """Living enemies of `actor`, memoised for the round."""
+    key = (id(world), _round(world), actor)
+    got = _FOES.get(key)
+    if got is None:
+        got = _FOES[key] = tuple(
+            e for e in enemies(world, actor) if alive(world, e))
+    return got
+
+
 def _square_of(world: Any, eid: int) -> Any:
     pos = world.get(eid, Position)
     return pos.square if pos is not None else None
@@ -351,9 +406,7 @@ def provokers(world: Any, actor: int, dest: Any) -> list[int]:
     if here is None or dest is None:
         return []
     out = []
-    for foe in enemies(world, actor):
-        if not alive(world, foe):
-            continue
+    for foe in foes(world, actor):
         reach = _reach_of(world, foe)
         there = _square_of(world, foe)
         if there is None:
@@ -403,9 +456,7 @@ def _in_area(world: Any, actor: int, origin: Any, ref: str) -> int:
     if kind == "personal":
         return 0
     caught = 0
-    for foe in enemies(world, actor):
-        if not alive(world, foe):
-            continue
+    for foe in foes(world, actor):
         there = _square_of(world, foe)
         if there is None:
             continue
@@ -429,6 +480,10 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
     """
     from .components import Powers
 
+    key = (id(world), _round(world), actor, origin)
+    hit = _BEST.get(key)
+    if hit is not None:
+        return hit
     known = world.get(actor, Powers)
     theirs = world.get(actor, Side)
     if known is None or theirs is None:
@@ -449,7 +504,8 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
         if not caught:
             continue
         best = max(best, T.row_damage(world, actor, ref) * caught)
-    return best / pool
+    _BEST[key] = best / pool
+    return _BEST[key]
 
 
 def fights_in_melee(world: Any, actor: int) -> bool:
@@ -531,11 +587,10 @@ def sets_up_flank(world: Any, actor: int, dest: Any) -> bool:
     from .components import Movement
     from .grid import distance
 
-    foes = [e for e in enemies(world, actor) if alive(world, e)]
     mates = [m for m in flankers(world, actor) if m != actor and alive(world, m)]
     if not mates:
         return False
-    for foe in foes:
+    for foe in foes(world, actor):
         space = squares(world, foe)
         if not space or min(distance(dest, s) for s in space) > 1:
             continue        # not adjacent from `dest`, so no flank to offer
@@ -564,9 +619,9 @@ def sets_up_flank(world: Any, actor: int, dest: Any) -> bool:
 def _would_be_flanked(world: Any, actor: int, dest: Any) -> bool:
     """Would two enemies flank `actor` at `dest`?"""
     space = frozenset({dest})
-    foes = [e for e in enemies(world, actor) if alive(world, e)]
-    for i, one in enumerate(foes):
-        for other in foes[i + 1:]:
+    near = foes(world, actor)
+    for i, one in enumerate(near):
+        for other in near[i + 1:]:
             for a in squares(world, one):
                 for b in squares(world, other):
                     if world.grid.flanks(a, b, space):
@@ -601,14 +656,17 @@ def _cover_from_enemies(world: Any, actor: int, where: Any) -> int:
     from three of four is no cover at all against the fourth, and taking the
     maximum would score that square as though it were safe.
     """
+    key = (id(world), _round(world), actor, where)
+    hit = _COVER.get(key)
+    if hit is not None:
+        return hit
     worst: int | None = None
-    for foe in enemies(world, actor):
-        if not alive(world, foe):
-            continue
+    for foe in foes(world, actor):
         for sq in squares(world, foe):
             got = int(world.grid.cover(sq, where))
             worst = got if worst is None else min(worst, got)
-    return worst or 0
+    _COVER[key] = worst or 0
+    return _COVER[key]
 
 
 def doctrine_features(
@@ -619,9 +677,11 @@ def doctrine_features(
     mine = world.get(actor, Side)
     here = _square_of(world, actor)
 
-    # -- threat removal, hit points included ---------------------------------
+    # -- threat removal, in rounds: hit points and control in one currency ----
     removed = 0.0
+    gained_hp = 0.0
     if action.ref:
+        laid = T.row_effects(world, actor, action.ref)
         for t in action.targets:
             theirs = world.get(t, Side)
             if t == actor or mine is None or theirs is None:
@@ -631,17 +691,32 @@ def doctrine_features(
             health = world.get(t, Health)
             if health is None or health.hp <= 0:
                 continue
-            dealt = T.row_damage(world, actor, action.ref)
-            share = min(1.0, dealt / health.hp)
-            removed += share * T.threat(world, t)
+            # **Rounds of damage denied, which is what makes control comparable
+            # with killing.** Camille's rubric: a kill takes all three rounds, an
+            # end-of-next-turn immobilise on a creature that cannot then reach
+            # anybody takes one, save-ends takes 1.8 because a save is 55%.
+            dealt = T.expected_vs(world, actor, action.ref, t)
+            rounds = min(1.0, dealt / health.hp) * T.ROUNDS
+            rounds += T.denial(world, t, laid)
+            # Capped at the window, so overkill and a stack of conditions cannot
+            # between them remove more than the creature had to give.
+            removed += min(rounds, float(T.ROUNDS)) * T.threat(world, t) / T.ROUNDS
+            # The other sign: an effect that makes it easier for the party to hit
+            # does not reduce its damage, so `denial` cannot see it at all.
+            gained_hp += T.enabled(world, t, laid)
     if removed:
         f["threat_removed"] = removed
+    if gained_hp:
+        other = Team.ENEMY if mine is not None and mine.team is Team.PC else Team.PC
+        theirs_pool = T.pool(world, other)
+        if theirs_pool:
+            f["party_enabled"] = gained_hp / theirs_pool
 
     # -- position, at the square this action would leave us in ---------------
     dest = action.dest if action.dest is not None else here
     if dest is not None and here is not None:
-        foes = [e for e in enemies(world, actor) if alive(world, e)]
-        if foes and fights_in_melee(world, actor):
+        near = foes(world, actor)
+        if near and fights_in_melee(world, actor):
             # **Only where a flank is worth something to *this* action.** `dest`
             # falls back to the square the creature already occupies, so scoring
             # this on every action gave a flat bonus for *standing* in a flank --
@@ -655,7 +730,7 @@ def doctrine_features(
             #   - attacking a creature this creature is flanking, which is the
             #     +2 actually being spent.
             if dest != here:
-                took = any(_would_flank(world, actor, dest, e) for e in foes)
+                took = any(_would_flank(world, actor, dest, e) for e in near)
                 f["takes_flank"] = float(took)
                 # Only when the flank is not already there to be taken: a square
                 # that flanks *and* sets one up would otherwise be paid twice for
@@ -669,7 +744,7 @@ def doctrine_features(
                 # creature collected it, which is the same leak as `end` on a
                 # smaller scale.
                 f["takes_flank"] = float(
-                    any(t in foes and flanked_by(world, t, actor)
+                    any(t in near and flanked_by(world, t, actor)
                         for t in action.targets)
                 )
             f["becomes_flanked"] = float(_would_be_flanked(world, actor, dest))
@@ -726,6 +801,91 @@ def doctrine_features(
     return f
 
 
+#: Action kinds that put the creature in a new square.
+_STEPS = ("move", "run", "shift", "charge", "teleport")
+
+#: How many destinations survive pruning. 16 against the ~210 `legal` offers, which
+#: is where the cost of a turn actually is.
+KEEP = 16
+
+
+def best_reach(world: Any, actor: int) -> int:
+    """How far this creature's longest usable attack reaches."""
+    from .components import Powers
+
+    known = world.get(actor, Powers)
+    if known is None:
+        return 1
+    far = 1
+    for ref in known.known:
+        p = get(ref)
+        if p is None or p.attack is None or p.reach is None:
+            continue
+        if known.available(ref):
+            far = max(far, p.reach.size)
+    return far
+
+
+def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
+    """Camille's rule: only score destinations that could matter.
+
+    **This is where a turn's cost is, not in the scoring.** `actions.legal` offers
+    every reachable square -- measured, 210 of a creature's 226 options are a `move`
+    or a `run` -- and scoring all of them was 15,155 evaluations for one fight. Most
+    are squares no creature would ever want.
+
+    So, Camille's rule, and it prunes for *quality* as much as for speed:
+
+    * a creature that fights in melee wants to end up **adjacent to something**, and
+      only if no square does that is approaching worth considering;
+    * one that does not wants to be **out of reach but in range** -- not adjacent,
+      because that hands over an opportunity attack, and not so far that it cannot
+      shoot.
+
+    Two things are deliberately kept beyond that rule. A hurt creature keeps its
+    retreat, because `LinearPolicy.decide` has always backed away below a third of
+    its hit points and pruning that away would silently remove the behaviour. And
+    if the rule matches nothing, the closest approaches are kept, so a creature is
+    never left with no way to move at all.
+
+    Returns the destinations worth scoring. Ties break on `str` so a seed replays.
+    """
+    from .grid import distance
+
+    near = foes(world, actor)
+    if not near or len(moves) <= KEEP:
+        return moves
+    melee = fights_in_melee(world, actor)
+    reach = best_reach(world, actor)
+
+    def gap(sq: Any) -> int:
+        return min(distance(sq, _square_of(world, f) or sq) for f in near)
+
+    good: list[Action] = []
+    ranked: list[tuple[int, str, Action]] = []
+    for a in moves:
+        g = gap(a.dest)
+        if melee:
+            if g <= 1:
+                good.append(a)
+        elif 1 < g <= reach:
+            good.append(a)
+        ranked.append((g, str(a), a))
+    keep = good
+    if not keep:
+        # Nothing satisfies the rule, so close the distance instead. For a ranged
+        # creature with nothing in range this is the same thing: get in range.
+        ranked.sort(key=lambda t: (t[0], t[1]))
+        keep = [a for _, _, a in ranked[:KEEP]]
+    health = world.get(actor, Health)
+    if health is not None and health.hp < health.max_hp * 0.35:
+        ranked.sort(key=lambda t: (-t[0], t[1]))
+        for _, _, a in ranked[:3]:
+            if a not in keep:
+                keep.append(a)
+    return keep[:KEEP + 3]
+
+
 @dataclass
 class DoctrinePolicy(LinearPolicy):
     """`LinearPolicy` plus threat, position and healing.
@@ -751,6 +911,23 @@ class DoctrinePolicy(LinearPolicy):
         total = self.weigh(f, action)
         d = doctrine_features(world, encounter, actor, action)
         return total + sum(self.doctrine.get(k, 0.0) * v for k, v in d.items())
+
+    def act(
+        self, world: Any, encounter: Encounter, actor: int, options: list[Action]
+    ) -> Action:
+        """Prune the destinations, then score what is left.
+
+        `LinearPolicy.act` scores every option `legal` produced, and nine in ten of
+        them are a square. `worth_standing` is the filter; everything else about
+        choosing is inherited, so the two policies still differ only in how they
+        value an action and in which squares they bother to value.
+        """
+        moves = [a for a in options if a.kind in _STEPS and a.dest is not None]
+        if len(moves) > KEEP:
+            keep = set(map(id, worth_standing(world, actor, moves)))
+            options = [a for a in options
+                       if a.kind not in _STEPS or a.dest is None or id(a) in keep]
+        return super().act(world, encounter, actor, options)
 
     def explain(
         self, world: Any, encounter: Encounter, actor: int, action: Action

@@ -46,57 +46,56 @@ is not the whole of what makes a creature dangerous.
 from __future__ import annotations
 
 import copy
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
-from .components import Defenses, Health, Ident, Powers, Side
+from .components import Defenses, Health, Ident, Position, Powers, Side
+from .durations import When
 from .query import alive, creatures
-from .types import Condition, Defense, Team
+from .types import ActionType, Condition, Defense, Team
 
-#: How much of a creature's threat each condition takes away, as a fraction.
+#: Chance to shrug a save-ends effect at the end of a turn. The save is
+#: `roll.total + bonus >= 10` (`durations.py`), so eleven faces in twenty succeed.
+#: Derived rather than typed so it tracks the rule if the rule ever moves.
+SAVE_CHANCE = 11 / 20
+
+#: How many of the affected creature's turns each duration covers.
 #:
-#: **Every entry is deliberately zero.** Camille's instruction for this pass was
-#: to "set the conditions applied threat modifiers to 0 (so that we can edit them
-#: later)", so the table is the shape of the answer with the numbers left out.
+#: **This replaces `CONDITION_THREAT`, a table of zeros that nothing read.** A
+#: single number per condition could not express the thing it was wanted for --
+#: immobilising a creature already in your face is worth nothing and immobilising
+#: one across the room is worth a round, and that is a fact about the board, not
+#: about the condition. What a condition *does* now comes from `conditions.RULES`
+#: via `from_rules`, and what it is worth is computed. Only the duration is a
+#: lookup, because only the duration is genuinely a property of the effect.
 #:
-#: **Nothing reads it yet.** It is consulted by no code path -- not by
-#: `DoctrinePolicy`, not by anything else -- so it is a declaration of intent and
-#: not a live weight. Said plainly because a table of zeros that *looks* wired is
-#: worse than an absent one: it reads as "conditions are priced at nothing" when
-#: the truth is "conditions are not priced". #263 carries what filling it in needs,
-#: starting with the fact that no `Power` header says which conditions a row
-#: applies, so the signal has to come from running the row.
+#: `SAVE_ENDS` is `1 / SAVE_CHANCE` = 1.82, which is Camille's 1.8x arrived at from
+#: the rule rather than from the number.
 #:
-#: Written out rather than generated so each line is somewhere to put a number.
-#: When they are filled in, note that the ordering is contested --
-#: `notes/DOCTRINE.md` §1 found guide doctrine ranks these by *action denial*
-#: (helpless, then immobilised, then dazed) while this project's own tiers rank
-#: them by geography, and that both are right because they answer different
-#: questions. A single column here cannot express both.
-CONDITION_THREAT: dict[Condition, float] = {
-    Condition.BLINDED: 0.0,
-    Condition.DAZED: 0.0,
-    Condition.DEAFENED: 0.0,
-    Condition.DOMINATED: 0.0,
-    Condition.DYING: 0.0,
-    Condition.GRABBED: 0.0,
-    Condition.HELPLESS: 0.0,
-    Condition.IMMOBILIZED: 0.0,
-    Condition.INSUBSTANTIAL: 0.0,
-    Condition.MARKED: 0.0,
-    Condition.PETRIFIED: 0.0,
-    Condition.PINNED: 0.0,
-    Condition.PRONE: 0.0,
-    Condition.REMOVED: 0.0,
-    Condition.RESTRAINED: 0.0,
-    Condition.SHAPED: 0.0,
-    Condition.ROOTED: 0.0,
-    Condition.SLOWED: 0.0,
-    Condition.SQUEEZING: 0.0,
-    Condition.STUNNED: 0.0,
-    Condition.SURPRISED: 0.0,
-    Condition.UNCONSCIOUS: 0.0,
-    Condition.WEAKENED: 0.0,
+#: **`EOT` is asymmetric and is the entry to understand.** "End of this turn" ends
+#: before the enemy ever acts, so it denies **nothing** -- but a defence debuff
+#: lasting that long still helps every ally who acts later this round. So denial
+#: and enablement read it differently, which is why `ENABLE_ROUNDS` exists below
+#: rather than one table serving both and being wrong for half its callers.
+ROUNDS_OF: dict[When, float] = {
+    When.INSTANT: 0.0,
+    When.EOT: 0.0,
+    When.EONT: 1.0,
+    When.SONT: 1.0,
+    When.EOTNT: 1.0,
+    When.SOTNT: 1.0,
+    When.SAVE_ENDS: 1 / SAVE_CHANCE,
+    When.ENCOUNTER: 3.0,
+    When.STANCE: 3.0,
+    When.SUSTAIN: 3.0,
 }
+
+#: The same durations, counted in *party* turns, for an effect that helps us
+#: rather than hindering them. `EOT` is half a round: the allies who have not yet
+#: acted this round get the benefit and the ones who already have do not.
+ENABLE_ROUNDS: dict[When, float] = {**ROUNDS_OF, When.EOT: 0.5}
+
 
 #: How many rows make up "best case over three rounds".
 ROUNDS = 3
@@ -104,7 +103,7 @@ ROUNDS = 3
 #: Keyed on the board and the creature, because a build does not change during a
 #: fight. Spending a power does not change this figure either -- "best case" is
 #: about what the creature can do, not what it has left.
-_CACHE: dict[tuple[int, int], float] = {}
+_CACHE: dict[tuple[int, int, int], float] = {}
 
 
 def clear() -> None:
@@ -117,11 +116,9 @@ def clear() -> None:
     _CACHE.clear()
     _ROWS.clear()
     _BOARDS.clear()
-
-
-def condition_threat(cond: Condition) -> float:
-    """The share of a creature's threat that `cond` removes. Currently zero."""
-    return CONDITION_THREAT.get(cond, 0.0)
+    _EFFECTS.clear()
+    _ROUND.clear()
+    _DENIED.clear()
 
 
 def _level_of(world: Any, eid: int) -> int:
@@ -222,6 +219,7 @@ def raw(world: Any, eid: int) -> float:
         return 0.0
     scored: list[float] = []
     for ref in known.known:
+        scrub(w, me, foe)      # see `scrub`: without it each row inherits the last
         try:
             got = float(expected(w, me, ref, foe))
         except Exception:
@@ -244,15 +242,48 @@ _ROWS: dict[tuple[int, int, str], float] = {}
 _BOARDS: dict[tuple[int, int], Any] = {}
 
 
+#: Where `board` stands the two creatures. `scrub` puts them back.
+HOME = ((4, 6), (5, 6))
+
+
+def scrub(w: Any, me: int, foe: int) -> None:
+    """Put a measuring board back the way `board` left it.
+
+    **Without this every row is measured on the wreckage of the last one.**
+    `expect.expected` restores hit points after each path and nothing else, so a
+    row that marks the target, knocks it prone or lays a penalty on it leaves that
+    standing -- and every row measured afterwards is priced against a weakened
+    creature. The board is cached per caster, so this applied to all of them.
+
+    Measured on a level-5 fighter's 37 rows, shared board against a fresh one:
+    7 rows differed and **every difference was an overstatement**, the worst
+    8.80 against 6.35, and its best row read 19.73 instead of 18.57. Order
+    dependent too, since it depended on which row happened to be measured first.
+
+    `Effects.forget` is the right tool rather than clearing `live` by hand: it
+    runs each effect's `on_end` and drops its bus subscriptions, so nothing is
+    left watching. Running `on_end` on a board kept for measuring is harmless.
+    """
+    from .movement import place
+
+    w.effects.forget(me, "measured")
+    w.effects.forget(foe, "measured")
+    for who in (me, foe):
+        health = w.get(who, Health)
+        if health is not None:
+            health.hp = health.max_hp
+    # A push or a slide moves them, and the next row would then be measured at a
+    # different range -- which silently changes whether it can reach at all.
+    place(w, me, HOME[0])
+    place(w, foe, HOME[1])
+
+
 def row_damage(world: Any, eid: int, ref: str) -> float:
     """What one row of `eid`'s would deal to the baseline opponent, in hp.
 
-    The damage half of `threat_removed`. Against the **baseline** rather than the
-    creature actually being aimed at, which is the approximation to know about:
-    accuracy against the real target is carried separately by the `hit_chance`
-    feature, so this is a measure of how hard the row hits and not of whether it
-    lands. Pricing it against the live target would be the better number and is
-    not available -- `expect.expected` would wound that target to find out.
+    How hard the row hits, not whether it lands against any particular creature:
+    `expected_vs` is what scales it to a real target. Against the baseline so that
+    two rows, and two creatures, are comparable.
     """
     from .expect import expected
 
@@ -268,12 +299,493 @@ def row_damage(world: Any, eid: int, ref: str) -> float:
             return 0.0
         _BOARDS[(id(world), eid)] = made
     w, me, foe = made
+    scrub(w, me, foe)
     try:
         out = float(expected(w, me, ref, foe))
     except Exception:
         out = 0.0
     _ROWS[key] = out
     return out
+
+
+#: Conditions a creature clears itself, whatever the printed duration says.
+#:
+#: Prone is modelled here as lasting to the end of the encounter, which is right --
+#: you lie there until you stand -- and **wrong for scoring**, because standing is
+#: a move action the creature takes on its very next turn. Read literally it would
+#: price a knockdown at three rounds of denial. One round is what it actually buys.
+SELF_CLEARING = {Condition.PRONE}
+
+
+def _shortened(when: When, conds: Sequence[Condition]) -> When:
+    """Cut a duration the target can end on its own turn down to one turn."""
+    if ROUNDS_OF.get(when, 0.0) > 1.0 and any(c in SELF_CLEARING for c in conds):
+        return When.EOTNT
+    return when
+
+
+@dataclass(frozen=True)
+class Laid:
+    """One effect a row puts on its target, as the scorer needs to read it."""
+
+    when: When
+    conditions: tuple[Condition, ...] = ()
+    #: Modifiers the effect laid **on the target**, not on the caster.
+    mods: tuple[Any, ...] = ()
+    #: True when the effect makes the target grant combat advantage, from any of
+    #: its conditions. Pulled out because it is the commonest enablement there is.
+    grants_ca: bool = False
+    #: Defence penalties the effect imposes, by `Defense`. The other half of
+    #: enablement: this is the printed "-2 to AC" that scored nothing at all.
+    defences: tuple[tuple[Any, int], ...] = ()
+
+
+#: Per (board, caster, row), what that row lays. Cached because it costs a Ledger
+#: run, and a row does the same thing every time it is used.
+_EFFECTS: dict[tuple[int, int, str], tuple[Laid, ...]] = {}
+
+
+def row_effects(world: Any, eid: int, ref: str) -> tuple[Laid, ...]:
+    """What this row would put on its target: conditions, durations, modifiers.
+
+    **No `Power` header declares any of this.** The header carries `attack`,
+    `damage`, `reach`, `target`, `keywords` and `requires`, and nothing about
+    conditions -- so `immobilized` is not readable off the card at any price. The
+    row has to be run and the result observed, which is what the scratch board
+    exists for: `Ledger` lets conditions land for real, so after one run the
+    answer is sitting in `world.effects.of(target)`.
+
+    Two things it cannot see, and both are in the figure rather than beside it:
+
+    * **`Mod.when` is a closure** and its own docstring calls it
+      "un-introspectable", so a modifier that applies only in some circumstance
+      reads here as though it always does. Over-counts.
+    * A condition applied on a **miss**, or down a branch the dictated hit did not
+      take, is never observed. Under-counts.
+
+    `Rules` is read for `grants_ca` and `defences` so that the enablement half --
+    a creature made easier for the whole party to hit -- is available without the
+    caller knowing which conditions imply it.
+    """
+    from .conditions import RULES
+    from .expect import expected
+
+    key = (id(world), eid, ref)
+    got = _EFFECTS.get(key)
+    if got is not None:
+        return got
+    made = _BOARDS.get((id(world), eid))
+    if made is None:
+        made = board(world, eid)
+        if made is None:
+            _EFFECTS[key] = ()
+            return ()
+        _BOARDS[(id(world), eid)] = made
+    w, me, foe = made
+    scrub(w, me, foe)
+    try:
+        expected(w, me, ref, foe)
+    except Exception:
+        _EFFECTS[key] = ()
+        return ()
+    out: dict[tuple, Laid] = {}
+    for eff in w.effects.of(foe):
+        conds = tuple(eff.conditions)
+        mods = tuple(m for who, m in eff.mods if who == foe)
+        ca = False
+        defs: dict[Any, int] = {}
+        for cond in conds:
+            r = RULES.get(cond)
+            if r is None:
+                continue
+            ca = ca or r.grants_ca
+            for d, v in r.defences.items():
+                defs[d] = defs.get(d, 0) + v
+        for m in mods:
+            what = getattr(m, "what", "")
+            if isinstance(what, Defense):
+                defs[what] = defs.get(what, 0) + m.value
+        laid = Laid(when=_shortened(eff.when, conds), conditions=conds, mods=mods,
+                    grants_ca=ca, defences=tuple(sorted(defs.items())))
+        # **Deduplicated, because `expected` runs the body once per outcome path**
+        # and each run lays the effect again. A row that rolls twice left four
+        # identical immobilisations standing, and counting them would have priced
+        # one condition as four.
+        out.setdefault(
+            (laid.when, laid.conditions, laid.defences, laid.grants_ca), laid)
+    scrub(w, me, foe)
+    _EFFECTS[key] = tuple(out.values())
+    return _EFFECTS[key]
+
+
+def _baseline_hit(world: Any, eid: int, ref: str) -> float | None:
+    """What this row's chance to hit the baseline opponent is.
+
+    The denominator in `expected_vs`. Taken from the same scratch board the damage
+    figure came from, so the two are consistent with each other.
+    """
+    from .dsl import get
+
+    made = _BOARDS.get((id(world), eid))
+    if made is None:
+        made = board(world, eid)
+        if made is None:
+            return None
+        _BOARDS[(id(world), eid)] = made
+    w, me, foe = made
+    p = get(ref)
+    return p.hit_chance(w, me, foe) if p is not None else None
+
+
+def expected_vs(world: Any, eid: int, ref: str, target: int,
+                *, attack: int = 0) -> float:
+    """What one row would deal to a **real** target, in hit points.
+
+    `row_damage` prices a row against the baseline, which is what makes two rows
+    comparable and is not what the target in front of you is. Rescaling by the
+    ratio of live to baseline hit chance gives the live figure without a second
+    Ledger run, because expected damage is proportional to the chance of landing.
+
+    `attack` shifts the attacker's roll, which is how a penalty is priced -- a
+    point is a twentieth of the die. Clamped, because a hit chance does not go on
+    falling past the automatic miss: a natural 1 always misses and a 20 always
+    hits, so the reachable range is 1/20 to 19/20 and a linear shift outside it
+    would invent damage or forgive it.
+
+    A row with no attack line at all is damage that does not need to land, so it
+    is returned unscaled rather than being scaled by a hit chance of `None`.
+    """
+    from .dsl import get
+
+    dmg = row_damage(world, eid, ref)
+    if dmg <= 0:
+        return 0.0
+    p = get(ref)
+    live = p.hit_chance(world, eid, target) if p is not None else None
+    base = _baseline_hit(world, eid, ref)
+    if live is None or base is None or base <= 0:
+        return dmg
+    if attack:
+        live = min(0.95, max(0.05, live + attack / 20))
+    return dmg * live / base
+
+
+@dataclass(frozen=True)
+class Pinned:
+    """What something stops a creature doing, in the terms the scorer needs.
+
+    Assembled by `from_rules` out of `conditions.Rules` and any `Mod` an effect
+    laid, so that the worth of a condition is **derived from what it mechanically
+    does** rather than from a number somebody typed next to its name. That is the
+    whole reason `CONDITION_THREAT` is gone: a single figure per condition cannot
+    say that immobilising a creature already in your face is worth nothing while
+    immobilising one across the room is worth a round.
+    """
+
+    cannot_act: bool = False
+    cannot_move: bool = False
+    no_standard: bool = False
+    speed_cap: int | None = None
+    halve_speed: bool = False
+    weakened: bool = False
+    #: Penalty to the creature's own attack rolls, as a number of faces.
+    attack: int = 0
+
+
+def from_rules(conds: Sequence[Condition], mods: Sequence[Any] = ()) -> Pinned:
+    """Fold conditions and modifiers into one `Pinned`.
+
+    `conditions.RULES` is the authority on what each condition does -- it is what
+    the kernel itself enforces, so a scorer reading it cannot disagree with play.
+    A `Mod` whose `what` is `"attack"` is the printed attack debuff and is added on
+    top, since a power may impose one without any named condition.
+    """
+    from .conditions import RULES
+
+    out = Pinned()
+    for cond in conds:
+        r = RULES.get(cond)
+        if r is None:
+            continue
+        cap = out.speed_cap
+        if r.speed_cap is not None:
+            cap = r.speed_cap if cap is None else min(cap, r.speed_cap)
+        out = Pinned(
+            cannot_act=out.cannot_act or r.cannot_act,
+            cannot_move=out.cannot_move or r.cannot_move,
+            no_standard=out.no_standard or r.no_standard,
+            speed_cap=cap,
+            halve_speed=out.halve_speed or r.halve_speed,
+            weakened=out.weakened or r.weakened,
+            attack=out.attack + r.attack,
+        )
+    extra = sum(m.value for m in mods if getattr(m, "what", "") == "attack")
+    if extra:
+        out = Pinned(**{**out.__dict__, "attack": out.attack + extra})
+    return out
+
+
+def _speed_under(world: Any, eid: int, pin: Pinned | None) -> int:
+    """How far the creature may move, given what is on it."""
+    from .components import Movement
+
+    move = world.get(eid, Movement)
+    speed = move.speed if move is not None else 6
+    if pin is None:
+        return speed
+    if pin.cannot_move:
+        return 0
+    if pin.halve_speed:
+        speed //= 2
+    if pin.speed_cap is not None:
+        speed = min(speed, pin.speed_cap)
+    return speed
+
+
+#: Per (board, round, creature, what is on it, whether reach is ignored). Keyed on
+#: the round because this is a question about the board and the board moves; keyed
+#: on the `Pinned` because the whole model asks it twice, once free and once held.
+#:
+#: **This is the difference between a usable scorer and an unusable one.** `denial`
+#: asks for two of these per candidate target, and a turn scores a few hundred
+#: candidate actions, so uncached it recomputed the same figure thousands of times:
+#: one fight went from 13s under `LinearPolicy` to 25s, and an 80-seed comparison
+#: from 25 minutes to about two hours.
+_ROUND: dict[tuple[int, int, int, Pinned | None, bool], float] = {}
+
+#: Per (board, round, target, the effects asked about). Same reasoning.
+_DENIED: dict[tuple[int, int, int, tuple], float] = {}
+
+
+def per_round(world: Any, eid: int, pin: Pinned | None = None,
+              *, anywhere: bool = False) -> float:
+    """The best damage this creature could do in one round, in hit points.
+
+    **Against the best target it can reach after moving**, which is Camille's rule
+    and the thing that makes a denial computable: a creature that cannot reach
+    anybody has no round to lose, and one already in contact loses nothing by
+    being held still.
+
+    Reach is approximated as `distance <= speed + the row's own reach` rather than
+    by walking `movement.reachable` for every candidate square. The exact answer is
+    available and costs a Dijkstra per creature per turn, and a square of error
+    does not change which target is the best one. Obstacles are the case it gets
+    wrong: a creature penned behind a wall reads as able to reach.
+
+    An area row is worth what it catches, so its figure is multiplied by how many
+    enemies fall inside it -- that is a real part of how dangerous a creature is
+    and the reason a controller is not scored like a brute.
+
+    `anywhere` drops the reach test, answering "what does a round look like once it
+    is standing where it wants to be". That is `potential`, the denominator, and it
+    **must come from this same function**: measuring the denominator on the scratch
+    board instead made it 8.8 against a live 30.8, so the ratio was nonsense and
+    every partial denial -- weakened, prone, an attack penalty -- came out as zero.
+    """
+    if pin is not None and pin.cannot_act:
+        return 0.0
+    key = (id(world), getattr(world, "round", 0), eid, pin, anywhere)
+    hit = _ROUND.get(key)
+    if hit is not None:
+        return hit
+    got = _per_round(world, eid, pin, anywhere=anywhere)
+    _ROUND[key] = got
+    return got
+
+
+def _per_round(world: Any, eid: int, pin: Pinned | None,
+               *, anywhere: bool) -> float:
+    """`per_round` without the memo. Split so the cache has one entry point."""
+    from .dsl import get
+    from .grid import distance
+
+    known = world.get(eid, Powers)
+    me = world.get(eid, Position)
+    if known is None or me is None:
+        return 0.0
+    mine = world.get(eid, Side)
+    if mine is None:
+        return 0.0
+    foes = [f for f in creatures(world)
+            if alive(world, f) and (s := world.get(f, Side)) is not None
+            and s.team is not mine.team]
+    if not foes:
+        return 0.0
+    speed = _speed_under(world, eid, pin)
+    best = 0.0
+    for ref in known.known:
+        p = get(ref)
+        if p is None or p.reach is None or p.reach.kind == "personal":
+            continue
+        if not known.available(ref):
+            continue
+        if pin is not None and pin.no_standard and p.action is ActionType.STANDARD:
+            continue
+        span = max(1, p.reach.size) + speed
+        area = p.reach.kind in ("close_burst", "close_blast", "area_burst", "wall")
+        for target in foes:
+            them = world.get(target, Position)
+            if them is None:
+                continue
+            if not anywhere and distance(me.square, them.square) > span:
+                continue
+            got = expected_vs(world, eid, ref, target,
+                              attack=pin.attack if pin else 0)
+            if area:
+                # Everything else it would catch, standing where it stands. Close
+                # enough: the origin it would choose is not known here.
+                got *= sum(
+                    1 for other in foes
+                    if (o := world.get(other, Position)) is not None
+                    and (anywhere or distance(me.square, o.square)
+                         <= max(1, p.reach.size) + speed)
+                )
+            if pin is not None and pin.weakened:
+                got /= 2        # `Rules.weakened`: the damage it deals is halved
+            best = max(best, got)
+    return best
+
+
+def potential(world: Any, eid: int) -> float:
+    """Its best round once it has closed, in hit points. The denominator.
+
+    **Not what it can reach this instant**, which is the distinction that took two
+    attempts to get right. Using this round's reach as the denominator made an
+    immobilise on a creature standing next to a character read as denying 58% of a
+    round -- because the thing it lost was the chance to *reposition* to something
+    better -- and made an immobilise on a creature out of everybody's reach deny
+    nothing, because it had nothing to lose this round. Both are wrong against the
+    doctrine: §1 says holding a creature already in contact is worth nothing, and
+    holding one at a distance plainly delays its arrival.
+
+    So the denominator is reachability-free -- what the creature does in a round
+    when it is where it wants to be -- and reachability lives entirely in the
+    numerator, `per_round(target, pin)`, which is what it can manage from where it
+    actually stands under what it is actually suffering.
+    """
+    key = (id(world), getattr(world, "round", 0), eid)
+    got = _CACHE.get(key)
+    if got is None:
+        got = _CACHE[key] = per_round(world, eid, None, anywhere=True)
+    return got
+
+
+def denial(world: Any, target: int, laid: Sequence[Laid]) -> float:
+    """How many rounds of `target`'s own damage these effects take away.
+
+    The spec, and every case in it falls out of one subtraction rather than a table:
+
+        free   = potential(target)                     a round, once it has closed
+        pinned = per_round(target, from_rules(...))    what it manages where it is
+        rounds = ROUNDS_OF[when] * (1 - pinned / free)
+
+    | immobilised, melee only, nobody in reach | `pinned` 0, so a whole round |
+    | immobilised, already adjacent            | `pinned` = `free`, so **nothing** |
+    | immobilised, holding a ranged attack     | the melee/ranged differential |
+    | stunned, petrified, dying                | `cannot_act`, so the whole round |
+    | attack debuff of N                       | hit chance falls N/20, pro rata |
+    | weakened                                 | damage halved, so half a round |
+    | slowed                                   | bites only when the target is far |
+
+    The second and third rows are the point: `notes/DOCTRINE.md` §1 calls the
+    adjacency case the most load-bearing distinction in the notes, and a single
+    number per condition could not express either of them.
+
+    Effects are taken as the **best** of what is laid rather than the sum, because
+    two conditions that both stop a creature acting do not stop it twice.
+    """
+    key = (id(world), getattr(world, "round", 0), target,
+           tuple((o.when, o.conditions) for o in laid))
+    hit = _DENIED.get(key)
+    if hit is not None:
+        return hit
+    got = _denial(world, target, laid)
+    _DENIED[key] = got
+    return got
+
+
+def _denial(world: Any, target: int, laid: Sequence[Laid]) -> float:
+    """`denial` without the memo."""
+    free = potential(world, target)
+    if free <= 0:
+        return 0.0        # nothing to deny; it has no output to take away
+    best = 0.0
+    for one in laid:
+        turns = ROUNDS_OF.get(one.when, 0.0)
+        if not turns:
+            continue
+        pin = from_rules(one.conditions, one.mods)
+        if pin == Pinned():
+            continue      # the effect does nothing to what it can do
+        pinned = per_round(world, target, pin)
+        lost = max(0.0, 1.0 - pinned / free)
+        best = max(best, min(float(ROUNDS), turns) * lost)
+    return best
+
+
+def enabled(world: Any, target: int, laid: Sequence[Laid]) -> float:
+    """How many rounds of extra *party* damage these effects buy, in hp.
+
+    The other sign, and it was worth exactly nothing before. Making a creature
+    easier to hit does not reduce its damage, so `denial` cannot see it -- but a
+    -2 to a target's AC is about ten points of hit chance on every attack the party
+    makes at it, and combat advantage is the same thing by another route.
+
+    Returned in **hit points of party damage**, not as a share, because its
+    denominator is the enemy's pool where denial's is ours. The caller divides.
+
+    Assumes the party will actually attack the creature that was made vulnerable.
+    `notes/DOCTRINE.md` §7 records focus fire as the assumed party doctrine, so
+    that is consistent with the rest of the scorer -- but it is an assumption about
+    behaviour and not a fact about the board.
+    """
+    mine = world.get(target, Side)
+    if mine is None:
+        return 0.0
+    ours = [a for a in creatures(world)
+            if alive(world, a) and (s := world.get(a, Side)) is not None
+            and s.team is not mine.team]
+    if not ours:
+        return 0.0
+    best = 0.0
+    for one in laid:
+        turns = ENABLE_ROUNDS.get(one.when, 0.0)
+        if not turns:
+            continue
+        # Combat advantage is +2, and a defence penalty is its own size. Both are
+        # a number of faces on the die, so both convert the same way.
+        faces = 2.0 if one.grants_ca else 0.0
+        faces += float(-min((v for _, v in one.defences), default=0))
+        if faces <= 0:
+            continue
+        for ally in ours:
+            out = per_round(world, ally)
+            if out <= 0:
+                continue
+            hit = _best_hit(world, ally, target)
+            if hit is None or hit <= 0:
+                continue
+            after = min(0.95, hit + faces / 20)
+            best = max(best, min(float(ROUNDS), turns) * out * (after - hit) / hit)
+    return best
+
+
+def _best_hit(world: Any, eid: int, target: int) -> float | None:
+    """This creature's best chance to hit that one, over the rows it has."""
+    from .dsl import get
+
+    known = world.get(eid, Powers)
+    if known is None:
+        return None
+    best: float | None = None
+    for ref in known.known:
+        p = get(ref)
+        if p is None or not known.available(ref):
+            continue
+        got = p.hit_chance(world, eid, target)
+        if got is not None and (best is None or got > best):
+            best = got
+    return best
 
 
 def pool(world: Any, of: Team) -> int:
@@ -297,10 +809,7 @@ def threat(world: Any, eid: int) -> float:
     """
     if not alive(world, eid):
         return 0.0
-    key = (id(world), eid)
-    got = _CACHE.get(key)
-    if got is None:
-        got = _CACHE[key] = raw(world, eid)
+    got = potential(world, eid) * ROUNDS
     side = world.get(eid, Side)
     if side is None:
         return 0.0

@@ -99,6 +99,7 @@ from combat_engine.engine import (
     install,
     take_turn,
 )
+from combat_engine.engine import doctrine as doctrine_cache
 from combat_engine.engine import threat as threat_cache
 from combat_engine.engine.events import AttackRolled, OpportunityWindow
 from combat_engine.engine.types import Team
@@ -143,6 +144,7 @@ def one(seed: int, level: int, cap: int,
     # `threat` keys its cache on that -- so a stale figure could be read as this
     # board's. Cleared per fight rather than trusted.
     threat_cache.clear()
+    doctrine_cache.forget()
     policy = POLICIES[policy_name]()
     install(world, encounter, {}, default=policy)
     if tally is not None:

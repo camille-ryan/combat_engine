@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import fight
 from combat_engine.engine import DoctrinePolicy, Ident, install, take_turn
 from combat_engine.engine import threat as T
-from combat_engine.engine.doctrine import DOCTRINE, doctrine_features
+from combat_engine.engine.doctrine import DOCTRINE, doctrine_features, forget
 from combat_engine.engine.query import alive, creatures
 
 
@@ -75,6 +75,7 @@ def threat_table(level: int, seed: int) -> None:
     world, enc = fight.build(seed, level, "full")
     enc.start()
     T.clear()
+    forget()
     print(f"\nthreat at level {level}, seed {seed} "
           f"-- best case over {T.ROUNDS} rounds")
     print(f"  {'creature':<24} {'role':<11} {'raw hp':>7} {'share':>7}")
@@ -98,6 +99,68 @@ def threat_table(level: int, seed: int) -> None:
                   f"  -- no rows to attack with, or none evaluable")
 
 
+def rounds_table(level: int, seed: int) -> None:
+    """What each condition is worth, in rounds, against every monster on a board.
+
+    **The acceptance test for the rounds model**, and the reason it is here rather
+    than in a one-off probe: these are Camille's own figures and they should be
+    re-checkable after any change to `engine/threat.py`.
+
+        kill                                3 rounds
+        EoNT immobilise, cannot then reach   1
+        save-ends immobilise, same           1.8   (a save is 55%, so 1/0.55)
+        immobilise a creature in contact     well under 1
+        immobilise one with a ranged backup  the melee/ranged differential, often 0
+        stun                                 1     (cannot act at all)
+        weakened                             0.5   (its damage is halved)
+        prone                                ~0.1  (-2 to attack, hit-chance weighted)
+
+    Each monster is measured twice, standing next to a character and four squares
+    off, because the whole point of the model is that the same condition is worth
+    different amounts in those two places.
+    """
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.types import Condition
+
+    world, enc = fight.build(seed, level, "full")
+    enc.start()
+    pcs = [e for e in creatures(world)
+           if (world.get(e, Ident).ref if world.get(e, Ident) else "").startswith("c:")]
+    mons = [f for f in creatures(world)
+            if (world.get(f, Ident).ref if world.get(f, Ident) else "").startswith("m")]
+    if not pcs or not mons:
+        print("  no board to measure")
+        return
+    sq = world.get(pcs[0], Position).square
+    print(f"\nrounds of damage denied, level {level}, seed {seed}")
+    print(f"  {'monster':<22} {'where':<9} {'pot':>5} {'immob':>6} {'save':>6} "
+          f"{'stun':>5} {'weak':>5} {'prone':>6}  attacks with")
+    for mon in mons:
+        known = world.get(mon, Powers)
+        kinds = sorted({p.reach.kind for r in (known.known if known else ())
+                        if (p := get(r)) is not None and p.attack is not None
+                        and p.reach is not None})
+        ident = world.get(mon, Ident)
+        name = f"{ident.ref if ident else '?'} ({(ident.role if ident else '') or '-'})"
+        for gap, where in ((1, "adjacent"), (4, "4 away")):
+            place(world, mon, (sq[0] + gap, sq[1]))
+            T.clear()
+            forget()
+
+            def denied(when: T.When, cond: Condition, m: int = mon) -> float:
+                return T.denial(world, m, [T.Laid(when=when, conditions=(cond,))])
+
+            print(f"  {name:<22} {where:<9} {T.potential(world, mon):>5.1f} "
+                  f"{denied(T.When.EONT, Condition.IMMOBILIZED):>6.2f} "
+                  f"{denied(T.When.SAVE_ENDS, Condition.IMMOBILIZED):>6.2f} "
+                  f"{denied(T.When.EONT, Condition.STUNNED):>5.2f} "
+                  f"{denied(T.When.EONT, Condition.WEAKENED):>5.2f} "
+                  f"{denied(T.When.EOTNT, Condition.PRONE):>6.2f}  "
+                  f"{'+'.join(kinds)}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -106,19 +169,26 @@ def main() -> int:
     ap.add_argument("--rounds", type=int, default=30)
     ap.add_argument("--threat", action="store_true",
                     help="print the threat table and stop")
+    ap.add_argument("--rounds-table", action="store_true",
+                    help="what each condition is worth in rounds, and stop")
     args = ap.parse_args()
 
+    if args.rounds_table:
+        rounds_table(args.level, 1)
+        return 0
     if args.threat:
         threat_table(args.level, 1)
         return 0
 
     threat_table(args.level, 1)
+    rounds_table(args.level, 1)
 
     policy = Watched()
     fought = 0
     for seed in range(1, args.seeds + 1):
         world, encounter = fight.build(seed, args.level, "full")
         T.clear()
+        forget()
         install(world, encounter, {}, default=policy)
         encounter.start()
         while not encounter.finished and world.round <= args.rounds:
