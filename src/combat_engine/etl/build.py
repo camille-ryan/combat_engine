@@ -1631,6 +1631,28 @@ def _cross_reference_rest(
                     # above records: refusing leaves the name in the spec as
                     # prose and `leaks.py --specs` goes red, and a leak is
                     # worse than a bad pointer.
+                    # **Ask the ranked index before giving up on a name.**
+                    # `by_word` is keyed on a name's first word, and that word
+                    # is cut with `[A-Za-z']+` -- so `Stone's Endurance` indexes
+                    # under `stone's` and `Stone\u2019s Endurance`, the same name
+                    # with the curly apostrophe the pages actually set, indexes
+                    # under `stone`. Different buckets for one name. The spec's
+                    # own words are cut the same way, so a feat printing the
+                    # curly form reached only the holders of the curly
+                    # spelling -- and where that was a monster's ability and the
+                    # character-side row spelt it straight, the loop never saw
+                    # the row it wanted and opaqued the name below.
+                    #
+                    # `by_name` already normalises both spellings and already
+                    # ranks a power over a feature over a stat block. Consulting
+                    # it here is what makes that ranking reach this decision.
+                    # 25 names are written both ways and 10 of those split a
+                    # monster from a character: `Stone's Endurance` on a warden
+                    # feat, and `Hunter's Quarry`, `Nature's Wrath` and
+                    # `Warlock's Curse` over core class features.
+                    ranked = by_name.get(_low(name), "")
+                    if _rank(ranked) > _rank(other):
+                        other = ranked
                     foreign = re.match(r"^(m\d+)a\d+$", other)
                     stranger = bool(
                         foreign and own_creature

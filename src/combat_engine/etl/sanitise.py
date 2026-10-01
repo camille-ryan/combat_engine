@@ -74,6 +74,20 @@ RULES_TERMS = {
     # mechanics, and several items are named after the slot they fill --
     # so without these, scrubbing takes the word "neck" out of a neck
     # item's own rules and the line stops meaning anything.
+    # Mechanics a stat block is routinely *named after*, which is the same
+    # argument the weapons above make. **205 refs carry one of these as their
+    # printed name** -- 55 "Regeneration", 45 "Threatening Reach", 38
+    # "All-Around Vision", 31 "Insubstantial" -- and without them here the
+    # words were turned into an id wherever they appeared: a feat reading
+    # "You gain regeneration 5 until the end of the encounter" was handed
+    # "You gain x_m5087a1 until the end of the encounter", which says nothing
+    # at all. Camille's rule, and the arithmetic agrees with it: a character
+    # option never references a monster's ability by name.
+    "regeneration", "threatening reach", "all-around vision", "all around vision",
+    "insubstantial", "phasing", "tremorsense", "darkvision", "blindsight",
+    "truesight", "low-light vision", "ongoing damage", "immunity",
+    # Two more weapons, for the reason the list above already gives.
+    "fullblade", "repeating crossbow",
     "enhancement bonus", "item bonus", "critical", "property", "consumable",
     "head slot", "neck slot", "arms slot", "hands slot", "waist slot",
     "feet slot", "ring slot", "wondrous item", "alchemical item",
@@ -594,6 +608,15 @@ def identifies(
     if names_a_race(name, context):
         return True
     if name in rules or name in ALLOWED or _stem(name) in rules:
+        return False
+    # **A mechanic with its value is still a mechanic.** `Regeneration` is in
+    # `RULES_TERMS` and `Regeneration 5` was not, so the words kept being read as
+    # a name: a feat printing "You gain regeneration 5 until the end of the
+    # encounter" was handed "You gain x_m5087a1 ...", which says nothing. The
+    # same shape covers `Resist 10`, `Aura 2` and anything else the books write
+    # as a term followed by a number.
+    bare = re.sub(r"\s+\d+$", "", name)
+    if bare != name and (bare in rules or bare in ALLOWED or _stem(bare) in rules):
         return False
     if " " in name:
         # Function words do not count towards the length: "from the
