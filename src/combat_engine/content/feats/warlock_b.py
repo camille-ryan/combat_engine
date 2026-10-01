@@ -819,18 +819,21 @@ def f2765(c: Cast) -> None:
 
 
 @power("f2127", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.change_dice()",))
+       reach=PERSONAL, target=SELF)
 def f2127(c: Cast) -> None:
-    """Grants the card beside it, `f2127b`, and takes away the racial power
-    that card replaces -- `p1628` is a ref now, so `c.forbid` has something
-    to name and the warlock no longer keeps both.
+    """Grants the card beside it, `f2127b`, takes away the racial power that
+    card replaces, and rolls the curse's damage as d8s.
 
-    The d8s stay dropped: `c.change_dice()`, the same gap f2764 is
-    entirely made of.
+    `p1628` is a ref, so `c.forbid` has something to name and the warlock no
+    longer keeps both.
+
+    The d8s were dropped for as long as the die was a literal closed over
+    inside `extra_damage`. It is asked for now, so this is f2764's line with
+    a different prerequisite in front of it.
     """
     c.grant_row("f2127b", on=c.me, until=When.ENCOUNTER)
     c.forbid("p1628", on=c.me, until=When.ENCOUNTER)
+    c.change_dice("cf:warlock-f4", "1d8")
 
 
 @power("f2127b", level=1, cls="", usage=ENCOUNTER, action=ActionType.MINOR,

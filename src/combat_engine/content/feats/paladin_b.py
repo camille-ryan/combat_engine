@@ -689,12 +689,39 @@ def f2125(c: Cast) -> None:
 
 
 @power("f2126", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_dice()",))
+       reach=PERSONAL, target=SELF)
 def f2126(c: Cast) -> None:
-    """Bigger dice for the other class's own extra damage. Both
-    conditions are readable -- the mark is a relation and so is the
-    curse -- but the dice are a literal inside `features.extra_damage`
-    and nothing outside that row chooses them."""
+    """d10s for the other class's extra damage, against a creature this
+    character has both marked and cursed.
+
+    `extra_damage` reads its die through `c.dice_for` now and passes the
+    creature it hit, which is what makes the narrowing sayable: the gate is
+    handed a context rather than having to find the target itself.
+
+    **Which power laid the mark is not recorded**, so the ref in the printed
+    sentence is honoured by watching for its use rather than by asking the
+    relation. `MARKED_BY` says only that this character marked that creature,
+    and a paladin has other rows that mark; the pair of tests is what makes
+    this exact -- `struck` says the ref was spent on that creature, and
+    `c.marked` says the mark is still that creature's and still this
+    character's. A mark that has since moved fails the second.
+    """
+    me, marked = c.me, set()
+
+    def struck(ev: PowerUsed) -> None:
+        if ev.actor == me and ev.power == MARK:
+            marked.clear()
+            marked.update(ev.targets)
+
+    def both(ctx: dict[str, Any]) -> bool:
+        foe = ctx.get("target")
+        return (
+            foe is not None and foe in marked and c.marked(on=foe)
+            and c.world.relations.holds(Relation.CURSED_BY, me, foe)
+        )
+
+    c.watch(PowerUsed, struck, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.change_dice("cf:warlock-f4", "1d10", when=both)
 
 
 # -- racial, by ref ---------------------------------------------------------
