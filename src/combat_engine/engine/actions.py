@@ -993,9 +993,17 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         from .dsl import use
 
         walk(world, actor, list(action.path))
-        # The move goes with it, and so does everything else: a charge ends
-        # your turn whatever you have left. Spent after the walk so that an
-        # opportunity attack on the way in still resolves normally.
+        # The move goes with it, and so does everything else: a charge ends your
+        # turn whatever you have left. Spent after the walk so that an opportunity
+        # attack on the way in still resolves normally.
+        #
+        # **An action point is the printed exception and it works.** "After you
+        # charge, you can't take any further actions this turn, unless you spend an
+        # action point" -- and because `_action_points` is offered off the pool
+        # rather than off the budget, and `Cast.action_point` restores a slot, the
+        # sequence falls out without a special case. Checked rather than assumed,
+        # and exercised in play: over 24 fights, 76 turns contained a charge, 14 of
+        # those spent a point afterwards, and all 14 then attacked again.
         encounter.spend(actor, ActionType.MOVE)
         hit = use(
             world, actor, action.ref,

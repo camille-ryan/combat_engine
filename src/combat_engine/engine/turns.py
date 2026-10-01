@@ -492,6 +492,19 @@ class Encounter:
             return True
         if self._one_action(eid):
             # Dazed: one action of any kind, so spending it empties the turn.
+            #
+            # **An action point still buys another one, and that is a table ruling
+            # rather than a printed rule.** The condition says one action and the
+            # action point rules say an extra action, and the two were never
+            # reconciled in print -- it is argued both ways and there is no official
+            # answer. Camille's call is that the point works, which is what this
+            # does: the budget is emptied here, `_action_points` is offered off the
+            # pool rather than off the budget, and `Cast.action_point` restores a
+            # slot, so a dazed creature that has acted can spend a point and attack.
+            #
+            # Recorded because it reads like a bug. Checked: dazed, one action
+            # spent, `can_spend(STANDARD)` False, point spent, `can_spend` True and
+            # 14 attacks offered again.
             budget.standard = budget.move = budget.minor = 0
             return True
         # A standard may be spent as a move and a move as a minor, so take the
