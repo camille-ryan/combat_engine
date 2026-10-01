@@ -55,8 +55,21 @@ Three orthogonal axes. Pick one from each that applies.
 git-ignored `localization/`. This is the legal basis of the project: game
 systems are not copyrightable and prose is.
 
-So: never grep the database for a name, never read `localization/`, never
-put a guessed name in a comment, a docstring or a variable.
+The rule binds **what an author sees and what the repo holds**, not what can
+ever be looked at:
+
+* **A name must not enter a tracked file** — not a comment, a docstring, a
+  variable, a commit message, an issue, a column. `scripts/leaks.py` checks
+  both halves and has caught a real one (15 reward titles sitting in
+  `item.slot`). This half is absolute.
+* **A content agent is shown no name, ever.** It writes rows from the
+  mechanics in its spec, which is what keeps the output clean by
+  construction.
+* **The main session may read a name and tell Camille**, in chat. That is
+  not redistribution and it is sometimes the only way to settle a question —
+  "is the database recording this row properly" was answered by reading
+  three range lines, and reading them found two parser bugs and one author's
+  invented number that four narrower probes had each misdiagnosed.
 
 **Search the web for a *mechanic* you do not understand — never for a
 name.** Those are different questions and only the second is forbidden.
