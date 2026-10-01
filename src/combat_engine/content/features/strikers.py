@@ -106,7 +106,15 @@ def extra_damage(
         if paid.get(me) == now:
             return
         paid[me] = now
-        c.damage(dice, c.total(f"{label} damage"), on=ev.target, detail=label)
+        # **The die is asked for, not closed over.** Four feats raise a
+        # striker's extra damage from d6s to d8s and one to d10s, and with the
+        # string baked in at arming time there was nothing for them to change.
+        # `dice_for` falls through to `dice` for anybody carrying no such feat.
+        # The target goes in the context because one of those feats narrows by
+        # it -- "against a creature marked by your ..." -- and the gate has no
+        # other way to know who was hit.
+        rolled = c.dice_for(label, dice, {"target": ev.target})
+        c.damage(rolled, c.total(f"{label} damage"), on=ev.target, detail=label)
 
     c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label=label)
 

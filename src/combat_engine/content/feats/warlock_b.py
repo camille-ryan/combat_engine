@@ -321,10 +321,14 @@ def f2760(c: Cast) -> None:
 
 
 @power("f2764", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_dice()",))
+       reach=PERSONAL, target=SELF)
 def f2764(c: Cast) -> None:
-    """d6s to d8s for the curse. The die is a string literal closed over
-    by `extra_damage`; three feats elsewhere name the same gap."""
+    """d8s instead of d6s for the curse.
+
+    The third of the three strikers' identical feats; `extra_damage` reads
+    its die through `c.dice_for` now, so all three are the same one line.
+    f185 carries the note on why the count is written out."""
+    c.change_dice("cf:warlock-f4", "1d8")
 
 
 @power("f2766", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -149,10 +149,17 @@ def f761(c: Cast) -> None:
 
 
 @power("f273", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_dice()",))
+       reach=PERSONAL, target=SELF)
 def f273(c: Cast) -> None:
-    """Raises the die another row rolls, from d6 to d8. The dice are a
-    string inside that row's body and nothing reaches in."""
+    """The class feature's extra damage rolls d8s instead of d6s.
+
+    One die at every level this build imports, so "1d8" says the whole
+    sentence -- see f185, which is the same row for the other striker and
+    carries the note about what 11th level does to both.
+
+    The gate names a second ref that is not declared, so there is nothing to
+    change for it; `cf:ranger-f1` is the only quarry in the tree."""
+    c.change_dice("cf:ranger-f1", "1d8")
 
 
 @power("f786", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -145,10 +145,19 @@ def f763(c: Cast) -> None:
 
 
 @power("f185", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_dice()",))
+       reach=PERSONAL, target=SELF)
 def f185(c: Cast) -> None:
-    """Raises the die another row rolls, d6 to d8. The dice are a string
-    inside that row's body. Same gap as the ranger's f273."""
+    """The class feature's extra damage rolls d8s instead of d6s.
+
+    `extra_damage` asks `c.dice_for` for its die now rather than closing over
+    the string, which is what made this writable; the feat is the other half.
+
+    **The count is written out rather than derived.** The feature rolls two
+    dice throughout the levels this build imports, so "2d8" is the whole of
+    the sentence here. It stops being so at 11th, where the feature's own
+    count goes up -- so this is one of the rows #281 has to revisit, and
+    saying that here is cheaper than finding it then."""
+    c.change_dice("cf:rogue-scoundrel-f4", "2d8")
 
 
 @power("f799", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
