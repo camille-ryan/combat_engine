@@ -9,9 +9,13 @@ is doctrine for the thing that chooses a move.
 
 ## What of this is actually implemented
 
-Two policies exist. **`DoctrinePolicy` is the default**, on the measurement
-in its own module docstring — 60 of 80 wins at level 5 against
-`LinearPolicy`'s 47, and 67 against 46 at level 10, both surviving Holm.
+Two policies exist. **`DoctrinePolicy` is the default.** On the newest held-out
+run (80 fights a cell, seeds 201-280) it wins 62 of 80 at level 5 against
+`LinearPolicy`'s 57, and 68 against 56 at level 10 — ahead at both levels, but
+**neither gap survives Holm correction**, so it has not been shown better on win
+rate at the bar `scripts/winrate.py` sets. What has moved reliably is the number of
+opportunity attacks the party concedes: 304 → 174 at level 5 and 352 → 293 at level
+10, which rests on thousands of events rather than one outcome a fight.
 `LinearPolicy` stays as the baseline `--policy linear` compares against.
 
 | | `LinearPolicy` | `DoctrinePolicy` |

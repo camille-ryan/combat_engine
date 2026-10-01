@@ -16,31 +16,43 @@ rather than becoming dead code.
 
 ## Where it stands, measured
 
-**80 fights a cell, seeds 121-200** -- fresh seeds, because 41-120 had already been
-used to confirm the previous model and reusing them turns a confirmation into a
-selection. Both sides run the same policy, `--draw scored`, after #244.
+**80 fights a cell, seeds 201-280** -- fresh seeds again, and the only run that
+measures the code as it now stands: the five fixes in 255859d landed after the
+previous run, so the two cannot be pooled and the earlier figures do not carry
+forward. Both sides run the same policy, `--draw scored`.
 
 | | level 5 linear | level 5 doctrine | level 10 linear | level 10 doctrine |
 |---|---|---|---|---|
-| wins of 80 | 49 (61%) | 56 (70%) | 47 (59%) | **70 (88%)** |
-| exact p | | 0.318 | | **0.000066** |
-| median rounds | 9.0 | **8.0** | 13.0 | 10.0 |
-| party hit rate | 63% | 64% | 63% | 62% |
-| party provoked / fight | 3.8 | 4.3 | 4.0 | 5.8 |
+| wins of 80 | 57 (71%) | 62 (78%) | 56 (70%) | 68 (85%) |
+| exact p | | 0.469 | | 0.036 |
+| under Holm | | keep null | | **keep null** |
+| median rounds | 7.5 | 8.0 | 12.0 | **10.0** |
+| party hit rate | 63% | 61% | 62% | 61% |
+| **party provoked / fight** | 3.8 | **2.2** | 4.4 | **3.7** |
 
-**Level 10 rejects the null under Holm; level 5 does not.** 56 against 49 is
-p = 0.32, which is noise, and saying otherwise would be the garden of forking paths
-`scripts/winrate.py`'s docstring warns about. The honest summary is one strong result
-and one null.
+**Neither win-rate comparison survives correction, and the previous run's
+`p = 0.000066` did not replicate.** That figure was measured on seeds 121-200 and on
+different code; here level 10 comes to p = 0.036 against a Holm threshold of 0.025.
+The direction has been positive in both runs at both levels, which is worth
+something, but **this policy has not been shown to beat `LinearPolicy` on win rate
+at the bar this instrument sets.** Said plainly because the earlier number was
+reported as a win and reporting only the better of two runs is the forking path the
+instrument's docstring warns about.
 
-**The two models have never been compared on the same seeds**, so "the rounds model
-beats the damage-only model" is *not* a claim this table supports. The damage-only
-version measured 60/80 and 67/80 on seeds 41-120; those are different fights. What
-can be said is that each beat `LinearPolicy` on its own seeds, and that level 10 did
-so more decisively here (p = 0.000066 against 0.00045).
+Part of the reason is that the baseline moved: `LinearPolicy` won 47 and 49 of 80 on
+the old seeds and 56 and 57 here, so these fights are easier for the party and there
+is less room above them.
 
-Median rounds is 8.0 at level 5, inside #217's 7-8 target, and level 10 came down
-from 13 to 10. The win rate did not come from shorter fights.
+**What did replicate, and it is the measure to read at this sample size,** is
+provocations -- thousands of events rather than one outcome a fight:
+
+    party opportunity attacks conceded, level 5     304 -> 174   (-43%)
+    party opportunity attacks conceded, level 10    352 -> 293   (-17%)
+    the worst single offender at level 5, p13970     99 ->  55
+
+That is what the five fixes in 255859d were aimed at and it moved hard. Median
+rounds also came down from 12 to 10 at level 10, toward #217's 7-8 target, while
+level 5 sits at 8.0 either side.
 
 ### Pruning the destinations, which is where a turn's cost was
 
