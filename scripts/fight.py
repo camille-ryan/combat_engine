@@ -98,6 +98,18 @@ def main() -> int:
     ap.add_argument("--quiet", action="store_true", help="the summary only")
     ap.add_argument("--rounds", type=int, default=30, help="give up after this many")
     ap.add_argument(
+        "--fights", type=int, default=1,
+        help="play this many encounters against one party, resting between "
+        "them. The only way a daily power differs from an encounter one in "
+        "play: a World does not outlive a fight, so the party is what carries "
+        "hit points, surges, action points and spent dailies from one to the "
+        "next (#72)",
+    )
+    ap.add_argument(
+        "--between", default="short", choices=("none", "short", "extended"),
+        help="the rest the party takes between encounters, with --fights",
+    )
+    ap.add_argument(
         "--surprise",
         choices=("none", "party", "monsters"),
         default="none",
@@ -113,6 +125,9 @@ def main() -> int:
         "single fight, so nothing ever had to tell them apart",
     )
     args = ap.parse_args()
+
+    if args.fights > 1:
+        return _a_day(args)
 
     world, encounter = build(args.seed, args.level, args.scaling, args.monster_math)
     policy = DoctrinePolicy()
@@ -155,6 +170,56 @@ def main() -> int:
         health = world.get(eid, Health)
         state = "dead" if not alive(world, eid) else f"{health.hp}/{health.max_hp}"
         print(f"  {ident!s:<10} {state}")
+    return 0
+
+
+def _a_day(args: argparse.Namespace) -> int:
+    """Several encounters against one party, which is what #72 is for.
+
+    Written because the capability needs a caller. That issue opens by
+    recording that `refresh_encounter_powers` was written, correct, and had
+    **zero callers** -- so a short rest existed and nothing in the repository
+    could perform one, which is exactly how the daily/encounter distinction
+    stayed theoretical. A durable party with nothing fielding two fights would
+    be the same mistake with a new name.
+
+    One `Party`, a fresh `World` per fight, and the wear harvested back between
+    them.
+    """
+    party = story.Party.of(story.PARTY, args.level, seed=args.seed)
+    for n in range(1, args.fights + 1):
+        fielded = story.field_encounter(
+            args.seed + n, args.level, scaling=args.scaling,
+            math=args.monster_math, party=party,
+        )
+        world = fielded.world
+        if not fielded.enemies:
+            raise SystemExit("no monster anywhere has all of its abilities written.")
+        encounter = Encounter(world)
+        policy = DoctrinePolicy()
+        install(world, encounter, {}, default=policy)
+        encounter.start()
+        while not encounter.finished and world.round <= args.rounds:
+            actor = world.turn
+            if actor is None:
+                break
+            take_turn(world, encounter, actor, policy)
+            encounter.advance()
+        story.harvest(world, party)
+        if not args.quiet:
+            print(world.bus.render())
+            print()
+        print(f"-- fight {n}: rounds {world.round}   winner {encounter.winner}")
+        for sheet in party.sheets:
+            hp = "full" if sheet.hp is None else str(sheet.hp)
+            surges = "full" if sheet.surges is None else str(sheet.surges)
+            print(
+                f"   {sheet.cls:<8} hp {hp:>5}   surges {surges:>4}   "
+                f"action points {sheet.action_points}   spent {len(sheet.spent)}"
+            )
+        if n < args.fights and args.between != "none":
+            party.rest(extended=args.between == "extended")
+            print(f"   -- {args.between} rest")
     return 0
 
 
