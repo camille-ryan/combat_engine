@@ -18,16 +18,11 @@ from __future__ import annotations
 
 import argparse
 
-from combat_engine import chargen
-from combat_engine.content import loader, terrain
+from combat_engine import story
 from combat_engine.engine import (
-    Bus,
     DoctrinePolicy,
     Encounter,
-    Grid,
     Ident,
-    Rng,
-    Team,
     World,
     install,
     take_turn,
@@ -44,7 +39,9 @@ from combat_engine.engine.turns import extended_rest, short_rest
 #: The rogue was swinging a dagger for 1d4 with none of its extra damage,
 #: which is not a rogue, and the fight it produced said more about the
 #: roster than about the engine.
-PARTY = ["fighter", "cleric", "rogue", "wizard"]
+#: Re-exported from `story`, which owns it now -- `winrate.py` reads
+#: `fight.PARTY` and there is one definition again.
+PARTY = story.PARTY
 
 def build(
     seed: int, level: int, scaling: str, math: str = "printed",
@@ -61,95 +58,29 @@ def build(
     the engine again rather than of the corpus's size.
     """
 
-    world = World(Grid(16, 12), Rng(seed), Bus())
-    world.scaling = PRESETS[scaling]
-    world.monster_math = MATHS[math]
-
-    # Something to take cover behind and something to wade through.
-    # Without it cover, concealment, hiding and difficult terrain are all
-    # modelled and none of them ever comes up.
-    #
-    # **`level=` matters and was missing.** `dress` takes it to decide what a
-    # trap on this board is worth, and `api/session.py` passes it -- so every
-    # fight run from here, at every level, armed a **level-1** trap. A
-    # level-5 party walked onto a hazard built for a level-1 one, which is
-    # the sort of thing #217 is trying to read round-counts out of.
-    terrain.dress(world, seed, level=level)
-
-    for i, cls in enumerate(PARTY):
-        chargen.spawn(
-            world,
-            chargen.Character(cls, level, feats=list((feats or {}).get(cls, []))),
-            (2, 3 + i * 2),
-        )
-
-    pool, found_at = _opposition(level)
-    if not pool:
+    fielded = story.field_encounter(
+        seed, level, scaling=scaling, math=math, feats=feats
+    )
+    world = fielded.world
+    if not fielded.enemies:
         raise SystemExit(
             "no monster anywhere has all of its abilities written.\n"
             "Run: uv run scripts/coverage.py --monsters --max-level 3"
         )
-    if found_at != level:
+    if fielded.found_at != level:
         print(
             f"# no monster at level {level} is fully written yet, so this "
-            f"fight uses level {found_at} ones\n"
+            f"fight uses level {fielded.found_at} ones\n"
         )
-    for i in range(4):
-        loader.spawn(world, pool[i % len(pool)], (12, 3 + i * 2), team=Team.ENEMY)
-
-    _tag(world)
     return world, Encounter(world)
 
 
-def _opposition(level: int) -> tuple[list[str], int]:
-    """Monsters to field. Falls back down the levels while content is thin.
-
-    A fight against nothing is not a useful thing to print, so rather than
-    refuse, this drops to whatever level has been written and says which.
-
-    Sorted by role rather than by id, and taken one role at a time, so the
-    four that turn up are a mixed band. Taking the first four by id gave an
-    all-brute line-up with half again the party's hit points and more damage
-    per swing, and a demo fight that says more about alphabetical order than
-    about the engine.
-    """
-    for candidate in range(min(level, 13), 0, -1):
-        pool = loader.pick(candidate)
-        if pool:
-            return _one_of_each(pool), candidate
-    return [], level
 
 
-#: The order roles are drawn in. A soldier and a brute in front, something
-#: shooting from the back, a skirmisher moving. What a published encounter
-#: looks like.
-ROLE_ORDER = ["soldier", "brute", "artillery", "skirmisher", "controller", "lurker"]
 
 
-def _one_of_each(pool: list[str]) -> list[str]:
-    """Reorder a pool so consecutive picks come from different roles."""
-    from combat_engine.etl.build import game
-
-    db = game()
-    by_role: dict[str, list[str]] = {}
-    for ref in pool:
-        row = db.execute("SELECT role FROM monster WHERE ref = ?", (ref,)).fetchone()
-        by_role.setdefault((row["role"] if row else "") or "", []).append(ref)
-    out: list[str] = []
-    while any(by_role.values()):
-        for role in [*ROLE_ORDER, *sorted(set(by_role) - set(ROLE_ORDER))]:
-            if by_role.get(role):
-                out.append(by_role[role].pop(0))
-    return out
 
 
-def _tag(world: World) -> None:
-    """Number the repeats, so two of the same monster are tellable apart."""
-    seen: dict[str, int] = {}
-    for _eid, ident in world.each(Ident):
-        seen[ident.ref] = seen.get(ident.ref, 0) + 1
-        if seen[ident.ref] > 1 or ident.ref.startswith("m"):
-            ident.tag = str(seen[ident.ref])
 
 
 def main() -> int:

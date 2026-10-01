@@ -25,16 +25,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from combat_engine import chargen
-from combat_engine.content import loader, terrain
+from combat_engine import story
 from combat_engine.engine import (
     Action,
-    Bus,
     DoctrinePolicy,
     Encounter,
-    Grid,
     Ident,
-    Rng,
     Team,
     World,
     legal,
@@ -43,7 +39,6 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.events import OpportunityWindow
 from combat_engine.engine.query import alive
-from combat_engine.engine.scaling import PRESETS
 from combat_engine.transcript import Transcript
 
 from .wire import Wire
@@ -53,7 +48,9 @@ from .wire import Wire
 #: of ids, `scripts/fight.py` kept another, and both had gone stale: the
 #: party the server dealt out carried no class features at all, so its rogue
 #: had no extra damage and its fighter could not mark.
-PARTY = ["fighter", "cleric", "rogue", "wizard"]
+#: `story` owns the roster now; this stays as a name for the transcript line
+#: below and so nothing outside has to learn a new import.
+PARTY = story.PARTY
 
 
 @dataclass
@@ -169,22 +166,21 @@ class Session:
         pcs: list[str] | None = None,
         enemies: list[str] | None = None,
     ) -> Session:
-        world = World(Grid(16, 12), Rng(seed), Bus())
-        terrain.dress(world, seed, level=level)
-        world.scaling = PRESETS.get(scaling, PRESETS["full"])
-
-        for i, name in enumerate(pcs or PARTY):
-            key = name.strip().lower()
-            chargen.spawn(world, chargen.Character(key, level), (2, 3 + i * 2))
-
-        pool = enemies or _opposition(level)
-        if not pool:
+        # **One place fields an encounter**, and it is not here any more: this
+        # method and `scripts/fight.build` were the same six steps twice over,
+        # with the replay fixtures pinning the other one. #229.
+        #
+        # This path gains something by the move. Its own monster pick returned
+        # `loader.pick(level)` raw, so the band was in id order -- an all-brute
+        # line-up -- while the scripts copy had been ordering by role for a
+        # while. `story.opposition` is the ordered one.
+        on_board = story.field_encounter(
+            seed, level, scaling=scaling, pcs=pcs, enemies=enemies
+        )
+        world = on_board.world
+        if not on_board.enemies:
             raise ValueError("no monster is fully written yet")
-        fielded = [pool[i % len(pool)] for i in range(4)]
-        for i, ref in enumerate(fielded):
-            loader.spawn(world, ref, (12, 3 + i * 2), team=Team.ENEMY)
-
-        _tag(world)
+        fielded = on_board.enemies
         encounter = Encounter(world)
         policy = DoctrinePolicy()
         ident = uuid.uuid4().hex[:12]
@@ -484,20 +480,8 @@ class Session:
         return self.world.bus.log[cursor:]
 
 
-def _opposition(level: int) -> list[str]:
-    for candidate in range(min(max(level, 1), 13), 0, -1):
-        pool = loader.pick(candidate)
-        if pool:
-            return pool
-    return []
 
 
-def _tag(world: World) -> None:
-    seen: dict[str, int] = {}
-    for _eid, ident in world.each(Ident):
-        seen[ident.ref] = seen.get(ident.ref, 0) + 1
-        if seen[ident.ref] > 1 or ident.ref.startswith("m"):
-            ident.tag = str(seen[ident.ref])
 
 
 SESSIONS: dict[str, Session] = {}

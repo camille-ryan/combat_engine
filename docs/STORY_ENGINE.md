@@ -24,16 +24,20 @@ move here.
 
 Scattered, and this is the useful part of the charter:
 
-* **Monster selection** — `_opposition()` in `api/session.py`, picking by
-  level. **Duplicated** in `scripts/fight.py`, along with the party list, the
-  spawn positions and the terrain call: the same six steps with the same
-  constants in two files. The six replay fixtures pin the **`scripts`** copy,
-  so changing composition in `api/` diverges silently and `replay` will not
-  notice. Filed as an issue; it wants cutting **once**, deliberately, and
-  this component is where the cut belongs.
-* **The party** — `PARTY = ["fighter", "cleric", "rogue", "wizard"]`,
-  hardcoded in both files. A "character" is constructed fresh each time;
-  nothing is saved.
+* **Monster selection, the party, the spawn positions and the terrain call** —
+  **done, and this component now exists.** `story.field_encounter` is the one
+  place that fields an encounter; `api/session.create` and
+  `scripts/fight.build` both call it. #229.
+
+  It was the same six steps with the same constants in two files, with the six
+  replay fixtures pinning the `scripts` copy — so changing composition in
+  `api/` diverged silently. The cut was worth making for more than tidiness:
+  the two had already drifted twice, and the second drift was live. `api/`'s
+  own pick returned `loader.pick(level)` raw, so the path a player actually
+  plays fielded **three brutes and a lurker** at level 5 where the scripts
+  copy fielded soldier, brute, artillery, skirmisher.
+
+  A "character" is still constructed fresh each time; nothing is saved.
 * **The adventuring day** — `GET/POST /api/day` is a deliberate `501` in
   `api/app.py`, and `web/app.js` already calls it. The endpoint exists to be
   filled in.

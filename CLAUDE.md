@@ -107,7 +107,7 @@ say so in the commit.
 | UI | `web/` | the page. Vanilla JS, no build step. |
 | AI Policy | `engine/policy.py` | what the AI chooses. One module, inside Engine. |
 | Chargen | `src/combat_engine/chargen/` | builds every character. Persistence does not exist. |
-| Story Engine | — | not built. `docs/STORY_ENGINE.md` is the charter. |
+| Story Engine | `src/combat_engine/story/` | fields an encounter: who is on the board, and where. `docs/STORY_ENGINE.md` is the charter; the rest of it is not built. |
 | Instruments | `scripts/` | belongs to no component. |
 
 Measured seams, so a claim about them can be checked: `etl` → `content` is
