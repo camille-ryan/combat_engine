@@ -354,14 +354,17 @@ def p12262(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH, Keyword.PRIMAL, Keyword.WEAPON],
-    dropped=("spec.power_ref()", *ABILITY),
 )
 def p12263(c: Cast) -> None:
-    """"Immune to forced movement" is `c.immovable`. The blast the form
-    unlocks is a second card filed under this same ref, so there is nothing
-    to decorate for it even before the ability question."""
+    """"Immune to forced movement" is `c.immovable`.
+
+    The blast the form unlocks is a second card filed under this same ref.
+    It is `p12263b` now and declared below, so the form hands it over --
+    "once before the end of your next turn" is `uses=1` on the grant, and
+    the card's own Requirement keeps it unusable once the form drops."""
     c.form(until=When.EONT, label=c.ref)
     c.immovable(until=When.EONT, on=c.me)
+    c.grant_row("p12263b", on=c.me, until=When.EONT, uses=1)
 
 
 @power(
@@ -378,13 +381,16 @@ def p12263(c: Cast) -> None:
         Keyword.THUNDER,
         Keyword.WEAPON,
     ],
-    dropped=("spec.power_ref()", *ABILITY),
 )
 def p12264(c: Cast) -> None:
     """"Each enemy that starts its turn within 2 squares" is an aura plus a
     `TurnStart` watcher, because the payout is on the enemy's turn and not
-    on entry."""
+    on entry.
+
+    "Once during the encounter while in this form, you can use the Attack
+    power" is the grant: `p12264b`, once."""
     c.form(until=When.ENCOUNTER, label=c.ref)
+    c.grant_row("p12264b", on=c.me, until=When.ENCOUNTER, uses=1)
     c.aura(2, label=c.ref, until=When.ENCOUNTER, on=c.me)
 
     def scorch(ev: TurnStart) -> None:
@@ -407,13 +413,15 @@ def p12264(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH, Keyword.PRIMAL, Keyword.WEAPON],
-    dropped=("spec.power_ref()", *ABILITY),
 )
 def p12265(c: Cast) -> None:
     """The resistance carries a live adjacency gate, so an ally who steps up
     later is covered. `c.immovable` takes no gate, so that half is laid on
-    whoever is beside you when the form is assumed."""
+    whoever is beside you when the form is assumed.
+
+    The form's own attack is `p12265b`, handed over once."""
     c.form(until=When.ENCOUNTER, label=c.ref)
+    c.grant_row("p12265b", on=c.me, until=When.ENCOUNTER, uses=1)
     c.resist(5, until=When.ENCOUNTER, on=c.me)
     c.immovable(until=When.ENCOUNTER, on=c.me)
     for friend in c.allies():
@@ -1476,19 +1484,134 @@ def p16414(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.low_light()", "c.forbid(keyword=)", "spec.power_ref()"),
+    dropped=("c.low_light()", "c.forbid(keyword=)"),
 )
 def p16525(c: Cast) -> None:
     """`revert=None` and `c.endable` instead of `c.form(revert=MINOR)`,
     because leaving the form is not a bare exit -- it is a minor action
     that also shifts you a square.
 
-    Three clauses have no verb: low-light vision, barring every power that
-    lacks a keyword, and the at-will attack the form unlocks, which is a
-    second card filed under this same ref.
+    Two clauses have no verb: low-light vision, and barring every power that
+    lacks a keyword. The third used to be the at-will attack the form
+    unlocks -- it is `p12263b`'s sibling `p16525b` now, declared below.
     """
     shape = c.form(until=When.ENCOUNTER, revert=None, label=c.ref)
     c.endable(shape, MINOR, then=lambda: c.shift(1))
+
+
+@power(
+    "p16525b",
+    level=0,
+    cls="x7_992",
+    usage=ENCOUNTER,
+    action=STANDARD,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+    attack=Attack(Pick.HIGHEST, plus=3, vs=AC),
+    dropped=("Keyword.BEAST_FORM",),
+)
+def p16525b(c: Cast) -> None:
+    """The attack the form unlocks, which is a **second card filed under
+    p16525's own ref**.
+
+    It had no ref of its own until `parse_extra` was called for theme powers,
+    and without one it could not be declared -- so p16527's grab rider was
+    armed and waiting on a hit that nothing could ever make. Declaring it is
+    what makes that rider reachable.
+
+    "Highest ability modifier" is `Pick.HIGHEST`, the rule the header says
+    and `c.mod(c.ability_for())` answers in the body -- not `Pick.PRIMARY`,
+    which is a different sentence that only accidentally agrees.
+    """
+    if not c.strike():
+        return
+    c.damage("1d8", c.mod(c.ability_for()))
+    c.mark(until=When.SONT)
+
+
+def _wearing(ref: str):  # noqa: ANN202
+    """"The power <ref> must be active in order to use this power."
+
+    The form is recorded as an effect labelled with the ref that laid it --
+    the same question `p16528` asks -- so the requirement is that label
+    standing on the caster. A factory because three rows in this run print
+    the identical line about their own parent.
+    """
+    def active(world: World, eid: int) -> bool:
+        return any(e.label.startswith(ref) for e in world.effects.of(eid))
+
+    return active
+
+
+@power(
+    "p12263b",
+    level=7,
+    cls="x7_661",
+    usage=ENCOUNTER,
+    action=STANDARD,
+    reach=CloseBlast(3),
+    target=EACH_CREATURE,
+    keywords=[Keyword.POLYMORPH, Keyword.PRIMAL, Keyword.WEAPON],
+    attack=Attack(Pick.PRIMARY, vs=REF),
+    requires=_wearing("p12263"),
+    requires_text="the p12263 form must be active",
+)
+def p12263b(c: Cast) -> None:
+    """The blast p12263's form unlocks -- the second card inside its entry.
+
+    It had no ref until `parse_extra` was called for theme powers, so the
+    parent could not hand it over and the row could not be declared. Both
+    halves are here now: this card, and the grant on the parent.
+    """
+    if not c.strike():
+        return
+    c.damage(c.w(1), c.attack_mod)
+    c.push(2)
+    c.blinded(until=When.EONT)
+
+
+@power(
+    "p12264b",
+    level=5,
+    cls="x7_661",
+    usage=DAILY,
+    action=STANDARD,
+    reach=CloseBurst(2),
+    target=EACH_CREATURE,
+    keywords=[Keyword.POLYMORPH, Keyword.PRIMAL, Keyword.THUNDER, Keyword.WEAPON],
+    attack=Attack(Pick.PRIMARY, vs=REF),
+    requires=_wearing("p12264"),
+    requires_text="the p12264 form must be active",
+)
+def p12264b(c: Cast) -> None:
+    """The burst p12264's form unlocks. Same shape as p12263b above."""
+    if not c.strike():
+        return
+    c.damage(c.w(1), c.attack_mod, dtype=DamageType.THUNDER)
+    c.slide(1)
+    c.slowed(until=When.SAVE_ENDS)
+
+
+@power(
+    "p12265b",
+    level=9,
+    cls="x7_661",
+    usage=DAILY,
+    action=STANDARD,
+    reach=CloseBurst(1),
+    target=EACH_ENEMY,
+    keywords=[Keyword.POLYMORPH, Keyword.PRIMAL, Keyword.WEAPON],
+    attack=Attack(Pick.PRIMARY, vs=FORT),
+    requires=_wearing("p12265"),
+    requires_text="the p12265 form must be active",
+)
+def p12265b(c: Cast) -> None:
+    """The burst p12265's form unlocks. "Each enemy in the burst you can
+    see" is `EACH_ENEMY` plus the sight check, which the targeting does."""
+    if not c.strike():
+        return
+    c.damage(c.w(2), c.attack_mod)
+    c.weakened(until=When.EONT)
 
 
 def _is_bloodied(world: World, eid: int) -> bool:

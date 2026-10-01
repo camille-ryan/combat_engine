@@ -431,15 +431,16 @@ def i2069p1(c: Cast) -> None:
 
 @power("i2356p1", level=2, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("spec.power_ref()",))
+       )
 def i2356p1(c: Cast) -> None:
-    """`p5389` is a ref now, so half the benefit attaches. The second
-    power the card names is still prose, which is what stays dropped --
-    a character holding only that one gets nothing from this soulfang
-    and pays for it anyway, which is the honest half-row."""
+    """Both powers the card names have refs now, so the whole benefit
+    attaches. It used to be half a row: `p5389` resolved and the second was
+    prose, so a character holding only that one paid for the soulfang and
+    got nothing."""
+    rows = ("p5389", "p5388")
     for what in ("attack", "damage"):
         c.bonus(what, 2, on=c.me, until=When.ENCOUNTER, kind="power",
-                when=_is_row("p5389"))
+                when=lambda ctx: ctx.get("power") in rows)
     _soulfang(c)
 
 

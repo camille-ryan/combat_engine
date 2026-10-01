@@ -69,6 +69,7 @@ from combat_engine.engine import (
     MoveEnd,
     MoveStart,
     Pick,
+    Ranged,
     Relation,
     RelationSet,
     SavingThrow,
@@ -1087,13 +1088,13 @@ def p16003(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE, Keyword.ELEMENTAL],
-    dropped=("spec.power_ref()",),
 )
 def p16069(c: Cast) -> None:
-    """The entry prints a second block -- a ranged attack that requires this
-    aura -- with no ref of its own, so there is nothing to decorate for it
-    and the clause that ends the aura goes with it."""
+    """The second block the entry prints -- a ranged attack that requires
+    this aura -- is `p16069b` now and declared below, so the aura hands it
+    over. It had no ref until `parse_extra` was called for theme powers."""
     c.aura(1, until=When.EONT)
+    c.grant_row("p16069b", on=c.me, until=When.EONT)
     mod = _best_mod(c)
 
     def scorch(ev: TurnStart) -> None:
@@ -1101,6 +1102,28 @@ def p16069(c: Cast) -> None:
             c.flat(mod, dtype=DamageType.FIRE, on=ev.actor)
 
     c.watch(TurnStart, scorch, until=When.EONT, on=c.me)
+
+
+@power(
+    "p16069b",
+    level=0,
+    cls="x7_946",
+    usage=ENCOUNTER,
+    action=STANDARD,
+    reach=Ranged(10),
+    target=ONE_CREATURE,
+    keywords=[Keyword.FIRE, Keyword.ELEMENTAL],
+    attack=Attack(Pick.HIGHEST, plus=2, vs=REF),
+    requires=lambda world, eid: any(
+        e.label.startswith("p16069") for e in world.effects.of(eid)
+    ),
+    requires_text="the p16069 aura must be active",
+)
+def p16069b(c: Cast) -> None:
+    """The ranged attack the aura unlocks -- the second card in p16069's own
+    entry, which had no ref until `parse_extra` ran for theme powers."""
+    if c.strike():
+        c.damage("1d8", dtype=DamageType.FIRE)
 
 
 @power(

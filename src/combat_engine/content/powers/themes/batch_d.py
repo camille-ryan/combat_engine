@@ -21,6 +21,7 @@ the aura around the conjuration is what "while adjacent to it" reads.
 from __future__ import annotations
 
 from combat_engine.engine import (
+    AC,
     ANY_CREATURE,
     AT_WILL,
     DAILY,
@@ -1518,21 +1519,45 @@ def p16436(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=(
-        "Keyword.BEAST_FORM",
-        "c.best_ability()",
-        "c.low_light()",
-        "spec.power_ref()",
-    ),
+    dropped=("Keyword.BEAST_FORM", "c.low_light()"),
 )
 def p16535(c: Cast) -> None:
     """The form and the printed alternative -- end it as a minor action and
     shift 1 -- are written as one way out, so `revert=None` and the shift
-    rides on `c.endable`. The secondary at-will attack is printed inside
-    this block with no ref of its own, and it is "Highest ability modifier
-    + 3 vs. AC" besides."""
+    rides on `c.endable`.
+
+    The secondary at-will attack is `p16535b`, declared below: it had no ref
+    of its own until `parse_extra` ran for theme powers, and "Highest ability
+    modifier + 3 vs. AC" is `Pick.HIGHEST` in its header rather than the
+    `c.best_ability()` this row was waiting on."""
     shape = c.form(until=When.ENCOUNTER, revert=None, label=c.ref)
     c.endable(shape, MINOR, then=lambda: c.shift(1, who=c.me))
+
+
+@power(
+    "p16535b",
+    level=0,
+    cls=X7_994,
+    usage=ENCOUNTER,
+    action=STANDARD,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+    attack=Attack(Pick.HIGHEST, plus=3, vs=AC),
+    dropped=("Keyword.BEAST_FORM",),
+)
+def p16535b(c: Cast) -> None:
+    """The attack the form unlocks -- the second card inside p16535's entry.
+
+    Declared for the same reason as `p16525b`: p16538's trigger tests
+    `ev.power == "p16535b"`, and until this row existed nothing could ever
+    cast it, so the trigger was unreachable rather than merely unused.
+
+    "Highest ability modifier + 3 vs. AC" is the printed line, which is
+    `Pick.HIGHEST` and was the `c.best_ability()` marker on the parent.
+    """
+    if not c.strike():
+        return
+    c.damage("1d10", c.mod(c.ability_for()))
 
 
 @power(

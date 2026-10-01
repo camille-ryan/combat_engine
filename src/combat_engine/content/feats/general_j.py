@@ -1189,15 +1189,25 @@ def f1552(c: Cast) -> None:
 
 
 @power("f1557", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF)
 def f1557(c: Cast) -> None:
     """Adds a chosen channel divinity power of another class.
 
-    Re-aimed. `c.borrow_row` reads a set off the registry by class,
-    level and usage, and this set is none of those: the four channel
-    divinity features are declared but none of them deals a card of its
-    own, so "a power available as a class feature for that class" names
-    an empty set. The powers exist only as names in the brief."""
+    The set used to be empty -- none of the four features deals a card, so
+    "a power available as a class feature for that class" named nothing and
+    the powers existed only as names in the brief. `_CHANNEL` is that set.
+
+    "Another class" is read off the feature: a class whose feature this
+    creature already has is not another class. The card adds the power to
+    your list rather than lending it, so there is no use limit."""
+    mine = [ref for ref in _CHANNEL if c.feat(ref, on=c.me)]
+    offer = [row for ref, rows in _CHANNEL.items() if ref not in mine
+             for row in rows]
+    if not offer:
+        return
+    taken = c.choose(offer, c.ref)
+    if taken:
+        c.grant_row(taken, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1561", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1216,6 +1226,22 @@ def f1561(c: Cast) -> None:
 
 
 # -- the channel divinity multiclass feats ----------------------------------
+
+
+#: What each divine class's Channel Divinity feature actually offers.
+#:
+#: **The feature deals no card**, which is what made five rows in this run
+#: unwritable: "a power available as a class feature for that class" named an
+#: empty set, and the two powers each feat hands over were names in the brief
+#: with no refs behind them. The brief carries the refs now, so the set is
+#: here -- a small table for a run of rows that genuinely share a shape,
+#: which is the one exception the global rule allows.
+_CHANNEL: dict[str, tuple[str, ...]] = {
+    "cf:cleric-templar-f0": ("p1589", "p146"),
+    "cf:invoker-f0": ("cf:invoker-f1c1", "cf:invoker-f1c0"),
+    "cf:paladin-f0": ("p1746", "p1747"),
+    "cf:avenger-f2": ("p5330", "p5331"),
+}
 
 
 @power("f1622", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1269,26 +1295,29 @@ def f1625(c: Cast) -> None:
 
 
 @power("f1627", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=BORROW)
+       reach=PERSONAL, target=SELF)
 def f1627(c: Cast) -> None:
-    """One chosen channel divinity power of another class, and the same
-    standing as f1622.
+    """One chosen channel divinity power of another class, and the standing.
 
-    The card offers a choice of four features and names no leg to read
-    it off, so it goes to the decider like any other choice the sheet
-    does not record. Dropped: the chosen power, which is a name with no
-    ref -- none of the four features deals a card."""
-    among = [
-        "cf:avenger-f2",
-        "cf:cleric-templar-f0",
-        "cf:invoker-f0",
-        "cf:paladin-f0",
-    ]
-    held = [ref for ref in among if not c.feat(ref, on=c.me)]
-    if held:
-        taken = c.choose(held, c.ref)
-        if taken:
-            c.grant_row(taken, on=c.me, until=When.ENCOUNTER)
+    The card offers a choice of four features and names no leg to read it
+    off, so it goes to the decider like any other choice the sheet does not
+    record. The chosen *power* is no longer dropped -- `_CHANNEL` holds what
+    each feature offers.
+
+    **Both printed branches end up granting the power**, and differ only in
+    the price: without the feature it is one use a day, with it the power
+    joins your list. `uses=1` is the first and the absence of it is the
+    second."""
+    held = [ref for ref in _CHANNEL if not c.feat(ref, on=c.me)]
+    if not held:
+        return
+    taken = c.choose(held, c.ref)
+    if not taken:
+        return
+    c.grant_row(taken, on=c.me, until=When.ENCOUNTER)
+    power = c.choose(list(_CHANNEL[taken]), f"{c.ref}:power")
+    if power:
+        c.grant_row(power, on=c.me, until=When.ENCOUNTER, uses=1)
 
 
 @power("f1628", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
