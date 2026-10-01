@@ -217,7 +217,16 @@ def features(
     f["target_damage_taken"] = hurt
     f["targets_bloodied"] = nearly
     f["allies_caught"] = friendly
-    f["enemies_caught"] = float(len(action.targets)) - friendly
+    # **The caster is not an enemy it caught.** `friendly` skips `t == actor` above,
+    # for the stated reason -- aiming at yourself does not clip an ally -- but only
+    # that half was fixed, so the actor fell straight through into `enemies_caught`
+    # and a `target=SELF` row was paid 2.0 for catching an enemy that was itself.
+    #
+    # Measured: a fighter's self-aura row scored `is_power 6.0 + enemies_caught 2.0`
+    # and was re-cast twice a turn for seven consecutive rounds while its wizard died
+    # four squares away. Nothing else on that turn could reach +8. See #231.
+    on_self = 1.0 if actor in action.targets else 0.0
+    f["enemies_caught"] = max(0.0, float(len(action.targets)) - friendly - on_self)
 
     # Swapping the stance you are already in for a different one. Legal,
     # and almost always pointless: a stance ends whatever you were in, so

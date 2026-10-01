@@ -78,19 +78,9 @@ def side_of(world, eid: int) -> str:  # noqa: ANN001
     return "monsters" if (ident and ident.ref.startswith("m")) else "party"
 
 
-def inert(world, actor: int, ref: str) -> bool:  # noqa: ANN001
-    """Could this row have accomplished anything at all?
-
-    No attack line, no damage against the baseline, and no effect laid. All three,
-    because any one of them alone is a legitimate row -- a zone deals no damage on
-    use, a buff declares no attack.
-    """
-    p = get(ref) if ref else None
-    if p is None or p.attack is not None:
-        return False
-    if T.row_damage(world, actor, ref) > 0:
-        return False
-    return not T.row_effects(world, actor, ref)
+#: The policy's own test, so the instrument and the scorer cannot disagree about
+#: what "inert" means.
+inert = D.inert
 
 
 class Counted(D.DoctrinePolicy):

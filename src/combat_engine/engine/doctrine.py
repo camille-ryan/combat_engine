@@ -427,6 +427,7 @@ def forget() -> None:
     _FOES.clear()
     _BEST.clear()
     _COVER.clear()
+    _INERT.clear()
 
 
 def _round(world: Any) -> int:
@@ -441,6 +442,62 @@ def foes(world: Any, actor: int) -> tuple[int, ...]:
         got = _FOES[key] = tuple(
             e for e in enemies(world, actor) if alive(world, e))
     return got
+
+
+#: Per (board, caster, row): could the row accomplish anything at all?
+_INERT: dict[tuple[int, int, str], bool] = {}
+
+
+def inert(world: Any, actor: int, ref: str) -> bool:
+    """Would this row accomplish nothing whatever?
+
+    No attack line, no damage against the baseline, and no effect laid. **All three**,
+    because any one alone is an ordinary row: a zone deals no damage as it goes down,
+    a buff declares no attack, a mark lays an effect and does neither.
+
+    `threat.row_damage` and `threat.row_effects` already answer two of the three off a
+    scratch-board run, so this costs a cache lookup after the first ask.
+
+    **What it is for.** `is_power` is a flat +6.0 and nothing asked whether the row
+    could do anything, so the scorer spent **231 of 1,127 party decisions at level 10
+    on rows that provably accomplish nothing** -- 20% of its turns -- while the
+    monsters did it zero times, holding three or four attack rows each against a
+    character's dozens of utilities. #264.
+    """
+    key = (id(world), actor, ref)
+    got = _INERT.get(key)
+    if got is None:
+        p = get(ref) if ref else None
+        if p is None or p.attack is not None or T.row_damage(world, actor, ref) > 0:
+            got = False
+        else:
+            got = not T.row_effects(world, actor, ref)
+        _INERT[key] = got
+    return got
+
+
+def running(world: Any, actor: int, ref: str) -> bool:
+    """Is what this row lays already in place on this creature?
+
+    **Three places to look, and the effect label alone is not enough.** A fighter's
+    aura row leaves an effect labelled `defender aura` on its caster -- nothing with
+    the ref in it -- and puts the ref on the *zone* instead, via
+    `c.aura(1, label=c.ref)`. Checking labels alone therefore missed it entirely, and
+    the row was re-cast twice a turn for seven consecutive rounds while its wizard
+    died four squares away.
+
+    So: an effect whose label carries the ref, a **zone of that name this creature
+    owns**, or a stance of that name. `swaps_stance` in `policy.features` catches only
+    rows tagged with `Keyword.STANCE`, and this row's keywords are empty while its
+    body calls `c.stance`, so that guard could not see it either.
+    """
+    if any(eff.label.startswith(ref) for eff in world.effects.of(actor)):
+        return True
+    for _, zone in world.zones.all():
+        if zone.owner == actor and zone.label == ref:
+            return True
+    stance = world.effects.stance_of(actor)
+    return stance is not None and stance.label.startswith(ref)
 
 
 def _square_of(world: Any, eid: int) -> Any:
@@ -915,8 +972,7 @@ def doctrine_features(
     # already on the creature, so casting it again buys nothing. `Effect.label` is
     # prefixed with the ref that laid it, which is what makes this readable.
     on_myself = action.ref and (not action.targets or tuple(action.targets) == (actor,))
-    if on_myself and any(eff.label.startswith(action.ref)
-                         for eff in world.effects.of(actor)):
+    if on_myself and running(world, actor, action.ref):
         f["already_on"] = 1.0
 
     # -- healing --------------------------------------------------------------
@@ -1059,6 +1115,30 @@ class DoctrinePolicy(LinearPolicy):
             # on purpose. Cleared before `weigh` rather than compensated for after,
             # so the number is never wrong in between.
             f["allies_caught"] = 0.0
+        # `running` asked directly, **not** read off `f`: `already_on` is a doctrine
+        # term and `f` is `policy.features`'s dict, so `f.get("already_on")` was always
+        # None and this condition never fired. A predicate reading a field its source
+        # does not carry, which is the failure the component file opens with -- and it
+        # looked exactly like a working fix, because the scorecard printed identically.
+        on_already = bool(action.ref) and (
+            not action.targets or tuple(action.targets) == (actor,)
+        ) and running(world, actor, action.ref)
+        if action.ref and (inert(world, actor, action.ref) or on_already):
+            # **An inert row is not a power, for scoring purposes.** `is_power` is a
+            # flat +6.0, which made any row beat any alternative -- so a row that can
+            # accomplish nothing was chosen 231 times in 1,127 decisions. Zeroed
+            # rather than penalised: none of the ones measured cost a *standard*
+            # action, so they were filling idle minor and free actions, and a free
+            # action that does nothing costs nothing. What it must not do is outbid a
+            # move that would have repositioned, or a shift that would have avoided
+            # the opportunity attack the ranged ones concede.
+            #
+            # **A row whose effect is already running counts as inert too**, for the
+            # same reason: it accomplishes nothing *now*. `already_on` at -4.0 did not
+            # cancel the +6.0, so the net stayed positive and the row went on being
+            # chosen -- 80 times over twelve fights at level 5 once the detection
+            # started working. Zeroing `is_power` is what actually stops it.
+            f["is_power"] = 0.0
         total = self.weigh(f, action)
         d = doctrine_features(world, encounter, actor, action)
         return total + sum(self.doctrine.get(k, 0.0) * v for k, v in d.items())
