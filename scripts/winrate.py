@@ -102,11 +102,10 @@ from combat_engine.engine.types import Team
 
 DRAWS = ("chassis", "scored", "rated")
 
-#: There is one policy. `--policy` is gone with `LinearPolicy`, and so is the A/B
+#: There is one policy, so `--policy` is gone with `LinearPolicy` and so is the A/B
 #: this instrument was built around: see `scripts/scorecard.py` for why, and for the
 #: gate that replaced it. What is left here is the **balance** question -- is a fight
 #: 7-8 rounds -- which a win rate and a round count can still answer.
-POLICIES = {"doctrine": DoctrinePolicy}
 
 
 def arrange(draw: str) -> None:
@@ -119,7 +118,7 @@ def arrange(draw: str) -> None:
 def one(seed: int, level: int, cap: int,
         tally: dict[str, list[int]] | None = None,
         oas: dict[str, int] | None = None,
-        policy_name: str = "linear") -> tuple[str, int]:
+        ) -> tuple[str, int]:
     """(outcome, rounds) for a single fight. Outcome is win, loss or cap.
 
     `tally` accumulates hits and attempts per creature, keyed by what it is.
@@ -142,7 +141,7 @@ def one(seed: int, level: int, cap: int,
     # board's. Cleared per fight rather than trusted.
     threat_cache.clear()
     doctrine_cache.forget()
-    policy = POLICIES[policy_name]()
+    policy = DoctrinePolicy()
     install(world, encounter, {}, default=policy)
     if tally is not None:
         def rolled(ev: AttackRolled) -> None:
@@ -180,7 +179,7 @@ def one(seed: int, level: int, cap: int,
 
 
 def run(draw: str, level: int, seeds: int, cap: int,
-        first: int = 1, policy_name: str = "linear") -> dict:
+        first: int = 1) -> dict:
     arrange(draw)
     tally: dict[str, list[int]] = {}
     oas: dict[str, int] = {}
@@ -188,7 +187,7 @@ def run(draw: str, level: int, seeds: int, cap: int,
     rounds: list[int] = []
     for seed in range(first, first + seeds):
         try:
-            out, n = one(seed, level, cap, tally, oas, policy_name)
+            out, n = one(seed, level, cap, tally, oas)
         except Exception as exc:
             # One unplayable seed must not cost the other fifty-nine, and a
             # silent skip would flatter the result. Counted and reported.
@@ -201,7 +200,8 @@ def run(draw: str, level: int, seeds: int, cap: int,
         capped += out == "cap"
     played = wins + losses + capped
     return {
-        "draw": draw, "policy": policy_name,
+        "skipped": len(range(first, first + seeds)) - played,
+        "draw": draw,
         "level": level, "played": played, "wins": wins,
         "losses": losses, "capped": capped,
         "rate": wins / played if played else 0.0,
@@ -223,34 +223,29 @@ def main() -> int:
                     help="repeatable; defaults to 1, 5 and 10")
     ap.add_argument("--draw", choices=DRAWS, action="append",
                     help="repeatable; defaults to every one")
-    ap.add_argument("--policy", choices=sorted(POLICIES), action="append",
-                    help="repeatable; defaults to linear alone. Held on both "
-                         "sides of the board")
     ap.add_argument("--rounds", type=int, default=30, help="give up after this many")
     args = ap.parse_args()
     levels = args.level or [1, 5, 10]
     draws = args.draw or list(DRAWS)
-    policies = args.policy or ["linear"]
 
     print(f"{args.seeds} seeds per cell, round cap {args.rounds}, "
-          f"policy on both sides: {', '.join(policies)}")
+          f"one policy on both sides")
     print(f"party: {', '.join(fight.PARTY)}\n")
-    print(f"{'draw':<9} {'policy':<9} {'lvl':>3} {'played':>6} {'wins':>5} "
+    print(f"{'draw':<9} {'lvl':>3} {'played':>6} {'wins':>5} "
           f"{'rate':>6} {'loss':>5} {'cap':>4} {'rounds':>7} {'range':>9}")
     got = []
     for level in levels:
         for draw in draws:
-            for pol in policies:
-                r = run(draw, level, args.seeds, args.rounds, args.from_seed, pol)
-                got.append(r)
-                print(f"{r['draw']:<9} {r['policy']:<9} {r['level']:>3} "
-                      f"{r['played']:>6} {r['wins']:>5} "
-                      f"{r['rate']:>5.0%} {r['losses']:>5} {r['capped']:>4} "
-                      f"{r['rounds']:>7} {str(r['lo']) + '-' + str(r['hi']):>9}")
+            r = run(draw, level, args.seeds, args.rounds, args.from_seed)
+            got.append(r)
+            print(f"{r['draw']:<9} {r['level']:>3} "
+                  f"{r['played']:>6} {r['wins']:>5} "
+                  f"{r['rate']:>5.0%} {r['losses']:>5} {r['capped']:>4} "
+                  f"{r['rounds']:>7} {str(r['lo']) + '-' + str(r['hi']):>9}")
         print()
 
     # Hit rate per creature, which is what actually moves when a draw improves.
-    print(f"{'draw':<9} {'policy':<9} {'lvl':>3}  "
+    print(f"{'draw':<9} {'lvl':>3}  "
           + "  ".join(f"{c:>9}" for c in fight.PARTY)
           + f"  {'party':>7} {'monsters':>9}")
     for r in got:
@@ -262,19 +257,19 @@ def main() -> int:
         pn = sum(r["hits"].get(c, [0, 0])[1] for c in fight.PARTY)
         mh = sum(v[0] for k, v in r["hits"].items() if k.startswith("monster:"))
         mn = sum(v[1] for k, v in r["hits"].items() if k.startswith("monster:"))
-        print(f"{r['draw']:<9} {r['policy']:<9} {r['level']:>3}  "
+        print(f"{r['draw']:<9} {r['level']:>3}  "
               + "  ".join(f"{c:>9}" for c in cells)
               + f"  {ph / pn if pn else 0:>6.0%} {mh / mn if mn else 0:>9.0%}")
     print()
 
     # Opportunity attacks provoked -- free damage handed to the other side.
-    print(f"{'draw':<9} {'policy':<9} {'lvl':>3} {'party provoked':>15} "
+    print(f"{'draw':<9} {'lvl':>3} {'party provoked':>15} "
           f"{'per fight':>10} {'monsters provoked':>18} {'per fight':>10}")
     for r in got:
         pp = r["oas"].get("party", 0)
         mp = r["oas"].get("monsters", 0)
         n = max(1, r["played"])
-        print(f"{r['draw']:<9} {r['policy']:<9} {r['level']:>3} {pp:>15} "
+        print(f"{r['draw']:<9} {r['level']:>3} {pp:>15} "
               f"{pp / n:>10.1f} {mp:>18} {mp / n:>10.1f}")
     print()
     for r in got:
@@ -282,10 +277,23 @@ def main() -> int:
                if k.startswith("party:")}
         top = sorted(why.items(), key=lambda kv: -kv[1])[:3]
         if top:
-            print(f"  {r['draw']:<9} {r['policy']:<9} lvl {r['level']:>2} "
+            print(f"  {r['draw']:<9} lvl {r['level']:>2} "
                   f"party provoked by: "
                   + ", ".join(f"{k} x{v}" for k, v in top))
     print()
+
+    # **A run that played nothing is a failure, not a clean sheet.** This caught
+    # exceptions per seed, printed them to stderr, carried on and exited 0 -- so when
+    # retiring `LinearPolicy` left a stale `policy_name="linear"` default, every seed
+    # raised `KeyError`, the summary read `0 played  0 wins  0%`, and `check.py` called
+    # it ok. `scripts/CLAUDE.md` has the rule in as many words: an instrument must not
+    # skip itself quietly, and a check that runs on half its runs is not a check.
+    lost = [r for r in got if r["played"] == 0 or r["skipped"] > r["played"]]
+    if lost:
+        for r in lost:
+            print(f"  FAIL level {r['level']} {r['draw']}: {r['played']} fights "
+                  f"played, {r['skipped']} skipped -- see the errors above")
+        return 1
 
     # The comparison the whole instrument exists for.
     for level in levels:

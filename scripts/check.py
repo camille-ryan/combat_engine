@@ -60,6 +60,18 @@ CHECKS = (
                "the engine still plays the recorded fights"),
     Instrument("fight", ("uv", "run", "scripts/fight.py", "--quiet"),
                "a whole fight runs to a finish"),
+    # **Both of these were broken by a refactor and nothing noticed**, which is why
+    # they are here. Retiring `LinearPolicy` left `winrate.py` with a stale
+    # `policy_name="linear"` default, so its ordinary invocation raised `KeyError`
+    # on every seed and reported nothing played; `check.py` ran every other
+    # instrument and not that one. Two seeds is enough to catch a broken
+    # instrument, which is all these two are for -- the numbers they exist to
+    # produce need far more and are not a pass/fail question.
+    Instrument("winrate", ("uv", "run", "scripts/winrate.py",
+                           "--seeds", "2", "--level", "5", "--draw", "scored"),
+               "the batch fight runner still runs"),
+    Instrument("scorecard", ("uv", "run", "scripts/scorecard.py", "--level", "5"),
+               "the policy scorecard still measures"),
     Instrument("api", ("uv", "run", "scripts/api_smoke.py"),
                "the wire: options, streams, names off", heavy=True),
     # Un-paused. The intermittent failure was never `check.py` and was never
