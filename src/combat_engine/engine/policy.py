@@ -14,7 +14,7 @@ not have offered.
 
 **Making policies rather than writing them.** The engine is deterministic and
 the event log is complete, so a fight is a labelled example: `features()`
-turns a `(state, action)` pair into a flat dict of numbers, `LinearPolicy`
+turns a `(state, action)` pair into a flat dict of numbers, the policy
 consumes weights over exactly those names, and `Memory` learns what a power
 is worth by watching what it did rather than by being told. That is the whole
 loop -- play fights, record features and outcomes, fit weights, play again --
@@ -32,8 +32,8 @@ from .components import Gear, Health, Side
 from .dsl import get
 from .events import DamageApplied, Event, OpportunityWindow, PowerUsed
 from .grid import distance
-from .query import alive, distance_between, enemies, is_, speed
-from .types import ActionType, Condition, Keyword, Team, Usage
+from .query import alive, distance_between, enemies, speed
+from .types import ActionType, Keyword, Team, Usage
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -580,114 +580,6 @@ WEIGHTS: dict[str, float] = {
 }
 
 
-@dataclass
-class LinearPolicy:
-    """Scores actions as a weighted sum over `features`.
-
-    The default weights are hand-set and deliberately unsubtle. Fit a better
-    dict from recorded fights and pass it in; nothing else changes.
-    """
-
-    weights: dict[str, float] = field(default_factory=lambda: dict(WEIGHTS))
-    memory: Memory | None = None
-    #: Keeps a daily in hand until the fight is going badly.
-    desperate_at: float = 0.4
-
-    def score(self, world: World, encounter: Encounter, actor: int, action: Action) -> float:
-        return self.weigh(features(world, encounter, actor, action), action)
-
-    def weigh(self, f: dict[str, float], action: Action) -> float:
-        """The weighted sum, given features already computed.
-
-        Split out from `score` so a subclass can adjust a feature *before* it is
-        weighed without computing the dict twice -- `features` asks
-        `Power.hit_chance` once per target, so it is not free. `DoctrinePolicy`
-        is the caller: a healing row has to have `allies_caught` cleared before
-        the -7.0 lands on it.
-        """
-        total = sum(self.weights.get(k, 0.0) * v for k, v in f.items())
-        if self.memory is not None and action.ref:
-            total += self.memory.worth(action.ref, 5.0) * f.get("expected_hits", 0.0) * 0.4
-        if f.get("usage_daily") and f.get("my_hp_fraction", 1.0) < self.desperate_at:
-            total += 6.0
-        if f.get("is_second_wind") and f.get("my_hp_fraction", 1.0) < 0.3:
-            total += 12.0
-        return total
-
-    def act(
-        self, world: World, encounter: Encounter, actor: int, options: list[Action]
-    ) -> Action:
-        usable = [a for a in options if a.available] or options
-        # Sorting by the string as well keeps two runs of a seed identical
-        # when several actions score the same.
-        return max(usable, key=lambda a: (self.score(world, encounter, actor, a), str(a)))
-
-    def decide(
-        self, world: World, actor: int, kind: str, options: list[Any], prompt: str
-    ) -> Any:
-        """Choices inside a power.
-
-        Movement choices are aimed: a shift goes toward the nearest enemy if
-        the creature is trying to reach one and away if it is hurt. Anything
-        else takes the first option, which is sorted, so it is stable rather
-        than arbitrary.
-        """
-        if kind in ("push", "pull", "slide") and options and _is_square(options[0]):
-            # Where to shove somebody. Away from its friends, which is the
-            # point of a push -- it is worth more than the square of damage
-            # it came with. Ties break in sorted order, so a seed replays.
-            mates = [
-                a
-                for a in _allies_of(world, actor)
-                if alive(world, a)
-            ]
-            if not mates:
-                return options[0]
-
-            def isolation(sq: Any) -> tuple[int, Any]:
-                return (min(distance(sq, _square(world, m)) for m in mates), sq)
-
-            return max(options, key=isolation)
-
-        if kind in ("shift", "move", "teleport") and options and _is_square(options[0]):
-            health = world.get(actor, Health)
-            retreat = health is not None and health.hp < health.max_hp * 0.35
-            foes = [e for e in enemies(world, actor) if alive(world, e)]
-            if not foes:
-                return options[0]
-
-            def reach(sq: Any) -> int:
-                return min(distance(sq, _square(world, e)) for e in foes)
-
-            return max(options, key=reach) if retreat else min(options, key=reach)
-        return options[0]
-
-    def react(
-        self, world: World, encounter: Encounter, actor: int, window: Event
-    ) -> Action | None:
-        """Take an opportunity attack whenever one is on offer.
-
-        Deliberately blunt. Declining is occasionally right and a fitted
-        policy can learn when; always taking it is the right default because
-        the failure mode of the alternative -- silently never reacting -- is
-        invisible in a log.
-        """
-        if not isinstance(window, OpportunityWindow):
-            return None
-        if not encounter.can_spend(actor, ActionType.OPPORTUNITY):
-            return None
-        if is_(world, actor, Condition.DAZED) or is_(world, actor, Condition.STUNNED):
-            return None
-        options = [
-            a
-            for a in _opportunity_options(world, encounter, actor, window.provoker)
-            if a.available
-        ]
-        if not options:
-            return None
-        return max(options, key=lambda a: (self.score(world, encounter, actor, a), str(a)))
-
-
 def _is_square(value: Any) -> bool:
     return isinstance(value, tuple) and len(value) == 2 and all(isinstance(v, int) for v in value)
 
@@ -745,11 +637,9 @@ def install(
     characters to a human interface and leave the monsters on a policy
     without either side knowing about the other.
     """
-    # **`DoctrinePolicy` is the default**, on the measurement in its own docstring:
-    # 60 of 80 at level 5 against `LinearPolicy`'s 47 and 67 against 46 at level
-    # 10, both surviving Holm. Imported here rather than at the top because
-    # `doctrine` imports this module -- it subclasses `LinearPolicy`, which stays
-    # exactly as it is so the two can go on being compared.
+    # Imported here rather than at the top because `doctrine` imports this module
+    # for `features`, `WEIGHTS` and the helpers. There is one policy now, so this is
+    # the only concrete one there is.
     from .doctrine import DoctrinePolicy
 
     fallback = default or DoctrinePolicy()

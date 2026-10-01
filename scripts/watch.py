@@ -27,13 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import fight
-from combat_engine.engine import (
-    DoctrinePolicy,
-    Ident,
-    LinearPolicy,
-    install,
-    take_turn,
-)
+from combat_engine.engine import DoctrinePolicy, Ident, install, take_turn
 from combat_engine.engine import doctrine as D
 from combat_engine.engine import threat as T
 from combat_engine.engine.components import Health, Position, Side
@@ -47,7 +41,7 @@ from combat_engine.engine.events import (
 from combat_engine.engine.grid import distance
 from combat_engine.engine.query import alive, creatures, enemies
 
-POLICIES = {"linear": LinearPolicy, "doctrine": DoctrinePolicy}
+POLICIES = {"doctrine": DoctrinePolicy}
 
 
 def who(world, eid: int) -> str:  # noqa: ANN001

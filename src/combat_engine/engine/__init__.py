@@ -126,7 +126,7 @@ from .events import (
 )
 from .grid import Grid, Square, distance, footprint, spread
 from .monster_math import AS_PRINTED, TO_MM3
-from .policy import LinearPolicy, Memory, Policy, install, take_turn
+from .policy import Memory, Policy, install, take_turn
 from .rng import Rng
 from .triggers import (
     Trigger,

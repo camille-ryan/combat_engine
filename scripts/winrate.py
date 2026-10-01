@@ -18,10 +18,12 @@ everything else alone, so two runs over the same seeds differ in one variable:
     scored    the option scorer as it stands
     rated     the scorer plus the community ratings
 
-`--policy` is the same idea for the scorer -- `linear` or `doctrine`, held on
-**both** sides of the board so a run measures the policy and not which side got the
-better one. Change one of `--draw` and `--policy` at a time: measured together they
-would tell you nothing about either.
+**There is one policy now, and this instrument is no longer how a policy change is
+judged.** Both sides of the board run it, so an improvement helps the monsters as much
+as the party and largely cancels here -- measured twice on fresh seeds, the gap never
+survived Holm while the tactical counts moved hard. `scripts/scorecard.py` is the gate.
+What this is still good for is **balance**: is a fight 7-8 rounds, and does the party
+win often enough to be playing a game.
 
 **Rounds is reported beside the win rate and is the more trustworthy number.**
 #217 settled that the target is 7-8 rounds and that a seeded fight's round count is
@@ -92,13 +94,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import fight
 from combat_engine import chargen
-from combat_engine.engine import (
-    DoctrinePolicy,
-    Ident,
-    LinearPolicy,
-    install,
-    take_turn,
-)
+from combat_engine.engine import DoctrinePolicy, Ident, install, take_turn
 from combat_engine.engine import doctrine as doctrine_cache
 from combat_engine.engine import threat as threat_cache
 from combat_engine.engine.events import AttackRolled, OpportunityWindow
@@ -106,10 +102,11 @@ from combat_engine.engine.types import Team
 
 DRAWS = ("chassis", "scored", "rated")
 
-#: `linear` is `LinearPolicy` as it has always been; `doctrine` adds threat,
-#: position and healing on top of it. Held on **both** sides of the board, so a
-#: run measures the scorer and not which side got the better one.
-POLICIES = {"linear": LinearPolicy, "doctrine": DoctrinePolicy}
+#: There is one policy. `--policy` is gone with `LinearPolicy`, and so is the A/B
+#: this instrument was built around: see `scripts/scorecard.py` for why, and for the
+#: gate that replaced it. What is left here is the **balance** question -- is a fight
+#: 7-8 rounds -- which a win rate and a round count can still answer.
+POLICIES = {"doctrine": DoctrinePolicy}
 
 
 def arrange(draw: str) -> None:

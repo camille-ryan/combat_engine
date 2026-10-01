@@ -88,10 +88,16 @@ reached as the `Cast` passed into every power body, not by import.
 
 ## AI Policy — a component inside this directory
 
-`policy.py` is its own component: **what the AI chooses**, not what the rules
-allow. One module, 599 lines, `Policy` protocol plus `LinearPolicy`. Its
-doctrine notes are in `docs/AI_DOCTRINE.md` (tactical heuristics,
-role goals, the threat definition).
+`policy.py` and `doctrine.py` are their own component: **what the AI chooses**, not
+what the rules allow. `policy.py` holds the `Policy` protocol, `features`, the weight
+table and `Memory`; `doctrine.py` holds the one concrete policy, `DoctrinePolicy`, and
+`threat.py` the figures it weighs. Doctrine notes are in `docs/AI_DOCTRINE.md`.
+
+**There is one policy.** `LinearPolicy` was retired once the A/B it existed for turned
+out to be the wrong instrument: both sides of the board run the same policy, so an
+improvement cancels in the win rate. `scripts/scorecard.py` is the gate now -- per-side
+tactical counts against a committed baseline -- and `scripts/doctrine.py` reports what
+each of the 52 weights fired on. Neither needs a rival policy to read.
 
 Two things follow:
 

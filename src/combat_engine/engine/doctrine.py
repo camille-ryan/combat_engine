@@ -1,18 +1,24 @@
 """A policy that scores the three things `docs/AI_DOCTRINE.md` actually asks for.
 
-`LinearPolicy` has 44 features and 37 weights and every one of them is an action
-kind, a hit chance or a count of targets. Nothing in it can say **where a square
-is good**, **how dangerous a creature is**, or **whether a heal is worth casting**
--- which is most of what the doctrine is about. This adds those three and changes
-nothing else.
+`policy.features` gives 44 features and `policy.WEIGHTS` prices 37 of them, and every
+one is an action kind, a hit chance or a count of targets. Nothing there can say
+**where a square is good**, **how dangerous a creature is**, or **whether a heal is
+worth casting** -- which is most of what the doctrine is about. This module adds those,
+and holds the policy that weighs them.
 
-A second policy rather than more weights on the first, deliberately. Forty-five
-interacting hand-set numbers cannot be moved one at a time, so a regression in them
-cannot be attributed; two policies on the same seeds can be compared. It was
-written opt-in for that reason and **is now the default**, on the measurement
-below. `LinearPolicy` stays exactly as it is -- this subclasses it and overrides
-`score` alone -- so `--policy linear` goes on being the baseline to compare against
-rather than becoming dead code.
+**There is one policy, and this is it.** It began as a second one beside
+`LinearPolicy` so that an A/B could attribute a regression -- "forty-five interacting
+hand-set numbers cannot be moved one at a time" was the argument, and it was mine. The
+A/B turned out to be the wrong instrument: both sides of the board run the same policy,
+so an improvement helps the monsters as much as the party and largely cancels in the
+win rate. Measured twice on fresh seeds, the gap never survived Holm while the tactical
+counts moved hard.
+
+So `LinearPolicy` is retired and the two weight tables are **one table of 52**.
+Attribution comes from `scripts/scorecard.py` -- per-side tactical counts against a
+committed baseline -- and from `scripts/doctrine.py`, which reports what each weight
+fired on and what it contributed to the action actually chosen. That is finer-grained
+than an A/B was, which is why the original objection no longer holds.
 
 ## Where it stands, measured
 
@@ -182,13 +188,33 @@ from . import threat as T
 from .actions import Action
 from .components import Health, Position, Side
 from .dsl import get
-from .policy import LinearPolicy, features
-from .query import alive, creatures, enemies, flanked_by, flankers, squares
+from .events import Event, OpportunityWindow
+from .grid import distance
+from .policy import (
+    WEIGHTS,
+    Memory,
+    _allies_of,
+    _is_square,
+    _opportunity_options,
+    _square,
+    features,
+)
+from .query import (
+    alive,
+    creatures,
+    enemies,
+    flanked_by,
+    flankers,
+    is_,
+    squares,
+)
 from .turns import Encounter
-from .types import Team
+from .types import ActionType, Condition, Team
 
-#: Weights for the doctrine terms only. `LinearPolicy.weights` is untouched and
-#: the two are summed, so a term here is worth what it says beside the 37 there.
+#: The doctrine half of the weight table. Merged with `policy.WEIGHTS`'s 37 into the
+#: one dict the policy carries; kept separate here so `scripts/doctrine.py` can report
+#: on these terms specifically, and because they share one currency and the others do
+#: not.
 #:
 #: **Five of these are one currency and share one weight.** `threat_removed`,
 #: `threat_conceded`, `reach_gained` and `healing_given` are each a *share of a
@@ -276,7 +302,7 @@ DOCTRINE: dict[str, float] = {
     # free swing from a minion's, and this is what does -- the expected damage of
     # the swings actually conceded, as a share of my side's health.
     #
-    # It *modulates* `LinearPolicy`'s `provokes_now` and `provokes_avoidably`
+    # It *modulates* `policy.features`'s `provokes_now` and `provokes_avoidably`
     # rather than replacing them, and that was measured rather than chosen:
     # switching those two off and leaving this in its place dropped the cost of
     # provoking from -9.0 to about -0.8, and the party went from 53 opportunity
@@ -1050,7 +1076,7 @@ def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
       shoot.
 
     Two things are deliberately kept beyond that rule. A hurt creature keeps its
-    retreat, because `LinearPolicy.decide` has always backed away below a third of
+    retreat, because `decide` has always backed away below a third of
     its hit points and pruning that away would silently remove the behaviour. And
     if the rule matches nothing, the closest approaches are kept, so a creature is
     never left with no way to move at all.
@@ -1094,16 +1120,30 @@ def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
 
 
 @dataclass
-class DoctrinePolicy(LinearPolicy):
-    """`LinearPolicy` plus threat, position and healing.
+class DoctrinePolicy:
+    """The policy. One of them, as of this commit.
 
-    Everything not named in the module docstring is inherited unchanged --
-    `act`, `decide` and `react` are `LinearPolicy`'s, so the two policies differ
-    in how they *score* an action and in nothing else. That is what makes an A/B
-    between them readable.
+    **`LinearPolicy` is retired** -- Camille's call. It existed as a frozen baseline so
+    that an A/B could attribute a regression, and that A/B turned out to be the wrong
+    instrument: both sides of the board run the same policy, so an improvement helps
+    the monsters as much as the party and largely cancels in the win rate. Measured
+    twice on fresh seeds, the gap never survived Holm while the tactical counts moved
+    hard. `scripts/scorecard.py` is the gate now, and it compares against committed
+    numbers rather than against a rival.
+
+    So the two classes are one, and **the two weight tables are one table of 52**.
+    That is the thing I argued against when the second policy was created -- "forty-five
+    interacting hand-set numbers cannot be moved one at a time, so a regression cannot
+    be attributed" -- and the answer is that attribution now comes from the scorecard's
+    per-side counts and `scripts/doctrine.py`'s per-term firing, which is finer-grained
+    than an A/B ever was. Recording the reversal rather than making it quietly.
     """
 
-    doctrine: dict[str, float] = field(default_factory=lambda: dict(DOCTRINE))
+    weights: dict[str, float] = field(
+        default_factory=lambda: {**WEIGHTS, **DOCTRINE})
+    memory: Memory | None = None
+    #: Keeps a daily in hand until the fight is going badly.
+    desperate_at: float = 0.4
 
     def score(
         self, world: Any, encounter: Encounter, actor: int, action: Action
@@ -1115,11 +1155,11 @@ class DoctrinePolicy(LinearPolicy):
             # on purpose. Cleared before `weigh` rather than compensated for after,
             # so the number is never wrong in between.
             f["allies_caught"] = 0.0
-        # `running` asked directly, **not** read off `f`: `already_on` is a doctrine
-        # term and `f` is `policy.features`'s dict, so `f.get("already_on")` was always
-        # None and this condition never fired. A predicate reading a field its source
-        # does not carry, which is the failure the component file opens with -- and it
-        # looked exactly like a working fix, because the scorecard printed identically.
+        # `running` asked directly, **not** read off `f`: it is a doctrine term and `f`
+        # is `policy.features`'s dict, so `f.get("already_on")` was always None and the
+        # condition never fired. A predicate reading a field its source does not carry,
+        # which is the failure the component file opens with -- and it looked exactly
+        # like a working fix, because the scorecard printed identically.
         on_already = bool(action.ref) and (
             not action.targets or tuple(action.targets) == (actor,)
         ) and running(world, actor, action.ref)
@@ -1130,46 +1170,125 @@ class DoctrinePolicy(LinearPolicy):
             # rather than penalised: none of the ones measured cost a *standard*
             # action, so they were filling idle minor and free actions, and a free
             # action that does nothing costs nothing. What it must not do is outbid a
-            # move that would have repositioned, or a shift that would have avoided
-            # the opportunity attack the ranged ones concede.
+            # move that would have repositioned.
             #
             # **A row whose effect is already running counts as inert too**, for the
-            # same reason: it accomplishes nothing *now*. `already_on` at -4.0 did not
-            # cancel the +6.0, so the net stayed positive and the row went on being
-            # chosen -- 80 times over twelve fights at level 5 once the detection
-            # started working. Zeroing `is_power` is what actually stops it.
+            # same reason: it accomplishes nothing *now*.
             f["is_power"] = 0.0
-        total = self.weigh(f, action)
-        d = doctrine_features(world, encounter, actor, action)
-        return total + sum(self.doctrine.get(k, 0.0) * v for k, v in d.items())
+        f.update(doctrine_features(world, encounter, actor, action))
+        return self.weigh(f, action)
 
     def act(
         self, world: Any, encounter: Encounter, actor: int, options: list[Action]
     ) -> Action:
-        """Prune the destinations, then score what is left.
+        """Prune the destinations, then take the best of what is left.
 
-        `LinearPolicy.act` scores every option `legal` produced, and nine in ten of
-        them are a square. `worth_standing` is the filter; everything else about
-        choosing is inherited, so the two policies still differ only in how they
-        value an action and in which squares they bother to value.
+        `actions.legal` offers every reachable square and nine in ten options are one,
+        so `worth_standing` filters before anything is scored. Sorting by `str` as well
+        keeps two runs of a seed identical when several actions score the same.
         """
         moves = [a for a in options if a.kind in _STEPS and a.dest is not None]
         if len(moves) > KEEP:
             keep = set(map(id, worth_standing(world, actor, moves)))
             options = [a for a in options
                        if a.kind not in _STEPS or a.dest is None or id(a) in keep]
-        return super().act(world, encounter, actor, options)
+        usable = [a for a in options if a.available] or options
+        return max(usable,
+                   key=lambda a: (self.score(world, encounter, actor, a), str(a)))
+
+    def weigh(self, f: dict[str, float], action: Action) -> float:
+        """The weighted sum, given features already computed.
+
+        Split out from `score` so a subclass can adjust a feature *before* it is
+        weighed without computing the dict twice -- `features` asks
+        `Power.hit_chance` once per target, so it is not free. `DoctrinePolicy`
+        is the caller: a healing row has to have `allies_caught` cleared before
+        the -7.0 lands on it.
+        """
+        total = sum(self.weights.get(k, 0.0) * v for k, v in f.items())
+        if self.memory is not None and action.ref:
+            total += self.memory.worth(action.ref, 5.0) * f.get("expected_hits", 0.0) * 0.4
+        if f.get("usage_daily") and f.get("my_hp_fraction", 1.0) < self.desperate_at:
+            total += 6.0
+        if f.get("is_second_wind") and f.get("my_hp_fraction", 1.0) < 0.3:
+            total += 12.0
+        return total
+
+    def decide(
+        self, world: Any, actor: int, kind: str, options: list[Any], prompt: str
+    ) -> Any:
+        """Choices inside a power.
+
+        Movement choices are aimed: a shift goes toward the nearest enemy if
+        the creature is trying to reach one and away if it is hurt. Anything
+        else takes the first option, which is sorted, so it is stable rather
+        than arbitrary.
+        """
+        if kind in ("push", "pull", "slide") and options and _is_square(options[0]):
+            # Where to shove somebody. Away from its friends, which is the
+            # point of a push -- it is worth more than the square of damage
+            # it came with. Ties break in sorted order, so a seed replays.
+            mates = [
+                a
+                for a in _allies_of(world, actor)
+                if alive(world, a)
+            ]
+            if not mates:
+                return options[0]
+
+            def isolation(sq: Any) -> tuple[int, Any]:
+                return (min(distance(sq, _square(world, m)) for m in mates), sq)
+
+            return max(options, key=isolation)
+
+        if kind in ("shift", "move", "teleport") and options and _is_square(options[0]):
+            health = world.get(actor, Health)
+            retreat = health is not None and health.hp < health.max_hp * 0.35
+            foes = [e for e in enemies(world, actor) if alive(world, e)]
+            if not foes:
+                return options[0]
+
+            def reach(sq: Any) -> int:
+                return min(distance(sq, _square(world, e)) for e in foes)
+
+            return max(options, key=reach) if retreat else min(options, key=reach)
+        return options[0]
+
+    def react(
+        self, world: Any, encounter: Encounter, actor: int, window: Event
+    ) -> Action | None:
+        """Take an opportunity attack whenever one is on offer.
+
+        Deliberately blunt. Declining is occasionally right and a fitted
+        policy can learn when; always taking it is the right default because
+        the failure mode of the alternative -- silently never reacting -- is
+        invisible in a log.
+        """
+        if not isinstance(window, OpportunityWindow):
+            return None
+        if not encounter.can_spend(actor, ActionType.OPPORTUNITY):
+            return None
+        if is_(world, actor, Condition.DAZED) or is_(world, actor, Condition.STUNNED):
+            return None
+        options = [
+            a
+            for a in _opportunity_options(world, encounter, actor, window.provoker)
+            if a.available
+        ]
+        if not options:
+            return None
+        return max(options, key=lambda a: (self.score(world, encounter, actor, a), str(a)))
 
     def explain(
         self, world: Any, encounter: Encounter, actor: int, action: Action
     ) -> dict[str, float]:
         """Every doctrine term and what it contributed. For an instrument.
 
-        A weight nothing consults is this project's commonest bug, so the scorer
-        is built able to say what it read.
+        A weight nothing consults is this project's commonest bug, so the scorer is
+        built able to say what it read.
         """
         d = doctrine_features(world, encounter, actor, action)
-        return {k: self.doctrine.get(k, 0.0) * v for k, v in d.items()}
+        return {k: self.weights.get(k, 0.0) * v for k, v in d.items()}
 
 
 def pool_shares(world: Any) -> dict[int, float]:
