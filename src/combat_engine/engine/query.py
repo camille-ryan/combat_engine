@@ -576,7 +576,7 @@ def granted_actions(world: World, eid: int) -> dict[tuple[str, str], int]:
     return out
 
 
-def immune_to(world: World, eid: int, cond: Condition) -> bool:
+def immune_to(world: World, eid: int, cond: Condition, source: int | None = None) -> bool:
     """Can this condition not be laid on this creature at all?
 
     Distinct from curing one: "you cannot be marked or slowed until the end
@@ -587,7 +587,12 @@ def immune_to(world: World, eid: int, cond: Condition) -> bool:
     mods = world.get(eid, Mods)
     if mods is None or not mods.items:
         return False
-    return mods.total(f"immune to {cond.value}", {}) > 0
+    # **The context, which used to be `{}`.** `Mods.total` evaluates a modifier's
+    # gate through `applies(ctx)`, so an empty dict let a gated immunity be written
+    # and then asked a question it could not answer. Keys follow the convention in
+    # `escape` and `skills`: the participants by name, plus what is being resisted.
+    ctx = {"cond": cond.value, "target": eid, "source": source}
+    return mods.total(f"immune to {cond.value}", ctx) > 0
 
 
 def sees_invisible(world: World, eid: int) -> bool:

@@ -2369,7 +2369,8 @@ class Cast:
         return self.world.effects.cure(who, conditions)
 
     def immune(
-        self, *conditions: Condition, until: When = When.EONT, on: int | None = None
+        self, *conditions: Condition, until: When = When.EONT, on: int | None = None,
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """"You cannot be marked or slowed until the end of your next turn."
 
@@ -2385,8 +2386,14 @@ class Cast:
         who = self._who(on)
         if who is None:
             return None
+        # `when` rides on the `Mod`, where `Mods.total` already evaluates it through
+        # `applies(ctx)`. `query.immune_to` used to hand that call an empty dict, so a
+        # gate could only ever answer from what it closed over -- the context it needs
+        # is added there, in this same commit, because a keyword whose reader cannot
+        # read it is this component's commonest bug wearing a friendlier face.
         mods = [
-            (who, Mod(what=f"immune to {c.value}", value=1, kind=self.ref, label=self.ref))
+            (who, Mod(what=f"immune to {c.value}", value=1, kind=self.ref,
+                      label=self.ref, when=when))
             for c in conditions
         ]
         if not mods:
@@ -3209,7 +3216,8 @@ class Cast:
 
     def no_provoke(
         self, *, from_: int | None = None, on: int | None = None,
-        until: When = When.EOTNT
+        until: When = When.EOTNT,
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """Walking away from that creature does not give it an opening.
 
@@ -3223,6 +3231,11 @@ class Cast:
         other printed shape -- "the target cannot make opportunity attacks
         against any creature other than you" -- could not be said at all,
         since that one hands the immunity to everybody else on the board.
+
+        `when` narrows it to particular openings -- `ctx["why"]` is the window's own
+        reason ("moved away", "is a ranged power"), and `ctx["actor"]` is whoever
+        would swing. Without it the only sayable sentence was "never provokes at
+        all", which is why 13 rows carried a marker.
         """
         from .events import OpportunityWindow
 
@@ -3235,8 +3248,19 @@ class Cast:
         me = on if on is not None else self.me
 
         def veto(ev: OpportunityWindow) -> None:
-            if ev.provoker == me and (who is None or ev.actor == who):
-                ev.cancel("the power says it does not provoke")
+            if ev.provoker != me or (who is not None and ev.actor != who):
+                return
+            # **The gate is read here, inside the veto**, which is the only place
+            # that knows what opened the window. 13 rows asked for it and they are
+            # all of the shape "does not provoke *when you shift*" or "...from the
+            # creature you marked" -- conditions on the opening, not on the
+            # creature. Keys follow the convention `escape` and `skills` use: the
+            # participants by name, plus the reason the window opened.
+            if when is not None and not when(
+                {"actor": ev.actor, "provoker": ev.provoker, "why": ev.why}
+            ):
+                return
+            ev.cancel("the power says it does not provoke")
 
         return self.watch(
             OpportunityWindow,
@@ -3642,7 +3666,8 @@ class Cast:
         )
 
     def resist_forced(
-        self, squares_: int = 1, *, on: int | None = None, until: When = When.ENCOUNTER
+        self, squares_: int = 1, *, on: int | None = None, until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """Shorten every push, pull and slide against this creature.
 
@@ -3652,8 +3677,12 @@ class Cast:
         Defaults to the caster rather than to `c.target`: every row printing
         this is describing itself.
         """
+        # `when` reaches the shove's own gate: `movement._settle` reads `"forced"`
+        # with `{"how": push|pull|slide, "power": ref}`, so "1 square fewer against
+        # a *pull*" is sayable without a second key.
         return self.bonus(
-            "forced", squares_, on=on or self.me, until=until, kind="untyped"
+            "forced", squares_, on=on or self.me, until=until, kind="untyped",
+            when=when,
         )
 
     def second_wind(
@@ -5593,6 +5622,7 @@ class Cast:
         *,
         side: str = "team",
         kind: str = "power",
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> None:
         """A zone that carries a modifier for as long as you stand in it.
 
@@ -5612,6 +5642,11 @@ class Cast:
         `side` reads as it does on `c.within`: `"team"` is your side with
         you in it, which is the "you and your allies" these zones print;
         `"ally"` leaves you out, which is the rarer "allies in the zone".
+
+        `when` is the same gate `c.bonus` takes and is handed straight to it, so
+        it is read where every other gated bonus is read, with the same context
+        -- "+1 to attack inside the zone **against bloodied enemies**" is one
+        lambda rather than a second kind of zone. Ten rows asked for it.
         """
         # Resistance is not a modifier -- `deal_damage` reads it off
         # `Defences.resist` and never consults `Mods` -- so asking for it
@@ -5625,7 +5660,7 @@ class Cast:
         self._while_inside(
             zone,
             lambda who: self.bonus(
-                what, value, on=who, until=When.ENCOUNTER, kind=kind
+                what, value, on=who, until=When.ENCOUNTER, kind=kind, when=when
             ),
             side,
         )

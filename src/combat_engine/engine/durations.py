@@ -222,7 +222,7 @@ class Effects:
         # effect still lands: a hold that slows *and* burns is only immune
         # to half of itself.
         conditions = list(conditions)
-        refused = [c for c in conditions if immune_to(self.world, owner, c)]
+        refused = [c for c in conditions if immune_to(self.world, owner, c, source)]
         if refused:
             conditions = [c for c in conditions if c not in refused]
             self.world.bus.emit(

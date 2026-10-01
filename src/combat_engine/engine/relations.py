@@ -60,7 +60,7 @@ class Relations:
         # count alone would leave the marker holding a mark over somebody
         # who is not marked, and `resolve` reads the relation for its -2.
         cond = IMPLIES.get(kind)
-        if cond is not None and immune_to(self.world, target, cond):
+        if cond is not None and immune_to(self.world, target, cond, source):
             self.world.bus.emit(Note(text=f"{target} cannot be {cond.value}"))
             return
         if kind is Relation.MARKED_BY:
