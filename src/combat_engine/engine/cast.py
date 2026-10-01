@@ -4069,21 +4069,34 @@ class Cast:
 
     # -- a second body you own ----------------------------------------------
 
-    def companion(self, *, of: int | None = None) -> int | None:
+    def companion(
+        self, *, of: int | None = None, which: int | None = None
+    ) -> int | None:
         """The companion this creature owns, if it has one on the board.
 
         The question 107 blocked rows were asking. A companion is not a
         conjuration -- it belongs to the character rather than to the power
         that made it, it persists, and it can be hit -- and it is not a
         servant either, because it never takes a turn of its own.
+
+        `which` picks among several, for the one creature that can have two: a
+        shaman who has used `p3839` chooses which spirit an attack is made from,
+        and this is where that choice lands. Out of range or absent falls back to
+        the first, which is the same answer this gave before there was a choice.
         """
         from .components import Companion
 
         owner = of if of is not None else self.me
-        for eid in self.world.having(Companion):
-            if self.world.get(eid, Companion).owner == owner:
-                return eid
-        return None
+        mine = [
+            eid
+            for eid in self.world.having(Companion)
+            if self.world.get(eid, Companion).owner == owner
+        ]
+        if not mine:
+            return None
+        if which is not None and 0 <= which < len(mine):
+            return mine[which]
+        return mine[0]
 
     def call_companion(
         self,
@@ -4093,12 +4106,20 @@ class Cast:
         kind: str = "spirit",
         speed: int = 6,
         damage: str = "",
+        second: bool = False,
     ) -> int:
         """Put your companion on the board, moving the one you have if any.
 
         "You can call it again" is printed on nearly every row that can
         dismiss one, and the printed reading is that you only ever have the
         one -- so calling again relocates rather than accumulating.
+
+        `second=True` is the exception and there is exactly one: a shaman who
+        has used `p3839` "can use your <call> power to conjure a **second**
+        spirit companion". It adds rather than relocating, and leaves the
+        standing one where it is. Everything downstream is already plural --
+        `Cast.companions`, and `dsl.origins` since this change -- so the only
+        thing that had to be said was "do not move the one I have".
 
         With no `ref` the companion's numbers come off its owner, which is
         what the printed spirit does: its hit points are the shaman's surge
@@ -4125,7 +4146,7 @@ class Cast:
         where = at or self._free_square_near(self.here)
         if where is None:
             return 0
-        standing = self.companion()
+        standing = None if second else self.companion()
         if standing is not None:
             mine = self.world.get(standing, Companion)
             if mine is not None and mine.ref == ref:

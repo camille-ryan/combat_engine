@@ -1158,7 +1158,12 @@ def area_of(
     highlights what it is given lights up squares that are not there.
     """
     r = p.reach_of(branch, augment)
-    mine = squares(world, measured_from(world, actor, r))
+    # Every origin, unioned. One companion gives one origin and the same answer
+    # as before; two give the area either of them could reach, which is what the
+    # printed rule asks for on both of its sentences. See `origins`.
+    mine = set()
+    for eye in origins(world, actor, r):
+        mine |= squares(world, eye)
     stretch = _stretched(world, actor, r.kind, {"power": p.ref, "kind": r.kind})
     if stretch:
         r = replace(r, size=r.size + stretch)
@@ -1294,6 +1299,35 @@ def measured_from(world: World, actor: int, r: Range) -> int:
         if world.get(eid, Companion).owner == actor and world.get(eid, Position):
             return eid
     return actor
+
+
+def origins(world: World, actor: int, r: Range) -> list[int]:
+    """Every square this range could be measured from, not just the first.
+
+    The plural of `measured_from`, and the shaman's second spirit is why it
+    exists. The printed rule is two sentences and they want different things:
+
+    * "When you attack with a spirit power, you **choose** which spirit
+      companion to use for the attack" -- so the menu has to offer whatever
+      *either* spirit could reach, and the choice is made at use time;
+    * "When an effect applies to creatures adjacent to your spirit companion,
+      that effect applies to creatures adjacent to **both**" -- a union.
+
+    Both come out of offering from every origin, which is what `area_of` and
+    `candidates` do with this. **With one companion the list is one long and
+    nothing changes**, which is every character that exists today: only `p3839`
+    conjures a second.
+    """
+    if r.from_ != "companion":
+        return [measured_from(world, actor, r)]
+    from .components import Companion, Position
+
+    mine = [
+        eid
+        for eid in world.having(Companion)
+        if world.get(eid, Companion).owner == actor and world.get(eid, Position)
+    ]
+    return mine or [actor]
 
 
 def roller(world: World, actor: int, by: str) -> int:
@@ -1433,13 +1467,13 @@ def candidates(
     # Line of effect is traced from whatever the range was measured from, so
     # a spirit round the corner reaches what *it* can see rather than what
     # its shaman can.
-    eye = measured_from(world, actor, reach)
+    eyes = origins(world, actor, reach)
     return [
         c
         for c in pool
         if targetable(world, c)
         and squares(world, c) & area
-        and line_of_effect(world, eye, c)
+        and any(line_of_effect(world, eye, c) for eye in eyes)
     ]
 
 

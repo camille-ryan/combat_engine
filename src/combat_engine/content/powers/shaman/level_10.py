@@ -305,16 +305,27 @@ def p5404(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.PRIMAL],
-    todo=(
-        "c.call_companion(second=)",
-        "c.companion(which=)",
-        "dsl.measured_from(which=)",
-    ),
 )
 def p3839(c: Cast) -> None:
-    """A second spirit companion, and the engine has one everywhere: the
-    call relocates the companion that is already out, `c.companion` answers
-    with a single eid, and "melee spirit 1" is measured and rolled from that
-    one. Its second and third sentences also change how every standing
-    shaman row reads "your spirit companion", so this is not a row that can
-    be finished by adding a method. Left for the issue that owns it."""
+    """A second spirit companion until the end of the encounter.
+
+    All three holds are gone and the printed rule is what settled the design,
+    because its two later sentences want *different* things:
+
+    * "When you attack with a spirit power, you **choose** which spirit
+      companion to use" -- so the action menu has to offer whatever either
+      spirit could reach, and the choice is made when the row is used.
+      `c.companion(which=)` is where it lands.
+    * "When an effect applies to creatures adjacent to your spirit companion,
+      that effect applies to creatures adjacent to **both**" -- a union.
+
+    `dsl.origins` serves both by offering from every origin, and **with one
+    companion it is one origin and nothing changes** -- which is every other
+    character in the game, since this is the only row that makes a second.
+
+    The effect is the permission, not the spirit: the card says "you can use
+    your call power to conjure a second", so this marks the shaman and the
+    call does the conjuring. `c.call_companion(second=True)` adds instead of
+    relocating, which is the one exception to "you only ever have the one".
+    """
+    c.effect(c.ref, until=When.ENCOUNTER, on=c.me)

@@ -52,8 +52,28 @@ def _spirit_of(world: World, me: int) -> int | None:
     return None
 
 
+def _twinned(world: World, eid: int) -> bool:
+    """Has this shaman the standing permission to keep a second spirit? p3839."""
+    return any(e.label.startswith("p3839") for e in world.effects.of(eid))
+
+
 def _no_spirit(world: World, eid: int) -> bool:
-    """"Requirement: your spirit companion must not be present."""
+    """"Requirement: your spirit companion must not be present."
+
+    **Unless `p3839` is up**, which says "you can use your <call> power to
+    conjure a second spirit companion" -- so for that shaman the requirement is
+    "fewer than two" rather than "none". Written here rather than as a second
+    row, because it is this row the card points at.
+    """
+    from combat_engine.engine.components import Companion
+
+    if _twinned(world, eid):
+        mine = [
+            e
+            for e in world.having(Companion)
+            if world.get(e, Companion).owner == eid
+        ]
+        return len(mine) < 2
     return _spirit_of(world, eid) is None
 
 
@@ -90,8 +110,13 @@ def p6515(c: Cast) -> None:
     """The spirit is a companion rather than a conjuration: it belongs to the
     character, it persists, and it can be hit. Everything printed about
     moving it with your move action and about the 10 + half level that
-    disperses it is the companion's own behaviour, not this row's."""
-    c.call_companion()
+    disperses it is the companion's own behaviour, not this row's.
+
+    `second=` when `p3839` is up and one spirit is already out: that card makes
+    *this* row conjure a second rather than relocating the first, which is the
+    one exception to "you only ever have the one"."""
+    again = _twinned(c.world, c.me) and c.companion() is not None
+    c.call_companion(second=again)
 
 
 @power(
