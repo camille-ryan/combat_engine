@@ -791,12 +791,56 @@ def _counts_as(ref: str, what: str, *, wants: tuple[str, ...] = COUNTS_AS) -> No
     )
 
 
-_counts_as("f821", """A mace where the rows ask for a light blade, at the
-           cost of a die of the extra damage.""",
-           wants=("c.counts_as(group=)", "c.change_dice()"))
-_counts_as("f825", """An axe, a hammer or a pick where the rows ask for a
-           light blade, at the cost of a die of the extra damage.""",
-           wants=("c.counts_as(group=)", "c.change_dice()"))
+# **These two have a body and the helper above cannot give them one.** Both
+# print the swap *and* its price -- a die off the class's extra damage while the
+# stand-in weapon is in hand -- and the price is writable now that
+# `strikers.extra_damage` asks `c.dice_for` for its die. So they are written out
+# rather than passed through `_counts_as`, which exists for the rows whose whole
+# benefit is the swap.
+
+
+def _price(c: Cast, groups: tuple[str, ...]) -> None:
+    """A die off the class's extra damage while one of those is in hand.
+
+    The feature prints 2d6 at every level this build imports, so one die fewer
+    is 1d6 outright. The gate asks the board what is held at the moment of the
+    hit rather than at arming, because a rogue draws and stows mid-fight and a
+    flag set when the trait armed would still be saying "mace" afterwards.
+    """
+    c.change_dice(
+        "cf:rogue-scoundrel-f4", "1d6", on=c.me,
+        when=lambda ctx: any(c.wielding(g) for g in groups),
+    )
+
+
+@power("f821", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.counts_as(group=)",))
+def f821(c: Cast) -> None:
+    """A mace where the rows ask for a light blade, at the cost of a die of
+    the extra damage.
+
+    The price is written. The swap is the dropped clause: `c.as_implement`
+    rewrites a weapon's group outright, and the general form -- count as a
+    light blade *for these rows only* -- has no verb. `rogue.py`'s f799 named
+    it first.
+
+    Inert until that lands, and correct rather than guessed: the class feature
+    refuses a mace, so there is no extra damage to charge a die against yet.
+    The clause is right the day the swap works."""
+    _price(c, ("mace",))
+
+
+@power("f825", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, dropped=("c.counts_as(group=)",))
+def f825(c: Cast) -> None:
+    """An axe, a hammer or a pick where the rows ask for a light blade, at the
+    cost of a die of the extra damage.
+
+    f821 with three groups instead of one; see it for why the price is
+    written and the swap is not."""
+    _price(c, ("axe", "hammer", "pick"))
+
+
 _counts_as("f2078", """A one-handed heavy blade where the rows ask for a
            light blade, the extra damage included. The proficiency half
            is a column and not a body.""")

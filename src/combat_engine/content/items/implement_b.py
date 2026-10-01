@@ -696,11 +696,16 @@ def i3504p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("by_ref()", "c.change_dice()"),
+    todo=("by_ref()",),
 )
 def i3525x1(c: Cast) -> None:
-    """Swapping one die size for another inside another row's damage
-    expression, on a power the spec names only in prose."""
+    """Rolls bigger dice for a named power's damage when it was triggered by an
+    attack made with this implement.
+
+    **One gap now, not two.** `c.change_dice()` was the second marker and
+    exists; it is also the right verb, and it takes the ref of the row whose
+    dice change. The spec names that row in prose, so there is nothing to pass
+    it. The whole of what is missing is the ref."""
 
 
 @power(

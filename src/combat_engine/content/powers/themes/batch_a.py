@@ -1162,11 +1162,16 @@ def _used_p16397(world: World, me: int, ev: Any) -> bool:
     target=SELF,
     trigger="you use p16397",
     on=Trigger(PowerUsed, _used_p16397, "you use p16397"),
-    dropped=("c.change_dice()",),
+    dropped=("c.pick_roll()",),
 )
 def p16399(c: Cast) -> None:
-    """The surge is paid. Choosing the face of somebody else's die needs a
-    reader that reaches into a roll another row has already made."""
+    """The surge is paid. The dropped clause is choosing the face.
+
+    Re-aimed off `c.change_dice()`, which exists now and is the wrong verb:
+    that one says *which* die a row rolls, and this says what the die **came
+    up**, on a roll the triggering row has already made. Nothing reaches into
+    a finished roll to set its result -- `c.boost_roll()` and `c.on_reroll()`
+    are the neighbouring gaps and neither is this either."""
     c.spend_surge(on=c.me)
 
 

@@ -127,17 +127,24 @@ def f1123(c: Cast) -> None:
 
 
 @power("f1134", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_dice()",))
+       reach=PERSONAL, target=SELF, todo=("c.bonus(per_die=)",))
 def f1134(c: Cast) -> None:
-    """Re-aimed: the marker named `c.widen_area()`, which has never
-    existed, while `c.widen_areas` does and is exactly the payout -- so
-    the instrument agreed with the typo and stayed quiet.
+    """Re-aimed twice, and the second time was to stop blaming the wrong verb.
 
-    What is genuinely missing is the price. The trade is "-2 to *each
-    die* of damage rolled", and a modifier is laid against a roll's
-    total, not against the dice that made it. Writing the wider blast
-    alone would be the payout with no price, which is a strictly better
-    card than the one printed."""
+    The first marker named `c.widen_area()`, which has never existed, while
+    `c.widen_areas` does and is exactly the payout -- so the instrument agreed
+    with the typo and stayed quiet.
+
+    The second named `c.change_dice()`. That verb exists now and is **not**
+    this gap: it swaps which die a row rolls, and the price here is "-2 to
+    *each die* of damage rolled", which leaves the dice alone and charges
+    against every one of them. A modifier is laid against a roll's total, so
+    there is nothing that scales with how many dice made it -- the same thing
+    f763 and f2766 want from the other direction, where the multiplier is per
+    die rather than the penalty.
+
+    Writing the wider blast alone would be the payout with no price, which is
+    a strictly better card than the one printed."""
 
 
 @power("f1128", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
