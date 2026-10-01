@@ -513,8 +513,9 @@ def i1(c: Cast) -> None:
   the skill and say why that narrowing has no combat meaning. `power()`
   refuses the row without one, because this is the easiest of the three
   fields to reach for to make an awkward clause go away.
-* **It is counted done and never goes red**, and it does not spend the
-  marker budget — there is nothing to come back for.
+* **It is counted done and never goes red** — there is nothing to come back
+  for. There was a marker budget it did not spend either; that gate is gone,
+  and `todo.py`'s docstring says why.
 * **It is still named.** `todo.py` lists every such row under the skill it
   narrows, so the set stays readable and a skill collecting excuses is
   visible.

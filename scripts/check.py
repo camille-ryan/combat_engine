@@ -53,7 +53,7 @@ CHECKS = (
     Instrument("specs", ("uv", "run", "scripts/leaks.py", "--specs"),
                "no printed name reached what an author is shown"),
     Instrument("todo", ("uv", "run", "scripts/todo.py"),
-               "no `todo=` waits on a symbol that now exists, and they stay under budget"),
+               "no `todo=` waits on a symbol that now exists"),
     Instrument("bonuses", ("uv", "run", "scripts/bonuses.py", "--quiet"),
                "every bonus says the type its card prints"),
     Instrument("replay", ("uv", "run", "scripts/replay.py", "verify"),
