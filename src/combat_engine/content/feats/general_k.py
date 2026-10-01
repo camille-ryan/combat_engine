@@ -361,21 +361,43 @@ def f1847(c: Cast) -> None:
     c.regeneration(2, on=c.me, until=When.ENCOUNTER)
 
 
+#: The six types f1849 offers. The card lists them, so the row does too.
+_TRADED = (
+    DamageType.COLD,
+    DamageType.FIRE,
+    DamageType.LIGHTNING,
+    DamageType.POISON,
+    DamageType.RADIANT,
+    DamageType.THUNDER,
+)
+
+
 @power("f1849", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("spec.power_ref()", "c.resist(replace=)"))
+       trigger="you use p6188",
+       on=Trigger(PowerUsed, _used("p6188"), "you use that racial power"))
 def f1849(c: Cast) -> None:
-    """**Re-aimed, and it was worse than a dropped clause.** The trigger
-    was declared on `PowerResolved` of `m5139a3`, which is not in the
-    registry -- the spec prints it as `x_m5139a3`, a name the ETL could
-    not resolve. A predicate comparing a power ref to a string nothing
-    ever emits is false in every fight, so the row looked written and
-    could not fire.
+    """Trades the racial power's resist-all for twice as much of one type.
 
-    Both holds are named. With a ref it would still want
-    `c.resist(replace=)`: trading the racial power's resist-all *for* the
-    typed one needs the amount inside its effect, and nothing reads one
-    back out."""
+    The trigger used to name `m5139a3` -- a stat block's ability that shares
+    the name, never in the registry and never emitted -- so a predicate
+    comparing a power ref to it was false in every fight and the row looked
+    written while being unable to fire. It is `p6188` now.
+
+    **`c.resist(replace=)` turned out to be unnecessary.** The old note
+    wanted it because "trading the resist-all *for* the typed one needs the
+    amount inside its effect, and nothing reads one back out" -- but the
+    trade does not need the old amount, only the old effect gone, and
+    `c.end_effect` ends it. The new figure is printed: 5 from p6188, "and
+    the resistance increases by 5", so 10.
+    """
+    picked = c.choose(list(_TRADED), c.ref)
+    if picked is None:
+        return
+    for held in list(c.world.effects.of(c.me)):
+        if held.label.startswith("p6188"):
+            c.end_effect(held, why="traded for one type")
+    c.resist(10, picked, on=c.me, until=When.EONT)
 
 
 @power("f1859", level=1, cls="", usage=AT_WILL, action=REACTION,
@@ -533,14 +555,27 @@ def f1835(c: Cast) -> None:
 
 
 @power("f1836", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("spec.power_ref()", "c.change_dice()"))
+       reach=PERSONAL, target=SELF)
 def f1836(c: Cast) -> None:
-    """Swaps the die a racial power adds to a roll. Two holds, and the
-    first was missing: the spec prints the power as `x_m4421a6`, which is
-    a name the ETL could not resolve, and `m4421a6` is not in the
-    registry -- so there is nothing to hang a trigger on. Even with a ref
-    there is no way to say which dice another row rolls."""
+    """Swaps the die a racial power adds to a roll: 1d10 rather than 1d6.
+
+    Both holds are gone. The spec used to print the power as `x_m4421a6` --
+    a stat block's ability that shares the name, not in the registry and
+    nothing to hang a clause on -- and it is `p6186` now. And the die a row
+    rolls used to be written into its body, which is what `c.change_dice`
+    and the `c.dice_for` p6186 now reads were built for.
+
+    The gate is the printed narrowing: a Nature check, or an attack roll
+    with a beast form or spirit power. `p6186` hands its skill over, so the
+    first is exact. The second is written as "not a skill check at all"
+    because that row cannot currently boost an attack roll -- its own
+    `c.boost_roll()` marker -- so the clause is correct the day it can and
+    applies to nothing before then, rather than being left out.
+    """
+    c.change_dice(
+        "p6186", "1d10",
+        when=lambda ctx: ctx.get("skill", "") in ("nature", ""),
+    )
 
 
 @power("f1848", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -1991,6 +1991,12 @@ def i1612x1(c: Cast) -> None:
     c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=gate)
 
 
+#: The monk's Flurry of Blows, which is five rows and not one: each monastic
+#: tradition grants its own, and a card saying "your flurry of blows power"
+#: means whichever you have. All five are declared.
+_FLURRIES = frozenset({"p7448", "p11207", "p13123", "p16131", "p16132"})
+
+
 @power(
     "i1612p1",
     level=3,
@@ -1999,12 +2005,40 @@ def i1612x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    trigger="you use your flurry of blows power",
-    todo=("spec.power_ref()",),
+    trigger="you use one of p7448, p11207, p13123, p16131, p16132",
+    on=Trigger(
+        PowerUsed,
+        lambda w, me, ev: ev.actor == me and ev.power in _FLURRIES,
+        "you use that class power",
+    ),
 )
 def i1612p1(c: Cast) -> None:
-    """The trigger is a named class power and the brief prints its name
-    rather than its ref, so there is nothing to declare `on=` against."""
+    """Bloodied enemies the flurry damages stop healing for a round.
+
+    **The trigger is a family, not a row**, which is why it had nothing to
+    declare `on=` against: the monk's flurry is one of five, each granted by a
+    different monastic tradition, and the card means whichever one you have.
+    `_FLURRIES` is that set -- all five are declared -- and the predicate asks
+    whether the power used is any of them.
+
+    "During this turn ... you damage" is a second watcher rather than a
+    clause on the trigger: the trigger is the *use*, and the damage lands
+    once per target afterwards. Bloodied is read at the moment the blow
+    lands, which is what the card asks.
+    """
+    me = c.me
+
+    def stops_healing(ev: DamageApplied) -> None:
+        # **`detail`, not `power`.** `DamageApplied` carries no `power` field
+        # at all -- its own docstring says `detail` is "what dealt it, a power
+        # ref where one did" -- so a gate on `ev.power` is false in every
+        # fight and the row would look written and do nothing.
+        if ev.source != me or getattr(ev, "detail", "") not in _FLURRIES:
+            return
+        if c.bloodied(on=ev.target):
+            c.no_healing(on=ev.target, until=When.EONT)
+
+    c.watch(DamageApplied, stops_healing, until=When.EOT, on=me, label=c.ref)
 
 
 @power(

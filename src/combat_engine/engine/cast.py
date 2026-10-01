@@ -4816,6 +4816,73 @@ class Cast:
         known.rolls.setdefault(ref, []).insert(0, entry)
         return effect
 
+    def change_dice(
+        self,
+        ref: str,
+        dice: str,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """Make a named row roll different dice.
+
+        The sibling of `rolls_with` above and the same argument: the die a row
+        rolls is written into its **body**, so "you add 1d10 to the roll,
+        rather than 1d6" had nothing to change and 21 rows print a sentence of
+        that shape. Recorded against the creature, so the row is untouched and
+        any number of characters may roll it differently.
+
+        **A row must read it to be changed**, with `dice_for` -- the same
+        arrangement `Attack.ability_for` has with `rolls`. A `change_dice` on a
+        row whose body still hard-codes its die is a modifier nothing
+        consults, which is this component's commonest bug.
+
+        `when` is a **context** predicate rather than `rolls_with`'s
+        `(world, eid)` one, because these clauses narrow by what is being
+        rolled -- "on a Nature check", "with a bow" -- and the row doing the
+        rolling is the only thing that knows. It passes what it knows to
+        `dice_for`.
+        """
+        from .components import Powers
+
+        who = self._who(on)
+        if who is None:
+            return None
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        entry = (dice, when)
+        effect = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} rolls {ref} as {dice}",
+            on_end=[lambda: _drop_dice(known, ref, entry)],
+        )
+        if effect is None:
+            return None
+        known.dice.setdefault(ref, []).insert(0, entry)
+        return effect
+
+    def dice_for(
+        self, ref: str = "", default: str = "", ctx: dict[str, Any] | None = None
+    ) -> str:
+        """Which dice this row rolls for this creature, after any change.
+
+        The read half of `change_dice`. `default` is what the card prints, so a
+        row calls `c.roll(c.dice_for(c.ref, "1d6"))` and keeps working for
+        everybody who has nothing changing it.
+        """
+        from .components import Powers
+
+        known = self.world.get(self.me, Powers)
+        if known is None:
+            return default
+        seen = ctx or {}
+        for dice, gate in known.dice.get(ref or self.ref, ()):
+            if gate is None or gate(seen):
+                return dice
+        return default
+
     def master(self) -> int | None:
         """Whoever this creature serves, if anybody."""
         found = self.world.relations.sources(Relation.MASTER_OF, self.me)
@@ -7683,3 +7750,16 @@ def _drop_roll(known: Any, ref: str, entry: tuple) -> None:
             break
     if not swaps:
         known.rolls.pop(ref, None)
+
+
+def _drop_dice(known: Any, ref: str, entry: tuple) -> None:
+    """Undo one `c.change_dice`, by identity, for the reason above."""
+    held = known.dice.get(ref)
+    if not held:
+        return
+    for i, one in enumerate(held):
+        if one is entry:
+            del held[i]
+            break
+    if not held:
+        known.dice.pop(ref, None)

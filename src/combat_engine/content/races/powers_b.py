@@ -73,6 +73,7 @@ from combat_engine.engine import (
     Melee,
     MoveEnd,
     MoveStart,
+    PowerUsed,
     Ranged,
     Relation,
     RelationSet,
@@ -495,12 +496,34 @@ def p2472(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    trigger="you use levitation",
-    todo=("spec.power_ref()",),
+    trigger="you use p16033",
+    on=Trigger(
+        PowerUsed,
+        lambda w, me, ev: ev.actor == me and ev.power == "p16033",
+        "you use that racial power",
+    ),
+    dropped=("c.hover(across=)",),
 )
 def p16034(c: Cast) -> None:
-    """The trigger names a power in prose and the spec gives no ref, so
-    there is nothing for `Trigger(PowerUsed, ...)` to match on."""
+    """Makes the levitation sustainable, which it is not on its own.
+
+    The trigger used to name the power in prose with no ref behind it, so
+    there was nothing for `Trigger(PowerUsed, ...)` to match. It is `p16033`.
+
+    **The sustainable thing is the levitation itself**, not a separate
+    "ability to sustain": `c.effect(sustain=)` is what a printed Sustain line
+    costs, and `on_sustain` runs each time it is paid -- which is where the
+    card's own Sustain Move clause goes, re-upping the hover to the end of
+    the next turn. Without `sustain=` a `When.SUSTAIN` hold lapses after a
+    round with nobody able to pay for it.
+
+    The one square of horizontal drift has no verb, which is the marker
+    `p16033` carries for the same clause.
+    """
+    held = c.effect(c.ref, until=When.SUSTAIN, on=c.me, sustain=MOVE)
+    if held is None:
+        return
+    held.on_sustain.append(lambda: c.hover(3, on=c.me, until=When.EONT))
 
 
 # -- r18 --------------------------------------------------------------------

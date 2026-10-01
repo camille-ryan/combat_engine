@@ -765,8 +765,15 @@ def p6186(c: Cast) -> None:
     the roll was, and both `AttackResult.total` and `SavingThrow.saved`
     are read back -- so the hold is a verb, not an engine limit. The
     `c.reroll_save` docstring says why it must be a verb: five rows
-    reaching into an event by hand is five chances to double a modifier."""
-    c.boost_check(c.roll("1d6"))
+    reaching into an event by hand is five chances to double a modifier.
+
+    **The die comes through `c.dice_for`**, not written in: f1836 prints
+    "you add 1d10 to the roll, rather than 1d6" about this very row, and a
+    hard-coded `"1d6"` here is what made that feat unwritable. The skill is
+    handed over so the feat can narrow to the check it names."""
+    ev = c.trigger
+    skill = str(getattr(ev, "skill", "") or "").lower()
+    c.boost_check(c.roll(c.dice_for("p6186", "1d6", {"skill": skill})))
 
 
 # -- r36 --------------------------------------------------------------------

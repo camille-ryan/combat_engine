@@ -1105,6 +1105,37 @@ def p16069(c: Cast) -> None:
 
 
 @power(
+    "p16070b",
+    level=3,
+    cls="x7_946",
+    usage=ENCOUNTER,
+    action=STANDARD,
+    reach=Ranged(10),
+    target=ONE_CREATURE,
+    keywords=[Keyword.FIRE, Keyword.ELEMENTAL],
+    attack=Attack(Pick.HIGHEST, plus=2, vs=REF),
+    requires=lambda world, eid: any(
+        e.label.startswith("p16070") for e in world.effects.of(eid)
+    ),
+    requires_text="the p16070 flame must be active",
+)
+def p16070b(c: Cast) -> None:
+    """The attack the flame exists for -- the second card in p16070's entry.
+
+    "You gain a +2 bonus to the attack roll" is printed on the line itself,
+    so it is `plus=2` in the header rather than a modifier laid at use.
+
+    Using it is one of the three things that ends the flame, which is why the
+    flame is ended here and not only by its own duration.
+    """
+    for held in list(c.world.effects.of(c.me)):
+        if held.label.startswith("p16070"):
+            c.end_effect(held, why="spent on the secondary power")
+    if c.strike():
+        c.damage("2d8", c.mod(c.ability_for()), dtype=DamageType.FIRE)
+
+
+@power(
     "p16069b",
     level=0,
     cls="x7_946",
@@ -1135,12 +1166,30 @@ def p16069b(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE, Keyword.ELEMENTAL],
-    todo=("c.light()", "spec.power_ref()"),
+    dropped=("c.light()",),
 )
 def p16070(c: Cast) -> None:
-    """Both halves are absent, not one: the primary's whole effect is a
-    light source, and the secondary attack that the light exists for is a
-    second block the entry gives no ref."""
+    """The flame, what ends it, and the attack it exists for.
+
+    `todo` before, because both halves were absent -- the secondary attack is
+    a second block the entry gave no ref, and it is `p16070b` below now. So
+    the row plays and one clause is missing, which is `dropped`.
+
+    **The missing clause is the light itself, and `c.light()` is deliberately
+    not written.** Nothing in this engine models darkness -- there is
+    line-of-sight and a `sight_range` cap and no light levels -- so a verb
+    recording "bright light out to 10 squares" would be a modifier nothing
+    consults, which is the commonest bug in this component. `narrative=`
+    would be the right marker for a clause with no combat meaning and its
+    vocabulary is `skill:<name>` only, so `dropped=` is the honest one.
+
+    Three ways out, and the third is the card's own: the encounter ends it,
+    a minor action dismisses it, or using the secondary power consumes it.
+    """
+    flame = c.form(until=When.ENCOUNTER, revert=None, label=c.ref)
+    if flame is not None:
+        c.endable(flame, MINOR)
+    c.grant_row("p16070b", on=c.me, until=When.ENCOUNTER)
 
 
 @power(

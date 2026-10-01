@@ -611,6 +611,21 @@ class Powers:
     rolls: dict[str, list[tuple[Ability, Callable[[Any, int], bool] | None]]] = field(
         default_factory=dict
     )
+    #: Which dice a named row rolls, when something has changed them.
+    #:
+    #: The sibling of `rolls` above and for the same reason: the die a row
+    #: rolls is written into its body, so "you add 1d10 to the roll, rather
+    #: than 1d6" had nothing to change. 21 rows print a sentence of that
+    #: shape -- a bigger die on a racial power, a brutal weapon's reroll
+    #: threshold, a sneak attack upgraded a step.
+    #:
+    #: A list, because two feats may both speak about one row, and `when` is
+    #: a context predicate so "on a Nature check" and "with a bow" are
+    #: sayable. First entry whose `when` passes wins; `Cast.dice_for` is the
+    #: read and the row that rolls must use it.
+    dice: dict[str, list[tuple[str, Callable[[dict[str, Any]], bool] | None]]] = field(
+        default_factory=dict
+    )
     #: A spellbook: rows the creature **owns and has not prepared**.
     #:
     #: `known` is what can be used, and it was the only list there was -- so
