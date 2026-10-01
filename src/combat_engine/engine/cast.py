@@ -3707,6 +3707,35 @@ class Cast:
             self.bonus(defence, 2, until=When.SONT, on=who, kind="untyped")
         return True
 
+    def total_defence(
+        self,
+        *,
+        on: int | None = None,
+        amount: int = 2,
+    ) -> bool:
+        """Hunker down: +2 to every defence until the start of your next turn.
+
+        One of the basic actions anybody can take with a standard, and it did not
+        exist -- which is why **nine content rows carry `c.total_defence()` as a
+        marker** rather than a body ("you may instead take a total defence action",
+        "...and gain the benefit of total defence"). They can be finished now.
+
+        **Until the *start* of the next turn, not the end.** Checked rather than
+        recalled, because I had it the other way round and a duration is exactly the
+        silently-wrong kind of bug this component produces. Two independent sources
+        agree it is the start, which also matches `second_wind` directly above --
+        the same +2 to the same four defences for the same span. If the book says
+        otherwise, this is the one line to change.
+
+        All four defences, for the reason `second_wind` records: granting AC alone
+        left every creature two points easier to hit on the other three, and made a
+        card reading "+1 AC and +3 to the others" unwritable.
+        """
+        who = on if on is not None else self.me
+        for defence in Defense:
+            self.bonus(defence, amount, until=When.SONT, on=who, kind="untyped")
+        return True
+
     def forces(
         self,
         squares_: int = 1,

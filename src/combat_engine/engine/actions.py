@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class Action:
     #: power | move | run | shift | charge | stand | escape | second_wind |
+    #: total_defence |
     #: sustain | drop | wield | item | instinctive | command | end
     kind: str
     cost: ActionType
@@ -864,6 +865,13 @@ def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
         for cost in sorted(costs, key=lambda a: a.value):
             if encounter.can_spend(actor, cost):
                 out.append(Action(kind="second_wind", cost=cost))
+    # **Total defence.** A basic action anybody may take with a standard, and it was
+    # missing from the menu entirely -- so a creature that had closed as far as it
+    # could and still could not reach anything had nothing to do but end its turn.
+    # Offered to monsters as well as characters: unlike a second wind it spends no
+    # resource and no printed line is needed to permit it.
+    if encounter.can_spend(actor, ActionType.STANDARD):
+        out.append(Action(kind="total_defence", cost=ActionType.STANDARD))
     return out
 
 
@@ -1116,6 +1124,11 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         return Cast(world=world, me=actor, ref="second-wind").second_wind(
             cost=action.cost
         )
+
+    if action.kind == "total_defence":
+        from .cast import Cast
+
+        return Cast(world=world, me=actor, ref="total-defence").total_defence()
 
     return False
 
