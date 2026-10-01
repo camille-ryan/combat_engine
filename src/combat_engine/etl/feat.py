@@ -80,6 +80,49 @@ _ERRATA = re.compile(
 #: not part of an edit to a previous printing, so it ends the block.
 _RESUMES = re.compile(r"^Associated Powers\s*:", re.I)
 
+#: `href="power.php?id=NNNN"` on an Associated Powers member. `build._HREF` is
+#: the same pattern; it cannot be imported, because `build` imports this module.
+_LINKED = re.compile(r'href="power\.php\?id=(\d+)"')
+
+
+def _above_ceiling(source: sqlite3.Connection, txt: str) -> dict[str, str]:
+    """Printed name -> ref, for each linked member this build will not import.
+
+    **The leak `_members` could not close.** A member whose clause the page
+    writes *bare* runs straight into the next member's name with no separator,
+    and `_members`' un-gluing only fires on the parenthesised spelling -- so for
+    `f2712` the brief ended "... used as a ranged attack <name>", a printed
+    power name shown to an author, which is the one thing this project may not
+    do. #232.
+
+    Neither of the two obvious fixes reaches it. A heuristic split on title case
+    is wrong on every clause that ends in a proper noun. A lookup in `by_name`
+    cannot find it either, and that is the whole difficulty: the glued member is
+    **above the level ceiling**, so it was never imported, has no `names.json`
+    entry, and `leaks.py --specs` cannot see it by construction.
+
+    The page links every member by id, including the ones above the ceiling, so
+    the ids are exact where the names are not. So the name is replaced by the ref
+    it would have had, rather than deleted: paragon and epic are meant to be
+    imported eventually, and on the day they are, `p4450` is already the right
+    row and this feat already points at it. A deleted name would have had to be
+    found again.
+
+    Until then the ref resolves to nothing, which is honest -- it says *which*
+    power without saying what it is called, the same trade the rest of this
+    component makes.
+    """
+    from .build import MAX_POWER_LEVEL
+
+    out: dict[str, str] = {}
+    for found in _LINKED.findall(txt or ""):
+        row = source.execute(
+            "SELECT Name, Level FROM Power WHERE ID = ?", (int(found),)
+        ).fetchone()
+        if row and (row["Level"] or 0) > MAX_POWER_LEVEL and (row["Name"] or "").strip():
+            out[row["Name"].strip()] = f"p{int(found)}"
+    return out
+
 #: The long forms the pages also print. The short ones come off the enum.
 _SPELT_OUT = {
     "strength": "str", "dexterity": "dex", "constitution": "con",
@@ -131,6 +174,17 @@ _KINDS = (
     (r"\bsize$|^small$|^medium$", "size"),
     (r"\bmanifestation$|\bpact$", "class option"),
 )
+
+
+def _trimmed(source: sqlite3.Connection, row: Any, spec: str) -> str:
+    """A benefit with each above-ceiling member's name swapped for its ref.
+
+    Longest first, so a name that contains another is swapped whole.
+    """
+    found = _above_ceiling(source, row["Txt"] or "")
+    for name in sorted(found, key=len, reverse=True):
+        spec = re.sub(re.escape(name), found[name], spec)
+    return spec
 
 
 def feats(
@@ -195,7 +249,7 @@ def feats(
             (
                 ref, row["ID"], tier, _min_level(tree),
                 json.dumps(tree) if tree else None, opaque,
-                books, _benefit(head, ref, row["Name"] or ""),
+                books, _trimmed(source, row, _benefit(head, ref, row["Name"] or "")),
             ),
         )
         names[ref] = {"name": (row["Name"] or "").strip(), "flavour": card_flavour}

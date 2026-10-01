@@ -1477,6 +1477,14 @@ def _cross_reference_rest(
     # instead. `Inspiring Presence` is a warlord build and also an
     # ability of one stat block, and that is why four warlord powers
     # printed the build's name to an author.
+    # **Every power row this build holds**, which is not the same set as
+    # `by_name`'s values and was briefly mistaken for it. `by_name` is keyed by
+    # *name* and `_rank` keeps one ref per key, so a power sharing its name with
+    # another is absent from the values -- and reading "absent" as "above the
+    # ceiling" moved three of `f2712`'s usable members into its trimmed tail.
+    # Asked of the table instead, so the answer cannot drift from what imported.
+    imported = {r for (r,) in out.execute("SELECT ref FROM power")}
+
     by_name: dict[str, str] = {}
     by_feature: dict[str, str] = {}
     held: dict[str, list[str]] = {}
@@ -1719,7 +1727,7 @@ def _cross_reference_rest(
             if others:
                 fixed = scrub(fixed, others)
                 if table == "feat":
-                    fixed = _associated_refs(fixed, by_name)
+                    fixed = _associated_refs(fixed, by_name, imported)
                 fixed = _named_powers(fixed, by_name, ref, by_feature, rules, cls)
             if fixed != spec:
                 out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
@@ -2318,6 +2326,20 @@ def _members(body: str) -> list[tuple[str, str]]:
             run_on = re.match(r"^(\([^)]*\))\s*(.+)$", clause)
             if run_on:
                 clause, tail = run_on.group(1), run_on.group(2)
+            # **A bare clause has no bracket to close it.** The same page
+            # shape without the parentheses -- `<a>name</a>: only when
+            # used as a melee attack<a>name</a>` -- glued the next member
+            # to the end of a sentence with nothing to split on, and
+            # splitting on title case is wrong on every clause that ends
+            # in a proper noun. A **ref** is an exact separator, and by
+            # the time this runs the glued name is one: either the general
+            # name pass resolved it (`f1309`), or `feat._trimmed` put the
+            # id there because the member is above the level ceiling and
+            # has no name to resolve (`f2712`). Both were losing the
+            # member from the list entirely. #232.
+            glued = re.match(r"^(.*?[^\s,])[\s,]+((?:p\d+[\s,]*)+)$", clause)
+            if glued and not tail:
+                clause, tail = glued.group(1), glued.group(2)
             if head:
                 out.append((head, clause))
             for extra in tail.split(","):
@@ -2326,7 +2348,7 @@ def _members(body: str) -> list[tuple[str, str]]:
     return out
 
 
-def _associated_refs(spec: str, by_name: dict[str, str]) -> str:
+def _associated_refs(spec: str, by_name: dict[str, str], imported: set[str]) -> str:
     """Turn a feat's Associated-Powers list into refs.
 
     **This is the single largest gap in the feat corpus and it was never
@@ -2344,22 +2366,34 @@ def _associated_refs(spec: str, by_name: dict[str, str]) -> str:
     would never pass it in running prose.
 
     **A name that does not resolve is not a failure and is not dropped
-    silently.** 213 of the 497 members are paragon or epic rows -- level
+    silently.** 259 of the 737 members are paragon or epic rows -- level
     13 to 27 -- and this build imports heroic only, so they are powers no
     character here can hold. The resolved subset therefore *is* the whole
     associated set as far as the engine is concerned, and that is the
-    thing an author needs to be told. The count of the rest is printed
-    beside it so the author can see the list was trimmed rather than
-    guess.
+    thing an author needs to be told.
+
+    **Those 259 are now named, not merely counted.** The count was all that
+    could be said while the only handle on them was a printed name; the page
+    links every member by **id**, so `feat._trimmed` puts the ref there
+    instead and they are listed after the count. Every one of the 737 is
+    therefore accounted for, where the bare-run-on defect was dropping some
+    of them from the list entirely (#232), and a feat that will matter at
+    paragon already points at the right rows (#281).
+
+    They are listed apart from the usable ones and never folded in. A row
+    must not gate on one: nothing is behind the ref until those tiers are
+    imported, and a gate on an absent power is the silently-false shape this
+    repo spends most of its instruments catching.
     """
 
     def swap(m: re.Match) -> str:
         refs: list[str] = []
+        beyond: list[str] = []
         clauses: dict[str, str] = {}
         above = 0
         for head, clause in _members(m.group(1)):
             if _IS_REF.match(head):
-                refs.append(head)
+                (refs if head in imported else beyond).append(head)
                 if clause:
                     clauses.setdefault(head, clause)
                 continue
@@ -2378,13 +2412,22 @@ def _associated_refs(spec: str, by_name: dict[str, str]) -> str:
                 refs.append(ref)
             else:
                 above += 1
-        if not refs and not above:
+        if not refs and not above and not beyond:
             return m.group(0)
         seen: list[str] = []
         for r in refs:
             if r not in seen:
                 seen.append(r)
-        tail = f"  (+{above} above heroic)" if above else ""
+        # **An above-heroic member is named, not merely counted, when the page
+        # gave an id for it.** The count alone was all that could be said while
+        # the only handle on those members was a name this project may not
+        # print; `feat._trimmed` now resolves them by id, so the ones it reached
+        # are listed. They are kept out of `seen` deliberately -- a row must not
+        # gate on one, because nothing is behind it until paragon and epic are
+        # imported. #281.
+        rest = [r for r in dict.fromkeys(beyond) if r not in seen]
+        over = above + len(rest)
+        tail = f"  (+{over} above heroic{': ' + ', '.join(rest) if rest else ''})" if over else ""
         # **The member's clause is the feat.** Eleven of these feats say
         # no more in their Benefit than "you gain a benefit with any of
         # the following", and the benefit itself is written once per
