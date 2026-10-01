@@ -243,6 +243,14 @@ def attack(
             # a rider gated on an off-hand attack read a key the context
             # did not carry, which is silently false rather than wrong.
             "hand": hand,
+            # **Everyone this attack is aimed at**, not just the one being
+            # rolled against. "Attacks that do not include you as a target" is
+            # a printed clause -- the mark penalty a few hundred lines down
+            # implements exactly it, and correctly, by testing the whole target
+            # set -- but a gated modifier could only see `target` and so could
+            # not ask the same question. A rider that sharpens a mark had
+            # nothing to gate on and read as unwritable.
+            "among": tuple(among),
         }
 
         situational = situational_attack(
