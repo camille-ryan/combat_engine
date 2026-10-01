@@ -2,7 +2,8 @@
 
 The rules kernel: events, components, resolution, durations, the grid, turns,
 triggers. It decides what *happens*. It does not decide what any row does
-(Content) or what the AI chooses (`policy.py`, below).
+(Content) or what the AI chooses (`combat_engine.policy`, which used to live
+here and does not any more).
 
 Global rules are in the root `CLAUDE.md`. This file is what is different
 here.
@@ -86,25 +87,27 @@ Changing one of these reaches most of the tree. Importer counts:
 `cast.py` has only 9 direct importers and that badly understates it — it is
 reached as the `Cast` passed into every power body, not by import.
 
-## AI Policy — a component inside this directory
+## AI Policy has moved out
 
-`policy.py` and `doctrine.py` are their own component: **what the AI chooses**, not
-what the rules allow. `policy.py` holds the `Policy` protocol, `features`, the weight
-table and `Memory`; `doctrine.py` holds the one concrete policy, `DoctrinePolicy`, and
-`threat.py` the figures it weighs. Doctrine notes are in `docs/AI_DOCTRINE.md`.
+It used to live here, as `policy.py`, `doctrine.py` and `threat.py`. It is
+`src/combat_engine/policy/` now — **what the AI chooses**, not what the rules
+allow, which is a different job from everything in this directory. #228.
 
-**There is one policy.** `LinearPolicy` was retired once the A/B it existed for turned
-out to be the wrong instrument: both sides of the board run the same policy, so an
-improvement cancels in the win rate. `scripts/scorecard.py` is the gate now -- per-side
-tactical counts against a committed baseline -- and `scripts/doctrine.py` reports what
-each of the 53 weights fired on. Neither needs a rival policy to read.
+What that buys, and it is the reason the move was worth doing: `audit.py`'s
+`WIDE` list widens `--changed` to every row for anything under `engine/`, and a
+policy change cannot break a row. There used to be a `NARROW` exemption naming
+`policy.py` to spare it the ten minutes — but `doctrine.py` and `threat.py` were
+never in that list, so every change to either of them paid in full. Outside
+`engine/`, the exemption deletes itself.
 
-Two things follow:
+So: **label a policy issue `policy`, and a policy change audits nothing.** That
+is correct and it means this instrument is not its cover — `replay` and `fight`
+are, both playing whole fights through the policy, and both run in `check.py`.
 
-* **A policy change cannot break a row**, so it should not widen the audit —
-  but `WIDE` covers all of `engine/`, so today it does. Filed; the fix is to
-  extract `policy/` into its own package.
-* Label policy issues `policy`, not `engine`.
+`engine/__init__.py` no longer re-exports `install`, `take_turn`, `Policy`,
+`Memory` or `DoctrinePolicy`; import them from `combat_engine.policy`. The
+re-export had to go because `policy` imports `engine`, and keeping it would have
+made that a cycle.
 
 ## Seam
 

@@ -105,7 +105,7 @@ say so in the commit.
 | Content | `src/combat_engine/content/` | 677 modules of hand-written rows. |
 | Wire | `src/combat_engine/api/` | engine state → DTOs → the page. |
 | UI | `web/` | the page. Vanilla JS, no build step. |
-| AI Policy | `engine/policy.py` | what the AI chooses. One module, inside Engine. |
+| AI Policy | `src/combat_engine/policy/` | what the AI chooses, not what the rules allow. |
 | Chargen | `src/combat_engine/chargen/` | builds every character. Persistence does not exist. |
 | Story Engine | `src/combat_engine/story/` | fields an encounter: who is on the board, and where. `docs/STORY_ENGINE.md` is the charter; the rest of it is not built. |
 | Instruments | `scripts/` | belongs to no component. |

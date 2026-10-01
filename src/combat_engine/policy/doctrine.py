@@ -204,22 +204,12 @@ import inspect
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import threat as T
-from .actions import Action
-from .components import Budget, Health, Position, Side
-from .dsl import get
-from .events import Event, OpportunityWindow
-from .grid import distance
-from .policy import (
-    WEIGHTS,
-    Memory,
-    _allies_of,
-    _is_square,
-    _opportunity_options,
-    _square,
-    features,
-)
-from .query import (
+from combat_engine.engine.actions import Action
+from combat_engine.engine.components import Budget, Health, Position, Side
+from combat_engine.engine.dsl import get
+from combat_engine.engine.events import Event, OpportunityWindow
+from combat_engine.engine.grid import distance
+from combat_engine.engine.query import (
     alive,
     creatures,
     enemies,
@@ -228,8 +218,19 @@ from .query import (
     is_,
     squares,
 )
-from .turns import Encounter
-from .types import ActionType, Condition, Team
+from combat_engine.engine.turns import Encounter
+from combat_engine.engine.types import ActionType, Condition, Team
+
+from . import (
+    WEIGHTS,
+    Memory,
+    _allies_of,
+    _is_square,
+    _opportunity_options,
+    _square,
+    features,
+)
+from . import threat as T
 
 #: The doctrine half of the weight table. Merged with `policy.WEIGHTS`'s 37 into the
 #: one dict the policy carries; kept separate here so `scripts/doctrine.py` can report
@@ -569,8 +570,9 @@ def provokers(world: Any, actor: int, dest: Any) -> list[int]:
     creatures themselves, because the *cost* of provoking is what each of them
     would do with the swing and they do not all hit equally hard.
     """
-    from .grid import distance
-    from .policy import _reach_of
+    from combat_engine.engine.grid import distance
+
+    from . import _reach_of
 
     here = _square_of(world, actor)
     if here is None or dest is None:
@@ -588,7 +590,7 @@ def provokers(world: Any, actor: int, dest: Any) -> list[int]:
 
 def _basic_of(world: Any, eid: int) -> str:
     """Which row this creature swings on an opportunity attack."""
-    from .components import Powers
+    from combat_engine.engine.components import Powers
 
     known = world.get(eid, Powers)
     return (known.basic if known is not None and known.basic else "mba")
@@ -607,8 +609,9 @@ def watchers(world: Any, actor: int) -> list[int]:
     the scorer had charged it a flat -9 -- the same as it would have charged for one
     enemy, because `threat_conceded` was wired into the movement branch alone.
     """
-    from .grid import distance
-    from .policy import _reach_of
+    from combat_engine.engine.grid import distance
+
+    from . import _reach_of
 
     here = _square_of(world, actor)
     if here is None:
@@ -671,7 +674,7 @@ def _in_area(world: Any, actor: int, origin: Any, ref: str) -> int:
     question it answers is "would stepping here bring more of them under the
     blast" where a square or two of error does not change the answer.
     """
-    from .grid import distance
+    from combat_engine.engine.grid import distance
 
     p = get(ref)
     if p is None or p.attack is None or p.reach is None:
@@ -704,7 +707,7 @@ def charge_reach(world: Any, eid: int) -> int:
     every move. So this is an upper bound: it can say "chargeable" where a wall
     makes it false, and never the reverse.
     """
-    from .components import Movement, Powers
+    from combat_engine.engine.components import Movement, Powers
 
     known = world.get(eid, Powers)
     if known is None or not known.basic:
@@ -723,7 +726,7 @@ def threatens_from(world: Any, actor: int) -> int:
     that only counted adjacency could not see that. This is the band a creature that
     does not want to be in melee should stay outside of.
     """
-    from .policy import _reach_of
+    from . import _reach_of
 
     worst = 0
     for foe in foes(world, actor):
@@ -752,7 +755,7 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
     range, zero outside it, flat within. That is the distinction worth having and it
     cannot saturate the way squares-travelled did, because there is only one step.
     """
-    from .components import Powers
+    from combat_engine.engine.components import Powers
 
     key = (id(world), _round(world), actor, origin)
     hit = _BEST.get(key)
@@ -782,7 +785,7 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
     # basic attack's, since that is what a charge swings.
     span = charge_reach(world, actor)
     if span:
-        from .grid import distance
+        from combat_engine.engine.grid import distance
 
         basic = known.basic
         for foe in foes(world, actor):
@@ -818,7 +821,7 @@ def fights_in_melee(world: Any, actor: int) -> bool:
     kiting rule Camille asked for could not apply to the one character that most
     needed it.
     """
-    from .components import Powers
+    from combat_engine.engine.components import Powers
 
     known = world.get(actor, Powers)
     if known is None:
@@ -881,8 +884,8 @@ def sets_up_flank(world: Any, actor: int, dest: Any) -> bool:
     "move into flanking" half of the sentence, and adjacency covers the shift half
     as a special case of it.
     """
-    from .components import Movement
-    from .grid import distance
+    from combat_engine.engine.components import Movement
+    from combat_engine.engine.grid import distance
 
     mates = [m for m in flankers(world, actor) if m != actor and alive(world, m)]
     if not mates:
@@ -1153,7 +1156,7 @@ KEEP = 16
 
 def best_reach(world: Any, actor: int) -> int:
     """How far this creature's longest usable attack reaches."""
-    from .components import Powers
+    from combat_engine.engine.components import Powers
 
     known = world.get(actor, Powers)
     if known is None:
@@ -1176,7 +1179,7 @@ def melee_reach(world: Any, eid: int) -> int:
     reaches one means attacking without being attacked back, and the scorer could
     not see that square because `worth_standing` discarded it.
     """
-    from .components import Powers
+    from combat_engine.engine.components import Powers
 
     known = world.get(eid, Powers)
     if known is None:
@@ -1199,7 +1202,7 @@ def close_reach(world: Any, eid: int) -> int:
     but nor is it a ranged one, and the kiting band computed off the longest *ranged*
     row would throw away every square the burst could actually be used from.
     """
-    from .components import Powers
+    from combat_engine.engine.components import Powers
 
     known = world.get(eid, Powers)
     if known is None:
@@ -1246,7 +1249,7 @@ def _can_charge_from(world: Any, actor: int, dest: Any) -> bool:
     a charge. Split out so the approach rule and the scoring rule cannot drift apart
     on what "arrives" means.
     """
-    from .grid import distance
+    from combat_engine.engine.grid import distance
 
     span = charge_reach(world, actor)
     if not span:
@@ -1282,7 +1285,7 @@ def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
 
     Returns the destinations worth scoring. Ties break on `str` so a seed replays.
     """
-    from .grid import distance
+    from combat_engine.engine.grid import distance
 
     near = foes(world, actor)
     if not near or len(moves) <= KEEP:

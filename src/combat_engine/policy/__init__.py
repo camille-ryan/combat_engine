@@ -27,17 +27,17 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
-from .actions import Action, legal, perform
-from .components import Gear, Health, Side
-from .dsl import get
-from .events import DamageApplied, Event, OpportunityWindow, PowerUsed
-from .grid import distance
-from .query import alive, distance_between, enemies, speed
-from .types import ActionType, Keyword, Team, Usage
+from combat_engine.engine.actions import Action, legal, perform
+from combat_engine.engine.components import Gear, Health, Side
+from combat_engine.engine.dsl import get
+from combat_engine.engine.events import DamageApplied, Event, OpportunityWindow, PowerUsed
+from combat_engine.engine.grid import distance
+from combat_engine.engine.query import alive, distance_between, enemies, speed
+from combat_engine.engine.types import ActionType, Keyword, Team, Usage
 
 if TYPE_CHECKING:
-    from .ecs import World
-    from .turns import Encounter
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.turns import Encounter
 
 
 class Policy(Protocol):
@@ -295,7 +295,7 @@ def _could_step_out(world: World, encounter: Encounter, actor: int) -> bool:
     move action cannot fix its position, and penalising it for standing where it
     is would only make it decline to attack at all.
     """
-    from .types import ActionType
+    from combat_engine.engine.types import ActionType
 
     if not encounter.can_spend(actor, ActionType.MOVE):
         return False
@@ -307,14 +307,14 @@ def _could_step_out(world: World, encounter: Encounter, actor: int) -> bool:
 
 
 def _reach_of(world: World, other: int) -> int:
-    from .movement import _threat
+    from combat_engine.engine.movement import _threat
 
     return _threat(world, other)
 
 
 def _in_reach(world: World, actor: int, where) -> bool:  # noqa: ANN001
     """Is any living enemy able to reach `where`?"""
-    from .grid import distance
+    from combat_engine.engine.grid import distance
 
     for foe in enemies(world, actor):
         if not alive(world, foe):
@@ -332,7 +332,7 @@ def _would_provoke(world: World, actor: int, dest) -> bool:  # noqa: ANN001
     because leaving one reach while staying in another still provokes from the
     one left.
     """
-    from .grid import distance
+    from combat_engine.engine.grid import distance
 
     here = _square(world, actor)
     for foe in enemies(world, actor):
@@ -360,7 +360,7 @@ def _attacks_would_provoke(world: World, actor: int) -> bool:
     True, so requiring both matched none of them and the feature never fired. A
     ranged *utility* counts for the same reason: using it in melee provokes too.
     """
-    from .components import Powers
+    from combat_engine.engine.components import Powers
 
     known = world.get(actor, Powers)
     for ref in (known.known if known else ()):
@@ -380,7 +380,7 @@ def _reaches_further(world: World, actor: int, action: Action) -> bool:
     practice -- a bow is worth drawing when the fight is at range, and a
     blade when it is not.
     """
-    from .components import Gear
+    from combat_engine.engine.components import Gear
 
     gear = world.get(actor, Gear)
     if gear is None:
@@ -405,7 +405,7 @@ def _reaches_further(world: World, actor: int, action: Action) -> bool:
     return reach >= near > holding + speed(world, actor)
 
 def _adjacent(world: World, a: int, b: int) -> bool:
-    from .query import adjacent
+    from combat_engine.engine.query import adjacent
 
     return adjacent(world, a, b)
 
@@ -416,14 +416,14 @@ def _allies_of(world: World, eid: int) -> list[int]:
     A push is aimed at an enemy, so the creatures it should be driven away
     from are that enemy's own allies.
     """
-    from .query import allies, enemies
+    from combat_engine.engine.query import allies, enemies
 
     foes = enemies(world, eid)
     return allies(world, foes[0]) if foes else []
 
 
 def _square(world: World, eid: int) -> tuple[int, int]:
-    from .components import Position
+    from combat_engine.engine.components import Position
 
     pos = world.get(eid, Position)
     return pos.square if pos else (0, 0)
@@ -612,9 +612,9 @@ def _opportunity_options(
     power that says otherwise, so this is every declared opportunity-action
     power that can reach, plus the basic.
     """
-    from .components import Powers
-    from .dsl import basic_options, candidates
-    from .dsl import usable as is_usable
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import basic_options, candidates
+    from combat_engine.engine.dsl import usable as is_usable
 
     out: list[Action] = []
     known = world.get(actor, Powers)
@@ -688,7 +688,7 @@ def take_turn(
     `cap` stops a policy that keeps choosing a free action from spinning. It
     is a guard against a bug, not a rule, so hitting it is worth noticing.
     """
-    from .actions import recharge
+    from combat_engine.engine.actions import recharge
 
     recharge(world, actor)
     for _ in range(cap):

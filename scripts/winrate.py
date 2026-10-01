@@ -94,11 +94,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import fight
 from combat_engine import chargen
-from combat_engine.engine import DoctrinePolicy, Ident, install, take_turn
-from combat_engine.engine import doctrine as doctrine_cache
-from combat_engine.engine import threat as threat_cache
+from combat_engine.engine import Ident
 from combat_engine.engine.events import AttackRolled, OpportunityWindow
 from combat_engine.engine.types import Team
+from combat_engine.policy import doctrine as doctrine_cache
+from combat_engine.policy import install, take_turn
+from combat_engine.policy import threat as threat_cache
+from combat_engine.policy.doctrine import DoctrinePolicy
 
 DRAWS = ("chassis", "scored", "rated")
 

@@ -1726,18 +1726,23 @@ WIDE = (
     "scripts/audit.py",
 )
 
-#: Inside `WIDE` but not actually wide. **The AI policy cannot break a row.**
-#: It decides what the AI *chooses* among the options the rules already allow,
-#: so a change here moves no row's behaviour -- and it declares no `@power`
-#: rows of its own. Left in `WIDE` it charged ten minutes for every
-#: policy change, which is the whole cost of the instrument for none of the
-#: benefit. Its own component label is `policy`, not `engine`.
+#: **Nothing. The exemption deleted itself when the file moved.**
 #:
-#: **So a policy change audits nothing, and that is correct** -- but it means
-#: this instrument is not its cover. `replay` and `fight` are: both play whole
-#: fights through `LinearPolicy`, so a policy change shows up there as a
-#: diverged fixture or a fight that stops finishing. Both run in `check.py`.
-NARROW = ("src/combat_engine/engine/policy.py",)
+#: This used to name `engine/policy.py`: the AI policy cannot break a row -- it
+#: decides what the AI *chooses* among options the rules already allow -- and
+#: left inside `WIDE` it charged ten minutes for every policy change. #228's
+#: argument was that the exemption was "a special case papering over a misplaced
+#: file", and it was: `policy.py`, `doctrine.py` and `threat.py` are
+#: `src/combat_engine/policy/` now, outside `WIDE` by being outside `engine/`,
+#: and `doctrine.py` and `threat.py` were never in this list at all -- so every
+#: change to either of them paid the ten minutes this was written to avoid.
+#:
+#: Kept as an empty tuple rather than removed, because the reasoning below still
+#: holds and the next misplaced file will want it: **a policy change audits
+#: nothing, and that is correct** -- this instrument is not its cover. `replay`
+#: and `fight` are, both playing whole fights through the policy, and both run
+#: in `check.py`.
+NARROW: tuple[str, ...] = ()
 
 
 def _calls(symbols: list[str]) -> list[str]:

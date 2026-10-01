@@ -28,17 +28,17 @@ from typing import Any
 from combat_engine import story
 from combat_engine.engine import (
     Action,
-    DoctrinePolicy,
     Encounter,
     Ident,
     Team,
     World,
     legal,
     perform,
-    take_turn,
 )
 from combat_engine.engine.events import OpportunityWindow
 from combat_engine.engine.query import alive
+from combat_engine.policy import take_turn
+from combat_engine.policy.doctrine import DoctrinePolicy
 from combat_engine.transcript import Transcript
 
 from .wire import Wire

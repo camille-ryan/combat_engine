@@ -27,9 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import fight
-from combat_engine.engine import DoctrinePolicy, Ident, install, take_turn
-from combat_engine.engine import doctrine as D
-from combat_engine.engine import threat as T
+from combat_engine.engine import Ident
 from combat_engine.engine.components import Health, Position, Side
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import (
@@ -40,6 +38,10 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.grid import distance
 from combat_engine.engine.query import alive, creatures, enemies
+from combat_engine.policy import doctrine as D
+from combat_engine.policy import install, take_turn
+from combat_engine.policy import threat as T
+from combat_engine.policy.doctrine import DoctrinePolicy
 
 POLICIES = {"doctrine": DoctrinePolicy}
 

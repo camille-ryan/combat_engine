@@ -50,10 +50,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from .components import Defenses, Health, Ident, Position, Powers, Side
-from .durations import When
-from .query import alive, creatures
-from .types import ActionType, Condition, Defense, Team
+from combat_engine.engine.components import Defenses, Health, Ident, Position, Powers, Side
+from combat_engine.engine.durations import When
+from combat_engine.engine.query import alive, creatures
+from combat_engine.engine.types import ActionType, Condition, Defense, Team
 
 #: Chance to shrug a save-ends effect at the end of a turn. The save is
 #: `roll.total + bonus >= 10` (`durations.py`), so eleven faces in twenty succeed.
@@ -146,12 +146,12 @@ def board(world: Any, eid: int) -> tuple[Any, int, int] | None:
     turned a third of landed hits back into misses and made the closed form look
     wrong by a third when it was the board that was wrong.
     """
-    from .ecs import World
-    from .events import Bus
-    from .grid import Grid
-    from .movement import place
-    from .rng import Rng
-    from .turns import Encounter
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.events import Bus
+    from combat_engine.engine.grid import Grid
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.rng import Rng
+    from combat_engine.engine.turns import Encounter
 
     level = _level_of(world, eid)
     try:
@@ -207,7 +207,7 @@ def raw(world: Any, eid: int) -> float:
     The sum of the `ROUNDS` highest-scoring rows the creature knows, each priced
     by `expect.expected` against the baseline opponent.
     """
-    from .expect import expected
+    from combat_engine.engine.expect import expected
 
     if unarmed(world, eid):
         return 0.0
@@ -265,7 +265,7 @@ def scrub(w: Any, me: int, foe: int) -> None:
     runs each effect's `on_end` and drops its bus subscriptions, so nothing is
     left watching. Running `on_end` on a board kept for measuring is harmless.
     """
-    from .movement import place
+    from combat_engine.engine.movement import place
 
     w.effects.forget(me, "measured")
     w.effects.forget(foe, "measured")
@@ -286,7 +286,7 @@ def row_damage(world: Any, eid: int, ref: str) -> float:
     `expected_vs` is what scales it to a real target. Against the baseline so that
     two rows, and two creatures, are comparable.
     """
-    from .expect import expected
+    from combat_engine.engine.expect import expected
 
     key = (id(world), eid, ref)
     got = _ROWS.get(key)
@@ -373,8 +373,8 @@ def row_effects(world: Any, eid: int, ref: str) -> tuple[Laid, ...]:
     a creature made easier for the whole party to hit -- is available without the
     caller knowing which conditions imply it.
     """
-    from .conditions import RULES
-    from .expect import expected
+    from combat_engine.engine.conditions import RULES
+    from combat_engine.engine.expect import expected
 
     key = (id(world), eid, ref)
     got = _EFFECTS.get(key)
@@ -446,7 +446,7 @@ def _baseline_hit(world: Any, eid: int, ref: str) -> float | None:
     The denominator in `expected_vs`. Taken from the same scratch board the damage
     figure came from, so the two are consistent with each other.
     """
-    from .dsl import get
+    from combat_engine.engine.dsl import get
 
     made = _BOARDS.get((id(world), eid))
     if made is None:
@@ -477,7 +477,7 @@ def expected_vs(world: Any, eid: int, ref: str, target: int,
     A row with no attack line at all is damage that does not need to land, so it
     is returned unscaled rather than being scaled by a hit chance of `None`.
     """
-    from .dsl import get
+    from combat_engine.engine.dsl import get
 
     dmg = row_damage(world, eid, ref)
     if dmg <= 0:
@@ -522,7 +522,7 @@ def from_rules(conds: Sequence[Condition], mods: Sequence[Any] = ()) -> Pinned:
     A `Mod` whose `what` is `"attack"` is the printed attack debuff and is added on
     top, since a power may impose one without any named condition.
     """
-    from .conditions import RULES
+    from combat_engine.engine.conditions import RULES
 
     out = Pinned()
     for cond in conds:
@@ -549,7 +549,7 @@ def from_rules(conds: Sequence[Condition], mods: Sequence[Any] = ()) -> Pinned:
 
 def _speed_under(world: Any, eid: int, pin: Pinned | None) -> int:
     """How far the creature may move, given what is on it."""
-    from .components import Movement
+    from combat_engine.engine.components import Movement
 
     move = world.get(eid, Movement)
     speed = move.speed if move is not None else 6
@@ -618,8 +618,8 @@ def per_round(world: Any, eid: int, pin: Pinned | None = None,
 def _per_round(world: Any, eid: int, pin: Pinned | None,
                *, anywhere: bool, where: Any = None) -> float:
     """`per_round` without the memo. Split so the cache has one entry point."""
-    from .dsl import get
-    from .grid import distance
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.grid import distance
 
     known = world.get(eid, Powers)
     me = world.get(eid, Position)
@@ -703,7 +703,7 @@ def landing(world: Any, target: int, pushed: int) -> Any:
     away from whichever of our creatures is closest to it. Clamped to a square that
     can be stood in, because a shove into a wall stops at the wall.
     """
-    from .grid import distance
+    from combat_engine.engine.grid import distance
 
     me = world.get(target, Position)
     mine = world.get(target, Side)
@@ -845,7 +845,7 @@ def enabled(world: Any, target: int, laid: Sequence[Laid]) -> float:
 
 def _best_hit(world: Any, eid: int, target: int) -> float | None:
     """This creature's best chance to hit that one, over the rows it has."""
-    from .dsl import get
+    from combat_engine.engine.dsl import get
 
     known = world.get(eid, Powers)
     if known is None:

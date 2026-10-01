@@ -73,14 +73,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import fight
-from combat_engine.engine import Ident, install, take_turn
-from combat_engine.engine import doctrine as D
-from combat_engine.engine import threat as T
+from combat_engine.engine import Ident
 from combat_engine.engine.components import Position
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import OpportunityWindow
 from combat_engine.engine.grid import distance
 from combat_engine.engine.query import alive, enemies
+from combat_engine.policy import doctrine as D
+from combat_engine.policy import install, take_turn
+from combat_engine.policy import threat as T
 
 BASELINE = Path(__file__).resolve().parent / "fixtures" / "scorecard.json"
 

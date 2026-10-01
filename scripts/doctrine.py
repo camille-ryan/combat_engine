@@ -35,10 +35,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import fight
-from combat_engine.engine import DoctrinePolicy, Ident, install, take_turn
-from combat_engine.engine import threat as T
-from combat_engine.engine.doctrine import DOCTRINE, doctrine_features, forget
+from combat_engine.engine import Ident
 from combat_engine.engine.query import alive, creatures
+from combat_engine.policy import install, take_turn
+from combat_engine.policy import threat as T
+from combat_engine.policy.doctrine import DOCTRINE, DoctrinePolicy, doctrine_features, forget
 
 
 class Watched(DoctrinePolicy):

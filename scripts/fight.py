@@ -20,17 +20,16 @@ import argparse
 
 from combat_engine import story
 from combat_engine.engine import (
-    DoctrinePolicy,
     Encounter,
     Ident,
     World,
-    install,
-    take_turn,
 )
 from combat_engine.engine.monster_math import PRESETS as MATHS
 from combat_engine.engine.query import alive, creatures
 from combat_engine.engine.scaling import PRESETS
 from combat_engine.engine.turns import extended_rest, short_rest
+from combat_engine.policy import install, take_turn
+from combat_engine.policy.doctrine import DoctrinePolicy
 
 #: Which four classes take the field. What each of them *knows* is worked
 #: out from the registry rather than listed, because a hand-written list goes
