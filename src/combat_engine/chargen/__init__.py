@@ -114,6 +114,7 @@ LONGSWORD = Weapon(ref="w:longsword", category="military", damage="1d8", profici
                    group="heavy blade")
 MACE = Weapon(ref="w:mace", category="simple", damage="1d8", proficiency=2, group="mace")
 DAGGER = Weapon(ref="w:dagger", category="simple", damage="1d4", proficiency=3, group="light blade",
+                thrown=(5, 10),
                 properties=frozenset({"light blade", "off-hand"}))
 SHORTSWORD = Weapon(ref="w:short-sword", category="military", damage="1d6", proficiency=3,
                     group="light blade",
@@ -239,6 +240,19 @@ def _printed_weapons() -> dict[str, Weapon]:
             ranged=(
                 (row["range_short"], row["range_long"])
                 if row["range_short"] and not row["melee"]
+                else None
+            ),
+            # **The other half of the same two columns, and it used to be
+            # thrown away.** The comment above is still right -- a thrown melee
+            # weapon is not a ranged one, and `Gear.ranged` must not pick it up
+            # -- but "not a ranged weapon" was being read as "has no range",
+            # so a dagger's printed 5/10 and a javelin's 10/20 reached nothing.
+            # A row printing `Ranged weapon` then fell back to whatever number
+            # the card happened to have, which over-threw a dagger and
+            # under-threw a javelin. #214.
+            thrown=(
+                (row["range_short"], row["range_long"])
+                if row["range_short"] and row["melee"]
                 else None
             ),
             group=row["grp"],

@@ -960,6 +960,17 @@ class Gear:
         return next((w for w in self.held if w.ranged), None)
 
     @property
+    def thrown(self) -> Weapon | None:
+        """The first thing in hand that can be thrown, if anything can.
+
+        The sibling of `ranged` above and deliberately not the same property:
+        that one answers "can this be fired", which decides whether there is a
+        ranged basic attack, and this answers "how far does it go when thrown",
+        which a row printing `Ranged weapon` needs and nothing could ask.
+        """
+        return next((w for w in self.held if w.thrown), None)
+
+    @property
     def melee(self) -> list[Weapon]:
         """What is in hand that can actually be swung at somebody.
 
@@ -1013,6 +1024,14 @@ class Weapon:
     proficiency: int = 2
     reach: int = 1
     ranged: tuple[int, int] | None = None
+    #: Short and long range **when thrown**, kept apart from `ranged` on
+    #: purpose. `Gear.ranged` means "can be fired", and a dagger cannot be --
+    #: letting it answer that question hands a rogue a ranged basic attack it
+    #: does not have, which is why a thrown weapon's range used to be dropped
+    #: on the floor instead. It is a different question from how far the thing
+    #: flies, and 17 printed weapons answer it differently: 2/5, 3/6, 4/8,
+    #: 5/10, 6/12 and 10/20.
+    thrown: tuple[int, int] | None = None
     group: str = ""
     #: Simple, military or superior -- the proficiency band the table prints
     #: beside the group. A handful of rows carry "you must use this power

@@ -1225,9 +1225,28 @@ def _reach_of(world: World, actor: int, r: Range, ref: str = "") -> int:
         return (worn or 1) + GIVES.get(ref, 0)
     if not r.by_weapon:
         return r.size
+    # **The weapon's range, not the card's.** A row printing `Ranged weapon`
+    # does not print a number, so the number the ETL wrote down is a stand-in
+    # and must lose to the thing in hand. It used to be `max(weapon, printed)`,
+    # which cannot be right in both directions and was wrong in both:
+    #
+    #   * a thrown weapon's range was not consulted at all, because `Gear.ranged`
+    #     answers "can be fired" and a dagger cannot be -- so a javelin (10/20)
+    #     reached only the 10 its card happened to carry, and 145 rows carrying
+    #     20 would have let a dagger throw twice as far as a dagger goes;
+    #   * and `max` floors every row at its stand-in, so a 3/6 trident in the
+    #     hand of a row printing 20 still reached 20.
+    #
+    # Fired first, then thrown, because a character holding a bow *and* a dagger
+    # is firing the bow -- the same precedence `Cast.w` uses to pick which dice
+    # to roll. The printed size is what is left when the hand holds neither, and
+    # there it is the only number there is.
     shot = getattr(gear, "ranged", None) if gear else None
-    reach = getattr(shot, "ranged", None) if shot else None
-    return max(reach[1], r.size) if reach else r.size
+    flies = getattr(shot, "ranged", None) if shot else None
+    if flies is None:
+        hurled = getattr(gear, "thrown", None) if gear else None
+        flies = getattr(hurled, "thrown", None) if hurled else None
+    return flies[1] if flies else r.size
 
 
 def _stretched(
