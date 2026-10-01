@@ -1148,6 +1148,50 @@ def _ongoing_if_alone(c: Cast, ev: Any) -> None:
     c.ongoing(c.wis_mod, on=foe)
 
 
+def _beast_shifts_if_open(c: Cast, ev: Any) -> None:
+    """"Your beast companion can shift 1 square before the attack."
+
+    On the `used` window, which is what "before the attack" means: the body
+    has not run, so the shift lands before the swing it is meant to set up.
+    `c.beast` answers None for a character that keeps none, so the gate is
+    honest rather than silently true.
+    """
+    from combat_engine.engine.query import has_combat_advantage
+
+    beast = c.beast()
+    if beast is None:
+        return
+    foes = [t for t in (ev.targets or ()) if has_combat_advantage(c.world, c.me, t)]
+    if foes:
+        c.shift(1, who=beast)
+
+
+def _beast_ongoing_instead(c: Cast, ev: Any) -> None:
+    """Ongoing damage **instead of** the Wisdom modifier on the damage roll.
+
+    **On the `resolved` window, not `clauses`.** The hit is the *beast's* --
+    `p4369` declares `by="companion"` -- and `clauses` is gated on
+    `ev.attacker == me`. `resolved` fires on the character's own
+    `PowerResolved`, which is where the use is announced and where `ev.rolls`
+    names who was actually hit.
+
+    **The "instead of" half cannot be expressed and is marked.** `p4369` adds
+    the Wisdom modifier to its damage *inside its own body*, and there is no
+    cancellable event for a damage bonus the way `ForcedMove` is cancellable
+    for a shove -- so the ongoing damage lands and the modifier it was meant
+    to replace cannot be taken back. That is `c.instead_of()`, the symbol 19
+    rows already wait on for exactly this shape.
+    """
+    from combat_engine.engine.query import has_combat_advantage
+
+    beast = c.beast()
+    if beast is None or c.wis_mod <= 0:
+        return
+    for foe in _hits(ev):
+        if has_combat_advantage(c.world, beast, foe):
+            c.ongoing(c.wis_mod, on=foe)
+
+
 def _slow_instead_of_push(c: Cast, ev: Any) -> None:
     """"You can slow the target **instead of** pushing it."
 
@@ -1287,7 +1331,7 @@ _riders("f1297", {
     "p917": _slow_if_open,
     "p2248": _slide_if_open,
     "p1000": _slow_instead_of_push,
-}, dropped=NAMED)
+}, used={"p4369": _beast_shifts_if_open})
 
 def _ally_adds_half_int(c: Cast, ev: Any) -> None:
     """Half the caster's Intelligence on the granted swing's attack roll.
@@ -1347,7 +1391,8 @@ _riders("f1299", {
     "p992": _ongoing_if_alone,
     "p653": _ongoing_on_riposte,
 }, landed={"p315": _ongoing_on_granted_hit},
-   dropped=NAMED)
+   resolved={"p4369": _beast_ongoing_instead},
+   dropped=("c.instead_of()",))
 
 # p997's clause pays out **on a miss**, which a rider hung on `Hit` never
 # sees; p1061 is the granted attack, which is readable now.

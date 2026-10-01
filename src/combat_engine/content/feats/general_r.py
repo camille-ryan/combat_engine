@@ -1297,11 +1297,70 @@ def f3619(c: Cast) -> None:
     c.watch(PowerUsed, offered, until=When.ENCOUNTER)
 
 
+def _melee_at_will(ref: str) -> bool:
+    """Is this ref a melee at-will attack power?"""
+    row = get(ref)
+    if row is None or row.attack is None or row.reach is None:
+        return False
+    return row.usage is Usage.AT_WILL and row.reach.kind == "melee"
+
+
+@power(
+    "p13853",
+    level=0,
+    cls="",
+    usage=ENCOUNTER,
+    action=NONE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.SHADOW],
+    trigger="you hit an enemy with a melee at-will attack power",
+    on=Trigger(
+        Hit,
+        lambda w, me, ev: ev.attacker == me and _melee_at_will(getattr(ev, "power", "")),
+        "you hit with a melee at-will attack power",
+    ),
+)
+def p13853(c: Cast) -> None:
+    """The card `f3620` below trades for, declared here because that feat is
+    the only route to it.
+
+    **Its own class is not imported**, so the row has no entry in `game.db`
+    -- which is ordinary rather than novel: 120 declared rows are in that
+    position, `mba` and every `rt:` trait among them. The numbers are
+    hand-written off the printed card, as every row's are.
+
+    The printed trigger narrows to *that class's* melee at-wills. That
+    narrowing cannot be expressed and does not need to be: no row of that
+    class exists to be the trigger, and the only character who can hold this
+    card is one who took `f3620`, whose own clause widens the trigger to any
+    melee at-will. So the gate is the wider sentence, which is the one that
+    can ever be true.
+    """
+    ev = c.trigger
+    victim = getattr(ev, "target", None)
+    if victim is None:
+        return
+    c.flat(c.roll("1d10"), on=victim)
+    c.regain_surge(on=c.me)
+
+
 @power("f3620", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=NAMED,
+       reach=PERSONAL, target=SELF,
        swap=Swap(1, Usage.ENCOUNTER))
 def f3620(c: Cast) -> None:
-    """Loses a known encounter power for one the brief names in prose."""
+    """Loses a known encounter power for the card above.
+
+    The brief names that card in prose and gives no ref, because the class it
+    belongs to is not imported -- so it is declared as `p13853` directly
+    above, and this hands it over. `chargen` takes the power that goes back;
+    that is the `Swap` in the header.
+
+    The feat's own widening -- "also triggered if you hit an adjacent enemy
+    with a melee at-will attack power" -- is `p13853`'s trigger as written, for
+    the reason given there. The adjacency is implied by the melee reach.
+    """
+    c.grant_row("p13853", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3621", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -1422,15 +1481,32 @@ def f3629(c: Cast) -> None:
     c.grant_row("p13554", on=c.me, until=When.ENCOUNTER)
 
 
+#: The three powers the ranger's archery feature grants.
+#:
+#: **Which rows belong to a feature is recorded nowhere in the tables** -- that
+#: was this row's hold -- but the class page says it outright: "You gain the
+#: following three powers", with all three cards printed underneath. Read off
+#: the compendium rather than guessed, and only the refs are written here.
+_ARCHER_GRANTS = ("p13585", "p13586", "p13587")
+
+
 @power("f3630", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=NAMED,
+       reach=PERSONAL, target=SELF,
        swap=Swap(1, Usage.AT_WILL))
 def f3630(c: Cast) -> None:
     """An at-will traded for one of the powers a class feature grants.
-    `f3620` above is the same sentence: what the row needs handed to it is
-    a *power* ref, and the brief prints neither the feature's nor its
-    grants'. Which rows belong to a feature is recorded nowhere even where
-    the feature does have a ref."""
+
+    `chargen` takes the one that goes back -- that is the `Swap` in the header
+    -- and the body hands a card over, the way `f3631` below does. The choice
+    among the three goes to the decider, since the sheet does not record it.
+
+    The hold was that neither the feature's ref nor its grants' were in the
+    brief, and that which rows a feature grants is recorded nowhere. The class
+    page records it: see `_ARCHER_GRANTS`.
+    """
+    taken = c.choose(list(_ARCHER_GRANTS), c.ref)
+    if taken:
+        c.grant_row(taken, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3631", level=1, cls="", usage=ENCOUNTER, action=NONE,
