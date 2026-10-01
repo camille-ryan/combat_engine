@@ -2259,6 +2259,7 @@ def main() -> int:
     chosen: list[str] = []
     inert: list[str] = []
     partial: list[tuple[str, tuple[str, ...], str]] = []
+    retired: list[tuple[str, tuple[str, ...], str]] = []
     for ref in wanted:
         p = get(ref)
         if p is None:
@@ -2269,6 +2270,14 @@ def main() -> int:
         if args.level is not None and p.level != args.level:
             continue
         if args.monsters and not ref.startswith("m"):
+            continue
+        if p.obsolete:
+            # **Retired by a rules change, not unfinished.** `usable` refuses it
+            # for a different reason than `todo` does, and firing it would only
+            # prove the refusal works. Its own bucket: counted with the `todo`
+            # rows it would read as waiting for something, and counted done it
+            # would read as playing.
+            retired.append((ref, (p.obsolete,), "GONE"))
             continue
         if p.todo:
             # Declared unfinished. `usable` refuses it, so firing it here
@@ -2387,6 +2396,10 @@ def main() -> int:
             f"  {len(partial)} unfinished -- {inert_rows} refused in play, "
             f"{len(partial) - inert_rows} playing with a clause missing"
         )
+    if retired:
+        print(f"  {len(retired)} retired by a rules change, not fired: "
+              + ", ".join(ref for ref, _, _ in retired[:6])
+              + (" ..." if len(retired) > 6 else ""))
     if broken or silent:
         print(f"  {len(broken)} raise, {len(silent)} silent")
     if never:
