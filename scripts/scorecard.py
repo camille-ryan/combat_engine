@@ -107,6 +107,12 @@ class Counted(D.DoctrinePolicy):
         got = super().act(world, encounter, actor, options)
         if got.kind == "charge":
             self.n[f"{side}/charge_taken"] += 1
+        if got.kind == "action_point":
+            self.n[f"{side}/ap_spent"] += 1
+            # Which extra action it bought. A standard is worth most by a wide
+            # margin, so this reading says whether the choice is evaluated or a
+            # tie-break: `Action.ref` carries the granted type. #266.
+            self.n[f"{side}/ap_standard"] += int(got.ref == "standard")
         if got.ref and inert(world, actor, got.ref):
             self.n[f"{side}/inert_chosen"] += 1
         p = get(got.ref) if got.ref else None
@@ -187,6 +193,8 @@ def measure(levels: tuple[int, ...]) -> dict:
                 "charge_offered": pol.n[f"{side}/charge_offered"],
                 "charge_taken": pol.n[f"{side}/charge_taken"],
                 "idle_melee": pol.n[f"{side}/idle_melee"],
+                "ap_spent": pol.n[f"{side}/ap_spent"],
+                "ap_standard": pol.n[f"{side}/ap_standard"],
                 "melee_turns": pol.n[f"{side}/melee_turns"],
             }
         out[str(level)] = cell
@@ -203,6 +211,8 @@ ROWS = [
     ("charge_taken", "charges taken", "higher"),
     ("charge_offered", "charges offered", "-"),
     ("idle_melee", "melee turns neither attacking nor closing", "lower"),
+    ("ap_spent", "action points spent", "-"),
+    ("ap_standard", "...of them buying a standard action", "higher"),
     ("decisions", "decisions", "-"),
 ]
 

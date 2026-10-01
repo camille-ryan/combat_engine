@@ -3,6 +3,8 @@
     "fights": 12,
     "monsters": {
       "already_on": 0,
+      "ap_spent": 0,
+      "ap_standard": 0,
       "charge_offered": 252,
       "charge_taken": 29,
       "decisions": 727,
@@ -17,6 +19,8 @@
     },
     "party": {
       "already_on": 4,
+      "ap_spent": 48,
+      "ap_standard": 48,
       "charge_offered": 356,
       "charge_taken": 54,
       "decisions": 1180,
@@ -35,6 +39,8 @@
     "fights": 12,
     "monsters": {
       "already_on": 0,
+      "ap_spent": 0,
+      "ap_standard": 0,
       "charge_offered": 203,
       "charge_taken": 13,
       "decisions": 560,
@@ -49,6 +55,8 @@
     },
     "party": {
       "already_on": 10,
+      "ap_spent": 48,
+      "ap_standard": 48,
       "charge_offered": 328,
       "charge_taken": 38,
       "decisions": 1023,
