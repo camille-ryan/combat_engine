@@ -1251,19 +1251,28 @@ def f1125(c: Cast) -> None:
 
 @power("f621", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.change_dice()", "c.counts_as(property=)"))
+       dropped=("Weapon.high_crit",))
 def f621(c: Cast) -> None:
-    """Raises a weapon's damage die and makes it high crit. `Weapon.damage`
-    is read straight out of the component when a swing is rolled and
-    nothing edits it.
+    """One named weapon rolls a d8, and becomes high crit.
 
-    Re-aimed: the old marker named `c.bonus('crit_range')`, which
-    **exists** and is the wrong thing twice over -- high crit is extra
-    damage on a critical, not a wider one, and the modifier sits on the
-    wielder where the property belongs to the weapon. The damage
-    context carries no weapon, so it cannot even be gated to the one in
-    hand. What is wanted is a weapon property, which is the gap
-    `c.counts_as(property=)` already names."""
+    The die is written -- `c.weapon_dice` edits the character's own copy of
+    the weapon, and `w:hand-crossbow` is in the database at the d6 the card
+    is raising.
+
+    **High crit is the dropped clause, and the gap is a reader rather than a
+    writer.** Properties are a frozenset on the same per-character copy, so
+    adding the word would be as easy as the die was -- and would be a
+    modifier nothing consults, which is this project's commonest bug. Nothing
+    in the engine reads high crit from anywhere: it is printed on 18 weapons
+    and acted on by none of them (#240). So the symbol names what is actually
+    missing, and it is the same one f3785 waits on.
+
+    Re-aimed twice before that. The first marker named `c.bonus('crit_range')`,
+    which **exists** and is wrong twice over -- high crit is extra damage on a
+    critical, not a wider one, and the modifier sits on the wielder where the
+    property belongs to the weapon. The second named `c.counts_as(property=)`,
+    a writer, when the writer turned out to be the half that was easy."""
+    c.weapon_dice("1d8", ref="w:hand-crossbow", on=c.me)
 
 
 @power("f999", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

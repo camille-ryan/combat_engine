@@ -6981,6 +6981,48 @@ class Cast:
         who = self._who(on)
         return holding(self.world, who, what) if who is not None else []
 
+    def weapon_dice(
+        self, dice: str, *, group: str = "", ref: str = "", on: int | None = None
+    ) -> int:
+        """Set the damage die of that creature's own weapons. Returns how many.
+
+        **The sibling of `change_dice`, and deliberately not the same verb.**
+        That one is keyed by the ref of a *row* and read by that row calling
+        `dice_for`; six feats instead say "your unarmed damage die is 1d6", or
+        a hand crossbow's, or a blowgun's -- the die of a **weapon**, which is
+        a field on `Weapon` that nothing read through a modifier. One symbol
+        serving both would go green for either need and be right for only one,
+        which this repo has paid for before.
+
+        It needs no reader, which is the whole argument for doing it this way.
+        `Gear.weapons` holds `replace(w)` copies made per character by
+        `chargen.spawn`, never the module-level weapons themselves -- measured,
+        because mutating a shared singleton would have armed every character in
+        the fight -- so the six places that read `weapon.damage` (`c.w`, three
+        warlord rows, chargen's two) all see this with no change to any of
+        them.
+
+        `group` is a weapon group and matches the whole group; `ref` names one
+        weapon exactly. Owned weapons count as well as held ones: a feat that
+        raises the die of a weapon on the belt should still have done so by the
+        time it is drawn.
+
+        Absolute, never a step up, so arming the trait twice in a fight says
+        the same thing twice.
+        """
+        who = self._who(on)
+        if who is None:
+            return 0
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return 0
+        changed = 0
+        for weapon in gear.weapons:
+            if (group and weapon.group == group) or (ref and weapon.ref == ref):
+                weapon.damage = dice
+                changed += 1
+        return changed
+
     def weapon_of(self, ev: Any = None) -> Weapon | None:
         """Which weapon the attack behind this event was swung with.
 

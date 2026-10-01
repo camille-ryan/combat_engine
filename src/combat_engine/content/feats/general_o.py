@@ -267,14 +267,18 @@ def f2901b(c: Cast) -> None:
 
 @power("f2902", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w:blowgun",), swap=Swap(1, Usage.AT_WILL),
-       dropped=("c.change_dice()",))
+       proficiency=("w:blowgun",), swap=Swap(1, Usage.AT_WILL))
 def f2902(c: Cast) -> None:
-    """The card is handed over here and the two build-time clauses are
-    header data: the blowgun `chargen` deals, and the at-will it is
-    traded for. What is left is the die that weapon rolls, which is a
-    field on the `Weapon` and not a thing a row edits."""
+    """The card is handed over here, and the weapon it is fired from rolls a
+    d6 rather than a d4.
+
+    The two build-time clauses are header data: the blowgun `chargen` deals,
+    and the at-will it is traded for. The die was the dropped clause, and it
+    is a field on the `Weapon` rather than on any row -- so `c.weapon_dice`
+    rather than `c.change_dice`, edited on the character's own copy. The ref
+    is the one the header already names, so there is nothing to guess."""
     c.grant_row("f2902b", on=c.me, until=When.ENCOUNTER)
+    c.weapon_dice("1d6", ref="w:blowgun", on=c.me)
 
 
 @power("f2902b", level=1, cls="", usage=AT_WILL, action=STANDARD,

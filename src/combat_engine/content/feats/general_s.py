@@ -1506,11 +1506,17 @@ def f3783(c: Cast) -> None:
 
 
 @power("f3784", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.change_dice()",))
+       reach=PERSONAL, target=SELF, dropped=("chargen.plain_unarmed",))
 def f3784(c: Cast) -> None:
-    """Unarmed *is* one of the ten groups, so the accuracy half is exact
-    and the word the card prints is "proficiency". Raising the weapon's
-    own damage die is a change to the item and not a modifier."""
+    """Unarmed *is* one of the ten groups, so the accuracy half is exact and
+    the word the card prints is "proficiency".
+
+    **The die is re-aimed, not written.** It was waiting on `c.change_dice()`;
+    that verb exists now and is the wrong one -- a weapon's die is a field on
+    the `Weapon`, which `c.weapon_dice` edits. The clause still cannot be
+    written, for a different reason: there is no plain fist to raise. Every
+    row in the group is a better fist than a bare one, so raising the group
+    would lower a monk's strike. #282, and f2400 is the other row on it."""
     c.bonus("attack", 2, kind="proficiency", on=c.me, until=When.ENCOUNTER,
             when=lambda ctx: _holding(c, "unarmed"))
 

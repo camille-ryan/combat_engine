@@ -533,10 +533,25 @@ def f2399(c: Cast) -> None:
 
 
 @power("f2400", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_dice()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("chargen.plain_unarmed",))
 def f2400(c: Cast) -> None:
-    """Raises the damage die of two weapons. `Weapon.damage` is the
-    character's own string and nothing rewrites one for a fight."""
+    """Raises two damage dice: one named weapon to a d8, and a bare fist to a
+    d6.
+
+    The named weapon is written. The fist is the dropped clause, and the
+    reason is worth stating because it looked writable and the first attempt
+    was wrong:
+
+    **There is no plain unarmed attack to raise.** The group holds three
+    weapons, every one of them a *better* fist than a bare one -- a monk's
+    strike at a d8, a spiked gauntlet, a racial one -- and the generic
+    `w:unarmed` the chassis deals is the monk's numbers under a generic ref.
+    So raising the group to a d6 **lowered** a monk's strike from its d8,
+    which is the opposite of what the card says, and the probe caught it.
+    A card that raises a fist to a d6 is talking about a d4 fist that this
+    build has no row for."""
+    c.weapon_dice("1d8", ref="w:spiked-gauntlet", on=c.me)
 
 
 @power("f2427", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

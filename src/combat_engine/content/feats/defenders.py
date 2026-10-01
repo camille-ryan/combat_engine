@@ -260,11 +260,23 @@ def f1024(c: Cast) -> None:
 
 
 @power("f2602", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_dice()",))
+       reach=PERSONAL, target=SELF)
 def f2602(c: Cast) -> None:
-    """Raises the die of the class's unarmed strike. The dice are a
-    string on a `Weapon` the chassis deals, and nothing rewrites one --
-    the same symbol the ranger's f273 and the rogue's f185 want."""
+    """The class's unarmed strike rolls a d10 rather than a d8.
+
+    `c.weapon_dice`, not `c.change_dice`: the die is a field on the `Weapon`
+    rather than on any row, so this edits the character's own copy and the
+    six places that read `weapon.damage` see it without being changed.
+
+    **By ref, twice, and not by group.** The group holds three weapons and
+    one of them is a spiked gauntlet, which this card says nothing about. The
+    two refs are the same weapon under two spellings: the chassis deals a
+    monk `w:unarmed`, which the database does not have -- it carries this
+    class's numbers under a generic ref -- and the row that *is* in the
+    database spells it out. Both are named so the row is right whichever the
+    character ends up holding, and the mismatch itself is filed."""
+    c.weapon_dice("1d10", ref="w:unarmed", on=c.me)
+    c.weapon_dice("1d10", ref="w:monk-unarmed-strike", on=c.me)
 
 
 #: **The feature has refs after all.** Both of these were marked
