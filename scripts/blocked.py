@@ -197,6 +197,16 @@ def _queue(
 # --------------------------------------------------------------------------
 
 
+#: The names the "wrong module guessed" fallback in `_one` may search by bare name.
+#: **Engine-owned only, deliberately.** That fallback exists because a marker names
+#: the module it *thinks* a symbol lives in and is often wrong, and it was safe while
+#: this index held one package. Widening the index to `chargen` and `spec` made it
+#: unsafe: `chargen.spawn` and the `loader.spawn` a marker asks for are different
+#: functions that share a name, and matching them reported a row ready on somebody
+#: else's symbol. So the index grew and the fallback did not.
+_FALLBACK: set[str] = set()
+
+
 def _surface() -> dict[str, object]:
     """Everything a row can call, by name, with the thing itself.
 
@@ -233,6 +243,40 @@ def _surface() -> dict[str, object]:
         for n in dir(mod):
             if not n.startswith("_"):
                 have.setdefault(f"{info.name}.{n}", getattr(mod, n))
+
+    _FALLBACK.clear()
+    _FALLBACK.update(have)
+
+    # **Not only the engine.** A marker names the owner it thinks a symbol belongs
+    # to, and 21 of them -- 148 row-slots -- name `chargen.` or `spec.`, which this
+    # index did not cover. So `_one` answered False for every one of them *forever*,
+    # whether or not the symbol existed: `chargen` is a real package in this repo,
+    # and at least nine `spec.associated_clause()` markers were already satisfied by
+    # a brief that carries the clause. That is the same silence this function's own
+    # note above was written about, one directory further out.
+    import combat_engine.chargen as chargen_pkg
+
+    for n in dir(chargen_pkg):
+        if not n.startswith("_"):
+            have.setdefault(f"chargen.{n}", getattr(chargen_pkg, n))
+    for info in pkgutil.iter_modules(chargen_pkg.__path__):
+        mod = importlib.import_module(f"combat_engine.chargen.{info.name}")
+        for n in dir(mod):
+            if not n.startswith("_"):
+                have.setdefault(f"chargen.{n}", getattr(mod, n))
+                have.setdefault(f"{info.name}.{n}", getattr(mod, n))
+
+    # `spec.py` is an instrument rather than a component, and it is what a marker
+    # means by `spec.`: the brief handed to an author. Sideways rather than downward,
+    # and both files already live in `scripts/`.
+    try:
+        import spec as spec_mod
+    except Exception:
+        spec_mod = None
+    if spec_mod is not None:
+        for n in dir(spec_mod):
+            if not n.startswith("_"):
+                have.setdefault(f"spec.{n}", getattr(spec_mod, n))
     return have
 
 
@@ -323,8 +367,9 @@ def _one(token: str, have: dict[str, object]) -> bool:
         # for a lowercase owner, which is a module: `Dropped.source` is
         # a field on one named class and must not match a `source`
         # somewhere else.
+        pool = _FALLBACK or have
         return owner.islower() and any(
-            k.endswith(f".{attr}") or k == attr for k in have
+            k.endswith(f".{attr}") or k == attr for k in pool
         )
     return False
 
