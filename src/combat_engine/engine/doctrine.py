@@ -808,6 +808,15 @@ def fights_in_melee(world: Any, actor: int) -> bool:
 
     Read off what the creature knows rather than off its role, because a role is
     a label and this is a question about the rows in hand.
+
+    **`close_burst` and `close_blast` are not melee and counting them here was a
+    bug of mine.** A close burst 3 is centred on the caster and reaches three
+    squares, so it wants space, not adjacency. Including them made the wizard --
+    whose only attacks are bursts, blasts and ranged rows -- report `True`, which
+    sent it to the *melee* tier of `worth_standing` looking for a square next to
+    something, and handed it `takes_flank` for a +2 it can never spend. The
+    kiting rule Camille asked for could not apply to the one character that most
+    needed it.
     """
     from .components import Powers
 
@@ -818,7 +827,7 @@ def fights_in_melee(world: Any, actor: int) -> bool:
         p = get(ref)
         if p is None or p.attack is None or p.reach is None:
             continue
-        if p.reach.kind in ("melee", "close_burst", "close_blast"):
+        if p.reach.kind == "melee":
             return True
     return False
 
