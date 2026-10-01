@@ -488,10 +488,12 @@ def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
     """
     global _WEAPON_WORDS
 
-    from dataclasses import replace
+    from dataclasses import replace as _replace
 
     from combat_engine.engine import Gear
     from combat_engine.engine.query import holding
+
+    gear = world.get(caster, Gear)
 
     wanted = " ".join(
         (getattr(declared, "requires_text", "") or "",
@@ -501,7 +503,6 @@ def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
         return
     if _WEAPON_WORDS is None:
         _WEAPON_WORDS = _weapon_words()
-    gear = world.get(caster, Gear)
     if gear is None:
         return
     for word, ref in _WEAPON_WORDS.items():
@@ -516,7 +517,7 @@ def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
             # A copy, for the reason `chargen.spawn` takes one: these are
             # module-level singletons and `Cast.decay` reduces enhancement
             # in place.
-            held = replace(arm)
+            held = _replace(arm)
             gear.weapons.append(held)
             gear.wield(held)
         return
@@ -2192,6 +2193,50 @@ def audit(ref: str) -> Result:
     return out
 
 
+def _why_never(never: list[Result]) -> None:
+    """Group the rows the harness could not use by what is in the way.
+
+    **A count is not a work queue**, which is why nobody had read this set: the
+    figure has been printed for months and the refs never were. #214's own last
+    comment names the interesting minority -- the rows that declare no trigger,
+    carry no Requirement, and still could not be used -- and that group is only
+    visible if the set is grouped rather than totalled.
+
+    The order matters: a row with a trigger is waiting for something to fire and
+    is explained, so it is reported first and dismissed. What is left is the
+    diagnosable part.
+    """
+    from collections import Counter
+
+    triggered: Counter = Counter()
+    gated: list[str] = []
+    bare: list[str] = []
+    for r in never:
+        row = REGISTRY.get(r.ref)
+        if row is None:
+            continue
+        if getattr(row, "on", None) is not None:
+            triggered[type(row.on.event).__name__ if not isinstance(row.on.event, type)
+                      else row.on.event.__name__] += 1
+        elif getattr(row, "requires", None) is not None or getattr(row, "requires_text", ""):
+            gated.append(r.ref)
+        else:
+            bare.append(r.ref)
+    if triggered:
+        print("      waiting for a trigger to fire, by event:")
+        for name, n in triggered.most_common(8):
+            print(f"        {name:<22} {n}")
+    if gated:
+        print(f"      a Requirement the board cannot meet: {len(gated)}")
+        print("        " + ", ".join(sorted(gated)[:10])
+              + (" ..." if len(gated) > 10 else ""))
+    if bare:
+        print(f"      **no trigger and no Requirement, and still unusable: "
+              f"{len(bare)}**")
+        print("        " + ", ".join(sorted(bare)[:16])
+              + (" ..." if len(bare) > 16 else ""))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -2210,6 +2255,8 @@ def main() -> int:
     ap.add_argument("--verbose", action="store_true", help="say what each row did")
     ap.add_argument("--changed", action="store_true",
                     help="only rows in content files that differ from HEAD")
+    ap.add_argument("--never", action="store_true",
+                    help="list the rows the harness could not use, grouped by why")
     ap.add_argument("--verdicts", action="store_true",
                     help="check the verdict against rows whose right answer is "
                          "known. Seconds, and the only way to iterate on "
@@ -2404,6 +2451,8 @@ def main() -> int:
         print(f"  {len(broken)} raise, {len(silent)} silent")
     if never:
         print(f"  {len(never)} never usable here -- often a Requirement the board cannot meet")
+        if args.never:
+            _why_never(never)
     if refused:
         print(f"  {len(refused)} negotiable event(s) ignored a refusal")
     if known_quiet:
