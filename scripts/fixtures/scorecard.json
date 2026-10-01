@@ -2,12 +2,13 @@
   "10": {
     "fights": 12,
     "monsters": {
-      "adjacent_idle": 2,
+      "adjacent_idle": 0,
       "already_on": 0,
       "ap_spent": 0,
       "ap_standard": 0,
       "charge_offered": 178,
       "charge_taken": 18,
+      "could_not_act": 2,
       "decisions": 807,
       "idle_melee": 2,
       "inert_chosen": 0,
@@ -19,14 +20,15 @@
       "tied_pct": 7.3
     },
     "party": {
-      "adjacent_idle": 24,
+      "adjacent_idle": 3,
       "already_on": 5,
       "ap_spent": 48,
       "ap_standard": 48,
       "charge_offered": 209,
       "charge_taken": 33,
+      "could_not_act": 26,
       "decisions": 1271,
-      "idle_melee": 10,
+      "idle_melee": 5,
       "inert_chosen": 215,
       "melee_turns": 355,
       "oa_conceded": 33,
@@ -46,6 +48,7 @@
       "ap_standard": 0,
       "charge_offered": 144,
       "charge_taken": 11,
+      "could_not_act": 0,
       "decisions": 650,
       "idle_melee": 3,
       "inert_chosen": 0,
@@ -57,14 +60,15 @@
       "tied_pct": 12.3
     },
     "party": {
-      "adjacent_idle": 15,
+      "adjacent_idle": 3,
       "already_on": 42,
       "ap_spent": 48,
       "ap_standard": 48,
       "charge_offered": 209,
       "charge_taken": 16,
+      "could_not_act": 16,
       "decisions": 1154,
-      "idle_melee": 7,
+      "idle_melee": 3,
       "inert_chosen": 193,
       "melee_turns": 255,
       "oa_conceded": 33,
@@ -74,5 +78,6 @@
       "tied_pct": 18.9
     },
     "rounds_median": 8.0
-  }
+  },
+  "commit": "73e0efa185a8f72e5c7644f661008fd38774abdb"
 }

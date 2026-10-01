@@ -52,6 +52,7 @@ from __future__ import annotations
 import argparse
 import json
 import statistics
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -76,6 +77,41 @@ SEEDS = tuple(range(301, 313))
 LEVELS = (5, 10)
 
 
+def _git(*args: str) -> str:
+    """A git reading, or "" when there is no git to read."""
+    try:
+        out = subprocess.run(("git", *args), capture_output=True, text=True,
+                             cwd=Path(__file__).resolve().parent.parent, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout.strip() if out.returncode == 0 else ""
+
+
+def staleness(was: dict | None) -> str:
+    """How far behind HEAD the baseline was recorded. #270.
+
+    **A baseline older than HEAD reads exactly like a commit that changed
+    nothing**, and that is not hypothetical: the baseline sat two commits behind
+    while 915ed93 moved three numbers -- inert rows 181 -> 213, a live buff
+    re-cast 18 -> 42, charges taken 21 -> 14 -- and the next change measured was
+    nearly blamed for all of it. Nothing in the output said so.
+    """
+    if was is None:
+        return ""
+    saved = was.get("commit", "")
+    head = _git("rev-parse", "HEAD")
+    if not saved:
+        # **An absent field is not evidence of freshness.** It reads identically
+        # to a baseline recorded ten commits ago, which is the whole failure.
+        return "  baseline records no commit, so its age cannot be checked -- --save fixes this"
+    if not head or saved == head:
+        return ""
+    n = _git("rev-list", "--count", f"{saved}..{head}")
+    behind = f"{n} commit{'s' if n != '1' else ''}" if n else "an unknown number of commits"
+    return (f"  baseline is {behind} stale, recorded at {saved[:9]} -- "
+            f"a number that moved may not be this change's doing")
+
+
 def side_of(world, eid: int) -> str:  # noqa: ANN001
     ident = world.get(eid, Ident)
     return "monsters" if (ident and ident.ref.startswith("m")) else "party"
@@ -93,9 +129,18 @@ class Counted(D.DoctrinePolicy):
         super().__init__()
         self.n: Counter = Counter()
         self.ties: dict[str, list[int]] = {"party": [], "monsters": []}
+        #: `(actor, round)` -> was anything but `end` available on the **first**
+        #: decision of that turn. Keyed rather than kept as one flag because an
+        #: immediate interrupt calls `act` for a creature whose turn it is not,
+        #: which would clobber a single slot.
+        self.could: dict[tuple[int, int], bool] = {}
 
     def act(self, world, encounter, actor, options):  # noqa: ANN001, ANN201
         side = side_of(world, actor)
+        self.could.setdefault(
+            (actor, world.round),
+            any(o.available and o.kind != "end" for o in options),
+        )
         scored = sorted(((self.score(world, encounter, actor, a), a)
                          for a in options if a.available), key=lambda t: -t[0])
         self.n[f"{side}/decisions"] += 1
@@ -141,6 +186,10 @@ def play(level: int, seed: int, pol: Counted, cap: int = 30) -> int:
     world, encounter = fight.build(seed, level, "full")
     T.clear()
     D.forget()
+    # Per-fight, unlike every tally on `pol`: entity ids and round numbers both
+    # restart each fight, so a surviving `(actor, round)` key answers the wrong
+    # fight's question. Left in, this reported 7 excluded turns where there are 25.
+    pol.could.clear()
     install(world, encounter, {}, default=pol)
 
     def provoked(ev: OpportunityWindow) -> None:
@@ -158,6 +207,7 @@ def play(level: int, seed: int, pol: Counted, cap: int = 30) -> int:
                    if alive(world, e) and (q := world.get(e, Position)) is not None),
                   default=99) if was else 99
         hits = pol.n[f"{side_of(world, actor)}/attacks"]
+        began = world.round
         take_turn(world, encounter, actor, pol)
         turn_watch(world, pol, actor)
         after = world.get(actor, Position)
@@ -171,9 +221,21 @@ def play(level: int, seed: int, pol: Counted, cap: int = 30) -> int:
         # offered. The first is an approach problem and the guard this was built to
         # be; the second is a creature with nothing it can use, which is a different
         # bug and was hiding inside the same number.
+        # **A turn with nothing but `end` on offer cannot demonstrate a bad
+        # choice**, so counting it as an idle turn measures the board rather than
+        # the policy. It was measuring mostly corpses: of 24 `adjacent_idle` turns
+        # at level 10, **20 were unconscious or dying creatures** with exactly one
+        # legal option, and 5 of 10 `idle_melee` the same. Three of the 23 carried
+        # no condition at all and still had one option, which is why the test is
+        # "what was offered" and not a list of conditions -- the same reason
+        # `threat.from_rules` derives from the rules instead of a hand-set table.
+        # Counted out loud below, because an instrument that quietly drops turns
+        # is the failure this directory's rules forbid.
         if D.fights_in_melee(world, actor) \
                 and pol.n[f"{side_of(world, actor)}/attacks"] == hits:
-            if gap <= 1:
+            if not pol.could.get((actor, began), True):
+                pol.n[f"{side_of(world, actor)}/could_not_act"] += 1
+            elif gap <= 1:
                 pol.n[f"{side_of(world, actor)}/adjacent_idle"] += 1
             elif now >= gap:
                 pol.n[f"{side_of(world, actor)}/idle_melee"] += 1
@@ -206,6 +268,7 @@ def measure(levels: tuple[int, ...]) -> dict:
                 "charge_taken": pol.n[f"{side}/charge_taken"],
                 "idle_melee": pol.n[f"{side}/idle_melee"],
                 "adjacent_idle": pol.n[f"{side}/adjacent_idle"],
+                "could_not_act": pol.n[f"{side}/could_not_act"],
                 "ap_spent": pol.n[f"{side}/ap_spent"],
                 "ap_standard": pol.n[f"{side}/ap_standard"],
                 "melee_turns": pol.n[f"{side}/melee_turns"],
@@ -225,6 +288,7 @@ ROWS = [
     ("charge_offered", "charges offered", "-"),
     ("idle_melee", "out of reach and did not close", "lower"),
     ("adjacent_idle", "adjacent to an enemy and did not attack", "lower"),
+    ("could_not_act", "...excluded: nothing but `end` was on offer", "-"),
     ("ap_spent", "action points spent", "-"),
     ("ap_standard", "...of them buying a standard action", "higher"),
     ("decisions", "decisions", "-"),
@@ -266,11 +330,17 @@ def main() -> int:
     args = ap.parse_args()
     levels = tuple(args.level) if args.level else LEVELS
     was = json.loads(BASELINE.read_text()) if BASELINE.exists() else None
+    stale = staleness(was)
     now = measure(levels)
+    if stale:
+        print(stale)
     show(now, was)
+    if stale:
+        print(stale)
     if args.save:
         merged = dict(was or {})
         merged.update(now)
+        merged["commit"] = _git("rev-parse", "HEAD")
         BASELINE.write_text(json.dumps(merged, indent=2, sort_keys=True) + "\n")
         print(f"\nbaseline written to {BASELINE}")
     return 0
