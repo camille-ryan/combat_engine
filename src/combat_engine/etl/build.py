@@ -1033,6 +1033,16 @@ def _racial_powers(
         p.kind = "Racial"
         keep(p)
         written += 1
+        # **A second card inside a racial entry needs its ref too.** The class pass
+        # has called `parse_extra` all along and neither rescuer did, so a racial or
+        # theme power printing two cards lost the suffixed ref for the second one --
+        # 232 of the 375 the parser finds. That is what put `spec.power_ref()` on 37
+        # rows: the card says "you can use the secondary power at will" and there was
+        # nothing in the database to point at.
+        for extra in power_parser.parse_extra(dict(row), row["Txt"]):
+            extra.kind = "Racial"
+            keep(extra)
+            written += 1
     return written
 
 
@@ -1122,6 +1132,13 @@ def _theme_powers(
         if p.kind not in _POWER_KINDS:
             p.kind = "Theme"
         keep(p)
+        # The same second card the racial pass above was losing, for the same
+        # reason: `parse_extra` was only ever called by the class pass.
+        for extra in power_parser.parse_extra(dict(row), row["Txt"]):
+            extra.cls = p.cls
+            if extra.kind not in _POWER_KINDS:
+                extra.kind = p.kind
+            keep(extra)
     return themed, talents
 
 
