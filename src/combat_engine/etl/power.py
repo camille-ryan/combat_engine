@@ -52,10 +52,20 @@ class Power:
         return sum(checks) / len(checks)
 
 
+#: Longest first, because the search below takes the first that matches and
+#: "melee" is a prefix of three of the others. `melee spirit` has to be here
+#: for that reason: 80 cards print it, it means "N squares from the conjured
+#: spirit" rather than anything a weapon reaches, and without an entry of its
+#: own every one of them was recorded as a bare `melee` -- which then read as
+#: a weapon row, so a spirit 5 squares away was swung at with a sword's reach.
 _RANGES = (
-    "melee touch", "melee weapon", "melee", "ranged weapon", "ranged",
-    "close burst", "close blast", "area burst", "area wall", "personal",
+    "melee touch", "melee weapon", "melee spirit", "melee", "ranged weapon",
+    "ranged", "close burst", "close blast", "area burst", "area wall", "personal",
 )  # fmt: skip
+
+#: "Melee weapon +1 reach", printed on 10 cards. The bonus is part of the range
+#: and was being dropped, so the row reached one square less than it prints.
+_BONUS = re.compile(r"\+\s*(\d+)\s*reach")
 
 _KEYWORDS = [
     "martial", "arcane", "divine", "primal", "psionic", "shadow", "weapon", "implement",
@@ -179,6 +189,8 @@ def _shape(p: Power, body: str) -> None:
         hit = re.search(rf"\b{name}\b\s*(\d*)", low)
         if hit:
             p.reach = f"{name} {hit.group(1)}".strip()
+            if (plus := _BONUS.search(low[hit.end():hit.end() + 20])):
+                p.reach += f" +{plus.group(1)} reach"
             break
 
     p.keywords = tuple(w for w in _KEYWORDS if re.search(rf"\b{w}\b", low))

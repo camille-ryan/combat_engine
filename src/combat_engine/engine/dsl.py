@@ -19,6 +19,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from ._weapon_reach import BY_WEAPON, GIVES
 from .cast import Cast
 from .grid import Square, area_burst, blast, blast_placements, spread
 from .monster_math import NORMAL
@@ -1173,13 +1174,13 @@ def area_of(
         # up and what `c.wall` picks its run of squares out of.
         out = spread(mine, r.within)
     elif r.kind in ("melee", "ranged"):
-        out = spread(mine, _reach_of(world, actor, r))
+        out = spread(mine, _reach_of(world, actor, r, p.ref))
     else:
         out = frozenset(mine)
     return frozenset(sq for sq in out if world.grid.inside(sq))
 
 
-def _reach_of(world: World, actor: int, r: Range) -> int:
+def _reach_of(world: World, actor: int, r: Range, ref: str = "") -> int:
     """How far this range actually carries.
 
     For a weapon range that is the **long** range, because a shot past
@@ -1188,11 +1189,37 @@ def _reach_of(world: World, actor: int, r: Range) -> int:
     made that penalty unreachable: the target was refused before it could
     be charged, so the whole of `_long_range` was dead code.
     """
-    if not r.by_weapon:
-        return r.size
     from .components import Gear
 
     gear = world.get(actor, Gear)
+    if r.kind == "melee":
+        # **A reach weapon reaches, which nothing here used to say.**
+        # `Weapon.reach` was filled by the ETL, carried on the component and
+        # read by no code in the engine, so a glaive was a reach-1 weapon in
+        # play: 12 of 117 printed weapons have reach above 1 and every
+        # character holding one was swinging short.
+        #
+        # **Only on a row that prints "Melee weapon."** A melee range is two
+        # different things -- the weapon's reach, or a fixed number -- and both
+        # arrive here as `Melee(1)`. `max(weapon, printed)` was the first attempt
+        # and it over-extends the fixed ones: a "Melee touch" row would stretch
+        # to two squares in a glaive's hand, which no printed line says. The
+        # compendium knows which is which, 1,023 against 325, and
+        # `scripts/reaches.py --emit` writes the set out.
+        if ref not in BY_WEAPON:
+            return r.size
+        # **The weapon's reach plus what the card grants**, and neither `max` with
+        # the printed size nor the weapon alone. Both of those were tried and both
+        # were wrong, because the figure they needed had been thrown away upstream:
+        # four of these rows print "Melee weapon +1 reach", the ETL kept only the
+        # "melee weapon" half, and so the bonus could not be read from the row at
+        # all. Fixed in the parser; `GIVES` is what it now records. One square
+        # unarmed, which is what a fist reaches.
+        held = getattr(gear, "main", None) if gear else None
+        worn = getattr(held, "reach", None) if held else None
+        return (worn or 1) + GIVES.get(ref, 0)
+    if not r.by_weapon:
+        return r.size
     shot = getattr(gear, "ranged", None) if gear else None
     reach = getattr(shot, "ranged", None) if shot else None
     return max(reach[1], r.size) if reach else r.size

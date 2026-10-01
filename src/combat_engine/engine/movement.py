@@ -297,16 +297,16 @@ def _reachers(world: World, eid: int) -> set[int]:
     per step is what took a full audit from 84 seconds to 331 the first time
     reach became a modifier.
     """
-    from .components import Mods
 
     mine = squares(world, eid)
     out: set[int] = set()
     for other in creatures(world):
         if other == eid:
             continue
-        mods = world.get(other, Mods)
-        if mods is None or not mods.items:
-            continue
+        # **No early exit on `Mods`.** This skipped every creature carrying no
+        # modifiers, which was sound while a modifier was the only thing that
+        # could stretch a reach and is wrong now that a weapon and a row can:
+        # a creature with a glaive and no modifiers reaches two and was skipped.
         reach = _threat(world, other)
         if reach > 1 and spread(squares(world, other), reach) & mine:
             out.add(other)
@@ -314,18 +314,43 @@ def _reachers(world: World, eid: int) -> set[int]:
 
 
 def _threat(world: World, eid: int) -> int:
-    """How far this creature threatens, in squares. One unless modified.
+    """How far this creature threatens, in squares.
 
-    Checks the component before doing any work: the overwhelming majority
-    of creatures carry no modifiers at all, and this is asked once per
-    watcher per step.
+    Three things can stretch it and only the first was read: a `"reach"`
+    modifier, **the weapon in its hand**, and **the reach of the row it would
+    swing**. An opportunity attack is made with the basic attack, so that row's
+    range is the range threatened -- which is also why asking the basic alone is
+    not a simplification: a reach on some other card is not what the swing uses.
+
+    `Weapon.reach` was read by nothing in the engine at all, so a glaive
+    threatened one square; 12 of 117 printed weapons reach further than one. A
+    monster's reach is on its row and was equally unread here, so a reach-2
+    monster did not threaten at two either.
+
+    Still cheap, which matters -- this is asked once per watcher per step. Two
+    component lookups and one registry lookup, no iteration over what a creature
+    knows.
     """
-    from .components import Mods
+    from .components import Gear, Mods, Powers
 
     mods = world.get(eid, Mods)
-    if mods is None or not mods.items:
-        return 1
-    return max(1, 1 + mods.total("reach", {}))
+    far = max(1, 1 + mods.total("reach", {})) if mods and mods.items else 1
+
+    gear = world.get(eid, Gear)
+    held = getattr(gear, "main", None) if gear else None
+    worn = getattr(held, "reach", None) if held else None
+    if worn:
+        far = max(far, worn)
+
+    known = world.get(eid, Powers)
+    if known is not None and known.basic:
+        from .dsl import get
+
+        swing = get(known.basic)
+        if swing is not None and swing.reach is not None \
+                and swing.reach.kind == "melee":
+            far = max(far, swing.reach.size)
+    return far
 
 
 def phasing(world: World, eid: int) -> bool:
@@ -443,13 +468,19 @@ def risk_along(world: World, eid: int, path: list[Square]) -> str:
         if zone.owner in where:
             hostile |= zone.squares
 
+    # Each foe's own reach, read once rather than per step: the hardcoded 1 here
+    # made this preview disagree with `step`, which has always spread by the
+    # watcher's reach. A creature with a reach weapon provoked in play and not in
+    # the preview the policy scores against.
+    spans = {foe: _threat(world, foe) for foe in foes}
     for nxt in path:
-        here_reach = spread(footprint(at, pos.size), 1)
         next_space = footprint(nxt, pos.size)
         # Leaving a square somebody threatens, and not staying in their
         # reach, is what opens the window -- the same test `step` makes.
         for foe in foes:
-            if (here_reach & where[foe]) and not (spread(next_space, 1) & where[foe]):
+            span = spans[foe]
+            here_reach = spread(footprint(at, pos.size), span)
+            if (here_reach & where[foe]) and not (spread(next_space, span) & where[foe]):
                 return "provokes an opportunity attack"
         if next_space & hostile:
             return "walks into an enemy zone"
