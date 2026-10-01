@@ -531,6 +531,14 @@ def has_combat_advantage(world: World, attacker: int, target: int) -> bool:
         return True
     if world.relations.holds(Relation.GRANTS_CA_TO, target, attacker):
         return True
+    # The gated form of the same sentence. `c.grants_advantage(when=)` cannot use the
+    # relation above, because a relation carries no predicate and this function returns
+    # as soon as it holds -- so the conditional version lays a modifier instead and is
+    # read here, with the same `ca_ctx` the two suppressing keys already get.
+    granting = world.get(target, Mods)
+    if granting is not None and granting.items \
+            and granting.total("grants_ca_to", ca_ctx) > 0:
+        return True
     if unseen_by(world, target, attacker):
         return True
     # "Enemies cannot gain combat advantage by flanking it" is a printed

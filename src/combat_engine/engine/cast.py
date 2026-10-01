@@ -4887,6 +4887,7 @@ class Cast:
         on: int | None = None,
         to: str | int = "me",
         once: bool = False,
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """The target grants combat advantage -- to you, an ally, or your side.
 
@@ -4920,10 +4921,33 @@ class Cast:
                 "ally": self.allies(),
                 "team": [self.me, *self.allies()],
             }[to]
-        granted = self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} advantage",
-            relations=[(Relation.GRANTS_CA_TO, who, b) for b in beneficiaries],
-        )
+        if when is None:
+            granted = self.world.effects.apply(
+                who, self.me, until, label=f"{self.ref} advantage",
+                relations=[(Relation.GRANTS_CA_TO, who, b) for b in beneficiaries],
+            )
+        else:
+            # **A gated grant cannot be a relation.** A `Relation` carries no
+            # predicate, and `query.advantage` short-circuits `True` the moment it
+            # holds, so there is nowhere for a condition to be asked. The gated form
+            # therefore follows the pattern that function already uses for the
+            # opposite sentence: a `Mod` read with `ca_ctx`, which is how
+            # `no_advantage` and `unflankable` are written. 15 rows asked for this and
+            # they are all narrow -- "grants combat advantage to you *while it is
+            # bloodied*", "...to the ally you chose".
+            #
+            # The beneficiary list moves into the gate rather than being lost, so the
+            # two forms answer "to whom" identically.
+            allowed = set(beneficiaries)
+
+            def gate(ctx: dict[str, Any], _w: Any = when, _a: Any = allowed) -> bool:
+                return ctx.get("attacker") in _a and bool(_w(ctx))
+
+            granted = self.world.effects.apply(
+                who, self.me, until, label=f"{self.ref} advantage",
+                mods=[(who, Mod(what="grants_ca_to", value=1, kind=self.ref,
+                                label=self.ref, when=gate))],
+            )
         if once:
             # "Grants combat advantage to the *next* attack against it."
             # `c.bonus` has had `once` all along and this had no equivalent,
