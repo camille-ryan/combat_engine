@@ -321,15 +321,25 @@ def p1450(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.grants_advantage(when=)",),
 )
 def p16042(c: Cast) -> None:
-    """The bow clause is dropped: the grant is a relation, and a relation
-    takes no attack-context gate the way `c.bonus` does."""
+    """Advantage against one chosen creature, but only with a bow.
+
+    The bow clause was dropped because a relation takes no attack-context gate.
+    `c.gains_advantage` does, and it carries both halves: the creature is fixed
+    when the power is used, the weapon is asked at the moment of the swing --
+    which is right, because the character may be holding something else by
+    then.
+
+    Both bow groups, which is what the card names."""
     seen = [foe for foe in c.enemies() if c.can_see(foe)]
     foe = c.choose(seen, "which creature")
-    if foe is not None:
-        c.grants_advantage(on=foe, to=c.me, until=When.EONT)
+    if foe is None:
+        return
+    c.gains_advantage(
+        lambda ctx: ctx["target"] == foe and c.wielding("bow"),
+        until=When.EONT, on=c.me,
+    )
 
 
 # -- r5 ---------------------------------------------------------------------

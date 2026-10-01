@@ -1225,14 +1225,28 @@ def p16057(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ELEMENTAL],
-    todo=("c.darkvision()", "c.grants_advantage(when=)"),
+    dropped=("c.darkvision()",),
 )
 def p16058(c: Cast) -> None:
-    """Both halves are missing, not one: there is no darkvision, and the
-    advantage is gated on the attack being melee *and* the enemy being
-    bloodied at the moment it is made, which `c.grants_advantage` cannot
-    take."""
-    ...
+    """Advantage on melee attacks against a bloodied enemy, and darkvision.
+
+    The advantage half is written. Both of its narrowings are per swing -- the
+    shape of the power, and whether the enemy is bloodied *at the moment the
+    attack is made* -- and `c.gains_advantage` is asked then rather than when
+    the power is used.
+
+    Darkvision stays dropped and is one clause: there are no light levels on a
+    board, so nothing on a square says it is dark. The row plays without it."""
+    from combat_engine.engine.dsl import get
+
+    def melee_at_the_bloodied(ctx: dict[str, Any]) -> bool:
+        row = get(ctx.get("power", ""))
+        return (
+            row is not None and row.reach.kind == "melee"
+            and c.bloodied(on=ctx["target"])
+        )
+
+    c.gains_advantage(melee_at_the_bloodied, until=When.ENCOUNTER, on=c.me)
 
 
 @power(

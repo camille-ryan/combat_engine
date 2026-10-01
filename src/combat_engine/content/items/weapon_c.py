@@ -870,23 +870,42 @@ def i820p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.grants_advantage(when=)",),
 )
 def i924x1(c: Cast) -> None:
-    """The weapon's invisibility has no reader; what it buys does. The
-    grants are laid on the enemies standing there and taken back the moment
-    a blow lands, which is what "until you successfully hit" means. The
-    melee half cannot be gated -- combat advantage is a fact about the pair
-    of creatures, not about the attack -- and an enemy that arrives later
-    does not get one."""
-    held = [c.grants_advantage(on=foe, until=When.ENCOUNTER) for foe in c.enemies()]
+    """The weapon's invisibility has no reader; what it buys does.
+
+    **Two things the old shape got wrong, both fixed by holding this on the
+    wielder instead of on the enemies.** It laid a grant per enemy, so the
+    advantage applied to *any* attack rather than a melee one -- combat
+    advantage was a fact about the pair of creatures with no attack in it --
+    and an enemy that walked onto the board afterwards never got one. Asked per
+    swing, both go away: the shape comes off the row and the set of enemies is
+    never fixed at all.
+
+    "Until you successfully hit" ends the whole thing on the first landed blow,
+    which is still a watcher, and now there is one effect to end rather than a
+    list."""
+    from combat_engine.engine.dsl import get
+
+    def swung(ctx: dict[str, Any]) -> bool:
+        """A melee attack. "Using the weapon" is not asked and cannot be.
+
+        The context carries the row, the attacker and the target, and no
+        weapon -- so which of two held things a melee row swung is not a
+        question here. It is left implicit the way the old shape left it:
+        this property belongs to the weapon in hand, and a melee row swings
+        what is in hand. A character wielding this *and* something else in
+        the off hand is where that reading goes wrong, and it is narrower
+        than the grant-per-enemy it replaces either way.
+        """
+        row = get(ctx.get("power", ""))
+        return row is not None and row.reach.kind == "melee"
+
+    granted = c.gains_advantage(swung, until=When.ENCOUNTER, on=c.me)
 
     def seen(ev: Hit) -> None:
-        if ev.attacker != c.me:
-            return
-        for eff in held:
-            if eff is not None:
-                c.world.effects.end(eff, "the weapon became visible")
+        if ev.attacker == c.me and granted is not None:
+            c.world.effects.end(granted, "the weapon became visible")
 
     c.watch(Hit, seen, until=When.ENCOUNTER, once=True)
 

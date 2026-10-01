@@ -210,7 +210,10 @@ def attack(
             result.cancelled = True
             return
 
-        ca = has_combat_advantage(world, attacker, target) if advantage is None else advantage
+        ca = (
+            has_combat_advantage(world, attacker, target, power)
+            if advantage is None else advantage
+        )
         # `opportunity` is in the context because "+2 to AC against
         # opportunity attacks" cannot be written without it, and gating on
         # the power's ref instead catches a standard-action basic and misses

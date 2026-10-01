@@ -509,18 +509,24 @@ def p16573(c: Cast) -> None:
 
 
 @power("p14163", level=0, cls="x7_861", usage=ENCOUNTER, action=MOVE,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.PRIMAL],
-       dropped=("c.grants_advantage(when=)",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.PRIMAL])
 def p14163(c: Cast) -> None:
-    """"+2 bonus" with no type word is untyped. The gate asks the board
-    each time rather than snapshotting where anybody was standing. The
-    combat-advantage clause is a standing condition on *enemies* rather
-    than a modifier of the caster's, so it waits on a gated grant."""
+    """"+2 bonus" with no type word is untyped. Every gate here asks the board
+    each time rather than snapshotting where anybody was standing -- this row
+    is about who is in rough ground, and that changes on everybody's turn.
+
+    The combat-advantage clause reads the **target's** square, which is why it
+    waited: it is not a condition on any one enemy, so there was nowhere to lay
+    it. `c.gains_advantage` holds it on the caster and is asked per swing."""
     c.ignores_difficult(on=c.me, until=When.EONT)
     c.move(c.speed_of(c.me), who=c.me)
     for d in (AC, REF):
         c.bonus(d, 2, on=c.me, until=When.EONT,
                 when=lambda ctx: c.here in c.world.difficult())
+    c.gains_advantage(
+        lambda ctx: bool(query.squares(c.world, ctx["target"]) & c.world.difficult()),
+        until=When.EONT, on=c.me,
+    )
 
 
 @power("p14164", level=2, cls="x7_861", usage=ENCOUNTER, action=MOVE,
@@ -537,14 +543,29 @@ def p14164(c: Cast) -> None:
 
 @power("p14165", level=6, cls="x7_861", usage=ENCOUNTER, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=[Keyword.PRIMAL],
-       dropped=("c.grants_advantage(when=)",),
        narrative=("skill:perception",))
 def p14165(c: Cast) -> None:
-    """The long-range clause is exact. Combat advantage with ranged and
-    area powers only is a gated grant nothing can lay, and the Perception
-    bonus is narrowed to spotting hidden things, which a board never asks
-    for."""
+    """The long-range clause is exact, and the advantage is narrowed by the
+    *shape* of the power rather than by anything about the target.
+
+    That narrowing is what waited: combat advantage was computed from the pair
+    of creatures with no power in it at all. `ca_ctx` carries the ref now.
+    "Area attack powers" is `area_burst` and `wall` -- the two kinds the card's
+    word covers. Spelt out rather than matched on a prefix, because `Range`'s
+    kinds are `close_burst` and `area_burst` and a test for "area" would be
+    exactly as wrong either way round.
+
+    The Perception bonus stays narrative -- it is narrowed to spotting hidden
+    things, which a board never asks for."""
     c.ignores_long_range(on=c.me, until=When.EONT)
+
+    from combat_engine.engine.dsl import get
+
+    def shot_or_area(ctx: dict[str, Any]) -> bool:
+        row = get(ctx.get("power", ""))
+        return row is not None and row.reach.kind in ("ranged", "area_burst", "wall")
+
+    c.gains_advantage(shot_or_area, until=When.EONT, on=c.me)
 
 
 @power("p14166", level=10, cls="x7_861", usage=ENCOUNTER, action=INTERRUPT,
@@ -829,13 +850,19 @@ def p16111(c: Cast) -> None:
 
 @power("p16112", level=10, cls="x7_951", usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=[Keyword.ELEMENTAL],
-       dropped=("query.flanked()", "c.grants_advantage(when=)"))
+       dropped=("query.flanked()", "c.spread_advantage()"))
 def p16112(c: Cast) -> None:
-    """The aura is real and both riders on it are not. The first asks
-    whether *every* member inside is flanked, which needs the question
-    asked of a creature rather than of an attacker-target pair; the second
-    spreads one enemy's combat advantage across the aura, which is a grant
-    standing on a condition rather than on a clock."""
+    """The aura is real and both riders on it are not.
+
+    The first asks whether *every* member inside is flanked, which needs the
+    question asked of a creature rather than of an attacker-target pair.
+
+    The second is re-aimed off `c.grants_advantage(when=)`. That verb exists
+    now and is not this: the card does not narrow a grant, it **copies** one --
+    an enemy already granting advantage to any member of the aura grants it to
+    all of them. The condition being copied is whatever `has_combat_advantage`
+    happened to answer for somebody else, which nothing can ask on another
+    creature's behalf and then re-publish."""
     c.aura(5, until=When.ENCOUNTER, on=c.me)
 
 

@@ -54,6 +54,7 @@ from combat_engine.engine import (
     get,
     power,
 )
+from combat_engine.engine.components import Defences
 from combat_engine.engine.query import distance_between, team
 
 DIVINE = [Keyword.DIVINE]
@@ -751,22 +752,30 @@ def f305b(c: Cast) -> None:
 
 
 @power("f309", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.grants_advantage(when=)",))
+       reach=PERSONAL, target=SELF)
 def f309(c: Cast) -> None:
     """Combat advantage with cold powers against whatever is vulnerable to
     cold.
 
-    Reading the vulnerability back is not the gap: `Defences.vulnerable`
-    is a plain dict per type, the mirror of the `Defences.resist` that
-    `c.resistances` reads, so "is it vulnerable to cold" is one lookup.
+    Two narrowings and the second was the whole hold-up. Reading the
+    vulnerability back was never the gap -- `Defences.vulnerable` is a plain
+    dict per type, the mirror of the `Defences.resist` that `c.resistances`
+    reads, so it is one lookup. The keyword was: combat advantage was computed
+    from the pair of creatures alone, with no power anywhere in it, so "only
+    when the power has the cold keyword" had nothing to ask. `ca_ctx` carries
+    the ref now and `c.gains_advantage` is read with it.
 
-    The gap is the narrowing. Combat advantage is a *relation*, laid by
-    `c.grants_advantage` and computed by `query.has_combat_advantage`
-    from the pair of creatures alone -- no power, no keyword, nowhere for
-    "only when the power has the cold keyword" to be asked. Laid
-    ungated, this row would hand out advantage with every attack the
-    character makes, which is much stronger than print.
+    Laid ungated this row would hand out advantage on every attack the
+    character makes, which is why the verb requires a gate.
     """
+    def cold_against_the_vulnerable(ctx: dict[str, Any]) -> bool:
+        row = get(ctx.get("power", ""))
+        if row is None or Keyword.COLD not in row.keywords:
+            return False
+        taking = c.world.get(ctx["target"], Defences)
+        return taking is not None and taking.vulnerable.get(DamageType.COLD, 0) > 0
+
+    c.gains_advantage(cold_against_the_vulnerable, on=c.me)
 
 
 @power("f333", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

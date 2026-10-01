@@ -239,7 +239,7 @@ class Ledger(Cast):
         self.result = AttackResult(
             hit=hit, critical=crit, target=who, natural=natural,
             rolls=[natural],
-            advantage=has_combat_advantage(self.world, self.me, who),
+            advantage=has_combat_advantage(self.world, self.me, who, self.ref),
         )
         self._announce(who)
         return self.result
@@ -302,7 +302,7 @@ class Ledger(Cast):
             "target": who,
             "power": self.ref,
             "defence": vs.value,
-            "advantage": has_combat_advantage(self.world, self.me, who),
+            "advantage": has_combat_advantage(self.world, self.me, who, self.ref),
             "opportunity": self.opportunity,
             "charge": self.charge,
             "granted_by": self.granted_by,

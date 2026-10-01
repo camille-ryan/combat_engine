@@ -5059,6 +5059,46 @@ class Cast:
             )
         return granted
 
+    def gains_advantage(
+        self,
+        when: Callable[[dict[str, Any]], bool],
+        *,
+        until: When = When.ENCOUNTER,
+        on: int | None = None,
+    ) -> Effect | None:
+        """This creature has combat advantage whenever that is true of a swing.
+
+        **The mirror of `grants_advantage` and a different sentence.** That one
+        is about a creature: *it* grants advantage, so the relation and the
+        modifier both sit on the creature granting it. Fifteen rows print the
+        other side -- "you gain combat advantage against immobilized targets",
+        "...with your cold powers against anything vulnerable to cold" -- and
+        there is no creature to lay those on. The set is whatever happens to be
+        immobilized at the moment of the swing, which is not knowable when the
+        trait arms.
+
+        So it lays a `Mod` on the **attacker**, and `query.has_combat_advantage`
+        reads it there with the same `ca_ctx` the four existing routes get.
+        `when` is required rather than defaulting to None: an ungated version of
+        this is "you always have combat advantage against everything", which no
+        card says and which would be a very quiet way to break every fight.
+
+        The context carries `attacker`, `target` and `power`. The last is why
+        these rows could not be written even once the gate existed -- "with your
+        close blast powers" is a question about the row being used, and nothing
+        passed one in. It is empty for a caller asking about a pair of creatures
+        rather than a swing, so a gate wanting a keyword is correctly False
+        there rather than accidentally true.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} gains advantage",
+            mods=[(who, Mod(what="gains_ca_when", value=1, kind=self.ref,
+                            label=self.ref, when=when))],
+        )
+
     def treat_roll_as(
         self, parity: str, *, until: When = When.EONT, on: int | None = None
     ) -> Effect | None:

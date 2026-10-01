@@ -511,7 +511,9 @@ def flanked_by(world: World, target: int, attacker: int) -> bool:
     return False
 
 
-def has_combat_advantage(world: World, attacker: int, target: int) -> bool:
+def has_combat_advantage(
+    world: World, attacker: int, target: int, power: str = ""
+) -> bool:
     # "You do not grant combat advantage to any of your enemies" suppresses
     # every route at once, so it is asked first -- unlike `unflankable`
     # below, which is one branch and lets a hidden or granting attacker
@@ -523,7 +525,13 @@ def has_combat_advantage(world: World, attacker: int, target: int) -> bool:
     # would have been silently false -- and the printed lines are narrow:
     # "you do not grant combat advantage to *those* creatures", "unless both
     # of you are flanked". Without the names there is nothing to ask about.
-    ca_ctx = {"attacker": attacker, "target": target}
+    # **`power` is here because fifteen rows narrow by it** -- "with your cold
+    # powers", "for close blast powers" -- and without it those gates could only
+    # ever have been silently true. Empty for the callers that are asking about a
+    # pair of creatures rather than about a swing, which is most of the sixty-odd
+    # of them, and a gate wanting a keyword is then correctly False: nothing can
+    # claim a power's narrowing when no power has been named.
+    ca_ctx = {"attacker": attacker, "target": target, "power": power}
     denied = world.get(target, Mods)
     if denied is not None and denied.items and denied.total("no_advantage", ca_ctx) > 0:
         return False
@@ -538,6 +546,17 @@ def has_combat_advantage(world: World, attacker: int, target: int) -> bool:
     granting = world.get(target, Mods)
     if granting is not None and granting.items \
             and granting.total("grants_ca_to", ca_ctx) > 0:
+        return True
+    # **The same sentence from the attacker's side, which the three routes above
+    # cannot say.** All of them live on the *target*, so "this creature grants
+    # combat advantage" is sayable and "I gain combat advantage against anything
+    # immobilized" is not -- there is no creature to lay it on, the set is
+    # whatever happens to be immobilized at the moment of the swing. Fifteen rows
+    # print the second shape and each was waiting on a verb; `c.gains_advantage`
+    # lays this and it is read here with the same context.
+    gaining = world.get(attacker, Mods)
+    if gaining is not None and gaining.items \
+            and gaining.total("gains_ca_when", ca_ctx) > 0:
         return True
     if unseen_by(world, target, attacker):
         return True

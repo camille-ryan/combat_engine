@@ -84,6 +84,26 @@ SUPPRESS = ("c.instead_of()",)
 #: narrowed to one shape of power.
 NARROW_CA = ("c.grants_advantage(when=)",)
 
+
+def _my_attack(ctx: dict[str, Any], shapes: tuple[str, ...] = ()) -> bool:
+    """Is the swing being resolved one of this class's attack powers?
+
+    Three rows below narrow their advantage this way, and the question is about
+    the row rather than about either creature -- which is why they waited on an
+    attack context to be carried into `query.has_combat_advantage` at all.
+
+    `Power.attack is None` for a utility, which is what "attack powers" rules
+    out. `shapes` are `Range` kinds when the card narrows further; empty means
+    the card does not.
+    """
+    from combat_engine.engine.dsl import get
+
+    row = get(ctx.get("power", ""))
+    return (
+        row is not None and row.cls == "invoker" and row.attack is not None
+        and (not shapes or row.reach.kind in shapes)
+    )
+
 #: What the covenant's own feature calls a power big enough to manifest.
 _BIG = (Usage.ENCOUNTER, Usage.DAILY)
 
@@ -564,7 +584,7 @@ def f2996(c: Cast) -> None:
 
 
 @power("f1510", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=NARROW_CA,
+       reach=PERSONAL, target=SELF,
        trigger="you use p7150",
        on=Trigger(PowerUsed, _used("p7150"), "you use that invocation"))
 def f1510(c: Cast) -> None:
@@ -580,6 +600,12 @@ def f1510(c: Cast) -> None:
     roll against that creature. "Your allies but not you" is `to="ally"`,
     which reads as it does on `c.within`; it used to have no spelling and
     was being written as the caster's whole side.
+
+    **The marker was stale, not the row.** It carried `NARROW_CA` with the
+    others below, and it does not belong there: this is the *target* granting
+    advantage, which the relation says exactly, and the card narrows by nothing
+    an attack context would carry. The neighbours narrow by the power being
+    used and this one does not.
     """
     for foe in c.trigger.targets:
         if c.is_kind("elemental", foe):
@@ -788,27 +814,54 @@ def f1769(c: Cast) -> None:
     )
 
 
-@power("f2757", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=NARROW_CA,
+@power("f2757", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="an enemy misses you with an attack",
        on=Trigger(Miss, targets_me, "an enemy misses you"))
 def f2757(c: Cast) -> None:
-    """The advantage is laid on the enemy that missed. Narrowing it to this
-    character's own invocations is dropped: `c.grants_advantage` takes no
-    `when=`, so the row also helps a plain weapon swing."""
-    c.grants_advantage(on=c.trigger.attacker, until=When.EONT)
+    """Advantage against the enemy that missed, but only with this class's
+    attacks.
+
+    It used to lay the relation on that enemy, which also helped a plain weapon
+    swing -- wider than print. The narrowing is a question about the row being
+    used, so it belongs on the caster: `c.gains_advantage` is read with the ref
+    in its context.
+
+    The enemy is fixed at the trigger and the power is asked per swing, which
+    is the division the card makes.
+
+    **`AT_WILL`, and it was `ENCOUNTER` before.** The card says "whenever" and
+    prints no limit, so a triggered trait declared `ENCOUNTER` is spent on its
+    first firing -- every miss after the first one in a fight did nothing.
+    `lint.py` says this in so many words and could not say it while the row
+    carried a marker: a row with an unfinished clause is skipped by that walk,
+    so finishing the clause is what let the instrument see the usage line."""
+    missed = c.trigger.attacker
+    c.gains_advantage(
+        lambda ctx: ctx["target"] == missed and _my_attack(ctx),
+        until=When.EONT, on=c.me,
+    )
 
 
 @power("f2988", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=NARROW_CA,
+       reach=PERSONAL, target=SELF,
        trigger="you are bloodied for the first time this encounter",
        on=Trigger(Bloodied, about_me, "you are bloodied"))
 def f2988(c: Cast) -> None:
-    """"The first time in an encounter" is what `usage=ENCOUNTER` already
-    says: the row is spent by its first firing. The narrowing to close
-    bursts and blasts is dropped, as in f2757."""
-    for foe in c.enemies():
-        c.grants_advantage(on=foe, until=When.EONT)
+    """Advantage with this class's close attacks, once you are bloodied.
+
+    "The first time in an encounter" is what `usage=ENCOUNTER` already says:
+    the row is spent by its first firing.
+
+    The narrowing is written now. It used to lay a grant on every enemy on the
+    board for *any* attack -- the same over-reach f2757 had, and worse here for
+    being a whole side. Both kinds of close shape, which is what "close burst
+    or close blast" names and what `Range` spells `close_burst` and
+    `close_blast`."""
+    c.gains_advantage(
+        lambda ctx: _my_attack(ctx, shapes=("close_burst", "close_blast")),
+        until=When.EONT, on=c.me,
+    )
 
 
 @power("f2992", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -956,13 +1009,24 @@ def f2991(c: Cast) -> None:
 
 
 @power("f2999", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=NARROW_CA)
+       reach=PERSONAL, target=SELF)
 def f2999(c: Cast) -> None:
-    """Combat advantage for close blasts against adjacent enemies, and
-    nothing else. Both halves are conditions on the attack being made
-    rather than on a moment, and `c.grants_advantage` takes no `when=` --
-    so unlike f2757 and f2988 there is no firing at which the set of
-    creatures could be fixed, and the whole row is the gap."""
+    """Combat advantage for this class's close blasts, against adjacent
+    enemies and nothing else.
+
+    **The row that could not be written at all**, where f2757 and f2988 could
+    at least be written too wide: both halves are conditions on the attack
+    being made rather than on a moment, so there was no firing at which any set
+    of creatures could be fixed. Both are now gates asked per swing -- the
+    shape off the row, the adjacency off the board.
+
+    `close_blast` alone. The card says blast and a burst is the other kind,
+    which is the one narrowing f2988 does not make."""
+    c.gains_advantage(
+        lambda ctx: _my_attack(ctx, shapes=("close_blast",))
+        and c.adjacent_to(c.me, ctx["target"]),
+        on=c.me,
+    )
 
 
 @power("f3000", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

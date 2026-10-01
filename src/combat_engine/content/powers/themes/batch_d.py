@@ -1283,13 +1283,17 @@ def p16065(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.PSIONIC, Keyword.ELEMENTAL],
-    dropped=("c.grants_advantage(when=)",),
+    dropped=("c.no_advantage(cause=)",),
 )
 def p16066(c: Cast) -> None:
-    """The shift and the defences are exact. "Climbing or balancing doesn't
-    cause you to grant combat advantage" waives one cause of a grant and
-    leaves the others standing, which no verb can say -- `c.no_advantage`
-    shuts all of them."""
+    """The shift and the defences are exact.
+
+    "Climbing or balancing doesn't cause you to grant combat advantage" waives
+    **one cause** of a grant and leaves the others standing. Re-aimed off
+    `c.grants_advantage(when=)`, which exists now and is the wrong direction
+    twice over: this row takes advantage away rather than giving it, and the
+    verb that takes it away is `c.no_advantage`, which shuts every cause at
+    once. What is missing is a way to name which cause."""
     c.ignores_difficult(on=c.me, until=When.EOT)
     c.shift(3, who=c.me)
     _defences(c, 2, until=When.EONT)
@@ -1781,17 +1785,23 @@ def p16695(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.STANCE],
-    dropped=("c.grants_advantage(when=)",),
 )
 def p16696(c: Cast) -> None:
-    """The grant is laid on the enemies that qualify when the stance is
-    taken. The printed line re-asks the question as creatures move, and the
-    relation has no gate to re-ask it with."""
+    """Advantage against any enemy standing next to one of your allies.
+
+    **Asked per swing, not fixed when the stance is taken.** It used to lay the
+    relation on whoever qualified at that moment, which is the printed line for
+    one instant and wrong from the next -- allies and enemies both move, and a
+    stance lasts until it ends. The relation has no gate to re-ask with;
+    `c.gains_advantage` is asked every time advantage is computed.
+
+    `c.allies()` is read inside the gate rather than closed over for the same
+    reason: an ally can drop, and a corpse is nobody to stand beside."""
     c.stance(label=c.ref)
-    friends = c.allies()
-    for foe in c.enemies():
-        if any(c.adjacent_to(foe, ally) for ally in friends):
-            c.grants_advantage(on=foe, to="me", until=When.STANCE)
+    c.gains_advantage(
+        lambda ctx: any(c.adjacent_to(ctx["target"], ally) for ally in c.allies()),
+        until=When.STANCE, on=c.me,
+    )
 
 
 @power(

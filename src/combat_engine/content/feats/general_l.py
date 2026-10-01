@@ -2184,12 +2184,23 @@ def f2610(c: Cast) -> None:
 
 
 @power("f2629", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.grants_advantage(when=)",))
+       reach=PERSONAL, target=SELF)
 def f2629(c: Cast) -> None:
-    """Combat advantage against a *class* of creature rather than a named
-    one. `query.has_combat_advantage` is computed from the board and the
-    only modifier it reads is the one that takes advantage away;
-    `c.grants_advantage` names one creature and takes no gate."""
+    """Combat advantage against anything immobilized or slowed.
+
+    A *class* of creature rather than a named one, which is why this waited:
+    every route `query.has_combat_advantage` had lived on the target, and
+    there is no target to lay this on -- the set is whatever is immobilized
+    at the moment of the swing. `c.gains_advantage` lays it on the attacker
+    instead and the gate is asked per swing.
+
+    Asked of the board rather than fixed at arming, for the same reason the
+    class features ask: a creature saves against immobilized mid-fight."""
+    c.gains_advantage(
+        lambda ctx: c.is_(Condition.IMMOBILIZED, on=ctx["target"])
+        or c.is_(Condition.SLOWED, on=ctx["target"]),
+        on=c.me,
+    )
 
 
 @power("f2864", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
