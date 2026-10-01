@@ -1128,7 +1128,23 @@ def doctrine_features(
 
 
 #: Action kinds that put the creature in a new square.
-_STEPS = ("move", "run", "shift", "charge", "teleport")
+#: The kinds `act` prunes before scoring. **`charge` is deliberately not one.**
+#:
+#: Pruning exists because `legal` offers ~210 destinations and scoring all of them is
+#: where a turn's cost is. A charge is not a destination -- it is a destination *plus
+#: an attack* -- and `worth_standing` ranks destinations, so it cannot tell "move here"
+#: from "charge here and swing". Charges therefore competed with plain moves for the
+#: same 16 slots and lost: **326 of 380 decisions that offered a charge had every one
+#: of them pruned away**, 75 of 730 options surviving, and the best discarded charge
+#: scored a median 11.54 against a `KEEP` list full of squares worth less.
+#:
+#: That is also why 915ed93 cut the charge rate while raising the offer count: more
+#: charge options, same 16 slots, more of them thrown out. And why the four scoring
+#: shapes tried in #265 all failed to move it -- the scorer never saw the action.
+#:
+#: Exempting them costs almost nothing: a median of 2 charge options per decision and
+#: at most 5, against the ~210 the prune is actually for.
+_STEPS = ("move", "run", "shift", "teleport")
 
 #: How many destinations survive pruning. 16 against the ~210 `legal` offers, which
 #: is where the cost of a turn actually is.

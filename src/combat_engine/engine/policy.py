@@ -83,6 +83,15 @@ def features(
     f["is_run"] = float(action.kind == "run")
     # Named, like every other kind, because an unnamed one scores zero.
     f["is_action_point"] = float(action.kind == "action_point")
+    # **Which extra action it buys, ranked explicitly.** The three grants all scored
+    # a flat `is_action_point`, and the right one was bought on 48 of 48 occasions by
+    # luck: `max(..., key=(score, str(a)))` takes the largest string and "standard"
+    # sorts after "minor" and "move". Rename an `ActionType` value, or add a fourth
+    # grant that sorts earlier, and it silently starts buying the worst one with
+    # nothing to notice. A tie-break made intentional, not an evaluation of what the
+    # action would do -- see #266 for why the evaluation is deliberately not here.
+    f["ap_grant"] = ({"standard": 1.0, "move": 0.5, "minor": 0.25}.get(action.ref, 0.0)
+                     if action.kind == "action_point" else 0.0)
     f["is_hide"] = float(action.kind == "hide")
     f["is_delay"] = float(action.kind == "delay")
     # Named on the day the escape action arrived, for the reason every
@@ -525,6 +534,9 @@ WEIGHTS: dict[str, float] = {
     # more than ending a turn and less than a good attack, because the
     # point is gone for the rest of the fight either way.
     "is_action_point": 4.0,
+    #: Separates the three grants. Small on purpose: it orders them and must not
+    #: make spending the point itself more attractive.
+    "ap_grant": 1.0,
     # A minor spent on a check that may fail, buying combat advantage on
     # the next attack and only against those it hides from. Worth about
     # what the advantage is, and less than spending the minor on a power.
