@@ -648,7 +648,6 @@ def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
     for foe in sorted(enemies(world, actor)):
         if not alive(world, foe):
             continue
-        beside = spread(squares(world, foe), 1)
         space = squares(world, foe)
 
         def closes(path: list[Square], at: tuple[int, int] = here,
@@ -662,23 +661,32 @@ def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
                 was = now
             return True
 
-        best = min(
-            (
-                (len(path), dest, path)
-                for dest, path in reachable.items()
-                # The two printed constraints, in order of what they rule out:
-                # ending too close to where you began, and a square that does
-                # not close. See the docstring for what each was costing.
-                if dest in beside and path
-                and distance(here, dest) >= 2
-                and closes(path)
-            ),
-            default=None,
-        )
-        if best is None:
-            continue
-        _n, dest, path = best
         for ref in swings:
+            # **A charge with reach may end at reach, not only adjacent.** Camille's
+            # clarification, and it is per *swing* rather than per enemy, because
+            # two rows a creature could charge with need not reach equally far. This
+            # asked for an adjacent square whatever was being swung, so a reach
+            # weapon's one advantage -- hitting from a square that cannot hit back --
+            # was unavailable on a charge.
+            swing = get(ref)
+            far = swing.reach_of(0).size if swing is not None and swing.reach else 1
+            lands = spread(space, max(1, far))
+            best = min(
+                (
+                    (len(path), dest, path)
+                    for dest, path in reachable.items()
+                    # The two printed constraints, in order of what they rule out:
+                    # ending too close to where you began, and a square that does
+                    # not close. See the docstring for what each was costing.
+                    if dest in lands and path
+                    and distance(here, dest) >= 2
+                    and closes(path)
+                ),
+                default=None,
+            )
+            if best is None:
+                continue
+            _n, dest, path = best
             out.append(
                 Action(
                     kind="charge",

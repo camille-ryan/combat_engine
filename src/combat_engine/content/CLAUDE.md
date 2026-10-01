@@ -31,6 +31,12 @@ the AI policy without running anything — and **the body is code** against a
 * `todo=(symbols,)` — nothing works. Refused in play.
 * `dropped=(symbols,)` — plays, one named clause missing.
 * `narrative=("skill:name",)` — finished; the clause has no combat meaning.
+* `obsolete="why"` — **superseded by a rules change. Never offered, not waiting.**
+  A reason in plain words, because there is no symbol to wait for. The other three
+  could not say this: `todo=` means "nothing works yet", so `todo.py` reports the
+  row ready the moment its symbol arrives — exactly wrong for a row nobody will
+  ever want. Refused by `usable` and excluded from every chargen draw, so it
+  reaches neither a player's list nor the dealer's.
   Requires a docstring saying why.
 
 Plus `out_of_combat=True` for a row that is complete and inert in a fight.

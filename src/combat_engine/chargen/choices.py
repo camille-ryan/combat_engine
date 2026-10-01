@@ -324,7 +324,8 @@ def race_options(cls: str, level: int = 1, build: Build | None = None) -> list[C
                     any(REGISTRY[r].is_attack for r in rows)
                 ),
                 "traits_written": float(
-                    sum(1 for r in rows if not REGISTRY[r].todo)
+                    sum(1 for r in rows
+                        if not REGISTRY[r].todo and not REGISTRY[r].obsolete)
                 ),
                 "surges": float(race.surges),
                 "speed_above_six": float(max(0, race.speed - 6)),
@@ -460,6 +461,8 @@ def legal_feats(
         for ref in sorted(gates)
         if ref in REGISTRY
         and not REGISTRY[ref].todo
+        # Superseded by a rules change: not a candidate for anybody.
+        and not REGISTRY[ref].obsolete
         and not second_block(ref)
         and ref not in held
         and meets(gates[ref], who, held)

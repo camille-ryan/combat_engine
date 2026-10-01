@@ -699,6 +699,21 @@ class Power:
     #: claimed this and then did nothing in a fight would be caught silent.
     #: `scripts/todo.py` names these rows so the set stays readable.
     narrative: tuple[str, ...] = ()
+    #: **A row the rules have superseded. Never offered, and not waiting.**
+    #:
+    #: The fourth marker, and the three before it could not say this. `todo=`
+    #: means "nothing works yet", so `scripts/todo.py` reports the row ready the
+    #: moment the symbol it names arrives -- which is exactly wrong for a row that
+    #: will never be wanted, however much of the engine gets written. `dropped=`
+    #: and `narrative=` both claim the row plays.
+    #:
+    #: The value is the reason, in plain words, because that is the only thing a
+    #: later reader needs and there is no symbol to wait for.
+    #:
+    #: Refused by `usable`, like `todo=`, and excluded from every chargen draw --
+    #: Camille's instruction being that an obsolete option is offered neither to a
+    #: player nor to the dealer.
+    obsolete: str = ""
     #: Base items this row lets a character carry, by weapon ref --
     #: `("w:warhammer",)`. **Build-time data, never run.** "You gain
     #: proficiency with all hammers" cannot be a body: a `Cast` opens on a
@@ -1009,6 +1024,7 @@ def power(
     todo: Iterable[str] = (),
     dropped: Iterable[str] = (),
     narrative: Iterable[str] = (),
+    obsolete: str = "",
     proficiency: Iterable[str] = (),
     swap: Swap | None = None,
     augments: Iterable[Augment] = (),
@@ -1107,6 +1123,7 @@ def power(
             todo=todo,
             dropped=dropped,
             narrative=narrative,
+            obsolete=obsolete,
             proficiency=tuple(proficiency),
             swap=swap,
             augments=tuple(augments),
@@ -1454,6 +1471,8 @@ def usable(
     # it replaced, because a wrong result is harder to see than a missing
     # one. Refused here, it is exactly as inert as being absent was, and it
     # says what it is waiting for.
+    if p.obsolete:
+        return False, "superseded by a rules change"
     if p.todo:
         return False, "not finished yet"
 

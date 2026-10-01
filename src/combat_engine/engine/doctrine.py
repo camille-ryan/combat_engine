@@ -1152,6 +1152,52 @@ def best_reach(world: Any, actor: int) -> int:
     return far
 
 
+def melee_reach(world: Any, eid: int) -> int:
+    """How far this creature's longest **melee** attack reaches.
+
+    Not `best_reach`, which takes the longest of anything including a bow. A reach
+    weapon is the case this exists for: standing two squares from something that
+    reaches one means attacking without being attacked back, and the scorer could
+    not see that square because `worth_standing` discarded it.
+    """
+    from .components import Powers
+
+    known = world.get(eid, Powers)
+    if known is None:
+        return 0
+    far = 0
+    for ref in known.known:
+        p = get(ref)
+        if p is None or p.attack is None or p.reach is None:
+            continue
+        if p.reach.kind == "melee" and known.available(ref):
+            far = max(far, p.reach.size)
+    return far
+
+
+def close_reach(world: Any, eid: int) -> int:
+    """How far a close burst or blast of this creature's would catch something.
+
+    Camille's point: **every square from which a close attack could hit an enemy
+    should be evaluated.** A close burst 3 is not a melee attack -- it wants space --
+    but nor is it a ranged one, and the kiting band computed off the longest *ranged*
+    row would throw away every square the burst could actually be used from.
+    """
+    from .components import Powers
+
+    known = world.get(eid, Powers)
+    if known is None:
+        return 0
+    far = 0
+    for ref in known.known:
+        p = get(ref)
+        if p is None or p.attack is None or p.reach is None:
+            continue
+        if p.reach.kind in ("close_burst", "close_blast") and known.available(ref):
+            far = max(far, p.reach.size)
+    return far
+
+
 def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
     """Camille's rule: only score destinations that could matter.
 
@@ -1191,17 +1237,25 @@ def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
     # a creature never considers a worse class of square while a better one exists.
     span = charge_reach(world, actor)
     danger = threatens_from(world, actor)
+    mine = melee_reach(world, actor) or 1
+    burst = close_reach(world, actor)
     first: list[Action] = []
     second: list[Action] = []
     ranked: list[tuple[int, str, Action]] = []
     for a in moves:
         g = gap(a.dest)
         if melee:
-            # Adjacent is the thing; **a square it could charge from is the next
-            # best**, because that is a square it can attack from next turn. Before
-            # this, a melee creature out of reach had no tier at all and fell
-            # through to "whatever is closest", which is how it came to stall.
-            if g <= 1:
+            # **Anywhere its melee attack reaches**, not just adjacent. A reach-2
+            # creature standing at two attacks something that reaches one without
+            # being attacked back, and this kept `g <= 1` only -- so the square was
+            # discarded before anything could score it. Measured: a reach-2 creature
+            # ended adjacent on 92 of 109 attacking turns, having never been offered
+            # the alternative. Both are kept now and the scoring chooses, which is
+            # right because sometimes closing *is* better -- a flank needs adjacency.
+            #
+            # A square it could charge from is the next best, being one it can attack
+            # from next turn.
+            if g <= mine:
                 first.append(a)
             elif span and 2 <= g <= span:
                 second.append(a)
@@ -1212,7 +1266,10 @@ def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
             # the old test only knew about adjacency. Falling back to merely
             # out-of-melee-and-in-range is the second tier, for a board where
             # nowhere is safe.
-            if danger < g <= reach:
+            # A close burst or blast reaches from anywhere inside its own size, and
+            # the band computed off the longest *ranged* row would have thrown those
+            # squares away. Camille's point, and it is why `burst` is in here.
+            if danger < g <= reach or (burst and 1 < g <= burst):
                 first.append(a)
             elif 1 < g <= reach:
                 second.append(a)

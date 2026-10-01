@@ -1350,10 +1350,16 @@ def f2395(c: Cast) -> None:
 
 
 @power("f2397", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.charge_at(stop=)",))
+       reach=PERSONAL, target=SELF,
+       obsolete="a charge may now end anywhere its attack reaches")
 def f2397(c: Cast) -> None:
-    """Where a charge stops is decided inside the run `c.charge_at`
-    makes, and nothing lets a row say "closer than you had to"."""
+    """Superseded, not unfinished. It let a charge stop closer than it had to,
+    and the rule it worked around is gone: a charge may end at the reach of
+    whatever it swings rather than adjacent, which `actions._charges` now does.
+
+    Was `todo=("c.charge_at(stop=)",)`, which is the wrong marker for this --
+    `scripts/todo.py` would have reported the row ready the day that verb
+    arrived, for a row nobody will ever want. Camille's call."""
 
 
 @power("f2403", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
