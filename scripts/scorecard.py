@@ -99,29 +99,36 @@ def _git(*args: str) -> str:
     return out.stdout.strip() if out.returncode == 0 else ""
 
 
-def staleness(was: dict | None) -> str:
-    """How far behind HEAD the baseline was recorded. #270.
+def staleness(_was: dict | None = None) -> str:
+    """How far behind the baseline is, read off git rather than a stored field. #270.
 
-    **A baseline older than HEAD reads exactly like a commit that changed
-    nothing**, and that is not hypothetical: the baseline sat two commits behind
-    while 915ed93 moved three numbers -- inert rows 181 -> 213, a live buff
-    re-cast 18 -> 42, charges taken 21 -> 14 -- and the next change measured was
-    nearly blamed for all of it. Nothing in the output said so.
+    **A baseline older than HEAD reads exactly like a commit that changed nothing**,
+    and that is not hypothetical: the baseline sat two commits behind while 915ed93
+    moved three numbers -- inert rows 181 -> 213, a live buff re-cast 18 -> 42, charges
+    taken 21 -> 14 -- and the next change measured was nearly blamed for all of it.
+    Nothing in the output said so.
+
+    **Derived, because the stored field was wrong by one and always would be.** `--save`
+    runs *before* the change it measures is committed, so stamping `HEAD` recorded the
+    commit the measurement was based on rather than the one containing it -- and the
+    warning then fired on the very next commit, every time. A guard that cries wolf
+    teaches people to ignore it, which is the failure it exists to prevent.
+
+    So: the commit that last changed the baseline **file**, and a count of the commits
+    since that touched code the measurement depends on. `scripts/fixtures/` is excluded
+    from that count deliberately -- a re-recorded replay fixture moves no number here.
+    Nothing to keep in sync, and it reads 0 exactly when the convention is followed
+    (re-save the baseline in the same commit as the change).
     """
-    if was is None:
+    born = _git("log", "-1", "--format=%H", "--", str(BASELINE))
+    if not born:
         return ""
-    saved = was.get("commit", "")
-    head = _git("rev-parse", "HEAD")
-    if not saved:
-        # **An absent field is not evidence of freshness.** It reads identically
-        # to a baseline recorded ten commits ago, which is the whole failure.
-        return "  baseline records no commit, so its age cannot be checked -- --save fixes this"
-    if not head or saved == head:
+    n = _git("rev-list", "--count", f"{born}..HEAD", "--",
+             "src/combat_engine", "scripts/*.py")
+    if not n or n == "0":
         return ""
-    n = _git("rev-list", "--count", f"{saved}..{head}")
-    behind = f"{n} commit{'s' if n != '1' else ''}" if n else "an unknown number of commits"
-    return (f"  baseline is {behind} stale, recorded at {saved[:9]} -- "
-            f"a number that moved may not be this change's doing")
+    return (f"  baseline is {n} commit{'s' if n != '1' else ''} behind, taken at "
+            f"{born[:9]} -- a number that moved may not be this change's doing")
 
 
 def side_of(world, eid: int) -> str:  # noqa: ANN001
@@ -352,7 +359,7 @@ def main() -> int:
     if args.save:
         merged = dict(was or {})
         merged.update(now)
-        merged["commit"] = _git("rev-parse", "HEAD")
+        merged.pop("commit", None)  # derived from git now, see `staleness`
         BASELINE.write_text(json.dumps(merged, indent=2, sort_keys=True) + "\n")
         print(f"\nbaseline written to {BASELINE}")
     return 0
