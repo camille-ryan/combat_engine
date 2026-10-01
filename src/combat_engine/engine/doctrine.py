@@ -206,7 +206,7 @@ from typing import Any
 
 from . import threat as T
 from .actions import Action
-from .components import Health, Position, Side
+from .components import Budget, Health, Position, Side
 from .dsl import get
 from .events import Event, OpportunityWindow
 from .grid import distance
@@ -1214,6 +1214,50 @@ def close_reach(world: Any, eid: int) -> int:
     return far
 
 
+def aim(world: Any, actor: int) -> int | None:
+    """Which enemy an approach should head *for*. Camille's rule.
+
+    Threat per hit point: what the creature would do in a round once it has closed,
+    over what it costs to remove. The highest ratio is the one worth walking at.
+
+    **`worth_standing` had no notion of a target at all.** Every square was ranked by
+    the distance to the *nearest* enemy, so a creature crossing the board went at
+    whatever stood closest -- routinely the thing least worth reaching. Tier
+    membership still asks about every foe, because you attack whoever ends up next to
+    you; this only decides which way to walk when nothing is in range yet.
+
+    `T.potential` is already cached per round, so this costs one division per foe.
+    """
+    best: int | None = None
+    score = -1.0
+    for f in foes(world, actor):
+        health = world.get(f, Health)
+        hp = max(1.0, float(health.hp)) if health is not None else 1.0
+        ratio = T.potential(world, f) / hp
+        if ratio > score:
+            best, score = f, ratio
+    return best
+
+
+def _can_charge_from(world: Any, actor: int, dest: Any) -> bool:
+    """Would a charge from `dest` reach anybody next turn?
+
+    The same band `worth_standing`'s second tier uses: two squares out to the end of
+    a charge. Split out so the approach rule and the scoring rule cannot drift apart
+    on what "arrives" means.
+    """
+    from .grid import distance
+
+    span = charge_reach(world, actor)
+    if not span:
+        return False
+    for f in foes(world, actor):
+        here = _square_of(world, f)
+        if here is not None and 2 <= distance(dest, here) <= span:
+            return True
+    return False
+
+
 def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
     """Camille's rule: only score destinations that could matter.
 
@@ -1249,6 +1293,13 @@ def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
     def gap(sq: Any) -> int:
         return min(distance(sq, _square_of(world, f) or sq) for f in near)
 
+    # Which way to walk, as opposed to which squares qualify. See `aim`.
+    target = aim(world, actor)
+    goal = _square_of(world, target) if target is not None else None
+
+    def toward(sq: Any) -> int:
+        return distance(sq, goal) if goal is not None else gap(sq)
+
     # Camille's two rules, as tiers. The first tier that has anything in it wins, so
     # a creature never considers a worse class of square while a better one exists.
     span = charge_reach(world, actor)
@@ -1257,6 +1308,7 @@ def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
     burst = close_reach(world, actor)
     first: list[Action] = []
     second: list[Action] = []
+    third: list[Action] = []
     ranked: list[tuple[int, str, Action]] = []
     for a in moves:
         g = gap(a.dest)
@@ -1275,6 +1327,18 @@ def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
                 first.append(a)
             elif span and 2 <= g <= span:
                 second.append(a)
+            elif g > danger:
+                # **Camille's rule, and it applies to melee too.** If neither tier
+                # matched anywhere then this creature cannot reach anything this turn
+                # -- it is spending both actions walking -- so where it *stops*
+                # matters, and stopping inside the enemy's reach means being hit
+                # first for nothing. Just outside the band, closest first, so it
+                # still makes as much progress as it safely can.
+                #
+                # Only reached when the better tiers are empty, which is what makes
+                # "only when double moving" true: a creature that can attack or
+                # charge from somewhere never considers these squares.
+                third.append(a)
         else:
             # **Just outside what the enemy can reach, including its charge.**
             # Camille's rule for a creature that does not want to be in melee:
@@ -1289,8 +1353,11 @@ def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
                 first.append(a)
             elif 1 < g <= reach:
                 second.append(a)
-        ranked.append((g, str(a), a))
-    keep = first or second
+        ranked.append((toward(a.dest), str(a), a))
+    if third:
+        # Closest to the target it is walking at, not to whatever is nearest.
+        third.sort(key=lambda a: (toward(a.dest), str(a)))
+    keep = first or second or third
     if not keep:
         # No tier matched, so close the distance instead. For a ranged creature with
         # nothing in range this is the same thing: get in range.
@@ -1361,6 +1428,40 @@ class DoctrinePolicy:
             # **A row whose effect is already running counts as inert too**, for the
             # same reason: it accomplishes nothing *now*.
             f["is_power"] = 0.0
+        if action.kind in ("move", "run") and action.dest is not None:
+            # **Camille's rule: one move, then total defence -- not two moves.** A
+            # second move is one the creature can only pay for with its *standard*,
+            # and `closes_distance` pays 2.0 a square for it whether or not it
+            # arrives anywhere, so a seven-square run collected +14 and hunkering
+            # down could never compete. Measured: of the turns where a melee creature
+            # could reach nothing at all, it ran on 37 of 69 at level 5 and 28 of 61
+            # at level 10, and the remainder had already spent the standard on a
+            # second move and could only end the turn.
+            #
+            # So a standard-funded move has to **arrive** to be worth the standard:
+            # somewhere it can attack from, or charge from next turn. If it does not,
+            # the squares travelled stop being worth anything and total defence wins
+            # on its own small merit.
+            #
+            # The first move is untouched -- it still collects the full closing
+            # figure, which is what keeps a creature approaching at all. This is the
+            # distinction Camille drew between a double move and a single one, and it
+            # is readable off the budget rather than guessed.
+            budget = world.get(actor, Budget)
+            second = budget is not None and budget.move <= 0
+            if second and not best_from(world, actor, action.dest) \
+                    and not _can_charge_from(world, actor, action.dest):
+                f["closes_distance"] = 0.0
+        if action.kind == "total_defence" and best_from(world, actor, _square_of(world, actor)):
+            # **Camille's rule: total defence is what you do when you have closed as
+            # far as you can and still cannot reach anybody.** So it is worth nothing
+            # while an attack is available from where the creature already stands --
+            # `best_from` is exactly that question and is already memoised.
+            #
+            # Deliberately *not* gated on a charge being available: a charge scores in
+            # the tens and wins on its own merits. Gating on `best_from` alone keeps
+            # this one predicate rather than a second copy of the approach rules.
+            f["is_total_defence"] = 0.0
         f.update(doctrine_features(world, encounter, actor, action))
         return self.weigh(f, action)
 

@@ -92,6 +92,9 @@ def features(
     # action would do -- see #266 for why the evaluation is deliberately not here.
     f["ap_grant"] = ({"standard": 1.0, "move": 0.5, "minor": 0.25}.get(action.ref, 0.0)
                      if action.kind == "action_point" else 0.0)
+    # Hunkering down. Worth something only when the standard has nothing better to
+    # spend itself on, which `DoctrinePolicy.score` is where it decides -- see there.
+    f["is_total_defence"] = float(action.kind == "total_defence")
     f["is_hide"] = float(action.kind == "hide")
     f["is_delay"] = float(action.kind == "delay")
     # Named on the day the escape action arrived, for the reason every
@@ -534,6 +537,10 @@ WEIGHTS: dict[str, float] = {
     # more than ending a turn and less than a good attack, because the
     # point is gone for the rest of the fight either way.
     "is_action_point": 4.0,
+    #: Beats ending the turn and loses to anything real. Gated in
+    #: `DoctrinePolicy.score`, so the weight only ever applies when the creature
+    #: genuinely cannot attack from where it stands.
+    "is_total_defence": 1.5,
     #: Separates the three grants. Small on purpose: it orders them and must not
     #: make spending the point itself more attractive.
     "ap_grant": 1.0,
