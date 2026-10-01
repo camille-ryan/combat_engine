@@ -258,7 +258,19 @@ def f3684(c: Cast) -> None:
     late, and `c.effects_on()` is what would couple them.
     """
 
+    # **The grant must not answer itself.** What this watches for is "a
+    # save-ends effect from this character on somebody else", and the grant it
+    # lays *is* one -- so it re-answered its own application until the
+    # interpreter ran out of stack. Not a slow row: unbounded, 1000 frames
+    # deep, and it took three unrelated rows down with it in the wide audit
+    # (p180, p3667, p7099) for no more than applying ongoing damage while
+    # somebody nearby held this feat. The grant's label is the one thing that
+    # tells it apart, and `c.grants_advantage` writes a fixed one.
+    mine = f"{c.ref} advantage"
+
     def granted(ev: Any) -> None:
+        if ev.label == mine:
+            return
         if ev.source == c.me and ev.save_ends and ev.target != c.me:
             c.grants_advantage(on=ev.target, to="team", until=When.SAVE_ENDS)
 
