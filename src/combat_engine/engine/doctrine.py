@@ -697,7 +697,8 @@ def doctrine_features(
             # anybody takes one, save-ends takes 1.8 because a save is 55%.
             dealt = T.expected_vs(world, actor, action.ref, t)
             rounds = min(1.0, dealt / health.hp) * T.ROUNDS
-            rounds += T.denial(world, t, laid)
+            rounds += T.denial(world, t, laid,
+                               pushed=T.row_push(world, actor, action.ref))
             # Capped at the window, so overkill and a stack of conditions cannot
             # between them remove more than the creature had to give.
             removed += min(rounds, float(T.ROUNDS)) * T.threat(world, t) / T.ROUNDS

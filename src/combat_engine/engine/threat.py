@@ -117,6 +117,7 @@ def clear() -> None:
     _ROWS.clear()
     _BOARDS.clear()
     _EFFECTS.clear()
+    _PUSH.clear()
     _ROUND.clear()
     _DENIED.clear()
 
@@ -344,6 +345,11 @@ class Laid:
 #: run, and a row does the same thing every time it is used.
 _EFFECTS: dict[tuple[int, int, str], tuple[Laid, ...]] = {}
 
+#: How far the row shoves its target, from the same run. Filled by `row_effects`
+#: rather than by a second Ledger pass, since the run that reads the conditions
+#: has already moved the creature.
+_PUSH: dict[tuple[int, int, str], int] = {}
+
 
 def row_effects(world: Any, eid: int, ref: str) -> tuple[Laid, ...]:
     """What this row would put on its target: conditions, durations, modifiers.
@@ -388,6 +394,14 @@ def row_effects(world: Any, eid: int, ref: str) -> tuple[Laid, ...]:
     except Exception:
         _EFFECTS[key] = ()
         return ()
+    # Where the row left it. `scrub` stood it on `HOME[1]`, so anything else is
+    # forced movement -- which is worth knowing because shoving a creature that
+    # cannot walk back is the cheapest way to take its round away. Camille's
+    # suggestion, and `row_push` is the read.
+    landed = w.get(foe, Position)
+    _PUSH[key] = (max(abs(landed.square[0] - HOME[1][0]),
+                      abs(landed.square[1] - HOME[1][1]))
+                  if landed is not None else 0)
     out: dict[tuple, Laid] = {}
     for eff in w.effects.of(foe):
         conds = tuple(eff.conditions)
@@ -416,6 +430,14 @@ def row_effects(world: Any, eid: int, ref: str) -> tuple[Laid, ...]:
     scrub(w, me, foe)
     _EFFECTS[key] = tuple(out.values())
     return _EFFECTS[key]
+
+
+def row_push(world: Any, eid: int, ref: str) -> int:
+    """How many squares this row shoves its target. Zero for most rows."""
+    key = (id(world), eid, ref)
+    if key not in _PUSH:
+        row_effects(world, eid, ref)
+    return _PUSH.get(key, 0)
 
 
 def _baseline_hit(world: Any, eid: int, ref: str) -> float | None:
@@ -551,14 +573,14 @@ def _speed_under(world: Any, eid: int, pin: Pinned | None) -> int:
 #: candidate actions, so uncached it recomputed the same figure thousands of times:
 #: one fight went from 13s under `LinearPolicy` to 25s, and an 80-seed comparison
 #: from 25 minutes to about two hours.
-_ROUND: dict[tuple[int, int, int, Pinned | None, bool], float] = {}
+_ROUND: dict[tuple[int, int, int, Pinned | None, bool, Any], float] = {}
 
 #: Per (board, round, target, the effects asked about). Same reasoning.
 _DENIED: dict[tuple[int, int, int, tuple], float] = {}
 
 
 def per_round(world: Any, eid: int, pin: Pinned | None = None,
-              *, anywhere: bool = False) -> float:
+              *, anywhere: bool = False, where: Any = None) -> float:
     """The best damage this creature could do in one round, in hit points.
 
     **Against the best target it can reach after moving**, which is Camille's rule
@@ -584,17 +606,17 @@ def per_round(world: Any, eid: int, pin: Pinned | None = None,
     """
     if pin is not None and pin.cannot_act:
         return 0.0
-    key = (id(world), getattr(world, "round", 0), eid, pin, anywhere)
+    key = (id(world), getattr(world, "round", 0), eid, pin, anywhere, where)
     hit = _ROUND.get(key)
     if hit is not None:
         return hit
-    got = _per_round(world, eid, pin, anywhere=anywhere)
+    got = _per_round(world, eid, pin, anywhere=anywhere, where=where)
     _ROUND[key] = got
     return got
 
 
 def _per_round(world: Any, eid: int, pin: Pinned | None,
-               *, anywhere: bool) -> float:
+               *, anywhere: bool, where: Any = None) -> float:
     """`per_round` without the memo. Split so the cache has one entry point."""
     from .dsl import get
     from .grid import distance
@@ -603,6 +625,10 @@ def _per_round(world: Any, eid: int, pin: Pinned | None,
     me = world.get(eid, Position)
     if known is None or me is None:
         return 0.0
+    # `where` asks the question from a square the creature is not standing in --
+    # which is what pricing a push needs, and why nothing has to be moved to find
+    # out. Same trick the flanking terms use with `Grid.flanks`.
+    stand = where if where is not None else me.square
     mine = world.get(eid, Side)
     if mine is None:
         return 0.0
@@ -627,7 +653,7 @@ def _per_round(world: Any, eid: int, pin: Pinned | None,
             them = world.get(target, Position)
             if them is None:
                 continue
-            if not anywhere and distance(me.square, them.square) > span:
+            if not anywhere and distance(stand, them.square) > span:
                 continue
             got = expected_vs(world, eid, ref, target,
                               attack=pin.attack if pin else 0)
@@ -637,7 +663,7 @@ def _per_round(world: Any, eid: int, pin: Pinned | None,
                 got *= sum(
                     1 for other in foes
                     if (o := world.get(other, Position)) is not None
-                    and (anywhere or distance(me.square, o.square)
+                    and (anywhere or distance(stand, o.square)
                          <= max(1, p.reach.size) + speed)
                 )
             if pin is not None and pin.weakened:
@@ -670,7 +696,41 @@ def potential(world: Any, eid: int) -> float:
     return got
 
 
-def denial(world: Any, target: int, laid: Sequence[Laid]) -> float:
+def landing(world: Any, target: int, pushed: int) -> Any:
+    """Where a shove of `pushed` squares would leave `target`, away from us.
+
+    The pusher picks the direction, so the assumption is the useful one: directly
+    away from whichever of our creatures is closest to it. Clamped to a square that
+    can be stood in, because a shove into a wall stops at the wall.
+    """
+    from .grid import distance
+
+    me = world.get(target, Position)
+    mine = world.get(target, Side)
+    if me is None or mine is None or pushed <= 0:
+        return None
+    ours = [a for a in creatures(world)
+            if alive(world, a) and (s := world.get(a, Side)) is not None
+            and s.team is not mine.team and world.get(a, Position) is not None]
+    if not ours:
+        return None
+    near = min(ours, key=lambda a: distance(me.square, world.get(a, Position).square))
+    from_sq = world.get(near, Position).square
+    dx = (me.square[0] > from_sq[0]) - (me.square[0] < from_sq[0])
+    dy = (me.square[1] > from_sq[1]) - (me.square[1] < from_sq[1])
+    if not dx and not dy:
+        return None
+    out = me.square
+    for step in range(1, pushed + 1):
+        sq = (me.square[0] + dx * step, me.square[1] + dy * step)
+        if not world.grid.passable(sq) or world.grid.occupant(sq) not in (None, target):
+            break
+        out = sq
+    return out
+
+
+def denial(world: Any, target: int, laid: Sequence[Laid],
+               pushed: int = 0) -> float:
     """How many rounds of `target`'s own damage these effects take away.
 
     The spec, and every case in it falls out of one subtraction rather than a table:
@@ -694,30 +754,43 @@ def denial(world: Any, target: int, laid: Sequence[Laid]) -> float:
     Effects are taken as the **best** of what is laid rather than the sum, because
     two conditions that both stop a creature acting do not stop it twice.
     """
+    # **`pushed` belongs in the key**, and leaving it out made the shove look inert:
+    # the first call for a given target and condition cached the unshoved answer and
+    # every shoved call read it back. The term fired, the numbers were identical to
+    # three decimals, and nothing raised -- which is this component's "silently
+    # false" failure arriving through a memo rather than through a predicate.
     key = (id(world), getattr(world, "round", 0), target,
-           tuple((o.when, o.conditions) for o in laid))
+           tuple((o.when, o.conditions) for o in laid), pushed)
     hit = _DENIED.get(key)
     if hit is not None:
         return hit
-    got = _denial(world, target, laid)
+    got = _denial(world, target, laid, pushed)
     _DENIED[key] = got
     return got
 
 
-def _denial(world: Any, target: int, laid: Sequence[Laid]) -> float:
+def _denial(world: Any, target: int, laid: Sequence[Laid], pushed: int) -> float:
     """`denial` without the memo."""
     free = potential(world, target)
     if free <= 0:
         return 0.0        # nothing to deny; it has no output to take away
+    where = landing(world, target, pushed) if pushed else None
     best = 0.0
-    for one in laid:
+    # **A shove with no condition on it still gets one round evaluated.** Camille's
+    # case: a prone, slowed or immobilised creature pushed away from the party cannot
+    # attack on its turn. The arithmetic needs no special case -- `per_round` from the
+    # square it lands in already knows whether it can walk back, so a shove on a free
+    # creature prices at nearly nothing and the same shove on a held one prices at a
+    # whole round.
+    entries = list(laid) or ([Laid(when=When.EOTNT)] if where else [])
+    for one in entries:
         turns = ROUNDS_OF.get(one.when, 0.0)
         if not turns:
             continue
         pin = from_rules(one.conditions, one.mods)
-        if pin == Pinned():
+        if pin == Pinned() and where is None:
             continue      # the effect does nothing to what it can do
-        pinned = per_round(world, target, pin)
+        pinned = per_round(world, target, pin, where=where)
         lost = max(0.0, 1.0 - pinned / free)
         best = max(best, min(float(ROUNDS), turns) * lost)
     return best
