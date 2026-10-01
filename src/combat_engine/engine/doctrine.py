@@ -60,6 +60,26 @@ That is what the five fixes in 255859d were aimed at and it moved hard. Median
 rounds also came down from 12 to 10 at level 10, toward #217's 7-8 target, while
 level 5 sits at 8.0 either side.
 
+### What the balance looks like now, which is the thing to worry about
+
+40 fresh seeds a level, one policy both sides, after everything above:
+
+    level   wins    rate   median rounds
+      1    40/40    100%        3.0
+      5    36/40     90%        6.0
+     10    35/40     88%        9.0
+
+**The party wins about nine in ten above level 1, and neither median is inside #217's
+7-8.** Camille's reason for abandoning the A/B was that both sides run the same policy
+so an improvement cancels -- right about the measurement, wrong about the outcome,
+because the defects were nearly all ones only a character could suffer: 231 inert rows
+chosen against the monsters' 0, 54 idle melee turns against 7. Fixing a shared scorer
+helped one side. Filed as #267; it is a balance question, not a scoring one.
+
+And none of it means the policy plays well. The scorecard still reads 169-178 inert
+choices a run, 41 idle melee turns at level 10, and 18% of decisions settled by a tie.
+It is winning 90% while still playing badly.
+
 ### Pruning the destinations, which is where a turn's cost was
 
 Camille's suggestion, and it is worth as much for the quality of play as for the
