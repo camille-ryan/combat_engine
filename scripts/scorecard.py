@@ -36,6 +36,13 @@ What is counted, and what each is for:
 * **adjacent_idle** -- standing next to an enemy and not attacking. Split out of
   `idle_melee`, which conflated the two: a sample found 16 of 25 "idle" turns were
   this, at gap 1, with no charge even offered. A different bug, and it was hiding.
+* **could_not_act** -- turns excluded from the two idle counters because nothing but
+  `end` was on offer. **Printed rather than dropped**, because this is what says the
+  exclusion is the right size: the counters above used to include these, and at level
+  10 that was 20 of 24 `adjacent_idle` turns and 5 of 10 `idle_melee` -- unconscious
+  and dying creatures, measured as though they had chosen badly. Derived from what was
+  offered and not from a condition list: 3 of 23 such turns carried no condition at
+  all.
 * **rounds** -- the balance guard only, against #217's 7-8.
 
 The baseline lives in `scripts/fixtures/scorecard.json` and is committed, which is
@@ -43,6 +50,11 @@ what makes a lost comparison survivable: "did this fix help" is answered against
 previous commit's numbers. **It has to be kept honest.** Re-save it only when the
 change is understood and intended, the same discipline `replay.py record` needs, and
 say in the commit which way each number moved.
+
+**The baseline records the commit it was taken at** and this prints how far behind HEAD
+it is. Without that, a baseline two commits stale reads exactly like a commit that
+changed nothing -- which happened: 915ed93 moved three numbers and the next change
+measured was nearly blamed for all of them. See #270.
 
 Not a pass/fail check. It prints what the AI did.
 """

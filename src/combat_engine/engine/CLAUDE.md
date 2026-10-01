@@ -97,7 +97,7 @@ table and `Memory`; `doctrine.py` holds the one concrete policy, `DoctrinePolicy
 out to be the wrong instrument: both sides of the board run the same policy, so an
 improvement cancels in the win rate. `scripts/scorecard.py` is the gate now -- per-side
 tactical counts against a committed baseline -- and `scripts/doctrine.py` reports what
-each of the 52 weights fired on. Neither needs a rival policy to read.
+each of the 53 weights fired on. Neither needs a rival policy to read.
 
 Two things follow:
 
