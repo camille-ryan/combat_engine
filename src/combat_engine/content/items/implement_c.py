@@ -53,6 +53,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.powers.paladin.marks import SANCTIONS
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -2300,10 +2301,9 @@ def i2719p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("spec.power_ref()",),
 )
 def i2806x1(c: Cast) -> None:
-    """The challenge half lands.
+    """Both halves land now.
 
     Divine challenge is `p805`, a declared row, and the bite it takes when
     the marked creature attacks somebody else goes through `c.flat`, which
@@ -2315,17 +2315,22 @@ def i2806x1(c: Cast) -> None:
     No loop: the extra helping is dealt by this row and carries this row's
     ref, not `p805`'s.
 
-    **Divine sanction is dropped.** It is the same arrangement, laid by
-    `powers/paladin/marks.burning_mark` on behalf of two dozen different
-    rows, and each of those stamps its own ref onto the blow. The card
-    names the sanction and no ref, and the set of rows that lay one is
-    recorded nowhere, so there is no `detail` to test against."""
+    **Divine sanction used to be dropped** because "the set of rows that lay
+    one is recorded nowhere, so there is no `detail` to test against". It is
+    recorded now: `marks.SANCTIONS` collects the ref of every row that lays a
+    sanction, as it lays it, and the bite is dealt by that same row -- so the
+    ref is always in the set by the time its damage is seen.
+
+    The card names the sanction and gives no ref, which is why this was marked
+    `spec.power_ref()`. That was the wrong gap: a mechanic rather than a row,
+    and the Glossary says so."""
     me, plus = c.me, c.enhancement
 
     def bitten(ev: DamageApplied) -> None:
         if ev.source != me or ev.dtype is not DamageType.RADIANT:
             return
-        if getattr(ev, "detail", "") != "p805" or plus <= 0:
+        detail = getattr(ev, "detail", "")
+        if plus <= 0 or (detail != "p805" and detail not in SANCTIONS):
             return
         c.flat(plus, dtype=DamageType.RADIANT, on=ev.target)
 

@@ -120,7 +120,10 @@ def p653(c: Cast) -> None:
         if spent or ev.target != c.me or not c.adjacent(victim):
             return
         spent.append(True)
-        if c.attack(c.str_, AC, on=victim):
+        # `as_="riposte"` so the counter can be told from the opening blow:
+        # both carry this row's `power`, and two feats print a clause about
+        # the counter alone.
+        if c.attack(c.str_, AC, on=victim, as_="riposte"):
             c.damage(c.w(1), c.str_mod, on=victim)
 
     c.on_attack(riposte, by=victim, until=When.SONT, label=f"{c.ref} riposte")

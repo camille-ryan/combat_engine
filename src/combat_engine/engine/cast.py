@@ -1515,7 +1515,15 @@ class Cast:
         ignore_cover: bool = False,
         keep: str = "",
         hand: str = "main",
+        as_: str = "",
     ) -> AttackResult:
+        """`as_` names *which* swing this is, when one row makes more than one.
+
+        A row granting a counter-attack rolls it longhand through here, so the
+        opening blow and the counter arrived with the same `power` and a feat
+        printing a clause about the counter alone had nothing to ask. It rides
+        on the `Hit` and the `Miss` the way `charge` and `opportunity` do.
+        """
         who = self._who(on)
         if who is None:
             return AttackResult()
@@ -1528,7 +1536,7 @@ class Cast:
             among=tuple(self.targets) or (who,), branch=self.branch,
             ignore_cover=ignore_cover, dying=self.dying, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via,
-            keep=keep, hand=hand,
+            keep=keep, hand=hand, as_=as_,
         )
         # An interrupt may have moved the blow onto somebody else. The roll
         # and the `Hit` already name the new target; without this the body's

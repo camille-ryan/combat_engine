@@ -171,6 +171,7 @@ def attack(
     granted_via: str = "",
     keep: str = "",
     hand: str = "main",
+    as_: str = "",
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
@@ -328,6 +329,13 @@ def attack(
         # a creature could not react to being hit by one.
         rolled.opportunity = opportunity
         rolled.charge = charge
+        # **Which swing this is, when one row makes two.** Hung on the event
+        # the way `opportunity` and `charge` are. A row that grants a counter
+        # -- p653's riposte -- rolls it longhand with `c.attack`, so both the
+        # opening blow and the counter carried the same `power` and nothing
+        # could tell them apart. Two feats print a clause about the counter
+        # alone and had no way to ask.
+        rolled.as_ = as_
         rolled.granted_by = granted_by
         rolled.granted_via = granted_via
         rolled.action_point = bought
@@ -375,6 +383,7 @@ def attack(
         landed.branch = branch
         landed.opportunity = opportunity
         landed.charge = charge
+        landed.as_ = as_
         landed.granted_by = granted_by
         landed.granted_via = granted_via
         landed.action_point = bought
@@ -415,6 +424,7 @@ def attack(
             ev.result = result
             ev.among = among or (target,)
             ev.branch = branch
+            ev.as_ = as_
             ev.opportunity = opportunity
             ev.charge = charge
             ev.granted_by = granted_by

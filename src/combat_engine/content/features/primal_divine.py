@@ -686,7 +686,6 @@ def _manifests(ref: str) -> bool:
     keywords=[Keyword.DIVINE],
     requires=on_leg("malediction"),
     requires_text=_NOT_MY_OPTION,
-    dropped=("spec.power_ref()",),
 )
 def invoker_covenant_curse(c: Cast) -> None:
     """The covenant whose manifestation shoves whoever was hit.
@@ -706,14 +705,15 @@ def invoker_covenant_curse(c: Cast) -> None:
     "On your turn" is `c.turn_of`: an invocation used off an immediate
     action in somebody else's turn does not manifest.
 
-    The channelled power this covenant hands over is **dropped**. The spec
-    names it and gives no ref, so there is nothing to grant --
-    `spec.power_ref()` is the standing symbol for exactly that. The two
-    channelled invocations the class already has, `p5186` and `p7150`,
-    belong to neither of the two covenants below, so reaching for one of
-    them here would be granting the wrong row rather than the right one.
+    **The channelled power is `p7150`, and the old note here was wrong about
+    it.** It said `p5186` and `p7150` "belong to neither of the two covenants
+    below", so reaching for one would be granting the wrong row. In fact
+    `p7150` is this covenant's own channelled invocation -- the names line up
+    and the ref was there all along -- so it is granted, and the row no longer
+    carries a marker for a ref it had.
     """
     me = c.me
+    c.grant_row("p7150", on=me, until=When.ENCOUNTER)
 
     def after(ev: PowerResolved) -> None:
         if ev.actor != me or c.turn_of() != me or not _manifests(ev.power):

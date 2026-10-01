@@ -107,11 +107,13 @@ from combat_engine.engine import (
     Trigger,
     Usage,
     When,
+    Window,
     about_me,
     get,
     power,
     targets_me,
 )
+from combat_engine.engine.events import ForcedMove
 from combat_engine.engine.grid import Square
 from combat_engine.engine.query import allies, distance_between
 
@@ -1146,6 +1148,56 @@ def _ongoing_if_alone(c: Cast, ev: Any) -> None:
     c.ongoing(c.wis_mod, on=foe)
 
 
+def _slow_instead_of_push(c: Cast, ev: Any) -> None:
+    """"You can slow the target **instead of** pushing it."
+
+    The hard shape in this family, and the one `c.instead_of()` was marking:
+    the clause does not add to the row, it *replaces* a clause of the row. By
+    the time a `Hit` rider runs, a push laid in the body would already have
+    happened -- so this cannot be written as an effect and has to pre-empt.
+
+    `ForcedMove` is a cancellable `Decision` carrying the `power` doing the
+    shoving, and `c.watch` takes a `BEFORE` window. So the rider arms a
+    one-shot that refuses this row's shove against this target and slows
+    instead. Nothing new was needed in the engine.
+
+    One-shot by a latch rather than `once=True`, for the reason p653 gives
+    about its riposte: `once` would be burnt by a shove aimed at somebody
+    else.
+    """
+    foe = ev.target
+    me = c.me
+    if c.choose(["slow", "push"], f"{c.ref}:instead") != "slow":
+        return
+    done: list[bool] = []
+
+    def swap(shove: Any) -> None:
+        if done or shove.source != me or shove.target != foe:
+            return
+        if getattr(shove, "power", "") != "p1000":
+            return
+        done.append(True)
+        shove.cancel("slowed instead of pushed")
+        c.slowed(on=foe, until=When.EONT)
+
+    c.watch(ForcedMove, swap, until=When.EOT, window=Window.BEFORE, on=me,
+            label=f"{c.ref} instead")
+
+
+def _ongoing_on_riposte(c: Cast, ev: Any) -> None:
+    """Ongoing damage, but only on the **counter** the row grants.
+
+    p653 rolls its riposte longhand with `c.attack`, so the opening blow and
+    the counter both arrive carrying that row's `power` -- which is why this
+    clause had no way to ask and the feat carried `c.on_riposte()`. The swing
+    now says which it is in `as_`, hung on the `Hit` the way `charge` and
+    `opportunity` are.
+    """
+    if getattr(ev, "as_", "") != "riposte" or c.wis_mod <= 0:
+        return
+    c.ongoing(c.wis_mod, on=ev.target)
+
+
 def _extra_if_held(c: Cast, ev: Any) -> None:
     if c.con_mod > 0 and any(c.is_(hold, on=ev.target) for hold in _HELD_FAST):
         c.flat(c.con_mod, on=ev.target)
@@ -1234,7 +1286,8 @@ def f1296(c: Cast) -> None:
 _riders("f1297", {
     "p917": _slow_if_open,
     "p2248": _slide_if_open,
-}, dropped=(*NAMED, "c.instead_of()"))
+    "p1000": _slow_instead_of_push,
+}, dropped=NAMED)
 
 def _ally_adds_half_int(c: Cast, ev: Any) -> None:
     """Half the caster's Intelligence on the granted swing's attack roll.
@@ -1292,8 +1345,9 @@ _riders("f1298", {
 # riposte, and the ranger's beast clause is still a printed name.
 _riders("f1299", {
     "p992": _ongoing_if_alone,
+    "p653": _ongoing_on_riposte,
 }, landed={"p315": _ongoing_on_granted_hit},
-   dropped=(*NAMED, "c.on_riposte()"))
+   dropped=NAMED)
 
 # p997's clause pays out **on a miss**, which a rider hung on `Hit` never
 # sees; p1061 is the granted attack, which is readable now.

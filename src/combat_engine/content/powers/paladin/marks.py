@@ -25,6 +25,18 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.events import AttackDeclared
 
+#: Every row that has laid a divine sanction, by ref.
+#:
+#: The sanction's bite is dealt by `c.flat` inside `burning_mark`, which stamps
+#: the **calling** row's ref onto the blow -- so `DamageApplied.detail` names
+#: whichever of two dozen rows laid it, and a card saying "radiant damage from
+#: your divine sanction" had no single ref to test against. This is that set.
+#:
+#: Filled as marks are laid rather than declared up front, which is sound in
+#: the only order that matters: the bite cannot arrive before the mark that
+#: deals it, so a ref is always registered by the time its damage is seen.
+SANCTIONS: set[str] = set()
+
 
 def burning_mark(
     c: Cast,
@@ -38,6 +50,7 @@ def burning_mark(
     if who is None:
         return None
     me = c.me
+    SANCTIONS.add(c.ref)
     struck: dict[int, int] = {}
 
     def bite(ev: AttackDeclared) -> None:

@@ -45,6 +45,7 @@ from combat_engine.engine import (
     Cast,
     DamageApplied,
     DamageType,
+    Hit,
     InitiativeRolled,
     Miss,
     PowerUsed,
@@ -428,25 +429,50 @@ def f3299(c: Cast) -> None:
     c.grants_advantage(on=ev.attacker, to=c.me, until=When.EONT)
 
 
+#: Each aspect, and the row it sharpens. The aspect is recorded as a known
+#: row -- `RaceLine.one_of` holds for this race, so exactly one of the three
+#: is in `Powers.known` -- so "your current aspect" is `c.knows`.
+_ASPECTS = {
+    "p7441": "p10439",
+    "p7442": "p10440",
+    "p7443": "p10438",
+}
+
+
 @power("f3304", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
+       reach=PERSONAL, target=SELF, dropped=("c.extra_target()",))
 def f3304(c: Cast) -> None:
-    """Three riders, one per aspect, and the three rows they hang off --
-    `p10438`, `p10439`, `p10440` -- are all declared and named in the
-    prerequisite.
+    """A rider per aspect, on the row that aspect sharpens.
 
-    **Re-aimed.** `c.race_option()` is stale: `rt:r44-aspects` used to
-    say the choice had nowhere to live and now says the opposite --
-    `RaceLine.one_of` is true for this race, so exactly one of the three
-    aspect powers is in `Powers.known` and the choice *is* recorded.
+    **The join is made.** The spec names each aspect in prose and the three
+    candidate rows are `p7441`, `p7442`, `p7443`; which name belongs to which
+    id is settled in `_ASPECTS` above, and only the refs are written down.
+    `c.race_option()` was already stale -- the choice *is* recorded, as one of
+    the three in `Powers.known`.
 
-    What is missing is the join. The spec names each aspect in prose and
-    gives no ref, and the three candidate rows are `p7441`, `p7442` and
-    `p7443`; deciding which name belongs to which id would be reading
-    flavour, which this project does not do. One of the three clauses --
-    a burst gaining an extra target -- has no verb either, since targets
-    are settled before the rider is reached.
+    Two of the three clauses are here. The third -- a burst gaining one more
+    target -- has no verb and cannot have a rider: targets are settled before
+    any rider is reached, which is a different mechanism from adding to a
+    blow after it lands.
     """
+    me = c.me
+
+    def sharpened(ev: Any) -> None:
+        if ev.actor != me:
+            return
+        used = getattr(ev, "power", "")
+        if used == _ASPECTS["p7441"] and c.knows("p7441"):
+            c.shift(1, who=me)
+
+    def bites(ev: Hit) -> None:
+        if ev.attacker != me or getattr(ev, "power", "") != _ASPECTS["p7442"]:
+            return
+        if c.knows("p7442") and c.wis_mod > 0:
+            c.flat(c.wis_mod, on=ev.target)
+
+    c.watch(PowerResolved, sharpened, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} aspect")
+    c.watch(Hit, bites, until=When.ENCOUNTER, on=me, label=f"{c.ref} spike")
 
 
 @power("f3322", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

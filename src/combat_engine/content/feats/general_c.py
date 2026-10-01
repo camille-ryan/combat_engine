@@ -156,21 +156,48 @@ def f723b(c: Cast) -> None:
 
 
 
-@power("f668", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("spec.power_ref()",))
-def f668(c: Cast) -> None:
-    """One multiclass feat whose granted power the spec names by ref, so
-    that half is written.
+#: Each Companion Spirit option and the at-will that comes with it.
+#:
+#: "The at-will shaman power **associated with that option**" is one
+#: particular row per option and not a free pick from the class's list, which
+#: is why `c.borrow_row` could not express it: that reads a set by class,
+#: level and usage, and this set is none of those. All eleven options are in
+#: the index and every at-will they name is declared.
+_COMPANION_SPIRIT = {
+    "cf:shaman-f0c0": "p6515",
+    "cf:shaman-f0c1": "p12866",
+    "cf:shaman-f0c2": "p12865",
+    "cf:shaman-f0c3": "p6521",
+    "cf:shaman-f0c4": "p5389",
+    "cf:shaman-f0c5": "p5388",
+    "cf:shaman-f0c6": "p5510",
+    "cf:shaman-f0c7": "p9734",
+    "cf:shaman-f0c8": "p9732",
+    "cf:shaman-f0c9": "p9736",
+    "cf:shaman-f0c10": "p9733",
+}
 
-    Re-aimed: the hold is not the borrowing, which `c.grant_row` and
-    `c.borrow_row` both say now. It is that the other two clauses name
-    their powers in prose -- the at-will that comes with a chosen
-    companion spirit, and the daily -- and `c.borrow_row` cannot read a
-    set the card does not describe by class, level and usage. The
-    spirit's at-will is one particular row per option, not a free pick
-    from the class's list, so choosing freely would be a different
-    feat."""
+
+@power("f668", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f668(c: Cast) -> None:
+    """A multiclass feat: the spirit, its at-will, and the daily.
+
+    The hold was never the borrowing -- `c.grant_row` says that -- it was that
+    two clauses named their powers in prose. Both have refs now: the daily is
+    `p3775`, and the spirit's at-will is whichever of `_COMPANION_SPIRIT` the
+    chosen option names.
+
+    The option goes to the decider, like any choice the sheet does not record.
+    Both granted rows get `uses=1`: the card gives the at-will "as an
+    encounter power" and the daily as one use.
+    """
     c.grant_row("p6515", on=c.me, until=When.ENCOUNTER)
+    taken = c.choose(sorted(_COMPANION_SPIRIT), f"{c.ref}:spirit")
+    if taken:
+        c.grant_row(_COMPANION_SPIRIT[taken], on=c.me, until=When.ENCOUNTER,
+                    uses=1)
+    c.grant_row("p3775", on=c.me, until=When.ENCOUNTER, uses=1)
 
 
 _granted("f669", "f669b")
