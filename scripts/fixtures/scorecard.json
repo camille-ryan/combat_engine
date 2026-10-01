@@ -1,0 +1,66 @@
+{
+  "10": {
+    "fights": 12,
+    "monsters": {
+      "already_on": 0,
+      "charge_offered": 234,
+      "charge_taken": 29,
+      "decisions": 662,
+      "idle_melee": 8,
+      "inert_chosen": 0,
+      "melee_turns": 261,
+      "oa_conceded": 39,
+      "oa_per_fight": 3.25,
+      "self_harm": 0,
+      "tie_size_mean": 1.33,
+      "tied_pct": 8.9
+    },
+    "party": {
+      "already_on": 16,
+      "charge_offered": 325,
+      "charge_taken": 54,
+      "decisions": 1127,
+      "idle_melee": 46,
+      "inert_chosen": 231,
+      "melee_turns": 357,
+      "oa_conceded": 42,
+      "oa_per_fight": 3.5,
+      "self_harm": 3,
+      "tie_size_mean": 1.55,
+      "tied_pct": 18.2
+    },
+    "rounds_median": 8.0
+  },
+  "5": {
+    "fights": 12,
+    "monsters": {
+      "already_on": 0,
+      "charge_offered": 241,
+      "charge_taken": 14,
+      "decisions": 672,
+      "idle_melee": 4,
+      "inert_chosen": 0,
+      "melee_turns": 244,
+      "oa_conceded": 17,
+      "oa_per_fight": 1.42,
+      "self_harm": 0,
+      "tie_size_mean": 1.31,
+      "tied_pct": 12.1
+    },
+    "party": {
+      "already_on": 19,
+      "charge_offered": 325,
+      "charge_taken": 30,
+      "decisions": 1047,
+      "idle_melee": 54,
+      "inert_chosen": 253,
+      "melee_turns": 278,
+      "oa_conceded": 36,
+      "oa_per_fight": 3.0,
+      "self_harm": 3,
+      "tie_size_mean": 1.88,
+      "tied_pct": 24.7
+    },
+    "rounds_median": 7.5
+  }
+}
