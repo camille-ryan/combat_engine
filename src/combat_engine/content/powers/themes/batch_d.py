@@ -1570,12 +1570,26 @@ def p16537(c: Cast) -> None:
         "you hit an enemy with p16535's secondary power, and the enemy is "
         "adjacent to at least one of your allies"
     ),
-    todo=("spec.power_ref()",),
+    on=Trigger(Hit, by_me, "you hit an enemy"),
 )
 def p16538(c: Cast) -> None:
-    """The trigger names a power that has no ref: it is printed inside the
-    p16535 block rather than filed on its own, so there is nothing for the
-    trigger to test `ev.power` against."""
+    """The secondary card has a ref now, so the trigger has something to test.
+
+    `p16535b` is the second card printed inside p16535's own entry. It was
+    parsed all along and never reached the database, because only the class
+    pass asked for extras and this is a theme power -- so `ev.power` had
+    nothing to be compared against and the row could not be written.
+
+    Both halves of the printed trigger are checked here rather than in the
+    predicate: `by_me` narrows to hits I made, and the ally's adjacency is a
+    question about the *victim's* neighbours, which the predicate's signature
+    cannot ask."""
+    ev = c.trigger
+    if getattr(ev, "power", "") != "p16535b":
+        return
+    if not any(c.adjacent_to(friend, ev.target) for friend in c.allies()):
+        return
+    c.prone(on=ev.target)
 
 
 def _hit_while_bloodied(world: World, me: int, ev: object) -> bool:

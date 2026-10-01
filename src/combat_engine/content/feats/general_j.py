@@ -1219,44 +1219,53 @@ def f1561(c: Cast) -> None:
 
 
 @power("f1622", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=BORROW)
+       reach=PERSONAL, target=SELF)
 def f1622(c: Cast) -> None:
     """Two channel divinity powers of another class, and the standing
     that comes with them.
 
-    The second half is writable now and is the half with teeth: "if you
-    do not already have the class feature, you are considered to have
-    it" is exactly `c.grant_row`, which returns `None` when the creature
-    already knows the row rather than handing it twice. That is what
-    every later divinity feat's prerequisite reads.
+    "If you do not already have the class feature, you are considered to
+    have it" is exactly `c.grant_row`, which returns `None` when the
+    creature already knows the row rather than handing it twice. That is
+    what every later divinity feat's prerequisite reads.
 
-    Dropped: the two powers themselves, which the card names and gives
-    no ref for."""
+    **The two powers are no longer dropped.** The card names them in
+    prose and the brief now carries their refs, so they are handed over
+    with the standing. Four feats in this run have the same shape and
+    differ only in the pair."""
     c.grant_row("cf:cleric-templar-f0", on=c.me, until=When.ENCOUNTER)
+    for ref in ("p1589", "p146"):
+        c.grant_row(ref, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1623", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=BORROW)
+       reach=PERSONAL, target=SELF)
 def f1623(c: Cast) -> None:
-    """Same shape as f1622, on another class's pair: the standing is
-    handed over and the two named powers are dropped."""
+    """Same shape as f1622, on another class's pair: the standing and both
+    named powers."""
     c.grant_row("cf:invoker-f0", on=c.me, until=When.ENCOUNTER)
+    for ref in ("cf:invoker-f1c1", "cf:invoker-f1c0"):
+        c.grant_row(ref, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1624", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=BORROW)
+       reach=PERSONAL, target=SELF)
 def f1624(c: Cast) -> None:
-    """Same shape as f1622, on another class's pair: the standing is
-    handed over and the two named powers are dropped."""
+    """Same shape as f1622, on another class's pair: the standing and both
+    named powers."""
     c.grant_row("cf:paladin-f0", on=c.me, until=When.ENCOUNTER)
+    for ref in ("p1746", "p1747"):
+        c.grant_row(ref, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1625", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=BORROW)
+       reach=PERSONAL, target=SELF)
 def f1625(c: Cast) -> None:
-    """Same shape as f1622, on another class's pair: the standing is
-    handed over and the two named powers are dropped."""
+    """Same shape as f1622, on another class's pair: the standing and both
+    named powers."""
     c.grant_row("cf:avenger-f2", on=c.me, until=When.ENCOUNTER)
+    for ref in ("p5330", "p5331"):
+        c.grant_row(ref, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1627", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

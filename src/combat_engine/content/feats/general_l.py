@@ -983,7 +983,7 @@ def f2841(c: Cast) -> None:
 
 @power("f2843", level=1, cls="", usage=ENCOUNTER,
        action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL,
-       target=NO_TARGET, dropped=("spec.power_ref()",),
+       target=NO_TARGET,
        trigger="you are subjected to a dazing or stunning effect",
        on=Trigger(
            ConditionApplied,
@@ -994,14 +994,24 @@ def f2841(c: Cast) -> None:
            "you are dazed or stunned",
        ))
 def f2843(c: Cast) -> None:
-    """The saving throw plays; the cost does not, and the reason has
-    changed. `c.expend_row(ref)` spends a use without running the row,
-    which is exactly the printed price -- but the ref the spec names for
-    it, `x_m4421a6`, matches no row in the database, so writing
-    `c.expend_row` against it would return False in every fight and the
-    save would never be reached. The `f651` clause hangs on the same
-    expenditure, so it goes with it."""
+    """The cost plays now, and with it the clause that hangs off it.
+
+    `c.expend_row(ref)` spends a use without running the row, which is
+    exactly the printed price. The ref used to come through as
+    `x_m4421a6` -- a stat block's ability that shares the name, so
+    `expend_row` would have returned False in every fight and the save
+    would never have been reached -- and it is `p6186` now.
+
+    The `f651` clause is gated on the same expenditure rather than on the
+    trigger, because the card prices it that way: "when you expend it in
+    this manner"."""
+    if not c.expend_row("p6186"):
+        return
     c.save(on=c.me)
+    if c.feat("f651", on=c.me):
+        for foe in c.enemies():
+            if c.adjacent(to=foe):
+                c.flat(5, dtype=DamageType.FIRE, on=foe)
 
 
 @power("f2847", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

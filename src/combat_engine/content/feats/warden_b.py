@@ -587,22 +587,33 @@ def f2554(c: Cast) -> None:
 
 
 @power("f1949", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
+       reach=PERSONAL, target=SELF)
 def f1949(c: Cast) -> None:
     """A further attack penalty on marked enemies while a racial power is
     running.
 
-    Re-aimed. "Under the effect of your X power" is `c.under`'s job and
-    `c.suffering(ref, include_self=True)` does it -- an effect's label is
-    the ref of the row that laid it and the source is the creature that
-    laid it, so a self-buff is found the same way anybody else's is.
-    That was the old marker and it is stale.
+    The ref was the whole of it. The spec used to name the power as
+    `x_m5139a3` -- a stat block's ability that happens to share the name,
+    which is no id to ask about -- and now names `p6188`, so the row is the
+    one gated `c.penalty` the old note promised.
 
-    What actually stops this row is the ref: the spec names the power as
-    `x_m5139a3`, which is not a compendium id and matches no declared
-    row, so there is nothing to ask about. The penalty itself is one
-    gated `c.penalty` and would be written in a line.
+    The gate is the printed clause: "attacks that don't include you as a
+    target". `ctx["among"]` is the whole target set, which is the same test
+    `resolve`'s own mark penalty makes a few hundred lines further down --
+    not `ctx["target"]`, which would still penalise a blast that caught the
+    warden along with everybody else.
     """
+    if c.me not in c.suffering("p6188", include_self=True):
+        return
+    me = c.me
+
+    def without_me(ctx: dict) -> bool:
+        return me not in ctx.get("among", ())
+
+    for foe in c.enemies():
+        if c.marked(on=foe):
+            c.penalty("attack", max(0, c.con_mod), on=foe,
+                      until=When.EONT, when=without_me)
 
 
 def _under(c: Cast, ref: str) -> bool:

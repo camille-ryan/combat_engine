@@ -1507,16 +1507,25 @@ def _is_bloodied(world: World, eid: int) -> bool:
     keywords=[Keyword.HEALING],
     requires=_is_bloodied,
     requires_text="you must have started this turn bloodied",
-    dropped=("spec.power_ref()",),
 )
 def p16527(c: Cast) -> None:
     """The requirement is read as "bloodied now" -- nothing records what you
-    were at the top of the turn. The grab rides on p16525's second card,
-    which has no ref of its own.
+    were at the top of the turn.
+
+    The grab rides on p16525's second card, which **has a ref now**:
+    `p16525b` was parsed all along and never imported, because only the class
+    pass asked a parent for its extras and this is a theme power.
 
     "Beast Form" is not one of the engine's keywords, so only Healing is
     declared.
     """
+    me = c.me
+
+    def caught(ev: Hit) -> None:
+        if ev.attacker == me and getattr(ev, "power", "") == "p16525b":
+            c.grab(on=ev.target, by=me)
+
+    c.watch(Hit, caught, until=When.ENCOUNTER, on=me, label=c.ref)
     c.regeneration(2, until=When.ENCOUNTER, on=c.me, while_bloodied=True)
 
 
