@@ -692,6 +692,45 @@ def _in_area(world: Any, actor: int, origin: Any, ref: str) -> int:
         else min(1, caught)
 
 
+def charge_reach(world: Any, eid: int) -> int:
+    """How far away a creature can be and still be charged by this one.
+
+    A charge moves up to speed and must end adjacent, so a target at distance `d`
+    is chargeable when `d - 1 <= speed`: **speed + 1**. Zero for a creature with no
+    melee attack to charge with, since a charge ends in a melee basic.
+
+    The closing-path requirement `actions._charges` enforces is not re-checked here
+    -- that needs a path per candidate square, and this is asked of every square of
+    every move. So this is an upper bound: it can say "chargeable" where a wall
+    makes it false, and never the reverse.
+    """
+    from .components import Movement, Powers
+
+    known = world.get(eid, Powers)
+    if known is None or not known.basic:
+        return 0
+    if not fights_in_melee(world, eid):
+        return 0
+    move = world.get(eid, Movement)
+    return (move.speed if move is not None else 6) + 1
+
+
+def threatens_from(world: Any, actor: int) -> int:
+    """How far the enemy that reaches furthest could reach `actor`.
+
+    Their melee reach **and their charge**, which is Camille's point: standing seven
+    squares from something with speed six is standing inside its reach, and a scorer
+    that only counted adjacency could not see that. This is the band a creature that
+    does not want to be in melee should stay outside of.
+    """
+    from .policy import _reach_of
+
+    worst = 0
+    for foe in foes(world, actor):
+        worst = max(worst, _reach_of(world, foe), charge_reach(world, foe))
+    return worst
+
+
 def best_from(world: Any, actor: int, origin: Any) -> float:
     """The best expected damage this creature could do from `origin`.
 
@@ -701,6 +740,17 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
     differential between the best attack after moving, and the best action without
     taking the OA". A close blast that would catch the whole enemy party is worth
     a free swing against you, and nothing in a flat provocation penalty can say so.
+
+    **A square you could charge from counts as a square you could attack from.**
+    Camille's rule, and it is what lets this term reward an approach that does not
+    arrive. Without it, `best_from` paid only for squares with a target already in
+    reach, so a creature ten squares out gained nothing by closing to seven and
+    simply stopped -- measured, `idle_melee` went from 10 to 42 when
+    `closes_distance` was removed and this was all that was left.
+
+    It makes the figure a **step** rather than a gradient: non-zero inside charge
+    range, zero outside it, flat within. That is the distinction worth having and it
+    cannot saturate the way squares-travelled did, because there is only one step.
     """
     from .components import Powers
 
@@ -728,6 +778,20 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
         if not caught:
             continue
         best = max(best, T.row_damage(world, actor, ref) * caught)
+    # The charge, if this square is one it could charge from. Its damage is the
+    # basic attack's, since that is what a charge swings.
+    span = charge_reach(world, actor)
+    if span:
+        from .grid import distance
+
+        basic = known.basic
+        for foe in foes(world, actor):
+            there = _square_of(world, foe)
+            if there is None:
+                continue
+            if 2 <= distance(origin, there) <= span:
+                best = max(best, T.row_damage(world, actor, basic))
+                break
     _BEST[key] = best / pool
     return _BEST[key]
 
@@ -1114,20 +1178,40 @@ def worth_standing(world: Any, actor: int, moves: list[Action]) -> list[Action]:
     def gap(sq: Any) -> int:
         return min(distance(sq, _square_of(world, f) or sq) for f in near)
 
-    good: list[Action] = []
+    # Camille's two rules, as tiers. The first tier that has anything in it wins, so
+    # a creature never considers a worse class of square while a better one exists.
+    span = charge_reach(world, actor)
+    danger = threatens_from(world, actor)
+    first: list[Action] = []
+    second: list[Action] = []
     ranked: list[tuple[int, str, Action]] = []
     for a in moves:
         g = gap(a.dest)
         if melee:
+            # Adjacent is the thing; **a square it could charge from is the next
+            # best**, because that is a square it can attack from next turn. Before
+            # this, a melee creature out of reach had no tier at all and fell
+            # through to "whatever is closest", which is how it came to stall.
             if g <= 1:
-                good.append(a)
-        elif 1 < g <= reach:
-            good.append(a)
+                first.append(a)
+            elif span and 2 <= g <= span:
+                second.append(a)
+        else:
+            # **Just outside what the enemy can reach, including its charge.**
+            # Camille's rule for a creature that does not want to be in melee:
+            # seven squares from something with speed six is inside its reach, and
+            # the old test only knew about adjacency. Falling back to merely
+            # out-of-melee-and-in-range is the second tier, for a board where
+            # nowhere is safe.
+            if danger < g <= reach:
+                first.append(a)
+            elif 1 < g <= reach:
+                second.append(a)
         ranked.append((g, str(a), a))
-    keep = good
+    keep = first or second
     if not keep:
-        # Nothing satisfies the rule, so close the distance instead. For a ranged
-        # creature with nothing in range this is the same thing: get in range.
+        # No tier matched, so close the distance instead. For a ranged creature with
+        # nothing in range this is the same thing: get in range.
         ranked.sort(key=lambda t: (t[0], t[1]))
         keep = [a for _, _, a in ranked[:KEEP]]
     health = world.get(actor, Health)

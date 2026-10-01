@@ -30,9 +30,12 @@ What is counted, and what each is for:
   `str(action)`. 14.8% when first measured.
 * **charge_taken / charge_offered**, by role -- #265's acceptance test. A melee
   creature should charge often and a wizard never.
-* **idle_melee** -- a melee creature's turn that neither attacked nor closed any
-  distance. **The regression guard**: the fix for #265 removes a term that approach
-  behaviour was built on, and this is what would catch it going wrong.
+* **idle_melee** -- a melee creature out of reach that did not close. **The approach
+  guard**: the fix for #265 changes what rewards closing, and this is what catches it
+  going wrong.
+* **adjacent_idle** -- standing next to an enemy and not attacking. Split out of
+  `idle_melee`, which conflated the two: a sample found 16 of 25 "idle" turns were
+  this, at gap 1, with no charge even offered. A different bug, and it was hiding.
 * **rounds** -- the balance guard only, against #217's 7-8.
 
 The baseline lives in `scripts/fixtures/scorecard.json` and is committed, which is
@@ -161,10 +164,19 @@ def play(level: int, seed: int, pol: Counted, cap: int = 30) -> int:
         now = min((distance(after.square, q.square) for e in enemies(world, actor)
                    if alive(world, e) and (q := world.get(e, Position)) is not None),
                   default=99) if after else 99
-        if (D.fights_in_melee(world, actor)
-                and pol.n[f"{side_of(world, actor)}/attacks"] == hits
-                and now >= gap):
-            pol.n[f"{side_of(world, actor)}/idle_melee"] += 1
+        # **Two different failures, and one counter could not tell them apart.**
+        # "Neither attacked nor closed" lumped a creature that stalled out of reach
+        # together with one standing next to an enemy and not swinging -- and a
+        # sample showed 16 of 25 were the second kind, at gap 1, with no charge even
+        # offered. The first is an approach problem and the guard this was built to
+        # be; the second is a creature with nothing it can use, which is a different
+        # bug and was hiding inside the same number.
+        if D.fights_in_melee(world, actor) \
+                and pol.n[f"{side_of(world, actor)}/attacks"] == hits:
+            if gap <= 1:
+                pol.n[f"{side_of(world, actor)}/adjacent_idle"] += 1
+            elif now >= gap:
+                pol.n[f"{side_of(world, actor)}/idle_melee"] += 1
         encounter.advance()
     return world.round
 
@@ -193,6 +205,7 @@ def measure(levels: tuple[int, ...]) -> dict:
                 "charge_offered": pol.n[f"{side}/charge_offered"],
                 "charge_taken": pol.n[f"{side}/charge_taken"],
                 "idle_melee": pol.n[f"{side}/idle_melee"],
+                "adjacent_idle": pol.n[f"{side}/adjacent_idle"],
                 "ap_spent": pol.n[f"{side}/ap_spent"],
                 "ap_standard": pol.n[f"{side}/ap_standard"],
                 "melee_turns": pol.n[f"{side}/melee_turns"],
@@ -210,7 +223,8 @@ ROWS = [
     ("tie_size_mean", "mean options tied", "lower"),
     ("charge_taken", "charges taken", "higher"),
     ("charge_offered", "charges offered", "-"),
-    ("idle_melee", "melee turns neither attacking nor closing", "lower"),
+    ("idle_melee", "out of reach and did not close", "lower"),
+    ("adjacent_idle", "adjacent to an enemy and did not attack", "lower"),
     ("ap_spent", "action points spent", "-"),
     ("ap_standard", "...of them buying a standard action", "higher"),
     ("decisions", "decisions", "-"),
