@@ -638,13 +638,15 @@ def f2092(c: Cast) -> None:
 
 
 @power("f1938", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
+       reach=PERSONAL, target=SELF)
 def f1938(c: Cast) -> None:
-    """**Re-aimed off `feat.associated_powers`.** This card prints no
-    Associated Powers list and never did -- it names one power, in prose
-    and in lower case, as "the <class> power <name>". That is
-    `spec.power_ref()`, the group the other fifty prose-named powers are
-    in. `c.grant_row` is the verb and the ref is what is missing."""
+    """The granted row, once per encounter rather than at will.
+
+    The ref was the only thing missing -- this card prints no Associated
+    Powers list, so it named its power in prose and nothing resolved it.
+    `uses=1` is the whole of "but you can use it only once per encounter";
+    `grant_row` counts the uses itself. Same shape as f1939 below."""
+    c.grant_row("p3773", uses=1)
 
 
 @power("f1939", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
