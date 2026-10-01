@@ -1598,9 +1598,18 @@ def f3637(c: Cast) -> None:
 
 
 @power("f3638", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=DICE)
+       reach=PERSONAL, target=SELF)
 def f3638(c: Cast) -> None:
-    """The whole benefit is the dice another row rolls."""
+    """Each shroud is worth a d8 rather than a d6 when they are invoked.
+
+    `p9400` reads the **face** off `c.dice_for` and keeps the count for
+    itself, which is the shape the card asks for: "per shroud" means the feat
+    chooses the die and the board chooses how many.
+
+    The rest of the sentence raises a flat addition at 11th and 21st level.
+    Out of scope rather than missing -- this build stops at 10, and the
+    feature's own version of that addition is already written the same way."""
+    c.change_dice("p9400", "1d8")
 
 
 @power("f3639", level=1, cls="", usage=ENCOUNTER, action=NONE,

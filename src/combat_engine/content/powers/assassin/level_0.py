@@ -156,7 +156,11 @@ def p9400(c: Cast) -> None:
             return
         count = c.shrouds(ev.target) - (1 if isinstance(ev, Miss) else 0)
         if count > 0:
-            c.flat(c.roll(f"{count}d6") + count * per, on=ev.target)
+            # **Per shroud**, which is why the face is read and the count is
+            # not. f3638 raises the die each shroud is worth; how many there
+            # are is the board's business and no feat's.
+            face = c.dice_for(c.ref, "1d6").split("d")[-1]
+            c.flat(c.roll(f"{count}d{face}") + count * per, on=ev.target)
         c.spend_shrouds()
 
     c.watch(Hit, invoke, until=When.ENCOUNTER, on=c.me, label=f"{c.ref} shrouds")

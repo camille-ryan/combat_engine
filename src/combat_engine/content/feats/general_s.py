@@ -1524,10 +1524,17 @@ def f3785(c: Cast) -> None:
 
 @power("f3786", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.change_dice()", "c.counts_as(property=)"))
+       dropped=("c.counts_as(property=)",))
 def f3786(c: Cast) -> None:
-    """The off-hand property and a power's dice both change the numbers a
-    row was declared with."""
+    """The racial burst rolls d8s, and the unarmed attack gains a property.
+
+    The dice half is written -- `p5599` asks `c.dice_for` for its die now.
+
+    The property half is the dropped clause: a weapon's properties are
+    columns on the row the character is holding, shared by every copy of that
+    weapon, so "this character's counts as off-hand" has nowhere to be
+    recorded. Same verb f3784 beside it wants, and the same reason."""
+    c.change_dice("p5599", "1d8")
 
 
 @power("f3787", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

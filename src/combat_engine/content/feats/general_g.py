@@ -1267,26 +1267,46 @@ def f621(c: Cast) -> None:
 
 
 @power("f999", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_dice()",))
+       reach=PERSONAL, target=SELF)
 def f999(c: Cast) -> None:
-    """Enlarges the die a named racial power adds. The power is a ref and
-    the die is inside its body, which this row cannot reach."""
+    """The racial power adds a d8 to the roll it answers, not a d6.
+
+    `p6186` reads its die through `c.dice_for`, so this is the one line. No
+    gate: the card narrows by nothing, unlike f1836, which raises the same
+    power's die only on a Nature check and has to say so."""
+    c.change_dice("p6186", "1d8")
 
 
 @power("f1061", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_dice()",))
+       reach=PERSONAL, target=SELF)
 def f1061(c: Cast) -> None:
-    """Steps one named power's damage dice up a size. Same gap as f999."""
+    """The racial attack rolls d8s for damage instead of d6s.
+
+    One die, so "1d8" is the whole sentence; `p2480` asks `c.dice_for` for
+    it rather than carrying the literal it used to."""
+    c.change_dice("p2480", "1d8")
 
 
 @power("f921", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.change_dice()", "c.counts_as(keyword=)"))
+       dropped=("c.counts_as(keyword=)",))
 def f921(c: Cast) -> None:
-    """Sets one named power's damage outright and adds Reliable to it.
-    `f923` beside this one can pay an extra die through
-    `c.bonus(dice=)`; *replacing* the printed dice cannot be done that
-    way, so unlike f923 nothing here works."""
+    """Gives one named power damage it does not print, and the keyword that
+    hands it back on a miss.
+
+    The damage is written. `p1767` deals none on its card -- it is a knock-down
+    burst -- so this is `c.change_dice` turning a die **on** rather than
+    raising one: that row asks for a die defaulting to the empty string, and
+    only this feat ever answers.
+
+    **Reliable is what is dropped, and it is one named clause.** `dsl.use`
+    reads `Keyword.RELIABLE in p.keywords` -- the row's *declared* keywords,
+    which are the same tuple for every character holding it. Saying "this
+    character's copy also has it" needs a per-creature set and a reader that
+    consults it, which is the verb named above and not a sentence this row
+    can write. The row plays without it; it simply spends on a miss.
+    """
+    c.change_dice("p1767", "1d8")
 
 
 @power("f725", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

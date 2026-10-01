@@ -640,7 +640,9 @@ def p2480(c: Cast) -> None:
     if foe is not None:
         c.run_at(foe)
     if c.strike():
-        c.damage("1d6", c.str_mod)
+        # Asked for rather than written in: f1061 raises this die, and a
+        # literal here is a sentence that row cannot reach.
+        c.damage(c.dice_for(c.ref, "1d6"), c.str_mod)
         c.prone()
 
 

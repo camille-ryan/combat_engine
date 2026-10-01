@@ -796,9 +796,17 @@ def p10044(c: Cast) -> None:
 )
 def p1767(c: Cast) -> None:
     """"Touching the ground" is left as it reads: a flying creature is not a
-    thing the burst can currently be asked about."""
+    thing the burst can currently be asked about.
+
+    **The card deals no damage, and the die is still asked for.** f921 gives
+    this power one, which is `c.change_dice` used to turn damage on rather
+    than to raise it -- the default is the empty string, so a character
+    without that feat rolls nothing, exactly as printed."""
     best = _best_of(c, c.str_mod, c.con_mod, c.dex_mod)
     if c.strike(plus=max(0, best - c.str_mod)):
+        hurt = c.dice_for(c.ref, "")
+        if hurt:
+            c.damage(hurt, best)
         c.prone()
 
 
@@ -960,9 +968,10 @@ def p16688(c: Cast) -> None:
     attack=Attack(STR, vs=REF, plus=2),
 )
 def p5599(c: Cast) -> None:
+    """The die is asked for, not written in: f3786 raises it to a d8."""
     best = _best_of(c, c.str_mod, c.con_mod, c.dex_mod)
     if c.strike(plus=max(0, best - c.str_mod)):
-        c.damage("1d6", best)
+        c.damage(c.dice_for(c.ref, "1d6"), best)
 
 
 @power(
