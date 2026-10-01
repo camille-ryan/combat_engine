@@ -118,7 +118,13 @@ from combat_engine.engine.query import (
 #: A power the spec names in prose and that has no ref **anywhere** --
 #: not in the tree, not in the compendium. Nothing can watch it and
 #: nothing will import it either.
-PROSE = ("spec.power_ref()",)
+#: **Re-aimed to the mechanic, not the ref.** Both rows that used this were
+#: marked "the brief prints a name and gives no ref", which is true -- the
+#: compendium holds no row of any kind by that name -- but it is not what
+#: would unblock them. Their clauses ride on the *act* of defiling, and
+#: `c.on_defiling()` is the hook two other rows already wait on. A ref would
+#: not help; the hook would.
+PROSE = ("c.on_defiling()",)
 #: A rider on a row the compendium has and this build does not import.
 #: `etl/build.py` takes powers whose `Class` is one of the 25 playable
 #: classes, plus a second pass for the races; `Class = 'Theme Power'` and
@@ -544,8 +550,12 @@ def f3190(c: Cast) -> None:
     prerequisite parser files the same ability under `kind = 'power'`
     (six feats share the term), and the compendium holds no row of any
     kind by that name -- no Power, no Feat, no Theme, no Class. So there
-    is no ref to import and none to borrow, which is what
-    `spec.power_ref()` says and `c.class_feature()` did not."""
+    is no ref to import and none to borrow.
+
+    **But a ref is not what this row needs.** The clause rides on the *act* of
+    defiling, not on naming the ability, so the gap is the hook --
+    `c.on_defiling()`, which two item blocks already wait on -- and the marker
+    says that now rather than asking for a ref that cannot exist."""
 
 
 @power("f3191", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -1451,14 +1451,27 @@ def f3632(c: Cast) -> None:
 
 
 @power("f3633", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=NAMED,
+       reach=PERSONAL, target=SELF,
        proficiency=("w:rod", "w:wand"))
 def f3633(c: Cast) -> None:
-    """Re-aimed off `c.pact_boon`. A pact is a build leg and `c.build`
-    reads one, and the warlock's legs are declared -- so the choice is
-    not the hold. What the feat hands over is "the at-will attack power
-    and the utility power the boon grants at 1st level", and the brief
-    names the boon in prose and its two powers not at all."""
+    """The binder's pact boon, and the two rows it grants.
+
+    `c.pact_boon` was never the hold -- a pact is a build leg and the
+    warlock's legs are declared. The hold was that the brief names the boon in
+    prose and its powers not at all.
+
+    **Which boon is settled by the compendium rather than guessed.** The
+    binder's own class page is entirely about vestiges -- it describes keeping
+    one active, and names the two a beginning character has -- so "a binder
+    pact boon" is the Vestige Pact's, which is `cf:warlock-f1s6`. Its at-will
+    attack is `p6855` and the boon itself is `cf:warlock-f1c12`; both are
+    declared.
+
+    "As encounter powers" is `uses=1` on each, which is the only thing the
+    feat changes about them: a pact warlock has them at will.
+    """
+    for ref in ("p6855", "cf:warlock-f1c12"):
+        c.grant_row(ref, on=c.me, until=When.ENCOUNTER, uses=1)
 
 
 # -- the assassin's shrouds -------------------------------------------------

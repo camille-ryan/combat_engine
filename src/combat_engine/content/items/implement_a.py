@@ -883,11 +883,21 @@ def i2314x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
+    todo=("c.fell_might()",),
 )
 def i2318p1(c: Cast) -> None:
-    """`c.restore_use` is the verb; the brief prints the class feature by
-    name and never gives its ref."""
+    """Gives back a pact boon's once-per-encounter charge.
+
+    **Re-aimed off `spec.power_ref()`.** The brief does print the thing by
+    name and give no ref, but that is not the gap: what the card restores is
+    the Sorcerer-King pact boon's charge, and the compendium describes it in
+    the warlock class text rather than filing it as a row. `cf:warlock-f1s4`
+    is the feature and it is a row; the charge inside it is not, which is
+    exactly what that row's own `c.fell_might()` marker says.
+
+    `c.restore_use` is ready for the moment there is a use to restore. Four
+    other rows wait on the same charge, so this joins a group that means
+    something instead of a group that cannot be satisfied."""
 
 
 @power(
