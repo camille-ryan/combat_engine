@@ -276,6 +276,18 @@ DOCTRINE: dict[str, float] = {
     # a close blast onto the whole enemy party being the case that makes it
     # obvious. Same weight as the two above, because it is the same currency.
     "reach_gained": SHARE,
+    # **Standing in your own blast.** `policy.features` excludes the caster from
+    # `allies_caught` -- `t != actor` -- which it does so that a `target=SELF` buff
+    # is not read as friendly fire, and which makes catching *yourself* in your own
+    # area attack completely free. Two reviewers of a level-10 sweep found the same
+    # wizard doing it for seven rounds and dying of it. Priced against its own hit
+    # points, exactly like `threat_conceded`.
+    "self_harm": -SHARE,
+    # **A buff that is already on you.** Re-applying it adds nothing and costs the
+    # action. `policy.features` has `swaps_stance` for the `STANCE`-tagged case and
+    # nothing for the rest, so a defender spent three consecutive rounds re-casting
+    # the same inert self-buff while the party fought without it.
+    "already_on": -4.0,
     # Flanking is +2 to hit for two creatures rather than one, and the guides
     # treat setting one up as a striker's ordinary business.
     "takes_flank": 0.6,
@@ -313,9 +325,22 @@ DOCTRINE: dict[str, float] = {
 #: which is the same job from the policy's point of view.
 _HEAL_VERBS = ("c.heal(", "c.surge(", "c.temp_hp(")
 
+#: The verbs a body calls to *help* an ally without healing it -- a bonus to
+#: attack or defence, a resistance, a saving throw. Read for the same reason the
+#: healing verbs are: no header field says a row is beneficial.
+#:
+#: **Found by reading a transcript.** A party-wide +1 to attack scored -15.56 and
+#: was never once chosen, because the friendly-fire exemption recognised healing
+#: and nothing else -- so `allies_caught` charged -7.0 per ally for handing them a
+#: bonus. Free value the scorer read as a mistake.
+_HELP_VERBS = ("c.bonus(", "c.resist(", "c.save_bonus(", "c.regen(")
+
 #: Answers cached per ref -- reading a body with `inspect.getsource` is far too
 #: slow to do once per option per turn.
 _HEALS: dict[str, bool] = {}
+
+#: Same, for the helping verbs.
+_HELPS: dict[str, bool] = {}
 
 
 def heals(ref: str) -> bool:
@@ -341,6 +366,31 @@ def heals(ref: str) -> bool:
         src = ""
     out = _HEALS[ref] = any(v in src for v in _HEAL_VERBS)
     return out
+
+
+def benefits(ref: str) -> bool:
+    """Is this row *for* the creatures it targets, rather than against them?
+
+    Heals, and also buffs: a row with **no attack line** whose body hands out a
+    bonus, a resistance or a regeneration is helping whoever it names. The
+    no-attack-line half matters -- plenty of attacks also lay a bonus on the
+    caster, and those are not support.
+    """
+    if not ref:
+        return False
+    if heals(ref):
+        return True
+    p = get(ref)
+    if p is None or p.attack is not None or p.body is None:
+        return False
+    got = _HELPS.get(ref)
+    if got is None:
+        try:
+            src = inspect.getsource(p.body)
+        except (OSError, TypeError):
+            src = ""
+        got = _HELPS[ref] = any(v in src for v in _HELP_VERBS)
+    return got
 
 
 #: Living enemies, per (board, round, creature). A board fact, and it was being
@@ -386,10 +436,15 @@ def _square_of(world: Any, eid: int) -> Any:
     return pos.square if pos is not None else None
 
 
-#: What a creature swings when handed an opportunity attack. A melee basic, for
-#: all but the few monsters whose opportunity action is something else -- and for
-#: those this under-prices the provocation rather than over-prices it.
-_BASIC = "mba"
+#: What a creature swings when handed an opportunity attack, when it has no
+#: `Powers.basic` of its own to name.
+#:
+#: **Read off the creature, not hard-coded.** `Powers.basic` says it plainly -- "a
+#: monster points at one of its own abilities; everyone else uses the engine's melee
+#: basic" -- and this asked for the literal `"mba"` from everybody. A monster has no
+#: row by that id, so `row_damage` returned 0 and **every provocation against a
+#: monster was priced at nothing**: two enemies standing over the wizard came to
+#: -0.25 where the flat penalty alone is -9.
 
 
 def provokers(world: Any, actor: int, dest: Any) -> list[int]:
@@ -416,26 +471,80 @@ def provokers(world: Any, actor: int, dest: Any) -> list[int]:
     return out
 
 
+def _basic_of(world: Any, eid: int) -> str:
+    """Which row this creature swings on an opportunity attack."""
+    from .components import Powers
+
+    known = world.get(eid, Powers)
+    return (known.basic if known is not None and known.basic else "mba")
+
+
+def watchers(world: Any, actor: int) -> list[int]:
+    """Enemies whose reach already covers `actor`, so each gets a free swing.
+
+    The *other* way a creature concedes an opportunity attack, and the commoner one:
+    not by walking out of a reach but by firing a ranged or area power while someone
+    is standing over it. `provokers` answers the movement case; this answers this
+    one, and they are different creatures.
+
+    **Found by reading a transcript.** A wizard fired a ranged row with three melee
+    enemies on it, took six opportunity attacks and about 27 damage in one turn, and
+    the scorer had charged it a flat -9 -- the same as it would have charged for one
+    enemy, because `threat_conceded` was wired into the movement branch alone.
+    """
+    from .grid import distance
+    from .policy import _reach_of
+
+    here = _square_of(world, actor)
+    if here is None:
+        return []
+    out = []
+    for foe in foes(world, actor):
+        there = _square_of(world, foe)
+        if there is not None and distance(here, there) <= _reach_of(world, foe):
+            out.append(foe)
+    return out
+
+
 def conceded(world: Any, actor: int, foes: list[int]) -> float:
-    """Expected damage those opportunity attacks deal, as a share of my side's hp.
+    """What conceding these swings costs, as a share of **my own** hit points.
 
     **Camille's correction, and the reason this is not a flat number.** A
-    provocation is priced at what it actually hands over: "if the expected damage
-    is 10 out of 100 total party hp, that's quite significant", and a -5.0 that
-    does not move with the hitter cannot say that. Expressed in the same currency
-    as `threat_removed` -- a share of a side's health -- so the two can be
-    subtracted from one another and the comparison means something.
+    provocation is priced at what it actually hands over, and a -5.0 that does not
+    move with the hitter cannot say that: a brute's free swing and a minion's are
+    the same -5.0 to `LinearPolicy` and are not remotely the same event.
 
-    A brute's free swing and a minion's are the same -5.0 to `LinearPolicy` and
-    are not remotely the same event.
+    **Against my own hit points, not my side's pool.** Camille's second refinement,
+    and it is the one that matters: 15 damage is an inconvenience to an 85-hit-point
+    fighter and most of a wizard. Measured against the pool, the wizard's danger
+    disappeared into the party's total, and all three reviewers of a level-10 sweep
+    independently found the same death -- a wizard taking the same opportunity
+    attack four rounds running, losing 55 of 61 hit points, never stepping away.
+    Divided by its own health, that fourth provocation prices at nearly everything
+    it has.
+
+    Clamped at 1, because a creature can only be killed once, so the figure reads
+    directly as "this fraction of the way to dropping me".
+
+    **Scaling it by the creature's own `threat` was tried and is wrong.** It keeps
+    the shared currency -- losing me costs the enemy my whole three rounds -- but it
+    inverts the thing this is for: the fighter's output is worth more than the
+    wizard's, so the product made a swing at the 85-hit-point fighter *dearer* than
+    the same swing at the 63-hit-point wizard. Fragility is the signal wanted here
+    and hit points are what carry it.
+
+    **It overstates non-lethal damage and that is a deliberate simplification.**
+    Losing a quarter of your hit points does not cut your output by a quarter -- in
+    these rules you fight at full strength until you drop. Read it as risk rather
+    than as loss: a quarter of the way to contributing nothing.
     """
-    mine = world.get(actor, Side)
-    if mine is None or not foes:
+    if not foes:
         return 0.0
-    ours = T.pool(world, mine.team)
-    if not ours:
+    health = world.get(actor, Health)
+    if health is None or health.hp <= 0:
         return 0.0
-    return sum(T.row_damage(world, f, _BASIC) for f in foes) / ours
+    incoming = sum(T.row_damage(world, f, _basic_of(world, f)) for f in foes)
+    return min(1.0, incoming / health.hp)
 
 
 def _in_area(world: Any, actor: int, origin: Any, ref: str) -> int:
@@ -769,6 +878,35 @@ def doctrine_features(
             if gained:
                 f["reach_gained"] = gained
 
+    # **The other way a swing is conceded, and the commoner one.** A ranged or area
+    # row used with somebody standing over you hands *each* of them an attack, and
+    # `provokes_now` charges a flat -5.0 for it however many there are. Priced here
+    # per enemy, the same way the movement case is, so firing next to three costs
+    # three times firing next to one.
+    if action.ref and not f.get("threat_conceded"):
+        p = get(action.ref)
+        if p is not None and p.provokes:
+            standing = watchers(world, actor)
+            if standing:
+                f["threat_conceded"] = conceded(world, actor, standing)
+
+    # **Would this land on me?** An area attack centred near the caster catches it,
+    # and nothing in `policy.features` can see that.
+    if action.ref and actor in action.targets and _is_attack(action.ref):
+        health = world.get(actor, Health)
+        if health is not None and health.hp > 0:
+            mine_dmg = T.row_damage(world, actor, action.ref)
+            if mine_dmg > 0:
+                f["self_harm"] = min(1.0, mine_dmg / health.hp)
+
+    # **Is this already running?** An effect labelled with the row's own ref is
+    # already on the creature, so casting it again buys nothing. `Effect.label` is
+    # prefixed with the ref that laid it, which is what makes this readable.
+    on_myself = action.ref and (not action.targets or tuple(action.targets) == (actor,))
+    if on_myself and any(eff.label.startswith(action.ref)
+                         for eff in world.effects.of(actor)):
+        f["already_on"] = 1.0
+
     # -- healing --------------------------------------------------------------
     if action.ref and heals(action.ref):
         given = 0.0
@@ -903,10 +1041,10 @@ class DoctrinePolicy(LinearPolicy):
         self, world: Any, encounter: Encounter, actor: int, action: Action
     ) -> float:
         f = features(world, encounter, actor, action)
-        if action.ref and heals(action.ref):
-            # **A heal is not friendly fire.** `allies_caught` is -7.0 and exists
-            # to stop a burst landing on your own party; a heal targets allies on
-            # purpose. Cleared before `weigh` rather than compensated for after,
+        if action.ref and benefits(action.ref):
+            # **Help is not friendly fire.** `allies_caught` is -7.0 and exists to
+            # stop a burst landing on your own party; a heal or a buff names allies
+            # on purpose. Cleared before `weigh` rather than compensated for after,
             # so the number is never wrong in between.
             f["allies_caught"] = 0.0
         total = self.weigh(f, action)
