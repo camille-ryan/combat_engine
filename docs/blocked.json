@@ -1,4 +1,28 @@
 {
+  "cf:artificer-infusions": {
+    "wants": "a shared per-encounter allowance of more than one use -- group= counts to one -- and chargen.power_choice() for the card the page offers in place of another",
+    "why": "the fourth feature is the budget the three declared infusion rows draw on: two per extended rest, one per round, three from 16th level. Each row is written as its own encounter power with once_per_round, which is three separate allowances rather than one shared one. The second half was filed as chargen.BUILDS and that was the wrong symbol: a Build records which secondary a fork leans on and carries no card list, so a leg could not express one card taken in place of another"
+  },
+  "cf:artificer-items": {
+    "wants": "magic items in the engine: an item with a daily power, Gear recording what is worn or carried, and an event announcing that an item's daily power was used",
+    "why": "three of the artificer's four class-page features are about magic items and none of the three has a subject. One banks a charge in a weapon or implement that its wielder spends for a bonus to an attack roll already made; one recharges an item's daily power; one pays an ally temporary hit points whenever that ally uses an item's daily power. Gear carries weapons and armour and no items at all, every chassis weapon has enhancement 0, and nothing anywhere uses an item power, so each of the three would be a hook nothing ever fires"
+  },
+  "cf:assassin-training-guild": {
+    "wants": "c.no_encounter_attacks(), or a c.forbid that takes a class-and-usage set rather than one ref",
+    "why": "the second of the two printed methods is a granted row -- p14372, which chargen.loadout already deals -- plus the loss of every encounter attack power in the class. The grant half is written as a c.forbid on the other leg; the loss half would be a hand-listed set of refs that goes stale the moment a level is added, and a half-written version would leave an assassin holding the encounter powers its method says it never learned"
+  },
+  "cf:barbarian-might-rest": {
+    "wants": "the cf:barbarian-f1s0 row, which is the one option of the four nobody has declared",
+    "why": "filed when the compendium carried only the first option's text and the class had two derived legs. Both are fixed: class_feature carries cf:barbarian-f1s0 .. f1s3 and chargen.BUILDS[\"barbarian\"] has five named legs that 23 riders ask about. Three of the four sub-option rows are written in features/primal_shadow.py; the fourth is named by a feat as todo=(\"cf:barbarian-f1s0\",) and has no declaration"
+  },
+  "cf:barbarian-rage": {
+    "wants": "Keyword.RAGE on the class's daily attack rows -- the p4807 gap -- so that the row this feature grants at 5th level exists for c.grant_row to hand over",
+    "why": "the feature is two sentences and neither can be said. Every daily attack power of the class carries a keyword nothing declares, and the level-5 row the second sentence grants is p4807, which is blocked on that same keyword. Until the keyword exists the feature has nothing to mark and nothing to give, and until now nothing recorded that the feature itself was missing -- only the row it grants"
+  },
+  "cf:druid-at-wills": {
+    "wants": "a per-class at-will count in chargen.SLOTS, and a composition rule chargen.loadout can honour",
+    "why": "the class's first printed feature is that a druid begins with three at-will attack powers and that at least one of them, and no more than two, must have the beast form keyword. SLOTS is two at-wills for every class in the game, and loadout picks them by the build's primary ability with no notion of a required keyword -- so the druid it deals has two at-wills and neither is a beast form row, which leaves the class's other feature, the shape change, leading nowhere. Nothing recorded it: the shape change is declared, so the class read as finished"
+  },
   "cf:fighter-opening-stop": {
     "wants": "c.halt(on=), plus movement.walk asking whether the mover may still move between steps rather than only before the first one",
     "why": "the card is imported now and its second sentence is a real clause -- an enemy hit by the opportunity attack stops moving, if a move provoked it -- but the window opens inside walk's loop and step never re-asks can_move, so immobilising the mover there leaves it walking the rest of its path"
@@ -7,81 +31,17 @@
     "wants": "a hand key in the attack context (the p7399 gap), Gear recording a free/empty off hand, an armour field on chargen.Build, and improvised weapons",
     "why": "three of the six talents are left: one turns on wielding an off-hand weapon, one on an empty off hand, and one on improvised weapons and on not wearing heavy armour -- the chassis wears scale and Build cannot say otherwise, so each would be a gate that is false for every fighter in the tree"
   },
-  "cf:rogue-melee-talent-die": {
-    "wants": "a thrown light blade in chargen, plus c.step_die() -- a modifier that moves a weapon's damage die one size",
-    "why": "the card's first sentence raises the die of a weapon no chassis carries, and nothing in the modifier language steps a die at all, so both halves of the clause are missing rather than one"
-  },
-  "cf:wizard-implement-rest": {
-    "wants": "legs in chargen.BUILDS[\"wizard\"] for the three masteries with none, plus c.store_row(ref) for the one that banks an unprepared encounter power and a summon-time damage hook for the one that pays its summoned creatures",
-    "why": "the page's build sections name a class feature for two builds the tree has no leg for, and a third mastery no build names at all. Each of the three is a real clause -- bank a power, pay a summoning, repeat a missed illusion against a second target -- and none of the three has anything for c.build to answer, so adding a leg first would deal a wizard whose mastery does nothing. The docstring on cf:wizard-arcanist-f0 claimed this file already said so; it did not"
-  },
-  "cf:sorcerer-soul-pierce": {
-    "wants": "c.ignore_resistance(dtype, up_to=), read by resolve.damage before Defences.resist is subtracted",
-    "why": "both written halves of the sorcerer's source end with the same clause -- the caster's arcane powers ignore a target's resistance to the sworn type up to the value of the caster's own -- and resistance is subtracted from a flat number on the target with nothing on the attacker's side consulted, so the clause has nowhere to be read"
-  },
-  "cf:sorcerer-soul-nat20": {
-    "wants": "an event announcing a power use's finished effects (the p10354 gap), carrying the natural roll",
-    "why": "each source ends with a rider on a natural 20 -- and one of them a second on a natural 1 -- that lands after the attack's other effects. AttackRolled is the only event carrying the natural and it fires before the damage, so a slide-and-prone hung there would resolve in the wrong order, and Hit carries no natural at all"
-  },
-  "cf:sorcerer-soul-rest": {
-    "wants": "events.ShortRested -- an event a rest emits, so a feature clocked on one has something to run inside",
-    "why": "the page prints four sources. Three have a leg in chargen.BUILDS[\"sorcerer\"] now and are written; the fourth is a three-phase cycle chosen at the end of a short or an extended rest and stepped on by being bloodied or spending a daily. turns.short_rest exists and emits nothing, so there is no moment at which a phase could be picked, and a leg carrying one phase of three would deal a sorcerer a feature that never advances"
-  },
-  "cf:warlord-archer": {
-    "wants": "c.attacks_with(ability=)",
-    "why": "spec.py can read the class page now and the card is three clauses: it drops two proficiencies, adds one, and lets a ranged basic attack with a bow roll Strength for the attack and the damage. basic.RANGED fixes its ability in the header and nothing can rewrite it for one creature; a bow on a warlord leg in chargen.BUILDS is wanted too, because no leg carries one and there would be nothing to shoot with"
-  },
-  "p4807": {
-    "wants": "Keyword.RAGE declared on the 41 rage rows (the compendium prints it in their type line), plus c.expend(ref)",
-    "why": "nothing at runtime tells a rage daily from any other barbarian daily; group= is the wrong field, the engine reads it as one-per-encounter"
-  },
-  "cf:barbarian-rage": {
-    "wants": "Keyword.RAGE on the class's daily attack rows -- the p4807 gap -- so that the row this feature grants at 5th level exists for c.grant_row to hand over",
-    "why": "the feature is two sentences and neither can be said. Every daily attack power of the class carries a keyword nothing declares, and the level-5 row the second sentence grants is p4807, which is blocked on that same keyword. Until the keyword exists the feature has nothing to mark and nothing to give, and until now nothing recorded that the feature itself was missing -- only the row it grants"
-  },
-  "cf:barbarian-might-rest": {
-    "wants": "the cf:barbarian-f1s0 row, which is the one option of the four nobody has declared",
-    "why": "filed when the compendium carried only the first option's text and the class had two derived legs. Both are fixed: class_feature carries cf:barbarian-f1s0 .. f1s3 and chargen.BUILDS[\"barbarian\"] has five named legs that 23 riders ask about. Three of the four sub-option rows are written in features/primal_shadow.py; the fourth is named by a feat as todo=(\"cf:barbarian-f1s0\",) and has no declaration"
-  },
-  "cf:assassin-training-guild": {
-    "wants": "c.no_encounter_attacks(), or a c.forbid that takes a class-and-usage set rather than one ref",
-    "why": "the second of the two printed methods is a granted row -- p14372, which chargen.loadout already deals -- plus the loss of every encounter attack power in the class. The grant half is written as a c.forbid on the other leg; the loss half would be a hand-listed set of refs that goes stale the moment a level is added, and a half-written version would leave an assassin holding the encounter powers its method says it never learned"
+  "cf:invoker-covenant-channel": {
+    "wants": "something that says which covenant grants which of the two channelled rows -- the covenant named in each row's own spec, or a build column on class_feature filled in for this class",
+    "why": "each covenant hands over one channel divinity power and the tree has both, p5186 and p7150, dealt to every invoker by loadout. cf:invoker-f1 writes the manifestation half, which the page prints in full for both covenants, but the specs are sanitised: neither row says what it is called and neither covenant's clause says what its power does. Forbidding the wrong one would take a working row off the board to express half a sentence"
   },
   "cf:monk-discipline": {
     "wants": "a per-round sibling of the group= header field, plus the full discipline keyword declared on the rows that print it",
     "why": "the printed rule is one such power per round across a set of rows, and group= is the only cross-row budget the engine has -- it is per encounter, which is a different sentence. Nothing marks which rows are in the set either, so the budget would have no members to count"
   },
-  "cf:sorcerer-elementalist": {
-    "wants": "c.vulnerable gated on the caster's own attacks rather than on a damage type, plus a saving-throw bonus against ongoing damage of one type",
-    "why": "the leg half is done -- chargen.BUILDS[\"sorcerer\"] carries one leg per elemental specialty, each holding the damage type its specialty is sworn to, and every row in features/sorcerer.py gates on one with on_leg. What is left is two clauses no modifier can be: \"vulnerable 3 to your elemental attacks\" names the attacker and c.vulnerable names a type, and the saving-throw bonus is against ongoing damage of one kind rather than against a condition"
-  },
-  "cf:warden-f1-rest": {
-    "wants": "nothing but the rows: cf:warden-f1s0 .. f1s3 are four refs nobody has declared",
-    "why": "this was filed against chargen.BUILDS and against an event announcing a second wind, and neither is missing any more. The class has a named leg per printed option and cf:warden-f1 asks all four by name; events.SecondWind exists and features/guardians.py already imports it. What is left is four undeclared sub-option refs, one second-wind rider each -- work, not a gap"
-  },
-  "cf:swordmage-f0": {
-    "wants": "taking an item up off the ground, and a Gear that records a weapon the creature owns but is not holding",
-    "why": "the only clause of this feature with a reading inside a fight is calling the bonded blade back to hand as a standard action from ten squares away. c.disarm drops a weapon into the disarmed creature's square and nothing anywhere picks one back up, so there is no state for the recall to change and the row would be a standard action that does nothing. The rest of the card is an hour of meditation between fights"
-  },
-  "cf:bard-f5": {
-    "wants": "a short rest in the engine, with healing surges spent at the end of one",
-    "why": "the whole feature is extra hit points per surge spent at the end of a short rest, and Encounter has no rest of any kind -- the same gap cf:sorcerer-soul-rest names. There is no moment for the clause to be read at, and the one-of-these-at-a-time rule it ends with has nothing to arbitrate"
-  },
-  "cf:wizard-familiar": {
-    "wants": "something that puts a familiar on the board -- a Companion of kind \"familiar\" -- plus a leg in chargen.BUILDS[\"wizard\"] for the second version of the class the page prints",
-    "why": "the class page carries a whole second set of features that nothing in the tree had a ref for, and both of its combat clauses hang on a familiar: a damage resistance for the wizard and its allies while adjacent to it, and a bonus feat whose only in-fight content is that the familiar exists at all. c.familiar and c.familiar_mode are built and four wizard rows already read them, but no row anywhere creates one, so every such call answers None and this feature would be a resistance nobody ever gets. The third feature of that set is four cantrips, which are declared and need nothing"
-  },
-  "cf:druid-at-wills": {
-    "wants": "a per-class at-will count in chargen.SLOTS, and a composition rule chargen.loadout can honour",
-    "why": "the class's first printed feature is that a druid begins with three at-will attack powers and that at least one of them, and no more than two, must have the beast form keyword. SLOTS is two at-wills for every class in the game, and loadout picks them by the build's primary ability with no notion of a required keyword -- so the druid it deals has two at-wills and neither is a beast form row, which leaves the class's other feature, the shape change, leading nowhere. Nothing recorded it: the shape change is declared, so the class read as finished"
-  },
-  "cf:invoker-covenant-channel": {
-    "wants": "something that says which covenant grants which of the two channelled rows -- the covenant named in each row's own spec, or a build column on class_feature filled in for this class",
-    "why": "each covenant hands over one channel divinity power and the tree has both, p5186 and p7150, dealt to every invoker by loadout. cf:invoker-f1 writes the manifestation half, which the page prints in full for both covenants, but the specs are sanitised: neither row says what it is called and neither covenant's clause says what its power does. Forbidding the wrong one would take a working row off the board to express half a sentence"
-  },
-  "cf:shaman-spirit": {
-    "wants": "a ref for the fifth companion spirit, whose block the importer glued onto the end of cf:shaman-f0c0 instead of giving it a cf:shaman-f0sN of its own",
-    "why": "four of the five spirits now have a sub-option ref with their boon printed on it, and chargen.BUILDS[\"shaman\"] now carries a leg per spirit, so cf:shaman-f0s0 to cf:shaman-f0s3 are written and each takes the other spirits' two rows away from a shaman that did not choose it. The fifth has no ref, so its boon -- a saving-throw bonus beside the spirit, and a free-action call once a turn -- has nothing to decorate, and its two rows, p12865 and p12866, are the only ones loadout still leaves on every shaman whatever leg it is on"
+  "cf:rogue-melee-talent-die": {
+    "wants": "a thrown light blade in chargen, plus c.step_die() -- a modifier that moves a weapon's damage die one size",
+    "why": "the card's first sentence raises the die of a weapon no chassis carries, and nothing in the modifier language steps a die at all, so both halves of the clause are missing rather than one"
   },
   "cf:runepriest-rune-switch": {
     "wants": "Keyword.RUNIC declared on the rows whose type line prints it, plus a rune offered when one of them is used and a state the choice writes",
@@ -95,17 +55,49 @@
     "wants": "the second bond's text on the imported class page",
     "why": "the page prints one of the two bonds in full and cf:seeker-f1 writes all of it -- the granted row, the exclusivity, and the standing minor-action shift. The other bond is not in the imported text at all. Its granted row is identifiable without it, p11462 being the only other level-0 seeker row and the one that spends the Strength modifier its riders spend, so the exclusivity is written both ways; whatever else that bond gives is not on the page and is not guessed at"
   },
-  "cf:artificer-items": {
-    "wants": "magic items in the engine: an item with a daily power, Gear recording what is worn or carried, and an event announcing that an item's daily power was used",
-    "why": "three of the artificer's four class-page features are about magic items and none of the three has a subject. One banks a charge in a weapon or implement that its wielder spends for a bonus to an attack roll already made; one recharges an item's daily power; one pays an ally temporary hit points whenever that ally uses an item's daily power. Gear carries weapons and armour and no items at all, every chassis weapon has enhancement 0, and nothing anywhere uses an item power, so each of the three would be a hook nothing ever fires"
+  "cf:shaman-spirit": {
+    "wants": "a ref for the fifth companion spirit, whose block the importer glued onto the end of cf:shaman-f0c0 instead of giving it a cf:shaman-f0sN of its own",
+    "why": "four of the five spirits now have a sub-option ref with their boon printed on it, and chargen.BUILDS[\"shaman\"] now carries a leg per spirit, so cf:shaman-f0s0 to cf:shaman-f0s3 are written and each takes the other spirits' two rows away from a shaman that did not choose it. The fifth has no ref, so its boon -- a saving-throw bonus beside the spirit, and a free-action call once a turn -- has nothing to decorate, and its two rows, p12865 and p12866, are the only ones loadout still leaves on every shaman whatever leg it is on"
   },
-  "cf:artificer-infusions": {
-    "wants": "a shared per-encounter allowance of more than one use -- group= counts to one -- and chargen.power_choice() for the card the page offers in place of another",
-    "why": "the fourth feature is the budget the three declared infusion rows draw on: two per extended rest, one per round, three from 16th level. Each row is written as its own encounter power with once_per_round, which is three separate allowances rather than one shared one. The second half was filed as chargen.BUILDS and that was the wrong symbol: a Build records which secondary a fork leans on and carries no card list, so a leg could not express one card taken in place of another"
+  "cf:sorcerer-elementalist": {
+    "wants": "c.vulnerable gated on the caster's own attacks rather than on a damage type, plus a saving-throw bonus against ongoing damage of one type",
+    "why": "the leg half is done -- chargen.BUILDS[\"sorcerer\"] carries one leg per elemental specialty, each holding the damage type its specialty is sworn to, and every row in features/sorcerer.py gates on one with on_leg. What is left is two clauses no modifier can be: \"vulnerable 3 to your elemental attacks\" names the attacker and c.vulnerable names a type, and the saving-throw bonus is against ongoing damage of one kind rather than against a condition"
   },
-  "p12422:augment2": {
-    "wants": "dsl.Range.by_ability, a reach sized off an ability modifier",
-    "why": "Augment 1 -- reach + 1 -- is now written as dsl.Augment(reach=); Augment 2 is reach + Charisma modifier, and a Range holds a number read off the card before any creature is in hand"
+  "cf:sorcerer-soul-nat20": {
+    "wants": "an event announcing a power use's finished effects (the p10354 gap), carrying the natural roll",
+    "why": "each source ends with a rider on a natural 20 -- and one of them a second on a natural 1 -- that lands after the attack's other effects. AttackRolled is the only event carrying the natural and it fires before the damage, so a slide-and-prone hung there would resolve in the wrong order, and Hit carries no natural at all"
+  },
+  "cf:sorcerer-soul-pierce": {
+    "wants": "c.ignore_resistance(dtype, up_to=), read by resolve.damage before Defences.resist is subtracted",
+    "why": "both written halves of the sorcerer's source end with the same clause -- the caster's arcane powers ignore a target's resistance to the sworn type up to the value of the caster's own -- and resistance is subtracted from a flat number on the target with nothing on the attacker's side consulted, so the clause has nowhere to be read"
+  },
+  "cf:sorcerer-soul-rest": {
+    "wants": "events.ShortRested -- an event a rest emits, so a feature clocked on one has something to run inside",
+    "why": "the page prints four sources. Three have a leg in chargen.BUILDS[\"sorcerer\"] now and are written; the fourth is a three-phase cycle chosen at the end of a short or an extended rest and stepped on by being bloodied or spending a daily. turns.short_rest exists and emits nothing, so there is no moment at which a phase could be picked, and a leg carrying one phase of three would deal a sorcerer a feature that never advances"
+  },
+  "cf:warden-f1-rest": {
+    "wants": "nothing but the rows: cf:warden-f1s0 .. f1s3 are four refs nobody has declared",
+    "why": "this was filed against chargen.BUILDS and against an event announcing a second wind, and neither is missing any more. The class has a named leg per printed option and cf:warden-f1 asks all four by name; events.SecondWind exists and features/guardians.py already imports it. What is left is four undeclared sub-option refs, one second-wind rider each -- work, not a gap"
+  },
+  "cf:warlord-archer": {
+    "wants": "c.attacks_with(ability=)",
+    "why": "spec.py can read the class page now and the card is three clauses: it drops two proficiencies, adds one, and lets a ranged basic attack with a bow roll Strength for the attack and the damage. basic.RANGED fixes its ability in the header and nothing can rewrite it for one creature; a bow on a warlord leg in chargen.BUILDS is wanted too, because no leg carries one and there would be nothing to shoot with"
+  },
+  "cf:wizard-familiar": {
+    "wants": "something that puts a familiar on the board -- a Companion of kind \"familiar\" -- plus a leg in chargen.BUILDS[\"wizard\"] for the second version of the class the page prints",
+    "why": "the class page carries a whole second set of features that nothing in the tree had a ref for, and both of its combat clauses hang on a familiar: a damage resistance for the wizard and its allies while adjacent to it, and a bonus feat whose only in-fight content is that the familiar exists at all. c.familiar and c.familiar_mode are built and four wizard rows already read them, but no row anywhere creates one, so every such call answers None and this feature would be a resistance nobody ever gets. The third feature of that set is four cantrips, which are declared and need nothing"
+  },
+  "cf:wizard-implement-rest": {
+    "wants": "legs in chargen.BUILDS[\"wizard\"] for the three masteries with none, plus c.store_row(ref) for the one that banks an unprepared encounter power and a summon-time damage hook for the one that pays its summoned creatures",
+    "why": "the page's build sections name a class feature for two builds the tree has no leg for, and a third mastery no build names at all. Each of the three is a real clause -- bank a power, pay a summoning, repeat a missed illusion against a second target -- and none of the three has anything for c.build to answer, so adding a leg first would deal a wizard whose mastery does nothing. The docstring on cf:wizard-arcanist-f0 claimed this file already said so; it did not"
+  },
+  "p10275:augment1": {
+    "wants": "Effect.keywords, so c.save(against=) can name a charm or a fear effect rather than matching a label substring",
+    "why": "the bonus applies only to a save against a charm or fear effect, and every effect's label is the ref of the row that laid it, so the gate would be false for every charm in the game"
+  },
+  "p11106:augment1": {
+    "wants": "c.must_attack(on=, against=) plus a way to say that enemies provoke from a creature",
+    "why": "'enemies provoke opportunity attacks from the target, and it must make those attacks' needs both halves; c.provoke opens one window for one named attacker and nothing obliges anybody to answer it"
   },
   "p11158:augment1": {
     "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
@@ -119,29 +111,9 @@
     "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
     "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
   },
-  "p13030:augment1": {
-    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
-    "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
-  },
-  "p13043:augment1": {
-    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
-    "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
-  },
-  "p2622:augment1": {
-    "wants": "a compendium ref for the class-feature attack, as dsl.REGISTRY has none for it",
-    "why": "Augment 1 pays extra damage on a later use of the battlemind's own feature attack, which the spec names in prose with no id beside it"
-  },
-  "p13053:augment1": {
-    "wants": "a compendium ref for the class-feature step power, as dsl.REGISTRY has none for it",
-    "why": "both augments only lengthen the rider on that feature, which the unaugmented row already had to drop for the same reason"
-  },
-  "p13053:augment2": {
-    "wants": "a compendium ref for the class-feature step power, as dsl.REGISTRY has none for it",
-    "why": "Augment 2's teleport is that same rider; its 2[W] is not written alone because half a clause is worse than none"
-  },
-  "p10275:augment1": {
-    "wants": "Effect.keywords, so c.save(against=) can name a charm or a fear effect rather than matching a label substring",
-    "why": "the bonus applies only to a save against a charm or fear effect, and every effect's label is the ref of the row that laid it, so the gate would be false for every charm in the game"
+  "p12422:augment2": {
+    "wants": "dsl.Range.by_ability, a reach sized off an ability modifier",
+    "why": "Augment 1 -- reach + 1 -- is now written as dsl.Augment(reach=); Augment 2 is reach + Charisma modifier, and a Range holds a number read off the card before any creature is in hand"
   },
   "p12934:augment1": {
     "wants": "c.revealed(on=) -- clearing Relation.HIDDEN_FROM from the creature being looked at",
@@ -159,25 +131,13 @@
     "wants": "c.deals_half(when=) -- half damage narrowed to some of a creature's attacks",
     "why": "the same gate, on basic attacks this time; its Charisma modifier is not written alone"
   },
-  "p13318:augment1": {
-    "wants": "c.penalty_in(zone, what, value) -- a modifier scoped to a zone or an aura, as c.resist_in and c.cover_in already are",
-    "why": "enemies take -2 to attack rolls while adjacent to the target, and nothing scopes an attack modifier to a footprint"
+  "p13030:augment1": {
+    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
+    "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
   },
-  "p11106:augment1": {
-    "wants": "c.must_attack(on=, against=) plus a way to say that enemies provoke from a creature",
-    "why": "'enemies provoke opportunity attacks from the target, and it must make those attacks' needs both halves; c.provoke opens one window for one named attacker and nothing obliges anybody to answer it"
-  },
-  "p13783:augment1": {
-    "wants": "SkillCheck.purpose, so a bonus can be gated to checks made to find hidden creatures",
-    "why": "the clause is +5 to Perception checks made for one reason, and a check carries no reason to gate on, so the bonus would apply to every Perception check the ardent makes"
-  },
-  "p13311:augment1": {
-    "wants": "a third command on dsl.Summon, beyond its standard and opportunity attacks",
-    "why": "Augment 1 gives the servant an opportunity action that makes a Heal check on a dying ally, and Summon declares two attack lines and nothing else"
-  },
-  "p13325:augment1": {
-    "wants": "a rider on dsl.Summon's attack line, so a summoned creature's grab can be applied",
-    "why": "the penalty is to escaping a grab the summon never applies, so the clause could never come up"
+  "p13043:augment1": {
+    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
+    "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
   },
   "p13051:augment1": {
     "wants": "Position.squares holding a second, separate square for one creature",
@@ -187,24 +147,56 @@
     "wants": "Position.squares holding a second, separate square for one creature",
     "why": "Augment 2 puts the double five squares away and is the same gap"
   },
+  "p13053:augment1": {
+    "wants": "a compendium ref for the class-feature step power, as dsl.REGISTRY has none for it",
+    "why": "both augments only lengthen the rider on that feature, which the unaugmented row already had to drop for the same reason"
+  },
+  "p13053:augment2": {
+    "wants": "a compendium ref for the class-feature step power, as dsl.REGISTRY has none for it",
+    "why": "Augment 2's teleport is that same rider; its 2[W] is not written alone because half a clause is worse than none"
+  },
   "p13303:augment2": {
     "wants": "augment.augment called on p13303b, the minor-action attack printed under this id",
     "why": "Augment 2 is that second card's dice, so it belongs to the row that now has its own ref"
+  },
+  "p13311:augment1": {
+    "wants": "a third command on dsl.Summon, beyond its standard and opportunity attacks",
+    "why": "Augment 1 gives the servant an opportunity action that makes a Heal check on a dying ally, and Summon declares two attack lines and nothing else"
+  },
+  "p13318:augment1": {
+    "wants": "c.penalty_in(zone, what, value) -- a modifier scoped to a zone or an aura, as c.resist_in and c.cover_in already are",
+    "why": "enemies take -2 to attack rolls while adjacent to the target, and nothing scopes an attack modifier to a footprint"
   },
   "p13320:augment2": {
     "wants": "augment.augment called on p13320b, the opportunity attack printed under this id",
     "why": "Augment 2 is that second card's hit line"
   },
+  "p13325:augment1": {
+    "wants": "a rider on dsl.Summon's attack line, so a summoned creature's grab can be applied",
+    "why": "the penalty is to escaping a grab the summon never applies, so the clause could never come up"
+  },
   "p13331:augment2": {
     "wants": "augment.augment called on p13331b, the minor-action burst printed under this id",
     "why": "Augment 2 is that second card's dice"
   },
-  "p8240:augment1": {
-    "wants": "c.strip_resistance(dtype, on=) -- taking a standing resistance away, which c.resist only adds",
-    "why": "the clause fixes the vulnerability at 5 and then strips the target's psychic resistance; the second half has no method, and writing the first alone would be half a clause"
+  "p13783:augment1": {
+    "wants": "SkillCheck.purpose, so a bonus can be gated to checks made to find hidden creatures",
+    "why": "the clause is +5 to Perception checks made for one reason, and a check carries no reason to gate on, so the bonus would apply to every Perception check the ardent makes"
   },
   "p2621:augment1": {
     "wants": "the card's Augment 1 body in the compendium import, which etl.sanitise.power_spec finds empty",
     "why": "the imported entry has no Hit line under its Augment 1 heading -- only the Special that belongs to the whole power sits between the two headings -- so there is no clause to write"
+  },
+  "p2622:augment1": {
+    "wants": "a compendium ref for the class-feature attack, as dsl.REGISTRY has none for it",
+    "why": "Augment 1 pays extra damage on a later use of the battlemind's own feature attack, which the spec names in prose with no id beside it"
+  },
+  "p4807": {
+    "wants": "Keyword.RAGE declared on the 41 rage rows (the compendium prints it in their type line), plus c.expend(ref)",
+    "why": "nothing at runtime tells a rage daily from any other barbarian daily; group= is the wrong field, the engine reads it as one-per-encounter"
+  },
+  "p8240:augment1": {
+    "wants": "c.strip_resistance(dtype, on=) -- taking a standing resistance away, which c.resist only adds",
+    "why": "the clause fixes the vulnerability at 5 and then strips the target's psychic resistance; the second half has no method, and writing the first alone would be half a clause"
   }
 }
