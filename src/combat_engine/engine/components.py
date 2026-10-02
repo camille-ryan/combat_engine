@@ -911,9 +911,25 @@ class Gear:
         two-handed bow *and* a short sword at once -- and since a power's
         melee or ranged branch is offered on the strength of what is in
         hand, that handed out both branches of every row to everybody.
+
+        **The first thing that can be swung or fired, not simply
+        `weapons[0]`**, which is the same rule `main` and `melee` already
+        follow and for the same reason. A fighter carrying a rod, a greataxe
+        and a wand wielded the rod -- an implement, one-handed, so the wand
+        came up in the other hand and the two-handed axe went on the belt.
+        It then stood next to an enemy holding two implements it cannot hit
+        anything with, and **every melee row it owned was refused, `mba`
+        included**: `can_branch` asks for a melee weapon in hand and `melee`
+        correctly answered none. Three starts in 144 across three levels,
+        every one of them the fighter. #268.
+
+        An all-implement creature still wields its first implement -- a
+        wizard holding nothing but an orb is holding the orb -- because the
+        fallback is `weapons[0]` when nothing else can be swung.
         """
         if self.weapons and not self.stowed:
-            self.wield(self.weapons[0])
+            self.wield(next((w for w in self.weapons
+                             if w.group != "implement"), self.weapons[0]))
 
     @property
     def held(self) -> list[Weapon]:
