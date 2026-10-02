@@ -135,8 +135,6 @@ NAMED_FEATURE = ("spec.feature_ref()",)
 #: Which weapons and implements a character may pick up is settled when
 #: it is built, not on a board.
 PROFICIENCY = ("chargen.proficiency()",)
-#: The brief prints a power by name where a ref belongs.
-NAMED = ("spec.power_ref()",)
 
 WEAPON = [Keyword.WEAPON]
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]

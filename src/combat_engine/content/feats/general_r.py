@@ -123,8 +123,6 @@ FEATURE = ("c.class_feature()",)
 #: borrowing any more; they are waiting on there being anything to point
 #: at. None of the options is a ref in the tree.
 BORROW = ("spec.feature_ref()",)
-#: The brief prints a power by name where a ref belongs.
-NAMED = ("spec.power_ref()",)
 #: A suit of armour or a shield, which is not the same column as the
 #: weapons and implements `chargen.proficiency` deals.
 ARMOUR = ("chargen.armor_proficiency()",)

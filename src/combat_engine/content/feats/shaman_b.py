@@ -88,8 +88,6 @@ from combat_engine.engine.query import adjacent, distance_between, team
 CALL = "p6515"
 HEALING = "p3773"
 
-#: The brief prints a power by name where a ref belongs.
-NAMED = ("spec.power_ref()",)
 
 DEFENCES = (AC, FORT, REF, WILL)
 

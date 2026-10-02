@@ -137,12 +137,6 @@ EXTRA = ("c.on_extra_damage()",)
 #: Which implements or weapons a character may pick up is settled when it
 #: is built, not on a board with the gear already in hand.
 PROFICIENCY = ("chargen.proficiency()",)
-#: A power named in prose with no ref, so there is nothing to hand over.
-#: What is left of the old `c.borrow_feature()` group here: handing a
-#: feature over is `c.grant_row` and choosing among a class's rows is
-#: `c.borrow_row`, so the rows still stuck are the ones whose card names
-#: its powers by name and gives no id for any of them.
-BORROW = ("spec.power_ref()",)
 
 
 # -- shared machinery -------------------------------------------------------
