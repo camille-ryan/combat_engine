@@ -99,9 +99,12 @@ uv run scripts/fight.py            one readable fight
   what one re-broken tie costs. Re-record in its own commit, never bundled.
 * **Report the mixed result as mixed.** Attrition and rounds move in opposite
   directions often enough that picking the flattering pair is easy.
-* `scorecard` and `fight` are slow and get slower: a term that calls
-  `T.expected_vs` per target per decision tripled the scorecard's runtime. Price
-  that before shipping it.
+* **Time it against itself, not against a figure you remember.** A term calling
+  `T.expected_vs` per target per decision *looked* like it had tripled the
+  scorecard's runtime, and had not: 95s with against 104s without, which is inside
+  the 15% run-to-run variance `audit._changed` already documents. The apparent
+  slowdown was three `fight.py` runs contending for the same cores. Measure both
+  arms back to back on an otherwise idle machine or do not claim a cost.
 
 ## Attrition is the metric, not win rate
 
