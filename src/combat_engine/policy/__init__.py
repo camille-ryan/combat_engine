@@ -95,6 +95,11 @@ def features(
     # Hunkering down. Worth something only when the standard has nothing better to
     # spend itself on, which `DoctrinePolicy.score` is where it decides -- see there.
     f["is_total_defence"] = float(action.kind == "total_defence")
+    # **The most decisive play in the game, and nothing could choose it.**
+    # `legal` offers a coup de grace now (#251); without a term here the policy
+    # scores it at zero and never takes one, which is the same outcome as never
+    # being offered it.
+    f["is_coup_de_grace"] = float(action.kind == "coup_de_grace")
     f["is_hide"] = float(action.kind == "hide")
     f["is_delay"] = float(action.kind == "delay")
     # Named on the day the escape action arrived, for the reason every
@@ -491,6 +496,14 @@ WEIGHTS: dict[str, float] = {
     # fail and standing cannot.
     "is_escape": 2.5,
     "is_second_wind": 0.0,
+    # **An automatic critical on a helpless creature, which usually ends it.**
+    # Priced above a standing attack rather than merely level with one: the
+    # alternative on the same standard action is an ordinary swing at something
+    # that can fight back, and this one cannot miss by much and cannot be
+    # retaliated against. Deliberately under the -9.0 that `doctrine`'s
+    # inequality reserves -- see its note -- so it does not outbid the whole
+    # threat model the way an early flanking weight once did.
+    "is_coup_de_grace": 6.0,
     "expected_hits": 4.0,
     "hit_chance": 3.0,
     "targets": 0.0,      # counted by side instead; see below

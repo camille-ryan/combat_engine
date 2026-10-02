@@ -19,7 +19,7 @@ from .components import Budget, Build, Health, Position, Powers
 from .dsl import affordable, aim_points, candidates, get, usable
 from .durations import When
 from .grid import Square, distance, spread
-from .query import alive, can_act, enemies, is_
+from .query import alive, can_act, distance_between, enemies, is_
 from .resolve import _mods
 from .types import ActionType, Condition, Relation, Usage
 
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class Action:
     #: power | move | run | shift | charge | stand | escape | second_wind |
-    #: total_defence |
+    #: total_defence | coup_de_grace |
     #: sustain | drop | wield | item | instinctive | command | end
     kind: str
     cost: ActionType
@@ -884,6 +884,39 @@ def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # resource and no printed line is needed to permit it.
     if encounter.can_spend(actor, ActionType.STANDARD):
         out.append(Action(kind="total_defence", cost=ActionType.STANDARD))
+    # **A coup de grace is a standard action anybody may take**, not a property
+    # of any power -- and it was offered to nobody. `Cast.coup_de_grace` existed
+    # and was reachable only from inside a power body, so the only coups de grace
+    # in the game were the two a monster's own card spells out: the AI could never
+    # take one and neither could a player. #251.
+    #
+    # One per adjacent helpless enemy, because the target is the whole decision.
+    # Reach 1 rather than the creature's own: the printed action is made in melee,
+    # and a row that finishes somebody at range is that row's own business.
+    if encounter.can_spend(actor, ActionType.STANDARD):
+        from .components import Powers as _Powers
+        from .conditions import rules as condition_rules
+        from .dsl import get as _get
+        from .query import active as conditions_on
+
+        # **The row it will swing is on the action**, which is what lets the
+        # policy price it. Scored without a `ref` the option carries only its own
+        # premium and none of the damage terms an attack gets, so an ordinary
+        # swing at the same creature outscored it -- 9.47 against 7.90 -- and the
+        # finisher was offered and never chosen, which is the same outcome as not
+        # offering it. With the ref the policy reads the same expected damage it
+        # reads for any attack and adds the premium on top.
+        known = world.get(actor, _Powers)
+        basic = known.basic if known is not None else "mba"
+        row = _get(basic)
+        if row is None or row.attack is None:
+            basic = "mba"
+        for foe in enemies(world, actor):
+            if not alive(world, foe) or distance_between(world, actor, foe) > 1:
+                continue
+            if any(condition_rules(c).helpless for c in conditions_on(world, foe)):
+                out.append(Action(kind="coup_de_grace", cost=ActionType.STANDARD,
+                                  ref=basic, targets=(foe,)))
     return out
 
 
@@ -1059,6 +1092,35 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # where it was -- the silently-false shape, and `LinearPolicy.act` was
         # being told a wasted action had worked. #246.
         return shift(world, actor, action.dest)
+
+    if action.kind == "coup_de_grace":
+        # The basic attack, with the auto-critical rule on top. A coup de grace
+        # is "a standard action to use an attack power against a helpless foe",
+        # and an action taken on its own has no row declaring anything -- so the
+        # creature's own basic attack is what it uses. #251.
+        #
+        # `Cast.coup_de_grace` does the rest: it refuses a target that is not
+        # actually helpless, it may miss, and a hit is a critical.
+        from .cast import Cast
+        from .components import Powers as _Powers
+        from .dsl import get as _get
+
+        # **Aliased** because a later branch in this function uses `Powers` from
+        # its own local import, and binding the bare name here would make it a
+        # local for the whole function -- so that branch raised
+        # "referenced before assignment" whenever this one did not run.
+        # `legal` already worked out which row this swings and put it on the
+        # action, including the fallback for a basic that declares no attack
+        # line. Trusting it keeps the two in step.
+        known = world.get(actor, _Powers)
+        ref = action.ref or (known.basic if known is not None else "mba")
+        row = _get(ref)
+        if row is None or row.attack is None:
+            ref = "mba"
+        cast = Cast(world=world, me=actor, ref=ref,
+                    targets=list(action.targets),
+                    target=action.targets[0] if action.targets else None)
+        return cast.coup_de_grace()
 
     if action.kind == "stand":
         for eff in world.effects.of(actor):
