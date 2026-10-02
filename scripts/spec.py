@@ -41,7 +41,15 @@ HEROIC = "(tier = 'Heroic' OR (tier = '' AND min_level <= 10))"
 #: The project's scope, and the reason a ladder prints two rungs here and
 #: not six: the paragon and epic ones are recorded but nobody is writing
 #: against them, and six rungs on one line buried the two that matter.
-MAX_ITEM_LEVEL = 10
+#:
+#: **Read from the ETL rather than held again.** This was its own `= 10`, so the
+#: ceiling lived in two places and raising one would have left briefs printing two
+#: rungs of a six-rung ladder with nothing saying why. The ETL owns what was
+#: imported; an instrument describing the import cannot own it too. #281.
+try:
+    from combat_engine.etl.item import MAX_ITEM_LEVEL
+except Exception:  # an instrument should still run without a built database
+    MAX_ITEM_LEVEL = 10
 
 #: `item.enh_to` is a code, because the pages word the same bonus eleven
 #: ways. This is the wording an author needs to recognise it by.
