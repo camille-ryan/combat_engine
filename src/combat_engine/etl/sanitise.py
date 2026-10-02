@@ -519,6 +519,19 @@ _CLAUSE = re.compile(
 )
 _CLAUSE_END = re.compile(r"\s*(?:[,;.]|$)")
 
+#: And the object of "if you are a ...", which is the third position and reaches
+#: prose where the two above only reach a level line and a Requirement.
+#:
+#: **Second person only, and that is what makes it safe.** Half the races are named
+#: after an ordinary English word and every one of those words is also the *type* a
+#: stat block prints -- the word `is_kind` is given, which the engine has to be able
+#: to say. But nothing on a card ever tells a creature what type it is, so the word
+#: after "if you are a" is a race every time. "If the <monster> is a <type>" would
+#: not be, and is deliberately not matched.
+#:
+#: Both apostrophes, because the compendium prints the curly one.
+_YOU_ARE = re.compile(r"(?i)\bif\s+you(?:\s+are|\s+were|['\u2019]re)\s+an?\s+$")
+
 
 @lru_cache(maxsize=4)
 def _race_pattern(names: frozenset[str]) -> re.Pattern[str] | None:
@@ -551,9 +564,17 @@ def named_races(context: str) -> list[tuple[int, int, str]]:
     cost 91 findings across the tree and 358 spec rows, and not one of
     them was a leak.
 
-    Two positions admit nothing but a name, which is `_named_powers`'
-    argument one step over: directly before the word *racial*, and alone
-    in a prerequisite clause.
+    **Three** positions admit nothing but a name, which is `_named_powers`'
+    argument one step over: directly before the word *racial*, alone in a
+    prerequisite clause, and as the object of "if you are a".
+
+    The third was added for #311, where nine rows reached authors with a race
+    printed in words while nine more carried the ref in the *same* sentence
+    shape -- split by nothing but whether the race happened to be named after a
+    dictionary word, since the general scrubber only swaps a one-word name it
+    cannot find in a dictionary. `build._racial_labels`' docstring had already
+    recorded that consequence for the level line and treated it as settled
+    there; prose was not.
     """
     pattern = _race_pattern(races())
     if pattern is None or not context:
@@ -566,9 +587,11 @@ def named_races(context: str) -> list[tuple[int, int, str]]:
         start = context.rfind("\n", 0, m.start()) + 1
         end = context.find("\n", m.end())
         line = context[start:] if end < 0 else context[start:end]
-        if _CLAUSE.match(line[: m.start() - start]) and _CLAUSE_END.match(
-            line[m.end() - start :]
-        ):
+        before = line[: m.start() - start]
+        if _YOU_ARE.search(before):
+            found.append((m.start(), m.end(), m.group(0)))
+            continue
+        if _CLAUSE.match(before) and _CLAUSE_END.match(line[m.end() - start :]):
             found.append((m.start(), m.end(), m.group(0)))
     return found
 
