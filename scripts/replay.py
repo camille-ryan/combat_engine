@@ -47,6 +47,13 @@ CASES = [
     {"name": "level-3-full", "seed": 5, "level": 3, "scaling": "full"},
     {"name": "level-5-full", "seed": 3, "level": 5, "scaling": "full"},
     {"name": "level-5-bounded", "seed": 3, "level": 5, "scaling": "bounded"},
+    # **Level 10, because the net stopped at 5 and the project stops at 10** --
+    # and because scoring the power draw cost `SecondWind` its only coverage.
+    # A party that picks its cards on purpose wins before anybody is hurt
+    # enough to need one, so the rule went from exercised to unreached, which
+    # `coverage` is here to catch and did. This seed is the one of three tried
+    # that bloodies somebody.
+    {"name": "level-10-full", "seed": 3, "level": 10, "scaling": "full"},
 ]
 
 
