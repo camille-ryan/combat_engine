@@ -2130,6 +2130,79 @@ def _changed() -> list[str]:
     return sorted({r for r in refs if r in REGISTRY})
 
 
+
+#: What the last **full** sweep saw, and the commit it saw it at. Tracked, because
+#: the whole point is to compare across commits; one object rather than a per-ref
+#: map, since 12,205 hashes churning on every run is a megabyte of diff nobody
+#: reads and Camille is short of disk.
+WATERMARK = ROOT / "scripts" / "fixtures" / "audited.json"
+
+
+def _mark() -> dict[str, object]:
+    import json
+
+    if not WATERMARK.exists():
+        return {}
+    try:
+        return json.loads(WATERMARK.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _behind(sha: str) -> int:
+    """How many commits have landed since the last full sweep. -1 if unknowable."""
+    import subprocess
+
+    got = subprocess.run(["git", "rev-list", "--count", f"{sha}..HEAD"],
+                         cwd=ROOT, capture_output=True, text=True)
+    if got.returncode != 0:
+        return -1
+    try:
+        return int(got.stdout.strip())
+    except ValueError:
+        return -1
+
+
+def _since(sha: str) -> list[str]:
+    """Rows in content files touched since `sha`, plus anything uncommitted.
+
+    **`--changed`'s blind spot, which is #298.** That one reads `git status`, so
+    it sees only what is uncommitted -- and the moment work is committed its rows
+    fall out of scope and nothing looks at them again until somebody edits the
+    file for an unrelated reason. Six silent rows were found that way on #275 and
+    fourteen more on #278: roughly one surfaced per file touched, by accident.
+
+    This closes it with one tracked number instead of a per-ref ledger. The same
+    widening rules apply -- an `engine/` change is not narrowable and a content
+    file declaring no rows is cross-cutting -- so this delegates both to
+    `_changed`'s own logic by diffing the two revisions and reusing the shape
+    tests.
+    """
+    import re
+    import subprocess
+
+    got = subprocess.run(["git", "diff", "--name-only", f"{sha}..HEAD"],
+                         cwd=ROOT, capture_output=True, text=True)
+    if got.returncode != 0:
+        return sorted(REGISTRY)
+    files = [f.strip() for f in got.stdout.splitlines() if f.strip()]
+    if any(f.startswith(WIDE) and not f.startswith(NARROW) for f in files):
+        return sorted(REGISTRY)
+    refs: list[str] = []
+    for name in files:
+        if "/content/" not in name or not name.endswith(".py"):
+            continue
+        path = ROOT / name
+        if not path.exists():
+            continue
+        found = re.findall(r'@power\(\s*"([^"]+)"', path.read_text())
+        if not found:
+            return sorted(REGISTRY)
+        refs += found
+    # Uncommitted work too: a sweep is only honest about *now*.
+    return sorted({r for r in refs + _changed() if r in REGISTRY})
+
+
 def _run_all(refs: list[str], jobs: int = 0) -> list[Result]:
     """Fire every row, in parallel, in the order they were asked for.
 
@@ -2546,6 +2619,11 @@ def main() -> int:
     ap.add_argument("--verbose", action="store_true", help="say what each row did")
     ap.add_argument("--changed", action="store_true",
                     help="only rows in content files that differ from HEAD")
+    ap.add_argument("--since", action="store_true",
+                    help="only rows in content files touched since the last "
+                         "full sweep. `--changed` sees uncommitted work only, "
+                         "so a committed row goes unlooked-at until its file is "
+                         "edited again -- see #298 and `_since`")
     ap.add_argument("--never", action="store_true",
                     help="list the rows the harness could not use, grouped by why")
     ap.add_argument("--verdicts", action="store_true",
@@ -2571,11 +2649,32 @@ def main() -> int:
         print(f"\n{total - len(wrong)} of {total} pinned rows verdict correctly")
         return 1 if wrong else 0
 
+    mark = _mark()
+    full = not (args.refs or args.calls or args.changed or args.since
+                or args.sample or args.cls or args.level or args.monsters)
+    # **Said on every run, the way `scorecard.py` says its baseline age.** #291's
+    # point, and #298 asks for it here: a sweep nobody has run for 200 commits is
+    # a coverage figure, and until it is printed it is not one.
+    if mark.get("sha"):
+        behind = _behind(mark["sha"])
+        print(f"# last full sweep: {mark['sha'][:9]}"
+              + (f", {behind} commit(s) ago" if behind >= 0 else "")
+              + f" -- {mark.get('silent', '?')} silent of "
+                f"{mark.get('fired', '?')} firing\n")
+    elif not args.verdicts:
+        print("# no full sweep on record. A bare `audit.py` writes one.\n")
+
     wanted = args.refs or (
         _calls(args.calls) if args.calls
         else _changed() if args.changed
+        else _since(mark["sha"]) if args.since and mark.get("sha")
         else sorted(REGISTRY)
     )
+    if args.since and not mark.get("sha"):
+        print("# --since has no watermark to work from; auditing everything.\n")
+    elif args.since and not args.refs:
+        print(f"# {len(wanted)} row(s) in files touched since the last full "
+              f"sweep, plus anything uncommitted.\n")
     if args.sample and not args.refs:
         import random
 
@@ -2750,6 +2849,27 @@ def main() -> int:
         print(f"  {len(known_quiet)} silent for a recorded reason, not counted above")
     if outgrown:
         print(f"  {len(outgrown)} excuse(s) outlived the thing they excused")
+    # **A full sweep leaves its watermark.** Only a full one: a narrowed run
+    # has not looked at the rest of the tree and recording it as though it had
+    # is how a coverage number becomes a lie. Written whatever the verdict,
+    # because the question it answers is "when did anybody last look", not
+    # "did it pass".
+    if full:
+        import json
+        import subprocess
+
+        got = subprocess.run(["git", "rev-parse", "HEAD"],
+                             cwd=ROOT, capture_output=True, text=True)
+        if got.returncode == 0:
+            WATERMARK.write_text(json.dumps({
+                "sha": got.stdout.strip(),
+                "refs": len(chosen),
+                "fired": ok,
+                "silent": len(silent),
+                "never": len(never),
+            }, indent=2) + "\n")
+            print(f"\n  watermark written at {got.stdout.strip()[:9]}")
+
     # `refused` fails the run. An engine that announces a thing and then
     # does it anyway is a worse fault than any single row being wrong, and
     # it is the one that has been silent four times.
