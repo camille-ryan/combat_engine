@@ -43,6 +43,7 @@ riders here are `AT_WILL` unless the card prints a limit.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
@@ -60,6 +61,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    Ability,
     ActionType,
     AttackDeclared,
     Bloodied,
@@ -84,6 +86,7 @@ from combat_engine.engine import (
     TurnEnd,
     TurnStart,
     When,
+    World,
     about_me,
     distance,
     get,
@@ -181,6 +184,26 @@ def _holding(c: Cast, *groups: str) -> bool:
 def _holding_ref(c: Cast, *refs: str) -> bool:
     gear = _gear(c)
     return gear is not None and any(w.ref in refs for w in gear.held)
+
+
+def _wielding_ref(*refs: str) -> Callable[[World, int], bool]:
+    """`_holding_ref` as a `(world, eid)` predicate, which is what
+    `c.rolls_with(when=)` takes.
+
+    Asked on every roll rather than once when the feat armed, because the
+    swap is laid at the start of the fight and a hand can be filled with
+    something else later. The ranger's style feats have the same helper for
+    the same reason -- `ranger_b._wields` -- gating on a weapon *group*; this
+    one gates on the ref, because the monk's strike is the only member of its
+    group today and a plain unarmed attack joining it later (#282) must not
+    silently inherit the feat.
+    """
+
+    def holds(world: World, eid: int) -> bool:
+        gear = world.get(eid, Gear)
+        return bool(gear) and any(w.ref in refs for w in gear.melee)
+
+    return holds
 
 
 def _keyword(ref: str, word: Keyword) -> bool:
@@ -490,12 +513,25 @@ def f3697(c: Cast) -> None:
 
 @power("f3698", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.rolls_with(ref, ability)", *FLURRY))
+       dropped=FLURRY)
 def f3698(c: Cast) -> None:
-    """Dexterity in place of Strength for a basic attack is a swap of the
-    ability the header declares. The prerequisite names `cf:monk-f1` and
-    that row is declared, so "your monk unarmed strike" is reachable; the
-    flurry the second sentence retriggers is not a row at all."""
+    """Dexterity in place of Strength on a basic attack made with the monk's
+    strike. The flurry the second sentence retriggers is still not a row.
+
+    `mba` is the ref to swap, not the monk's weapon: the card says "when
+    making a melee basic attack **with** your monk unarmed strike", so the
+    row being rolled is the basic attack and the strike is the gate on it.
+    Gated with `when=` rather than checked once, because the swap is laid
+    when the feat arms and a hand can be filled later.
+
+    **`todo` became `dropped`**: the row plays, with one of its two
+    sentences missing.
+
+    Only the attack half of "attack rolls and damage rolls" lands.
+    `Attack.ability_for` reads the swap, so the roll is right; `mba`'s damage
+    names its modifier in its own body and is not this row's to rewrite.
+    """
+    c.rolls_with("mba", Ability.DEX, when=_wielding_ref("w:monk-unarmed-strike"))
 
 
 @power("f3699", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

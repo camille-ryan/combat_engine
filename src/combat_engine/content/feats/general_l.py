@@ -817,16 +817,18 @@ def f2842(c: Cast) -> None:
 
 @power("f2871", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*RACE_OPTION, "c.rolls_with(ref, ability)"))
+       todo=RACE_OPTION)
 def f2871(c: Cast) -> None:
     """Swaps which ability the `rt:r6-dilettante` power attacks with.
 
-    `rt:r6-dilettante` is a declared trait now and carries the same
-    `c.race_option()` hold this does: the card it deals is a 1st-level
-    at-will borrowed from another class, picked when the character is
-    built and recorded nowhere. The second symbol is re-aimed to the
-    eighteen-row group that already names rewriting one row's attack
-    line, rather than a spelling only this row used."""
+    **One hold now.** `c.rolls_with` exists and would say this in a line, but
+    it takes a ref: `rt:r6-dilettante` deals a 1st-level at-will borrowed
+    from another class, picked when the character is built and recorded
+    nowhere, so there is no ref to name. `c.race_option()` was always the
+    real hold and is now the only one on the marker.
+
+    The card offers a choice of three abilities, which is `c.choose` once
+    there is a row to choose for."""
 
 
 @power("f2873", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

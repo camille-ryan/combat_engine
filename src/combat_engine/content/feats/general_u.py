@@ -94,8 +94,12 @@ from combat_engine.engine.durations import keywords_of
 AUGMENT = ("c.lend_augment(ref, clause)",)
 #: The "Associated Powers" line is a column no row can read.
 ASSOCIATED = ("feat.associated_powers",)
-#: "You can use Charisma instead of Constitution" for a named list.
-ABILITY_SWAP = ("c.rolls_with(ref, ability)",)
+#: The heroic half of a card's "Associated Powers" line, by the feat naming it.
+#: Each card prints four more refs at paragon and epic and this build imports
+#: none of them, so naming those would record refs that resolve to nothing --
+#: #281. `ABILITY_SWAP` is gone: `c.rolls_with` exists and both rows that
+#: wanted it say the sentence now.
+_ASSOCIATED = {"f3427": ("p5919", "p1341"), "f3429": ("p1401", "p501")}
 #: Trading away the extra damage an augment would have dealt.
 FORGO = ("c.forgo_damage()",)
 #: `f1028`'s own hold: a power's reach is header data and is never rewritten
@@ -225,19 +229,41 @@ def f3426(c: Cast) -> None:
 
 @power("f3427", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=AUGMENT + ABILITY_SWAP,
-       trigger="you drop an enemy you have cursed to 0 hit points",
-       on=Trigger(Dropped, both(by_me, cursed_by_me),
-                  "you drop an enemy you have cursed"))
+       dropped=AUGMENT,
+       trigger="you drop an enemy you have cursed to 0 hit points")
 def f3427(c: Cast) -> None:
     """"Each enemy cursed by you" is every live enemy carrying my curse,
     which the one going down no longer is.
 
-    `feat.associated_powers` is gone from the marker: the card's list is
-    refs now, and both clauses that wanted it are held by something else
-    -- one by the augment nothing lends, one by the ability swap."""
-    for foe in _cursed(c):
-        c.penalty("attack", 2, on=foe, until=When.EONT)
+    **The declared trigger became a watch so the ability swap has somewhere
+    to be laid.** A row with `on=Trigger(...)` runs its body only when the
+    trigger fires, and the card's last sentence is a standing property of
+    the character -- laid there it would arrive only after the first cursed
+    enemy fell, which is every earlier roll too late. `turns.arm_traits_of`
+    arms an `action=NONE` row with no `on=`, so this becomes a trait that
+    lays the swap and watches for the drop. `ranger_b.f1309` is the same
+    rewrite and `trigger=` keeps the card's own words either way.
+
+    Free, as `c.watch` is, which is right here: the payout costs no action
+    on the card. A row whose trigger costs an immediate wants
+    `c.arm_trigger` instead.
+
+    Only the attack half of "attack rolls and damage rolls" lands. The swap
+    is recorded against the creature and `Attack.ability_for` reads it, so
+    the roll is right; a damage line naming its modifier outright belongs to
+    the associated row and is not this row's to rewrite. Not claimed as a
+    gap here, because this row has said all it can.
+    """
+    for ref in _ASSOCIATED["f3427"]:
+        c.rolls_with(ref, CHA)
+
+    def fell(ev: Dropped) -> None:
+        if not by_me(c.world, c.me, ev) or not cursed_by_me(c.world, c.me, ev):
+            return
+        for foe in _cursed(c):
+            c.penalty("attack", 2, on=foe, until=When.EONT)
+
+    c.watch(Dropped, fell, until=When.ENCOUNTER, on=c.me)
 
 
 @power("f3428", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -249,22 +275,28 @@ def f3428(c: Cast) -> None:
 
 @power("f3429", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=AUGMENT + ABILITY_SWAP,
-       trigger="you drop an enemy you have cursed to 0 hit points",
-       on=Trigger(Dropped, both(by_me, cursed_by_me),
-                  "you drop an enemy you have cursed"))
+       dropped=AUGMENT,
+       trigger="you drop an enemy you have cursed to 0 hit points")
 def f3429(c: Cast) -> None:
     """The enemy picks, not the warlock, so the choice is put to it with
     `c.may(who=)` rather than taken with `c.choose`.
 
-    `feat.associated_powers` is gone from the marker for the same reason
-    as `f3427`: the list is refs now, and the clauses reading it are held
-    by the augment and the ability swap instead."""
-    for foe in _cursed(c):
-        if c.may("fall prone", who=foe):
-            c.prone(on=foe)
-        else:
-            c.weakened(on=foe, until=When.SONT)
+    Declared trigger turned into a watch for the same reason as `f3427`
+    above, and the swap is the attack half only on the same reading.
+    """
+    for ref in _ASSOCIATED["f3429"]:
+        c.rolls_with(ref, CHA)
+
+    def fell(ev: Dropped) -> None:
+        if not by_me(c.world, c.me, ev) or not cursed_by_me(c.world, c.me, ev):
+            return
+        for foe in _cursed(c):
+            if c.may("fall prone", who=foe):
+                c.prone(on=foe)
+            else:
+                c.weakened(on=foe, until=When.SONT)
+
+    c.watch(Dropped, fell, until=When.ENCOUNTER, on=c.me)
 
 
 # -- the three `f1028` riders -----------------------------------------------

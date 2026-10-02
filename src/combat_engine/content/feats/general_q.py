@@ -50,6 +50,7 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     AT_WILL,
+    CHA,
     DAILY,
     EACH_ENEMY,
     ENCOUNTER,
@@ -1945,15 +1946,18 @@ def f3416(c: Cast) -> None:
 #: this row, and `Dropped` plus `cursed_by_me` is exactly that sentence.
 _CURSED_FELL = "an enemy under your curse drops to 0 hit points"
 
+#: The heroic half of each card's "Associated Powers" line. Both print four
+#: more refs at paragon and epic that this build does not import, so naming
+#: those would record refs resolving to nothing -- #281.
+_ASSOCIATED = {"f3417": ("p4069", "p4177"), "f3419": ("p1401", "p1462")}
+
 
 @power("f3417", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger=_CURSED_FELL,
-       on=Trigger(Dropped, cursed_by_me, _CURSED_FELL),
-       dropped=(*AUGMENT, "c.rolls_with(ref, ability)"))
+       dropped=AUGMENT)
 def f3417(c: Cast) -> None:
-    """The first of three clauses is written; the feature was never the
-    hold on it.
+    """Two of three clauses written; only the augment is still a gap.
 
     "Hits with a damaging attack" is `DamageApplied` rather than `Hit`:
     the event names the row that dealt it, so an attack can be told from
@@ -1962,12 +1966,28 @@ def f3417(c: Cast) -> None:
     window.
 
     The curse itself is `c.curse`, an ordinary verb, so the card the
-    spec names for it needs no row of its own. The two clauses left are
-    spending the boon to augment a listed power, and swapping which
-    ability those powers roll -- the associated refs are printed and
-    neither verb exists.
+    spec names for it needs no row of its own.
+
+    **The declared trigger became an outer watch so the ability swap has
+    somewhere to be laid.** A row with `on=Trigger(...)` runs its body only
+    when the trigger fires, and the card's last sentence is a standing
+    property of the character -- laid in there it would arrive only after
+    the first cursed enemy fell, which is every earlier roll too late.
+    `turns.arm_traits_of` arms an `action=NONE` row with no `on=`, so the
+    row becomes a trait that lays the swap and watches for the drop.
+    `ranger_b.f1309` is the same rewrite; `trigger=` keeps the card's words.
+
+    So there are two watches now and they nest: the outer one is the pact
+    boon firing, the inner one is the single ally it then waits for.
+
+    Only the attack half of "attack rolls and damage rolls" lands. The swap
+    is recorded against the creature and `Attack.ability_for` reads it;
+    a damage line naming its own modifier belongs to the associated row and
+    is not this row's to rewrite. Not claimed as a gap here.
     """
     me = c.me
+    for ref in _ASSOCIATED["f3417"]:
+        c.rolls_with(ref, CHA)
 
     def struck(ev: DamageApplied) -> None:
         if ev.source == me or ev.amount <= 0 or ev.source not in c.allies():
@@ -1980,8 +2000,13 @@ def f3417(c: Cast) -> None:
         else:
             c.curse(on=ev.target)
 
-    c.watch(DamageApplied, struck, until=When.SONT, on=me, once=True,
-            label=c.ref)
+    def fell(ev: Dropped) -> None:
+        if not cursed_by_me(c.world, me, ev):
+            return
+        c.watch(DamageApplied, struck, until=When.SONT, on=me, once=True,
+                label=c.ref)
+
+    c.watch(Dropped, fell, until=When.ENCOUNTER, on=me)
 
 
 @power("f3418", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -2001,14 +2026,26 @@ def f3418(c: Cast) -> None:
 @power("f3419", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger=_CURSED_FELL,
-       on=Trigger(Dropped, cursed_by_me, _CURSED_FELL),
-       dropped=(*AUGMENT, "c.rolls_with(ref, ability)"))
+       dropped=AUGMENT)
 def f3419(c: Cast) -> None:
-    """The same three clauses as f3417 and the same split: the shove is
-    written, the augment and the ability swap are not."""
-    for foe in c.enemies():
-        if c.adjacent(foe):
-            c.push(1, on=foe)
+    """The same three clauses as f3417 and the same split: the shove and the
+    ability swap are written, the augment is not.
+
+    Declared trigger turned into a watch for the reason given on `f3417`,
+    and the swap is the attack half only on the same reading.
+    """
+    me = c.me
+    for ref in _ASSOCIATED["f3419"]:
+        c.rolls_with(ref, CHA)
+
+    def fell(ev: Dropped) -> None:
+        if not cursed_by_me(c.world, me, ev):
+            return
+        for foe in c.enemies():
+            if c.adjacent(foe):
+                c.push(1, on=foe)
+
+    c.watch(Dropped, fell, until=When.ENCOUNTER, on=me)
 
 
 @power("f3420", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

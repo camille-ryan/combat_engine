@@ -328,15 +328,19 @@ def f2926(c: Cast) -> None:
 
 @power("f1120", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.rolls_with(ref, ability)", "chargen.multiclass_powers()"))
+       todo=("chargen.multiclass_powers()",))
 def f1120(c: Cast) -> None:
     """Attacks with a borrowed power roll on Charisma instead.
 
-    Two holds. The ability a row attacks with is header data read before
-    the body -- `Attack(ability=)` -- and nothing rewrites it for a
-    creature. And "gained through a multiclass feat" is a provenance
-    `Powers.known` does not keep: a row is in the list or it is not, and
-    the list does not say how it got there.
+    **One hold now, not two.** `c.rolls_with` exists, so rewriting which
+    ability a row attacks with is no longer the problem -- but the verb takes
+    a ref and this card names no rows at all. "Gained through a multiclass
+    feat" is a provenance `Powers.known` does not keep: a row is in the list
+    or it is not, and the list does not say how it got there.
+
+    So the swap is one line the moment that provenance exists, and the marker
+    names only the thing actually missing. Dropping the arrived symbol is not
+    progress on the row and is not claimed as any.
     """
 
 

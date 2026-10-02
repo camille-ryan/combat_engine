@@ -755,11 +755,35 @@ def f2335(c: Cast) -> None:
 
 @power("f2361", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.extend_shift()", "c.rolls_with(ref, ability)"))
+       dropped=("c.extend_shift()",))
 def f2361(c: Cast) -> None:
-    """Both clauses are gaps and they are different ones. Nothing adds
-    to the distance a shift somebody else's row grants, and nothing
-    changes which ability a named row rolls."""
+    """Dexterity in place of Strength on the two rows the card names, and
+    the shift clause is still a gap.
+
+    The same shape as `f1309` above: the swap is gated with `when=` rather
+    than checked once, because it is laid when the feat arms and the blade
+    can be sheathed later. `melee light blade` is the printed gate; the
+    proficiency half of "and you have proficiency with that weapon" is
+    `Gear.trained`'s business and `_attack_bonus` already withholds the
+    bonus without it.
+
+    **`todo` became `dropped`.** The row plays now -- one of its two
+    benefits is missing rather than all of it -- and that is the whole
+    difference between the two markers.
+
+    The card says "attack rolls and damage rolls" and only the attack half
+    lands here. The swap is recorded against the creature and
+    `Attack.ability_for` reads it, so the roll is right; a damage line that
+    names its modifier outright belongs to the associated row and cannot be
+    rewritten from here. Not claimed as this row's gap, because this row has
+    said everything it can say.
+
+    The card prints four more associated refs at paragon and epic. The build
+    imports none of them, so naming them would record refs resolving to
+    nothing -- #281.
+    """
+    for ref in ("p4387", "p1418"):
+        c.rolls_with(ref, Ability.DEX, when=_wields("light blade"))
 
 
 # -- the beast companion ----------------------------------------------------
