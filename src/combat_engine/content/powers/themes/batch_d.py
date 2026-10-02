@@ -20,6 +20,8 @@ the aura around the conjuration is what "while adjacent to it" reads.
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.engine import (
     AC,
     ANY_CREATURE,
@@ -259,14 +261,41 @@ def p11807(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=PRIMAL_IMPL_CONJ,
-    dropped=(*PRIMARY, "c.grants_advantage(when=)"),
+    dropped=("c.dismiss_conjuration(attack=)",),
 )
 def p11808(c: Cast) -> None:
-    """"Enemies grant combat advantage while adjacent to it" is geometry
-    rather than a duration: the relation has to be re-asked as creatures
-    move in and out, and nothing lays one on a zone."""
+    """"Enemies grant combat advantage while adjacent to it" is written now.
+
+    It is geometry rather than a duration -- the question has to be re-asked
+    as creatures move in and out -- and that is exactly what
+    `c.grants_advantage(when=)` is: a gated modifier that
+    `query.has_combat_advantage` reads with the attack context, rather than a
+    relation, which carries no predicate. `ctx["target"]` is the creature
+    being asked about, so the gate is `c.adjacent_to(spirit, that creature)`.
+
+    Laid once per live enemy, which is what the relation's arity forces. An
+    enemy that arrives *after* this is cast is not covered -- the card says
+    "enemies", not "these enemies" -- and that is a smaller miss than the
+    whole clause was.
+
+    **The marker is re-aimed to the clause that is actually missing**, and it
+    is the big one: "as a standard action, you can dismiss it and make a
+    close burst 1 attack centred on its square". Nothing dismisses a
+    conjuration -- `c.dismiss_companion` is the only dismissal in `Cast` and
+    a conjuration is not a companion -- so the attack, its targets and its
+    damage are all unreachable. `c.ability_for(ref)` was on the marker for
+    that damage line and was never the hold: the verb exists, the attack it
+    would feed does not. See #296.
+    """
     spirit = c.conjure(until=When.EONT, sustain=None)
     c.aura(1, on=spirit, until=When.EONT, label=c.ref)
+
+    def beside(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("target")
+        return who is not None and c.adjacent_to(spirit, who)
+
+    for foe in c.enemies():
+        c.grants_advantage(on=foe, until=When.EONT, to="team", when=beside)
 
 
 @power(
@@ -1147,13 +1176,20 @@ def p14329(c: Cast) -> None:
     reach=Ranged(5),
     target=ANY_CREATURE,
     keywords=[Keyword.SHADOW, Keyword.IMPLEMENT, Keyword.FEAR],
-    todo=("c.ability_for(ref)", "c.retarget_defence()"),
+    todo=("c.retarget_defence()",),
 )
 def p15953(c: Cast) -> None:
-    """Two holes, and the row is nothing without either: the ability is the
-    caster's choice of Intelligence, Wisdom or Charisma, and the one roll is
-    then compared against Fortitude, Reflex and Will in turn, each with its
-    own Hit line."""
+    """One hole, and the row is nothing without it: a single attack roll
+    compared against Fortitude, Reflex **and** Will, each with its own Hit
+    line. Nothing re-aims a roll that has already been made at a second
+    defence.
+
+    **`c.ability_for(ref)` is off the marker and was never the hold.** The
+    caster's choice of Intelligence, Wisdom or Charisma is `c.choose` plus
+    `c.rolls_with`, both of which exist -- `ability_for` *reads* which
+    ability a line rolls and choosing is a different question. So the ability
+    half is one line whenever the row has an attack to hang it on, and the
+    marker now names only what is missing."""
 
 
 @power(
