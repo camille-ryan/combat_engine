@@ -888,12 +888,17 @@ def i1851p1(c: Cast) -> None:
 
 
 @power("i1886x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.resist_forced(when=)",))
+)
 def i1886x1(c: Cast) -> None:
-    """`c.resist_forced` shortens every push, pull and slide and takes no
-    gate, where the card shortens only pushes. The opportunity attack on
-    a pull is exact -- `ForcedMove` carries `how`."""
-    c.resist_forced(2, on=c.me, until=When.ENCOUNTER)
+    """Shortens a **push** only, which is what the card says, and the gate says so
+    now: `movement.settle` reads `"forced"` with `{"how", "power"}`, so
+    `ctx["how"]` is the shove's own kind. It used to shorten every push, pull and
+    slide -- and the pull half mattered, because the row's *other* clause pays out
+    when a pull lands you adjacent, which a shortened pull is less likely to do.
+
+    The opportunity attack on a pull is exact -- `ForcedMove` carries `how`."""
+    c.resist_forced(2, on=c.me, until=When.ENCOUNTER,
+                    when=lambda ctx: ctx.get("how") == Forced.PUSH.value)
 
     def hauled(ev: ForcedMove) -> None:
         if (

@@ -395,17 +395,22 @@ _granted("f2907", "f2907b")
 
 
 @power("f2907b", level=1, cls="", usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.STANCE],
-       dropped=("c.immune(when=)",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.STANCE])
 def f2907b(c: Cast) -> None:
-    """The forced-movement clause is unconditional; the resistance is
-    gated on being bloodied and so is laid as a modifier rather than as
-    flat resistance. "Cannot be knocked prone" is the same gated shape
-    and `c.immune` takes no `when`, so that third clause is named."""
+    """All three clauses. The forced-movement one is unconditional; the other two
+    are gated on being bloodied, so both are laid as gated modifiers rather than
+    as flat resistance and a flat immunity.
+
+    `c.immune` takes a `when=` now, and the gate is about the caster's own state
+    rather than about what is arriving -- which is why this one is writable where
+    `f924`'s "caused by cold powers" is not: the immunity context carries `cond`,
+    `target` and `source`, and no power."""
     me = c.me
     c.stance(on=me, label=c.ref)
     c.resist_forced(2, on=me, until=When.STANCE)
     c.resist(5, on=me, until=When.STANCE, when=lambda ctx: c.bloodied(on=me))
+    c.immune(Condition.PRONE, on=me, until=When.STANCE,
+             when=lambda ctx: c.bloodied(on=me))
 
 
 @power("f2908", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

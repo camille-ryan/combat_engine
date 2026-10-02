@@ -246,12 +246,27 @@ def f920(c: Cast) -> None:
 
 
 @power("f924", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.immune(when=)",))
+       reach=PERSONAL, target=SELF,
+       dropped=("query.immune_to(power=)",))
 def f924(c: Cast) -> None:
-    """The resistance half plays. The immunity is dropped rather than
-    written wide: `c.immune` takes no `when=`, and slow and immobilize
-    immunity with the "caused by cold powers" clause thrown away is
-    strictly stronger than the card."""
+    """The resistance half plays. The immunity is dropped rather than written
+    wide, because slow and immobilize immunity with "caused by cold powers"
+    thrown away is strictly stronger than the card.
+
+    **Re-aimed off `c.immune(when=)`, which arrived and is not the hold.** The
+    gate exists; what it cannot read is the power. `query.immune_to` builds its
+    context as `{"cond", "target", "source"}` -- the creature that laid the
+    condition, not the row it laid it with -- so "caused by a cold power" is a
+    question about a keyword nothing passes. See #309.
+
+    **Named in the parameter form, and the two dotted spellings I tried first both
+    lied.** `query.immune_to.power` resolves because `immune_to` exists;
+    `query.immune_ctx.power` resolves too, because `blocked._one` falls back to
+    looking for the bare last name anywhere on the surface and `power` is the row
+    decorator. Both reported ARRIVED while the capability was missing -- the exact
+    failure `todo.py` exists to prevent. `query.immune_to(power=)` is the
+    convention `c.grants_in(when=)` uses: the function is there, the parameter is
+    not, and `_params_ok` is what says so."""
     held = c.world.get(c.me, Defences)
     if held is not None and held.resist.get(DamageType.COLD, 0) > 0:
         c.resist(3, DamageType.COLD, on=c.me)

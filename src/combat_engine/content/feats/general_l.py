@@ -2289,17 +2289,30 @@ def f2870(c: Cast) -> None:
 
 @power("f2725", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.grant_action(when=)", "c.resist_forced(when=)"))
+       dropped=("c.grant_action(when=)",))
 def f2725(c: Cast) -> None:
     """Standing as a minor action is the half `c.grant_action` actually
     understands -- it takes `shift` and `stand` and eats anything else.
 
-    Both dropped clauses are the same missing thing: a gate. The printed
-    benefit holds only while the companion is adjacent, and neither
-    `c.grant_action` nor `c.resist_forced` takes a `when`, so writing the
-    adjacency in at arming would freeze a fact that changes every round.
-    """
+    **The forced-movement half is written.** `c.resist_forced` takes a `when=`,
+    and the gate is asked at the moment of the shove rather than at arming, which
+    is the whole point: the companion's adjacency changes every round and writing
+    it in when the feat armed would freeze it.
+
+    `c.grant_action(when=)` is the clause still dropped, for exactly the reason
+    that one is not: the stand is offered from the action economy and the gate
+    would have to be read when the option is *built*, not when it is taken.
+
+    **Only the reducing half.** The card offers "either increase or reduce", and a
+    choice between two signs is not a modifier -- it is a decision somebody makes
+    per shove, and `c.may` cannot be asked from inside a gate that `Mods.total`
+    evaluates. Reducing is the half a creature always wants when it is being
+    shoved, so it is the half that is right to take unasked."""
     c.grant_action("stand", ActionType.MINOR, on=c.me, until=When.ENCOUNTER)
+    c.resist_forced(
+        2, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: (pet := c.companion()) is not None and c.adjacent(pet),
+    )
 
 
 @power("f2726", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
