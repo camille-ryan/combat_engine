@@ -738,6 +738,7 @@ def read(name: str, guide: Guide, index: Index) -> dict:
     why: Counter[str] = Counter()
     unresolved: list[tuple[str, str]] = []      # (tier, text) -- notes only
     clash = 0
+    contested: set[str] = set()
     for tier, text, _post in runs:
         ref, reason = index.find(text)
         if ref is None:
@@ -761,11 +762,24 @@ def read(name: str, guide: Guide, index: Index) -> dict:
             # match the "best case" the doctrine already asks for elsewhere, and
             # the count is reported rather than buried.
             clash += 1
+            # **Which refs, not just how many.** #256: one class can hold two
+            # answers -- 23 of 25 classes have build legs differing on an
+            # ability, and one guide writes a name split across two coloured
+            # spans *because* its two builds rate it differently. Keeping the
+            # better of the two loses exactly the distinction the author took
+            # trouble to express, and the key cannot hold which build is which
+            # because the split-colour form never says.
+            #
+            # So the disagreement is recorded rather than resolved, and
+            # `rating()` declines to answer for a contested pair the same way it
+            # declines when only other classes have an opinion.
+            contested.add(ref)
             want = max(want, rated[ref])
         rated[ref] = want
     return {
         "runs": len(runs), "rated": rated, "aside": aside,
         "why": why, "unresolved": unresolved, "clash": clash,
+        "contested": contested,
         "key": key, "unmapped": unmapped,
     }
 
@@ -909,6 +923,12 @@ def main() -> int:
     every: dict[str, dict[str, float]] = {}
     sources: dict[str, list[str]] = {}
     spread: dict[str, list[float]] = {}
+    #: ref -> the classes for which the guides give more than one answer. #256.
+    contested: dict[str, set[str]] = {}
+    #: class -> ref -> the rating the last guide for that class gave, so two
+    #: guides disagreeing about one class is detectable as well as one guide
+    #: disagreeing with itself.
+    seen_for: dict[str, dict[str, float]] = {}
     skipped: dict[str, str] = {}
     print(f"{'guide':<10} {'runs':>6} {'rated':>6} {'aside':>6} {'unres':>6} "
           f"{'own class':>10} {'stray':>6}")
@@ -958,6 +978,18 @@ def main() -> int:
                 spread.setdefault(ref, []).append(v)
             per[guide.cls or "any"] = v
             sources.setdefault(ref, []).append(name)
+            # Contested *within one class*, which is the #256 case: either this
+            # guide rated it twice at different tiers, or two guides for the same
+            # class disagree. Both mean "one class, two answers", and the second
+            # is caught here because the first is caught in `read`.
+            if ref in got["contested"]:
+                contested.setdefault(ref, set()).add(guide.cls or "any")
+        for ref in got["rated"]:
+            if ref in seen_for.get(guide.cls or "any", ()) and \
+                    seen_for[guide.cls or "any"][ref] != got["rated"][ref]:
+                contested.setdefault(ref, set()).add(guide.cls or "any")
+        for ref, v in got["rated"].items():
+            seen_for.setdefault(guide.cls or "any", {})[ref] = v
         for tier, refs in got["aside"].items():
             for ref in refs:
                 skipped[ref] = f"{name} ({tier})"
@@ -992,14 +1024,15 @@ def main() -> int:
     print(f"  tiers:   {dict(sorted(Counter(flat).items()))}")
 
     if args.emit:
-        write_table(every, sources, skipped)
+        write_table(every, sources, skipped, contested)
         print(f"\nwrote src/combat_engine/ratings.py and {NOTES}/")
     return 0
 
 
 def write_table(rated: dict[str, dict[str, float]],
                 sources: dict[str, list[str]],
-                skipped: dict[str, str]) -> None:
+                skipped: dict[str, str],
+                contested: dict[str, set[str]] | None = None) -> None:
     """The tracked output. Refs, class names and numbers, and nothing else."""
     lines = [
         '"""Community ratings for player options, as `(ref, class) -> score`.',
@@ -1061,6 +1094,45 @@ def write_table(rated: dict[str, dict[str, float]],
     lines += [
         "}",
         "",
+        "#: ref -> the classes for which the guides give **more than one answer**.",
+        "#:",
+        "#: One class can hold two answers and this key cannot: 23 of 25 classes",
+        "#: have build legs differing on an ability, and one guide writes a name",
+        "#: split across two coloured spans precisely because its two builds rate",
+        "#: it differently -- red/purple, purple/red, blue/sky. Keeping the better",
+        "#: of the two throws away the distinction the author took trouble over.",
+        "#:",
+        "#: Which build each half belongs to is **not** recoverable: the",
+        "#: split-colour form never says, and a guide that discusses one build in",
+        "#: prose says it nowhere a parser can read. So the disagreement is",
+        "#: recorded instead of resolved, and `rating()` declines to answer for a",
+        "#: contested pair -- the same thing it does when only other classes have",
+        "#: an opinion, and for the same reason: absent evidence beats a number",
+        "#: that is wrong for both builds. #256.",
+        "CONTESTED: dict[str, tuple[str, ...]] = {",
+    ]
+    for ref in sorted(contested or {}):
+        names = sorted(contested[ref])
+        one = f'    "{ref}": ({", ".join(chr(34) + c + chr(34) for c in names)},),'
+        if len(one) <= 96:
+            lines.append(one)
+            continue
+        # Wrapped the way `SOURCES` below is: a race contested by twenty classes
+        # runs to 171 characters on one line and `ruff` refuses the file.
+        lines.append(f'    "{ref}": (')
+        row = "       "
+        for c in names:
+            piece = f'"{c}",'
+            if len(row) + len(piece) + 1 > 94:
+                lines.append(row)
+                row = "       "
+            row += f" {piece}"
+        if row.strip():
+            lines.append(row)
+        lines.append("    ),")
+    lines += [
+        "}",
+        "",
         "#: ref -> the guides that rated it. Provenance, so a number can be",
         "#: argued with rather than trusted.",
         "SOURCES: dict[str, tuple[str, ...]] = {",
@@ -1115,9 +1187,15 @@ def write_table(rated: dict[str, dict[str, float]],
         "    Also None when the only opinions on file belong to other classes: a",
         "    wizard guide's view of a race says nothing about that race for a",
         "    fighter, and borrowing it is worse than admitting ignorance.",
+        "",
+        "    And None for a **contested** pair -- see `CONTESTED`. One class can",
+        "    hold two answers, the key cannot, and which build each belongs to is",
+        "    not recoverable, so no number here would be right for both builds.",
         '    """',
         "    per = RATINGS.get(ref)",
         "    if not per:",
+        "        return None",
+        "    if cls and cls in CONTESTED.get(ref, ()):",
         "        return None",
         "    if cls and cls in per:",
         "        return per[cls]",
