@@ -536,6 +536,7 @@ _COVER: dict[tuple[int, int, int, Any], int] = {}
 def forget() -> None:
     """Drop the per-board memos. `scripts/winrate.py` calls this between fights."""
     _FOES.clear()
+    _MATES.clear()
     _BEST.clear()
     _COVER.clear()
     _INERT.clear()
@@ -552,6 +553,31 @@ def foes(world: Any, actor: int) -> tuple[int, ...]:
     if got is None:
         got = _FOES[key] = tuple(
             e for e in enemies(world, actor) if alive(world, e))
+    return got
+
+
+#: Per (board, round, creature): its living allies, not counting itself.
+_MATES: dict[tuple[int, int, int], tuple[int, ...]] = {}
+
+
+def mates(world: Any, actor: int) -> tuple[int, ...]:
+    """Living allies of `actor`, not counting `actor`, memoised for the round.
+
+    `foes`' mirror, and it exists for the same reason: `best_from` asks this of
+    every candidate square of every move, which is thousands of times a turn.
+
+    **Itself excluded**, which matches `features`' own `allies_caught` rule
+    (`t != actor`): aiming a burst at your own square is not clipping an ally, and
+    catching yourself is `self_harm`, priced separately and against your own hit
+    points rather than the party's.
+    """
+    from combat_engine.engine.query import allies as _allies
+
+    key = (id(world), _round(world), actor)
+    got = _MATES.get(key)
+    if got is None:
+        got = _MATES[key] = tuple(
+            a for a in _allies(world, actor) if a != actor and alive(world, a))
     return got
 
 
@@ -759,6 +785,30 @@ def _in_area(world: Any, actor: int, origin: Any, ref: str) -> int:
         else min(1, caught)
 
 
+def _mates_in_area(world: Any, actor: int, origin: Any, ref: str) -> int:
+    """How many living allies a row fired from `origin` would clip.
+
+    `_in_area`'s mirror, same geometry and the same deliberate cheapness. Only an
+    area row can catch a bystander: a melee or ranged row names one creature and
+    the policy does not get to choose an ally as its target, so counting them for
+    a single-target row would charge it for a square it never aims at.
+    """
+    from combat_engine.engine.grid import distance
+
+    p = get(ref)
+    if p is None or p.attack is None or p.reach is None:
+        return 0
+    if p.reach.kind not in ("close_burst", "close_blast", "area_burst", "wall"):
+        return 0
+    size = max(1, p.reach.size)
+    caught = 0
+    for mate in mates(world, actor):
+        there = _square_of(world, mate)
+        if there is not None and distance(origin, there) <= size:
+            caught += 1
+    return caught
+
+
 def charge_reach(world: Any, eid: int) -> int:
     """How far away a creature can be and still be charged by this one.
 
@@ -833,6 +883,7 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
     pool = T.pool(world, other)
     if not pool:
         return 0.0
+    ours = T.pool(world, theirs.team)
     best = 0.0
     for ref in known.known:
         # **Only what it could actually use.** Counting a spent daily inflated
@@ -844,7 +895,21 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
         caught = _in_area(world, actor, origin, ref)
         if not caught:
             continue
-        best = max(best, T.row_damage(world, actor, ref) * caught)
+        dmg = T.row_damage(world, actor, ref)
+        value = dmg * caught / pool
+        # **Net of friendly fire, which is #266's whole sequence.** `_in_area`
+        # counts enemies only, so a square where the burst spares the fighter and
+        # one where it does not came out identical -- and `reach_gained`, being
+        # the difference between them, paid nothing for the one step that makes
+        # the burst clean. The burst itself was always priced correctly by
+        # `features`' `allies_caught`; what could not be seen was the *move*.
+        #
+        # Subtracted in the same currency and against **our** pool, the way
+        # `heals` measures a heal, so clipping the party is weighed against what
+        # the party has to lose rather than against the enemy's health.
+        if ours and not heals(ref):
+            value -= dmg * _mates_in_area(world, actor, origin, ref) / ours
+        best = max(best, value)
     # The charge, if this square is one it could charge from. Its damage is the
     # basic attack's, since that is what a charge swings.
     span = charge_reach(world, actor)
@@ -857,9 +922,15 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
             if there is None:
                 continue
             if 2 <= distance(origin, there) <= span:
-                best = max(best, T.row_damage(world, actor, basic))
+                best = max(best, T.row_damage(world, actor, basic) / pool)
                 break
-    _BEST[key] = best / pool
+    # **Floored at zero, and that is the right floor rather than a convenience.**
+    # A creature is never obliged to use a row that would cost its own side more
+    # than it gains, so the best thing available from a square is at worst
+    # nothing. It also keeps the signal: a square where every option clips an ally
+    # reads 0, a square where one of them comes clean reads positive, and the
+    # difference is what pays for the step.
+    _BEST[key] = max(0.0, best)
     return _BEST[key]
 
 
