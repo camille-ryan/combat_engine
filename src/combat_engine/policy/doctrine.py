@@ -347,6 +347,22 @@ DOCTRINE: dict[str, float] = {
     # nothing for the rest, so a defender spent three consecutive rounds re-casting
     # the same inert self-buff while the party fought without it.
     "already_on": -4.0,
+    # **An inert row that costs a move or a standard.** Zeroing `is_power` stops such
+    # a row outbidding something useful and does not stop it outbidding `end` at
+    # -2.10, so it was still chosen -- and the action it spends is the one the
+    # creature needed to reposition. Measured across 24 fights: of 354 inert choices,
+    # **243 cost a minor, 48 a free, 62 a move and 1 a standard**.
+    #
+    # Only the last two are priced here. A minor or free spent on nothing leaves the
+    # standard and the move intact, so beating `end` with one is **correct** -- the
+    # turn continues and the creature chooses again. That is why this is not simply a
+    # penalty on `inert`: 291 of the 354 are not the bug.
+    #
+    # Sized to clear `end` (-2.10) from above with the whole family in tow. The
+    # runner-up to one of these is another of these 54 times in 62 -- four rows of one
+    # family scoring identically to two decimals -- so a penalty that only unseats the
+    # winner promotes its twin and changes nothing. #264.
+    "inert_costs_turn": -6.0,
     # Flanking is +2 to hit for two creatures rather than one, and the guides
     # treat setting one up as a striker's ordinary business.
     "takes_flank": 0.6,
@@ -1149,6 +1165,19 @@ def doctrine_features(
             standing = watchers(world, actor)
             if standing:
                 f["threat_conceded"] = conceded(world, actor, standing)
+
+    # **An inert row that costs the creature its move or its standard.** Set here
+    # rather than in `score`, where the rest of the inert handling lives, because
+    # `scripts/doctrine.py` reads `doctrine_features` directly and **cannot see a term
+    # `score` adds afterwards** -- it printed `never fired` for this one while it was
+    # firing 38 times in the same 24 fights. A weight the instrument reports as dead is
+    # indistinguishable from a weight nothing consults, which is this component's
+    # commonest bug, so the term goes where it is observable. #292 has the blind spot.
+    if action.ref and action.cost in (ActionType.MOVE, ActionType.STANDARD):
+        on_self = not action.targets or tuple(action.targets) == (actor,)
+        if inert(world, actor, action.ref) or (
+                on_self and running(world, actor, action.ref)):
+            f["inert_costs_turn"] = 1.0
 
     # **Would this land on me?** An area attack centred near the caster catches it,
     # and nothing in `policy.features` can see that.
