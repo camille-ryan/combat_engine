@@ -42,7 +42,7 @@ import contextlib
 import re
 import traceback
 from dataclasses import dataclass, field
-from functools import lru_cache
+from functools import cache, lru_cache
 from pathlib import Path
 
 from combat_engine import chargen
@@ -53,6 +53,7 @@ from combat_engine.engine import (
     DamageType,
     Encounter,
     Grid,
+    Keyword,
     Powers,
     Rng,
     Team,
@@ -1410,6 +1411,35 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         if probe():
             return True
 
+    # **A typed attack, not typed damage.** The loop above deals a point of
+    # each type and emits `DamageApplied`; thirty-eight never-usable rows are
+    # waiting on a `Hit` that *carries the keyword*, and every one of their
+    # predicates reads `Keyword.X in p.keywords` of the power that landed --
+    # not the damage it dealt. So no amount of typed damage reaches them, and
+    # a typed weapon would not either: `Weapon.dtype` colours the damage and
+    # leaves the power's keyword list alone. The harness has to use a row that
+    # *has* the keyword, which the caster usually already knows -- a wizard
+    # holding a cold at-will was never asked to cast it.
+    #
+    # Both directions, because five of the thirty-eight are monsters printing
+    # "is hit by a cold attack" rather than "you hit with one".
+    for kw in _typed_wanted(ref):
+        for who, at in ((caster, foes[0]), (foes[0], caster)):
+            if not alive(world, at):
+                continue
+            for other in _typed_rows(world, who, ref, kw):
+                known = world.get(who, Powers)
+                lent = known is not None and other not in known.all
+                if lent:
+                    known.known.append(other)
+                use(world, who, other, targets=[at], spend=False)
+                hit = probe()
+                if lent:
+                    with contextlib.suppress(ValueError):
+                        known.known.remove(other)
+                if hit:
+                    return True
+
     # A burst or a blast of its own. "When the m5027 hits with a close or
     # area attack" is a common enough shape, and a harness that only ever
     # swings a basic can never produce one.
@@ -1494,6 +1524,110 @@ def _wants_expended(ref: str) -> bool:
         body = inspect.getsource(declared.body)
         return "expended" in body or "restore_use" in body
     return False
+
+
+#: The damage keyword a printed trigger names, by the word the author wrote.
+#: Only the ten that are damage types -- `weapon`, `martial` and the rest are
+#: the `61` keyword/usage group and want a different lever.
+_TYPED_TRIGGER = {
+    "acid": Keyword.ACID, "cold": Keyword.COLD, "fire": Keyword.FIRE,
+    "force": Keyword.FORCE, "lightning": Keyword.LIGHTNING,
+    "necrotic": Keyword.NECROTIC, "poison": Keyword.POISON,
+    "psychic": Keyword.PSYCHIC, "radiant": Keyword.RADIANT,
+    "thunder": Keyword.THUNDER,
+}
+
+
+def _typed_wanted(ref: str) -> list[Keyword]:
+    """Which damage keywords this row's own printed trigger names.
+
+    **Read off `Trigger.text` rather than tried exhaustively**, and that is a
+    cost decision, not a shortcut. Ten keywords in two directions is forty extra
+    uses per row across 12,197 rows, and this instrument's ten minutes is the one
+    number in the repo documented as un-tunable. One or two keywords is free, and
+    the text is the author's own words sitting in a tracked file -- the same
+    place `--never` already reads to group these.
+    """
+    row = get(ref)
+    if row is None or not row.triggers:
+        return []
+    text = " ".join((t.text or "") for t in row.triggers).lower()
+    return [kw for word, kw in _TYPED_TRIGGER.items()
+            if re.search(rf"\b{word}\b", text)]
+
+
+def _keyword_rows(world, caster: int, exclude: str, kw: Keyword) -> list[str]:  # noqa: ANN001
+    """This creature's own attack rows carrying one keyword, cheapest first.
+
+    `_area_rows`' sibling, and the same two exclusions for the same reasons: a
+    triggered row cannot be used to order and the row under test must not
+    provoke itself. `attack is None` as well -- an effect-only row emits no
+    `Hit`, which is the whole event these callers are waiting for.
+    """
+    known = world.get(caster, Powers)
+    if known is None:
+        return []
+    out = []
+    for other in known.all:
+        p = get(other)
+        if p is None or other == exclude or p.triggers or p.attack is None:
+            continue
+        if kw in p.keywords:
+            out.append(other)
+    return out[:2]
+
+
+@cache
+def _typed_lenders(kw: Keyword) -> tuple[str, ...]:
+    """Declared at-will attacks carrying one damage keyword, one per class.
+
+    **One per class, because several of these triggers narrow further than the
+    keyword and the harness cannot see how far.** `wizard_b._wizard_hit_with`
+    asks `p.cls == "wizard"` as well as the keyword, and a predicate is a
+    closure -- there is nothing to read. Spreading the candidates across
+    classes is the only way to satisfy a gate that cannot be inspected, and it
+    costs a handful of uses rather than a sweep.
+
+    At-will only, and no triggered rows: a daily would spend a resource the
+    rest of the audit is measuring, and a triggered row cannot be used to order.
+    """
+    found: list[tuple[int, str, str]] = []
+    for ref, row in REGISTRY.items():
+        if row.attack is None or row.triggers or kw not in row.keywords:
+            continue
+        if row.usage is not Usage.AT_WILL:
+            continue
+        found.append((row.level, row.cls, ref))
+    found.sort()
+    seen: set[str] = set()
+    picked: list[str] = []
+    for _, cls, ref in found:
+        if cls in seen:
+            continue
+        seen.add(cls)
+        picked.append(ref)
+    # **One per class and no cap beyond that.** A cap of six looked thrifty and
+    # silently dropped the class the gate wanted: sorted by level then name,
+    # `wizard` is last alphabetically, so `f1994`'s `p.cls == "wizard"` could
+    # never be met however many cold rows existed. Ten classes at most carry a
+    # given damage keyword, and this list is built once per keyword for the
+    # whole run.
+    return tuple(picked)
+
+
+def _typed_rows(world, caster: int, exclude: str, kw: Keyword) -> list[str]:  # noqa: ANN001
+    """What this creature can swing to make a typed hit -- owned first, then lent.
+
+    Owned first because it is the realistic case and costs nothing: a wizard
+    holding a cold at-will was simply never asked to cast it. **Lending is the
+    half that does the work**, though -- measured across the 38 rows this pass
+    exists for, neither the caster nor its enemy knew a single row of the wanted
+    keyword, so an owned-only pass fires none of them.
+    """
+    owned = _keyword_rows(world, caster, exclude, kw)
+    lent = [r for r in _typed_lenders(kw) if r != exclude and r not in owned]
+    return owned + lent
+
 
 def _area_rows(world, caster: int, exclude: str) -> list[str]:  # noqa: ANN001
     """This creature's own close and area attacks, cheapest first."""
