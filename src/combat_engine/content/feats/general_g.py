@@ -1374,13 +1374,31 @@ def f718(c: Cast) -> None:
     attack."""
 
 
-@power("f933", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_provoke(when=)",))
+@power("f933", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f933(c: Cast) -> None:
-    """No opportunity attacks for firing a hand crossbow in one hand with
-    a light blade in the other. `c.no_provoke` names a creature you may
-    walk away from; the opening a *ranged attack* gives has no modifier
-    to gate."""
+    """No opportunity attacks for firing a hand crossbow in one hand with a
+    light blade in the other. `c.no_provoke` takes a `when=` now.
+
+    **"Ranged" needs no test here.** `Power.provokes_on` opens this window for
+    `ranged`, `area_burst` and `wall` only, so a window that exists is already
+    a ranged or area attack -- testing the shape again would be a second copy
+    of that rule. What the gate adds is the grip the card names and the attack
+    being made with a **weapon** rather than an implement.
+
+    `ENCOUNTER` became `AT_WILL`: the card prints no limit and a triggered
+    trait declared per-encounter is spent on its first firing, which `lint.py`
+    checks for."""
+    def firing_it(ctx: dict[str, Any]) -> bool:
+        row = get(str(ctx.get("why", "")).split(" ", 1)[0])
+        gear = c.world.get(c.me, Gear)
+        if row is None or gear is None or Keyword.WEAPON not in row.keywords:
+            return False
+        held = gear.held
+        return (any(w.ref == "w:hand-crossbow" for w in held)
+                and any(w.group == "light blade" for w in held))
+
+    c.no_provoke(on=c.me, until=When.ENCOUNTER, when=firing_it)
 
 
 def _used_area_arcane(world, me: int, ev: Any) -> bool:  # noqa: ANN001

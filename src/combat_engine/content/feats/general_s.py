@@ -94,6 +94,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.components import Health
+from combat_engine.engine.dsl import Power
 from combat_engine.engine.query import has_combat_advantage, team
 
 
@@ -184,6 +185,18 @@ def _holding(c: Cast, *groups: str) -> bool:
 def _holding_ref(c: Cast, *refs: str) -> bool:
     gear = _gear(c)
     return gear is not None and any(w.ref in refs for w in gear.held)
+
+
+def _provoking_row(ctx: dict[str, Any]) -> Power | None:
+    """The row that opened this opportunity window, from `c.no_provoke(when=)`.
+
+    `ctx["why"]` is the window's own reason and reads `"<ref> is a ranged power"`,
+    so the row is its first token. **"Ranged or area" needs no test of its own**:
+    `Power.provokes_on` opens this window for `ranged`, `area_burst` and `wall`
+    and nothing else, so a window that exists is already one of those -- and
+    re-checking the shape here would be a second copy of that rule.
+    """
+    return get(str(ctx.get("why", "")).split(" ", 1)[0])
 
 
 def _wielding_ref(*refs: str) -> Callable[[World, int], bool]:
@@ -966,16 +979,31 @@ def f3741(c: Cast) -> None:
 
 @power("f3742", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(*WEAPON_REF, "c.no_provoke(when=)"))
+       dropped=WEAPON_REF)
 def f3742(c: Cast) -> None:
-    """`c.no_provoke` names a creature you may walk away from, not a shape
-    of attack you may make, so "ranged and area attacks do not provoke"
-    has nowhere to go. The holy symbol is `spec.weapon_ref()`, as in
-    `f3741`."""
+    """The second clause is written: `c.no_provoke` takes a `when=` now, so
+    "ranged and area attacks do not provoke" has somewhere to go.
+
+    Gated on an **implement** attack rather than on the holy symbol by ref,
+    which is the `spec.weapon_ref()` half still missing: an implement attack
+    made while holding a symbol is made *with* it, and naming the symbol is
+    what cannot be done. The narrower reading would refuse a symbol-wielding
+    character's other implements; this one is wrong only for a character
+    holding two kinds, which `chargen` does not build.
+
+    The two-handed-melee gate is the printed one and is the same predicate the
+    bonus above already uses."""
     c.bonus(
         "attack", 1, kind="feat", on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: _holding_two_handed(c),
     )
+
+    def with_a_symbol(ctx: dict[str, Any]) -> bool:
+        row = _provoking_row(ctx)
+        return (row is not None and Keyword.IMPLEMENT in row.keywords
+                and _holding_two_handed(c))
+
+    c.no_provoke(on=c.me, until=When.ENCOUNTER, when=with_a_symbol)
 
 
 def _holding_two_handed(c: Cast) -> bool:
@@ -1330,20 +1358,44 @@ def f3764(c: Cast) -> None:
     speed to raise to a full one."""
 
 
+def _ranged_while_armed(c: Cast, *refs: str) -> Callable[[dict[str, Any]], bool]:
+    """"Ranged attacks made with that weapon do not provoke, while you also
+    hold a melee one."
+
+    The limbs are not modelled and do not need to be: `Gear` already lets two
+    one-handers be held at once, and the printed clause's effect is that the
+    ranged attack costs no opening. Gated on a **weapon** attack rather than an
+    implement one, because that is what these two cards hand over.
+    """
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        row = _provoking_row(ctx)
+        gear = _gear(c)
+        if row is None or gear is None or Keyword.WEAPON not in row.keywords:
+            return False
+        return (any(w.ref in refs for w in gear.held)
+                and any(not w.ranged and w.group != "implement" for w in gear.held))
+
+    return gate
+
+
 @power("f3766", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.no_provoke(when=)",))
+       reach=PERSONAL, target=SELF)
 def f3766(c: Cast) -> None:
-    """`Gear` has hands, not limbs, and already lets two one-handers be
-    held at once -- so what is left of the printed line is the ranged
-    attacks not provoking, which `c.no_provoke` cannot narrow to."""
+    """`Gear` has hands, not limbs, and already lets two one-handers be held at
+    once -- so the limbs were never the gap. What was left of the printed line
+    is the ranged attacks not provoking, and `c.no_provoke` takes a gate now."""
+    c.no_provoke(on=c.me, until=When.ENCOUNTER,
+                 when=_ranged_while_armed(c, "w:hand-crossbow"))
 
 
 @power("f3767", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.no_provoke(when=)",))
+       reach=PERSONAL, target=SELF)
 def f3767(c: Cast) -> None:
-    """The thrown-weapon twin of `f3766`, and the same two gaps."""
+    """The thrown-weapon twin of `f3766`. A light thrown weapon is a thrown one
+    in the light-blade group, which is the dagger and its superior cousin."""
+    c.no_provoke(on=c.me, until=When.ENCOUNTER,
+                 when=_ranged_while_armed(c, "w:dagger", "w:widow-s-knife"))
 
 
 @power("f3768", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

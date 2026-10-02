@@ -1388,12 +1388,28 @@ def p16068(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE],
-    dropped=("c.no_provoke(when=)",),
 )
 def p16370(c: Cast) -> None:
-    """The printed line covers ranged and area arcane powers only; the verb
-    takes no gate, so what is laid is the wider "you provoke nothing"."""
-    c.no_provoke(on=c.me, until=When.EONT)
+    """Ranged and area **arcane** powers only, which is narrower than what this
+    row used to lay.
+
+    It laid the bare `c.no_provoke`, i.e. "you provoke nothing at all" -- a row
+    **stronger than its card**, which is the one direction never to guess in.
+    The verb takes a `when=` now.
+
+    **The gate only has to test the keyword.** "Ranged and area" needs no test
+    at all: `Power.provokes_on` opens this window for `ranged`, `area_burst` and
+    `wall` and nothing else, so a window that exists is already one of those.
+    Checking the shape again would be a second copy of that rule, free to drift.
+
+    `ctx["why"]` is the window's own reason, `"<ref> is a ranged power"`, so the
+    row that provoked is its first token.
+    """
+    def arcane_ranged(ctx: dict[str, Any]) -> bool:
+        row = get(str(ctx.get("why", "")).split(" ", 1)[0])
+        return row is not None and Keyword.ARCANE in row.keywords
+
+    c.no_provoke(on=c.me, until=When.EONT, when=arcane_ranged)
 
 
 @power(
