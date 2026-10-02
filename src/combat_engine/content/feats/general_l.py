@@ -433,17 +433,26 @@ def f2628(c: Cast) -> None:
 
 
 @power("f2694", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.flurry_of_blows()",))
+       reach=PERSONAL, target=SELF, todo=("chargen.power_choice()",))
 def f2694(c: Cast) -> None:
     """One of the monk's named powers, chosen at build time, plus a
     proficiency.
 
-    Re-aimed twice. `c.borrow_row` reads a set off the registry by
-    class, level and usage, and the set this card names is none of
-    those -- it is the powers belonging to one named monk feature. The
-    monk's features are declared now, so `spec.feature_ref()` is the
-    wrong absence: what is missing is the feature's own cards, which is
-    the hold nine rows already carry under `c.flurry_of_blows()`."""
+    **Re-aimed a third time, and `c.flurry_of_blows()` was never the hold.**
+    That verb answers "which flurry does this creature *hold*", and the whole
+    point of this card is that it is taken by somebody who holds none -- it is
+    how a non-monk acquires one. So the verb arriving changed nothing here, and
+    the row sat red against a symbol that had already landed.
+
+    What is missing is the **choice**: the card says "choose one of the monk's
+    Flurry of Blows powers" and there are five, which differ. Picking one here
+    would be right for a fifth of the characters who take this. Once the choice
+    is recorded, `c.grant_row(ref, uses=1)` is the rest of the card and is
+    written four lines above this one.
+
+    `chargen.power_choice()` rather than a symbol of its own: eight rows already
+    wait on exactly this -- a build-time pick from a named set of rows -- and a
+    ninth spelling would split the group for no reason."""
 
 
 @power("f2731", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

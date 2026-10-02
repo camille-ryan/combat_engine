@@ -129,10 +129,17 @@ def _on_bolt_hit(c: Cast, fn: Callable[[Hit], None]) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    todo=("chargen.BUILDS", "events.ShortRested"),
+    todo=("events.ShortRested",),
 )
 def sorcerer_f0s0(c: Cast) -> None:
     """The source that cycles through three phases, and has no leg.
+
+    **`chargen.BUILDS` dropped from the marker, because this row's own reasoning
+    already rules it out.** The paragraph below says a leg "with only a third of
+    the feature behind it would deal a sorcerer two of three phases that never
+    arrive" -- so a leg is not wanted *until* the rest announces itself, and
+    naming `BUILDS` made the row report ready the moment legs existed. One gap,
+    and it is the event.
 
     `cf:sorcerer-soul-rest` is the reason and it is unchanged by the legs
     added for the elementalist: the phase is chosen at the end of a short or

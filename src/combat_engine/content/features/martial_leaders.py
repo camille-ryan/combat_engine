@@ -477,10 +477,17 @@ def swordmage_aegis_shield_choice(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=MARTIAL,
-    todo=("c.attacks_with(ability=)", "chargen.armor_proficiency()", "chargen.BUILDS"),
+    todo=("c.attacks_with(ability=)", "chargen.armor_proficiency()",
+          "chargen.second_fork()"),
 )
 def warlord_archer(c: Cast) -> None:
     """Three clauses and none of them has a subject.
+
+    **`chargen.BUILDS` re-aimed to `chargen.second_fork()`, and the paragraph
+    below is why.** It already states that "adding legs does not supply it" --
+    so naming the thing that exists made this row red the moment legs were dealt,
+    against a symbol that was never the hold. What is wanted is a *second fork
+    per class*, which is a different shape from a longer list of legs.
 
     Two are proficiency, which nothing models in either direction -- the
     row drops two and adds one. The third rewrites which ability a ranged

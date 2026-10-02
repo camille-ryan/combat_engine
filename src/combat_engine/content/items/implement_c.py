@@ -431,11 +431,19 @@ def i704x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.flurry_of_blows()",),
+    todo=("c.uses_this_turn(ref=)",),
 )
 def i724x1(c: Cast) -> None:
-    """Nothing counts a class feature's uses within a turn, so an extra one
-    cannot be handed back."""
+    """**Re-aimed: `c.flurry_of_blows()` arrived and was not the hold.** It
+    names the row, which this card needed and now has; what it cannot say is
+    how many times that row has been used *this turn*.
+
+    `Powers.times` counts uses for the whole encounter and `last_round` records
+    a single round number, so neither answers it -- and a flurry is an at-will,
+    so there is no spent use to hand back either. "An additional time during
+    your turn" needs the once-per-turn limit to exist before anything can add to
+    it, and the distinctness clause on top of that: the two uses "must be
+    triggered by two different attacks that you make with this ki focus"."""
 
 
 @power(

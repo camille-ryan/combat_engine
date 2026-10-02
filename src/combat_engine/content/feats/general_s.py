@@ -644,11 +644,34 @@ def f3701(c: Cast) -> None:
 
 @power("f3702", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*FLURRY, "spec.weapon_ref()"))
+       proficiency=("w:sickle",),
+       todo=("c.pre_empt(ref, clause)",))
 def f3702(c: Cast) -> None:
-    """A sickle is not one of the ten weapon groups and the spec gives no
-    ref for it, so "while you are wielding a sickle" cannot be asked --
-    and the power it would change the outcome of has no ref either."""
+    """**Both of this row's old markers were false.** It claimed the sickle
+    could not be asked for and that the flurry had no ref. Neither holds:
+
+    * `_holding_ref(c, "w:sickle")` is in this file and the weapon table
+      carries `w:sickle` -- `query.holding` matches a ref as well as a group,
+      precisely so a card naming one weapon has something to ask. A sickle not
+      being one of the ten groups was never the obstacle.
+    * `c.flurry_of_blows()` arrived with #277 and f3701, directly above, uses
+      it for the identical trigger.
+
+    So the proficiency half lands now -- but it is a **column, read by chargen**,
+    and `todo` is still right because the marker is about *play*: in a fight this
+    row does nothing whatever. Written as `dropped` first, and `audit.py` called
+    that out immediately by reporting it SILENT, "fired 24/8 times and did
+    nothing" -- which was true and is the distinction the three markers exist to
+    make. A proficiency is not a thing that happens in a round.
+
+    What is genuinely missing is that the clause is a **replacement**: the
+    chosen target "instead takes ongoing damage equal to the damage that you
+    would have dealt". `PowerUsed` is announced before the body runs, so there
+    is nothing to subtract yet, and by the time the damage lands it is already
+    paid. `c.pre_empt(ref, clause)` is that window and 29 rows wait on it -- the
+    largest group in the tree and the right one to join rather than mint a
+    thirtieth spelling. A watch written now could only *add* the ongoing damage
+    on top, making the row stronger than its card."""
 
 
 # -- runepriest -------------------------------------------------------------
