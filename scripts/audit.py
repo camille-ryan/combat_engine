@@ -2221,8 +2221,18 @@ def _why_never(never: list[Result]) -> None:
         if row is None:
             continue
         if getattr(row, "on", None) is not None:
-            triggered[type(row.on.event).__name__ if not isinstance(row.on.event, type)
-                      else row.on.event.__name__] += 1
+            # **`on=` may be a tuple of triggers**, and assuming one crashed this
+            # on the full corpus -- so the flag worked on every narrow set it was
+            # tried against and died the first time it was asked the question it
+            # exists for. A row with two trigger events is counted under each,
+            # because "what is this waiting for" has two answers and either
+            # firing would explain it.
+            for trig in (row.on if isinstance(row.on, tuple) else (row.on,)):
+                event = getattr(trig, "event", None)
+                if event is None:
+                    continue
+                triggered[event.__name__ if isinstance(event, type)
+                          else type(event).__name__] += 1
         elif getattr(row, "requires", None) is not None or getattr(row, "requires_text", ""):
             gated.append(r.ref)
         else:
@@ -2240,6 +2250,18 @@ def _why_never(never: list[Result]) -> None:
               f"{len(bare)}**")
         print("        " + ", ".join(sorted(bare)[:16])
               + (" ..." if len(bare) > 16 else ""))
+    # **Every ref, not a sample of them.** A change to what the board hands a
+    # row moves this set in both directions at once, and the last attempt at one
+    # was net zero on the count while breaking four rows -- only diffing the
+    # refs showed it. A truncated list cannot be diffed, so the whole set goes
+    # to a file and the summary above stays readable.
+    out = Path("logs") / "never.txt"
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text("\n".join(sorted(r.ref for r in never)) + "\n")
+        print(f"      every ref: {out}")
+    except OSError:
+        pass
 
 
 def main() -> int:
