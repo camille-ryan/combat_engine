@@ -550,24 +550,34 @@ def i477x1(c: Cast) -> None:
     reach=CloseBurst(5),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("resolve.dmg_ctx.attacker",),
 )
 def i614p1(c: Cast) -> None:
-    """The penalty lands on every enemy in the zone rather than only the marked
-    ones attacking somebody other than their marker.
+    """Only the marked enemies, and only against anyone but their own marker.
 
-    **Re-aimed off `c.grants_in(when=)`, which arrived and is not the hold.**
-    The gate exists; what it cannot read is **who is attacking**. The attack
-    context carries `attacker`, the damage context does not -- it has `target`,
-    `power`, `dtype`, `crit`, `ranged` and the granted-swing provenance, and this
-    is a damage penalty. So "is this enemy marked" and "is it attacking its own
-    marker" are both questions about a creature the gate cannot name.
+    **Both halves are written now that the damage context says who is dealing
+    it** (#302). `ctx["source"]` is the enemy swinging, so "that are marked" is
+    `c.marked(on=source)` and "other than the one that marked them" is the
+    target *not* being its marker -- `c.marked(on=source, by=target)` asked in
+    the negative, which is the same relation read from the other end rather than
+    a second mechanism.
 
-    Pulling the standard back out of the ground is not modelled either --
-    nothing can be planted -- but that clause is about ending the zone rather
-    than about the penalty, and the zone does end with the encounter."""
+    Gated on `from_attack` as well, because the card says "damage rolls": a
+    zone's burn or an ongoing effect is damage this creature deals and is not a
+    roll it makes, and the context distinguishes them so the row may as well.
+
+    Pulling the standard back out of the ground is still not modelled -- nothing
+    can be planted -- but that clause ends the zone rather than the penalty, and
+    the zone does end with the encounter."""
     zone = c.zone(c.area(), until=When.ENCOUNTER)
-    c.grants_in(zone, "damage", -1, side="enemy", kind="untyped")
+
+    def marked_elsewhere(ctx: dict[str, Any]) -> bool:
+        who, at = ctx.get("source"), ctx.get("target")
+        if who is None or at is None or not ctx.get("from_attack"):
+            return False
+        return c.marked(on=who) and not c.marked(on=who, by=at)
+
+    c.grants_in(zone, "damage", -1, side="enemy", kind="untyped",
+                when=marked_elsewhere)
 
 
 # -- level 3 ----------------------------------------------------------------

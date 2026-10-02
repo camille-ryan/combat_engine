@@ -751,6 +751,20 @@ def deal_damage(
     # would disagree about the same blow.
     dmg_ctx = {
         "target": target,
+        # **Who is dealing it, which this could not say.** The attack context has
+        # carried `attacker` all along and this had eleven keys and no equivalent,
+        # so a damage-side modifier gated on *who is swinging* could not be
+        # written at all -- `i614p1`'s "enemies that are marked take -1 against
+        # any creature other than the one that marked them" asks twice about the
+        # dealer and once about the target. #302.
+        #
+        # `source` rather than `attacker`, because damage is dealt by things that
+        # are not swings -- ongoing damage, a zone's burn, a trait's `c.flat` --
+        # and for those the dealer is the effect's owner rather than somebody
+        # taking a shot. `from_attack` below is how a gate tells the two apart,
+        # so neither has to be guessed from a None.
+        "source": source,
+        "from_attack": from_attack,
         "power": detail,
         "opportunity": opportunity,
         "charge": charge,
