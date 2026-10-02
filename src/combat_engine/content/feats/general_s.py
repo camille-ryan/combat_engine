@@ -1535,9 +1535,14 @@ def f3784(c: Cast) -> None:
 
 @power("f3785", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.counts_as(property=)", "Weapon.high_crit"))
+       todo=("c.counts_as(property=)",))
 def f3785(c: Cast) -> None:
-    """A weapon property laid on a weapon after the fact."""
+    """A weapon property laid on a weapon after the fact.
+
+    **One gap now, not two.** It also waited on `Weapon.high_crit`, on the
+    argument that nothing read the property; `Cast._high_crit` reads it now
+    (#240), so the whole of what is missing is the writer.
+    """
 
 
 @power("f3786", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

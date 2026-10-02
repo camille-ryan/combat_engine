@@ -1251,7 +1251,7 @@ def f1125(c: Cast) -> None:
 
 @power("f621", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("Weapon.high_crit",))
+       dropped=("c.counts_as(property=)",))
 def f621(c: Cast) -> None:
     """One named weapon rolls a d8, and becomes high crit.
 
@@ -1259,13 +1259,13 @@ def f621(c: Cast) -> None:
     the weapon, and `w:hand-crossbow` is in the database at the d6 the card
     is raising.
 
-    **High crit is the dropped clause, and the gap is a reader rather than a
-    writer.** Properties are a frozenset on the same per-character copy, so
-    adding the word would be as easy as the die was -- and would be a
-    modifier nothing consults, which is this project's commonest bug. Nothing
-    in the engine reads high crit from anywhere: it is printed on 18 weapons
-    and acted on by none of them (#240). So the symbol names what is actually
-    missing, and it is the same one f3785 waits on.
+    **High crit is the dropped clause, and the gap moved from the reader to the
+    writer.** It was `Weapon.high_crit` on the argument that nothing in the
+    engine read the property at all -- printed on 18 weapons and acted on by
+    none. That is no longer true: `Cast._high_crit` pays a rolled extra `[W]`
+    on a critical (#240). So what is left is the half this row actually needs,
+    which is a way to *add* the property to one character's weapon after the
+    fact. `c.counts_as(property=)`, the same symbol f3785 and f3786 wait on.
 
     Re-aimed twice before that. The first marker named `c.bonus('crit_range')`,
     which **exists** and is wrong twice over -- high crit is extra damage on a
