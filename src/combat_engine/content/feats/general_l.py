@@ -2148,8 +2148,8 @@ def f2630(c: Cast) -> None:
         return
     for friend in c.allies():
         if friend != c.me and c.adjacent(friend):
-            c.bonus(AC, 2, on=friend, until=When.SONT, kind="feat")
-            c.bonus(REF, 2, on=friend, until=When.SONT, kind="feat")
+            c.bonus(AC, 2, on=friend, until=When.SONT, kind="untyped")
+            c.bonus(REF, 2, on=friend, until=When.SONT, kind="untyped")
 
 
 @power("f2632", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2159,7 +2159,7 @@ def f2630(c: Cast) -> None:
 def f2632(c: Cast) -> None:
     """Hunkering down sharpens the next swing. The printed window is the
     **end** of the next turn, not the start the defences themselves use."""
-    c.bonus("attack", 1, on=c.me, until=When.EONT, kind="feat")
+    c.bonus("attack", 1, on=c.me, until=When.EONT, kind="untyped")
 
 
 @power("f2723", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

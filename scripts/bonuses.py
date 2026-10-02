@@ -215,7 +215,16 @@ def _granted(text: str, word: str) -> bool:
         before = text[start + 1:m.start()]
         if re.search(
             r"\b(ignore|ignores|ignoring|no|without|not|n't|penalt\w*|must|"
-            r"requirement|prerequisite|against creatures that have)\b", before
+            r"requirement|prerequisite|against creatures that have|"
+            # **"while wielding a shield" is a gate and carries no negation.**
+            # `must` already caught "you must be wielding a shield", and the
+            # commoner phrasing has no such word in it -- so f2630's bonus,
+            # which its card leaves untyped, was read as a shield bonus off
+            # the clause saying when the feat applies. A type word is never
+            # introduced *by* "wielding", so excluding it cannot hide a real
+            # one: "a +1 shield bonus while wielding a shield" still grants,
+            # because the first `shield` has no `wielding` before it.
+            r"wielding|wields|wielded)\b", before
         ):
             continue
         # **"proficiency with that weapon" is a gate, not a grant**, and
