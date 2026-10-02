@@ -1040,7 +1040,9 @@ def _associated(ref: str, *, listed: bool = True) -> None:
     feat.__doc__ = _associated.__doc__
 
 
-for _ref in ("f972", "f980", "f981", "f982", "f985", "f992", "f994"):
+# `f981` is written in `exploits.py`, where the `_riders` machinery and the
+# "dealt me damage since my last turn" memory both live. #299.
+for _ref in ("f972", "f980", "f982", "f985", "f992", "f994"):
     _associated(_ref)
 for _ref in ("f977", "f988"):
     _associated(_ref, listed=False)
