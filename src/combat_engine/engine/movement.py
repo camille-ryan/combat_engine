@@ -331,26 +331,27 @@ def _threat(world: World, eid: int) -> int:
     component lookups and one registry lookup, no iteration over what a creature
     knows.
     """
-    from .components import Gear, Mods, Powers
+    from .components import Mods
 
     mods = world.get(eid, Mods)
-    far = max(1, 1 + mods.total("reach", {})) if mods and mods.items else 1
-
-    gear = world.get(eid, Gear)
-    held = getattr(gear, "main", None) if gear else None
-    worn = getattr(held, "reach", None) if held else None
-    if worn:
-        far = max(far, worn)
-
-    known = world.get(eid, Powers)
-    if known is not None and known.basic:
-        from .dsl import get
-
-        swing = get(known.basic)
-        if swing is not None and swing.reach is not None \
-                and swing.reach.kind == "melee":
-            far = max(far, swing.reach.size)
-    return far
+    # **Reach does not threaten, and that is the printed rule.** The compendium's
+    # Reach entry: "With a reach weapon, a creature can make melee attacks against
+    # enemies that are 2 squares away ... **Even so, the wielder can make
+    # opportunity attacks only against enemies adjacent to it** and can flank only
+    # enemies adjacent to it."
+    #
+    # So this used to read the weapon in hand and the basic attack's own range, and
+    # was wrong for **every** reach wielder. Camille caught it. It is wrong for
+    # monsters too: of 938 that print a Reach of 2 or more, only **76** have
+    # threatening reach -- the separate ability that *does* extend it, and the only
+    # thing that should.
+    #
+    # Nothing sets `threatening_reach` yet, so this is adjacency for everybody
+    # today. The 76 want the flag off their blocks and that is #306; being wrong
+    # for 76 monsters is better than for 938 plus the whole party.
+    if mods is not None and mods.items and mods.total("threatening_reach", {}) > 0:
+        return max(1, 1 + mods.total("reach", {}))
+    return 1
 
 
 def phasing(world: World, eid: int) -> bool:

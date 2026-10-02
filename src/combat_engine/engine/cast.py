@@ -1065,6 +1065,20 @@ class Cast:
         """
         return self.stats.score(a)
 
+    def attack_with(self, a: Ability) -> int:
+        """The full attack bonus for an ability, named at runtime.
+
+        `c.str_` and its six siblings are this with the ability baked in, which
+        is what a row printing "Strength vs. AC" wants. A row printing **"Primary
+        ability vs. Reflex"** does not know which ability until it asks, so it
+        needs the generic form -- `p11808` rolls its dismissal burst through here
+        off `c.ability_for()`.
+
+        Public because content asked: reaching for `_attack_bonus` from a row is
+        the same thing with a private name on it.
+        """
+        return self._attack_bonus(a)
+
     def _attack_bonus(self, a: Ability) -> int:
         """Half level, the ability modifier, and the weapon where it counts.
 

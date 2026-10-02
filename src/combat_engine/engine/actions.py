@@ -744,8 +744,23 @@ def _dropping(world: World, encounter: Encounter, actor: int) -> list[Action]:
     of it costs something. Nothing could say that before -- an effect was
     only ever ended by its duration running out.
     """
+    from .components import Conjuration
+
+    mine = list(world.effects.of(actor))
+    # **A conjuration's effect is held by the conjuration**, which has no turn --
+    # no `Health`, no `Side`, no initiative slot, deliberately. So an effect that
+    # `c.endable` made droppable on a spectral hound was offered to nobody, and
+    # "as a standard action you can dismiss it and make a close burst 1 attack
+    # centred on its square" had no action to be. Offered to whoever conjured it,
+    # which is the only creature the printed line can mean. #296.
+    for _eid, conj in world.each(Conjuration):
+        if conj.by != actor:
+            continue
+        held = world.effects.live.get(conj.effect or -1)
+        if held is not None and held not in mine:
+            mine.append(held)
     out: list[Action] = []
-    for eff in sorted(world.effects.of(actor), key=lambda e: e.id):
+    for eff in sorted(mine, key=lambda e: e.id):
         if eff.drop_cost is None or not encounter.can_spend(actor, eff.drop_cost):
             continue
         out.append(

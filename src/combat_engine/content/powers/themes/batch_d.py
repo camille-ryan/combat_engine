@@ -72,7 +72,7 @@ from combat_engine.engine import (
     targets_me,
     would_hit_me,
 )
-from combat_engine.engine.components import Companion
+from combat_engine.engine.components import Companion, Conjuration, Position
 from combat_engine.engine.events import (
     AdjacencyGained,
     AttackRolled,
@@ -261,7 +261,6 @@ def p11807(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=PRIMAL_IMPL_CONJ,
-    dropped=("c.dismiss_conjuration(attack=)",),
 )
 def p11808(c: Cast) -> None:
     """"Enemies grant combat advantage while adjacent to it" is written now.
@@ -278,17 +277,52 @@ def p11808(c: Cast) -> None:
     "enemies", not "these enemies" -- and that is a smaller miss than the
     whole clause was.
 
-    **The marker is re-aimed to the clause that is actually missing**, and it
-    is the big one: "as a standard action, you can dismiss it and make a
-    close burst 1 attack centred on its square". Nothing dismisses a
-    conjuration -- `c.dismiss_companion` is the only dismissal in `Cast` and
-    a conjuration is not a companion -- so the attack, its targets and its
-    damage are all unreachable. `c.ability_for(ref)` was on the marker for
-    that damage line and was never the hold: the verb exists, the attack it
-    would feed does not. See #296.
+    **And the dismissal is written.** "As a standard action, you can dismiss it
+    and make a close burst 1 attack centred on its square" is `c.endable` with a
+    `then=` -- the offer is `Effect.drop_cost`, which `actions.legal` hands to
+    whoever conjured it, and `drop_then` is a payout that runs for a deliberate
+    dismissal and for nothing else. Not for the clock, which is right: the card
+    pays for *choosing*, and a spirit that simply expires attacks nobody.
+
+    The burst is centred on the spirit's square, **captured when it is
+    conjured**, and that is correct here rather than lazy: `drop_then` runs
+    *after* the effect ends, the effect's `on_end` despawns the conjuration, so
+    by the time the payout runs there is no entity left to measure from. This
+    spirit is conjured with no `speed`, so it cannot be moved and its square at
+    dismissal is the square it was made on.
+    
+    A conjuration that *can* be walked would need the live square and there is
+    nowhere to read it from at that moment -- noted in #296 rather than worked
+    around, because no row in the tree wants it yet.
+
+    `c.ability_for()` is the damage line's "+ ability modifier", which is the
+    thing `PRIMARY` was asking for and which exists. See #296.
     """
     spirit = c.conjure(until=When.EONT, sustain=None)
     c.aura(1, on=spirit, until=When.EONT, label=c.ref)
+
+    where = c.world.get(spirit, Position).square
+
+    def dismissed() -> None:
+        near = spread({where}, 1)
+        for foe in sorted(f for f in c.enemies()
+                          if (at := c.world.get(f, Position)) is not None
+                          and at.squares & near):
+            # Longhand, because this row declares no attack line and should not:
+            # casting it conjures and attacks nobody, and the swing belongs to the
+            # dismissal. `c.ability_for()` is the card's "Primary ability", which
+            # falls back to the best modifier on the sheet for a row with no
+            # declared line -- which is what Primary means.
+            if c.attack(c.attack_with(c.ability_for()), REF, on=foe):
+                c.damage("1d10", c.mod(c.ability_for()), on=foe)
+                # `c.rooted` bars a shift and leaves being shoved alone, which is
+                # what "the target can't shift" says -- `c.immobilized` would stop
+                # it walking too.
+                c.rooted(on=foe, until=When.EONT)
+
+    conj = c.world.get(spirit, Conjuration)
+    if conj is not None:
+        c.endable(c.world.effects.live.get(conj.effect), STANDARD, then=dismissed)
 
     def beside(ctx: dict[str, Any]) -> bool:
         who = ctx.get("target")
