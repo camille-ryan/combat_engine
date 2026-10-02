@@ -276,6 +276,13 @@ class Report:
     links_total: int = 0
     #: Rows whose text says something about a weapon, gate or rider. #237.
     wields: int = 0
+    #: Stat blocks that yielded no numbers at all. #238.
+    blank_stats: list[str] = field(default_factory=list)
+
+    @property
+    def unexpected_blank(self) -> list[str]:
+        """The blank stat lines nobody has recorded yet. See `KNOWN_BLANK`."""
+        return [r for r in self.blank_stats if r not in KNOWN_BLANK]
     build_powers: int = 0
     items: int = 0
     item_blocks: int = 0
@@ -308,6 +315,14 @@ class Report:
             f"companions    {self.companions:6d}  (familiars and beasts, new)",
             f"traps         {self.traps:6d}  (with a printed Perception DC where one is given)",
             f"weapon rows   {self.wields:6d}  (what each power's text says it needs)",
+            (f"blank stats   {len(self.unexpected_blank):6d} unexpected  "
+             f"**{', '.join(self.unexpected_blank)}** -- a stat line that "
+             f"yielded nothing; see `_read_nothing`"
+             if self.unexpected_blank else
+             f"blank stats        0 unexpected  "
+             f"({len(self.blank_stats)} known: {', '.join(self.blank_stats)})"
+             if self.blank_stats else
+             "blank stats        0 unexpected  (every stat block yielded numbers)"),
             f"assoc links   {self.links_found:6d}/{self.links_total}"
             "  (linked Associated members resolved; see _links_resolve)"
             + ("   <-- A MISS. The name resolver has regressed."
@@ -431,6 +446,41 @@ CORRECTED: dict[str, dict[str, int]] = {
 }
 
 
+#: Stat blocks already known to yield nothing, so a **new** one stands out.
+#:
+#: Without this the report is a line in a long build log saying what somebody
+#: already knows, which is the kind of check that is read once and then skipped
+#: forever. With it, `blank stats` reads `0 unexpected` on every ordinary run and
+#: names anything new on the run that imports it. The same arrangement
+#: `loader.UNUSABLE` and `CORRECTED` use, and for the same reason: a known-bad
+#: row is a fact to record, not a reason to stop.
+KNOWN_BLANK = ("m5452",)
+
+
+def _read_nothing(m) -> bool:  # noqa: ANN001
+    """Did this stat line yield nothing at all, rather than yield zeroes?
+
+    **The importer could not tell the difference and that is #238.** A block
+    whose defences parse to four zeros looks exactly like one the parser never
+    reached, and `m5452` is the case: every number zero including hit points,
+    no role -- and **four of its abilities declared**, so the block parsed far
+    enough to give up its powers and then gave up nothing for its stat line.
+    It was stored in silence.
+
+    Hit points and AC together, not either alone. A minion has 1 hit point and
+    a real AC, and a few blocks legitimately print no AC at all -- but nothing
+    in 4e has an AC of zero *and* no hit points. Asking for both is what makes
+    this a parse failure rather than an unusual monster.
+
+    Reported rather than refused. `loader.UNUSABLE` is what keeps a wrong
+    monster off a board, and it already lists this one; the importer's job here
+    is to stop being quiet about it, so that the next block that fails this way
+    is visible on the run that imports it rather than two months later in an ad
+    hoc analysis.
+    """
+    return m.hp == 0 and m.ac == 0
+
+
 def _int_or_none(value: object) -> int | None:
     """The compendium's own column, when it is a number."""
     try:
@@ -485,6 +535,8 @@ def _monsters(
             printed_role=row["Role"] or "",
         )
         _correct(m, m.ref_id)
+        if _read_nothing(m):
+            report.blank_stats.append(m.ref_id)
         scores.append(m.score)
         report.monsters += 1
         report.worst.append((m.ref_id, m.score))
