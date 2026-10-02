@@ -42,6 +42,7 @@ import contextlib
 import re
 import traceback
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 from combat_engine import chargen
@@ -394,6 +395,36 @@ def _item_blocks() -> dict[str, list[str]]:
 _BLOCKS: dict[str, list[str]] = {}
 
 
+@lru_cache(maxsize=1)
+def _associated() -> dict[str, list[str]]:
+    """Each feat's "Associated Powers" line, as refs, from `feat.spec`.
+
+    **The rows a feat is a rider on, which `_siblings` did not have.** 219 rows in
+    the never-usable set wait on `Hit`, and the single commonest thing their printed
+    trigger narrows by is "a power associated with this feat" -- so the harness
+    swinging a melee *basic* can never satisfy them however well they are written.
+    The refs are right there on the card: `Associated Powers: p917, p1758, p1063`.
+
+    Distinct from the `{"ref": ...}` gate `_siblings` already reads: that is the one
+    card a feat is a *prerequisite* on, and this is the list it riders. A feat can
+    have either, both or neither. #214.
+    """
+    from combat_engine.etl.build import game
+
+    out: dict[str, list[str]] = {}
+    try:
+        rows = game().execute("SELECT ref, spec FROM feat").fetchall()
+    except Exception:
+        return out
+    for ref, spec in rows:
+        for line in (spec or "").splitlines():
+            if line.startswith("Associated Powers:"):
+                out[ref] = re.findall(r"\b(?:p|i|cf:)[\w:-]*\d[\w:-]*\b",
+                                      line.split(":", 1)[1])
+                break
+    return out
+
+
 def _siblings(ref: str) -> list[str]:
     """The rows this one is printed beside, and cannot work without.
 
@@ -415,6 +446,7 @@ def _siblings(ref: str) -> list[str]:
     if parent:
         out.append(parent)
     out += _atoms(_gates().get(ref), "ref")
+    out += _associated().get(ref, [])
     found = ITEM_BLOCK.match(ref)
     if found:
         out += _item_blocks().get(found.group(1), [])
