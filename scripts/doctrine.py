@@ -39,7 +39,7 @@ from combat_engine.engine import Ident
 from combat_engine.engine.query import alive, creatures
 from combat_engine.policy import install, take_turn
 from combat_engine.policy import threat as T
-from combat_engine.policy.doctrine import DOCTRINE, DoctrinePolicy, doctrine_features, forget
+from combat_engine.policy.doctrine import DOCTRINE, DoctrinePolicy, forget
 
 
 class Watched(DoctrinePolicy):
@@ -56,10 +56,16 @@ class Watched(DoctrinePolicy):
         self.chosen = 0
 
     def score(self, world, encounter, actor, action):  # noqa: ANN001, ANN201
-        d = doctrine_features(world, encounter, actor, action)
+        # **`weighed`, not `doctrine_features`.** This used to build its own copy of
+        # the doctrine half, which is only part of what `DoctrinePolicy.score`
+        # assembles -- so any term `score` added or cleared afterwards was invisible
+        # here, and this file printed `never fired` for it. That is the same thing it
+        # prints for a weight nothing consults, so the two cases could not be told
+        # apart in the one report built to tell them apart. #292.
+        d = self.weighed(world, encounter, actor, action)
         self.scored += 1
         for k, v in d.items():
-            if v:
+            if v and k in DOCTRINE:
                 self.offered[k] += 1
         return super().score(world, encounter, actor, action)
 

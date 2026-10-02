@@ -1166,19 +1166,6 @@ def doctrine_features(
             if standing:
                 f["threat_conceded"] = conceded(world, actor, standing)
 
-    # **An inert row that costs the creature its move or its standard.** Set here
-    # rather than in `score`, where the rest of the inert handling lives, because
-    # `scripts/doctrine.py` reads `doctrine_features` directly and **cannot see a term
-    # `score` adds afterwards** -- it printed `never fired` for this one while it was
-    # firing 38 times in the same 24 fights. A weight the instrument reports as dead is
-    # indistinguishable from a weight nothing consults, which is this component's
-    # commonest bug, so the term goes where it is observable. #292 has the blind spot.
-    if action.ref and action.cost in (ActionType.MOVE, ActionType.STANDARD):
-        on_self = not action.targets or tuple(action.targets) == (actor,)
-        if inert(world, actor, action.ref) or (
-                on_self and running(world, actor, action.ref)):
-            f["inert_costs_turn"] = 1.0
-
     # **Would this land on me?** An area attack centred near the caster catches it,
     # and nothing in `policy.features` can see that.
     if action.ref and actor in action.targets and _is_attack(action.ref):
@@ -1543,6 +1530,24 @@ class DoctrinePolicy:
     def score(
         self, world: Any, encounter: Encounter, actor: int, action: Action
     ) -> float:
+        return self.weigh(self.weighed(world, encounter, actor, action), action)
+
+    def weighed(
+        self, world: Any, encounter: Encounter, actor: int, action: Action
+    ) -> dict[str, float]:
+        """Every feature this action is actually scored on, after the lot of it.
+
+        **Split out so an instrument cannot read a different dict from the one
+        `weigh` is handed.** `scripts/doctrine.py` built its own copy by calling
+        `doctrine_features`, which is only *part* of what this method assembles --
+        the clauses below add `inert_costs_turn` and clear `allies_caught`,
+        `is_power`, `closes_distance` and `is_total_defence` -- so every one of
+        those was invisible to the only report that asks "is this weight
+        load-bearing". It printed `never fired` for `inert_costs_turn` while the
+        term was firing 1,115 times, and `never fired` is also what it prints for
+        a weight nothing consults: the two cases were indistinguishable in the
+        report built to tell them apart. #292.
+        """
         f = features(world, encounter, actor, action)
         if action.ref and benefits(action.ref):
             # **Help is not friendly fire.** `allies_caught` is -7.0 and exists to
@@ -1570,6 +1575,13 @@ class DoctrinePolicy:
             # **A row whose effect is already running counts as inert too**, for the
             # same reason: it accomplishes nothing *now*.
             f["is_power"] = 0.0
+            if action.cost in (ActionType.MOVE, ActionType.STANDARD):
+                # **Moved back here from `doctrine_features` once #292 was fixed.** It
+                # had been exiled there only so `scripts/doctrine.py` could see it
+                # fire; now that the instrument reads `weighed`, a term can live
+                # where its logic belongs instead of where the report can reach.
+                # Verified by the move: `offered` is unchanged at 1,115.
+                f["inert_costs_turn"] = 1.0
         if action.kind in ("move", "run") and action.dest is not None:
             # **Camille's rule: one move, then total defence -- not two moves.** A
             # second move is one the creature can only pay for with its *standard*,
@@ -1605,7 +1617,7 @@ class DoctrinePolicy:
             # this one predicate rather than a second copy of the approach rules.
             f["is_total_defence"] = 0.0
         f.update(doctrine_features(world, encounter, actor, action))
-        return self.weigh(f, action)
+        return f
 
     def act(
         self, world: Any, encounter: Encounter, actor: int, options: list[Action]
@@ -1715,9 +1727,15 @@ class DoctrinePolicy:
 
         A weight nothing consults is this project's commonest bug, so the scorer is
         built able to say what it read.
+
+        **Reads `weighed`, not `doctrine_features`.** It used to recompute the
+        doctrine half on its own and so could not see a term `score` added
+        afterwards. Still filtered to `DOCTRINE`, because that is what this method
+        promises -- `policy.features`' own keys have their own report. #292.
         """
-        d = doctrine_features(world, encounter, actor, action)
-        return {k: self.weights.get(k, 0.0) * v for k, v in d.items()}
+        d = self.weighed(world, encounter, actor, action)
+        return {k: self.weights.get(k, 0.0) * v for k, v in d.items()
+                if k in DOCTRINE}
 
 
 def pool_shares(world: Any) -> dict[int, float]:
