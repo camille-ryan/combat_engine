@@ -502,6 +502,21 @@ def _wields_of(ref: str) -> list[str]:
     return _WIELDS.get(ref, [])
 
 
+def _train(gear: object, held: object) -> None:
+    """Count the handed-over weapon as one this character is trained with.
+
+    `Gear.trained` withholds a weapon's proficiency bonus from a creature not
+    trained with it (#242), and everything this function hands over is handed
+    over **because a row demands it** -- so the character it stands in for is
+    one that took the feat and is trained. Without this the harness would
+    under-roll all 257 of those rows by 2 or 3 to hit, which changed no verdict
+    when measured but makes every one of them a slightly wrong question.
+    """
+    current = getattr(gear, "trained", frozenset())
+    if current:
+        gear.trained = current | {held.ref}
+
+
 def _any_weapon(want: str):  # noqa: ANN202
     """A printed weapon matching a group or a category, or None for a shape."""
     for arm in chargen.PRINTED.values():
@@ -583,6 +598,7 @@ def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
             held = _replace(arm)
             gear.weapons.append(held)
             gear.wield(held)
+            _train(gear, held)
         return
     # **The sentence first, the column as the fallback, and that order is
     # measured.** `power.wields` records a *group* -- a Requirement naming one
@@ -601,6 +617,7 @@ def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
             held = _replace(arm)
             gear.weapons.append(held)
             gear.wield(held)
+            _train(gear, held)
             return
 
 

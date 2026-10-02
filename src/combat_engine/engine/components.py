@@ -885,6 +885,16 @@ class Gear:
     armour: str = "cloth"
     #: What is on the belt rather than in the hands, by weapon ref.
     stowed: set[str] = field(default_factory=set)
+    #: The weapons this creature is **trained** with, by ref -- its chassis's
+    #: printed lines plus whatever its feats and its race opened up.
+    #:
+    #: **Empty means "nobody recorded any", not "proficient with nothing."** A
+    #: monster has no `Build` and carries no weapons; a board assembled by hand
+    #: in a probe or an instrument records none either. Penalising those would
+    #: turn a missing record into a to-hit penalty, which is the wrong failure
+    #: -- so the bonus is withheld only when there **is** a record and the
+    #: weapon in hand is not in it. `chargen.spawn` is what fills it. #242.
+    trained: frozenset[str] = frozenset()
     #: Magic items being worn, by slot. A weapon's own magic is on the
     #: `Weapon` -- it is a longsword with properties -- so this holds the
     #: armour, the neck, and the eight small slots that had nowhere to go.

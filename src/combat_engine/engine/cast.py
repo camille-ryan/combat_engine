@@ -1020,10 +1020,30 @@ class Cast:
         weapon_power = p is None or Keyword.WEAPON in p.keywords
         gear = self.world.get(self.me, Gear)
         if gear is not None:
-            if weapon_power:
+            if weapon_power and self._trained_with(gear, self._wielded()):
                 bonus += getattr(self._wielded(), "proficiency", 0)
             bonus += self._enhancement_of(p)
         return bonus
+
+    def _trained_with(self, gear: Gear, arm: Weapon | None) -> bool:
+        """Is this creature trained with the weapon it is holding?
+
+        **The test used to be "is this a weapon power", never "is this character
+        proficient".** So any creature holding anything got that weapon's full
+        proficiency bonus, and the superior weapons -- whose entire cost is a
+        feat -- were free: a level-1 fighter with no feat rolled +8 with a
+        fullblade against +7 with the greataxe it is actually trained with.
+        #242.
+
+        `Gear.trained` empty means **no record**, not "trained with nothing". A
+        monster has no `Build` and a probe's hand-built board records nothing,
+        and turning a missing record into a to-hit penalty would be a worse bug
+        than the one being fixed. So the bonus is withheld only when there is a
+        record and the weapon is not in it.
+        """
+        if arm is None or not gear.trained:
+            return True
+        return arm.ref in gear.trained
 
     def _wielded(self) -> Weapon | None:
         """The weapon this power swings or fires.

@@ -2056,6 +2056,15 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
             weapons=carried,
             shield=bool(carried_shield),
             armour=line.armour,
+            # **What this character is trained with**, which nothing recorded
+            # before: the chassis's printed lines, plus what its feats and its
+            # race opened up. `_attack_bonus` was awarding a weapon's
+            # proficiency for merely holding it, so a superior weapon -- whose
+            # entire cost is a feat -- was free. #242.
+            trained=frozenset(
+                w.ref for w in (*line.weapons, *carried, *belt,
+                                *from_feats, *from_race)
+            ),
         ),
     )
     # Owned, not held. `Gear.__post_init__` works the grip out from an
