@@ -966,15 +966,28 @@ class Gear:
         wizard holding nothing but an orb is holding nothing it can swing,
         and answering "the orb" makes every row that asks what is in hand
         quietly true.
+
+        **Both remaining branches filter `held`, so this cannot contradict
+        `melee`.** There was a third that filtered `weapons` instead, and so
+        answered "the greataxe" for an axe sitting on the belt while `melee`
+        answered "nothing" -- one disagreeing pair read by 86 callers, every
+        one of which is asking what the creature is *using*. It became visible
+        when a grip bug put a fighter's axe in its stow (#268); the two readings
+        had been inconsistent all along.
+
+        Removed rather than corrected, because correcting it makes it identical
+        to the branch above. Measured first: across 16 fights and 1.8 million
+        calls, **the branch answered zero times** -- `melee[0]` 810,779 and
+        `None` 995,039, nothing else. And `None` being the commonest answer is
+        why dropping it is safe: every caller already handles it. #295.
         """
         melee = self.melee
         if melee:
             return melee[0]
-        usable = [w for w in self.held if w.group != "implement"]
-        if usable:
-            return usable[0]
-        rest = [w for w in self.weapons if w.group != "implement"]
-        return rest[0] if rest else None
+        # A creature holding only a bow has nothing to swing and something to
+        # fire, and that is what it is using.
+        firing = [w for w in self.held if w.group != "implement"]
+        return firing[0] if firing else None
 
     @property
     def ranged(self) -> Weapon | None:
