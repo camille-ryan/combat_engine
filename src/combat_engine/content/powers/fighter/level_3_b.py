@@ -45,7 +45,14 @@ from combat_engine.engine.query import adjacent, allies, team
 from combat_engine.engine.query import squares as squares_of
 
 from .footwork import beside_me
-from .grips import has_shield, heavy_rider, two_handed, two_melee
+from .grips import (
+    FINESSE_HEAVY,
+    has_shield,
+    heavy_rider,
+    two_handed,
+    two_melee,
+    wielding_any,
+)
 from .holds import grabbed_by, holds_somebody
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
@@ -413,7 +420,10 @@ def p226(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p4230(c: Cast) -> None:
-    if c.strike():
+    """The `Weapon:` rider was missing and unmarked: a Dexterity modifier to the
+    attack roll for three groups. #236. Its twin two levels up, `p4231`, prints
+    the identical line."""
+    if c.strike(plus=c.dex_mod if wielding_any(c, FINESSE_HEAVY) else 0):
         c.damage(c.w(2), c.str_mod)
         c.grants_advantage(until=When.EONT)
 

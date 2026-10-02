@@ -48,7 +48,16 @@ from combat_engine.engine.events import AttackDeclared, Hit, MoveEnd
 from combat_engine.engine.query import adjacent, allies
 
 from .footwork import ends_when_apart
-from .grips import has_shield, heavy_rider, light_blade, reach_weapon, two_handed, two_melee
+from .grips import (
+    FINESSE_HEAVY,
+    has_shield,
+    heavy_rider,
+    light_blade,
+    reach_weapon,
+    two_handed,
+    two_melee,
+    wielding_any,
+)
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 MARTIAL = [Keyword.MARTIAL]
@@ -344,7 +353,9 @@ def p2470(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p4231(c: Cast) -> None:
-    if c.strike():
+    """`p4230`'s line, two levels later and word for word. Was missing and
+    unmarked. #236."""
+    if c.strike(plus=c.dex_mod if wielding_any(c, FINESSE_HEAVY) else 0):
         c.damage(c.w(2), c.str_mod)
 
 

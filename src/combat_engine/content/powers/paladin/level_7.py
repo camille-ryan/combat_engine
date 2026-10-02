@@ -96,11 +96,25 @@ def p10251(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*DIVINE_WEAPON, Keyword.RADIANT],
     attack=Attack(STR, vs=REF),
+    dropped=("dsl.Range.by_grip",),
 )
 def p12305(c: Cast) -> None:
-    """The Special line lengthens the range to 10 for a heavy blade, and a
-    range is header data with no room for a condition -- the printed five is
-    what is declared. See the report.
+    """The Special line lengthens the range to 10 for a heavy blade.
+
+    **Marked rather than argued, which is the fix.** The reasoning here was
+    right and that was the problem: a docstring explaining a dropped clause is
+    not queryable, so `blocked.py` could not see this and `coverage.py` counted
+    the row done. `docs/AUTHORING.md` says exactly that -- "do not drop a clause
+    silently in a docstring" -- and this row was the example. #236.
+
+    The reasoning, for the record. A range is header data and the body runs
+    **after** it has been used: `candidates` picks what may be aimed at from the
+    declared reach, and only then is this called, so there is no moment at which
+    this row could lengthen its own range in time to matter.
+    `c.bonus("range", ...)` exists and `dsl._stretched` reads it with the power
+    in context, so the *reader* is there -- what is missing is a way for a
+    header to say "ten with a heavy blade, five otherwise", which is its own
+    gap and not this row's to invent.
     """
     if c.strike():
         c.damage(c.w(2), c.str_mod, dtype=DamageType.RADIANT)

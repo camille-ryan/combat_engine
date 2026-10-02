@@ -55,7 +55,15 @@ from combat_engine.engine.events import AttackDeclared, DamageRolled
 from combat_engine.engine.query import adjacent, team
 from combat_engine.engine.query import squares as squares_of
 
-from .grips import hand_free, has_shield, heavy_rider, two_handed, two_melee
+from .grips import (
+    CRUSHING,
+    hand_free,
+    has_shield,
+    heavy_rider,
+    two_handed,
+    two_melee,
+    wielding_any,
+)
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 MARTIAL = [Keyword.MARTIAL]
@@ -561,6 +569,11 @@ def p7498(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(1), c.str_mod)
         c.ongoing(5)
+        # The `Weapon:` rider, which was missing and unmarked. #236. On the hit
+        # branch only -- "targets you hit are also knocked prone" -- so the miss
+        # below does not knock anybody down.
+        if wielding_any(c, CRUSHING):
+            c.prone()
     else:
         c.half_damage(c.w(1), c.str_mod)
 

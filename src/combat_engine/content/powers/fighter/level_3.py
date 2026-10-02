@@ -20,6 +20,8 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.query import hidden_from
 
+from .grips import BRUTAL, FINESSE, wielding_any
+
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 
 
@@ -104,10 +106,14 @@ def p268(c: Cast) -> None:
 )
 def p291(c: Cast) -> None:
     """The burst already checks line of effect. "You can see" rules out one
-    more thing that does not: an enemy hidden from you."""
+    more thing that does not: an enemy hidden from you.
+
+    The `Weapon:` rider was missing and unmarked -- half a Strength modifier to
+    the attack for four groups. #236. Half, rounded down, which is what "one-half
+    your Strength modifier" means for a bonus."""
     if c.target is None or c.me in hidden_from(c.world, c.target):
         return
-    if c.strike():
+    if c.strike(plus=c.str_mod // 2 if wielding_any(c, BRUTAL) else 0):
         c.damage(c.w(1), c.str_mod)
 
 
@@ -140,5 +146,11 @@ def p622(c: Cast) -> None:
     attack=Attack(STR, vs=REF),
 )
 def p634(c: Cast) -> None:
-    if c.strike():
-        c.damage(c.w(1), c.str_mod)
+    """**Two `Weapon:` lines, not one**, and both were missing: the same grip
+    pays the attack roll *and* the damage roll a Dexterity modifier. #236.
+
+    Asked once and spent twice, because one weapon is in hand and the card's two
+    lines name the same groups -- re-asking would be the same question twice."""
+    finesse = c.dex_mod if wielding_any(c, FINESSE) else 0
+    if c.strike(plus=finesse):
+        c.damage(c.w(1), c.str_mod + finesse)

@@ -59,6 +59,24 @@ def reach_weapon(world: World, eid: int) -> bool:
 HEAVY = ("axe", "hammer", "mace")
 
 
+#: The groups the other `Weapon:` riders name. Written out per row-set rather
+#: than merged, because the sets genuinely differ and a union would pay the
+#: rider on a weapon the card does not list.
+BRUTAL = ("axe", "flail", "heavy blade", "pick")
+FINESSE = ("light blade", "spear")
+FINESSE_HEAVY = ("light blade", "heavy blade", "spear")
+CRUSHING = ("flail", "hammer", "mace")
+
+
+def wielding_any(c: Cast, groups: tuple[str, ...]) -> bool:
+    """Is any of those weapon groups in hand?
+
+    One weapon is in hand, so a list of groups is one question -- the same
+    reading `heavy_rider` below makes of its three.
+    """
+    return any(c.wielding(group) for group in groups)
+
+
 def heavy_rider(c: Cast) -> int:
     """"If you're wielding an axe, a hammer, or a mace, ... your Constitution
     modifier." One weapon is in hand, so the three are one question."""
