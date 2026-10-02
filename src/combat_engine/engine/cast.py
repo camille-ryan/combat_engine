@@ -3857,9 +3857,23 @@ class Cast:
         "It can make opportunity attacks against enemies within 2 squares"
         had no expression: the window was opened from a ring fixed at one.
         A held modifier, so "gains reach 2" can raise it too.
+
+        **Two modifiers, and the flag is the one that makes it work.** This set
+        `reach` alone and was therefore **inert**: `movement._threat` gates on
+        `threatening_reach` first -- because a reach weapon must *not* extend the
+        window, which is the printed rule and the whole of #306 -- and only then
+        reads `reach`. So the gate was never satisfied, and `m4928a1` called this
+        verb and threatened **one** square where its card says three. Measured:
+
+            after c.threatens(3)   _threat = 1   reach=2  threatening_reach=0
+
+        Both keys, because they answer different halves: the flag says this
+        creature's window is not fixed at one, and `reach` says how far.
         """
+        who = on or self.me
+        self.bonus("threatening_reach", 1, on=who, until=until, kind="untyped")
         return self.bonus(
-            "reach", max(0, squares_ - 1), on=on or self.me, until=until,
+            "reach", max(0, squares_ - 1), on=who, until=until,
             kind="untyped",
         )
 
