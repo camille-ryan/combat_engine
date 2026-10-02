@@ -157,6 +157,9 @@ def _vocabulary() -> tuple[dict[str, str], frozenset[str], frozenset[str]]:
 #: How an opaque clause is labelled in `prereq_term`. The kind is the only
 #: thing about it that can be said in the open, and it is enough to sort the
 #: work: every `deity` is the same missing feature.
+#: A race sub-option's ref, as `item.sub_options` mints them.
+_SUB_OPTION = re.compile(r"rt:r\d+-s\d+")
+
 _KINDS = (
     (r"^(?:you\s+)?must\s+(?:not\s+)?worship", "deity"),
     (r"\b(?:regional\s+)?(?:background|benefit)$", "background"),
@@ -217,12 +220,43 @@ def feats(
 
     ordinary = mechanical() | {w for (w,) in out.execute("SELECT word FROM common_word")}
     terms = {clause: f"q{n}" for n, clause in enumerate(sorted(uses))}
+    # **A clause naming a race's "choose one" option resolves to that option**,
+    # which is #277's title: it could not, so each such prerequisite minted an
+    # opaque `qN` pointing at nothing -- 11 of them, every one used exactly once.
+    # `item.races` has already run by here, so `names` holds the 18 sub-option
+    # refs and the match is a lookup rather than a parse.
+    #
+    # The `qN` numbering is left alone and the resolved ones overwritten on top,
+    # rather than numbering around them. Renumbering would shift every opaque ref
+    # after the first match and rewrite the prereq tree of every feat in the
+    # corpus -- a deterministic diff, but an enormous one for no gain.
+    options = {
+        row["name"].lower(): ref
+        for ref, row in names.items()
+        if _SUB_OPTION.fullmatch(ref) and row.get("name")
+    }
+    for clause in list(terms):
+        low = clause.lower()
+        found = next((r for label, r in options.items() if label in low), None)
+        if found is not None:
+            terms[clause] = found
+    # **Merged by ref, because two clauses can name one sub-option.** A `qN` is
+    # unique by construction and these used to be inserted one per clause; a
+    # resolved ref is not, and the printed prerequisites say the same option two
+    # ways -- which hit `prereq_term`'s primary key and took the whole build down.
+    # The uses add up, which is what `uses` means.
+    merged: dict[str, tuple[str, int]] = {}
     for clause, ref in terms.items():
-        out.execute(
-            "INSERT INTO prereq_term VALUES (?,?,?)",
-            (ref, _kind(clause), uses[clause]),
-        )
-        names[ref] = {_key(clause, ordinary): clause}
+        kind, count = merged.get(ref, (_kind(clause), 0))
+        merged[ref] = (kind, count + uses[clause])
+    for ref, (kind, count) in merged.items():
+        out.execute("INSERT INTO prereq_term VALUES (?,?,?)", (ref, kind, count))
+    for clause, ref in terms.items():
+        # A resolved sub-option already has its printed label in the index under
+        # its own ref; overwriting it with the clause text would lose the name the
+        # localisation is *for*.
+        if not _SUB_OPTION.fullmatch(ref):
+            names[ref] = {_key(clause, ordinary): clause}
 
     atoms = 0
     for row in rows:
