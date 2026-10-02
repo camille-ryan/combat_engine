@@ -1707,11 +1707,24 @@ class Cast:
         """"Miss: half damage" -- rolled, then halved, as the rule reads.
 
         `dtypes` is one blow of several types, as on `c.damage`.
+
+        **The enhancement bonus is halved with the rest, and was missing.** This
+        method and `c.damage` sit twenty lines apart and only the other one added
+        it, so every miss line in the tree understated itself by half the
+        enhancement -- 1.5 points at +3, on a clause that fires on roughly a
+        third of attacks. Half damage is half of *the damage the hit would have
+        dealt*, and the enhancement is part of that, so it goes in before the
+        halving and not after. #241.
+
+        Added here rather than removed there, because `c.damage` is the one that
+        matches the printed rule; the inconsistency was the symptom and the
+        omission was the fault.
         """
         who = self._who(on)
         if who is None:
             return 0
-        amount = (self._roll_damage(dice) + bonus) // 2 if dice else bonus // 2
+        full = self._roll_damage(dice) + bonus if dice else bonus
+        amount = (full + self._enhancement()) // 2
         dtype = dtype if dtypes else self._typed(dtype)
         dealt = deal_damage(
             self.world, self.me, who, amount, dtype, f"{self.ref} (half)",
