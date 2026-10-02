@@ -2130,15 +2130,18 @@ def i1340x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.grants_in(when=)",),
 )
 def i1494x1(c: Cast) -> None:
-    """An aura of one square is "while adjacent to you", and `c.grants_in`
-    hangs the bonus on whoever stands in it. It takes no gate, so the
-    bonus is to AC against everything rather than against opportunity
-    attacks alone."""
+    """An aura of one square is "while adjacent to you", and `c.grants_in` hangs the
+    bonus on whoever stands in it.
+
+    **Narrowed to opportunity attacks**, which the card says and this did not: it
+    gave +2 AC against everything, and an aura that blunts every attack on every
+    adjacent ally is a much larger item than the printed one. `resolve`'s attack
+    context has carried `opportunity` all along, so the gate is one key."""
     zone = c.aura(1, on=c.me, until=When.ENCOUNTER)
-    c.grants_in(zone, AC, 2, side="ally", kind="untyped")
+    c.grants_in(zone, AC, 2, side="ally", kind="untyped",
+                when=lambda ctx: bool(ctx.get("opportunity")))
 
 
 @power(

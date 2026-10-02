@@ -1926,13 +1926,22 @@ def p16652(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.ZONE],
-    dropped=("c.grants_in(when=)", "c.zone(cost=)"),
+    dropped=("resolve.ctx(origin=)", "c.zone(cost=)"),
 )
 def p16653(c: Cast) -> None:
-    """The defence bonus is laid whole, which is wider than printed: the
-    card gives it only against attacks originating outside the zone and
-    `c.grants_in` takes no condition. Four extra squares to enter is not
-    difficult terrain either -- that word is worth one square."""
+    """The defence bonus is laid whole, which is wider than printed: the card gives
+    it only against attacks **originating outside the zone**.
+
+    **Re-aimed off `c.grants_in(when=)`, which arrived and is not the hold.** The
+    gate exists and is handed the attack context; what the context does not carry is
+    where the attack came *from*. It has `attacker`, so the attacker's current square
+    is reachable -- but that is not the same thing: a ranged attack's origin can be
+    moved by `c.cast_from`, and a burst's origin is a square rather than a creature.
+    Asking the attacker's position would be right most of the time and wrong exactly
+    where the card is interesting.
+
+    Four extra squares to enter is not difficult terrain either -- that word is worth
+    one square."""
     zone = c.zone(c.area(), until=When.SUSTAIN, sustain=MINOR)
     for d in (AC, FORT, REF, WILL):
         c.grants_in(zone, d, 4, side="team", kind="power")
