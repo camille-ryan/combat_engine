@@ -2,6 +2,7 @@
   "10": {
     "fights": 24,
     "monsters": {
+      "adjacent_helped": 0,
       "adjacent_idle": 0,
       "already_on": 0,
       "ap_spent": 0,
@@ -20,7 +21,8 @@
       "tied_pct": 9.9
     },
     "party": {
-      "adjacent_idle": 14,
+      "adjacent_helped": 9,
+      "adjacent_idle": 5,
       "already_on": 4,
       "ap_spent": 96,
       "ap_standard": 96,
@@ -45,6 +47,7 @@
   "5": {
     "fights": 24,
     "monsters": {
+      "adjacent_helped": 0,
       "adjacent_idle": 0,
       "already_on": 0,
       "ap_spent": 0,
@@ -63,7 +66,8 @@
       "tied_pct": 13.7
     },
     "party": {
-      "adjacent_idle": 1,
+      "adjacent_helped": 1,
+      "adjacent_idle": 0,
       "already_on": 19,
       "ap_spent": 94,
       "ap_standard": 94,
