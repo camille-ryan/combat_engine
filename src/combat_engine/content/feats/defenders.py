@@ -275,7 +275,7 @@ def f2602(c: Cast) -> None:
     class's numbers under a generic ref -- and the row that *is* in the
     database spells it out. Both are named so the row is right whichever the
     character ends up holding, and the mismatch itself is filed."""
-    c.weapon_dice("1d10", ref="w:unarmed", on=c.me)
+    c.weapon_dice("1d10", ref="w:monk-unarmed-strike", on=c.me)
     c.weapon_dice("1d10", ref="w:monk-unarmed-strike", on=c.me)
 
 

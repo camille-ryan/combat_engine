@@ -533,25 +533,23 @@ def f2399(c: Cast) -> None:
 
 
 @power("f2400", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("chargen.plain_unarmed",))
+       reach=PERSONAL, target=SELF)
 def f2400(c: Cast) -> None:
     """Raises two damage dice: one named weapon to a d8, and a bare fist to a
-    d6.
+    d6. **Both are written now.**
 
-    The named weapon is written. The fist is the dropped clause, and the
-    reason is worth stating because it looked writable and the first attempt
-    was wrong:
+    The fist was the dropped clause and the reason is worth keeping, because
+    the clause looked writable and the first attempt was wrong: the `unarmed`
+    group holds three weapons and every one is a *better* fist than a bare
+    one, so raising the **group** to a d6 lowered a monk's strike from its d8
+    -- the opposite of what the card says.
 
-    **There is no plain unarmed attack to raise.** The group holds three
-    weapons, every one of them a *better* fist than a bare one -- a monk's
-    strike at a d8, a spiked gauntlet, a racial one -- and the generic
-    `w:unarmed` the chassis deals is the monk's numbers under a generic ref.
-    So raising the group to a d6 **lowered** a monk's strike from its d8,
-    which is the opposite of what the card says, and the probe caught it.
-    A card that raises a fist to a d6 is talking about a d4 fist that this
-    build has no row for."""
+    `w:unarmed` is a d4 fist now rather than the monk's strike under a generic
+    ref (#282), so the clause aims at that one ref and leaves the monk's
+    strike and the gauntlet alone. By ref, never by group, for exactly the
+    reason above."""
     c.weapon_dice("1d8", ref="w:spiked-gauntlet", on=c.me)
+    c.weapon_dice("1d6", ref="w:unarmed", on=c.me)
 
 
 @power("f2427", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

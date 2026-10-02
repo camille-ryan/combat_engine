@@ -191,7 +191,29 @@ QUARTERSTAFF = Weapon(ref="w:quarterstaff", category="simple", damage="1d8", pro
                       group="staff", properties=frozenset({"two-handed"}))
 LONGSPEAR = Weapon(ref="w:longspear", category="military", damage="1d10", proficiency=2,
                    group="spear", properties=frozenset({"two-handed", "reach"}))
-UNARMED = Weapon(ref="w:unarmed", category="simple", damage="1d8", proficiency=3, group="unarmed")
+#: **The monk's strike, under the ref the database already has for it.** This was
+#: `w:unarmed`, which `game.db` does not contain -- and its 1d8 and +3 are
+#: `w:monk-unarmed-strike`'s numbers exactly, so the two were always one weapon
+#: under two spellings. Dealt only on the proficiency line that names the monk
+#: strike, which is how the duplicate went unnoticed. #282.
+MONK_STRIKE = Weapon(ref="w:monk-unarmed-strike", category="simple", damage="1d8",
+                     proficiency=3, group="unarmed",
+                     properties=frozenset({"off-hand"}))
+#: **A bare fist**, which the tree had none of: every row in the `unarmed` group is
+#: a *better* fist than a bare one, so "the damage die of your unarmed attack
+#: increases to 1d6" was a sentence about a weapon that did not exist -- and
+#: aiming it at the group *lowered* the monk's d8.
+#:
+#: The numbers are the compendium's rather than mine. Its Improvised Weapons entry
+#: gives a one-handed improvised melee attack as **Prof. --, Damage 1d4, Group
+#: "None or unarmed"**, and its Basic Attack entry says a creature with no weapon
+#: makes a melee basic "using an unarmed strike (such as a kick or punch) or
+#: another improvised weapon". So: 1d4, no proficiency bonus, no properties.
+#:
+#: Keeps the `w:unarmed` ref, which is now what it says: the plain one. Nothing
+#: in the database claims it.
+UNARMED = Weapon(ref="w:unarmed", category="", damage="1d4", proficiency=0,
+                 group="unarmed")
 STAFF = Weapon(ref="w:staff", damage="1d8", proficiency=0, group="implement")
 TOTEM = Weapon(ref="w:totem", damage="1d4", proficiency=0, group="implement")
 #: The last two implements nothing was carrying. Declared rather than
@@ -364,7 +386,7 @@ def _arms(weapons: str, implements: str) -> tuple[Weapon, ...]:
     text = weapons.lower()
     held: list[Weapon] = []
     if "monk unarmed" in text:
-        held.append(UNARMED)
+        held.append(MONK_STRIKE)
     elif "longspear" in text:
         held.append(LONGSPEAR)
     # Blades before the generic lines, because three classes print a

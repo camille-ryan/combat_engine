@@ -1554,19 +1554,25 @@ def f3783(c: Cast) -> None:
 
 
 @power("f3784", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("chargen.plain_unarmed",))
+       reach=PERSONAL, target=SELF)
 def f3784(c: Cast) -> None:
     """Unarmed *is* one of the ten groups, so the accuracy half is exact and
     the word the card prints is "proficiency".
 
-    **The die is re-aimed, not written.** It was waiting on `c.change_dice()`;
-    that verb exists now and is the wrong one -- a weapon's die is a field on
-    the `Weapon`, which `c.weapon_dice` edits. The clause still cannot be
-    written, for a different reason: there is no plain fist to raise. Every
-    row in the group is a better fist than a bare one, so raising the group
-    would lower a monk's strike. #282, and f2400 is the other row on it."""
+    **The die is written now.** It was waiting on `c.change_dice()` -- the
+    wrong verb, since a weapon's die is a field on the `Weapon` and
+    `c.weapon_dice` is what edits that -- and then on there being a plain fist
+    to raise at all. `w:unarmed` is a d4 one since #282, so "your unarmed
+    attack deals 1d6" aims at that ref.
+
+    **By ref and not by group**, which is the trap this row and `f2400` both
+    fell into: the group holds a monk's d8 strike, and raising the group would
+    lower it. The accuracy half above *is* by group, correctly -- the card says
+    "unarmed attacks", plural and general, and a bonus cannot lower
+    anything."""
     c.bonus("attack", 2, kind="proficiency", on=c.me, until=When.ENCOUNTER,
             when=lambda ctx: _holding(c, "unarmed"))
+    c.weapon_dice("1d6", ref="w:unarmed", on=c.me)
 
 
 @power("f3785", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
