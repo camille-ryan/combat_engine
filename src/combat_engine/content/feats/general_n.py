@@ -88,6 +88,7 @@ from combat_engine.engine import (
     SurgeSpent,
     Swap,
     Target,
+    TotalDefence,
     Trigger,
     TurnStart,
     Usage,
@@ -1249,11 +1250,20 @@ def f2157(c: Cast) -> None:
             when=lambda ctx: _group_in(c, "light blade"))
 
 
-@power("f2158", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.total_defence()",))
+@power("f2158", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you take the total defence action while you have concealment",
+       on=Trigger(TotalDefence, about_me, "you take the total defence action"))
 def f2158(c: Cast) -> None:
-    """Total defence is not an action this engine offers, so the moment
-    the row is printed for never arrives."""
+    """Total defence is an action now and announces itself, so the moment
+    this row is printed for finally arrives.
+
+    "While you have **any** concealment" is `Cover.NONE` being the only
+    answer that fails -- partial and total both count, which is why this
+    asks `concealment_of` rather than a label.
+    """
+    if concealment_of(c.world, c.me) is not Cover.NONE:
+        c.invisible(on=c.me, until=When.SONT)
 
 
 @power("f2159", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -75,10 +75,12 @@ from combat_engine.engine import (
     Relation,
     SavingThrow,
     Size,
+    TotalDefence,
     Trigger,
     Usage,
     When,
     Window,
+    about_me,
     get,
     hits_me,
     power,
@@ -98,7 +100,9 @@ REROLL = ("c.on_reroll()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
 #: Total defence is not an action this engine has.
-TOTAL_DEFENCE = ("c.total_defence()",)
+#: Was `("c.total_defence()",)`. The action exists and announces itself as
+#: `TotalDefence` now, so the three rows that carried this say their sentence.
+_HUNKER = "you take the total defence action"
 #: Nothing models a bull rush.
 BULL_RUSH = ("c.bull_rush()",)
 #: Trading one power for another out of a named pool, which is settled
@@ -2125,23 +2129,49 @@ def f2622(c: Cast) -> None:
     character a benefit several feats charge much more for."""
 
 
-@power("f2630", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=TOTAL_DEFENCE)
+@power("f2630", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger=_HUNKER + " while wielding a shield",
+       on=Trigger(TotalDefence, about_me, _HUNKER),
+       dropped=("c.bonus(while_adjacent=)",))
 def f2630(c: Cast) -> None:
-    """Total defence is not an action this engine offers, so the trigger
-    has no moment."""
+    """Allies beside a shield get some of its benefit.
+
+    **"Or until they are no longer adjacent to you" is the dropped clause.**
+    `c.bonus` takes a duration and not a condition to hold under, so an ally
+    that walks away keeps the bonus to the start of my next turn. One clause
+    of a row that plays, which is what `dropped=` is for -- and it is the
+    kinder error of the two, since it only ever pays out too long.
+    """
+    gear = c.world.get(c.me, Gear)
+    if gear is None or not gear.shield:
+        return
+    for friend in c.allies():
+        if friend != c.me and c.adjacent(friend):
+            c.bonus(AC, 2, on=friend, until=When.SONT, kind="feat")
+            c.bonus(REF, 2, on=friend, until=When.SONT, kind="feat")
 
 
-@power("f2632", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=TOTAL_DEFENCE)
+@power("f2632", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger=_HUNKER,
+       on=Trigger(TotalDefence, about_me, _HUNKER))
 def f2632(c: Cast) -> None:
-    """Same gap as f2630."""
+    """Hunkering down sharpens the next swing. The printed window is the
+    **end** of the next turn, not the start the defences themselves use."""
+    c.bonus("attack", 1, on=c.me, until=When.EONT, kind="feat")
 
 
-@power("f2723", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=TOTAL_DEFENCE)
+@power("f2723", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger=_HUNKER,
+       on=Trigger(TotalDefence, about_me, _HUNKER))
 def f2723(c: Cast) -> None:
-    """Same gap as f2630."""
+    """"You **can** also shift", so it is offered rather than taken --
+    `c.may` is the question and the shift is free of the action economy,
+    because total defence has already spent the standard."""
+    if c.may("shift 1 square"):
+        c.shift(1)
 
 
 @power("f2585", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

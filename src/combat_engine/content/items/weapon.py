@@ -69,6 +69,7 @@ from combat_engine.engine import (
     Ranged,
     SecondWind,
     Size,
+    TotalDefence,
     Trigger,
     When,
     Window,
@@ -376,14 +377,18 @@ def i1045x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.total_defence()",),
-    trigger="you take the second wind action",
-    on=Trigger(SecondWind, about_me, "you take your second wind"),
+    trigger="you take the total defence or second wind action",
+    on=[Trigger(SecondWind, about_me, "you take your second wind"),
+        Trigger(TotalDefence, about_me, "you take the total defence action")],
 )
 def i1057x1(c: Cast) -> None:
-    """The total-defence half is dropped: it is not an action the engine
-    has. "All your defenses" is the four of them, and the card names the
-    bonus an item bonus."""
+    """"All your defenses" is the four of them, and the card names the bonus
+    an item bonus.
+
+    Both printed actions, as two declared triggers -- `Power.on` takes a
+    sequence. Total defence announces itself now, so the dropped half is
+    written, and the two payouts are identical so the body need not ask
+    which fired."""
     plus = c.enhancement
     for what in (AC, FORT, REF, WILL):
         c.bonus(what, plus, on=c.me, until=When.SONT, kind="item")

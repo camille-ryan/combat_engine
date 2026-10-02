@@ -80,9 +80,11 @@ from combat_engine.engine import (
     Relation,
     SecondWind,
     TempHP,
+    TotalDefence,
     Trigger,
     When,
     World,
+    about_me,
     both,
     by_me,
     by_melee,
@@ -526,18 +528,21 @@ def i1895p1(c: Cast) -> None:
 
 
 @power("i2018x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.total_defence()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you take the total defence or second wind action",
+       on=[Trigger(SecondWind, about_me, "you take your second wind"),
+           Trigger(TotalDefence, about_me, "you take the total defence action")])
 def i2018x1(c: Cast) -> None:
-    """Total defence is not an action the engine has; the second wind
-    half answers `SecondWind`."""
+    """Both printed actions, and the payout is the same either way.
 
-    def seen(ev: SecondWind) -> None:
-        if ev.actor != c.me:
-            return
-        for defence in (AC, FORT, REF, WILL):
-            c.bonus(defence, 2, on=c.me, until=When.SONT, kind="item")
-
-    c.watch(SecondWind, seen, until=When.ENCOUNTER, on=c.me)
+    **The watch became two declared triggers.** It was a watch only because
+    half the card could not be written: with total defence announcing itself
+    there is nothing left for the body to arm, and a declared trigger is the
+    right shape -- `triggers._ask` owns the window and the row stops having
+    to re-arm itself every encounter. `Power.on` takes a sequence.
+    """
+    for defence in (AC, FORT, REF, WILL):
+        c.bonus(defence, 2, on=c.me, until=When.SONT, kind="item")
 
 
 @power("i2179x1", level=5, cls=ITEM, action=ActionType.NONE,

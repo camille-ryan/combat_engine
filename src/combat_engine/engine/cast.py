@@ -3856,10 +3856,18 @@ class Cast:
         All four defences, for the reason `second_wind` records: granting AC alone
         left every creature two points easier to hit on the other three, and made a
         card reading "+1 AC and +3 to the others" unwritable.
+
+        **Announced, as `second_wind` is.** Eight rows print "when you take the
+        total defense action" and this was the one implementation saying nothing,
+        so the sentence had nowhere to hang. The bonus goes on first and the
+        event second, so a row reacting to it sees the defences already raised.
         """
+        from .events import TotalDefence
+
         who = on if on is not None else self.me
         for defence in Defense:
             self.bonus(defence, amount, until=When.SONT, on=who, kind="untyped")
+        self.world.bus.emit(TotalDefence(actor=who, amount=amount))
         return True
 
     def forces(

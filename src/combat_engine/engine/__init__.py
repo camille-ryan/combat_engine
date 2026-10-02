@@ -116,6 +116,7 @@ from .events import (
     Summoned,
     SurgeSpent,
     TempHP,
+    TotalDefence,
     TurnEnd,
     TurnStart,
     ZoneCreated,

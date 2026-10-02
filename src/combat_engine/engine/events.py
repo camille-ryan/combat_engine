@@ -517,6 +517,26 @@ class SecondWind(Event):
 
 
 @dataclass
+class TotalDefence(Event):
+    """A creature took the total defence action.
+
+    The sibling of `SecondWind` above and filed for the same reason: eight
+    rows print "when you take the total defense action" and `Cast
+    .total_defence` announced nothing, so the sentence had no moment to hang
+    from. Four of the eight name **both** actions in one line -- "when you
+    take the total defense or second wind action" -- which is what makes the
+    pair worth keeping symmetrical.
+
+    `amount` is the bonus actually laid, because the verb takes an
+    `amount=` and a row reading "you add the enhancement bonus of this
+    weapon *instead*" needs to know what it is replacing.
+    """
+
+    actor: int
+    amount: int
+
+
+@dataclass
 class TempHP(Event):
     source: int
     target: int

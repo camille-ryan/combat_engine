@@ -42,6 +42,7 @@ from combat_engine.engine import (
     Escaped,
     Hit,
     SecondWind,
+    TotalDefence,
     Trigger,
     When,
     about_me,
@@ -381,12 +382,18 @@ def f2281(c: Cast) -> None:
 
 
 @power("f2284", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.total_defence()",),
-       trigger="you use your second wind",
-       on=Trigger(SecondWind, about_me, "you use your second wind"))
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind or take the total defence action",
+       on=[Trigger(SecondWind, about_me, "you use your second wind"),
+           Trigger(TotalDefence, about_me, "you take the total defence action")])
 def f2284(c: Cast) -> None:
-    """The total-defence half is dropped: it is not an action the engine
-    has. Heroic tier, so 5."""
+    """Heroic tier, so 5.
+
+    **Two declared triggers rather than one**, which `Power.on` already
+    accepts as a sequence: the card names both actions in one sentence and
+    the payout is identical either way, so there is nothing to tell apart
+    inside the body. Total defence announces itself now, so the half that
+    was dropped is written."""
     if in_beast_form(c.world, c.me):
         c.resist(5, on=c.me, until=When.EONT)
 
