@@ -162,6 +162,13 @@ class ActorDTO(BaseModel):
     resist: str | None = None
     immune: str | None = None
     vulnerable: str | None = None
+    #: How dangerous this creature is: its best case over three rounds as a
+    #: share of the **opposing** side's whole health pool. So 0.25 means "could
+    #: account for a quarter of the other side in three rounds", and two
+    #: creatures on one board are comparable.
+    #:
+    #: **Not a hit probability**, which is what this used to carry -- the two are
+    #: both small floats and a consumer cannot tell them apart by looking. #262.
     threat: float = 0.0
 
 

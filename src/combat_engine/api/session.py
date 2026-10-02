@@ -174,6 +174,19 @@ class Session:
         # `loader.pick(level)` raw, so the band was in id order -- an all-brute
         # line-up -- while the scripts copy had been ordering by role for a
         # while. `story.opposition` is the ordered one.
+        # **Forget the threat cache before fielding a new board.** `policy.threat`
+        # keys its scratch boards on `id(world)`, and a world that has been
+        # collected frees its id for the next one -- so a long-lived server would
+        # serve one session's figures for another session's creature. A
+        # correctness fix with no visible symptom until it has one, which is why
+        # it goes in with the renderer that started reading those figures. #262.
+        #
+        # Safe to clear wholesale: everything in there is derived and recomputed
+        # on demand, and `scripts/winrate.py` clears per fight for this reason.
+        from combat_engine.policy import threat as _threat_cache
+
+        _threat_cache.clear()
+
         on_board = story.field_encounter(
             seed, level, scaling=scaling, pcs=pcs, enemies=enemies
         )

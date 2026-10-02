@@ -352,28 +352,31 @@ def _rank(ref: str) -> str:
 
 
 def _threat(session: Session, eid: int) -> float:
-    """How dangerous this creature is, as a share of one character's health.
+    """How dangerous this creature is, as a share of the **other side's** health.
 
     Deliberately the scorer's kind of number rather than raw damage: a flat
-    figure quietly changes meaning as the party levels, and two creatures on
-    one board are being compared here.
+    figure quietly changes meaning as the party levels, and two creatures on one
+    board are being compared here.
+
+    **This promised that and returned a hit probability.** It computed
+    `max(hit_chance)` over the creature's rows -- a number between 0 and 1 with
+    nothing to do with hit points -- so a solo with one inaccurate, devastating
+    attack reported *lower* threat than a minion that hits often, and the
+    comparison inverted exactly where it mattered. #262.
+
+    `policy.threat.threat` computes the figure this docstring always described --
+    best case over three rounds, over the opposing side's pool -- so it is called
+    rather than written again. An `api` -> `policy` import, which the seam allows:
+    nothing imports `api` in Python at all.
+
+    **Whose health is the other side's, not "one character's"**, which is what
+    the old wording said and `#262` asks to be settled. Said on `CreatureDTO`
+    too, because a consumer cannot tell a share of a pool from a probability by
+    looking at it -- both are small floats.
     """
-    world = session.world
-    known = world.get(eid, Powers)
-    if known is None:
-        return 0.0
-    best = 0.0
-    foes = [f for f in creatures(world) if alive(world, f)]
-    for ref in known.all:
-        p = get(ref)
-        if p is None or p.attack is None:
-            continue
-        for foe in foes:
-            mine, theirs = world.get(eid, Side), world.get(foe, Side)
-            if mine and theirs and mine.team is theirs.team:
-                continue
-            best = max(best, p.hit_chance(world, eid, foe))
-    return round(best, 3)
+    from combat_engine.policy.threat import threat as danger
+
+    return round(danger(session.world, eid), 3)
 
 
 # --------------------------------------------------------------------------
