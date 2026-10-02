@@ -291,6 +291,27 @@ def f1224(c: Cast) -> None:
         c.resist(5, kind, on=c.me, until=When.ENCOUNTER)
 
 
+
+def _wielding(name: str):  # noqa: ANN202
+    """A `requires=` gate on holding one named weapon.
+
+    **These rows displayed a requirement they did not apply.** `usable` returns
+    `requires_text` only as the words a refusal prints; with no `requires` beside
+    it the card said "you must be wielding a garrote" and the row was offered to
+    anybody at all. #236.
+
+    `query.holding` matches by ref as well as by group, which is what makes this
+    one line: a garrote has no group of its own, and a short sword shares `light
+    blade` with thirteen other things, so the group is not the question.
+    """
+    from combat_engine.engine.query import holding
+
+    def gate(world, eid: int) -> bool:  # noqa: ANN001
+        return bool(holding(world, eid, name))
+
+    return gate
+
+
 @power("f1225", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=Ranged(10), target=ONE_CREATURE, proficiency=("w:rod", "w:wand"))
 def f1225(c: Cast) -> None:
@@ -549,6 +570,7 @@ _swap("f1253", "f1253b")
 @power("f1253b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=MARTIAL_WEAPON,
        attack=Attack(Ability.DEX, vs=REF),
+       requires=_wielding("spiked chain"),
        requires_text="must be wielding a spiked chain")
 def f1253b(c: Cast) -> None:
     """The 11th and 21st steps are paragon and out of scope."""
@@ -563,6 +585,7 @@ _swap("f1254", "f1254b")
 
 @power("f1254b", level=1, cls="", usage=DAILY, action=MINOR, reach=PERSONAL,
        target=SELF, keywords=[Keyword.MARTIAL, Keyword.STANCE, Keyword.WEAPON],
+       requires=_wielding("spiked chain"),
        requires_text="must be wielding a spiked chain")
 def f1254b(c: Cast) -> None:
     """"You threaten all squares within your reach" is `c.threatens`,
@@ -580,6 +603,7 @@ _swap("f1255", "f1255b")
 @power("f1255b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=MARTIAL_WEAPON,
        attack=Attack(Ability.DEX, vs=REF),
+       requires=_wielding("spiked chain"),
        requires_text="must be wielding a spiked chain",
        dropped=("c.grant_action(slide=)",))
 def f1255b(c: Cast) -> None:
@@ -630,6 +654,7 @@ _swap("f1276", "f1276b")
 @power("f1276b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
        reach=Ranged(10, by_weapon=True), target=ONE_CREATURE, keywords=WEAPON,
        attack=Attack(Ability.DEX, vs=REF),
+       requires=_wielding("blowgun"),
        requires_text="must be wielding a blowgun")
 def f1276b(c: Cast) -> None:
     """The Special line -- staying hidden on a miss -- is already true:
@@ -645,6 +670,7 @@ _swap("f1278", "f1278b")
 
 @power("f1278b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=PERSONAL, target=SELF,
+       requires=_wielding("blowgun"),
        requires_text="must be wielding a blowgun")
 def f1278b(c: Cast) -> None:
     """"Your next attack" is `once=True` on both halves, so the pair is
@@ -661,6 +687,7 @@ _swap("f1279", "f1279b")
 @power("f1279b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Ranged(10, by_weapon=True), target=ONE_CREATURE, keywords=WEAPON,
        attack=Attack(Ability.DEX, vs=AC),
+       requires=_wielding("blowgun"),
        requires_text="must be wielding a blowgun")
 def f1279b(c: Cast) -> None:
     """The Aftereffect is `Effect.on_end`: the stun expires at the end of
@@ -707,6 +734,7 @@ _swap("f1289", "f1289b")
 @power("f1289b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
        attack=Attack(Ability.STR, vs=REF),
+       requires=_wielding("garrote"),
        requires_text="must be wielding a garrote, against a creature you have "
                      "combat advantage against")
 def f1289b(c: Cast) -> None:
@@ -724,7 +752,8 @@ _swap("f1290", "f1290b")
 
 @power("f1290b", level=1, cls="", usage=ENCOUNTER,
        action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL, target=NO_TARGET,
-       keywords=WEAPON, requires_text="must be wielding a garrote",
+       keywords=WEAPON, requires=_wielding("garrote"),
+                        requires_text="must be wielding a garrote",
        trigger="you are attacked while grabbing a creature",
        on=Trigger(AttackDeclared, targets_me, "an enemy attacks you"))
 def f1290b(c: Cast) -> None:
@@ -745,6 +774,7 @@ _swap("f1291", "f1291b")
        reach=Melee(1), target=ONE_CREATURE,
        keywords=[Keyword.RELIABLE, Keyword.WEAPON],
        attack=Attack(Ability.STR, vs=REF),
+       requires=_wielding("garrote"),
        requires_text="must be wielding a garrote, against a creature you have "
                      "combat advantage against")
 def f1291b(c: Cast) -> None:

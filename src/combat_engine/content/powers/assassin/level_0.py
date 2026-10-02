@@ -2,11 +2,13 @@
 
 Two things recur and are worth saying once.
 
-* **The weapons are not in the table.** Garrote, bola, blowgun, hand
-  crossbow, shuriken and kusari-gama have no entry, so a `requires=` gate on
-  them would be false forever and the row would never be offered. Those rows
-  carry the printed line as `requires_text` and no gate; "light blade" is a
-  real group and is gated properly.
+* **The weapons are in the table now, and this said they were not.** Garrote,
+  bola, blowgun, hand crossbow, shuriken and kusari-gama were all absent when
+  that was written, so a `requires=` gate would have been false forever and the
+  rows carried the printed line as `requires_text` alone. Every one of the six
+  has an entry today -- checked, all seven including the short sword -- so the
+  reason had outlived itself and the rows were displaying a requirement they did
+  not apply. They are gated by ref through `_wielding` below. #236.
 * **Assassin poisons are items.** Every "if you deliver an assassin poison"
   clause is about a consumable smeared on the blade, which nothing models,
   so those sentences are dropped rather than approximated.
@@ -70,6 +72,26 @@ SHROUD_MAX = 4
 #: `Shrouds` component; this is only the once-per-fight arming flag, keyed on
 #: the world so a second encounter arms its own watch.
 _SHROUDS: dict[tuple[int, int], list[int]] = {}
+
+
+def _wielding(name: str):  # noqa: ANN202
+    """A `requires=` gate on holding one named weapon.
+
+    **These rows displayed a requirement they did not apply.** `usable` returns
+    `requires_text` only as the words a refusal prints; with no `requires` beside
+    it the card said "you must be wielding a garrote" and the row was offered to
+    anybody. #236.
+
+    `query.holding` matches by ref as well as by group, which is what makes this
+    one line: a garrote has no group of its own and a short sword shares `light
+    blade` with thirteen other things, so the group is not the question.
+    """
+    from combat_engine.engine.query import holding
+
+    def gate(world, eid: int) -> bool:  # noqa: ANN001
+        return bool(holding(world, eid, name))
+
+    return gate
 
 
 def _light_blade(world: World, eid: int) -> bool:
@@ -302,6 +324,7 @@ def p14399(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=REF),
+    requires=_wielding("garrote"),
     requires_text="must use a garrote, against a creature you are hidden from",
 )
 def p13793(c: Cast) -> None:
@@ -336,6 +359,7 @@ def p13793(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=AC),
+    requires=_wielding("dagger"),
     requires_text="must use a dagger",
 )
 def p13794(c: Cast) -> None:
@@ -375,6 +399,7 @@ def p13795(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=REF),
+    requires=_wielding("bola"),
     requires_text="must use a bola",
 )
 def p13796(c: Cast) -> None:
@@ -393,6 +418,7 @@ def p13796(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=REF),
+    requires=_wielding("blowgun"),
     requires_text="must use a blowgun",
 )
 def p13797(c: Cast) -> None:
@@ -411,6 +437,7 @@ def p13797(c: Cast) -> None:
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=AC),
     no_provoke=True,
+    requires=_wielding("hand crossbow"),
     requires_text="must use a hand crossbow",
 )
 def p13798(c: Cast) -> None:
@@ -458,6 +485,7 @@ def p13806(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=AC),
+    requires=_wielding("short sword"),
     requires_text="must use a short sword",
 )
 def p15911(c: Cast) -> None:
@@ -478,6 +506,7 @@ def p15911(c: Cast) -> None:
     target=UpTo(3),
     keywords=MARTIAL_WEAPON,
     attack=Attack(DEX, vs=AC),
+    requires=_wielding("shuriken"),
     requires_text="must use shuriken",
 )
 def p15912(c: Cast) -> None:
