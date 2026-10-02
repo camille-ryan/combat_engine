@@ -1092,6 +1092,15 @@ def doctrine_features(
         f["threat_removed"] = removed
     if worse_off:
         f["shoved_from_prey"] = worse_off
+        # **#247's other half: does the row step after what it shoved?** A defender
+        # that pushes an enemy away and stays put has lost contact -- its mark is a
+        # square further off and the enemy walks past it next turn -- while one whose
+        # row moves it in the same breath has lost nothing. 10 of the 23
+        # forced-movement rows move the caster, and no geometry can tell: it is a
+        # property of the row, which is why `shove_value` could not see it. Set only
+        # beside a shove, because following nobody is worth nothing. #287.
+        if action.ref and T.row_follows(world, actor, action.ref):
+            f["keeps_contact"] = 1.0
     if gained_hp:
         other = Team.ENEMY if mine is not None and mine.team is Team.PC else Team.PC
         theirs_pool = T.pool(world, other)
@@ -1651,8 +1660,28 @@ class DoctrinePolicy:
             total += self.memory.worth(action.ref, 5.0) * f.get("expected_hits", 0.0) * 0.4
         if f.get("usage_daily") and f.get("my_hp_fraction", 1.0) < self.desperate_at:
             total += 6.0
-        if f.get("is_second_wind") and f.get("my_hp_fraction", 1.0) < 0.3:
-            total += 12.0
+        hurt = f.get("my_hp_fraction", 1.0)
+        if f.get("is_second_wind") and hurt <= 0.5:
+            # **Bloodied, and scaled by how far past it.** This was a cliff at 0.3
+            # and a flat +12.0, and between them they meant the term was barely
+            # exercised: a character below 30% is usually dead before its next turn
+            # rather than lingering there, so the window came up on 2 of 88 turns.
+            #
+            # 0.5 because the printed rule lets you second-wind **at any time** and
+            # bloodied is the natural line; scaled because 12.0 against a hit that
+            # kills something is a losing trade at the line and an obvious one at
+            # death's door, and a cliff cannot say the difference. 12 at bloodied,
+            # 30 at zero.
+            #
+            # `<=`, not `<`: `Health.bloodied` is `hp <= max_hp // 2`, so a creature
+            # on exactly half **is** bloodied. Checked rather than recalled, because a
+            # boundary is the silently-wrong kind of thing this component produces.
+            #
+            # A/B'd across 48 fights an arm. Second winds taken **9 -> 49**, which is
+            # the count this issue was filed on; the level-10 mean went 9.00 -> 8.62,
+            # which is **inside** what #291 measured this instrument as able to
+            # resolve, so it is reported and not claimed. #284.
+            total += 12.0 * (1.0 + 1.5 * (0.5 - hurt) / 0.5)
         return total
 
     def decide(
