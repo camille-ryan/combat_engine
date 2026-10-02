@@ -66,6 +66,8 @@ def main() -> int:
     )
     ap.add_argument("--monsters", action="store_true", help="alias for --kind monsters")
     ap.add_argument("--max-level", type=int, help="stop at this level")
+    ap.add_argument("--mm13", action="store_true",
+                    help="monsters: only the three Monster Manuals, the old default")
     ap.add_argument(
         "--book",
         default="Player's Handbook",
@@ -94,21 +96,51 @@ def main() -> int:
         "powers": lambda: (_powers(db, args), "class", "level"),
     }[kind]()
     _report(found, done, partial, a, b, args)
+    # **Never a bare percentage.** The monster figure read 100% for a long time
+    # against a denominator of a fifth of the corpus, and nothing on the line said
+    # which fifth. An instrument that scopes itself has to print the scope. #308.
+    if kind == "monsters":
+        every = db.execute("SELECT COUNT(*) FROM monster").fetchone()[0]
+        mm13 = db.execute(
+            "SELECT COUNT(*) FROM monster WHERE book != ''").fetchone()[0]
+        if args.mm13:
+            print(f"  counting the three Monster Manuals -- "
+                  f"{mm13} of {every} imported monsters")
+        else:
+            print(f"  counting all {every} imported monsters; "
+                  f"--mm13 narrows to the {mm13} in the Monster Manuals")
     return 0
 
 
 def _monsters(db, args: argparse.Namespace) -> list:  # noqa: ANN001
-    # MM1-3 only. Everything else in the compendium is out of scope and
-    # counting it would make the work look endless.
-    where = ["m.book != ''"]
+    # **Every imported source, not MM1-3.** This was `m.book != ''` with the
+    # reasoning "everything else in the compendium is out of scope and counting it
+    # would make the work look endless" -- which was sound about the work and wrong
+    # about the reporting: it meant **630 of 3,130 imported monsters** were in the
+    # denominator, so the line read `100%` while 2,500 monsters that `loader.pick`
+    # can field were invisible to the only instrument that asks whether they are
+    # written. #308.
+    #
+    # Camille's call, with the condition that the checks must not get slower. They
+    # do not: this instrument reads `game.db` and the registry and **exercises
+    # nothing** -- no board, no fight, no `take_turn` -- so a wider denominator is a
+    # bigger SQL result and costs milliseconds. The ten-minute instrument is
+    # `audit.py` and this does not touch it.
+    #
+    # `--mm13` keeps the old view, because scoping the *work* to MM1-3 is still a
+    # reasonable plan; what was wrong was a percentage that did not say so.
+    where = ["m.book != ''"] if args.mm13 else []
     params: list = []
     if args.max_level:
         where.append("m.level <= ?")
         params.append(args.max_level)
+    # `WHERE` only when there is something to put after it: the scope is a flag now
+    # and the unscoped form has no clauses at all.
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
     return db.execute(
         "SELECT a.ref, m.level, m.role FROM monster_power a "
-        "JOIN monster m ON m.ref = a.monster_ref WHERE "
-        + " AND ".join(where)
+        "JOIN monster m ON m.ref = a.monster_ref"
+        + clause
         + " ORDER BY m.level, m.role, a.ref",
         params,
     ).fetchall()
