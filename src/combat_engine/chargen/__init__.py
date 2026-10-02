@@ -1227,7 +1227,7 @@ def loadout(
         on_leg = [p for p in here if _fits(p, build)]
         pool = sorted(p.ref for p in (on_leg or here) if p.ref not in out)
         spare = sorted(p.ref for p in here if p.ref not in out and p.ref not in pool)
-        chosen = pick.sample(pool, min(count, len(pool)))
+        chosen = _best_of(pool, count, cls, build, pick)
         # A thin leg is topped up from the rest of the class rather than
         # leaving the character with one at-will.
         while len(chosen) < count and spare:
@@ -1243,6 +1243,36 @@ def loadout(
         if at <= level:
             out += deal(at, None, 1)
     return out + sorted(r for ref in out for r in riders.get(ref, []))
+
+
+def _best_of(
+    pool: list[str], count: int, cls: str, build: Build, pick: Random
+) -> list[str]:
+    """`count` powers out of `pool`, ranked and then sampled.
+
+    **The sixth and last of the build choices to be scored**, and the largest by
+    volume: a level-10 character takes about ten cards and took all of them with
+    `rng.sample` over whatever passed `_fits`, which is a boolean. #234.
+
+    `choices.sample` draws one at a time, so this draws repeatedly and drops
+    what it has taken -- the same thing `rng.sample` was doing, with the odds
+    weighted. Falls back to the uniform draw when `SCORED_CHOICES` is off, which
+    is what that flag is for.
+    """
+    if not SCORED_CHOICES:
+        return pick.sample(pool, min(count, len(pool)))
+
+    from .choices import POWER_TOP, power_options, sample
+
+    left = list(pool)
+    taken: list[str] = []
+    while len(taken) < count and left:
+        drawn = sample(power_options(left, cls, build), pick, top=POWER_TOP)
+        if drawn is None:
+            break
+        taken.append(drawn.ref)
+        left.remove(drawn.ref)
+    return taken
 
 
 def feat_slots(level: int, race: str = "") -> int:

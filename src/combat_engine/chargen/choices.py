@@ -92,6 +92,27 @@ WEIGHTS: dict[str, float] = {
     "speed_above_six": 1.0,
     # Going earlier is worth about a third of a point of attack.
     "initiative": 0.4,
+    # -- a power ----------------------------------------------------------
+    # **The one choice this file did not price**, and the biggest by volume: a
+    # level-10 character takes about ten powers and took them with
+    # `rng.sample` over whatever passed a boolean leg filter. #234.
+    #
+    # Reaching more than one creature is the clearest thing a card can be
+    # better at, and the one the board most often rewards.
+    "hits_several": 2.5,
+    # **There is no damage term, and that is measured rather than an
+    # oversight.** The obvious one is the average of the printed expression, and
+    # `Power.damage` carries it for **0 of the 519** attack rows these four
+    # classes own -- all 1,351 rows that have one are monsters, where the header
+    # holds damage as data so MM3 rescaling can reach it. A character's damage
+    # is written in its body, as `c.damage("2d6", ...)` or `c.w(2)`, and the
+    # second of those is not a number until a weapon is in hand. A weight that
+    # is always zero is this project's commonest bug, so it is absent instead.
+    # A card that does nothing but damage is worth less than one that also
+    # moves, marks or hobbles, and the body is where that lives.
+    "has_a_rider": 1.5,
+    # Not expended on a miss, which is most of a second use.
+    "reliable": 1.5,
     # -- a feat -----------------------------------------------------------
     # `_leans_on` reads the row's own source for `c.<ability>_mod`, so this is
     # "does the feat pay out through the ability this build is good at". It
@@ -123,6 +144,14 @@ WEIGHTS: dict[str, float] = {
     # Declared finished and inert in a fight. Fine for a character and no use
     # to a fight being analysed, which is what the dealer is for.
     "out_of_combat": -5.0,
+    # **Refused in play, so the card is dead in the hand** -- and still priced
+    # rather than filtered. A power pool at one level and usage is often two or
+    # three rows deep, so dropping one leaves the character short of a card it
+    # is entitled to. Heavy enough to lose to anything finished and light
+    # enough to be taken when it is all there is. Powers only: `feats_for`
+    # excludes a refused feat before scoring, because that pool is hundreds
+    # deep and never runs out.
+    "refused_in_play": -8.0,
     # -- which weapon is actually held ------------------------------------
     # **Camille's rule**: "If the character has taken the feat, it should
     # almost certainly be taking that weapon as well." Heavy enough to beat
@@ -184,6 +213,12 @@ FLOOR = 1.0
 #: of the same class rarely take the same feat, narrow enough that what they
 #: take is a feat somebody would have picked on purpose.
 FEAT_TOP = 24
+
+#: How many candidates a power draw considers. Much narrower than `FEAT_TOP`
+#: because the pool is: a class prints two or three attack powers at a given
+#: level and usage, so this mostly does nothing and is here for the levels that
+#: print six.
+POWER_TOP = 6
 
 #: `race_options` per (class, leg). The ranking is the same every time it is
 #: asked and it costs **41ms**, nearly all of it inside `RaceLine.granted`,
@@ -517,6 +552,79 @@ def feat_options(
         )
         out.append(Choice(ref=ref, score=score, terms=terms))
     return _ranked(out)
+
+
+def power_options(
+    candidates: list[str], cls: str, build: Build | None = None
+) -> list[Choice]:
+    """Which of the powers printed at a level this character should take.
+
+    **The sixth choice, and the one left uniform longest.** `loadout` filtered
+    to the build's leg with `_fits` -- a boolean -- and then drew with
+    `rng.sample`, so a level-10 character took about ten cards at chance from
+    whatever survived the filter. By volume it is the largest build decision in
+    the package and it was the least considered. #234.
+
+    `candidates` is handed in for the same reason `feat_options` takes `legal`:
+    `loadout` already knows which rows are printed at this level and in this
+    usage, and working it out twice is a second place for the answer to differ.
+
+    A row that is **refused in play** is scored down rather than filtered out.
+    It is tempting to drop it -- `usable` will refuse it, so the card is dead in
+    the hand -- but the pool at a given level and usage is often two or three
+    rows deep, and dropping one leaves the character short of a card it is
+    entitled to. Priced low, it loses whenever there is anything else and is
+    still there when there is not, which is the behaviour `loadout`'s own
+    top-up already reaches for.
+    """
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Keyword
+
+    from . import build_of
+
+    leg = build or build_of(cls)
+    out: list[Choice] = []
+    for ref in candidates:
+        declared = REGISTRY.get(ref)
+        if declared is None:
+            continue
+        target = getattr(declared, "target", None)
+        several = bool(target is not None and (target.everyone or target.count > 1))
+        score, terms = _priced(
+            {
+                "leans_on_build": float(_leaning(declared, leg, ref)),
+                "hits_several": float(several),
+                "has_a_rider": float(_does_more_than_damage(declared)),
+                "reliable": float(Keyword.RELIABLE in (declared.keywords or ())),
+                "carries_a_marker": float(bool(getattr(declared, "dropped", ()) or ())),
+                "refused_in_play": float(bool(getattr(declared, "todo", ()) or ())),
+                "out_of_combat": float(getattr(declared, "out_of_combat", False)),
+                **_rating_term(ref, cls),
+            }
+        )
+        out.append(Choice(ref=ref, score=score, terms=terms))
+    return _ranked(out)
+
+
+def _does_more_than_damage(declared) -> bool:  # noqa: ANN001
+    """Does the body do anything besides roll damage?
+
+    Read off the source, the way `_leans_on` reads an ability off it, because
+    there is no header field for "and the target is slowed". A body whose only
+    verbs are the attack and the damage is a plain hit; anything else -- a
+    condition, a push, a shift granted, a zone -- is a rider.
+    """
+    import inspect
+
+    try:
+        src = inspect.getsource(declared.body)
+    except (OSError, TypeError):
+        return False
+    verbs = {line.split("c.", 1)[1].split("(", 1)[0]
+             for line in src.splitlines() if "c." in line}
+    return bool(verbs - {"strike", "damage", "w", "target", "first", "ref", "me",
+                         "level", "str_mod", "dex_mod", "con_mod", "int_mod",
+                         "wis_mod", "cha_mod", "attack_mod", "dice_for"})
 
 
 def wield_options(
