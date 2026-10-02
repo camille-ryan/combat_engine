@@ -701,6 +701,15 @@ def options(html: str, guide: Guide) -> tuple[list[tuple[str, str, int]],
             text = " ".join((el.text_content() or "").split())
             if not text:
                 continue
+            # **The key's own swatches are not options.** A guide writes its
+            # legend in the colours it is defining, so every swatch is a
+            # coloured bold run and offers itself as a candidate -- and one of
+            # them resolves: `"Light Blue"` matches a real power's printed name
+            # and was being rated sky by every guide whose key spells sky that
+            # way. `legend` already knows these words; this is the same test it
+            # makes, so the two cannot drift apart.
+            if text.strip(" .:,;-\u2013\u2014").strip().lower() in LEGEND_WORDS:
+                continue
             hex_ = colour_of(el)
             if hex_ is None or hex_ in NEUTRAL:
                 tier = "black"

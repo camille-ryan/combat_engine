@@ -3454,8 +3454,7 @@ RATINGS: dict[str, dict[str, float]] = {
     "p12237": {"warden": 4.0},
     "p1225": {
         "ardent": 5.0, "avenger": 4.0, "cleric": 4.0, "fighter": 4.0, "monk": 3.0,
-        "paladin": 1.5, "psion": 1.5, "ranger": 5.0, "rogue": 3.0, "sorcerer": 5.0,
-        "swordmage": 5.0, "warlock": 5.0, "wizard": 5.0,
+        "paladin": 1.5, "psion": 1.5, "ranger": 5.0, "rogue": 3.0,
     },
     "p12258": {"warden": 3.0},
     "p12260": {"warden": 4.0},
@@ -9458,8 +9457,7 @@ SOURCES: dict[str, tuple[str, ...]] = {
     "p12237": ("warden",),
     "p1225": (
         "ardent", "avenger", "cleric", "fighter2", "fighter3", "monk", "monk2", "paladin",
-        "paladin2", "paladin3", "psion", "ranger", "rogue", "sorcerer", "swordmage",
-        "warlock", "wizard3",
+        "paladin2", "paladin3", "psion", "ranger", "rogue",
     ),
     "p12258": ("warden",),
     "p12260": ("warden",),
