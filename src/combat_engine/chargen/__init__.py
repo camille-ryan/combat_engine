@@ -1040,10 +1040,35 @@ SCORED_CHOICES = True
 #: the comparison, and a fixture movement can be attributed to one of them
 #: rather than to both at once.
 #:
-#: Off by default. Turning it on changes every dealt character, so the six
-#: fixtures need re-recording in a commit with nothing else in it, for the
-#: reason `DEAL_RACES` and `SCORED_CHOICES` both give above.
-USE_RATINGS = False
+#: **On**, and it was off because turning it on cost win rate. That is no
+#: longer true, and both reasons it was true have been fixed:
+#:
+#: * #234 was the dominant confound -- `loadout` dealt one level's worth of
+#:   powers, so a quarter of the party swung a 1d4 whip and no feat term could
+#:   be read over it. Characters hold full hands now and the weapon choice is
+#:   scored.
+#: * #256 was costing this seven points on its own. 1,529 (ref, class) pairs
+#:   were contested -- one class, two answers -- and the table kept the better
+#:   of the two, which is wrong for both builds. `rating()` declines for those
+#:   now, and the rated draw went +3% to +10% against the chassis purely from
+#:   withdrawing them.
+#:
+#: Re-measured at 100 seeds, level 5, which is the power #257's own comment
+#: says this needs (about 80 for the effect it was arguing about):
+#:
+#:     draw      win   rounds  party hit%  moved-away provocations
+#:     chassis   81%     7.0      61%            177
+#:     scored    89%     6.0      60%            122
+#:     rated     93%     6.0      63%            159
+#:
+#: So three of #257's findings invert: the rated draw is **best** rather than
+#: worst, it is a round **shorter** rather than longer, and the scored draw
+#: walks away from adjacent enemies **least** rather than most. Only "hit rate
+#: does not move" survives, which it does -- 61/60/63.
+#:
+#: Still separate from `SCORED_CHOICES` so the two can be measured apart, which
+#: is how the seven points above were attributed to one of them.
+USE_RATINGS = True
 
 #: The rated average on the community six-colour scale. An item a guide put
 #: below this is refused outright; see `_pick_item`.
