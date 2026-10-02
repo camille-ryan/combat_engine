@@ -2493,7 +2493,15 @@ class Cast:
         so it lives here and they all get the same one.
 
         False if the target is not actually helpless, which is the printed
-        requirement and worth checking rather than trusting the caller.
+        requirement and worth checking rather than trusting the caller -- and
+        **False if the attack misses**, which it may.
+
+        **"Regardless of the roll" licenses the critical, not the hit.** This
+        forced `hit = True`, so a helpless creature could not be missed -- and
+        it was the silently-false shape besides: `strike` was called and its
+        answer overwritten, so the die it rolled decided nothing. You can miss a
+        helpless creature; if you connect, it is a critical whatever the natural
+        was. #250.
         """
         from .conditions import rules
         from .query import active
@@ -2502,13 +2510,22 @@ class Cast:
         if who is None or not any(rules(c).helpless for c in active(self.world, who)):
             return False
         result = self.strike(on=who, advantage=True)
+        if not result.hit:
+            return False
         result.critical = True
-        result.hit = True
-        # `c.flat`, not `c.damage`: the extra 5d6 of a coup de grace is not
-        # part of the attack's damage and a critical does not maximise it.
-        # Rolled through `c.damage` with the critical flag already up, it
-        # came out a flat 30 every time, on top of an automatic critical,
-        # from a level 1 monster.
+        # **The 5d6 has no basis in the rule and is still here, deliberately.**
+        # What the rule says is that damage meeting the target's *bloodied value*
+        # kills it, and that logic exists nowhere in the engine. Removing this
+        # without building that would leave `m2942a2` and its level-2 twin
+        # dealing **nothing at all** -- both declare no attack line and no damage
+        # line, so they have no damage of their own to fall back on, while the
+        # other two callers deal theirs with `c.hit()` and would double up. So
+        # this stands in for the finisher until somebody decides what a coup de
+        # grace deals for a row that declares no attack. Asked on #250.
+        #
+        # `c.flat`, not `c.damage`: it is not part of the attack's damage and a
+        # critical does not maximise it. Rolled through `c.damage` with the
+        # critical flag already up it came out a flat 30 every time.
         self.flat(self.roll("5d6"), on=who)
         return True
 
