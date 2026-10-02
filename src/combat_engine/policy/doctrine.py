@@ -979,6 +979,7 @@ def doctrine_features(
 
     # -- threat removal, in rounds: hit points and control in one currency ----
     removed = 0.0
+    worse_off = 0.0
     gained_hp = 0.0
     if action.ref:
         laid = T.row_effects(world, actor, action.ref)
@@ -997,8 +998,15 @@ def doctrine_features(
             # anybody takes one, save-ends takes 1.8 because a save is 55%.
             dealt = T.expected_vs(world, actor, action.ref, t)
             rounds = min(1.0, dealt / health.hp) * T.ROUNDS
-            rounds += T.denial(world, t, laid,
-                               pushed=T.row_push(world, actor, action.ref))
+            shoved = T.row_push(world, actor, action.ref)
+            rounds += T.denial(world, t, laid, pushed=shoved)
+            # **Signed, and the only term here that can be.** See `shove_value`:
+            # the same push is good or bad depending on where the creature it
+            # wants is standing, and `denial` scores both at zero. Summed over
+            # targets like the rest of this loop, so a blast that shoves three
+            # enemies off the wizard is worth three times one.
+            if shoved:
+                worse_off += shove_value(world, t, shoved)
             # Capped at the window, so overkill and a stack of conditions cannot
             # between them remove more than the creature had to give.
             removed += min(rounds, float(T.ROUNDS)) * T.threat(world, t) / T.ROUNDS
@@ -1007,6 +1015,8 @@ def doctrine_features(
             gained_hp += T.enabled(world, t, laid)
     if removed:
         f["threat_removed"] = removed
+    if worse_off:
+        f["shoved_from_prey"] = worse_off
     if gained_hp:
         other = Team.ENEMY if mine is not None and mine.team is Team.PC else Team.PC
         theirs_pool = T.pool(world, other)
@@ -1215,6 +1225,47 @@ def close_reach(world: Any, eid: int) -> int:
         if p.reach.kind in ("close_burst", "close_blast") and known.available(ref):
             far = max(far, p.reach.size)
     return far
+
+
+def shove_value(world: Any, target: int, pushed: int) -> float:
+    """Signed squares a shove puts between `target` and the creature it wants.
+
+    **Forced movement is the only rider whose value can be negative**, and the
+    policy could not say so. `denial` prices a shove through `per_round` from the
+    landing square, which asks "can it still reach *somebody*" -- and the answer
+    is yes from either square, so the good shove and the harmful one both scored
+    exactly `+0.000`. Measured, a push of 2 with the ally four squares off:
+
+        defender interposed        enemy-to-ally 5 -> 7    denial +0.000
+        enemy already past it      enemy-to-ally 3 -> 1    denial +0.000
+
+    Nothing about the row changes between those lines; only the geometry does.
+    #247.
+
+    **Whose safety counts is not a new judgement.** It is `aim` below, asked of
+    the enemy: the creature it would walk at is the one worth keeping it away
+    from, by the same threat-per-hit-point rule the approach already uses. So a
+    defender shoving a brute off the wizard scores positive and shoving it
+    *toward* the wizard scores negative, without anybody having to define "the
+    squishy one".
+
+    Zero when the shove is blocked, when the enemy wants nobody, or when the row
+    shoves nothing -- all of which are "this tells us nothing" rather than "this
+    is bad".
+    """
+    from combat_engine.engine.grid import distance
+
+    if pushed <= 0:
+        return 0.0
+    prey = aim(world, target)
+    if prey is None:
+        return 0.0
+    here = world.get(target, Position)
+    there = T.landing(world, target, pushed)
+    at = world.get(prey, Position)
+    if here is None or at is None or there is None or there == here.square:
+        return 0.0
+    return float(distance(there, at.square) - distance(here.square, at.square))
 
 
 def aim(world: Any, actor: int) -> int | None:

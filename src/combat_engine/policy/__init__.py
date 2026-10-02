@@ -502,6 +502,16 @@ WEIGHTS: dict[str, float] = {
     "target_damage_taken": 1.0,
     "usage_daily": -3.0,
     "usage_encounter": -0.5,
+    # **A square of separation between an enemy and the creature it wants.**
+    # Signed: `doctrine.shove_value` returns negative when the shove drives the
+    # enemy *at* that creature, which is the case a defender is most likely to be
+    # in -- it pushes when it has just failed to interpose. #247.
+    #
+    # Priced beside `closes_distance`, which is the same quantity from the other
+    # end: a square closed toward a target is worth about what a square of
+    # separation is worth, and this is flat rather than a share for the reason the
+    # note in `doctrine` gives about mixing currencies.
+    "shoved_from_prey": 2.0,
     "closes_distance": 2.0,
     "nearest_enemy": -0.1,
     # Worth about one attack, which is what it hands over.
