@@ -74,9 +74,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import fight
 from combat_engine.engine import Ident
-from combat_engine.engine.components import Position
+from combat_engine.engine.components import Build, Health, Position, Powers
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import OpportunityWindow, SurgeSpent
+from combat_engine.engine.events import Dropped, OpportunityWindow, SurgeSpent
 from combat_engine.engine.grid import distance
 from combat_engine.engine.query import alive, enemies
 from combat_engine.engine.types import Usage
@@ -258,6 +258,35 @@ class Counted(D.DoctrinePolicy):
         return got
 
 
+
+def _held_a_second_wind(world, who: int) -> bool:  # noqa: ANN001
+    """Could this creature still have taken a second wind as it dropped?
+
+    **`actions.offers`' own three conditions, not a tally of `SecondWind`
+    events.** Counting events answers "did it spend one", which is a different
+    question in two ways that both matter here: a character out of surges never
+    had the option, and a **monster never has it at all** -- monsters carry
+    surges so that leader rows can spend them. Read off events, every one of the
+    96 monster drops at both levels counted as "holding a second wind it never
+    had", and the monsters column was identical to the drop count by
+    construction.
+
+    Read at the moment of the drop, which is the moment the question is about.
+    `encounter.can_spend` is deliberately not asked: it answers False whenever it
+    is not that creature's turn, and a creature is usually dropped on somebody
+    else's.
+    """
+    health = world.get(who, Health)
+    known = world.get(who, Powers)
+    return (
+        world.get(who, Build) is not None
+        and health is not None
+        and health.surges > 0
+        and known is not None
+        and known.times("second-wind") == 0
+    )
+
+
 def turn_watch(world, pol: Counted, actor: int) -> None:  # noqa: ANN001
     """After a turn: did a melee creature neither attack nor close?"""
     side = side_of(world, actor)
@@ -292,6 +321,19 @@ def play(level: int, seed: int, pol: Counted, cap: int = 30) -> int:
         pol.n[f"{side_of(world, ev.actor)}/surges"] += 1
 
     world.bus.on(SurgeSpent, surged)
+
+    # **Camille's reading on #303: going down with a second wind still in hand.**
+    # A character who has already spent one and drops has run out of answers,
+    # which is the fight being hard. One who drops still holding it was never
+    # offered the choice or declined it, and that is the AI to improve -- so the
+    # two have to be counted apart or the signal is buried in the total.
+    def went_down(ev) -> None:  # noqa: ANN001
+        side = side_of(world, ev.actor)
+        pol.n[f"{side}/downed"] += 1
+        if _held_a_second_wind(world, ev.actor):
+            pol.n[f"{side}/downed_holding_wind"] += 1
+
+    world.bus.on(Dropped, went_down)
     encounter.start()
     while not encounter.finished and world.round <= cap:
         actor = world.turn
@@ -388,6 +430,8 @@ def measure(levels: tuple[int, ...]) -> dict:
                 "ap_spent": pol.n[f"{side}/ap_spent"],
                 "surges": pol.n[f"{side}/surges"],
                 "dailies": pol.n[f"{side}/dailies"],
+                "downed": pol.n[f"{side}/downed"],
+                "downed_holding_wind": pol.n[f"{side}/downed_holding_wind"],
                 "ap_standard": pol.n[f"{side}/ap_standard"],
                 "melee_turns": pol.n[f"{side}/melee_turns"],
             }
@@ -417,6 +461,12 @@ ROWS = [
     # cost it, because 4e is an attrition game and a day is four fights.
     ("surges", "healing surges spent", "lower"),
     ("dailies", "daily powers spent", "lower"),
+    ("downed", "dropped to 0 hp", "lower"),
+    # **The signal, and the reason the pair is printed together.** #303: dropping
+    # with the second wind still unspent says the AI never took an answer it had,
+    # which is fixable. Dropping after spending it says the fight was hard, which
+    # is not a fault. One number cannot say which.
+    ("downed_holding_wind", "...with their second wind still unspent", "lower"),
     ("ap_standard", "...of them buying a standard action", "higher"),
     ("decisions", "decisions", "-"),
 ]
