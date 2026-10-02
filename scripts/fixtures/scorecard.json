@@ -21,7 +21,7 @@
       "tied_pct": 9.5
     },
     "party": {
-      "adjacent_helped": 24,
+      "adjacent_helped": 23,
       "adjacent_idle": 0,
       "already_on": 2,
       "ap_spent": 96,
@@ -66,7 +66,7 @@
       "tied_pct": 12.5
     },
     "party": {
-      "adjacent_helped": 12,
+      "adjacent_helped": 11,
       "adjacent_idle": 0,
       "already_on": 15,
       "ap_spent": 94,
