@@ -518,7 +518,7 @@ def _burst_origins(world: World, actor: int, p, augment: int = 0) -> list[Square
 
 
 def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
-    from .query import can_walk, speed
+    from .query import can_move, can_walk, speed
 
     out: list[Action] = []
     if is_(world, actor, Condition.PRONE):
@@ -559,20 +559,32 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # else, so it could not be written while the menu was a constant.
     from .movement import OVERHEAD, mode_of, reachable
 
-    offers = {ActionType.MOVE: 1}
-    for (what, cost), squares_ in _granted(world, actor).items():
-        if what != "shift":
-            continue
-        offers[cost] = max(offers.get(cost, 0), squares_)
-    mode = mode_of(world, actor, None)
-    for cost in sorted(offers, key=lambda a: a.value):
-        if not encounter.can_spend(actor, cost):
-            continue
-        step = reachable(
-            world, actor, offers[cost], mode="walk" if mode in OVERHEAD else None
-        )
-        for dest in sorted(step):
-            out.append(Action(kind="shift", cost=cost, dest=dest, path=(dest,)))
+    # **`can_move`, not `can_walk`, and the difference is the whole point.**
+    # `_movement` above gates its walk on `can_walk` and this gated on nothing,
+    # so an immobilized or grabbed creature was offered seven shifts it could not
+    # take -- seven squares a player would be shown as legal destinations for
+    # something that cannot move. `movement.shift` refused them correctly, so the
+    # rule was never broken; the menu was lying about it. #246.
+    #
+    # The weaker test is deliberate: `can_walk` also refuses a **rooted**
+    # creature, and rooted is "cannot use move actions to walk or run" -- its own
+    # docstring says such a creature "may still shift". Gating this on `can_walk`
+    # would take the shift away from every row printing that line.
+    if can_move(world, actor):
+        offers = {ActionType.MOVE: 1}
+        for (what, cost), squares_ in _granted(world, actor).items():
+            if what != "shift":
+                continue
+            offers[cost] = max(offers.get(cost, 0), squares_)
+        mode = mode_of(world, actor, None)
+        for cost in sorted(offers, key=lambda a: a.value):
+            if not encounter.can_spend(actor, cost):
+                continue
+            step = reachable(
+                world, actor, offers[cost], mode="walk" if mode in OVERHEAD else None
+            )
+            for dest in sorted(step):
+                out.append(Action(kind="shift", cost=cost, dest=dest, path=(dest,)))
     return out
 
 
@@ -1033,8 +1045,11 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
     if action.kind == "shift":
         from .movement import shift
 
-        shift(world, actor, action.dest)
-        return True
+        # **Return what the move returned.** This said `True` unconditionally, so
+        # a caller was told the shift succeeded while the creature stood exactly
+        # where it was -- the silently-false shape, and `LinearPolicy.act` was
+        # being told a wasted action had worked. #246.
+        return shift(world, actor, action.dest)
 
     if action.kind == "stand":
         for eff in world.effects.of(actor):
