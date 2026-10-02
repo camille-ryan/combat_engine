@@ -229,7 +229,21 @@ class Counted(D.DoctrinePolicy):
             # row out, since that branch is above.
             self.helped.add((actor, world.round))
         p = get(got.ref) if got.ref else None
-        if p is not None and p.attack is not None and got.targets:
+        if p is not None and got.targets and (
+                p.attack is not None
+                # **Or it deals damage without rolling.** The test was the header
+                # alone, so a row that damages from its body was invisible --
+                # `p11618` deals 21 and has no `Attack` line, and an estimated
+                # **179 rows** of the 6,947 without one do deal damage. Every such
+                # turn read as having attacked nobody, and five readings are
+                # derived from this tally. #300.
+                #
+                # A row property rather than an event, deliberately: counting
+                # `DamageApplied` instead took the tally from 282 to 497 at level
+                # 5, because ongoing damage emits one every round and credits the
+                # creature that applied it for a turn it spent doing nothing. The
+                # same figure `doctrine.inert` already asks for, so it is cached.
+                or T.row_damage(world, actor, got.ref) > 0):
             self.n[f"{side}/attacks"] += 1
         d = self.explain(world, encounter, actor, got)
         if d.get("self_harm"):
