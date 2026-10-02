@@ -62,6 +62,7 @@ from combat_engine.engine import (
     SELF,
     WILL,
     Ability,
+    ActionPointSpent,
     ActionType,
     AttackDeclared,
     Bloodied,
@@ -78,6 +79,7 @@ from combat_engine.engine import (
     Keyword,
     MoveEnd,
     PowerResolved,
+    Powers,
     PowerUsed,
     SecondWind,
     SurgeSpent,
@@ -515,13 +517,37 @@ def f3696b(c: Cast) -> None:
 
 
 @power("f3697", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FLURRY)
+       reach=PERSONAL, target=SELF)
 def f3697(c: Cast) -> None:
-    """A second use of the monk's flurry in a turn the action point
-    bought. The prerequisite resolves `cf:monk-f1` -- the unarmed strike
-    -- but the flurry itself is neither that row nor any other: it is a
-    power the class page prints and the importer never gave a ref, which
-    is the same hold five item rows carry."""
+    """A second use of the monk's flurry in a turn the action point bought.
+
+    **The flurry has a ref now.** `c.flurry_of_blows()` names whichever of the five
+    the tradition granted (#277), so "your flurry of blows power" is a row this can
+    hand a use back to.
+
+    Both printed conditions are checked, and in the order the card states them: the
+    point must have been spent, and the flurry must **already** have been used this
+    turn -- `Powers.last_round` records the round a row was last used, which is that
+    question on the creature's own turn. Without the second test this would hand out
+    a use to a monk that had not spent one, which is a different and better feat.
+
+    `c.restore_use` rather than a second grant: the flurry is a class feature with a
+    budget, and giving the budget back is what "you can use it a second time" means.
+    """
+    me = c.me
+
+    def spent(ev: ActionPointSpent) -> None:
+        if ev.actor != me:
+            return
+        flurry = c.flurry_of_blows()
+        known = c.world.get(me, Powers)
+        if not flurry or known is None:
+            return
+        if known.last_round.get(flurry) != c.world.round:
+            return
+        c.restore_use(flurry, on=me)
+
+    c.watch(ActionPointSpent, spent, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f3698", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
