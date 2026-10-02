@@ -1438,13 +1438,21 @@ def f3767(c: Cast) -> None:
 
 
 @power("f3768", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=PROFICIENCY)
+       reach=PERSONAL, target=SELF,
+       dropped=("etl.weapon.racial_arms",))
 def f3768(c: Cast) -> None:
-    """The spec names these two by weapon ref, so the gate is exact --
-    and false for every character `chargen` can build today, because
-    neither ref is in the weapon table `chargen.PRINTED` loads. The same
-    shape `general_q.py`'s `_wielding` documents: the row reports UNUSED
-    rather than wrong. Heroic tier, so +2."""
+    """The damage bonus is written and its gate is exact; the proficiency cannot be
+    granted because **the two things it names are not weapons in the tree**.
+
+    **Re-aimed off `chargen.proficiency()`, which arrived and is not the hold.**
+    The header grants named arms perfectly well -- see `f2783` -- but these two
+    arrive from the spec as `x_m5495a1` and `x_m5732a1`, monster-ability refs rather
+    than rows in the `weapon` table `chargen` loads. So `proficiency=` has nothing
+    to point at and the gate below is false for every character `chargen` can build,
+    which is why the row reports UNUSED rather than wrong.
+
+    They are a race's natural weapons, printed on its page rather than in the weapon
+    tables, and the ETL does not extract them. Heroic tier, so +2."""
     c.bonus(
         "damage", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: _holding_ref(c, "m5495a1", "m5732a1"),

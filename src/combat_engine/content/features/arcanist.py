@@ -161,15 +161,24 @@ def _weapon_swung(world: World, eid: int, ctx: dict[str, Any]) -> Weapon | None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    dropped=("chargen.proficiency()", "c.counts_as(group=)"),
+    # **The proficiency is a header column and both weapons are printed ones.**
+    # `chargen.proficiency` reads this and hands the arms over at build time, which
+    # is the only moment the clause can happen in -- `f2783` is the same shape. The
+    # marker named it as missing and it had arrived.
+    proficiency=("w:club", "w:mace"),
+    dropped=("c.counts_as(group=)",),
 )
 def rogue_tactic_bludgeon(c: Cast) -> None:
-    """Three clauses, and only the last is a number the engine can carry.
+    """Three clauses; two land and the middle one does not.
 
-    The proficiency is a chargen column, not a modifier. "You can use those
-    weapons with the extra damage or any rogue power that normally requires
-    a light blade" is a weapon counting as a group it is not in, which the
-    requirement gates ask of `Gear` directly and nothing can rewrite.
+    The proficiency is a chargen column rather than a modifier, and it is declared
+    in the header now -- `chargen.proficiency` reads `proficiency=` and hands the
+    club and the mace over when the character is built, which is the only moment
+    "you are proficient with" can happen in.
+
+    "You can use those weapons with the extra damage or any rogue power that
+    normally requires a light blade" is a weapon counting as a group it is not in,
+    which the requirement gates ask of `Gear` directly and nothing can rewrite.
 
     What is left is the rattling rider, and it is written: a club or a mace
     delivering an attack with that keyword adds the Strength modifier to

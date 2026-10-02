@@ -2256,11 +2256,20 @@ def f2865(c: Cast) -> None:
 
 
 @power("f2624", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROFICIENCY)
+       reach=PERSONAL, target=SELF, todo=("chargen.proficiency(choice=)",))
 def f2624(c: Cast) -> None:
-    """A superior implement. Which implements a character may pick up is
-    settled by its chassis in `chargen`, and a `Cast` runs on a board
-    with the gear already in hand."""
+    """A superior implement, and **which one is the character's choice** -- that is
+    the whole of what is missing.
+
+    **Re-aimed off `chargen.proficiency()`, which arrived and is not the hold.**
+    `proficiency=("w:club", "w:mace")` is how a feat grants named arms and
+    `cf:rogue-scoundrel-f1s3` uses it; what the header cannot express is "one of
+    your choice", because the tuple is fixed when the row is written. The card even
+    says it may be taken more than once for a different implement each time, so the
+    grant is a *selection* among a category rather than a list.
+
+    Nothing in `chargen` records a per-feat choice today, which is the same absence
+    `c.race_option()` names for a racial power."""
 
 
 @power("f2783", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
