@@ -1,0 +1,117 @@
+# AI Policy
+
+What the AI *chooses*, never what the rules allow. A row is legal or it is not —
+that is `engine/`. This component decides which legal thing a creature does, and
+it may be wrong without anything being broken.
+
+Global rules are in the root `CLAUDE.md`. This file is what is different here.
+
+## Read fights with subagents before touching a weight
+
+**The practice that has actually found improvements**, and Camille's call: for a
+policy issue, spawn a handful of subagents, give each a fight log, and ask them to
+name the poor tactical decisions. Then measure the ones that recur.
+
+Why it works better than reading the code: a weight is a number in a table and a
+mistake is a creature standing in the wrong square on round 4. The table does not
+show you that, and the scorecard's aggregates do not either — they tell you the
+median moved, not what the fighter should have done instead.
+
+How to run it:
+
+```
+uv run scripts/fight.py --seed 7 --level 10 > /tmp/log7.txt
+```
+
+* **Three to five agents, one log each**, different seeds and levels. Independent
+  readings; do not give one agent five logs.
+* Ask for **specific** criticism — round, creature, what it did, what it should
+  have done, why. "The AI plays badly" is not actionable; "on round 3 the wizard
+  walked into melee to take a flank it cannot use" is.
+* **Treat the output as hypotheses, not findings.** An agent reading a log cannot
+  see the scores, so it will confidently explain decisions it has guessed at. What
+  it is good at is noticing that something looks wrong, which is the expensive half.
+* **A criticism that two agents raise independently is worth measuring.** One
+  agent's is worth reading and nothing more.
+* Then measure. Every number below.
+
+## Two ways a policy term is silently false
+
+Both cost a day each, and neither showed up as a failure anywhere.
+
+**A term can read a key its source does not carry.** `DoctrinePolicy.explain`
+filters to `DOCTRINE`, and `policy.features`' keys are a different table — so
+`explain()["allies_caught"]` is always absent. A counter built on it read **0 in
+every state**, including with the −7.0 deterrent disarmed, and that zero was taken
+as "this does not happen". It happens 93 times a run. Read `weighed()` when you
+want everything; `explain()` only promises the doctrine half, and says so.
+
+**A term built as a difference of baselines cannot express "avoid this".**
+`reach_gained` is `best_from(dest) − best_from(here)`. Anything netted into
+`best_from` lowers *both* ends, so lowering `here` inflates every move out of a bad
+square rather than only the moves that fix it — it reads as "anywhere but here".
+Netting friendly fire in that way made friendly fire **worse** (party blasts
+clipping an ally 20 → 25) and was reverted. A penalty belongs where the choice is
+made.
+
+## The currency is small, and that is the usual reason a term does nothing
+
+`threat_removed`, `threat_lost`, `conceded` and `reach_gained` are shares of a
+side's threat pool, weighted by `SHARE`. A share is a small number: a blast
+catching three enemies is worth about 1.3 after weighting, against `is_power` at
+6.0 and `allies_caught` at −7.0.
+
+So **a principled term in this currency routinely cannot carry a decision.**
+Measured on the differential threat term: worth **0.58** where the decision needed
+about **7**, and swapping it in for the flat deterrent broke the acceptance test it
+was built to satisfy. Before building, estimate the term's weighted size and
+compare it with what it has to outrank.
+
+## Isolate a term before believing it
+
+Zero the weight and run the same probe. If the verdict does not change, the term is
+not what produced it:
+
+```
+both terms on          blast -0.67   single +12.68   PASS
+differential off       blast -0.09   single +12.68   PASS   <- the flat term did it
+flat off               blast +20.33  single +12.68   FAIL
+```
+
+That table is the whole argument. A term that passes a test the old behaviour also
+passes has been shown nothing.
+
+## What covers a policy change
+
+**`audit.py` covers nothing here** — deliberately. A policy decides among options
+the rules already allow, so no row changes and the audit widens to nothing.
+`NARROW`'s docstring records that reasoning. What covers it:
+
+```
+uv run scripts/scorecard.py        the numbers. --save is its own commit
+uv run scripts/replay.py verify    fixtures WILL diverge; see below
+uv run scripts/fight.py            one readable fight
+```
+
+* **Fixtures diverging is expected and is not the verdict.** Say which divergences
+  are tie-breaks and which are repricings: 14% of decisions are already tied at the
+  top, so a small term re-breaks ties and a few hundred events of difference is
+  what one re-broken tie costs. Re-record in its own commit, never bundled.
+* **Report the mixed result as mixed.** Attrition and rounds move in opposite
+  directions often enough that picking the flattering pair is easy.
+* `scorecard` and `fight` are slow and get slower: a term that calls
+  `T.expected_vs` per target per decision tripled the scorecard's runtime. Price
+  that before shipping it.
+
+## Attrition is the metric, not win rate
+
+Camille's call on #267: a party beating a standard encounter from full resources is
+the **intended** outcome, so a win rate measures the wrong thing. What a fight
+costs is **surges, dailies and action points**, and a day is four fights. The
+scorecard prints those, plus "dropped to 0 hp" and "with their second wind still
+unspent" — the second of which is half of every drop and is the clearest signal in
+the file.
+
+Round counts have a target band (#217) and the scorecard's "lower is better"
+default disagrees with it, so the two instruments can call the same change good and
+bad. #217 is the one with a stated target.
