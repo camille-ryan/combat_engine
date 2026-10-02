@@ -253,6 +253,44 @@ class Cast:
             "other": [c for c in creatures(self.world) if c != excluded],
         }[side]
 
+    def flurry_of_blows(self, *, on: int | None = None) -> str:
+        """Which flurry of blows **this** monk has, as a ref. Empty for anyone else.
+
+        Six rows print "your flurry of blows power" and mean whichever one the
+        monk's tradition granted -- there are five, one per tradition, and a row
+        naming any single ref would be right for a fifth of the monks who hold it.
+        Camille's call on #277 was a verb per family rather than a general
+        "the row this feature granted me", and this is the monk's.
+
+        **Derived, not tabulated.** The five share a signature no other row has:
+        a monk row at level 0, at-will, `action=NONE`, with the psionic keyword --
+        checked, and it matches exactly those five out of the whole registry. A
+        hardcoded tuple of refs would have been an `engine` -> `content` leak and
+        a list to maintain; this is a query over the registry, which `dsl` owns.
+
+        Returns the one the creature actually holds, so a row can watch it, spend
+        it, or hand back a use. Empty string rather than None, because every
+        caller feeds it to something that takes a ref.
+        """
+        from .components import Powers
+        from .dsl import REGISTRY
+        from .types import Keyword as _Kw
+        from .types import Usage as _Usage
+
+        known = self.world.get(self._who(on) if on is not None else self.me, Powers)
+        if known is None:
+            return ""
+        for ref in known.all:
+            declared = REGISTRY.get(ref)
+            if (declared is not None
+                    and declared.cls == "monk"
+                    and declared.level == 0
+                    and declared.usage is _Usage.AT_WILL
+                    and declared.action is ActionType.NONE
+                    and _Kw.PSIONIC in declared.keywords):
+                return ref
+        return ""
+
     def reach(self, ref: str = "", *, on: int | None = None) -> int:
         """How far this creature's melee attacks carry, in squares.
 

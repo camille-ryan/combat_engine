@@ -526,10 +526,10 @@ def f3697(c: Cast) -> None:
 
 @power("f3698", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=FLURRY)
+)
 def f3698(c: Cast) -> None:
     """Dexterity in place of Strength on a basic attack made with the monk's
-    strike. The flurry the second sentence retriggers is still not a row.
+    strike, and the flurry retriggered off an opportunity attack with it.
 
     `mba` is the ref to swap, not the monk's weapon: the card says "when
     making a melee basic attack **with** your monk unarmed strike", so the
@@ -545,6 +545,26 @@ def f3698(c: Cast) -> None:
     names its modifier in its own body and is not this row's to rewrite.
     """
     c.rolls_with("mba", Ability.DEX, when=_wielding_ref("w:monk-unarmed-strike"))
+
+    # **"Your flurry of blows power" is whichever one the tradition granted**, and
+    # `c.flurry_of_blows()` names it -- there are five and a row naming any single
+    # ref would be right for a fifth of the monks holding it. #277.
+    #
+    # Asked inside the watch rather than once when the feat arms: a monk could in
+    # principle gain the feature later, and the ref costs a registry scan over
+    # what it knows rather than a board query.
+    me = c.me
+
+    def struck(ev: Hit) -> None:
+        if ev.attacker != me or not getattr(ev, "opportunity", False):
+            return
+        if not _wielding_ref("w:monk-unarmed-strike")(c.world, me):
+            return
+        flurry = c.flurry_of_blows()
+        if flurry:
+            c.use_power(flurry, on=ev.target)
+
+    c.watch(Hit, struck, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f3699", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -570,11 +590,30 @@ def f3700(c: Cast) -> None:
 
 @power("f3701", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.cover_from()", *FLURRY))
+       dropped=("c.cover_from()",))
 def f3701(c: Cast) -> None:
-    """Partial cover against one sort of attack and not another is a
-    narrowing `c.no_cover`'s mirror does not have, and the trigger is the
-    flurry, which has no ref."""
+    """The flanking half is written; the cover half is not.
+
+    **The trigger has a ref now.** `c.flurry_of_blows()` names whichever flurry
+    the monk's tradition granted (#277), so "when you use your flurry of blows
+    power while wielding a quarterstaff" is a watch on `PowerUsed` with two
+    equalities.
+
+    Partial cover **against ranged and area attacks only** is still a narrowing
+    `c.no_cover`'s mirror does not have -- `c.cover_from()` would be it -- so that
+    clause is dropped and the row pays out its other half. `todo` became
+    `dropped` for that reason: it plays now.
+    """
+    me = c.me
+
+    def flurried(ev: PowerUsed) -> None:
+        if ev.actor != me or ev.power != c.flurry_of_blows():
+            return
+        if not _holding(c, "staff"):
+            return
+        c.cannot_be_flanked(on=me, until=When.EONT)
+
+    c.watch(PowerUsed, flurried, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f3702", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
