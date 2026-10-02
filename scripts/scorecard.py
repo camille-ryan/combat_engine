@@ -178,6 +178,11 @@ class Counted(D.DoctrinePolicy):
         #: immediate interrupt calls `act` for a creature whose turn it is not,
         #: which would clobber a single slot.
         self.could: dict[tuple[int, int], bool] = {}
+        #: `(actor, round)` for a turn where the creature did something that was
+        #: not an attack and was not inert -- a buff, a heal, a zone. Cleared per
+        #: fight for the same reason `could` is: entity ids and round numbers both
+        #: restart, so a surviving key answers the wrong fight's question.
+        self.helped: set[tuple[int, int]] = set()
 
     def act(self, world, encounter, actor, options):  # noqa: ANN001, ANN201
         side = side_of(world, actor)
@@ -207,6 +212,14 @@ class Counted(D.DoctrinePolicy):
             self.n[f"{side}/ap_standard"] += int(got.ref == "standard")
         if got.ref and inert(world, actor, got.ref):
             self.n[f"{side}/inert_chosen"] += 1
+        elif got.ref and got.targets:
+            # **A turn can be useful without being an attack**, and
+            # `adjacent_idle` could not say so. A cleric standing next to an
+            # enemy and buffing the whole party is not wasting its turn, but
+            # "did not attack" is literally true of it -- so the one counter was
+            # reading six productive leader turns as idle ones. Recorded per
+            # (actor, round) and read below, the way `could` already is. #268.
+            self.helped.add((actor, world.round))
         p = get(got.ref) if got.ref else None
         if p is not None and p.attack is not None and got.targets:
             self.n[f"{side}/attacks"] += 1
@@ -234,6 +247,7 @@ def play(level: int, seed: int, pol: Counted, cap: int = 30) -> int:
     # restart each fight, so a surviving `(actor, round)` key answers the wrong
     # fight's question. Left in, this reported 7 excluded turns where there are 25.
     pol.could.clear()
+    pol.helped.clear()
     install(world, encounter, {}, default=pol)
 
     def provoked(ev: OpportunityWindow) -> None:
@@ -279,6 +293,16 @@ def play(level: int, seed: int, pol: Counted, cap: int = 30) -> int:
                 and pol.n[f"{side_of(world, actor)}/attacks"] == hits:
             if not pol.could.get((actor, began), True):
                 pol.n[f"{side_of(world, actor)}/could_not_act"] += 1
+            elif gap <= 1 and (actor, began) in pol.helped:
+                # **Not an attack is not the same as not useful.** A cleric beside
+                # an enemy buffing or healing the whole party has not attacked and
+                # has not wasted the turn, and one counter could not tell the two
+                # apart -- so six productive leader turns were reading as idle. Split
+                # rather than excused, because a number that quietly stops counting
+                # things is the failure this file's own history is made of: the same
+                # split gave `could_not_act` its own line when `adjacent_idle` turned
+                # out to be mostly corpses. #268.
+                pol.n[f"{side_of(world, actor)}/adjacent_helped"] += 1
             elif gap <= 1:
                 pol.n[f"{side_of(world, actor)}/adjacent_idle"] += 1
             elif now >= gap:
@@ -321,6 +345,7 @@ def measure(levels: tuple[int, ...]) -> dict:
                 "charge_taken": pol.n[f"{side}/charge_taken"],
                 "idle_melee": pol.n[f"{side}/idle_melee"],
                 "adjacent_idle": pol.n[f"{side}/adjacent_idle"],
+                "adjacent_helped": pol.n[f"{side}/adjacent_helped"],
                 "could_not_act": pol.n[f"{side}/could_not_act"],
                 "ap_spent": pol.n[f"{side}/ap_spent"],
                 "ap_standard": pol.n[f"{side}/ap_standard"],
@@ -340,7 +365,11 @@ ROWS = [
     ("charge_taken", "charges taken", "higher"),
     ("charge_offered", "charges offered", "-"),
     ("idle_melee", "out of reach and did not close", "lower"),
-    ("adjacent_idle", "adjacent to an enemy and did not attack", "lower"),
+    ("adjacent_idle", "adjacent to an enemy and did nothing", "lower"),
+    # Not "lower is better": a leader beside an enemy buffing the party is doing
+    # its job, so this is a reading rather than a fault. Printed next to the line
+    # it was split out of, so the pair is read together.
+    ("adjacent_helped", "...but buffed, healed or laid a zone", ""),
     ("could_not_act", "...excluded: nothing but `end` was on offer", "-"),
     ("ap_spent", "action points spent", "-"),
     ("ap_standard", "...of them buying a standard action", "higher"),
