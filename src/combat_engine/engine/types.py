@@ -139,7 +139,20 @@ class Condition(StrEnum):
     REMOVED = "removed"
     RESTRAINED = "restrained"
     SHAPED = "shaped"
-    ROOTED = "rooted"
+    #: **Not a printed condition and it used to claim to be.** 4e has no "rooted"
+    #: condition; the printed clause is "cannot shift", and *Rooted* is a monster
+    #: feature name whose meaning varies from block to block -- so a chip reading
+    #: "rooted" told a player something the rules do not say, and an author reading
+    #: `c.rooted` would reasonably assume it implemented that feature. Camille's
+    #: correction.
+    #:
+    #: It stays in this enum rather than becoming a modifier because six rows pass
+    #: it *alongside* a real condition -- "slowed and cannot shift (save ends
+    #: both)" is one effect with one saving throw, and `Rules` is keyed by
+    #: `Condition`. Naming it for the clause is the honest fix; restructuring
+    #: `Rules` to hang a flag off a conditionless effect would split those into two
+    #: effects and two saves, which is worse.
+    CANNOT_SHIFT = "cannot shift"
     SLOWED = "slowed"
     SQUEEZING = "squeezing"
     STUNNED = "stunned"

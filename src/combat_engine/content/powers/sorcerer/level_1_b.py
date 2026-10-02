@@ -329,11 +329,11 @@ def p5841(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p5842(c: Cast) -> None:
-    """"Cannot shift" is `c.rooted` rather than immobilised -- the target
+    """"Cannot shift" is `c.cannot_shift` rather than immobilised -- the target
     still walks. The Cosmic Magic attack penalty goes with the fork."""
     if c.strike():
         c.damage("2d6", c.cha_mod, dtype=DamageType.COLD)
-        c.rooted(until=When.EOTNT)
+        c.cannot_shift(until=When.EOTNT)
 
 
 @power(

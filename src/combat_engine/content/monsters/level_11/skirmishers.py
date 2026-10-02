@@ -977,7 +977,7 @@ def m483a3(c: Cast) -> None:
 def m4866a0(c: Cast) -> None:
     """Cold stops it slipping about.
 
-    `c.rooted` rather than `c.immobilized`: the printed line takes the shift
+    `c.cannot_shift` rather than `c.immobilized`: the printed line takes the shift
     away and leaves the walk, which is the whole reason the two conditions
     are different. Read off `DamageApplied`, which is the only event that
     says how much actually came off and of what type.
@@ -986,7 +986,7 @@ def m4866a0(c: Cast) -> None:
 
     def chilled(ev: DamageApplied) -> None:
         if ev.target == me and ev.amount > 0 and ev.dtype is DamageType.COLD:
-            c.rooted(until=When.EONT, on=me)
+            c.cannot_shift(until=When.EONT, on=me)
 
     c.watch(DamageApplied, chilled, until=When.ENCOUNTER, on=me, label=c.ref)
 

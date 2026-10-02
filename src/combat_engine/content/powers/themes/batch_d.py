@@ -315,10 +315,10 @@ def p11808(c: Cast) -> None:
             # declared line -- which is what Primary means.
             if c.attack(c.attack_with(c.ability_for()), REF, on=foe):
                 c.damage("1d10", c.mod(c.ability_for()), on=foe)
-                # `c.rooted` bars a shift and leaves being shoved alone, which is
+                # `c.cannot_shift` bars a shift and leaves being shoved alone, which is
                 # what "the target can't shift" says -- `c.immobilized` would stop
                 # it walking too.
-                c.rooted(on=foe, until=When.EONT)
+                c.cannot_shift(on=foe, until=When.EONT)
 
     conj = c.world.get(spirit, Conjuration)
     if conj is not None:

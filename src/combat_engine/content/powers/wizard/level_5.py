@@ -738,7 +738,7 @@ def p11843(c: Cast) -> None:
 
     def symbiosis(ev: Hit) -> None:
         if ev.attacker == c.me and _at_will_or_basic(ev.power):
-            c.rooted(on=ev.target, until=When.EOTNT)
+            c.cannot_shift(on=ev.target, until=When.EOTNT)
 
     c.watch(Hit, symbiosis, until=When.ENCOUNTER, label=f"{c.ref} symbiosis")
 

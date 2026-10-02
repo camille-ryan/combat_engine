@@ -376,7 +376,7 @@ def p1871(c: Cast) -> None:
 )
 def p1872(c: Cast) -> None:
     """"An undead target cannot move closer to you" is the clause with no
-    method: `c.immovable` is about being shoved and `c.rooted` about
+    method: `c.immovable` is about being shoved and `c.cannot_shift` about
     shifting, and neither forbids walking towards somebody."""
     if c.strike():
         c.damage("1d12", c.cha_mod, dtype=DamageType.NECROTIC)

@@ -53,7 +53,7 @@ def p11074(c: Cast) -> None:
 def p5111(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(), c.str_mod)
-        c.rooted(until=When.EONT)
+        c.cannot_shift(until=When.EONT)
 
 
 @power(

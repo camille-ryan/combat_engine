@@ -707,7 +707,7 @@ def p12939(c: Cast) -> None:
     attack=Attack(CHA, vs=AC),
 )
 def p13780(c: Cast) -> None:
-    """"Cannot shift" is `c.rooted`, not `c.immobilized`: the target still walks.
+    """"Cannot shift" is `c.cannot_shift`, not `c.immobilized`: the target still walks.
     Augment 1 adds -2 on any attack that includes you as a target, gated on
     the attack context's `target`. Augment 2 is 2[W] and pays somebody a shift
     each time the target moves."""
@@ -716,7 +716,7 @@ def p13780(c: Cast) -> None:
     victim = c.target
     if c.strike():
         c.damage(c.w(2) if spent == 2 else c.w(), c.cha_mod)
-        c.rooted(until=When.EONT)
+        c.cannot_shift(until=When.EONT)
         if spent == 1:
             c.penalty(
                 "attack", 2, until=When.EONT,

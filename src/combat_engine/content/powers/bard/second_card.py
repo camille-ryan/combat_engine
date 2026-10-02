@@ -50,4 +50,4 @@ def p2977b(c: Cast) -> None:
     is the damage."""
     if c.strike():
         c.damage(0, c.cha_mod)
-        c.rooted(until=When.EONT)
+        c.cannot_shift(until=When.EONT)

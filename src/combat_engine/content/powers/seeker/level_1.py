@@ -57,12 +57,12 @@ from combat_engine.engine.grid import Square, distance, spread
     attack=Attack(WIS, vs=AC),
 )
 def p11463(c: Cast) -> None:
-    """"Can't shift" is `c.rooted`, which still walks -- `c.immobilized` would
+    """"Can't shift" is `c.cannot_shift`, which still walks -- `c.immobilized` would
     say a different and stronger sentence."""
     if c.strike():
         c.damage(scaled_w(c), c.wis_mod)
         c.slowed(until=When.EOTNT)
-        c.rooted(until=When.EOTNT)
+        c.cannot_shift(until=When.EOTNT)
 
 
 @power(

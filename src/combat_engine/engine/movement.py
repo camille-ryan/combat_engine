@@ -153,7 +153,8 @@ def step(
                 left = not (spread(squares(world, other), reach) & target)
             if left:
                 world.bus.emit(
-                    OpportunityWindow(actor=other, provoker=eid, why="moved away")
+                    OpportunityWindow(actor=other, provoker=eid, why="moved away",
+                                      kind=kind, mode=mode)
                 )
 
     world.grid.lift(eid)
@@ -416,9 +417,21 @@ def walk(
         return 0
     # A walk and a shift are barred by different rows, and `step` is shared
     # with both -- so the bar is checked here, where the kind is known.
+    #
+    # **A charge is a walk for this.** `can_walk` is "it cannot use move actions to
+    # walk or run", and a creature that cannot walk cannot run at somebody either --
+    # so when the charge started passing `kind="charge"` (#301) this test had to
+    # widen or the bar would have been skipped.
+    #
+    # The card is `c.no_walk`, which lays the modifier this reads, and
+    # `c.immobilized`, which stops both kinds of going. **Not `c.cannot_shift`**, which is
+    # no_walk's mirror -- it bars the *shift* and leaves the walk -- so a rooted
+    # creature charges, correctly, and always did. Camille caught me naming it here
+    # as the hazard; measured, `can_walk` is True under `rooted` and False under
+    # `immobilized`, and the charge covers 0 squares under the second.
     from .query import can_walk
 
-    if kind == "walk" and not can_walk(world, eid):
+    if kind in ("walk", "charge") and not can_walk(world, eid):
         return 0
     mode = mode_of(world, eid, mode)
     # The return is read. "You can cancel that movement as an immediate

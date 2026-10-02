@@ -554,7 +554,7 @@ def p13743(c: Cast) -> None:
     carries both halves of "slowed and can't shift"."""
     if c.strike():
         c.damage("2d8", c.int_mod)
-    c.condition(Condition.SLOWED, Condition.ROOTED, until=When.EOTNT)
+    c.condition(Condition.SLOWED, Condition.CANNOT_SHIFT, until=When.EOTNT)
 
 
 @power(

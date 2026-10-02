@@ -3279,13 +3279,22 @@ class Cast:
             who, self.me, When.STANCE, label=label or self.ref, conditions=conditions
         )
 
-    def rooted(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
+    def cannot_shift(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
         """Cannot shift. Still walks, which is why this is not `immobilized`.
 
-        "Slowed and cannot shift" is one printed line in at least three
-        classes, and until this existed the second half was quietly dropped.
+        "Slowed and cannot shift" is one printed line in at least three classes,
+        and until this existed the second half was quietly dropped.
+
+        **Was `c.rooted`, which named a condition the rules do not have.** 4e has
+        no rooted condition -- *Rooted* is a monster feature whose meaning varies
+        from block to block -- so the chip read "rooted" to a player, and an author
+        reading the verb would reasonably have assumed it implemented that feature.
+        Camille's correction.
+
+        The mirror is `c.no_walk`, which bars the walk and leaves the shift;
+        `c.immobilized` is both.
         """
-        return self.condition(Condition.ROOTED, until=until, on=on)
+        return self.condition(Condition.CANNOT_SHIFT, until=until, on=on)
 
     def insubstantial(
         self, *, until: When = When.EONT, on: int | None = None
@@ -3438,7 +3447,10 @@ class Cast:
             # creature. Keys follow the convention `escape` and `skills` use: the
             # participants by name, plus the reason the window opened.
             if when is not None and not when(
-                {"actor": ev.actor, "provoker": ev.provoker, "why": ev.why}
+                {"actor": ev.actor, "provoker": ev.provoker, "why": ev.why,
+                 # How and by what means the provoker moved, for the rows that
+                 # narrow by it. Empty for a window a move did not open. #301.
+                 "kind": ev.kind, "mode": ev.mode}
             ):
                 return
             ev.cancel("the power says it does not provoke")
@@ -3456,7 +3468,7 @@ class Cast:
         """Cannot be pushed, pulled or slid. The counterpart of `c.no_provoke`.
 
         `ForcedMove` is cancellable, so this is a listener that refuses --
-        but three rows had each written that listener out, and `c.rooted`
+        but three rows had each written that listener out, and `c.cannot_shift`
         is the wrong card: that bars a shift and leaves being shoved alone.
         """
         from .events import ForcedMove
@@ -6585,7 +6597,7 @@ class Cast:
     def no_walk(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
         """"It cannot use move actions to walk or run." It may still shift.
 
-        The mirror of `c.rooted`, which bars the shift and leaves the walk.
+        The mirror of `c.cannot_shift`, which bars the shift and leaves the walk.
         Neither is `c.immobilized`: that stops both, and a row printing only
         one half was being written as the stronger card or dropped.
 

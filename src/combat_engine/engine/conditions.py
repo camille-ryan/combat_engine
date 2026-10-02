@@ -87,7 +87,7 @@ RULES: dict[Condition, Rules] = {
     Condition.RESTRAINED: Rules(grants_ca=True, attack=-2, cannot_move=True),
     # "Cannot shift" on its own. Named for what it does rather than
     # after any one power, because three classes impose it.
-    Condition.ROOTED: Rules(no_shift=True),
+    Condition.CANNOT_SHIFT: Rules(no_shift=True),
     Condition.SLOWED: Rules(speed_cap=2),
     # A big creature folding itself into a small space: half speed, -5 to
     # attack, and it grants combat advantage to everybody.

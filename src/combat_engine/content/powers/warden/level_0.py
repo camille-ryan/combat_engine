@@ -65,4 +65,4 @@ def p5094(c: Cast) -> None:
     so the turn running is the target's own."""
     c.slide(1)
     c.slowed(until=When.EOT)
-    c.rooted(until=When.EOT)
+    c.cannot_shift(until=When.EOT)

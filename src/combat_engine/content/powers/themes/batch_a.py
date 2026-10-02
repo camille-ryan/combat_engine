@@ -1128,7 +1128,7 @@ AP_BOON = (
 def p16397(c: Cast) -> None:
     """Six printed results, each an ordinary verb. Result 2 is untyped
     vulnerability -- "2 extra damage each time it is hit" is what that is --
-    and result 6 is `c.rooted`, which forbids a shift and leaves the walk."""
+    and result 6 is `c.cannot_shift`, which forbids a shift and leaves the walk."""
     ev = c.trigger
     who = getattr(ev, "attacker", None)
     victim = getattr(ev, "target", None)
@@ -1146,7 +1146,7 @@ def p16397(c: Cast) -> None:
     elif roll == 5:
         c.grant_attack(who)
     elif roll == 6 and victim is not None:
-        c.rooted(on=victim, until=When.EONT)
+        c.cannot_shift(on=victim, until=When.EONT)
 
 
 @power(

@@ -1180,13 +1180,13 @@ def i1194p1(c: Cast) -> None:
        trigger="you are damaged by an attack",
        on=Trigger(DamageApplied, targets_me, "you are damaged"))
 def i1770p1(c: Cast) -> None:
-    """"You can no longer shift" is `c.rooted`, which is exactly that and
+    """"You can no longer shift" is `c.cannot_shift`, which is exactly that and
     not `c.immobilized`."""
     if c.may("spend a healing surge", who=c.me):
         c.spend_surge(on=c.me)
     else:
         c.save(on=c.me)
-    c.rooted(on=c.me, until=When.ENCOUNTER)
+    c.cannot_shift(on=c.me, until=When.ENCOUNTER)
 
 
 @power("i2043p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,

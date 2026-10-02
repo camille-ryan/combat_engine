@@ -357,7 +357,7 @@ def p5848(c: Cast) -> None:
     if c.strike():
         c.damage("3d6", c.cha_mod, dtype=kind)
         if kind is DamageType.COLD:
-            c.condition(Condition.SLOWED, Condition.ROOTED, until=When.SAVE_ENDS)
+            c.condition(Condition.SLOWED, Condition.CANNOT_SHIFT, until=When.SAVE_ENDS)
     else:
         c.half_damage("3d6", c.cha_mod, dtype=kind)
 

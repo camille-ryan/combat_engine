@@ -3,7 +3,7 @@
 All at-will and all augmentable; each row buys its augment with `augment` and
 names in its docstring whatever is left out. One printed row is absent: the one
 whose whole rider is "cannot use move actions to walk or run", which is neither
-`c.rooted` (cannot shift) nor `c.immobilized` (cannot move at all).
+`c.cannot_shift` (cannot shift) nor `c.immobilized` (cannot move at all).
 """
 
 from __future__ import annotations

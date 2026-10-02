@@ -276,18 +276,24 @@ def f2758(c: Cast) -> None:
 
 @power("f2911", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("events.OpportunityWindow.kind",))
+)
 def f2911(c: Cast) -> None:
     """A charge at the sworn enemy draws no openings on the way in.
 
-    Two holds, and the marker named one. `c.no_provoke` is a standing
-    veto on the opportunity window with no gated form, so "during this
-    charge" cannot be said and a bare call would cover every step the
-    avenger takes all fight -- the symbol f1119 names. And there is
-    nothing for such a gate to read: `actions.execute` walks a charge's
-    path with `walk(world, actor, path)` and no `kind=`, so the move
-    announces itself as an ordinary walk and the board never says a
-    creature is charging."""
+    **Both holds are gone.** `c.no_provoke` takes a `when=`, and the window says
+    how the creature moved -- `ctx["kind"]` is `"charge"` now, because
+    `actions.execute` passes `kind="charge"` to `walk` where it used to walk a
+    charge as an ordinary move (#301).
+
+    The sworn-enemy half is the printed narrowing and is read on the caster
+    rather than on the window: the oath is a relation this `Cast` can ask about,
+    and the window names only the creature that would swing."""
+    me = c.me
+    c.no_provoke(
+        on=me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("kind") == "charge"
+        and sworn(c.world, me, ctx.get("actor")),
+    )
 
 
 # -- the longsword family --------------------------------------------------

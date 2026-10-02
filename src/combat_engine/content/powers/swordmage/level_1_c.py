@@ -218,7 +218,7 @@ def p5738(c: Cast) -> None:
         c.damage("1d8", c.int_mod, dtype=DamageType.PSYCHIC)
     else:
         c.half_damage("1d8", c.int_mod, dtype=DamageType.PSYCHIC)
-    c.rooted(until=held)
+    c.cannot_shift(until=held)
     c.threatens(0, on=c.target, until=held)
 
 

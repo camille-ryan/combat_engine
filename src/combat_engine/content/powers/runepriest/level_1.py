@@ -354,18 +354,18 @@ def p11373(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p11374(c: Cast) -> None:
-    """"Cannot shift" is `c.rooted`. The Effect's "and deals no damage on a
+    """"Cannot shift" is `c.cannot_shift`. The Effect's "and deals no damage on a
     miss" is dropped: a `Miss` does not say whether the power had a miss
     line, so the rune punishes every miss made next to the caster."""
     victim = c.target
     if c.strike():
         c.damage(c.w(2), c.str_mod)
         c.slowed(until=When.SAVE_ENDS)
-        c.rooted(until=When.SAVE_ENDS)
+        c.cannot_shift(until=When.SAVE_ENDS)
     else:
         c.half_damage(c.w(2), c.str_mod)
         c.slowed(until=When.EONT)
-        c.rooted(until=When.EONT)
+        c.cannot_shift(until=When.EONT)
     if victim is None:
         return
 

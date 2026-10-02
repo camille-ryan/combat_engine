@@ -923,11 +923,11 @@ def m4862a1(c: Cast) -> None:
     damage=Damage("1d8", 5),
 )
 def m4862a2(c: Cast) -> None:
-    """"Cannot shift" is `c.rooted`, not `c.immobilized`: it still walks, and
+    """"Cannot shift" is `c.cannot_shift`, not `c.immobilized`: it still walks, and
     walking away is what this is meant to cost it."""
     if c.strike():
         c.hit()
-        c.rooted()
+        c.cannot_shift()
 
 
 _M4862_ALLY_HIT = "an enemy hits one of the m4862's allies with a melee attack"

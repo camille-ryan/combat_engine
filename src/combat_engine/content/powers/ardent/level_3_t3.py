@@ -1,6 +1,6 @@
 """Ardent, level 3: the at-will that stops the target walking.
 
-The spec entry wanted the mirror of `c.rooted`: `c.immobilized` bars the
+The spec entry wanted the mirror of `c.cannot_shift`: `c.immobilized` bars the
 shift as well, which is a stronger card than this row prints. `c.no_walk` is
 that mirror, read by `query.can_walk` in `movement.walk` and in the menu
 `actions.legal` builds, so a policy is not offered a move it may not take.

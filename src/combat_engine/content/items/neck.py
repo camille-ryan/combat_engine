@@ -581,10 +581,19 @@ def i500p1(c: Cast) -> None:
 
 
 @power("i585x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("events.OpportunityWindow.kind",))
+       reach=PERSONAL, target=SELF)
 def i585x1(c: Cast) -> None:
-    """`c.no_provoke` is unconditional; the charge's own movement cannot be
-    told apart from the rest of the creature's walking."""
+    """"When you charge, your movement made as part of the charge doesn't provoke."
+
+    The charge's own movement can be told apart now: `actions.execute` passes
+    `kind="charge"` to `walk`, so `ctx["kind"]` says so and the rest of the
+    creature's walking still provokes (#301).
+
+    Laid for the encounter rather than armed per charge, which the card allows --
+    it is a property of wearing the amulet, and the gate is what makes it narrow
+    rather than the duration."""
+    c.no_provoke(on=c.me, until=When.ENCOUNTER,
+                 when=lambda ctx: ctx.get("kind") == "charge")
 
 
 @power("i912p1", level=2, cls=ITEM, usage=DAILY, action=MINOR,

@@ -1571,7 +1571,7 @@ def f2023b(c: Cast) -> None:
     "a target currently affected by your f2023b", and `c.suffering`
     matches on the label, so without it none of them has a question.
 
-    "Cannot willingly move closer to you" is dropped. `c.rooted` and
+    "Cannot willingly move closer to you" is dropped. `c.cannot_shift` and
     `c.no_walk` both bar a whole kind of movement rather than a
     direction, and there is nothing that bars one direction only."""
     victim = c.target

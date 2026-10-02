@@ -208,7 +208,7 @@ def p10380(c: Cast) -> None:
 def p12890(c: Cast) -> None:
     """Only the "cannot shift" half is written.
 
-    `c.rooted` is exactly that clause. Barring teleportation and stripping
+    `c.cannot_shift` is exactly that clause. Barring teleportation and stripping
     concealment have no method, so neither is approximated -- and the
     rooting is laid on whoever is standing in the zone when it goes up and
     on anybody who walks in afterwards.
@@ -218,11 +218,11 @@ def p12890(c: Cast) -> None:
         return
     ring = c.zone(area, label=c.ref, until=When.SUSTAIN, sustain=MINOR)
     for foe in c.in_squares(area, side="enemy"):
-        c.rooted(on=foe)
+        c.cannot_shift(on=foe)
 
     def caught(ev: ZoneEntered) -> None:
         if ev.zone == ring and ev.actor in c.enemies():
-            c.rooted(on=ev.actor)
+            c.cannot_shift(on=ev.actor)
 
     c.watch(ZoneEntered, caught, until=When.ENCOUNTER)
 

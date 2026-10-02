@@ -351,7 +351,7 @@ def p10758(c: Cast) -> None:
         def bite(ev: DamageApplied) -> None:
             if ev.source == c.me and ev.target == victim and ev.amount > 0:
                 c.penalty("attack", 2, on=victim, until=When.EONT)
-                c.rooted(on=victim, until=When.EONT)
+                c.cannot_shift(on=victim, until=When.EONT)
 
         c.watch(
             DamageApplied, bite, until=When.ENCOUNTER, on=c.me,
@@ -360,8 +360,8 @@ def p10758(c: Cast) -> None:
 
     c.world.effects.apply(
         victim, c.me, When.EONT,
-        label=f"{c.ref} blinded and rooted",
-        conditions=(Condition.BLINDED, Condition.ROOTED),
+        label=f"{c.ref} blinded and cannot shift",
+        conditions=(Condition.BLINDED, Condition.CANNOT_SHIFT),
         on_end=[afterwards],
     )
 

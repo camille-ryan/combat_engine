@@ -151,13 +151,13 @@ def p2789(c: Cast) -> None:
     requires_text=BEAST_FORM,
 )
 def p4898(c: Cast) -> None:
-    """"Slowed and can't shift (save ends both)" is one hold: `c.rooted` is
+    """"Slowed and can't shift (save ends both)" is one hold: `c.cannot_shift` is
     the second half, and it hangs on the first so one saving throw answers
     the printed line rather than two."""
     if c.strike():
         c.damage("2d8", c.wis_mod)
         hold = c.slowed(until=When.SAVE_ENDS)
-        still = c.rooted(until=When.SAVE_ENDS)
+        still = c.cannot_shift(until=When.SAVE_ENDS)
         if hold is not None and still is not None:
             hold.on_end.append(lambda: c.world.effects.end(still, "the hold ended"))
     else:
@@ -168,7 +168,7 @@ def p4898(c: Cast) -> None:
     aura_hold(
         c, 1,
         lambda who: who in foes,
-        lambda who: c.rooted(on=who, until=When.ENCOUNTER),
+        lambda who: c.cannot_shift(on=who, until=When.ENCOUNTER),
     )
 
 

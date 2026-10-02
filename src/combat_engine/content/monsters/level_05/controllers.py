@@ -831,9 +831,9 @@ def m4904a2(c: Cast) -> None:
     saving throw and not two."""
     if c.strike():
         c.hit()
-        c.condition(Condition.ROOTED, Condition.PINNED, until=When.SAVE_ENDS)
+        c.condition(Condition.CANNOT_SHIFT, Condition.PINNED, until=When.SAVE_ENDS)
     else:
-        c.condition(Condition.ROOTED, Condition.PINNED, until=When.EOTNT)
+        c.condition(Condition.CANNOT_SHIFT, Condition.PINNED, until=When.EOTNT)
 
 
 @power(

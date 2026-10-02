@@ -690,9 +690,9 @@ def p10418(c: Cast) -> None:
     c.teleport(10, who=pet)
     c.can_flank(on=pet, until=When.EONT)
 
-    def rooted(ev: Hit) -> None:
+    def pinned(ev: Hit) -> None:
         if ev.target == pet or not flanked_by(c.world, ev.target, pet):
             return
-        c.rooted(on=ev.target, until=When.EOTNT)
+        c.cannot_shift(on=ev.target, until=When.EOTNT)
 
-    c.watch(Hit, rooted, until=When.EONT, on=c.me, label=c.ref)
+    c.watch(Hit, pinned, until=When.EONT, on=c.me, label=c.ref)

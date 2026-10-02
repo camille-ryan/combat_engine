@@ -116,7 +116,7 @@ def p11276(c: Cast) -> None:
             return
         c.slowed(until=When.EONT)
         if spent:
-            c.rooted(until=When.EONT)
+            c.cannot_shift(until=When.EONT)
 
 
 @power(

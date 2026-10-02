@@ -176,7 +176,7 @@ def p12307(c: Cast) -> None:
 def p12308(c: Cast) -> None:
     """"Cannot willingly move closer to you" is the clause with no method.
 
-    `c.immovable` is about being shoved and `c.rooted` about shifting;
+    `c.immovable` is about being shoved and `c.cannot_shift` about shifting;
     neither forbids a creature walking towards somebody. It is left out of
     the primary and the secondary alike rather than approximated.
     """

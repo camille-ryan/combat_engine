@@ -332,7 +332,7 @@ def p13824(c: Cast) -> None:
 )
 def p13825(c: Cast) -> None:
     """"Cannot shift or make opportunity attacks (save ends both)" is one
-    effect: `c.rooted` is the first half, and the second is a refusal hung
+    effect: `c.cannot_shift` is the first half, and the second is a refusal hung
     on the same hold, so one saving throw ends both. `c.no_basic` is the
     wrong instrument -- it takes away granted swings and basic attacks too.
     """
@@ -341,7 +341,7 @@ def p13825(c: Cast) -> None:
         return
     if c.strike():
         c.damage(c.w(2), c.str_mod, dtype=DamageType.PSYCHIC)
-        held = c.rooted(until=When.SAVE_ENDS)
+        held = c.cannot_shift(until=When.SAVE_ENDS)
         if held is not None:
 
             def refuse(ev: OpportunityWindow) -> None:

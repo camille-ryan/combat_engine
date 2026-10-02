@@ -1214,11 +1214,11 @@ def i3162x1(c: Cast) -> None:
        trigger="you hit an enemy with an attack using this ammunition",
        on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i732x1(c: Cast) -> None:
-    """"Cannot shift" on its own is `c.rooted`, not `c.immobilized`: the
+    """"Cannot shift" on its own is `c.cannot_shift`, not `c.immobilized`: the
     enemy may still walk."""
     if not c.ammunition():
         return
-    c.rooted(until=When.EOTNT)
+    c.cannot_shift(until=When.EOTNT)
 
 
 @power("i733x1", level=8, cls=ITEM, action=ActionType.NONE,

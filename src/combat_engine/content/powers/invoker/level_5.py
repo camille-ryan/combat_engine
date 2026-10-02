@@ -268,7 +268,7 @@ def p7173(c: Cast) -> None:
     if c.strike():
         c.damage("2d8", c.wis_mod, dtype=DamageType.PSYCHIC)
         c.grants_advantage(until=When.SAVE_ENDS, to="team")
-        c.rooted(until=When.SAVE_ENDS)
+        c.cannot_shift(until=When.SAVE_ENDS)
 
 
 @power(

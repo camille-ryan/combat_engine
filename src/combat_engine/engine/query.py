@@ -445,7 +445,7 @@ def can_move(world: World, eid: int) -> bool:
 def can_walk(world: World, eid: int) -> bool:
     """"It cannot use move actions to walk or run", but it may still shift.
 
-    The exact mirror of `c.rooted`, and neither condition says it:
+    The exact mirror of `c.cannot_shift`, and neither condition says it:
     `immobilized` bars the shift as well, which is a stronger card than the
     rows printing this one. Held as a modifier rather than a condition
     because nothing else about the creature changes -- it is not slowed, it

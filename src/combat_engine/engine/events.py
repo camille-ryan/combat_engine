@@ -266,6 +266,18 @@ class OpportunityWindow(Decision):
     actor: int
     provoker: int
     why: str
+    #: How the provoker moved, when movement is what opened this. `walk`,
+    #: `shift`, `charge` -- `movement.step`'s own `kind`. Empty when the window
+    #: was opened by something that is not a move.
+    #:
+    #: **`why` could not answer it.** It reads `"moved away"` for a walk, a charge
+    #: and a flight alike, so "your movement **during the charge** does not
+    #: provoke" had nothing to test -- while `step` had both facts in scope on the
+    #: line that emits this. Four rows wanted them. #301.
+    kind: str = ""
+    #: And how it travelled: `walk`, `fly`, `swim`, `burrow`, resolved by
+    #: `movement.mode_of`. "Your **flying** does not provoke" is one row.
+    mode: str = ""
 
 
 # -- using a power ----------------------------------------------------------

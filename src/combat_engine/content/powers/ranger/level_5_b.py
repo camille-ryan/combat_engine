@@ -433,7 +433,7 @@ def p16480(c: Cast) -> None:
         c.penalty("attack", 2, until=When.SAVE_ENDS)
         return
     c.damage(c.w(1), c.attack_mod)
-    held = c.condition(Condition.BLINDED, Condition.ROOTED, until=When.SAVE_ENDS)
+    held = c.condition(Condition.BLINDED, Condition.CANNOT_SHIFT, until=When.SAVE_ENDS)
     if held is None:
         return
 

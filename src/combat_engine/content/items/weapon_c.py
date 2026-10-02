@@ -1151,7 +1151,7 @@ def i1185p1(c: Cast) -> None:
 )
 def i1275x1(c: Cast) -> None:
     """Bars one way of moving and leaves the rest. `c.immobilized` stops
-    everything and `c.rooted` stops the shift; neither is a teleport."""
+    everything and `c.cannot_shift` stops the shift; neither is a teleport."""
 
 
 @power(

@@ -1305,11 +1305,11 @@ def m4863a1(c: Cast) -> None:
     damage=Damage("3d8", 6),
 )
 def m4863a2(c: Cast) -> None:
-    """`c.rooted`, not `c.immobilized`: the printed line takes the shift away
+    """`c.cannot_shift`, not `c.immobilized`: the printed line takes the shift away
     and leaves the walk, which is the whole reason the two are different."""
     if c.strike():
         c.hit()
-        c.rooted(until=When.EONT)
+        c.cannot_shift(until=When.EONT)
 
 
 @power(

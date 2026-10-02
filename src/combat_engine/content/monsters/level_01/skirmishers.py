@@ -584,13 +584,13 @@ def m4859a2(c: Cast) -> None:
 def m4865a0(c: Cast) -> None:
     """Cold locks it up: it may still walk, but it cannot shift.
 
-    A trait, armed once. `c.rooted` is the hold that bars a shift and leaves
+    A trait, armed once. `c.cannot_shift` is the hold that bars a shift and leaves
     walking alone -- `immobilized` is the wrong card and stops both.
     """
 
     def chilled(ev: DamageApplied) -> None:
         if ev.target == c.me and ev.dtype is DamageType.COLD and ev.amount:
-            c.rooted(until=When.EONT, on=c.me)
+            c.cannot_shift(until=When.EONT, on=c.me)
 
     c.watch(DamageApplied, chilled, until=When.ENCOUNTER, on=c.me, label="m4865a0")
 

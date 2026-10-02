@@ -383,7 +383,7 @@ def p12236(c: Cast) -> None:
     def grind(ev: TurnStart) -> None:
         if ev.actor in c.enemies() and c.adjacent(ev.actor):
             c.flat(mod, on=ev.actor)
-            c.rooted(on=ev.actor)
+            c.cannot_shift(on=ev.actor)
 
     c.watch(TurnStart, grind, until=When.STANCE, on=c.me)
 

@@ -1077,7 +1077,12 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
     if action.kind == "charge":
         from .dsl import use
 
-        walk(world, actor, list(action.path))
+        # **`kind="charge"`, so the move says what it is.** It walked as an ordinary
+        # one, so `OpportunityWindow.kind` read `"walk"` and "your movement during
+        # the charge does not provoke" had nothing to test -- two rows named that as
+        # their gap and one named it twice. `walk` already threads `kind` through to
+        # `step`, which is where the window is opened. #301.
+        walk(world, actor, list(action.path), kind="charge")
         # The move goes with it, and so does everything else: a charge ends your
         # turn whatever you have left. Spent after the walk so that an opportunity
         # attack on the way in still resolves normally.

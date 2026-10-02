@@ -252,7 +252,7 @@ def p11790(c: Cast) -> None:
        keywords=[Keyword.MARTIAL, Keyword.WEAPON],
        attack=Attack(Pick.PRIMARY, vs=AC))
 def p11793(c: Cast) -> None:
-    """"Cannot shift" is `c.rooted`, not `c.immobilized` -- it still walks.
+    """"Cannot shift" is `c.cannot_shift`, not `c.immobilized` -- it still walks.
 
     The Effect is geometry rather than a clock, so the +4 is laid for the
     encounter behind a gate that asks the board whether the caster is still
@@ -260,7 +260,7 @@ def p11793(c: Cast) -> None:
     foe = c.target
     if c.strike(plus=_best(c) - c.attack_mod):
         c.damage(c.w(2), _best(c))
-        c.rooted(until=When.SAVE_ENDS)
+        c.cannot_shift(until=When.SAVE_ENDS)
     else:
         c.half_damage(c.w(2), _best(c))
     if c.choose(["you gain +4 to defences", "it grants combat advantage"]) \

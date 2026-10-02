@@ -242,7 +242,7 @@ def p13305(c: Cast) -> None:
         c.damage("1d8", c.int_mod, dtype=DamageType.PSYCHIC)
         c.slowed(until=When.EONT)
         if spent == 1:
-            c.rooted(until=When.EONT)
+            c.cannot_shift(until=When.EONT)
 
 
 @power(

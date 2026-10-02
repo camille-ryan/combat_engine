@@ -79,11 +79,11 @@ def p11207(c: Cast) -> None:
     on=TRIGGERED,
 )
 def p13123(c: Cast) -> None:
-    """"Cannot shift" is `c.rooted`, not `c.immobilized` -- the creature can
+    """"Cannot shift" is `c.cannot_shift`, not `c.immobilized` -- the creature can
     still walk. "Cannot make opportunity attacks" has no `Cast` method at
     all, so the second half of the off-target clause is dropped."""
     c.flat(2 + c.con_mod)
-    c.rooted(until=When.SONT)
+    c.cannot_shift(until=When.SONT)
 
 
 @power(
