@@ -118,8 +118,15 @@ class Range:
         return (0, 1) if self.alt else (0,)
 
 
-def Melee(n: int = 1, *, from_: str = "") -> Range:
-    return Range("melee", n, from_=from_)
+def Melee(n: int = 1, *, by_weapon: bool = False, from_: str = "") -> Range:
+    """`by_weapon` for a row the compendium does not list, which is `mba`.
+
+    The melee branch of `_reach_of` decides by `BY_WEAPON`, a set
+    `scripts/reaches.py --emit` derives from the compendium -- so an
+    **engine-declared** row can never be in it however plainly its reach is the
+    weapon's. `Ranged` has taken this argument all along for the same reason.
+    """
+    return Range("melee", n, by_weapon=by_weapon, from_=from_)
 
 
 def Ranged(n: int, *, by_weapon: bool = False, from_: str = "") -> Range:
@@ -1211,7 +1218,14 @@ def _reach_of(world: World, actor: int, r: Range, ref: str = "") -> int:
         # to two squares in a glaive's hand, which no printed line says. The
         # compendium knows which is which, 1,023 against 325, and
         # `scripts/reaches.py --emit` writes the set out.
-        if ref not in BY_WEAPON:
+        #
+        # **Or the row says so itself**, which is what `r.by_weapon` is for and
+        # what `mba` needs: the melee basic attack is declared in `engine/basic
+        # .py` and has no compendium id, so it can never be in a set derived from
+        # the compendium. Without this a glaive-wielder **threatened** two squares
+        # and could not **choose** a basic attack at two -- `_threat` reads the
+        # weapon and `candidates` read the printed 1. #294.
+        if ref not in BY_WEAPON and not r.by_weapon:
             return r.size
         # **The weapon's reach plus what the card grants**, and neither `max` with
         # the printed size nor the weapon alone. Both of those were tried and both

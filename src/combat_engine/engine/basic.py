@@ -30,7 +30,13 @@ BEAST = "bmba"
     MELEE,
     usage=Usage.AT_WILL,
     action=ActionType.STANDARD,
-    reach=Melee(1),
+    # **The weapon's reach, not one square.** A melee basic attack is made with
+    # whatever is in hand, so a glaive swings it at two -- and `_threat` already
+    # knew that, which is how the inconsistency showed: the wielder threatened an
+    # opportunity attack at two and could not choose a basic attack at two on its
+    # own turn. `BY_WEAPON` is derived from the compendium and this row has no
+    # compendium id, so it says so itself. #294.
+    reach=Melee(1, by_weapon=True),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON, Keyword.MELEE],
     attack=Attack(Ability.STR, vs=Defense.AC),

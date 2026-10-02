@@ -253,6 +253,38 @@ class Cast:
             "other": [c for c in creatures(self.world) if c != excluded],
         }[side]
 
+    def reach(self, ref: str = "", *, on: int | None = None) -> int:
+        """How far this creature's melee attacks carry, in squares.
+
+        **"Within your melee reach" is a printed phrase and no row could ask for
+        it.** A card reading "if an enemy is now within your melee reach" had to
+        hard-code 1, so the row played short for anybody holding a glaive --
+        `c.strike` validates against the true reach, but the row gathering
+        candidates could not find the enemy two squares away to offer it. #294.
+
+        The same arithmetic `dsl._reach_of` does, and deliberately *that*
+        function rather than a copy: a weapon row's reach is the wielded
+        weapon's plus whatever the card grants, a fixed "Melee 5" row's is the
+        number it prints, and which of the two applies is `BY_WEAPON`'s answer.
+        Two copies of that rule would be one too many.
+
+        Defaults to the row being cast, which is the common case; naming another
+        ref answers for that row instead -- the same shape `c.ability_for` and
+        `c.weapon_dice` take, and what "the reach of the power you are about to
+        grant" needs.
+
+        A ranged row answers its range, because `_reach_of` does; a row that
+        reaches nowhere answers 1, which is what a fist reaches.
+        """
+        from .dsl import REGISTRY, _reach_of
+
+        who = self.me if on is None else on
+        want = ref or self.ref
+        declared = REGISTRY.get(want)
+        if declared is None:
+            return 1
+        return _reach_of(self.world, who, declared.reach_of(self.branch), want)
+
     def within(self, radius: int, *, of: int | None = None, side: str = "any") -> list[int]:
         """Creatures within `radius` squares.
 

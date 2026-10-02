@@ -160,7 +160,11 @@ def p1300(c: Cast) -> None:
     if friend is None or c.distance(friend) > max(1, c.wis_mod):
         return
     c.swap(friend)
-    pool = sorted(c.within(1, side="enemy"))
+    # **"Within your melee reach", which is what `c.reach()` answers.** This was
+    # a literal 1, so with a reach weapon the enemy two squares away was not in
+    # the pool and the secondary attack went unoffered -- `c.strike` would have
+    # allowed it. #294.
+    pool = sorted(c.within(c.reach(), side="enemy"))
     foe = c.choose(pool, "who the blade finds") if pool else None
     if foe is not None and c.strike(on=foe):
         c.damage(c.w(2), c.cha_mod, on=foe)
