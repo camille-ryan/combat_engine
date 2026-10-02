@@ -212,13 +212,21 @@ class Counted(D.DoctrinePolicy):
             self.n[f"{side}/ap_standard"] += int(got.ref == "standard")
         if got.ref and inert(world, actor, got.ref):
             self.n[f"{side}/inert_chosen"] += 1
-        elif got.ref and got.targets:
+        elif got.kind != "end":
             # **A turn can be useful without being an attack**, and
             # `adjacent_idle` could not say so. A cleric standing next to an
             # enemy and buffing the whole party is not wasting its turn, but
             # "did not attack" is literally true of it -- so the one counter was
             # reading six productive leader turns as idle ones. Recorded per
             # (actor, round) and read below, the way `could` already is. #268.
+            #
+            # **The test is "not inert and not `end`", not "has a ref and
+            # targets."** The first spelling missed every action that carries no
+            # ref -- a second wind, a total defence, an escape -- and #284's
+            # widened second-wind window walked straight into it: eleven turns
+            # where a bloodied character healed itself read as having done
+            # nothing. Healing is not nothing. The `elif` is what keeps an inert
+            # row out, since that branch is above.
             self.helped.add((actor, world.round))
         p = get(got.ref) if got.ref else None
         if p is not None and p.attack is not None and got.targets:
