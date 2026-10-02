@@ -255,6 +255,27 @@ class Counted(D.DoctrinePolicy):
             self.n[f"{side}/self_harm"] += 1
         if d.get("already_on"):
             self.n[f"{side}/already_on"] += 1
+        # **The number #266 was filed on, which had never been counted.** That
+        # issue is "a monster repeatedly bursts its own ally" and there was no
+        # line here for it -- `self_harm` covers catching *yourself* and nothing
+        # covered catching a friend, so the behaviour the issue describes could
+        # only be seen by reading a fight log.
+        #
+        # Read off `allies_caught`, so it is the same figure the scorer acted on
+        # rather than a second opinion that can disagree with it. Counted in
+        # bodies, not in decisions: clipping three allies with one blast is three
+        # times the mistake and a per-decision tally would call it one.
+        #
+        # **`weighed`, not `explain`**, and the difference is the whole metric.
+        # `explain` filters to `DOCTRINE` -- it says so -- and `allies_caught`
+        # lives in `policy.features`' table, not that one. Read through `explain`
+        # this counter was zero at both levels and stayed zero with the -7.0
+        # deterrent set to 0.0, which is how the fault was found: a metric that
+        # cannot move when the thing it watches is unleashed is not measuring it.
+        raw = self.weighed(world, encounter, actor, got)
+        if raw.get("allies_caught"):
+            self.n[f"{side}/allies_clipped"] += int(raw["allies_caught"])
+            self.n[f"{side}/ally_blasts"] += 1
         return got
 
 
@@ -418,6 +439,8 @@ def measure(levels: tuple[int, ...]) -> dict:
                 "oa_per_fight": round(pol.n[f"{side}/oa_conceded"] / len(SEEDS), 2),
                 "inert_chosen": pol.n[f"{side}/inert_chosen"],
                 "self_harm": pol.n[f"{side}/self_harm"],
+                "ally_blasts": pol.n[f"{side}/ally_blasts"],
+                "allies_clipped": pol.n[f"{side}/allies_clipped"],
                 "already_on": pol.n[f"{side}/already_on"],
                 "tied_pct": round(100 * pol.n[f"{side}/tied"] / n, 1),
                 "tie_size_mean": round(statistics.fmean(sizes), 2) if sizes else 0.0,
@@ -443,6 +466,8 @@ ROWS = [
     ("oa_per_fight", "opportunity attacks conceded / fight", "lower"),
     ("inert_chosen", "inert rows chosen", "lower"),
     ("self_harm", "caught in own blast", "lower"),
+    ("ally_blasts", "attacks that caught an ally", "lower"),
+    ("allies_clipped", "...allies hit by them, counted in bodies", "lower"),
     ("already_on", "re-cast a live buff", "lower"),
     ("tied_pct", "decisions tied at the top (%)", "lower"),
     ("tie_size_mean", "mean options tied", "lower"),
