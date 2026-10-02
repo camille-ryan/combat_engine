@@ -1092,15 +1092,6 @@ def doctrine_features(
         f["threat_removed"] = removed
     if worse_off:
         f["shoved_from_prey"] = worse_off
-        # **#247's other half: does the row step after what it shoved?** A defender
-        # that pushes an enemy away and stays put has lost contact -- its mark is a
-        # square further off and the enemy walks past it next turn -- while one whose
-        # row moves it in the same breath has lost nothing. 10 of the 23
-        # forced-movement rows move the caster, and no geometry can tell: it is a
-        # property of the row, which is why `shove_value` could not see it. Set only
-        # beside a shove, because following nobody is worth nothing. #287.
-        if action.ref and T.row_follows(world, actor, action.ref):
-            f["keeps_contact"] = 1.0
     if gained_hp:
         other = Team.ENEMY if mine is not None and mine.team is Team.PC else Team.PC
         theirs_pool = T.pool(world, other)
