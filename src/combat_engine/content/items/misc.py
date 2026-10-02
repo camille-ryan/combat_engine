@@ -2857,11 +2857,15 @@ def i512x1(c: Cast) -> None:
 @power("i512p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(3), target=NO_TARGET,
        keywords=[Keyword.PSYCHIC, Keyword.ZONE],
-       dropped=("c.grants_in(when=)",))
+       dropped=("c.grants_in(dice=)",))
 def i512p1(c: Cast) -> None:
-    """`c.grants_in` carries a flat value and no dice and no gate, so the
-    die is laid on each ally standing in the zone when it is made: an
-    ally who walks in later does not pick it up."""
+    """The die is laid on each ally standing in the zone when it is made, so
+    an ally who walks in later does not pick it up.
+
+    **Re-aimed: `when=` was never the hold.** The gate is written right here
+    on `c.bonus` and always could have been; what `c.grants_in` cannot carry
+    is the *die*, which is why the bonus is laid per ally instead of on the
+    zone. The marker named the half that was available."""
     area = c.area()
     c.zone(area, until=When.EONT)
     for friend in c.in_squares(area, side="ally"):

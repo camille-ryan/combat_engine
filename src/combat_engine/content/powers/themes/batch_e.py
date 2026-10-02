@@ -1249,15 +1249,22 @@ def p16073(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE, Keyword.ELEMENTAL],
-    dropped=("c.vulnerable(zone=)", "c.grants_in(when=)", "c.douse(zone=)"),
+    dropped=("c.vulnerable(zone=)", "c.douse(zone=)"),
 )
 def p16076(c: Cast) -> None:
     """Vulnerability lives on `Defences` and not in `Mods`, so `c.grants_in`
     cannot carry it and it is laid on arrival instead -- which means it does
-    not lift on the way out. The save penalty cannot be narrowed to ongoing
-    fire, and nothing holds a fire open against being put out."""
+    not lift on the way out. Nothing holds a fire open against being put out.
+
+    **The save penalty is narrowed now**, and the gate needed no new key:
+    `durations` builds the saving-throw context with `ongoing` and `dtypes`
+    already in it -- put there for exactly this family of printed lines -- so
+    "against ongoing fire damage" is one lambda. `dtypes` plural because a
+    fire-and-radiant burn is both and `ctx["dtype"] is FIRE` would miss it."""
     zone = c.aura(2, until=When.ENCOUNTER)
-    c.grants_in(zone, "save", -2, side="enemy", kind="power")
+    c.grants_in(zone, "save", -2, side="enemy", kind="power",
+                when=lambda ctx: bool(ctx.get("ongoing"))
+                and DamageType.FIRE in (ctx.get("dtypes") or ()))
     for foe in c.within(2, side="enemy"):
         c.vulnerable(5, DamageType.FIRE, on=foe, until=When.ENCOUNTER)
 

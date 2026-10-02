@@ -1416,20 +1416,35 @@ def i3206p1(c: Cast) -> None:
         c.restore_use(c.ref)
 
 
+def _vs_ranged(ctx: dict[str, Any]) -> bool:
+    """"Against ranged attacks" -- and only those.
+
+    A **close or area** attack is not a ranged one: the card narrows to the
+    `Ranged` line and those are separate reach kinds. Read off the attacking
+    row, because `concealment_of` is handed the real attack context and
+    `ctx["power"]` is the row that is swinging.
+    """
+    p = get(ctx.get("power") or "")
+    return p is not None and p.reach is not None and p.reach.kind == "ranged"
+
+
 @power("i3212p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(1), target=SELF,
-       dropped=("c.grants_in(when=)",))
+       reach=CloseBurst(1), target=SELF)
 def i3212p1(c: Cast) -> None:
     """Concealment is a modifier the creature carries, and `c.grants_in`
-    lays one for as long as a creature stands in the aura. It carries no
-    gate, so the concealment covers melee as well as ranged.
+    lays one for as long as a creature stands in the aura.
+
+    **The gate was the whole marker and it arrived**, so the concealment no
+    longer covers melee as well: `concealment_of` reads `mods.total` with the
+    real attack context, so `ctx["power"]` says what is swinging and
+    `_vs_ranged` is the card's own narrowing.
 
     "Or until you move" is the aura's other end, and `c.dispel` on the
     wearer's first `Moved` is it."""
     aura = c.aura(1, label=c.ref, until=When.ENCOUNTER, on=c.me)
     if not aura:
         return
-    c.grants_in(aura, "concealment", 2, side="any")
+    c.grants_in(aura, "concealment", 2, side="any", when=_vs_ranged)
 
     def walked(ev: Moved) -> None:
         if ev.actor == c.me:

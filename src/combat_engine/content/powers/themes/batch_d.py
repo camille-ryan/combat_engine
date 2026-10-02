@@ -341,12 +341,17 @@ def p11808(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=PRIMAL_CONJ,
-    dropped=("c.grants_in(dice=)", "c.grants_in(when=)"),
+    dropped=("c.grants_in(dice=)",),
 )
 def p11811(c: Cast) -> None:
     """The attack bonus is written. The "+1d6 to damage rolls on melee
-    attacks" half wants a rolled modifier on a zone and a gate narrowing it
-    to melee, and `c.grants_in` takes a flat number and no gate."""
+    attacks" half wants a rolled modifier on a zone.
+
+    **One marker now, not two.** The gate half arrived -- `c.grants_in` takes
+    `when=` and narrowing to melee is a lambda -- but a gate on a bonus that
+    cannot be rolled buys nothing, so the whole clause still waits on `dice=`.
+    Two symbols for one clause meant this row would have reported ready when
+    only the useless half of it landed."""
     made: list[int] = []
     for _ in range(4):
         elemental = c.conjure(until=When.ENCOUNTER, sustain=None)
