@@ -217,6 +217,7 @@ def m2941a2(c: Cast) -> None:
     reach=Melee(1),
     target=Target("any", 1, label="One helpless or unconscious creature"),
     keywords=[Keyword.HEALING],
+    dropped=("c.coup_de_grace(ref=)",),
 )
 def m2941a3(c: Cast) -> None:
     """Settle on the kill and feed.

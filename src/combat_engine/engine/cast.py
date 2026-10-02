@@ -2569,16 +2569,17 @@ class Cast:
         )
 
     def coup_de_grace(self, *, on: int | None = None) -> bool:
-        """Finish a helpless creature. Automatic critical, plus a flat 5d6.
+        """Finish a helpless creature. An automatic critical, and nothing added.
 
         Four rows across two monster batches asked for this, and every one of
         them would otherwise have spelled out the auto-crit rule in its own
         body. It is a rule of the game rather than a property of any power,
         so it lives here and they all get the same one.
 
-        False if the target is not actually helpless, which is the printed
-        requirement and worth checking rather than trusting the caller -- and
-        **False if the attack misses**, which it may.
+        Three ways to come back False: the target is not actually helpless,
+        which is the printed requirement and worth checking rather than trusting
+        the caller; **the row declared no attack of its own**; or the attack
+        missed, which it may.
 
         **"Regardless of the roll" licenses the critical, not the hit.** This
         forced `hit = True`, so a helpless creature could not be missed -- and
@@ -2586,31 +2587,35 @@ class Cast:
         answer overwritten, so the die it rolled decided nothing. You can miss a
         helpless creature; if you connect, it is a critical whatever the natural
         was. #250.
+
+        **The flat 5d6 is gone, and the no-attack guard replaces it.** The 5d6
+        had no basis in the rule; it stood in for the real finisher -- damage
+        meeting the target's bloodied value -- on behalf of two callers that
+        print no attack line and no damage line and would otherwise deal
+        nothing. Camille's call on #250 was to disallow a no-attack power rather
+        than invent damage for one.
+
+        That also closes a **live crash**, which is the part worth knowing:
+        `strike` raises for a row with no attack line, so those two rows raised
+        `ValueError` the first time their target was genuinely helpless. The
+        audit never saw it because the audit's target never is -- the helper
+        refused on the helpless check and returned before reaching `strike`. So
+        the guard has to come before `strike` and not inside it.
         """
         from .conditions import rules
+        from .dsl import get
         from .query import active
 
         who = self._who(on)
         if who is None or not any(rules(c).helpless for c in active(self.world, who)):
             return False
+        row = get(self.ref)
+        if row is None or row.attack_of(self.branch) is None:
+            return False
         result = self.strike(on=who, advantage=True)
         if not result.hit:
             return False
         result.critical = True
-        # **The 5d6 has no basis in the rule and is still here, deliberately.**
-        # What the rule says is that damage meeting the target's *bloodied value*
-        # kills it, and that logic exists nowhere in the engine. Removing this
-        # without building that would leave `m2942a2` and its level-2 twin
-        # dealing **nothing at all** -- both declare no attack line and no damage
-        # line, so they have no damage of their own to fall back on, while the
-        # other two callers deal theirs with `c.hit()` and would double up. So
-        # this stands in for the finisher until somebody decides what a coup de
-        # grace deals for a row that declares no attack. Asked on #250.
-        #
-        # `c.flat`, not `c.damage`: it is not part of the attack's damage and a
-        # critical does not maximise it. Rolled through `c.damage` with the
-        # critical flag already up it came out a flat 30 every time.
-        self.flat(self.roll("5d6"), on=who)
         return True
 
     def vulnerable(

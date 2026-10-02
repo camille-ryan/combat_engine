@@ -246,6 +246,7 @@ def m2942a1(c: Cast) -> None:
     reach=Melee(1),
     target=Target("any", 1, label="One helpless or unconscious creature"),
     keywords=[Keyword.HEALING],
+    dropped=("c.coup_de_grace(ref=)",),
 )
 def m2942a2(c: Cast) -> None:
     """The printed target restriction lives in the `Target` label, which is
