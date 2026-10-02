@@ -1149,15 +1149,23 @@ def f1542(c: Cast) -> None:
        on=Trigger(PowerUsed, lambda w, me, ev: (
            ev.actor == me and _divine_radiant(get(ev.power))
        ), "you use a radiant divine encounter or daily power"),
-       dropped=("c.grants_in(when=)",))
+)
 def f1545(c: Cast) -> None:
-    """The zone and its bonus play. Dropped: "with radiant powers" --
-    `c.grants_in` lays a flat modifier on whoever is standing in the
-    zone and takes no gate, so the narrowing has nowhere to go."""
+    """The zone, its bonus, and now "with radiant powers" -- `c.grants_in`
+    takes the same `when=` gate `c.bonus` does, and hands it straight through,
+    so the narrowing is read where every other gated bonus is read.
+
+    `ctx["power"]` is the row being rolled, so the gate is a keyword test on it.
+    Without it the zone paid for **every** attack an ally made from inside,
+    which is a wider feat than the printed one."""
     lit = c.zone(
         burst(squares(c.world, c.me), 1), until=When.EONT, label="f1545",
     )
-    c.grants_in(lit, "attack", 1, side="ally", kind="power")
+    c.grants_in(
+        lit, "attack", 1, side="ally", kind="power",
+        when=lambda ctx: Keyword.RADIANT in getattr(
+            get(str(ctx.get("power", ""))), "keywords", ()),
+    )
 
 
 @power("f1552", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

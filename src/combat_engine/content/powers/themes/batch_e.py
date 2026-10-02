@@ -841,13 +841,20 @@ def p14180(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    dropped=("c.grants_in(when=)",),
 )
 def p14181(c: Cast) -> None:
-    """The penalty should lift for an attack aimed at me; a zone modifier
-    takes no gate, so as written it bites on every attack from inside."""
+    """"Enemies take a -2 penalty to attack rolls **against any creature other
+    than you**", which is the whole point of the aura: it herds attacks onto the
+    caster rather than suppressing them.
+
+    As written it bit on every attack from inside, including attacks on the
+    caster -- **stronger than the card**, and in the direction that makes the
+    row do the opposite of what it is for. `c.grants_in(when=)` takes the gate
+    now and `ctx["target"]` is who the attack is aimed at."""
     zone = c.aura(2, until=When.EONT)
-    c.grants_in(zone, "attack", -2, side="enemy", kind="power")
+    me = c.me
+    c.grants_in(zone, "attack", -2, side="enemy", kind="power",
+                when=lambda ctx: ctx.get("target") != me)
 
 
 @power(

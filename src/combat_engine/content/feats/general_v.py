@@ -1441,16 +1441,26 @@ def _my_necrotic_hit(world: Any, me: int, ev: Any) -> bool:
 
 @power("f3546", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.grants_in(when=)", "c.light()"),
+       dropped=("c.light()",),
        trigger="you use a divine necrotic encounter or daily attack power",
        on=Trigger(PowerResolved, _my_necrotic_use, "you use a necrotic power"))
 def f3546(c: Cast) -> None:
-    """The zone is drawn around the caster's own square, because this row
-    has no area of its own to read with `c.area`. The +1 is laid for every
-    necrotic power an ally could use rather than only those -- `c.grants_in`
-    has no gate -- and dim light is not a level the engine tracks."""
+    """The zone is drawn around the caster's own square, because this row has no
+    area of its own to read with `c.area`.
+
+    **The +1 is narrowed to necrotic powers now**, which `c.grants_in(when=)`
+    says: `ctx["power"]` is the row being rolled and the gate is a keyword test
+    on it. It used to pay for every attack an ally made from inside, which is a
+    wider feat than the printed one.
+
+    Dim light is still not a level the engine tracks, which is the one clause
+    left."""
     zone = c.zone(_burst(c, 1), label=c.ref, until=When.EONT)
-    c.grants_in(zone, "attack", 1, side="ally", kind="power")
+    c.grants_in(
+        zone, "attack", 1, side="ally", kind="power",
+        when=lambda ctx: Keyword.NECROTIC in getattr(
+            get(str(ctx.get("power", ""))), "keywords", ()),
+    )
 
 
 @power("f3547", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

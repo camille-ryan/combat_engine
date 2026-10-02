@@ -550,13 +550,22 @@ def i477x1(c: Cast) -> None:
     reach=CloseBurst(5),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.grants_in(when=)",),
+    dropped=("resolve.dmg_ctx.attacker",),
 )
 def i614p1(c: Cast) -> None:
-    """The penalty lands on every enemy in the zone: `c.grants_in` carries
-    no gate, so neither "that are marked" nor "against any creature other
-    than the one that marked them" can be said. Pulling the standard back
-    out of the ground is not modelled -- nothing can be planted."""
+    """The penalty lands on every enemy in the zone rather than only the marked
+    ones attacking somebody other than their marker.
+
+    **Re-aimed off `c.grants_in(when=)`, which arrived and is not the hold.**
+    The gate exists; what it cannot read is **who is attacking**. The attack
+    context carries `attacker`, the damage context does not -- it has `target`,
+    `power`, `dtype`, `crit`, `ranged` and the granted-swing provenance, and this
+    is a damage penalty. So "is this enemy marked" and "is it attacking its own
+    marker" are both questions about a creature the gate cannot name.
+
+    Pulling the standard back out of the ground is not modelled either --
+    nothing can be planted -- but that clause is about ending the zone rather
+    than about the penalty, and the zone does end with the encounter."""
     zone = c.zone(c.area(), until=When.ENCOUNTER)
     c.grants_in(zone, "damage", -1, side="enemy", kind="untyped")
 
