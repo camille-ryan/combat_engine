@@ -1002,7 +1002,16 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         )
 
     if action.kind == "run":
-        walk(world, actor, list(action.path), kind="run")
+        # **The penalty is paid only if the running happened.** `walk` returns
+        # how many squares were covered and **0** when the creature cannot move,
+        # and this threw that away -- so a creature that did not run granted
+        # combat advantage until the start of its next turn for nothing, which
+        # is worse than the shift case in #246: that one wasted an action, this
+        # one hands the enemy a bonus. Found sweeping the other `perform`
+        # branches after fixing the shift. #246.
+        covered = walk(world, actor, list(action.path), kind="run")
+        if not covered:
+            return False
         # "You grant combat advantage until the start of your next turn."
         # Unless something says otherwise -- the ranger's stance is the
         # printed exception and turns this off with `run_exposed`.
