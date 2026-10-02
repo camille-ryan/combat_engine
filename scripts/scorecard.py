@@ -76,9 +76,10 @@ import fight
 from combat_engine.engine import Ident
 from combat_engine.engine.components import Position
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import OpportunityWindow
+from combat_engine.engine.events import OpportunityWindow, SurgeSpent
 from combat_engine.engine.grid import distance
 from combat_engine.engine.query import alive, enemies
+from combat_engine.engine.types import Usage
 from combat_engine.policy import doctrine as D
 from combat_engine.policy import install, take_turn
 from combat_engine.policy import threat as T
@@ -204,6 +205,10 @@ class Counted(D.DoctrinePolicy):
         got = super().act(world, encounter, actor, options)
         if got.kind == "charge":
             self.n[f"{side}/charge_taken"] += 1
+        if got.ref:
+            spent = get(got.ref)
+            if spent is not None and spent.usage is Usage.DAILY:
+                self.n[f"{side}/dailies"] += 1
         if got.kind == "action_point":
             self.n[f"{side}/ap_spent"] += 1
             # Which extra action it bought. A standard is worth most by a wide
@@ -276,6 +281,17 @@ def play(level: int, seed: int, pol: Counted, cap: int = 30) -> int:
         pol.n[f"{side_of(world, ev.provoker)}/oa_conceded"] += 1
 
     world.bus.on(OpportunityWindow, provoked)
+
+    # **Attrition, which is what 4e actually spends.** Camille's call on #267: a
+    # party beating a standard encounter from full resources is the *intended*
+    # outcome, so a win rate is measuring the wrong thing. What a fight costs is
+    # surges, dailies and action points -- the three things that do not come back
+    # until a rest -- and a party that wins four fights in a day without anyone
+    # dropping is the real target.
+    def surged(ev) -> None:  # noqa: ANN001
+        pol.n[f"{side_of(world, ev.actor)}/surges"] += 1
+
+    world.bus.on(SurgeSpent, surged)
     encounter.start()
     while not encounter.finished and world.round <= cap:
         actor = world.turn
@@ -370,6 +386,8 @@ def measure(levels: tuple[int, ...]) -> dict:
                 "adjacent_helped": pol.n[f"{side}/adjacent_helped"],
                 "could_not_act": pol.n[f"{side}/could_not_act"],
                 "ap_spent": pol.n[f"{side}/ap_spent"],
+                "surges": pol.n[f"{side}/surges"],
+                "dailies": pol.n[f"{side}/dailies"],
                 "ap_standard": pol.n[f"{side}/ap_standard"],
                 "melee_turns": pol.n[f"{side}/melee_turns"],
             }
@@ -394,6 +412,11 @@ ROWS = [
     ("adjacent_helped", "...but buffed, healed or laid a zone", ""),
     ("could_not_act", "...excluded: nothing but `end` was on offer", "-"),
     ("ap_spent", "action points spent", "-"),
+    # **The attrition lines, and "lower is better" on purpose.** #267: the
+    # question is not whether the party wins -- it should -- but what winning
+    # cost it, because 4e is an attrition game and a day is four fights.
+    ("surges", "healing surges spent", "lower"),
+    ("dailies", "daily powers spent", "lower"),
     ("ap_standard", "...of them buying a standard action", "higher"),
     ("decisions", "decisions", "-"),
 ]
