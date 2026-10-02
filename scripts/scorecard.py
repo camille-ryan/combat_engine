@@ -85,8 +85,32 @@ from combat_engine.policy import threat as T
 
 BASELINE = Path(__file__).resolve().parent / "fixtures" / "scorecard.json"
 
-#: Fixed so two runs are comparable. Twelve is enough for event counts.
-SEEDS = tuple(range(301, 313))
+#: Fixed so two runs are comparable.
+#:
+#: **Twenty-four, not twelve, and the round count is why.** Twelve is plenty for the
+#: event counts -- those are tallies over thousands of decisions -- but the headline
+#: is a median over 12 fights of 4 to 19 rounds, and that moves on its own. Measured
+#: over 96 level-10 fights (true median 9.0, mean 9.33), as the spread between
+#: disjoint blocks of n:
+#:
+#:      n      median spread   mean spread
+#:     12          2.0            3.00
+#:     16          2.5            3.00
+#:     24          1.0            1.08
+#:     32          1.0            0.72
+#:     48          1.0            0.42
+#:
+#: At twelve the median wanders **two rounds** with nothing changed, which is larger
+#: than most effects anyone measures here -- and it twice gave a wrong answer in one
+#: session (#291). Twenty-four halves that, and is where the mean stops being worse
+#: than the median: below it the mean is dragged by the 19-round tail, above it the
+#: mean keeps tightening while the median sits on the floor its granularity imposes.
+#:
+#: So **24 and both statistics**, and the honest reading of the pair is that an
+#: effect under a round is not visible at this sample size whatever the median says.
+#: Going further costs linearly and buys only the mean; 48 would be the next step if
+#: a sub-half-round effect ever has to be settled.
+SEEDS = tuple(range(301, 325))
 LEVELS = (5, 10)
 
 
@@ -271,7 +295,16 @@ def measure(levels: tuple[int, ...]) -> dict:
         for seed in SEEDS:
             # Counting attacks needs a hook; the policy records them itself below.
             rounds.append(play(level, seed, pol))
-        cell: dict = {"fights": len(SEEDS), "rounds_median": statistics.median(rounds)}
+        cell: dict = {
+            "fights": len(SEEDS),
+            "rounds_median": statistics.median(rounds),
+            # **The spread, so the reader can tell an unreadable number.** Either of
+            # the two wrong answers this instrument gave would have been obviously
+            # unreadable with the range printed beside the median. #291.
+            "rounds_mean": round(statistics.fmean(rounds), 2),
+            "rounds_low": min(rounds),
+            "rounds_high": max(rounds),
+        }
         for side in ("party", "monsters"):
             n = max(1, pol.n[f"{side}/decisions"])
             sizes = pol.ties[side]
@@ -321,7 +354,12 @@ def show(now: dict, was: dict | None) -> None:
         old = (was or {}).get(level, {})
         print(f"\n=== level {level}, {cell['fights']} fights, "
               f"median {cell['rounds_median']} rounds"
-              + (f" (was {old.get('rounds_median')})" if old else "") + " ===")
+              + (f" (was {old.get('rounds_median')})" if old else "")
+              + f", mean {cell.get('rounds_mean', 0)}"
+              + (f" (was {old.get('rounds_mean')})"
+                 if old and old.get("rounds_mean") is not None else "")
+              + f", range {cell.get('rounds_low')}-{cell.get('rounds_high')}"
+              + " ===")
         print(f"  {'':<42} {'party':>9} {'was':>9}   {'monsters':>9} {'was':>9}")
         for key, label, want in ROWS:
             line = f"  {label:<42}"
