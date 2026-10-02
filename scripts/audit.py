@@ -474,6 +474,42 @@ def _weapon_words() -> dict[str, str]:
 _WEAPON_WORDS: dict[str, str] | None = None
 
 
+_WIELDS: dict[str, list[str]] | None = None
+
+
+def _wields_of(ref: str) -> list[str]:
+    """What `power.wields` says this row's own text is about, gates first.
+
+    Gates before riders, because failing a gate means the row is refused and
+    failing a rider only means a weaker version of it -- so if the board can
+    only satisfy one, it should be the one that decides whether the row runs.
+    """
+    global _WIELDS
+    if _WIELDS is None:
+        import json
+
+        from combat_engine.etl.build import game
+
+        _WIELDS = {}
+        for row, raw in game().execute(
+            "SELECT ref, wields FROM power WHERE wields IS NOT NULL"
+        ):
+            found = json.loads(raw)
+            _WIELDS[row] = [
+                *found["gate_groups"], *found["gate_shapes"],
+                *found["rider_groups"], *found["rider_shapes"],
+            ]
+    return _WIELDS.get(ref, [])
+
+
+def _any_weapon(want: str):  # noqa: ANN202
+    """A printed weapon matching a group or a category, or None for a shape."""
+    for arm in chargen.PRINTED.values():
+        if arm.group == want or arm.category == want:
+            return arm
+    return None
+
+
 def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
     """Wield whatever the row's own Requirement says it needs.
 
@@ -548,6 +584,24 @@ def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
             gear.weapons.append(held)
             gear.wield(held)
         return
+    # **The sentence first, the column as the fallback, and that order is
+    # measured.** `power.wields` records a *group* -- a Requirement naming one
+    # weapon is filed under that weapon's group, which is right for scoring and
+    # lossy here. Asking it first broke three rows gated on an exact weapon
+    # (`p13794` a dagger, `p13796` a bola, `p15912` shuriken): the column said
+    # "light blade", the board handed over a short sword, and the gate failed.
+    # The words resolve a weapon exactly; the column is what sees the **riders**,
+    # which are not requirements and so appear in no sentence this function reads.
+    # #237.
+    for want in _wields_of(getattr(declared, "ref", "")):
+        if holding(world, caster, want):
+            return
+        arm = _any_weapon(want)
+        if arm is not None:
+            held = _replace(arm)
+            gear.weapons.append(held)
+            gear.wield(held)
+            return
 
 
 def board(ref: str, seed: int) -> tuple[World, int, set[str]]:

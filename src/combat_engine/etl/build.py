@@ -30,7 +30,7 @@ from functools import lru_cache
 from html import unescape
 from pathlib import Path
 
-from . import feat, item, sanitise
+from . import feat, item, sanitise, wields
 from . import monster as monster_parser
 from . import power as power_parser
 
@@ -88,7 +88,13 @@ CREATE TABLE common_word (
 CREATE TABLE power (
   ref TEXT PRIMARY KEY, id INTEGER, class TEXT, level INTEGER,
   usage TEXT, action TEXT, kind TEXT, reach TEXT, keywords TEXT,
-  books TEXT, spec TEXT, score REAL
+  books TEXT, spec TEXT, score REAL,
+  -- Which weapons this power's own text is about, as JSON: the groups and
+  -- shapes its Requirement **gates** on, and the ones a rider merely **rewards**.
+  -- Two axes because they are two relationships, and NULL for the great majority
+  -- of rows that mention no weapon at all. `etl/wields.py` fills it; three
+  -- consumers were asking this by substring match before it existed. #237.
+  wields TEXT
 );
 CREATE INDEX power_class ON power(class, level);
 
@@ -268,6 +274,8 @@ class Report:
     traps: int = 0
     links_found: int = 0
     links_total: int = 0
+    #: Rows whose text says something about a weapon, gate or rider. #237.
+    wields: int = 0
     build_powers: int = 0
     items: int = 0
     item_blocks: int = 0
@@ -299,6 +307,7 @@ class Report:
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
             f"companions    {self.companions:6d}  (familiars and beasts, new)",
             f"traps         {self.traps:6d}  (with a printed Perception DC where one is given)",
+            f"weapon rows   {self.wields:6d}  (what each power's text says it needs)",
             f"assoc links   {self.links_found:6d}/{self.links_total}"
             "  (linked Associated members resolved; see _links_resolve)"
             + ("   <-- A MISS. The name resolver has regressed."
@@ -385,6 +394,10 @@ def build() -> Report:
     # a set's benefit names feats. Neither index exists earlier.
     report.crossed += _cross_reference_rest(out, names)
     report.links_found, report.links_total = _links_resolve(source, out)
+    # **Last, and it has to be.** The vocabulary is the `weapon` table and the
+    # text is `power.spec`, so this runs once both are finished; earlier it would
+    # read an empty vocabulary and quietly write nothing.
+    report.wields = wields.record(out)
 
     out.execute(
         "INSERT INTO meta (key, value) VALUES (?, ?)",
@@ -956,8 +969,14 @@ def _powers(
         (MAX_POWER_LEVEL, *CLASSES),
     )
     def keep(p: power_parser.Power) -> None:
+        # **Columns named rather than counted.** `VALUES (?,?,...)` broke the
+        # moment a column was added -- "table power has 13 columns but 12 values
+        # were supplied" -- and the next person to add one should not have to
+        # find this line. `wields` is filled by a late pass, not here.
         out.execute(
-            "INSERT INTO power VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO power (ref, id, class, level, usage, action, kind,"
+            " reach, keywords, books, spec, score)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 p.ref, p.id, p.cls, p.level, p.usage, p.action, p.kind,
                 p.reach, json.dumps(p.keywords), json.dumps(p.books),

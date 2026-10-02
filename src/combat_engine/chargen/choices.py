@@ -214,6 +214,9 @@ FLOOR = 1.0
 #: take is a feat somebody would have picked on purpose.
 FEAT_TOP = 24
 
+#: `power.wields` by ref, read once. See `_wields`.
+_WIELDS: dict[str, set[str]] | None = None
+
 #: How many candidates a power draw considers. Much narrower than `FEAT_TOP`
 #: because the pool is: a class prints two or three attack powers at a given
 #: level and usage, so this mostly does nothing and is here for the levels that
@@ -706,32 +709,47 @@ def _hands_over_a_row(declared) -> bool:  # noqa: ANN001
         return False
 
 
-def _rows_needing(known: list[str], arm: Weapon) -> int:
-    """How many of this character's own rows name what this weapon is.
+def _wields() -> dict[str, set[str]]:
+    """Every power's weapon answer, by ref: the groups and shapes it is about.
 
-    Reads `requires_text` and `trigger`, which is where `audit.py`'s
-    `_hand_it_the_weapon` reads the same sentence for 257 rows -- "you must be
-    wielding a light blade" is a gate on gear whether it is printed as a
-    Requirement or inside a trigger.
+    One query, cached, because `wield_options` asks this once per candidate
+    weapon and a character has a handful of each.
     """
-    from combat_engine.engine.dsl import REGISTRY
+    global _WIELDS
+    if _WIELDS is None:
+        from combat_engine.etl.build import game
 
-    words = {arm.group, *arm.properties}
+        _WIELDS = {}
+        for ref, raw in game().execute(
+            "SELECT ref, wields FROM power WHERE wields IS NOT NULL"
+        ):
+            found = json.loads(raw)
+            _WIELDS[ref] = {
+                *found["gate_groups"], *found["gate_shapes"],
+                *found["rider_groups"], *found["rider_shapes"],
+            }
+    return _WIELDS
+
+
+def _rows_needing(known: list[str], arm: Weapon) -> int:
+    """How many of this character's own rows are about what this weapon is.
+
+    **A set intersection against `power.wields`, where this used to be a
+    substring match on `requires_text` and `trigger`.** #237. Two things were
+    wrong with reading those strings. They are *our* sentences, written by hand
+    per row, so the vocabulary drifted row by row -- and a **rider** is not a
+    requirement at all, so 39 powers that reward holding the right thing were
+    invisible to it. The column is extracted once from the compendium's own
+    prose and carries both relationships.
+
+    Gate and rider are counted alike here, deliberately: this term exists to
+    stop a spiked chain taking a rogue's dagger away, and a row that merely
+    *pays better* for the dagger is a reason to keep it too.
+    """
+    words = {arm.group, *arm.properties, arm.category}
     words.discard("")
-    count = 0
-    for ref in known:
-        declared = REGISTRY.get(ref)
-        if declared is None:
-            continue
-        said = " ".join(
-            (
-                getattr(declared, "requires_text", "") or "",
-                getattr(declared, "trigger", "") or "",
-            )
-        ).lower()
-        if said and any(word in said for word in words):
-            count += 1
-    return count
+    found = _wields()
+    return sum(1 for ref in known if found.get(ref, frozenset()) & words)
 
 
 def _average(damage: str) -> float:
