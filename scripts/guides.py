@@ -50,6 +50,7 @@ import sys
 import urllib.request
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -91,6 +92,44 @@ TABLE_DEPENDENT = "pink"
 #: instrument is not working" and "this project does not implement paragon
 #: paths". `x` alone is 4,876 entries with no table in `game.db` at all.
 RATEABLE = ("p", "f", "i", "r")
+
+
+@lru_cache(maxsize=1)
+def weapon_groups() -> frozenset[str]:
+    """The printed weapon groups, normalised, read off the `weapon` table.
+
+    **Not options, and one of them resolves.** Guides discuss groups constantly --
+    "take a light blade", "any heavy blade works" -- and bold or colour them exactly
+    as they do an option, because to the author they *are* one. 13 of the 17 then
+    resolve to a ref: twelve to a monster's ability, which `RATEABLE` already
+    refuses, and **`light blade` to `p1225`, a power printed "Light"**, which it does
+    not. So that power carried ratings from nine classes and most of them never
+    mention it.
+
+    Derived rather than typed, like `LEGEND_WORDS` is derived from each guide's own
+    key: a group that moved underneath a hand-written list would go unnoticed, and
+    this is the same vocabulary `Weapon.grp` already is. #290.
+
+    A rating *on a group* is the better answer eventually -- "this class likes light
+    blades" is real doctrine -- but `chargen.choices.wield_options` scores weapons by
+    ref and has nowhere to put it, so dropping these loses nothing that is read
+    today.
+    """
+    try:
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
+        from combat_engine.etl.build import game
+
+        bare = [norm(r[0]) for r in game().execute(
+            "SELECT DISTINCT grp FROM weapon") if r[0]]
+        # **Plurals too, because guides write them.** "Light Blades" resolves to
+        # `p1225` exactly as "Light Blade" does -- the resolver's own normalisation
+        # takes the suffix off -- so a singular-only set caught the paladin guide and
+        # missed the psion one. Both spellings, rather than reimplementing the
+        # resolver's stemming out here where it could drift from it.
+        return frozenset(bare) | {f"{g}s" for g in bare} | {f"{g}es" for g in bare}
+    except Exception:
+        # An instrument that cannot reach the database should still read guides.
+        return frozenset()
 
 #: Indexed for classification only, so a miss can be named.
 KINDS = {"p": "power", "f": "feat", "i": "item", "r": "race",
@@ -708,7 +747,13 @@ def options(html: str, guide: Guide) -> tuple[list[tuple[str, str, int]],
             # and was being rated sky by every guide whose key spells sky that
             # way. `legend` already knows these words; this is the same test it
             # makes, so the two cannot drift apart.
-            if text.strip(" .:,;-\u2013\u2014").strip().lower() in LEGEND_WORDS:
+            bare = text.strip(" .:,;-\u2013\u2014").strip().lower()
+            if bare in LEGEND_WORDS:
+                continue
+            # **A weapon group is not an option.** Same shape as the legend swatch
+            # above -- a coloured bold run that resolves to something the author did
+            # not mean. See `weapon_groups`. #290.
+            if norm(bare) in weapon_groups():
                 continue
             hex_ = colour_of(el)
             if hex_ is None or hex_ in NEUTRAL:
