@@ -31,22 +31,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import combat_engine.content  # noqa: F401
 from combat_engine import chargen
-from combat_engine.content import loader
+from combat_engine.content import dummy
 from combat_engine.engine import Bus, Encounter, Grid, Rng, World
 from combat_engine.engine.components import (
-    Defenses,
     Gear,
-    Health,
     Powers,
 )
 from combat_engine.engine.dsl import REGISTRY
 from combat_engine.engine.expect import expected
 from combat_engine.engine.movement import place
-from combat_engine.engine.types import Defense, Keyword, Team
-
-#: Any creature would do -- every number on it is overwritten below. A fixed
-#: ref rather than a dealt one so two runs of this instrument are comparable.
-DUMMY = "m264"
+from combat_engine.engine.types import Keyword, Team
 
 #: An eight-round fight, which is the round count the project targets: one
 #: daily, a couple of encounter rows, at-wills for the rest.
@@ -54,22 +48,23 @@ ROUND = {"at-will": 5 / 8, "encounter": 2 / 8, "daily": 1 / 8}
 
 
 def target(world: World, level: int) -> int:
-    """The baseline opponent, with nothing of its own left on it.
+    """The baseline opponent: `content.dummy`, which is built for this.
 
-    **The powers are stripped and that is the point.** Left in place, this
-    creature's immediate interrupt makes an attacker reroll on being hit, which
-    turned a third of landed hits back into misses and made the closed form
-    look wrong by a third when it was the board that was wrong.
+    **This used to spawn a real creature and overwrite it**, and the reason is
+    worth keeping: that creature's immediate interrupt made an attacker reroll on
+    being hit, which turned a third of landed hits back into misses and had the
+    closed form looking wrong by a third when it was the board that was wrong.
+
+    `content.dummy` is that workaround made into a thing, so the next instrument
+    does not have to know to do it. #243.
+
+    **It also fixes a number this function had wrong.** Flattening the three
+    non-AC defences to `level + 11` understated Fortitude and Reflex by a point
+    each -- measured across 1,997 standard monsters they sit at `level + 12`, and
+    only Will is at `level + 11`. So every row targeting Fort or Ref was being
+    priced against a target a point softer than the corpus.
     """
-    foe = loader.spawn(world, DUMMY, (5, 6), team=Team.ENEMY)
-    world.need(foe, Powers).known.clear()
-    hp = world.need(foe, Health)
-    hp.max_hp = hp.hp = 24 + 8 * level
-    d = world.need(foe, Defenses)
-    d.values[Defense.AC] = level + 14
-    for nad in (Defense.FORT, Defense.REF, Defense.WILL):
-        d.values[nad] = level + 11
-    return foe
+    return dummy.spawn(world, level, (5, 6), team=Team.ENEMY)
 
 
 def board(cls: str, level: int, weapon: str, feats: list[str],
