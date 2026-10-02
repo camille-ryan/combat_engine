@@ -389,19 +389,25 @@ def f1145(c: Cast) -> None:
 
 
 @power("f1231", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.associated_clause()",))
+       reach=PERSONAL, target=SELF, todo=("c.retype_damage(dtypes=)",))
 def f1231(c: Cast) -> None:
-    """**Re-aimed off `feat.associated_powers`, and now off the ETL
-    entirely.** The list resolved and the spec carries the ref -- that part
-    was right. The claim that `build._associated_refs` "keeps only the name
-    before the colon" is **wrong**: the spec carries
-    `<ref> : <clause>` with the clause intact, and 478 of 478 linked
-    members with a heroic row resolve correctly.
+    """**Re-aimed twice, and the marker is now the real gap.**
 
-    So nothing is lost in transit. This row is simply unwritten, and
-    `f1305` shows the shape it wants -- one watcher per window, the clause
-    picked by which power fired. See `general_g._associated`, which carried
-    the same wrong note."""
+    The first two notes were about the ETL and both were wrong: the list
+    resolves and the spec carries `<ref> : <clause>` with the clause intact,
+    478 of 478. So `spec.associated_clause()` named nothing, and this row
+    read as blocked on an instrument when it was blocked on an engine verb.
+
+    What it actually wants, across all five of its riders identically: the
+    damage the named power deals becomes a second type **as well**, and the
+    power gains that keyword. Both halves are missing. `c.flat` and
+    `c.damage` take `dtype`/`dtypes` where the damage is dealt, so a row can
+    choose its own type -- but nothing retypes damage *another* row is about
+    to deal, and `Power.keywords` is header data no trait can add to.
+
+    One symbol for five riders, which is usually the trap `CLAUDE.md`
+    warns about and here is not: the gap is the same sentence five times, so
+    the marker goes red and green honestly for every one of them. #299."""
 
 
 @power("f2091", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
