@@ -1472,7 +1472,7 @@ def f1302(c: Cast) -> None:
     c.watch(PowerUsed, on_use, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1303", dropped=("c.pre_empt(ref, clause)", "c.no_provoke(when=)"))
+@_trait("f1303", dropped=("c.pre_empt(ref, clause)", "events.OpportunityWindow.step"))
 def f1303(c: Cast) -> None:
     """All four refs resolve and none of the clauses is a rider. p2099
     goes in the place of the melee basic a charge swings; the other

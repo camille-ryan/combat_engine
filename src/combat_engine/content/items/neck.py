@@ -581,7 +581,7 @@ def i500p1(c: Cast) -> None:
 
 
 @power("i585x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_provoke(when=)",))
+       reach=PERSONAL, target=SELF, todo=("events.OpportunityWindow.kind",))
 def i585x1(c: Cast) -> None:
     """`c.no_provoke` is unconditional; the charge's own movement cannot be
     told apart from the rest of the creature's walking."""

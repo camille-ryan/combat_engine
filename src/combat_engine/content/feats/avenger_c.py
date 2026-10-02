@@ -276,7 +276,7 @@ def f2758(c: Cast) -> None:
 
 @power("f2911", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.no_provoke(when=)", "query.charging()"))
+       todo=("events.OpportunityWindow.kind",))
 def f2911(c: Cast) -> None:
     """A charge at the sworn enemy draws no openings on the way in.
 

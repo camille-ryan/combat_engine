@@ -672,7 +672,7 @@ def f3495(c: Cast) -> None:
 
 
 @power("f3496", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=("c.no_provoke(when=)",),
+       reach=PERSONAL, target=NO_TARGET, dropped=("events.OpportunityWindow.mode",),
        trigger="you use p1828",
        on=Trigger(PowerUsed, _used("p1828"), "you use p1828"))
 def f3496(c: Cast) -> None:
