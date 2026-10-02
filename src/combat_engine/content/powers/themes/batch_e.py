@@ -209,6 +209,24 @@ def _my_mount_hurt(world: Any, me: int, ev: Any) -> bool:
 # ===========================================================================
 
 
+
+def _a_hand_free(world, eid: int) -> bool:  # noqa: ANN001
+    """"Requirement: You must have a hand free."
+
+    The same reading `fighter/grips.hand_free` makes, written here because this
+    file is not the fighter's and the question is one line. A shield, a second
+    melee weapon, or a two-handed weapon all fill the hand. #236.
+    """
+    from combat_engine.engine.components import Gear
+
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return True
+    if gear.shield or len(gear.melee) > 1:
+        return False
+    return gear.main is None or not gear.main.two_handed
+
+
 @power(
     "p11868",
     level=0,
@@ -1565,6 +1583,8 @@ def p16565(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.SHADOW],
     dropped=("c.grab(sustain=)",),
+    requires=_a_hand_free,
+    requires_text="must have a hand free",
 )
 def p16626(c: Cast) -> None:
     """The Special is `c.as_basic`, which is what "in place of a melee basic

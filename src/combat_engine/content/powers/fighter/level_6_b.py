@@ -60,7 +60,7 @@ from combat_engine.engine.query import adjacent, allies, defence, team
 from combat_engine.engine.query import squares as squares_of
 
 from .footwork import aura_ring, close_by_shift, stand
-from .grips import has_shield
+from .grips import hand_free, has_shield
 
 MARTIAL = [Keyword.MARTIAL]
 
@@ -533,6 +533,8 @@ def p4327(c: Cast) -> None:
     keywords=MARTIAL,
     trigger=_CLOSE_HIT_ME,
     on=Trigger(AttackRolled, _would_land_in_melee, _CLOSE_HIT_ME),
+    requires=hand_free,
+    requires_text="must have a hand free",
 )
 def p10498(c: Cast) -> None:
     """The defence the attack is actually aimed at, which the event names --

@@ -452,6 +452,22 @@ def _weapon_words() -> dict[str, str]:
             out.setdefault(w.group, w.ref)
         for prop in w.properties:
             out.setdefault(prop, w.ref)
+        # **"a thrown weapon" is not a property and three rows ask for one.**
+        # The table spells the properties `light thrown` and `heavy thrown`, so
+        # a Requirement reading "you must be wielding a thrown weapon" matched
+        # nothing and the board handed nothing over -- which was invisible for
+        # as long as those rows applied no gate, and made all three unusable the
+        # moment they did.
+        #
+        # **A heavy one, and that is not arbitrary.** This key is 13 characters
+        # and `heavy thrown` is 12, so longest-match-wins hands it every row
+        # reading "needs a heavy thrown weapon" as well -- `p4559` went unusable
+        # the first time I wrote this, because a dagger answered it. A heavy
+        # thrown weapon satisfies both sentences and a light one satisfies one,
+        # so the stricter reading is the safe one to stock. The docstring above
+        # already warned about exactly this pair.
+        if w.thrown is not None and "heavy thrown" in w.properties:
+            out.setdefault("thrown weapon", w.ref)
     return dict(sorted(out.items(), key=lambda kv: -len(kv[0])))
 
 
@@ -499,6 +515,17 @@ def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
         (getattr(declared, "requires_text", "") or "",
          getattr(declared, "trigger", "") or "")
     ).lower()
+    # **"A hand free" is a grip this could only ever fill.** Everything below
+    # *draws* something, and 15 rows ask for the opposite -- so a board whose
+    # character happened to be holding a shield reported one UNUSED, which is
+    # indistinguishable from a row that cannot work at all. That is the same
+    # argument `_grip_for` gives for existing.
+    if "hand free" in wanted and gear is not None:
+        gear.shield = False
+        kept = next((w for w in gear.melee if not w.two_handed), None)
+        gear.weapons = [w for w in gear.weapons if w is kept] if kept else []
+        gear.__post_init__()
+        return
     if not wanted.strip():
         return
     if _WEAPON_WORDS is None:

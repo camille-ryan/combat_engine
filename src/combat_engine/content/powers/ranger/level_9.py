@@ -86,6 +86,22 @@ def _has_ranged(world: World, eid: int) -> bool:
     return gear is not None and gear.ranged is not None
 
 
+
+def _wielding_a_thrown_weapon(world, eid: int) -> bool:  # noqa: ANN001
+    """"Requirement: You must be wielding a thrown weapon."
+
+    **Writable as of `Weapon.thrown`.** This was three rows printing a
+    requirement they did not apply, and the reason was that nothing could ask
+    whether a held weapon could be thrown: `Gear.ranged` answers "can be fired"
+    and is `None` for every thrown weapon in the table, which is deliberate. The
+    field that does answer it exists now. #236.
+    """
+    from combat_engine.engine.components import Gear
+
+    gear = world.get(eid, Gear)
+    return gear is not None and gear.thrown is not None
+
+
 @power(
     "p160",
     level=9,
@@ -186,6 +202,8 @@ def p714(c: Cast) -> None:
     keywords=MARTIAL_RANGED,
     attack=Attack(STR, vs=AC),
     thrown_by_hand=True,
+    requires=_wielding_a_thrown_weapon,
+    requires_text="must be wielding a thrown weapon",
 )
 def p10631(c: Cast) -> None:
     """The Effect line names the quarry, so by the time the Hit line asks

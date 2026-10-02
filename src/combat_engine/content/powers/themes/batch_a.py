@@ -102,6 +102,24 @@ YOU_AND_ALLIES = Target("ally", 99, everyone=True)
 # -- wild talent cantrips ----------------------------------------------------
 
 
+
+def _a_hand_free(world, eid: int) -> bool:  # noqa: ANN001
+    """"Requirement: You must have a hand free."
+
+    The same reading `fighter/grips.hand_free` makes, written here because this
+    file is not the fighter's and the question is one line. A shield, a second
+    melee weapon, or a two-handed weapon all fill the hand. #236.
+    """
+    from combat_engine.engine.components import Gear
+
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return True
+    if gear.shield or len(gear.melee) > 1:
+        return False
+    return gear.main is None or not gear.main.two_handed
+
+
 @power(
     "p12400",
     level=0,
@@ -280,6 +298,8 @@ SHADOW_BLADE = Trigger(
     target=SELF,
     keywords=SHADOW,
     todo=("c.as_weapon()",),
+    requires=_a_hand_free,
+    requires_text="must have a hand free",
 )
 def p15895(c: Cast) -> None:
     """The whole printed Effect is a weapon: its enhancement bonus and its

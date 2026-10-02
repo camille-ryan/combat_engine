@@ -227,6 +227,7 @@ def p13672(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.PSYCHIC, Keyword.RADIANT],
     trigger=_ADJACENT_ATTACKED_ME,
     on=Trigger(AttackDeclared, when=_adjacent_attacker, text=_ADJACENT_ATTACKED_ME),
+    dropped=("c.as_weapon()",),
 )
 def p13752(c: Cast) -> None:
     """Its Requirement names one particular sword; see `p13672`."""

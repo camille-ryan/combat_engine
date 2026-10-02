@@ -1,5 +1,17 @@
 """Warlock, level 0: the pact boons and the pact blades.
 
+**Five pact blades, fifteen rows, and none applied its Requirement.** Each set is
+a trio -- two "you must use this power with your <blade>" and one "you must be
+holding" it -- and the blade is conjured by another row rather than carried off
+the weapon table. So `query.holding` has nothing to match: there is no `w:` ref
+for a weapon the character summons.
+
+They play, and what they do not do is refuse a character who is not holding the
+thing. That is one named clause, so `dropped=("c.as_weapon()",)` -- the symbol
+eleven other rows already wait on, which is what makes it the right one rather
+than a fifteenth name for one gap. #236 guessed these "may want a marker rather
+than a predicate", and they do.
+
 Nine of these are the free-action boon every pact prints, and all nine share
 one Trigger written twice: `Dropped` with `by_me` for "you reduce an enemy to
 0 hit points", and `Dropped` with a local predicate for "an enemy adjacent to
@@ -190,6 +202,7 @@ def p13679(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.NECROTIC, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
+    dropped=("c.as_weapon()",),
 )
 def p13680(c: Cast) -> None:
     victim = c.target
@@ -216,6 +229,7 @@ def p13680(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=FORT),
+    dropped=("c.as_weapon()",),
 )
 def p13681(c: Cast) -> None:
     victim = c.target
@@ -239,6 +253,7 @@ def p13681(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.NECROTIC],
     trigger="an adjacent enemy attacks you",
     on=ADJACENT_SWING,
+    dropped=("c.as_weapon()",),
 )
 def p13682(c: Cast) -> None:
     c.flat(5 * (1 + (c.level >= 17) + (c.level >= 27)) + c.cha_mod, dtype=DamageType.FIRE)
@@ -276,6 +291,7 @@ def p13721(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
+    dropped=("c.as_weapon()",),
 )
 def p13722(c: Cast) -> None:
     victim = c.target
@@ -307,6 +323,7 @@ def p13722(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=FORT),
+    dropped=("c.as_weapon()",),
 )
 def p13723(c: Cast) -> None:
     """The destination is named rather than measured, so the teleport is
@@ -331,6 +348,7 @@ def p13723(c: Cast) -> None:
     keywords=ARCANE,
     trigger="an adjacent enemy attacks you",
     on=ADJACENT_SWING,
+    dropped=("c.as_weapon()",),
 )
 def p13724(c: Cast) -> None:
     c.blinded(until=When.EONT)
@@ -349,6 +367,7 @@ def p13724(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT, Keyword.WEAPON],
     attack=Attack(CHA, vs=REF),
+    dropped=("c.as_weapon()",),
 )
 def p13746(c: Cast) -> None:
     victim = c.target
@@ -372,6 +391,7 @@ def p13746(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
+    dropped=("c.as_weapon()",),
 )
 def p13747(c: Cast) -> None:
     """"Vulnerable to *your* attacks" is widened to vulnerable outright: a
@@ -487,6 +507,7 @@ def p13962(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=AC),
+    dropped=("c.as_weapon()",),
 )
 def p13963(c: Cast) -> None:
     if c.strike():
@@ -513,6 +534,7 @@ def p13963(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=REF),
+    dropped=("c.as_weapon()",),
 )
 def p13964(c: Cast) -> None:
     dice = 1 + (c.level >= 13) + (c.level >= 23)
@@ -534,6 +556,7 @@ def p13964(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.NECROTIC, Keyword.PSYCHIC, Keyword.SHADOW],
     trigger="an adjacent enemy attacks you",
     on=ADJACENT_SWING,
+    dropped=("c.as_weapon()",),
 )
 def p13965(c: Cast) -> None:
     flat = 5 * (1 + (c.level >= 13) + (c.level >= 23))
@@ -574,6 +597,7 @@ def p16257(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.IMPLEMENT, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
+    dropped=("c.as_weapon()",),
 )
 def p16258(c: Cast) -> None:
     if c.strike():
@@ -591,6 +615,7 @@ def p16258(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.IMPLEMENT, Keyword.WEAPON],
     attack=Attack(CHA, vs=REF),
+    dropped=("c.as_weapon()",),
 )
 def p16259(c: Cast) -> None:
     """The Hit clause stripping the target's resistance and immunity to the
@@ -615,6 +640,7 @@ def p16259(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.PSYCHIC],
     trigger="an adjacent enemy attacks you",
     on=ADJACENT_SWING,
+    dropped=("c.as_weapon()",),
 )
 def p16260(c: Cast) -> None:
     flat = 5 * (1 + (c.level >= 17) + (c.level >= 27))
