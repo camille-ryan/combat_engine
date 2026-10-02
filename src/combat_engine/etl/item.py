@@ -53,6 +53,53 @@ _RUNG = re.compile(
 _PRICE = re.compile(r"[\d,]+\s*gp\b", re.I)
 
 
+
+#: The line that opens a "choose one of the following" family on a race's page.
+_CHOOSE_ONE = re.compile(r"(?i)choose one")
+
+#: A labelled benefit inside a trait block: `<Label> : <benefit>`.
+_LABELLED = re.compile(r"(?m)^([A-Z][A-Za-z'\-\s]{2,40}?)\s*:\s*(.+)$")
+
+
+def sub_options(spec: str, ref: str) -> dict[str, str]:
+    """A race's "choose one" family, as `{printed label: its own ref}`.
+
+    Two races print one -- 13 sub-options on one page and 3 on another -- and
+    every label was reaching authors verbatim, in the race's own spec and in the
+    10 feats and 4 powers that name one. None of the 16 was in
+    `localization/names.json`, so `scrub` could not swap them and `leaks.py`
+    could not report them: invisible to both halves of the arrangement, which is
+    the condition `_other_names` exists to prevent. #277.
+
+    **Identified by the power each one grants, not by a list of headings.** A
+    sub-option's benefit always names a card -- that is what the family *is*,
+    "each offers particular benefits and provides an associated encounter power"
+    -- and the ordinary trait headings printed in the same block never do. So the
+    test is structural and this function spells no printed label, which it must
+    not: a deny-list of heading names would be the leak it is here to close, the
+    same trap `_slot`'s allow-list was written to avoid.
+
+    Numbered by order of appearance, which is deterministic from the page, and
+    spelled the way a class feature's legs are (`f0s0`) because it is the same
+    idea: sub-option N of one feature.
+    """
+    opens = _CHOOSE_ONE.search(spec)
+    if opens is None:
+        return {}
+    out: dict[str, str] = {}
+    for found in _LABELLED.finditer(spec[opens.start():]):
+        label, benefit = found.group(1).strip(), found.group(2)
+        # **Either spelling of "a card", because this runs before the
+        # cross-reference pass.** At this point in the build a benefit still
+        # names its power in words -- `p\d+` does not exist yet and testing for
+        # it found nothing at all, which is how the first attempt silently
+        # returned no sub-options anywhere. The word survives both stages.
+        if not re.search(r"\bp\d+\b|\bpowers?\b", benefit):
+            continue
+        out[label] = f"rt:{ref}-s{len(out)}"
+    return out
+
+
 def races(
     source: sqlite3.Connection,
     out: sqlite3.Connection,
@@ -87,15 +134,23 @@ def races(
         spec = re.split(r"\s*Published in\b", spec)[0].strip()
 
         flavour = re.search(r"</h1>\s*<i>(.*?)</i>", body, re.S)
+        # **The "choose one" family gets refs of its own.** Swapped here as well
+        # as the race's own name, so the spec an author reads says `rt:r33-s0`
+        # where it said a printed label -- and registered in `names` so the other
+        # tables that name one can be swapped too, and so `leaks.py` can finally
+        # see them.
+        options = sub_options(spec, ref)
         out.execute(
             "INSERT INTO race VALUES (?,?,?,?,?)",
             (ref, row["ID"], size, json.dumps(_scores(spec)),
-             scrub(spec, {name: ref})),
+             scrub(spec, {name: ref, **options})),
         )
         names[ref] = {
             "name": name,
             "flavour": text(flavour.group(1)) if flavour else "",
         }
+        for label, option_ref in options.items():
+            names.setdefault(option_ref, {"name": label})
         report.races += 1
 
 

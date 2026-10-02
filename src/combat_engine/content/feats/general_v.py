@@ -124,7 +124,7 @@ BEST_OF = ("Attack.best_of()",)
 #: Suppressing a clause of the power that triggered this one.
 INSTEAD = ("c.pre_empt(ref, clause)",)
 
-#: The four a stormsoul rider narrows on.
+#: The four an rt:r33-s2 rider narrows on.
 ELEMENTS = (
     DamageType.COLD,
     DamageType.FIRE,

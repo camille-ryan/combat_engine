@@ -408,6 +408,7 @@ def build() -> Report:
     # After both, because a feat's Special line names items and
     # a set's benefit names feats. Neither index exists earlier.
     report.crossed += _cross_reference_rest(out, names)
+    report.crossed += _swap_sub_options(out, names)
     report.links_found, report.links_total = _links_resolve(source, out)
     # **Last, and it has to be.** The vocabulary is the `weapon` table and the
     # text is `power.spec`, so this runs once both are finished; earlier it would
@@ -1495,6 +1496,66 @@ def _other_names(
             names.setdefault(ref, {"name": name})
             seen += 1
     return seen
+
+
+
+#: A race sub-option's ref, as `item.sub_options` mints them.
+_SUB_OPTION = re.compile(r"rt:r\d+-s\d+")
+
+
+def _swap_sub_options(
+    out: sqlite3.Connection, names: dict[str, dict[str, str]]
+) -> int:
+    """Swap a race's "choose one" labels out of every other table's spec.
+
+    `item.races` swaps them inside the race's own spec, but **the powers pass has
+    already run by then** and the feats pass scrubs its own text, so the 10 feats
+    and 4 powers that name a sub-option kept the printed label. A post-pass, the
+    way `_cross_reference_rest` is one and for the same reason: the index does not
+    exist earlier.
+
+    **A direct mapping rather than `identifies`, and that is the point.** Two of
+    the 16 labels are single words the corpus has already earned as ordinary
+    English -- each is used on 14 pages, over `COMMON_IN` -- so an
+    identifies-gated swap would leave exactly those two in place while swapping
+    their eleven siblings, which is the inconsistency #311 was about one level up.
+    The map is exact and needs no judgement.
+    """
+    from .sanitise import scrub
+
+    mapping = {
+        row["name"]: ref
+        for ref, row in names.items()
+        if _SUB_OPTION.fullmatch(ref) and row.get("name")
+    }
+    if not mapping:
+        return 0
+    # **Every table that carries a spec.** The first version excluded
+    # `monster_power` and `trap` on the theory that a stat block saying the same
+    # words means a creature's own attack rather than a character's racial
+    # option. Camille's reading is that there is no other sense -- a dragon
+    # breath *is* the one racial power -- and the data agrees: **zero**
+    # word-bounded matches in either of those tables, so the exclusion bought
+    # nothing and left the narrower scope to go stale against a later build.
+    #
+    # Not a substring hazard, which is worth saying because it looks like one:
+    # `scrub` anchors on `\b`, so "the dragon breathes" is untouched. Checked
+    # after the fact -- zero corrupted substitutions across every table.
+    swapped = 0
+    for table in ("power", "feat", "item", "item_block", "class_feature",
+                  "companion", "monster_power", "trap"):
+        rows = out.execute(f"SELECT ref, spec FROM {table}").fetchall()
+        for ref, spec in rows:
+            if not spec:
+                continue
+            clean = scrub(spec, mapping)
+            if clean != spec:
+                out.execute(
+                    f"UPDATE {table} SET spec = ? WHERE ref = ?",
+                    (clean, ref),
+                )
+                swapped += 1
+    return swapped
 
 
 def _cross_reference_rest(
