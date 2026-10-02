@@ -1456,6 +1456,16 @@ _ALIAS_TABLES = (
 #: with an id in the middle of a rules sentence.
 _VOCABULARY_TABLE = "Glossary"
 
+#: Which Glossary categories are **vocabulary**, and which is a list of names
+#: wearing a glossary's clothes.
+#:
+#: An **allow-list, for the reason `_slot`'s was one**: writing the deny list
+#: would itself have been the leak. So this names the categories that may seed
+#: `common_word`, and `Monsters` -- 140 entries, 53 of them also somebody's
+#: printed name -- is simply not among them. A glossary of creature names is a
+#: name list.
+_VOCABULARY_CATEGORIES = ("Rules", "Powers", "Weapons")
+
 
 def _other_names(
     source: sqlite3.Connection,
@@ -2528,6 +2538,33 @@ def _vocabulary(texts) -> set[str]:  # noqa: ANN001
     return out
 
 
+
+def _printed_names(source: sqlite3.Connection) -> frozenset[str]:
+    """Every printed name the source holds, lowercased, from any table with a Name.
+
+    Discovered rather than listed, so a table added to a later community build is
+    covered without an edit here -- and so that nothing in this file has to *spell*
+    a name in order to exclude it, which is the trap `_slot`'s allow-list was
+    written to avoid.
+    """
+    tables = [
+        t for (t,) in source.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")
+        if not t.endswith(("_fts", "_config", "_data", "_docsize", "_idx"))
+        and t != _VOCABULARY_TABLE
+    ]
+    out: set[str] = set()
+    for table in tables:
+        cols = [c[1] for c in source.execute(f"PRAGMA table_info('{table}')")]
+        if "Name" not in cols:
+            continue
+        for (name,) in source.execute(f"SELECT Name FROM '{table}'"):
+            term = (name or "").strip().lower()
+            if len(term) > 2:
+                out.add(term)
+    return frozenset(out)
+
+
 def _common_words(
     source: sqlite3.Connection, out: sqlite3.Connection, report: Report
 ) -> frozenset[str]:
@@ -2552,11 +2589,41 @@ def _common_words(
     seen: Counter[str] = Counter()
     # The glossary first, as whole phrases: it *is* the rules vocabulary,
     # and every entry counts as ordinary however rare its words are.
-    for row in source.execute(f"SELECT Name FROM {_VOCABULARY_TABLE}"):
+    #
+    # **But not an entry that is also somebody's printed name**, and this is the
+    # half that was missing. Seeding the Glossary wholesale marked 76 printed
+    # names as ordinary English, so `sanitise.identifies` answered False for them
+    # and `leaks.py` routed them to its quiet pile. Measured before the fix:
+    #
+    #     identifies('deceptive veil')        -> False   silently quiet
+    #     identifies('fang titan drake')      -> False   silently quiet
+    #
+    # The first of those is a Glossary *Rules* entry **and** a power's name. So
+    # the check that exists to keep names out of the tree was blind to exactly
+    # the names most easily mistaken for vocabulary.
+    #
+    # Two guards, and neither one writes a name down. The category allow-list
+    # above, and this collision test -- computed from the source's own Name
+    # columns, so it needs no list and cannot go stale.
+    #
+    # It matters most for **phrases**: the corpus pass below reads single words
+    # (`[a-z]{2,}`), so a multi-word term can only ever be marked here. 14 of the
+    # 76 were phrases and those are now fully closed; the 62 single words are
+    # re-earned by the corpus on their own merits, which is correct -- `elf`
+    # really is an English word, and keeping it out of this set would report every
+    # creature type in the tree. Position is what tells a name from a word there,
+    # which is `sanitise.named_races`' job and not this one.
+    claimed = _printed_names(source)
+    for row in source.execute(
+        f"SELECT Name, Category FROM {_VOCABULARY_TABLE}"
+    ):
         term = (row[0] or "").strip().lower()
-        if len(term) > 2:
-            seen[term] = COMMON_IN
-            seen.update({w: COMMON_IN for w in term.split()})
+        if len(term) <= 2 or row[1] not in _VOCABULARY_CATEGORIES:
+            continue
+        if term in claimed:
+            continue
+        seen[term] = COMMON_IN
+        seen.update({w: COMMON_IN for w in term.split()})
     for table in ("Monster", "Power", "Item", "Feat"):
         for row in source.execute(f"SELECT PlainTxt FROM {table}"):
             seen.update(_vocabulary([row[0]]))
