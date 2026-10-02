@@ -160,7 +160,7 @@ def _howl(c: Cast, amount: int, dtype: DamageType = DamageType.THUNDER) -> list[
     cls="barbarian",
     usage=AT_WILL,
     action=STANDARD,
-    reach=Melee(2),
+    reach=Melee(1),
     target=ONE_CREATURE,
     keywords=PRIMAL_WEAPON,
     attack=Attack(STR, vs=AC),

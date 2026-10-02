@@ -144,7 +144,7 @@ def p1244(c: Cast) -> None:
     cls="paladin",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Melee(5),
+    reach=Melee(1),
     target=ONE_OTHER_ALLY,
     keywords=[*DIVINE_WEAPON, Keyword.TELEPORTATION],
     attack=Attack(CHA, vs=AC),

@@ -68,7 +68,7 @@ def _square_of(c: Cast, who: int):  # noqa: ANN202
     cls="barbarian",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Melee(2),
+    reach=Melee(1),
     target=ONE_CREATURE,
     keywords=PRIMAL_WEAPON,
     attack=Attack(STR, vs=AC),

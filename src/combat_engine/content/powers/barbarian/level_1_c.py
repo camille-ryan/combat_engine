@@ -67,7 +67,7 @@ def p1020(c: Cast) -> None:
     cls="barbarian",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Melee(2),
+    reach=Melee(1),
     target=ONE_CREATURE,
     keywords=PRIMAL_WEAPON,
     attack=Attack(STR, vs=AC),
