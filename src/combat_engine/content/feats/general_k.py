@@ -1598,15 +1598,21 @@ def f2024(c: Cast) -> None:
 
 @power("f2025", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.cast_from(ref=)", "c.no_provoke(when=)"))
+       dropped=("c.cast_from(ref=)",))
 def f2025(c: Cast) -> None:
-    """`c.cast_from` moves the origin of *every* ranged and area attack
-    the caster makes; narrowing it to one row is the first dropped
-    clause, and the provoke waiver is the second -- `c.no_provoke` names
-    a creature to be safe from, not a row to be safe while using."""
+    """`c.cast_from` moves the origin of *every* ranged and area attack the
+    caster makes; narrowing it to one row is the clause still dropped.
+
+    **The provoke waiver is written.** `c.no_provoke` takes a `when=`, and the
+    row to be safe while using is named on the card, so the gate is an equality
+    on the ref `ctx["why"]` carries."""
     familiar = c.familiar()
     if familiar is not None:
         c.cast_from(familiar, on=c.me, until=When.ENCOUNTER)
+    c.no_provoke(
+        on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: str(ctx.get("why", "")).split(" ", 1)[0] == "f2023b",
+    )
 
 
 @power("f2027", level=1, cls="", usage=ENCOUNTER, action=FREE,

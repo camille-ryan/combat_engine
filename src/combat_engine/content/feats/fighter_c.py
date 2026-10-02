@@ -616,11 +616,27 @@ def f2440(c: Cast) -> None:
 
 
 @power("f2412", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_provoke(when=)",))
+       reach=PERSONAL, target=SELF,
+       dropped=("events.OpportunityWindow.step",))
 def f2412(c: Cast) -> None:
-    """Only the **first square** of the movement is free. `c.no_provoke`
-    waives the whole move or none of it, and takes no gate -- waiving all
-    of it would be a much larger feat than the one printed."""
+    """"Does not provoke from enemies **you have marked**" is written; "the
+    **first square**" is not.
+
+    The marked half is a question about `ctx["actor"]`, the creature that would
+    swing, and the mark is a relation this `Cast` can read. The square is not on
+    the context at all -- `movement.step` knows which step it is on and the
+    window does not carry it (#301) -- so what is laid is wider than the card
+    for an enemy that is marked and narrower for one that is not.
+
+    **Wider is the wrong direction** and it is declared rather than hidden: a
+    marked enemy gets no opening for the whole move instead of only the first
+    square. The alternative was waiving nothing, which is a feat that does not
+    work at all; this one plays and over-pays against marked enemies only."""
+    c.no_provoke(
+        on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: str(ctx.get("why", "")) == "moved away"
+        and c.marked(on=ctx.get("actor")),
+    )
 
 
 @power("f2421", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -688,7 +704,7 @@ def f2401(c: Cast) -> None:
 
 
 @power("f2404", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.no_provoke(when=)",),
+       reach=PERSONAL, target=SELF,
        trigger="you hit a creature marked by you with a melee attack",
        on=Trigger(Hit, lambda w, me, ev: ev.attacker == me,
                   "you hit with an attack"))
@@ -700,9 +716,15 @@ def f2404(c: Cast) -> None:
     directly, and `Hit` carries only the ref, so the reach comes off the
     row in the registry.
 
-    Dropped: "using p1831 in this way doesn't provoke opportunity
-    attacks" -- `c.no_provoke` takes no `when=`, and a blanket one would
-    cover every use of the power rather than this one."""
+    "Using p1831 in this way doesn't provoke opportunity attacks" is written:
+    `c.no_provoke` takes a `when=` now, so the waiver is an equality on the ref
+    `ctx["why"]` carries rather than the blanket one, which would have covered
+    every use of the power instead of this one.
+
+    Laid for `When.EOT` rather than the encounter, which is as close as the
+    context gets to "in this way": the waiver is armed at the moment the free
+    use is about to happen and expires with the turn, so an ordinary use of
+    `p1831` on a later turn provokes as it should."""
     from combat_engine.engine import get as _get
 
     ev = c.trigger
@@ -712,6 +734,13 @@ def f2404(c: Cast) -> None:
     victim = getattr(ev, "target", None)
     if victim is None or not c.marked(on=victim, by=c.me):
         return
+    # Armed immediately before the free use and gone with the turn, which is as
+    # close as the context gets to "in this way": an ordinary use of the row on a
+    # later turn still provokes.
+    c.no_provoke(
+        on=c.me, until=When.EOT,
+        when=lambda ctx: str(ctx.get("why", "")).split(" ", 1)[0] == "p1831",
+    )
     c.use_power("p1831", on=victim)
 
 

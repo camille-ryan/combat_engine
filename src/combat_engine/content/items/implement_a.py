@@ -1533,16 +1533,29 @@ def i3195p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.no_provoke(when=)",),
 )
 def i3503x1(c: Cast) -> None:
-    """`c.no_provoke` vetoes the opportunity window whatever opened it, so
-    this also covers walking away -- which the printed line does not.
+    """Ranged or area **divine** powers only, which is narrower than what this
+    laid.
 
-    Re-aimed onto the name nineteen other rows use for the same absence:
-    the verb takes `from_` and `on` and no `when=`, so no printed
-    narrowing of *which* action stops provoking can be said."""
-    c.no_provoke(on=c.me, until=When.ENCOUNTER)
+    It vetoed the window whatever opened it, so it also covered walking away --
+    which the printed line does not, and which made the property **stronger
+    than its card**. `c.no_provoke` takes a `when=` now.
+
+    **The gate tests only the keyword.** `Power.provokes_on` opens this window
+    for `ranged`, `area_burst` and `wall` and nothing else, so a window that
+    exists is already a ranged or area attack; re-checking the shape would be a
+    second copy of that rule. `ctx["why"]` reads `"<ref> is a ranged power"`, so
+    the provoking row is its first token.
+
+    "With this implement" is not tested, for the reason `f3742` gives: the
+    implement in hand is not on the context, and a divine implement attack made
+    while holding this symbol is made with it."""
+    def divine_ranged(ctx: dict[str, Any]) -> bool:
+        row = get(str(ctx.get("why", "")).split(" ", 1)[0])
+        return row is not None and Keyword.DIVINE in row.keywords
+
+    c.no_provoke(on=c.me, until=When.ENCOUNTER, when=divine_ranged)
 
 
 @power(
