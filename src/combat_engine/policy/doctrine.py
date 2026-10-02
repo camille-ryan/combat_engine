@@ -401,6 +401,14 @@ _HEALS: dict[str, bool] = {}
 #: Same, for the helping verbs.
 _HELPS: dict[str, bool] = {}
 
+#: The verbs a body calls to take hit points off whoever is standing there.
+#: `c.flat` is in because a zone's tick is usually a flat number rather than a
+#: rolled one, and `c.ongoing` because an ongoing-damage zone hurts on a delay.
+_HARM_VERBS = ("c.damage(", "c.flat(", "c.ongoing(", "c.half_damage(")
+
+#: Same cache, for `hurts`.
+_HURTS: dict[str, bool] = {}
+
 
 def heals(ref: str) -> bool:
     """Does this row put hit points back?
@@ -424,6 +432,46 @@ def heals(ref: str) -> bool:
     except (OSError, TypeError):
         src = ""
     out = _HEALS[ref] = any(v in src for v in _HEAL_VERBS)
+    return out
+
+
+def hurts(ref: str) -> bool:
+    """Does this row's zone take hit points off anything standing in it?
+
+    **A `Zone` does not record that it deals damage**, so "damaging terrain is a
+    bad square" -- which `docs/AI_DOCTRINE.md` asks for -- was answerable only by
+    a proxy: is the zone owned by an enemy. That is wrong in both directions. An
+    **ally's** fire zone burns just as much and scored nothing, and an enemy zone
+    that only blocks sight was priced as though it burned. #261.
+
+    Derived rather than declared, which is that issue's own recommendation: the
+    alternative is a `Zone.hurts` field set by hand on every zone-creating row,
+    and this costs no content change and catches most of them. Read out of the
+    body exactly as `heals` above reads it, and cached for the same reason.
+
+    **The damage is in a watcher, not in the body's straight line** -- a zone
+    ticks on `EnterSquare` or at a turn boundary -- so the verb being anywhere in
+    the source is the signal. That makes this over-eager by construction: a row
+    that damages on its initial hit *and* drops a harmless zone reads as hurting.
+    Bounded and the right direction: the term is a small negative on a square, so
+    the error is a creature being slightly shy of a zone rather than walking into
+    a fire.
+    """
+    if not ref:
+        return False
+    got = _HURTS.get(ref)
+    if got is not None:
+        return got
+    declared = get(ref)
+    body = getattr(declared, "body", None) if declared is not None else None
+    if body is None:
+        _HURTS[ref] = False
+        return False
+    try:
+        src = inspect.getsource(body)
+    except (OSError, TypeError):
+        src = ""
+    out = _HURTS[ref] = any(v in src for v in _HARM_VERBS)
     return out
 
 
@@ -930,14 +978,25 @@ def _would_be_flanked(world: Any, actor: int, dest: Any) -> bool:
 
 
 def _enemy_zone_squares(world: Any, actor: int) -> set[Any]:
-    """Every square covered by a zone an enemy owns.
+    """Every square it would hurt to stand in.
 
-    The best available reading of "hostile terrain": a `Zone` does not record
-    whether it hurts, so ownership is what there is to go on.
+    **Was "every square a zone an enemy owns covers"**, which is wrong in both
+    directions: an ally's damaging zone burns just as much and scored nothing,
+    and an enemy zone that only blocks sight was priced as though it burned.
+    #261.
+
+    Asked of the row now, through `hurts`, and ownership is only the tie-breaker
+    it should always have been: a zone that hurts is a bad square **whoever** put
+    it there, and a zone that does not is bad only if its owner means it for you
+    -- an enemy's difficult-ground or sight-blocking zone is still somewhere not
+    to stand, just not for the same reason.
     """
     mine = world.get(actor, Side)
     out: set[Any] = set()
     for _, zone in world.zones.all():
+        if hurts(getattr(zone, "label", "") or ""):
+            out |= set(zone.squares)
+            continue
         owner = getattr(zone, "owner", -1)
         theirs = world.get(owner, Side)
         if mine is None or theirs is None or theirs.team is mine.team:
