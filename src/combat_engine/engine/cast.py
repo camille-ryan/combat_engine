@@ -1117,9 +1117,23 @@ class Cast:
         A ranger carries a blade and a bow, and firing the bow while rolling
         the blade's dice is wrong in a way nothing would ever report.
         """
+        weapon = self._swinging(hand=hand, ranged=ranged)
+        if weapon is None:
+            return f"{count}d4"
+        n, _, faces = weapon.damage.partition("d")
+        return f"{int(n or 1) * count}d{faces}"
+
+    def _swinging(self, *, hand: str = "main", ranged: bool | None = None):  # noqa: ANN202
+        """Which weapon this row is being used with, or None.
+
+        Lifted out of `w` so `_high_crit` asks the same question rather than a
+        similar one: a high-crit die has to come off the weapon whose dice the
+        row is already rolling, or a ranger firing a bow would get the extra die
+        from the blade on its belt.
+        """
         gear = self.world.get(self.me, Gear)
         if gear is None:
-            return f"{count}d4"
+            return None
         weapon = gear.off if hand == "off" else gear.main
         p = self._declared()
         # The branch is the better answer where there is one: a row printing
@@ -1134,10 +1148,35 @@ class Cast:
             fires = p is not None and Keyword.RANGED in p.keywords
         if fires and gear.ranged is not None:
             weapon = gear.ranged
-        if weapon is None:
-            return f"{count}d4"
-        n, _, faces = weapon.damage.partition("d")
-        return f"{int(n or 1) * count}d{faces}"
+        return weapon
+
+    def _high_crit(self) -> int:
+        """The extra damage a high crit weapon deals on a critical hit.
+
+        **18 of 117 printed weapons carry the property and nothing read it**, so
+        a greataxe and a maul differed only in their dice and `choices.py` was
+        scoring a benefit the engine did not grant -- a silently-false term in
+        the scorer rather than in a row. #240.
+
+        One extra `[W]`, which is the heroic number and the only one this build
+        needs: the rule gives two at paragon and three at epic, and the level
+        ceiling stops at 10 (#281).
+
+        **Rolled, not maxed**, which is the part worth being careful about. A
+        critical maximises the power's own dice; the high-crit dice are extra
+        damage *on top of* that and are rolled normally. Maxing them too would
+        pay a greataxe 12 where the rule pays it an average of 6.5.
+
+        Only for a row carrying the weapon keyword. A wizard's implement power
+        is not a weapon attack, and a held weapon must not lend it anything.
+        """
+        p = self._declared()
+        if p is None or Keyword.WEAPON not in p.keywords:
+            return 0
+        weapon = self._swinging()
+        if weapon is None or "high crit" not in weapon.properties:
+            return 0
+        return self._roll_damage(weapon.damage)
 
     def _declared(self):  # noqa: ANN202
         from .dsl import get
@@ -1638,7 +1677,7 @@ class Cast:
         if who is None:
             return 0
         if self.crit:
-            amount = _max_of(dice) + bonus
+            amount = _max_of(dice) + bonus + self._high_crit()
         else:
             amount = self._roll_damage(dice) + bonus if dice else bonus
         amount += self._enhancement()
