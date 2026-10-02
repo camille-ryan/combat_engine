@@ -122,7 +122,7 @@ EXPEND = ("c.expend_row()",)
 #: "Strength or Dexterity" -- one attack line, whichever is better.
 BEST_OF = ("Attack.best_of()",)
 #: Suppressing a clause of the power that triggered this one.
-INSTEAD = ("c.instead_of()",)
+INSTEAD = ("c.pre_empt(ref, clause)",)
 
 #: The four a stormsoul rider narrows on.
 ELEMENTS = (

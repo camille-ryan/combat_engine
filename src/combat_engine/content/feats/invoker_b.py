@@ -79,7 +79,7 @@ COUNTS_AS = "c.counts_as(keyword=)"
 #: only this file used: the covenant is a declared row now, so the gap is
 #: not the naming of it but the printed swap for what a feature does inside
 #: its own body -- which is what thirty other rows already call.
-SUPPRESS = ("c.instead_of()",)
+SUPPRESS = ("c.pre_empt(ref, clause)",)
 #: `c.grants_advantage` takes no `when=`, so combat advantage cannot be
 #: narrowed to one shape of power.
 NARROW_CA = ("c.grants_advantage(when=)",)

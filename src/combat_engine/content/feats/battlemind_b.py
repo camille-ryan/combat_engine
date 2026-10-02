@@ -74,7 +74,7 @@ WILD_FOCUS = "p12418"
 TRIGGERING = ("PowerUsed.trigger",)
 #: Nothing lets a rider replace the triggering power's own printed effect:
 #: `PowerUsed` is a plain `Event`, so `c.cancel()` cannot stop it.
-INSTEAD = ("c.instead_of()",)
+INSTEAD = ("c.pre_empt(ref, clause)",)
 #: A class feature named in prose with no ref.
 FEATURE = ("c.class_feature()",)
 #: Spending power points emits a `Note` and nothing a trigger can watch.

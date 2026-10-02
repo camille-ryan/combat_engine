@@ -1922,7 +1922,7 @@ def f2876(c: Cast) -> None:
 
 @power("f2781", level=1, cls="", usage=ENCOUNTER, action=FREE,
        reach=CloseBurst(1), target=NO_TARGET,
-       dropped=("c.instead_of()",),
+       dropped=("c.pre_empt(ref, clause)",),
        trigger="you drop to 0 hit points or fewer",
        on=Trigger(Dropped, _i_dropped, "you drop"))
 def f2781(c: Cast) -> None:

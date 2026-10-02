@@ -702,7 +702,7 @@ def f3462b(c: Cast) -> None:
 
 
 @power("f3463", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.instead_of()",),
+       reach=PERSONAL, target=SELF, dropped=("c.pre_empt(ref, clause)",),
        trigger="you use your shadow jaunt",
        on=Trigger(PowerUsed, _used(SHADOW_JAUNT), "you use that power"))
 def f3463(c: Cast) -> None:
@@ -714,10 +714,13 @@ def f3463(c: Cast) -> None:
     announced before the body runs and is not a decision anything can
     stop, so the substitution is the dropped half.
 
-    **Re-aimed.** That half is not a teleport problem, it is the
-    twenty-three-row `c.instead_of()` gap -- a clause of another row
+    **Re-aimed twice.** That half is not a teleport problem, it is the
+    twenty-nine-row `c.pre_empt(ref, clause)` gap -- a clause of another row
     that cannot be suppressed from outside it. `c.forgo_teleport()` was
-    named by this row and one other and hid the group it belongs to.
+    named by this row and one other and hid the group it belongs to; the
+    group was then called `c.instead_of()`, which named the *choice* and
+    not the pre-emption, and 4 rows wanting something else entirely were
+    sitting in it. #278.
     """
     c.condition(Condition.REMOVED, on=c.me, until=When.SONT)
 

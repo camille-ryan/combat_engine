@@ -521,7 +521,7 @@ def f1716(c: Cast) -> None:
 
 
 @power("f1724", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.instead_of()",))
+       reach=PERSONAL, target=SELF, todo=("c.pre_empt(ref, clause)",))
 def f1724(c: Cast) -> None:
     """Swaps the pull `p5330` prints for a slide. The row is a ref and is
     declared; the pull happens inside its own body and nothing declines

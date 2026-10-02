@@ -180,7 +180,7 @@ def f2563(c: Cast) -> None:
 
 @power("f2972", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.moved_by_me()", "c.instead_of()"))
+       todo=("c.moved_by_me()", "c.pre_empt(ref, clause)"))
 def f2972(c: Cast) -> None:
     """A free step whenever you teleport an ally, and a teleport in place
     of the heal's slide.

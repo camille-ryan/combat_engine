@@ -896,7 +896,7 @@ def f2405(c: Cast) -> None:
 
 
 @power("f2429", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.instead_of()",))
+       reach=PERSONAL, target=SELF, todo=("c.pre_empt(ref, clause)",))
 def f2429(c: Cast) -> None:
     """Shortens the distance `cf:rogue-scoundrel-f1s2` asks a move to
     cover. That row is declared, so the name is not the hold -- the 3 is

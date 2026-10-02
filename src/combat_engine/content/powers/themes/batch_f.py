@@ -1378,12 +1378,12 @@ def p16391(c: Cast) -> None:
     keywords=ARCANE,
     trigger="you would make a Diplomacy or an Intimidate check",
     on=Trigger(SkillCheck, my_check("diplomacy", "intimidate"), "one of those checks"),
-    dropped=("c.instead_of()",),
+    dropped=("c.pre_empt(ref, clause)",),
     narrative=("skill:diplomacy",),
 )
 def p16392(c: Cast) -> None:
     """The +2 is laid on Arcana, which is where the card moves the roll to;
-    swapping one check for another is `c.instead_of()` and is not in `Cast`,
+    swapping one check for another is `c.pre_empt(ref, clause)`, not in `Cast`,
     so the original check still happens. Counting as sharing a language with
     the subject of a Diplomacy check is the other clause, and no board ever
     asks what language two creatures have in common."""

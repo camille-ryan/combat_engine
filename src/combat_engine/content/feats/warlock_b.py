@@ -83,7 +83,7 @@ PACT_BOON = ("c.on_pact_boon()",)
 FEATURE = ("c.class_feature()",)
 #: "Instead of": a printed swap for half of what a class feature does
 #: inside its own body. Declining that half is the operation nothing has.
-INSTEAD = ("c.instead_of()",)
+INSTEAD = ("c.pre_empt(ref, clause)",)
 
 #: "Allies who are helpless, stunned, dominated, unconscious, or
 #: petrified" -- the list f2762 prints, as conditions.
@@ -719,7 +719,7 @@ def f2081(c: Cast) -> None:
     The word the row turns on is "instead": nothing declines half of what
     a row is doing inside its own body, and writing the upside without
     the trade would be a strictly better feat than the printed one. That
-    is `c.instead_of()`, the same gap thirty rows elsewhere name -- it
+    is `c.pre_empt(ref, clause)`, the same gap 28 rows elsewhere name -- it
     was written here as `c.forgo_temp_hp()`, which named the one shape
     of it this row happens to want and so sat alone in its own group.
     """

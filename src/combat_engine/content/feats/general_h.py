@@ -525,7 +525,7 @@ def f1259(c: Cast) -> None:
     c.use_power("p1449")
 
 
-@_trait("f1270", todo=("actions.bluff()", "c.instead_of()"))
+@_trait("f1270", todo=("actions.bluff()", "c.pre_empt(ref, clause)"))
 def f1270(c: Cast) -> None:
     """Hands the combat advantage a Bluff check would win to an ally
     instead of taking it.
@@ -1207,8 +1207,8 @@ def _beast_ongoing_instead(c: Cast, ev: Any) -> None:
     the Wisdom modifier to its damage *inside its own body*, and there is no
     cancellable event for a damage bonus the way `ForcedMove` is cancellable
     for a shove -- so the ongoing damage lands and the modifier it was meant
-    to replace cannot be taken back. That is `c.instead_of()`, the symbol 19
-    rows already wait on for exactly this shape.
+    to replace cannot be taken back. That is `c.pre_empt(ref, clause)`, the
+    symbol 29 rows wait on for exactly this shape.
     """
     from combat_engine.engine.query import has_combat_advantage
 
@@ -1223,7 +1223,7 @@ def _beast_ongoing_instead(c: Cast, ev: Any) -> None:
 def _slow_instead_of_push(c: Cast, ev: Any) -> None:
     """"You can slow the target **instead of** pushing it."
 
-    The hard shape in this family, and the one `c.instead_of()` was marking:
+    The hard shape in this family, and the one `c.pre_empt(ref, clause)` marks:
     the clause does not add to the row, it *replaces* a clause of the row. By
     the time a `Hit` rider runs, a push laid in the body would already have
     happened -- so this cannot be written as an effect and has to pre-empt.
@@ -1420,7 +1420,7 @@ _riders("f1299", {
     "p653": _ongoing_on_riposte,
 }, landed={"p315": _ongoing_on_granted_hit},
    resolved={"p4369": _beast_ongoing_instead},
-   dropped=("c.instead_of()",))
+   dropped=("c.pre_empt(ref, clause)",))
 
 # p997's clause pays out **on a miss**, which a rider hung on `Hit` never
 # sees; p1061 is the granted attack, which is readable now.
@@ -1431,7 +1431,7 @@ _riders("f1300", {
    dropped=("c.on_miss(ref)",))
 
 
-@_trait("f1301", todo=("c.instead_of()",))
+@_trait("f1301", todo=("c.pre_empt(ref, clause)",))
 def f1301(c: Cast) -> None:
     """Both refs resolve. Both clauses rewrite the movement their row
     already prints -- a shift traded for a move, and a move allowed only
@@ -1439,7 +1439,7 @@ def f1301(c: Cast) -> None:
     made inside the other body with nothing announcing it."""
 
 
-@_trait("f1302", dropped=("c.instead_of()", "query.provoked_by()"))
+@_trait("f1302", dropped=("c.pre_empt(ref, clause)", "query.provoked_by()"))
 def f1302(c: Cast) -> None:
     """Two of the four clauses are the same sentence on two rows: a
     defence bonus against *the target of* the exploit, which does not
@@ -1472,7 +1472,7 @@ def f1302(c: Cast) -> None:
     c.watch(PowerUsed, on_use, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1303", dropped=("c.instead_of()", "c.no_provoke(when=)"))
+@_trait("f1303", dropped=("c.pre_empt(ref, clause)", "c.no_provoke(when=)"))
 def f1303(c: Cast) -> None:
     """All four refs resolve and none of the clauses is a rider. p2099
     goes in the place of the melee basic a charge swings; the other
@@ -1514,7 +1514,7 @@ _riders("f1306", {
 }, dropped=("When.SURPRISE",))
 
 
-@_trait("f1307", todo=("c.stored_dose()", "c.effects_on()", "c.instead_of()"))
+@_trait("f1307", todo=("c.stored_dose()", "c.effects_on()", "c.pre_empt(ref, clause)"))
 def f1307(c: Cast) -> None:
     """All four refs resolve. Re-aimed off `c.apply_poison`, which coats a
     weapon now: what these clauses want is the dose itself. Two of them

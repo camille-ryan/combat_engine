@@ -61,7 +61,7 @@ THROWN = ("c.make_thrown()", "c.weapon_range()")
 #: "Instead of": a printed swap for something a class feature does inside
 #: its own body. The feature has a ref now; declining half of what it does
 #: is the operation nothing has.
-INSTEAD = ("c.instead_of()",)
+INSTEAD = ("c.pre_empt(ref, clause)",)
 
 _DEFENCES = (AC, FORT, REF, WILL)
 
