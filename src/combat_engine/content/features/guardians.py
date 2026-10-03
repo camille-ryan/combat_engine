@@ -475,19 +475,21 @@ def seeker_bond_second(c: Cast) -> None:
 
 # -- warden -----------------------------------------------------------------
 
-#: One leg per printed option, which `chargen.BUILDS["warden"]` now has
-#: -- four named legs where `docs/blocked.json` was written against the
-#: derived `second-<ability>` pair. The pairing is read off the ability
-#: each leg's secondary names and the order the two lists print in: the
-#: options are Constitution, Wisdom, Constitution, Wisdom, and the legs are
-#: the two Constitution ones followed by the two Wisdom ones, each pair in
-#: the page's own order.
-_GUARD_LEG = {
-    "cf:warden-f1s0": "earthstrength",
-    "cf:warden-f1s2": "lifespirit",
-    "cf:warden-f1s1": "stormheart",
-    "cf:warden-f1s3": "wildblood",
-}
+#: One leg per printed option, and **the leg's name is the option's own
+#: suffix**, so there is nothing to pair. This used to be a dict mapping each
+#: `cf:` ref to a leg named after the printed option, with the pairing derived
+#: from the ability each secondary names -- "the options are Constitution,
+#: Wisdom, Constitution, Wisdom, and the legs are the two Constitution ones
+#: followed by the two Wisdom ones". The reading of the page was right and the
+#: two lists were not in the same order, so the middle two entries crossed:
+#: `f1s1` is the Wisdom option and got the leg whose secondary said
+#: Constitution, and `f1s2` the reverse.
+#:
+#: It cancelled out for these four gates -- each still reached exactly one leg
+#: -- and did not cancel in `defenders_sb`, which picks the AC ability from the
+#: leg and so gave one option the wrong one. A derived pairing cannot be
+#: checked against anything; a slug that *is* the ref's suffix needs no check.
+#: #337.
 
 
 @power(
@@ -499,7 +501,7 @@ _GUARD_LEG = {
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    requires=on_leg(_GUARD_LEG["cf:warden-f1s0"]),
+    requires=on_leg("f1s0"),
     requires_text="needs the guardian might this belongs to",
 )
 def warden_might_ac(c: Cast) -> None:
@@ -540,7 +542,7 @@ def warden_might_ac(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL, Keyword.HEALING],
-    requires=on_leg(_GUARD_LEG["cf:warden-f1s1"]),
+    requires=on_leg("f1s1"),
     requires_text="needs the guardian might this belongs to",
 )
 def warden_might_ally(c: Cast) -> None:
@@ -593,7 +595,7 @@ def warden_might_ally(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    requires=on_leg(_GUARD_LEG["cf:warden-f1s2"]),
+    requires=on_leg("f1s2"),
     requires_text="needs the guardian might this belongs to",
 )
 def warden_might_slide(c: Cast) -> None:
@@ -637,7 +639,7 @@ def warden_might_slide(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    requires=on_leg(_GUARD_LEG["cf:warden-f1s3"]),
+    requires=on_leg("f1s3"),
     requires_text="needs the guardian might this belongs to",
 )
 def warden_might_penalty(c: Cast) -> None:

@@ -102,10 +102,19 @@ def warden_might(c: Cast) -> None:
 
     **The second sentence is not here**; see `cf:warden-f1-rest` in
     `docs/blocked.json`. All four options hang a different rider on the
-    warden's second wind and the two legs cannot tell the Constitution pair
-    apart from each other, nor the Wisdom pair.
+    warden's second wind, and each rider is written on the option's own row --
+    `cf:warden-f1s0` to `f1s3` in `features/guardians.py` -- rather than here,
+    because this row is the half that is true whichever was taken. (That note
+    used to say the legs "cannot tell the Constitution pair apart"; there are
+    four legs now, one per option, so they can.)
     """
-    on_con = c.build("earthstrength") or c.build("lifespirit")
+    # **The Constitution pair is the first and third option, not the first
+    # two.** The page prints Constitution, Wisdom, Constitution, Wisdom, and
+    # this read the two legs that `chargen.BUILDS` happened to list first --
+    # which were the two whose secondary said Constitution, because that list
+    # was grouped by ability while its names were in page order. So one option
+    # substituted Constitution for AC where its own text says Wisdom. #337.
+    on_con = c.build("f1s0") or c.build("f1s2")
     instead = c.con_mod if on_con else c.wis_mod
     gain = instead - max(c.dex_mod, c.int_mod)
     if gain > 0:

@@ -274,7 +274,7 @@ def p5101(c: Cast) -> None:
     if not c.strike():
         return
     c.damage(c.w(), c.str_mod, dtype=DamageType.THUNDER)
-    if c.build("earthstrength"):
+    if c.build("f1s0"):
         c.push(c.con_mod)
     area = blast(squares(c.world, c.me), 3, c.there)
     c.branch = 1
@@ -299,7 +299,7 @@ def p5101(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p5102(c: Cast) -> None:
-    extra = c.wis_mod if c.build("wildblood") else 0
+    extra = c.wis_mod if c.build("f1s3") else 0
     if c.strike():
         c.damage(c.w(), c.str_mod + extra)
     again = c.choose(c.enemies(), "who the second swing goes to")
@@ -322,7 +322,7 @@ def p5567(c: Cast) -> None:
     if not c.strike():
         return
     c.damage(c.w(2), c.str_mod)
-    amount = 5 + (c.wis_mod if c.build("lifespirit") else 0)
+    amount = 5 + (c.wis_mod if c.build("f1s1") else 0)
 
     def on_hit(ev: Hit) -> None:
         if ev.target != c.me or ev.attacker not in c.enemies():
@@ -351,7 +351,7 @@ def p9816(c: Cast) -> None:
         for e in [e for e in c.enemies() if c.marked(e)]:
             if e != c.target:
                 c.flat(c.con_mod, on=e)
-            if c.build("stormheart"):
+            if c.build("f1s2"):
                 c.slide(1, on=e)
 
 
@@ -401,7 +401,7 @@ def p9819(c: Cast) -> None:
     def on_exit(ev: ZoneExited) -> None:
         if ev.zone == ground and ev.actor == victim:
             c.prone(on=victim)
-            if c.build("earthstrength"):
+            if c.build("f1s0"):
                 c.flat(c.con_mod, on=victim)
 
     c.watch(ZoneExited, on_exit, until=When.EONT)

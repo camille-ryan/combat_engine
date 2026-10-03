@@ -103,7 +103,7 @@ def p5124(c: Cast) -> None:
     modifier context has a power and no reach of its own."""
     if c.strike():
         c.damage(c.w(2), c.str_mod)
-        amount = 1 + c.con_mod if c.build("earthstrength") else 2
+        amount = 1 + c.con_mod if c.build("f1s0") else 2
         c.penalty("attack", amount, until=When.EONT, when=_melee_attack)
 
 
@@ -157,7 +157,7 @@ def p5515(c: Cast) -> None:
     if second is None:
         return
     c.slide(1, on=second)
-    if c.build("wildblood"):
+    if c.build("f1s3"):
         c.flat(c.wis_mod, dtype=DamageType.PSYCHIC, on=victim)
         c.flat(c.wis_mod, dtype=DamageType.PSYCHIC, on=second)
 
@@ -177,7 +177,7 @@ def p5519(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(), c.str_mod)
         if c.may("drag it closer rather than floor it"):
-            c.pull(2 if c.build("earthstrength") else 1)
+            c.pull(2 if c.build("f1s0") else 1)
         else:
             c.prone()
 
@@ -281,7 +281,7 @@ def p9854(c: Cast) -> None:
     c.damage(c.w(2), c.str_mod, dtype=DamageType.COLD)
     c.slowed(until=When.EONT)
     victim = c.target
-    if not c.build("stormheart"):
+    if not c.build("f1s2"):
         return
 
     def backlash(ev: AttackDeclared) -> None:

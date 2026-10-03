@@ -277,6 +277,10 @@ class Report:
     links_total: int = 0
     #: Rows whose text says something about a weapon, gate or rider. #237.
     wields: int = 0
+    #: Words the corpus made frequent that are somebody's whole printed name and
+    #: in no dictionary -- refused a place in `common_word`, so `leaks.py` can
+    #: report them. A number that moves here means the compendium changed. #337.
+    cited_names: int = 0
     #: Stat blocks that yielded no numbers at all. #238.
     blank_stats: list[str] = field(default_factory=list)
 
@@ -344,6 +348,7 @@ class Report:
             f"other names   {self.aliases:6d}  (rituals, deities: indexed, never content)",
             f"names         {self.names:6d}  (localization/names.json, gitignored)",
             f"common words  {self.common:6d}  (what leaks.py treats as English)",
+            f"  cited names {self.cited_names:6d}  (frequent, but somebody's whole name)",
             "",
             "parse coverage",
         ]
@@ -2710,13 +2715,18 @@ def _vocabulary(texts) -> set[str]:  # noqa: ANN001
 
 
 
-def _printed_names(source: sqlite3.Connection) -> frozenset[str]:
-    """Every printed name the source holds, lowercased, from any table with a Name.
+def _printed_names(source: sqlite3.Connection) -> Counter[str]:
+    """Every printed name the source holds, lowercased, and how many rows carry it.
 
     Discovered rather than listed, so a table added to a later community build is
     covered without an edit here -- and so that nothing in this file has to *spell*
     a name in order to exclude it, which is the trap `_slot`'s allow-list was
     written to avoid.
+
+    **Counted, not just collected.** Membership answers "is this somebody's
+    name"; the count answers "does it identify anybody", which is a different
+    question and the one `_common_words` needs below. A `Counter` serves both --
+    `in` still works exactly as it did when this returned a set.
     """
     tables = [
         t for (t,) in source.execute(
@@ -2724,7 +2734,7 @@ def _printed_names(source: sqlite3.Connection) -> frozenset[str]:
         if not t.endswith(("_fts", "_config", "_data", "_docsize", "_idx"))
         and t != _VOCABULARY_TABLE
     ]
-    out: set[str] = set()
+    out: Counter[str] = Counter()
     for table in tables:
         cols = [c[1] for c in source.execute(f"PRAGMA table_info('{table}')")]
         if "Name" not in cols:
@@ -2732,8 +2742,8 @@ def _printed_names(source: sqlite3.Connection) -> frozenset[str]:
         for (name,) in source.execute(f"SELECT Name FROM '{table}'"):
             term = (name or "").strip().lower()
             if len(term) > 2:
-                out.add(term)
-    return frozenset(out)
+                out[term] += 1
+    return out
 
 
 def _common_words(
@@ -2798,7 +2808,102 @@ def _common_words(
     for table in ("Monster", "Power", "Item", "Feat"):
         for row in source.execute(f"SELECT PlainTxt FROM {table}"):
             seen.update(_vocabulary([row[0]]))
-    rows = [(w, n) for w, n in seen.items() if n >= COMMON_IN]
+    # **A word made frequent by being cited is not ordinary English.** The pass
+    # above counts how many *pages* use a word, which answers "how ordinary is
+    # this" for vocabulary and answers a different question entirely for a
+    # proper noun. A deity is named on every power and feat that invokes it; a
+    # sub-class on every page in its build; a race everywhere. All of them clear
+    # `COMMON_IN` comfortably and were then handed to `leaks.py` as English.
+    #
+    # Measured before this guard: `common_word` held six deities, five races and
+    # three class features, and **66** one-word printed names were waived by
+    # this route alone -- including four sub-option names that are the whole
+    # printed name of one row each and had become `Build(...)` keys in chargen
+    # with the checker green. #337.
+    #
+    # The test needs no list and cannot go stale: a word that is the **whole**
+    # printed name of very few rows, and is in no dictionary, identifies
+    # somebody. An ordinary word a row happens to be called -- `elf`, `retreat`,
+    # `stable` -- is in the dictionary and keeps its place, which is exactly
+    # what `e337be3` argued for when it left the 62 single words from the
+    # Glossary to be re-earned here. They still are; this only declines to
+    # re-earn the ones no dictionary has.
+    #
+    # `COMMON_ENOUGH` is `sanitise`'s own threshold for "names too many rows to
+    # identify one", so the two halves cannot come to different opinions about
+    # what identifies.
+    english = {
+        w.strip().lower()
+        for w in sanitise.DICTIONARY.read_text(errors="ignore").splitlines()
+        if w.strip()
+    } if sanitise.DICTIONARY.exists() else set()
+
+    def ordinary(word: str) -> bool:
+        """Is this an English word, **inflections included**?
+
+        The dictionary is web2, which holds `create` and `shake` and not
+        `created` or `shakes`. The first version of this guard asked
+        `word in english` and went red on both of those -- "created" and
+        "shakes" are each some row's printed name, and each is also a word
+        anybody writing a docstring will use. 20 of the first 25 findings were
+        that mistake. `sanitise._stem` was built for the possessive and does
+        not reach a participle, so the suffixes are stripped here.
+        """
+        if word in english:
+            return True
+        for suffix, add in (("s", ""), ("es", ""), ("ed", ""), ("ed", "e"),
+                            ("ing", ""), ("ing", "e"), ("d", ""), ("er", ""),
+                            ("ers", ""), ("ies", "y")):
+            if (word.endswith(suffix) and len(word) > len(suffix) + 2
+                    and word[: -len(suffix)] + add in english):
+                return True
+        return False
+
+    # **A race keeps its place, because something else already owns that
+    # decision.** A race's name is the one printed name that is also a *type*
+    # word -- the engine asks `is_kind("<type>")` and "the <type> shifts 1
+    # square" is a rules sentence -- so `sanitise.names_a_race` waives it
+    # everywhere except the one position where it is a name. Refusing races
+    # here overrode that and reported four of them across six content files on
+    # lines that are using the word as a type.
+    races = {
+        (n or "").strip().lower()
+        for (n,) in source.execute("SELECT Name FROM Race")
+        if n and len(n.strip()) > 2
+    }
+
+    # **A class feature's name is not in any `Name` column**, which is why the
+    # first version of this guard freed 33 names and left the four it was filed
+    # for. `claimed` walks the source's `Name` columns, and a class feature is
+    # parsed out of the class page's HTML -- so `claimed` is **0** for every one
+    # of them, and `0 < claimed[w]` skipped the lot. Measured: 13 of the 33 left
+    # over were class features and their sub-options, including all four of the
+    # sub-option names that had become `Build(...)` keys in chargen.
+    #
+    # Read with the same two patterns `_features` uses, so the guard and the
+    # parser cannot come to different opinions about what a feature is called.
+    # **Over-collecting is the safe direction here** and that is why a looser
+    # read is acceptable: every name this finds only ever *refuses* a word a
+    # place in `common_word`, which makes `leaks.py` louder. Under-collecting is
+    # the failure that hides a leak.
+    for (txt,) in source.execute("SELECT Txt FROM Class"):
+        for m in _FEATURE_HEAD.finditer(txt or ""):
+            claimed[m.group(1).strip().lower()] += 1
+        for _s, _e, kind, label in _sub_marks(txt or ""):
+            if kind == "s" and label:
+                claimed[label.strip().lower()] += 1
+
+    cited_not_common = {
+        w for w in seen
+        if 0 < claimed[w] <= sanitise.COMMON_ENOUGH
+        and not ordinary(w)
+        and w not in races
+    }
+    rows = [
+        (w, n) for w, n in seen.items()
+        if n >= COMMON_IN and w not in cited_not_common
+    ]
+    report.cited_names = len(cited_not_common & {w for w, n in seen.items() if n >= COMMON_IN})
     out.executemany("INSERT INTO common_word VALUES (?, ?)", rows)
     report.common = len(rows)
     return frozenset(w for w, _ in rows)

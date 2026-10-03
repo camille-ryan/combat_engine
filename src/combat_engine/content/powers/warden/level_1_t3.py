@@ -60,7 +60,7 @@ def p9818(c: Cast) -> None:
     )
     size = (
         c.wis_mod + (1 if both else 0)
-        if c.build("wildblood")
+        if c.build("f1s3")
         else (5 if both else 2)
     )
     if size <= 0:

@@ -41,12 +41,12 @@ today's commits as if the text were unavailable. It was one table away.
   Seeker one; the five Monk `Feature` rows are the Flurry variants). The
   agents searched for `cf:monk-*`, found none, and reported the ref as
   nonexistent.
-* **`p3369` is writable.** Swordmage Warding is in the upstream text; the
+* **`p3369` is writable.** `cf:swordmage-f2` is in the upstream text; the
   agent grepped for the *name*, which is the one thing deliberately
   stripped everywhere.
-* **The `chargen.BUILDS` gaps are the same story.** Upstream carries
-  Fighter Knight/Slayer/Weaponmaster, Rogue Scoundrel/Thief, four Wizard
-  builds, and for each one the skills and suggested powers. Every
+* **The `chargen.BUILDS` gaps are the same story.** Upstream carries three
+  fighter builds, two rogue builds, four wizard builds, and for each one the
+  skills and suggested powers. Every
   `blocked.json` note asking for "a leg in `chargen.BUILDS[...]`" has real
   text behind it.
 

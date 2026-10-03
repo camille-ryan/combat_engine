@@ -69,13 +69,13 @@ def p5111(c: Cast) -> None:
 )
 def p5112(c: Cast) -> None:
     """Standing up is the end of the prone condition, so that is what the
-    watch answers. Earthstrength holds the target down as well, and gives
+    watch answers. `cf:warden-f1s0` holds the target down as well, and gives
     the blow that follows the whole encounter to land in."""
     if not c.strike():
         return
     c.damage(c.w(), c.str_mod)
     victim = c.target
-    earth = c.build("earthstrength")
+    earth = c.build("f1s0")
     c.prone(held=When.EONT if earth else None)
 
     def on_stand(ev: ConditionEnded) -> None:
@@ -104,7 +104,7 @@ def p5113(c: Cast) -> None:
         return
     c.damage(c.w(2), c.str_mod)
     victim = c.target
-    far = 1 + c.wis_mod if c.build("wildblood") else 2
+    far = 1 + c.wis_mod if c.build("f1s3") else 2
 
     def on_shift(ev: MoveEnd) -> None:
         if ev.actor == victim and ev.kind_ == "shift":
@@ -131,7 +131,7 @@ def p5518(c: Cast) -> None:
     if not c.strike():
         return
     c.damage(c.w(), c.str_mod)
-    amount = 2 + c.wis_mod if c.build("lifespirit") else 3
+    amount = 2 + c.wis_mod if c.build("f1s1") else 3
     already = set(c.suffering(c.ref))
     for ally in c.in_squares(c.area(), side="ally"):
         if ally != c.me and ally not in already:
@@ -161,7 +161,7 @@ def p5574(c: Cast) -> None:
         c.prone(on=who)
     else:
         c.flat(5, dtype=DamageType.LIGHTNING, on=who)
-    if c.build("stormheart"):
+    if c.build("f1s2"):
         c.flat(c.con_mod, dtype=DamageType.LIGHTNING, on=who)
 
 
@@ -222,7 +222,7 @@ def p9835(c: Cast) -> None:
 )
 def p9836(c: Cast) -> None:
     if c.first:
-        c.move(4 + (c.wis_mod if c.build("wildblood") else 0))
+        c.move(4 + (c.wis_mod if c.build("f1s3") else 0))
     if c.strike():
         c.damage(c.w(2), c.str_mod)
 
@@ -240,7 +240,7 @@ def p9836(c: Cast) -> None:
 )
 def p9837(c: Cast) -> None:
     if c.strike():
-        c.damage(c.w(2), c.str_mod + (c.con_mod if c.build("earthstrength") else 0))
+        c.damage(c.w(2), c.str_mod + (c.con_mod if c.build("f1s0") else 0))
         c.slowed(until=When.EONT)
 
 

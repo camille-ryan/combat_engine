@@ -612,11 +612,17 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         Build("elemental", WIS, CON),
         Build("world speaker", WIS, CON),
     ),
+    # Named `fNsM` like the other 29 sub-option legs, so the slug *is* the
+    # suffix `wire.build` already resolves and no table has to pair the two.
+    # These four carried the printed names instead, and the pairing written to
+    # reconcile them had the middle two crossed: the page's options are
+    # Constitution, **Wisdom**, **Constitution**, Wisdom, and the secondaries
+    # here were Con, Con, Wis, Wis. #337.
     "warden": (
-        Build("earthstrength", STR, CON),
-        Build("lifespirit", STR, CON),
-        Build("stormheart", STR, WIS),
-        Build("wildblood", STR, WIS),
+        Build("f1s0", STR, CON),
+        Build("f1s1", STR, WIS),
+        Build("f1s2", STR, CON),
+        Build("f1s3", STR, WIS),
     ),
     # Seven pacts are printed and four had a leg, so three pact rows were
     # refused in play and their at-wills reached nobody. The three names
