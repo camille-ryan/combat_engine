@@ -402,6 +402,20 @@ RANK_COST = {"standard": 1, "elite": 2, "solo": 5}
 
 
 #: How much of the budget each rank in a paradigm should spend.
+#: What one creature of each rank is worth, in standard monsters. The printed maths,
+#: which `_compose`'s docstring already states: "An elite is two standards and a solo five".
+#:
+#: Used to work out what **one slot** of a rank should cost, which is what the fit window
+#: has to be centred on. Centring it on the whole group's share instead is #323: at level 5
+#: the elite window became 640-1040 against elites costing 300-700, so the only candidates
+#: that "fit" were the six costing 700 -- one of those was taken and `spent + cost >
+#: want * 1.1` then refused a second, so a two-elite encounter fielded **one** creature.
+#:
+#: At level 10 the same arithmetic let two through by accident, because no elite in the band
+#: cost enough to fill the budget alone. The body count was an accident of which elites
+#: happened to be written at a level, which is why it was right at one and wrong at another.
+WORTH = {"standard": 1.0, "elite": 2.0, "solo": 5.0, "minion": 0.25}
+
 COMPOSITION: dict[str, list[tuple[str, float]]] = {
     "standard": [("standard", 1.0)],
     "elites": [("elite", 1.0)],
@@ -562,7 +576,12 @@ def _compose(level: int, paradigm: str, draw: Random | None) -> list[str]:
         # from 120 to 165. Tuning one aggregate narrowed the sample until one bad
         # matchup was the whole measurement, which is the fault the paradigms exist
         # to prevent.
-        aim = max(want, 1.0)
+        # **What one creature of this rank should cost, not what the whole share
+        # should.** `want` is the group's budget; a fit test applied per candidate has to
+        # be centred on a single slot or it only ever admits creatures big enough to
+        # swallow the lot. `budget` is `SIDE` standards, so one standard is `total / SIDE`
+        # and the rest follows from `WORTH`. #323.
+        aim = max((total / SIDE) * WORTH.get(rank, 1.0), 1.0)
 
         def band(ref: str, c: dict[str, float] = costs, a: float = aim) -> int:
             return 0 if 0.8 * a <= c[ref] <= 1.3 * a else 1
