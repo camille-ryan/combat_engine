@@ -820,10 +820,49 @@ def reserved(world: Any, actor: int, worth: float) -> float:
                 T.effective_hp(world, ally) <= health.max_hp * 0.5:
             return 0.0
     other = Team.ENEMY if mine.team is Team.PC else Team.PC
-    ours = T.capacity(world, mine.team)
-    danger = (T.capacity(world, other) / ours) if ours else 1.0
-    need = min(1.0, danger / THRESHOLD) if THRESHOLD else 1.0
+    need = min(1.0, losing(world, mine.team, other) / THRESHOLD) if THRESHOLD else 1.0
     return worth * day * (1.0 - need)
+
+
+def losing(world: Any, ours: Any, theirs: Any) -> float:
+    """Who wins the race: rounds to kill us, over rounds to kill them.
+
+    Above 1.0 they drop us first and a limited row is what it is for; below 1.0 we are
+    ahead and spending one is waste. Both halves are hit points over hit points a round,
+    so the units cancel and the figure means the same thing at every level.
+
+    **This replaced a ratio of two `T.capacity` figures, which was not a difficulty
+    measure at all.** `capacity` is `sum(threat * effHP)` and `threat` is itself divided
+    by the *other* side's hit-point pool, so the ratio of two capacities multiplies both
+    pools back in and reads as neither side's danger. Measured at round one against a
+    level-10 party, with the paradigm held fixed per seed:
+
+        opposition built at   L-3    L+0    L+3
+        old capacity ratio   1.74   1.25   9.45     <- not even ordered
+        THRESHOLD was 1.0, so `need` saturated at 1.0 in all three arms and the
+        reservation charged **nothing** at round one, at any difficulty. Raising
+        THRESHOLD to 1.5 changed the level-5 arm not at all, which is what sent me
+        looking at the measure instead of the constant.
+    """
+    def output(team: Any) -> float:
+        return sum(T.per_round(world, e) for e in creatures(world)
+                   if alive(world, e)
+                   and (s := world.get(e, Side)) is not None and s.team is team)
+
+    def hp(team: Any) -> float:
+        return sum(float(T.effective_hp(world, e)) for e in creatures(world)
+                   if alive(world, e)
+                   and (s := world.get(e, Side)) is not None and s.team is team)
+
+    mine_out, their_out = output(ours), output(theirs)
+    if mine_out <= 0:
+        return 1.0 if their_out > 0 else 0.0
+    if their_out <= 0:
+        return 0.0
+    # Rounds each side needs. The ratio is "their clock over ours", so bigger is worse.
+    kill_them = hp(theirs) / mine_out
+    kill_us = hp(ours) / their_out
+    return kill_them / kill_us if kill_us else 1.0
 
 
 def conceded(world: Any, actor: int, foes: list[int]) -> float:
