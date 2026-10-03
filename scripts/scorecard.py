@@ -75,6 +75,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import fight
 from combat_engine.engine import Ident
 from combat_engine.engine.components import (
+    Budget,
     Build,
     Health,
     Position,
@@ -241,6 +242,25 @@ class Counted(D.DoctrinePolicy):
         got = super().act(world, encounter, actor, options)
         if got.kind == "charge":
             self.n[f"{side}/charge_taken"] += 1
+        if got.kind == "end":
+            # **Passed the turn with a standard action still in hand.** The guard on
+            # Camille's rule that `end` is the floor: once it sits at +0.001 instead
+            # of -2.0, anything the scorer cannot value scores 0 and *loses* to
+            # passing -- so the failure mode inverts. It used to be that an unnamed
+            # action kind became the idle default; now an unvalued one disappears,
+            # and the creature forfeits the rest of its turn with it.
+            #
+            # Measured at the moment it chose to pass rather than from `could`,
+            # which `setdefault`s on the turn's *first* decision and so answers a
+            # different question: a creature that attacked and then passed with a
+            # standard left is the case this has to catch.
+            #
+            # Excludes a turn where nothing but `end` was on offer, for the reason
+            # `could_not_act` exists -- that measures the board, not the policy.
+            budget = world.get(actor, Budget)
+            if budget is not None and budget.standard > 0 \
+                    and any(o.available and o.kind != "end" for o in options):
+                self.n[f"{side}/passed_holding_standard"] += 1
         if got.ref:
             spent = get(got.ref)
             if spent is not None and spent.usage is Usage.DAILY:
@@ -539,6 +559,8 @@ def measure(levels: tuple[int, ...]) -> dict:
                 "charge_offered": pol.n[f"{side}/charge_offered"],
                 "charge_taken": pol.n[f"{side}/charge_taken"],
                 "idle_melee": pol.n[f"{side}/idle_melee"],
+                "passed_holding_standard":
+                    pol.n[f"{side}/passed_holding_standard"],
                 "adjacent_idle": pol.n[f"{side}/adjacent_idle"],
                 "adjacent_helped": pol.n[f"{side}/adjacent_helped"],
                 "could_not_act": pol.n[f"{side}/could_not_act"],
@@ -577,6 +599,7 @@ ROWS = [
     ("charge_offered", "charges offered", "-"),
     ("idle_melee", "out of reach and did not close", "lower"),
     ("adjacent_idle", "adjacent to an enemy and did nothing", "lower"),
+    ("passed_holding_standard", "passed the turn with a standard in hand", "lower"),
     # Not "lower is better": a leader beside an enemy buffing the party is doing
     # its job, so this is a reading rather than a fault. Printed next to the line
     # it was split out of, so the pair is read together.

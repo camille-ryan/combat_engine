@@ -515,6 +515,16 @@ class Memory:
 #: Hand-set weights over `features`. A fitted policy replaces this dict and
 #: nothing else, which is the point of scoring through named features.
 WEIGHTS: dict[str, float] = {
+    # **Still here, and the measurement is why.** #314 wants this gone -- it was
+    # 22.7% of all weighted magnitude, more than twice the measured term under it --
+    # and deleting it cost: level-10 median rounds 7.0 -> 10.0, party drops 31 -> 71,
+    # 12 turns passed with a standard still in hand and 14 melee creatures that
+    # stopped out of reach.
+    #
+    # The reason is #326: a row that rolls its damage inside its body probes 0.0
+    # **93% of the time**, so `hp_swing` cannot see most of what a creature owns, and
+    # this flat 6.0 is what has been carrying those rows. Delete it first and they
+    # stop being played at all. So #326 gates this, not the other way round.
     "is_power": 6.0,
     # A power point, priced a little above what one more enemy caught is
     # worth. Points refresh every encounter, so hoarding them to the end
@@ -526,7 +536,21 @@ WEIGHTS: dict[str, float] = {
     # to earn itself through `closes_distance`. Make ending much worse than
     # moving and the creature shuffles every turn it cannot attack, which is
     # what the first version of these numbers did.
-    "is_end": -2.0,
+    # **The floor, and the whole shape of the table now rests on it.** Camille's
+    # rule: ending the turn is what you do once everything else is worth nothing,
+    # so it sits a hair above zero and anything achieving nothing loses to it.
+    #
+    # At -2.0 the failure mode was that an action kind the scorer did not name
+    # scored 0 and *beat* passing, which `features` records happening six separate
+    # times -- a weapon swap twelve times a fight, eighty-three stance swaps. At
+    # +0.001 it inverts: an action whose value is unseen scores 0 and vanishes from
+    # play, taking the rest of the turn with it. That is the strictly better of the
+    # two failures because it is *visible* -- `scorecard.passed_holding_standard`
+    # counts it, and reads 0 where breaking `is_end` on purpose took it to 2,825.
+    #
+    # Not 0.0: an inert action also scores 0, and a tie there would be broken by
+    # `str(action)` rather than by preferring to pass.
+    "is_end": 0.001,
     "is_move": -1.0,
     "is_stand": 3.0,
     # The same shape as standing up -- a move action spent to shed a
@@ -570,6 +594,16 @@ WEIGHTS: dict[str, float] = {
     # separation is worth, and this is flat rather than a share for the reason the
     # note in `doctrine` gives about mixing currencies.
     "shoved_from_prey": 2.0,
+    # **Kept, against the plan, because the measurement said so.** `reach_gained` is
+    # the same question in hit points and ought to replace this -- but `best_from` is
+    # a **step**, not a gradient: non-zero inside charge range, zero outside, flat
+    # within. So a creature ten squares out gains nothing by closing to seven and
+    # simply stops, which `best_from`'s own docstring already records ("`idle_melee`
+    # went from 10 to 42 when `closes_distance` was removed and this was all that was
+    # left"). Deleting it here reproduced that exactly: 0 -> 43 at level 5 and
+    # 12 -> 65 at level 10, with median rounds 5.0 -> 8.0.
+    #
+    # So this stays until `reach_gained` is a gradient. #293 is where that happens.
     "closes_distance": 2.0,
     "nearest_enemy": -0.1,
     # Worth about one attack, which is what it hands over.
@@ -637,6 +671,9 @@ WEIGHTS: dict[str, float] = {
     # is not a power -- so it is handed back here, or a charge is
     # systematically six points worse than the same swing standing still
     # and nothing ever charges.
+    # Held back with `is_power`, which it has to move with: a charge competes
+    # directly against an ordinary attack, so removing one flat 6.0 and not the other
+    # would just make charging always win.
     "is_charge": 6.0,
     # Keeping something alive that is already paid for.
     "is_sustain": 3.0,
