@@ -50,7 +50,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from combat_engine.engine.components import Defenses, Health, Ident, Position, Powers, Side
+from combat_engine.engine.components import Health, Ident, Position, Powers, Side
 from combat_engine.engine.durations import When
 from combat_engine.engine.query import alive, creatures
 from combat_engine.engine.types import (
@@ -130,29 +130,75 @@ def clear() -> None:
 
 
 def _level_of(world: Any, eid: int) -> int:
+    """What level this creature is, for building a baseline to measure it against.
+
+    **`Ident` has no `level` field and never had one.** It carries `ref`, `tag`,
+    `book` and `role`. So `getattr(ident, "level", 1) or 1` returned the *default*
+    for every creature on every board, and the scratch opponent in `board` has been
+    a **level-1** dummy at every level since this module was written:
+
+        level  1    AC 15, hp 32     <- what it has always built
+        level  5    AC 19, hp 64
+        level 10    AC 24, hp 104
+
+    At level 10 that is nine points of AC and a third of the hit points, so every
+    `row_damage` figure was overstated, and overstated *more* the higher the level
+    because the gap widens. Everything built on it inherits that: `expected_vs`,
+    `potential`, `output`, `threat`, and therefore the whole of `hp_swing`.
+
+    A textbook silently-false read of the kind this component's file opens with --
+    `getattr` with a default cannot tell "the field says 1" from "there is no such
+    field", and nothing raised for as long as the module has existed.
+
+    `Stats.level` is the real source and is populated for characters and monsters
+    alike. `Ident` is still consulted first in case anything ever does set it.
+    """
+    from combat_engine.engine.components import Stats
+
     ident = world.get(eid, Ident)
-    return getattr(ident, "level", 1) or 1
+    got = getattr(ident, "level", None)
+    if got:
+        return int(got)
+    stats = world.get(eid, Stats)
+    return int(getattr(stats, "level", 1) or 1)
 
 
 def board(world: Any, eid: int) -> tuple[Any, int, int] | None:
     """A fresh board holding a copy of `eid` and the baseline opponent.
 
     The baseline is the one `docs/AI_DOCTRINE.md` names and the monster corpus
-    sits on -- AC 14 + level, other defences 11 + level, hp 24 + 8 x level.
+    sits on: **`content.dummy`**, which is that baseline made into a thing so each
+    instrument does not have to rebuild it. `scripts/expect.py` already uses it for
+    exactly this and `audit.py` provokes rows against it.
 
-    **The opponent is a second copy of the same creature**, with its powers
-    stripped and every defence overwritten. That reads oddly and is deliberate:
-    it gives a complete, valid creature to attack without this module reaching
-    into `content/` for a template, which the component file forbids -- there are
-    five `engine` -> `content` sites and a sixth is not to be added. What remains
-    of the original on it is never consulted, because it does not act and its
-    defences no longer depend on it.
+    **This used to assemble its own opponent** -- a second deep copy of the caster
+    with its powers stripped and every defence overwritten -- to avoid importing
+    `content` from here. Two reasons that is gone:
 
-    Its powers are stripped for a measured reason: left in place, one common
-    creature's immediate interrupt makes an attacker reroll on being hit, which
-    turned a third of landed hits back into misses and made the closed form look
-    wrong by a third when it was the board that was wrong.
+    * The seam objection was **stale**. It cited "five `engine` -> `content` sites and
+      a sixth is not to be added", which is `engine/CLAUDE.md`'s rule; this module
+      moved to `policy/` in #228 and `engine/CLAUDE.md:90` says so. `content` imports
+      nothing from `policy`, so the edge is legal and cycle-free. It is still a new
+      component seam and the commit says so.
+    * Duplicating the figures had already produced a **wrong number**. It flattened
+      all three non-AC defences to `level + 11`; `dummy.OVER_LEVEL` is
+      `{AC: 14, FORT: 12, REF: 12, WILL: 11}` and `scripts/expect.py` records why --
+      measured across **1,997 standard monsters**, Fortitude and Reflex sit at
+      `level + 12` and only Will at `level + 11`. So every row targeting Fort or Ref
+      was priced against a target a point softer than the corpus, in the module that
+      now supplies the whole of `hp_swing`.
+
+    `dummy` also brings `scale="monster"` on its defences and initiative, which the
+    hand-rolled version did not: without it, `--scaling bounded` would not bound the
+    opponent and a bounded measurement was measuring something else.
+
+    Its two rows are `dummy:mba` and `dummy:rba` and that is the feature. A real
+    creature's own powers left in place were the original bug: one common creature's
+    immediate interrupt makes an attacker reroll on being hit, which turned a third
+    of landed hits back into misses and made the closed form look wrong by a third
+    when it was the board that was wrong.
     """
+    from combat_engine.content import dummy
     from combat_engine.engine.ecs import World
     from combat_engine.engine.events import Bus
     from combat_engine.engine.grid import Grid
@@ -165,29 +211,16 @@ def board(world: Any, eid: int) -> tuple[Any, int, int] | None:
         parts = world.components_of(eid)
         w = World(Grid(16, 12), Rng(0), Bus())
         me = w.spawn(*[copy.deepcopy(c) for c in parts])
-        foe = w.spawn(*[copy.deepcopy(c) for c in parts])
-        mine, theirs = w.get(me, Side), w.get(foe, Side)
+        mine = w.get(me, Side)
         if mine is not None:
             mine.team = Team.PC
-        if theirs is not None:
-            theirs.team = Team.ENEMY
-        got = w.get(foe, Powers)
-        if got is not None:
-            got.known.clear()
-        hp = w.get(foe, Health)
-        if hp is not None:
-            hp.max_hp = hp.hp = 24 + 8 * level
-        d = w.get(foe, Defenses)
-        if d is not None:
-            d.values[Defense.AC] = level + 14
-            for nad in (Defense.FORT, Defense.REF, Defense.WILL):
-                d.values[nad] = level + 11
+        foe = dummy.spawn(w, level, HOME[1], team=Team.ENEMY)
         # An encounter has to be running or nothing a class feature arms is
         # armed -- which is exactly where a rogue's extra damage lives, and the
         # whole of what #249 was about.
         Encounter(w).start()
-        place(w, me, (4, 6))
-        place(w, foe, (5, 6))
+        place(w, me, HOME[0])
+        place(w, foe, HOME[1])
     except Exception:
         # A creature that cannot be rebuilt gets no threat rather than crashing
         # a turn. `raw` then reports zero, which reads as "harmless" when it
