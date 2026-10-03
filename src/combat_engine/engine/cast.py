@@ -5691,6 +5691,29 @@ class Cast:
             for w in gear.weapons
         ]
 
+    def revives_unless(self, *types: DamageType, on: int | None = None) -> None:
+        """Say that this creature gets back up unless finished with `types`. #318.
+
+        **Declaration only -- it implements nothing.** The row's own body is what
+        keeps the creature alive, by watching its `Dropped` and healing inside that
+        window, and it was already right. This records the *fact* so a policy can
+        read it, because the scorer had no way to know the body on the floor was
+        going to stand up: `threat_removed` skips anything at or below 0 hit points,
+        so a troll lying at 0 was worth nothing to attack and the one row that ends
+        it was never the best thing to do. Three of 24 level-10 fights ran to the
+        40-round cap on exactly that, with the party healthy and the troll on 2 of
+        109.
+
+        Deliberately not a `Mod`: a modifier is a number read with a context, and
+        this is a set of damage types. `Undying` holds it for the encounter.
+        """
+        from .components import Undying
+
+        who = self._who(on)
+        if who is None:
+            return
+        self.world.add(who, Undying(by=frozenset(types)))
+
     def regeneration(
         self,
         amount: int,

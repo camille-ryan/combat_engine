@@ -1044,6 +1044,39 @@ def _cover_from_enemies(world: Any, actor: int, where: Any) -> int:
     return _COVER[key]
 
 
+
+def _undying(world: Any, target: int) -> bool:
+    """Does this creature get back up when something drops it? #318."""
+    from combat_engine.engine.components import Undying
+
+    mark = world.get(target, Undying)
+    return mark is not None and bool(mark.by)
+
+
+def _finishes(world: Any, target: int, ref: str) -> float:
+    """How much capacity ending an undying creature would remove, or 0. #318.
+
+    Zero unless the target has declared `Undying` **and** this row deals one of
+    the damage types that finishes it. A row that cannot finish it is worth
+    nothing against a body at 0 hit points: it drops it again and it still gets
+    up, which is exactly what forty rounds of a fight looked like.
+
+    The figure is the creature's threat-weighted durability **at full**, not what
+    is left of it, because what is being removed is the creature -- it is about to
+    stand up with its hit points back. That is the one place in this term where a
+    maximum is the honest denominator.
+    """
+    from combat_engine.engine.components import Undying
+
+    mark = world.get(target, Undying)
+    if mark is None or not mark.by:
+        return 0.0
+    if not (set(T.row_types(ref)) & set(mark.by)):
+        return 0.0
+    health = world.get(target, Health)
+    return float(health.max_hp) if health is not None else 0.0
+
+
 def doctrine_features(
     world: Any, encounter: Encounter, actor: int, action: Action
 ) -> dict[str, float]:
@@ -1071,7 +1104,9 @@ def doctrine_features(
             if theirs.team is mine.team or not alive(world, t):
                 continue
             health = world.get(t, Health)
-            if health is None or health.hp <= 0:
+            if health is None:
+                continue
+            if health.hp <= 0:
                 continue
             # **Rounds of damage denied, which is what makes control comparable
             # with killing.** Camille's rubric: a kill takes all three rounds, an
@@ -1113,13 +1148,29 @@ def doctrine_features(
             # close to dead the target is, and the denominator is the whole side, so
             # the figure stays the share of enemy capability it always was.
             took = T.threat(world, t) * min(dealt, effhp)
+            # **An undying creature, and the blow that would drop it.** #318.
+            # Damage above 0 sticks normally, so an ordinary swing at a healthy
+            # troll wears it down and is priced as such. The blow that *reduces it
+            # to 0* is the one the clause is about: a finisher removes the creature
+            # and anything else resets it to 1 and it stands up with ten. So that
+            # blow is worth the whole creature or it is worth nothing, and nothing
+            # is why three of 24 level-10 fights ran to the 40-round cap with the
+            # party healthy and the troll on 2 of 109.
+            #
+            # Read off a declared `Undying`, not guessed: the row implementing the
+            # clause now says so, and a policy cannot read a body.
+            if dealt >= effhp and _undying(world, t):
+                took = (T.threat(world, t) * float(health.max_hp)
+                        if _finishes(world, t, action.ref) else 0.0)
             # Control, in the same currency: the creature's whole contribution,
             # withheld for the rounds denied. Capped with the damage at what the
             # creature had to give, so overkill and a stack of conditions cannot
             # between them remove more than all of it.
             took += (T.threat(world, t) * effhp
                      * min(denied, float(T.ROUNDS)) / T.ROUNDS)
-            removed += min(took, T.threat(world, t) * effhp) / (cap or 1.0)
+            ceiling = T.threat(world, t) * max(
+                effhp, float(health.max_hp) if _undying(world, t) else 0.0)
+            removed += min(took, ceiling) / (cap or 1.0)
             # The other sign: an effect that makes it easier for the party to hit
             # does not reduce its damage, so `denial` cannot see it at all.
             gained_hp += T.enabled(world, t, laid)

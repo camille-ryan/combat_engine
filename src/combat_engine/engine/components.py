@@ -186,6 +186,28 @@ class Movement:
 
 
 @dataclass
+class Undying:
+    """This creature gets back up unless it is finished with one of `by`.
+
+    A troll clause: "reduced to 0 hit points by an attack that does not deal acid
+    or fire damage, it falls prone and remains at 0 until the start of its next
+    turn, when it regains 10 hit points."
+
+    **Declared so a policy can read it**, which is the whole reason this exists as
+    a component rather than staying inside the row's body. The body already
+    implements the mechanic correctly by watching its own `Dropped`; what nothing
+    could see was that the creature *will* get up, so `threat_removed` scored it at
+    nothing once it hit 0 and the party had no reason to spend the one row that
+    ends it. Three of 24 level-10 fights ran to the round cap on that. #318.
+
+    Empty `by` means nothing finishes it, which no printed row says; a row that
+    declares this names its types.
+    """
+
+    by: frozenset[DamageType] = field(default_factory=frozenset)
+
+
+@dataclass
 class Defences:
     """Damage the creature shrugs off or takes worse, by type."""
 

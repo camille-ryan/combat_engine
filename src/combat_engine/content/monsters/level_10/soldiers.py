@@ -639,6 +639,11 @@ def m1578a2(c: Cast) -> None:
     """
     me = c.me
     down = f"{c.ref} down"
+    # **Declared as well as implemented.** The watch below is the mechanic; this
+    # tells the scorer the body on the floor is going to stand up, which it had no
+    # way to know -- so it priced a troll at 0 hit points as worth nothing and the
+    # fight ran to the round cap. #318.
+    c.revives_unless(*CAUTERISING, on=me)
 
     def get_up() -> None:
         health = c.world.get(me, Health)
