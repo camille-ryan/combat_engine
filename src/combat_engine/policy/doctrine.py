@@ -1675,6 +1675,83 @@ class DoctrinePolicy:
             total += 12.0 * (1.0 + 1.5 * (0.5 - hurt) / 0.5)
         return total
 
+    def trigger(
+        self, world: Any, encounter: Encounter, actor: int,
+        options: list[Any], prompt: str,
+    ) -> Any:
+        """Take a triggered row, or decline it. #313.
+
+        **Nothing scored these at all.** `triggers._ask` offers `[ref, ""]` with
+        taking it first -- deliberately, because with no policy installed a
+        declared reaction that never fired would be the harder bug -- and
+        `decide` had no `"trigger"` branch, so it fell through to `options[0]`
+        and the answer was always yes. The whole triggered half of the game
+        bypassed both weight tables, `allies_caught` included. Measured: a
+        monster free-action close burst 5 that hits every other creature fired
+        on round 1 against `targets=[5, 6]`, its own two allies and no enemies.
+
+        **Declined only when it catches allies and no enemies at all**, which is
+        deliberately narrower than "scores badly". The first attempt declined on
+        `score < 0` and that was far too aggressive: a legitimate reaction scores
+        unimpressively rather than positively -- `usage_encounter` alone is -0.5
+        and `inert_costs_turn` is -6.0 for a row whose benefit the scorer cannot
+        see -- so immediate interrupts went from **4 to 0** in one fight and six
+        distinct triggered rows stopped firing. A reaction competes with nothing;
+        the alternative is that nothing happens. So the bar is "is this actively
+        self-harming", not "is this good".
+
+        That bar cannot suppress a row which helps anybody, and that is what makes
+        it safe to ship before the weights are sorted out. The mixed case -- a
+        burst catching four enemies and one ally -- is left to `allies_caught`,
+        and pricing that properly is #314.
+
+        **Self is not an ally here**, matching `features`' own `t != actor` rule: a
+        self-targeting interrupt aims at exactly one creature, the caster, and has
+        to keep firing.
+
+        Targets come from `dsl.candidates`, the same enumerator `actions.legal`
+        uses, because a trigger's targets are not known until it runs and a
+        self-centred burst's are geometric. No targets means nothing to decline
+        on, which is right for a self-buff.
+        """
+        from combat_engine.engine.components import Side
+        from combat_engine.engine.dsl import candidates, get
+
+        ref = options[0] if options else ""
+        if not isinstance(ref, str) or not ref:
+            return options[0] if options else ""
+        row = get(ref)
+        if row is None:
+            return ref
+        # **Help is not friendly fire**, and leaving this out was a measured
+        # regression rather than a theoretical one: a heal or a buff reaction
+        # names allies and no enemies, which is exactly the shape declined below,
+        # so the party's defensive reactions were switched off and `dropped to 0
+        # hp` at level 10 went **58 -> 90**. `score` carries the same exemption
+        # for `allies_caught` and this has to mirror it.
+        if benefits(ref):
+            return ref
+        decline = next((o for o in options if o != ref), ref)
+        try:
+            aimed = tuple(candidates(world, actor, row))
+        except Exception:
+            return ref
+        mine = world.get(actor, Side)
+        if mine is None or not aimed:
+            return ref
+        friends = foes = 0
+        for t in aimed:
+            if t == actor:
+                continue
+            theirs = world.get(t, Side)
+            if theirs is None:
+                continue
+            if theirs.team is mine.team:
+                friends += 1
+            else:
+                foes += 1
+        return decline if friends and not foes else ref
+
     def decide(
         self, world: Any, actor: int, kind: str, options: list[Any], prompt: str
     ) -> Any:

@@ -691,6 +691,16 @@ def install(
         return policies.get(side.team, fallback) if side else fallback
 
     def decide(actor: int, kind: str, options: list[Any], prompt: str) -> Any:
+        # **`"trigger"` is routed to its own hook because it needs the
+        # encounter**, which `decide` is not given and `react` already is. Asked
+        # through `getattr` so a policy without the hook -- a human interface, a
+        # test stub -- keeps the old behaviour of answering through `decide`
+        # rather than crashing. #313.
+        if kind == "trigger":
+            policy = owner(actor)
+            ask = getattr(policy, "trigger", None)
+            if ask is not None:
+                return ask(world, encounter, actor, options, prompt)
         return owner(actor).decide(world, actor, kind, options, prompt)
 
     world.decider = decide
