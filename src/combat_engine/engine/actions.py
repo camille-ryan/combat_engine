@@ -466,23 +466,46 @@ def _aiming_branch(world: World, actor: int, ref: str, p, branch: int, cost: Act
     if not p.is_attack_at(augment):
         return [act()]
 
-    if reach.kind == "close_blast":
-        # One option per place the blast can be laid down, keyed by the square
-        # it is aimed at -- for a blast 3 that is the ring two squares out.
+    def aimed(origins: list[Square]) -> list[Action]:
+        """One option per place the area can be laid down, honouring its target line.
+
+        **The target line used to be ignored here**, so a blast or burst whose printed
+        target is "one creature" hit *everyone* in its footprint. 19 attack rows declare an
+        area with a capped target line -- 14 at one creature, three at two, two at three --
+        and the path below for non-area rows has always honoured both `everyone` and
+        `count`. #322.
+
+        The worked case: `m493a7` is `Close blast 10, Target: one creature`, an at-will
+        minor whose whole hit line is a slide -- its own docstring says "No damage at all".
+        Offered against a four-character party it became a four-target power, and one solo
+        used it **28 times across 9 turns, 72 of its 77 attack rolls, for 0 damage**. The
+        inflated target count is also what made it win the comparison, so this and the
+        policy's per-body terms were feeding each other.
+
+        `count == 1` **enumerates** rather than capping, which is what the non-area path
+        does and for the same reason: capping to `hit[:1]` would silently pick the first
+        creature in sort order on the caster's behalf, and which one is hit is the
+        interesting half of the choice.
+        """
         out = []
-        for aim in aim_points(world, actor, p, augment):
-            hit = candidates(world, actor, p, aim, branch, augment)
-            if hit:
-                out.append(act(targets=tuple(hit), origin=aim))
+        for origin in origins:
+            hit = candidates(world, actor, p, origin, branch, augment)
+            if not hit:
+                continue
+            if aim_at.everyone:
+                out.append(act(targets=tuple(hit), origin=origin))
+            elif aim_at.count == 1:
+                out.extend(act(targets=(t,), origin=origin) for t in hit)
+            else:
+                out.append(act(targets=tuple(hit[: aim_at.count]), origin=origin))
         return out
 
+    if reach.kind == "close_blast":
+        # Keyed by the square it is aimed at -- for a blast 3 that is the ring two out.
+        return aimed(aim_points(world, actor, p, augment))
+
     if reach.kind == "area_burst":
-        out = []
-        for origin in _burst_origins(world, actor, p, augment):
-            hit = candidates(world, actor, p, origin, branch, augment)
-            if hit:
-                out.append(act(targets=tuple(hit), origin=origin))
-        return out
+        return aimed(_burst_origins(world, actor, p, augment))
 
     pool = candidates(world, actor, p, None, branch, augment)
     if aim_at.everyone:
