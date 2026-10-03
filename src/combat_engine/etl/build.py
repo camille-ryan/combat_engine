@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import threading
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -2705,23 +2706,49 @@ def _digest(path: Path) -> str:
     return h.hexdigest()
 
 
-@lru_cache(maxsize=1)
+#: One connection per **thread**, not per process.
+#:
+#: This was `@lru_cache(maxsize=1)` plus `check_same_thread=False`, with a docstring
+#: reasoning that "read-only, so sharing it is safe". That is not what
+#: `check_same_thread` does: it makes sqlite3 *permit* cross-thread use, it does not
+#: serialise it. One `Connection` has shared statement and cursor state, so two threads
+#: executing on it interleave -- read-only prevents the *data* being corrupted, not one
+#: thread's `fetchone()` being answered from another thread's cursor.
+#:
+#: Measured. `POST /api/encounter` runs on a FastAPI worker thread, deliberately
+#: (`api/app.py:113-118`), and eight concurrent creates returned **seven 500s and one
+#: 200**. The tracebacks all landed in `content/loader.load` and `loader.pick`, with
+#: `KeyError: 'no monster m1010'` for a ref that exists and `IndexError: tuple index out
+#: of range` -- the two classic shapes of a cursor read from the wrong thread. Run
+#: sequentially the same eight all returned 200.
+#:
+#: It also made `scripts/browser.py` -- the entire cover for `web/` -- non-deterministic:
+#: 5 failures, then 3, then 3, on byte-identical code.
+_connections = threading.local()
+
+
 def _open_game() -> sqlite3.Connection:
-    if not GAME.exists():
-        raise SystemExit(f"{GAME} is missing. Run: uv run scripts/build.py")
-    db = sqlite3.connect(f"file:{GAME}?mode=ro", uri=True, check_same_thread=False)
-    db.row_factory = sqlite3.Row
+    db = getattr(_connections, "game", None)
+    if db is None:
+        if not GAME.exists():
+            raise SystemExit(f"{GAME} is missing. Run: uv run scripts/build.py")
+        # `check_same_thread` can go back to its default now: each connection is only
+        # ever touched by the thread that opened it, which is the actual invariant.
+        db = sqlite3.connect(f"file:{GAME}?mode=ro", uri=True)
+        db.row_factory = sqlite3.Row
+        _connections.game = db
     return db
 
 
 def game() -> sqlite3.Connection:
     """The built database. The engine reads this, never the compendium.
 
-    One connection per process. It used to open a fresh one on every call,
-    and `loader.spawn` calls it several times per creature -- so building an
-    audit board opened six connections, and an audit builds a hundred
-    thousand boards. Read-only, so sharing it is safe; `check_same_thread`
-    is off because the API serves its blocking handlers from a threadpool.
+    One connection per thread, opened once and kept. It used to open a fresh one on
+    every call, and `loader.spawn` calls it several times per creature -- so building an
+    audit board opened six connections, and an audit builds a hundred thousand boards.
+    That optimisation is intact; what changed is that the cache is per thread rather than
+    per process, because a `sqlite3.Connection` cannot be used from two at once. See
+    `_connections`.
     """
     return _open_game()
 
