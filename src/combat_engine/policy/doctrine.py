@@ -202,6 +202,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass, field
+from itertools import pairwise
 from typing import Any
 
 from combat_engine.engine.actions import Action
@@ -665,12 +666,30 @@ def _square_of(world: Any, eid: int) -> Any:
 #: -0.25 where the flat penalty alone is -9.
 
 
-def provokers(world: Any, actor: int, dest: Any) -> list[int]:
+def provokers(world: Any, actor: int, dest: Any, path: Any = ()) -> list[int]:
     """Which enemies would get a free swing if `actor` walked to `dest`.
 
     `policy._would_provoke` answers the same question as a boolean; this needs the
     creatures themselves, because the *cost* of provoking is what each of them
     would do with the swing and they do not all hit equally hard.
+
+    **Walks the path, because `movement.step` does.** #330. This compared only the
+    square being left and the square being arrived at, so a route that stepped into
+    an enemy's reach and straight back out provoked in play and was invisible here --
+    and `_would_provoke` had the identical test, so the flat `-5.0` it used to price
+    was charged on the same partial reading. Measured before the fix:
+    `threat_conceded` was non-zero on 57 chosen actions while the party conceded
+    about 93 opportunity attacks.
+
+    The kernel's rule is per step: whoever is in reach before a step provokes if they
+    are out of reach after it (`movement.py:144-158`). So the test is the same, once
+    per pair of squares along the route, and a foe is collected once however many
+    times the route crosses it.
+
+    `path` is `Action.path`, which `legal` fills for `move`, `run` and `charge`.
+    Without it the route is just the two ends, which is the old behaviour and is
+    right for a `shift` -- whose path *is* its destination, and which provokes
+    nothing anyway.
     """
     from combat_engine.engine.grid import distance
 
@@ -679,13 +698,15 @@ def provokers(world: Any, actor: int, dest: Any) -> list[int]:
     here = _square_of(world, actor)
     if here is None or dest is None:
         return []
+    route = [here, *path] if path else [here, dest]
     out = []
     for foe in foes(world, actor):
         reach = _reach_of(world, foe)
         there = _square_of(world, foe)
         if there is None:
             continue
-        if distance(here, there) <= reach and distance(dest, there) > reach:
+        near = [distance(sq, there) <= reach for sq in route]
+        if any(was and not now for was, now in pairwise(near)):
             out.append(foe)
     return out
 
@@ -1247,7 +1268,7 @@ def doctrine_features(
             # **What the move costs and what it buys, in one currency.** Both are
             # shares of a side's health, so they are directly comparable and the
             # trade is arithmetic rather than a pair of hand-set constants.
-            giving = provokers(world, actor, dest)
+            giving = provokers(world, actor, dest, action.path)
             if giving:
                 f["threat_conceded"] = conceded(world, actor, giving)
             gained = best_from(world, actor, dest) - best_from(world, actor, here)
