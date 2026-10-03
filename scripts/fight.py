@@ -69,6 +69,9 @@ def build(
         enemies=enemies,
     )
     world = fielded.world
+    # Beside `world.scaling` and `world.monster_math`, which are set the same way
+    # and for the same reason: the log has to be able to say what it was.
+    world.paradigm = fielded.paradigm
     if not fielded.enemies:
         raise SystemExit(
             "no monster anywhere has all of its abilities written.\n"
@@ -166,6 +169,7 @@ def main() -> int:
 
     print(
         f"seed {args.seed}   level {args.level}   "
+        f"encounter {getattr(world, 'paradigm', '?')}   "
         f"scaling {world.scaling.describe()}   "
         f"monsters {world.monster_math.describe()}"
     )

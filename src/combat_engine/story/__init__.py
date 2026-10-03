@@ -65,6 +65,9 @@ class Fielded:
     #: The level the opposition came from. Lower than asked for when content at
     #: the asked-for level is not written yet, which the caller may want to say.
     found_at: int = 0
+    #: Which shape of encounter this is -- see `PARADIGMS`. `"named"` when the
+    #: caller named the monsters outright, which `replay.py` does.
+    paradigm: str = ""
 
 
 # -- what survives a fight --------------------------------------------------
@@ -386,7 +389,59 @@ def mixed(pool: list[str]) -> list[str]:
     return out
 
 
-def opposition(level: int, draw: Random | None = None) -> tuple[list[str], int]:
+#: What an encounter can look like, and Camille's list. Every one of them spends
+#: the party's XP budget, which is the thing the bare draw did not do: it took four
+#: creatures whatever their rank, so **11 of 24 level-10 draws came out over
+#: budget** -- three of them at 4,000 XP and one at 6,000, against a standard 2,000.
+#: An elite is worth two standards and a solo five, so "four creatures" is a count
+#: and not a budget.
+PARADIGMS = ("standard", "leader", "elites", "solo")
+
+#: How many standards' worth each rank costs, from the printed maths.
+RANK_COST = {"standard": 1, "elite": 2, "solo": 5}
+
+
+#: How much of the budget each rank in a paradigm should spend.
+COMPOSITION: dict[str, list[tuple[str, float]]] = {
+    "standard": [("standard", 1.0)],
+    "elites": [("elite", 1.0)],
+    "solo": [("solo", 1.0)],
+    "leader": [("standard", 0.5), ("minion", 0.5)],
+}
+
+#: How far either way a fight may reach for a monster. Camille's call, and it is
+#: what the printed encounter-building rules allow.
+BAND = 3
+
+#: The most creatures one rank's share may field. Minions are a quarter of a
+#: standard, so half a budget buys eight of them at the party's level and more from
+#: lower down the band; past about a dozen a fight is a bookkeeping exercise.
+MOST = 12
+
+
+def budget(level: int) -> int:
+    """The XP a standard encounter for this party is worth.
+
+    One standard monster of the party's level per character, which is the printed
+    rule. Read off the database rather than from a table here, so it cannot
+    disagree with what the monsters are actually worth.
+    """
+    from combat_engine.etl.build import game
+
+    # **A *standard* monster's XP**, which the rank filter is for: taking the
+    # first row with an XP at all picked up a solo at 2,500 and declared the
+    # budget 10,000, which fielded 48 creatures on a 16x12 board.
+    row = game().execute(
+        "SELECT xp FROM monster WHERE level = ? AND minion = 0 AND xp > 0 "
+        "AND (rank IS NULL OR rank = 'standard') LIMIT 1",
+        (level,),
+    ).fetchone()
+    return (row[0] if row else 0) * SIDE
+
+
+def opposition(
+    level: int, draw: Random | None = None, paradigm: str | None = None,
+) -> tuple[list[str], int, str]:
     """Monsters to field, and the level they came from.
 
     Falls back down the levels while content is thin: a fight against nothing is
@@ -407,15 +462,86 @@ def opposition(level: int, draw: Random | None = None) -> tuple[list[str], int]:
     than four brutes.
     """
     for candidate in range(min(max(level, 1), 13), 0, -1):
-        pool = loader.pick(candidate, limit=0)
-        if pool:
-            if draw is not None and len(pool) > SIDE:
-                # Three times the slots, so `mixed`'s role interleave still has
-                # something to interleave.
-                pool = draw.sample(pool, min(len(pool), SIDE * 3))
-            return mixed(pool), candidate
-    return [], level
+        want = paradigm or (draw.choice(PARADIGMS) if draw else "standard")
+        fielded = _compose(candidate, want, draw)
+        # **Falls back to `standard` rather than to nothing.** A level with no
+        # usable solo is the ordinary case -- there are two at level 10 and two at
+        # level 5 -- and refusing the fight would make the paradigm a coin that
+        # sometimes returns an empty board.
+        if not fielded and want != "standard":
+            want = "standard"
+            fielded = _compose(candidate, want, draw)
+        if fielded:
+            return fielded, candidate, want
+    return [], level, "standard"
 
+
+def _compose(level: int, paradigm: str, draw: Random | None) -> list[str]:
+    """The refs for one paradigm, filled to the XP budget. `[]` if unbuildable.
+
+    **Filled by XP rather than counted**, which is what reaching three levels
+    either way forces: a level-7 standard is not worth a level-10 one, so "four
+    creatures" stopped being a budget the moment the band opened. An elite is two
+    standards and a solo five by the printed maths, and this reads the real figure
+    off each row rather than assuming it.
+
+    **Fits to the budget rather than filling past it.** Taking each creature in
+    turn until the total was reached overshot every time -- a leader-and-minions
+    came out at 122-129% and two elites drawn from the top of the band at 130% --
+    because the last creature taken is the one that breaks the ceiling. A
+    candidate is skipped when it would, unless nothing has been taken yet.
+
+    **Nearest the party's level first.** The band exists so a fight has a choice,
+    not so a level-5 party meets a level-8 solo; sorting by distance keeps the
+    band as variety rather than as difficulty.
+    """
+    from combat_engine.etl.build import game
+
+    db = game()
+    total = budget(level)
+    if not total:
+        return []
+    out: list[str] = []
+    for rank, share in COMPOSITION.get(paradigm, COMPOSITION["standard"]):
+        # **A solo is the encounter, so it does not get the band.** Its whole
+        # point is one creature matched to the party, and three levels of slack
+        # on a creature worth five standards is the difference between a fight
+        # and a formality in either direction.
+        reach = 1 if rank == "solo" else BAND
+        pool = loader.pick(
+            level, limit=0, band=reach,
+            rank=None if rank == "minion" else rank, minion=rank == "minion",
+        )
+        if not pool:
+            return []
+        costs: dict[str, float] = {}
+        depth: dict[str, int] = {}
+        for ref in pool:
+            row = db.execute(
+                "SELECT xp, level FROM monster WHERE ref = ?", (ref,)).fetchone()
+            if row and (row[0] or 0) > 0:
+                costs[ref] = float(row[0])
+                depth[ref] = abs(int(row[1] or level) - level)
+        pool = [r for r in pool if r in costs]
+        if not pool:
+            return []
+        if draw is not None:
+            pool = draw.sample(pool, len(pool))
+        pool = mixed(sorted(pool, key=lambda r: depth[r]))
+        want = total * share
+        spent = 0.0
+        taken = 0
+        for i in range(MOST * len(pool)):
+            ref = pool[i % len(pool)]
+            cost = costs[ref]
+            if taken and spent + cost > want * 1.1:
+                continue
+            out.append(ref)
+            spent += cost
+            taken += 1
+            if rank == "solo" or spent >= want * 0.9 or taken >= MOST:
+                break
+    return out
 
 def number_repeats(world: World) -> None:
     """Number the repeats, so two of the same monster are tellable apart."""
@@ -485,6 +611,7 @@ def field_encounter(
             )
 
     found_at = level
+    shape = "named"
     if enemies:
         pool = list(enemies)
     else:
@@ -492,15 +619,22 @@ def field_encounter(
         # would shift every roll after it, so a change to how monsters are
         # chosen would also change every attack in the fight and the two could
         # not be told apart.
-        pool, found_at = opposition(level, Random(seed))
+        pool, found_at, shape = opposition(level, Random(seed))
     if not pool:
-        return Fielded(world=world, enemies=[], found_at=found_at)
+        return Fielded(world=world, enemies=[], found_at=found_at, paradigm=shape)
 
-    fielded = [pool[i % len(pool)] for i in range(SIDE)]
-    for i, ref in enumerate(fielded):
+    # **The paradigm decides how many, so this no longer takes `SIDE` of them.**
+    # A solo is one creature and a leader-and-minions is ten, and taking four
+    # either way was the bug that made every encounter the same shape.
+    #
+    # Wrapped into columns so ten minions do not run off a 12-row board.
+    for i, ref in enumerate(pool):
         loader.spawn(
-            world, ref, (ENEMY_AT[0], ENEMY_AT[1] + i * SPACING), team=Team.ENEMY
+            world, ref,
+            (ENEMY_AT[0] - (i // 5) * 2, ENEMY_AT[1] + (i % 5) * SPACING),
+            team=Team.ENEMY,
         )
 
     number_repeats(world)
-    return Fielded(world=world, enemies=fielded, found_at=found_at)
+    return Fielded(world=world, enemies=list(pool), found_at=found_at,
+                   paradigm=shape)

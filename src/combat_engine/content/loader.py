@@ -334,7 +334,10 @@ def usable(ref: str) -> bool:
     return ref not in UNUSABLE
 
 
-def pick(level: int, *, role: str | None = None, limit: int = 20) -> list[str]:
+def pick(
+    level: int, *, role: str | None = None, limit: int = 20,
+    rank: str | None = None, minion: bool = False, band: int = 0,
+) -> list[str]:
     """Monsters at a level whose abilities are all written.
 
     **`limit=0` means all of them**, and the caller that fields an encounter
@@ -356,12 +359,24 @@ def pick(level: int, *, role: str | None = None, limit: int = 20) -> list[str]:
     # all -- what an item conjures, what a ritual calls up, what somebody
     # rides -- and those are not an encounter. 159 of them, nearly all out of
     # `Adventurer's Vault`, and they were eligible until now.
+    # **A band, not one level.** Camille's call: a fight may field anything within
+    # three levels either way, which is what the printed encounter-building rules
+    # allow and is the difference between "two usable solos" and a real choice.
     sql = ("SELECT ref FROM monster "
-           "WHERE level = ? AND minion = 0 AND conjuration = 0")
-    params: list = [level]
+           f"WHERE level BETWEEN ? AND ? AND minion = {1 if minion else 0} "
+           "AND conjuration = 0")
+    params: list = [max(1, level - band), level + band]
     if role:
         sql += " AND role = ?"
         params.append(role)
+    # **`rank` is how an encounter paradigm asks for two elites or one solo.**
+    # A standard's rank is spelled either way in the source, so the standard case
+    # accepts both rather than normalising a column the ETL owns.
+    if rank == "standard":
+        sql += " AND (rank IS NULL OR rank = 'standard')"
+    elif rank:
+        sql += " AND rank = ?"
+        params.append(rank)
     out = []
     for row in db.execute(sql + " ORDER BY ref", params):
         if usable(row["ref"]) and not load(row["ref"]).missing:
