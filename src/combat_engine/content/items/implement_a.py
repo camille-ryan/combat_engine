@@ -890,7 +890,7 @@ def i2318p1(c: Cast) -> None:
 
     **Re-aimed off `spec.power_ref()`.** The brief does print the thing by
     name and give no ref, but that is not the gap: what the card restores is
-    the Sorcerer-King pact boon's charge, and the compendium describes it in
+    `cf:warlock-f1s4`'s boon charge, and the compendium describes that boon in
     the warlock class text rather than filing it as a row. `cf:warlock-f1s4`
     is the feature and it is a row; the charge inside it is not, which is
     exactly what that row's own `c.fell_might()` marker says.

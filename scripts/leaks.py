@@ -78,6 +78,37 @@ SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__", "data", "localizati
 TEXT_SUFFIXES = {".py", ".md", ".js", ".css", ".html", ".json", ".toml", ".txt", ".sql"}
 
 
+def _index(names: dict) -> tuple[dict[str, list[str]], dict[str, str]]:
+    """Every printed name, keyed so `_hits` can actually find it.
+
+    **Hyphens normalise to spaces, on both sides.** `_hits` captures a run of
+    prose with `[a-z' -]` and then splits it into words with `[a-z']+`, so a
+    hyphen is a letter to the first regex and a boundary to the second: the
+    only thing it can ever produce is a space-joined n-gram. Keying on the
+    printed spelling therefore made **578 hyphenated printed names unmatchable
+    by construction** -- not missed through a judgement call, unreachable. #336.
+
+    Normalising the key rather than teaching `_hits` about hyphens is the
+    smaller change and loses nothing: a file that writes the name with a space
+    where the compendium writes a hyphen is just as much a leak, and this
+    catches that too.
+
+    Returns the lookup, and beside it the printed spelling of each key, so a
+    finding can quote what the compendium prints rather than the normalised
+    form a reader would then go looking for in vain.
+    """
+    index: dict[str, list[str]] = {}
+    printed: dict[str, str] = {}
+    for ref, entry in names.items():
+        name = (entry.get("name") or "").strip().lower()
+        if len(name) <= 2:
+            continue
+        key = " ".join(name.replace("-", " ").split())
+        index.setdefault(key, []).append(ref)
+        printed.setdefault(key, name)
+    return index, printed
+
+
 def tracked() -> list[Path]:
     try:
         out = subprocess.run(
@@ -104,11 +135,7 @@ def specs() -> int:
         print("localization/names.json is missing.", file=sys.stderr)
         return 0
 
-    index: dict[str, list[str]] = {}
-    for ref, entry in names.items():
-        name = (entry.get("name") or "").strip().lower()
-        if len(name) > 2:
-            index.setdefault(name, []).append(ref)
+    index, _printed = _index(names)
     rules = vocabulary()
 
     db = game()
@@ -229,11 +256,7 @@ def main() -> int:
         )
         return 0
 
-    index: dict[str, list[str]] = {}
-    for ref, entry in names.items():
-        name = (entry.get("name") or "").strip().lower()
-        if len(name) > 2:
-            index.setdefault(name, []).append(ref)
+    index, printed = _index(names)
 
     rules = vocabulary()
     findings: list[tuple[Path, int, str, list[str]]] = []
@@ -254,7 +277,11 @@ def main() -> int:
                 where.append((path.relative_to(ROOT), n, name, refs))
 
     for path, n, name, refs in findings:
-        print(f"{path}:{n}: {name!r} is the printed name of {', '.join(refs[:3])}")
+        # The printed spelling, not the normalised key -- a reader told the name
+        # has a space where the compendium prints a hyphen goes looking for the
+        # wrong string.
+        shown = printed.get(name, name)
+        print(f"{path}:{n}: {shown!r} is the printed name of {', '.join(refs[:3])}")
 
     if quiet:
         words = sorted({name for _, _, name, _ in quiet})
