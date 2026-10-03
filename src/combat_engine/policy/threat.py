@@ -53,7 +53,13 @@ from typing import Any
 from combat_engine.engine.components import Defenses, Health, Ident, Position, Powers, Side
 from combat_engine.engine.durations import When
 from combat_engine.engine.query import alive, creatures
-from combat_engine.engine.types import ActionType, Condition, Defense, Team
+from combat_engine.engine.types import (
+    ActionType,
+    Condition,
+    DamageType,
+    Defense,
+    Team,
+)
 
 #: Chance to shrug a save-ends effect at the end of a turn. The save is
 #: `roll.total + bonus >= 10` (`durations.py`), so eleven faces in twenty succeed.
@@ -459,6 +465,137 @@ def _baseline_hit(world: Any, eid: int, ref: str) -> float | None:
     return p.hit_chance(w, me, foe) if p is not None else None
 
 
+
+def row_types(ref: str) -> tuple[DamageType, ...]:
+    """What damage types a row deals, for pricing a target's defences. #317.
+
+    Two sources, because neither alone covers the corpus: `Damage.dtype` is set
+    on all 1,351 rows that declare a damage header, and **1,947 rows carry the
+    type as a keyword** -- a fire power is a fire power whether its header says so
+    or its body passes `dtype=FIRE` to `c.damage`. The union is the honest answer
+    and the keyword half is the bigger one.
+
+    `(UNTYPED,)` when neither says anything, which is most weapon damage and is
+    what `Defences` stores an untyped entry for.
+    """
+    from combat_engine.engine.dsl import get
+
+    p = get(ref)
+    if p is None:
+        return (DamageType.UNTYPED,)
+    found: set[DamageType] = set()
+    if p.damage is not None and p.damage.dtype is not DamageType.UNTYPED:
+        found.add(p.damage.dtype)
+    named = {d.value: d for d in DamageType}
+    for kw in p.keywords or ():
+        hit = named.get(getattr(kw, "value", ""))
+        if hit is not None and hit is not DamageType.UNTYPED:
+            found.add(hit)
+    return tuple(sorted(found, key=lambda d: d.value)) or (DamageType.UNTYPED,)
+
+
+def after_defences(world: Any, target: int, types: tuple[DamageType, ...],
+                   dmg: float) -> float:
+    """`dmg` as the target would actually take it. #317.
+
+    **The scorer consulted none of this.** `expected_vs` scaled by hit chance and
+    stopped, so a 20-damage fire row was priced at 20 against a creature that
+    resists 10 fire, at 20 against one that is *immune* to fire, and at 20 against
+    one with vulnerable 5 where the truth is 25. 142 of 615 usable monsters carry a
+    resistance, 120 an immunity and 45 a vulnerability.
+
+    **A deliberate approximation of `resolve`'s arithmetic, not a copy of it.**
+    That one splits a blow into parts, spends resistance once across them, reads
+    `ignore resist` modifiers and can treat an immunity as a resistance. Copying it
+    here would be a second implementation to keep in step, and `_in_area` already
+    sets the precedent for a cheap geometric stand-in. What this does is the
+    single-part case, which is the overwhelming majority:
+
+    * immune to **all** of the row's types and the damage is gone -- the printed
+      rule, and why `all` rather than `any`;
+    * otherwise the resistance that applies is the **smallest** across the types,
+      because a blow that is fire *and* radiant is only shrugged off by a creature
+      that resists both;
+    * vulnerability is the largest, and goes on before resistance comes off, which
+      is `resolve`'s order.
+
+    What it will get wrong: a multi-part blow with a typed rider, and an attacker
+    carrying `ignore resist`. Both make this read low rather than high, which is
+    the safer direction for a term that decides what to attack.
+    """
+    # **`Defences`, not `Defenses`.** Two components one letter apart:
+    # `Defenses` holds AC, Fort, Ref and Will; `Defences` holds resist,
+    # vulnerable and immune. Imported locally so the two spellings never sit
+    # side by side in this file's import block, where picking the wrong one is
+    # an `AttributeError` at best and a silently empty answer at worst.
+    from combat_engine.engine.components import Defences
+
+    if dmg <= 0:
+        return 0.0
+    d = world.get(target, Defences)
+    if d is None:
+        return dmg
+    if types and all(t in d.immune for t in types):
+        return 0.0
+    resist = min((d.resist.get(t, 0) for t in types), default=0)
+    vuln = max((d.vulnerable.get(t, 0) for t in types), default=0)
+    return max(0.0, dmg + vuln - resist)
+
+
+def effective_hp(world: Any, eid: int) -> int:
+    """Hit points in front of the creature: current plus temporary. #316.
+
+    **Not surges or a second wind**, which is Camille's call and the right one:
+    those are day-long resources and this prices a single action. Folding them in
+    would make a bloodied fighter standing beside a cleric a *worse* target than
+    the same fighter alone, which inverts focus fire, and it would double-count
+    against the attrition metrics that already track surges separately.
+
+    **And not divided by the chance of being hit here, though that is part of the
+    idea.** Camille's definition is `hit points / probability of being hit` -- a
+    soldier is effectively tougher and should rarely be the first target -- and
+    that factor is real but is applied **once, in `expected_vs`**, which scales a
+    row's damage by its live hit chance against the target. Dividing here as well
+    would square it:
+
+        expected damage / effHP  ==  (dmg * p) / (hp / p)  ==  dmg * p^2 / hp
+
+    Both orderings are the same arithmetic with `p` applied once, and
+    `expected_vs` is where the hit chance is already known. Said out loud because
+    the formula reads like it belongs here and adding it would look like a fix.
+
+    The other half of Camille's point -- that a defender is attacked because it
+    *makes* itself attacked, by marking or by making its allies harder to hit --
+    is not priced at all: `CONDITION_THREAT` is zeros and a mark is worth nothing.
+    That is #263 and is not this function's to solve.
+    """
+    health = world.get(eid, Health)
+    if health is None:
+        return 0
+    return max(0, health.hp) + max(0, getattr(health, "temp", 0))
+
+
+def capacity(world: Any, of: Team) -> float:
+    """A side's threat-weighted durability: `sum(threat * effective hp)`. #316.
+
+    Camille's formulation, and the denominator that makes a differential
+    well-formed. `pool` is the same shape with the threat left out -- total hit
+    points -- and stays, because several terms are about hit points rather than
+    about capability.
+
+    Why this rather than `pool`: removing ten hit points from the artillery and
+    from the brute are the same fraction of a pool and not the same thing done to a
+    side. Weighting each creature's durability by what it contributes says so.
+    """
+    total = 0.0
+    for eid in creatures(world):
+        side = world.get(eid, Side)
+        if side is None or side.team is not of or not alive(world, eid):
+            continue
+        total += threat(world, eid) * effective_hp(world, eid)
+    return total
+
+
 def expected_vs(world: Any, eid: int, ref: str, target: int,
                 *, attack: int = 0) -> float:
     """What one row would deal to a **real** target, in hit points.
@@ -480,6 +617,10 @@ def expected_vs(world: Any, eid: int, ref: str, target: int,
     from combat_engine.engine.dsl import get
 
     dmg = row_damage(world, eid, ref)
+    if dmg <= 0:
+        return 0.0
+    # **What the target would actually take**, which this did not ask. #317.
+    dmg = after_defences(world, target, row_types(ref), dmg)
     if dmg <= 0:
         return 0.0
     p = get(ref)

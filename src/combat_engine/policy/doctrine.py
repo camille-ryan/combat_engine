@@ -1058,6 +1058,12 @@ def doctrine_features(
     gained_hp = 0.0
     if action.ref:
         laid = T.row_effects(world, actor, action.ref)
+        # The denominator for both halves below, read once. `capacity` is
+        # `pool`'s threat-weighted sibling: hit points say how much is left and
+        # this says how much *capability* is left, which is what a blow removes.
+        other_team = (Team.ENEMY if mine is not None and mine.team is Team.PC
+                      else Team.PC)
+        cap = T.capacity(world, other_team)
         for t in action.targets:
             theirs = world.get(t, Side)
             if t == actor or mine is None or theirs is None:
@@ -1072,9 +1078,18 @@ def doctrine_features(
             # end-of-next-turn immobilise on a creature that cannot then reach
             # anybody takes one, save-ends takes 1.8 because a save is 55%.
             dealt = T.expected_vs(world, actor, action.ref, t)
-            rounds = min(1.0, dealt / health.hp) * T.ROUNDS
+            # **Hit points removed, not a fraction of what is left.** #316, and
+            # Camille's formulation: a side's capacity is `sum(threat * effHP)`, so
+            # a blow removes `threat * min(dealt, effHP)` of it. Dividing by the
+            # target's *current* hit points inflated every attack on a nearly-dead
+            # creature -- `min(1, dealt / hp)` clamps to 1.0 for one point of
+            # damage against a creature on 1 hp, so it collected that creature's
+            # whole threat share for a scratch. Measured consequence: three of
+            # eight monster standard actions in one fight went into a 15-hp
+            # companion that never attacked, and one into its corpse.
+            effhp = float(T.effective_hp(world, t))
             shoved = T.row_push(world, actor, action.ref)
-            rounds += T.denial(world, t, laid, pushed=shoved)
+            denied = T.denial(world, t, laid, pushed=shoved)
             # **Signed, and the only term here that can be.** See `shove_value`:
             # the same push is good or bad depending on where the creature it
             # wants is standing, and `denial` scores both at zero. Summed over
@@ -1082,9 +1097,29 @@ def doctrine_features(
             # enemies off the wizard is worth three times one.
             if shoved:
                 worse_off += shove_value(world, t, shoved)
-            # Capped at the window, so overkill and a stack of conditions cannot
-            # between them remove more than the creature had to give.
-            removed += min(rounds, float(T.ROUNDS)) * T.threat(world, t) / T.ROUNDS
+            # **Divided by the side's capacity, not by this creature's own hit
+            # points.** That was the defect: `min(1, dealt / hp)` clamps to 1.0 the
+            # moment `dealt` reaches what is left, so one point of damage against a
+            # creature on 1 hp collected its **whole** threat share. Measured
+            # before the change, the same blow against the same creature:
+            #
+            #     at 296/296 hp   threat_removed 0.0152
+            #     at   5/296 hp   threat_removed 0.9003
+            #     at   1/296 hp   threat_removed 1.6302
+            #
+            # Camille's formulation instead: a side's capacity is
+            # `sum(threat * effHP)` and a blow removes `threat * min(dealt, effHP)`
+            # of it. The numerator is hit points, so a scratch is a scratch however
+            # close to dead the target is, and the denominator is the whole side, so
+            # the figure stays the share of enemy capability it always was.
+            took = T.threat(world, t) * min(dealt, effhp)
+            # Control, in the same currency: the creature's whole contribution,
+            # withheld for the rounds denied. Capped with the damage at what the
+            # creature had to give, so overkill and a stack of conditions cannot
+            # between them remove more than all of it.
+            took += (T.threat(world, t) * effhp
+                     * min(denied, float(T.ROUNDS)) / T.ROUNDS)
+            removed += min(took, T.threat(world, t) * effhp) / (cap or 1.0)
             # The other sign: an effect that makes it easier for the party to hit
             # does not reduce its damage, so `denial` cannot see it at all.
             gained_hp += T.enabled(world, t, laid)
