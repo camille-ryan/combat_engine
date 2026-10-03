@@ -1261,9 +1261,22 @@ def doctrine_features(
             # that tickled its worst.
             ours = theirs.team is mine.team
             budget = T.output(world, t)
-            if budget <= 0:
-                continue
             got = T.taken_from(world, actor, action.ref, t) if health.hp > 0 else 0.0
+            if budget <= 0:
+                # **A creature that deals no damage is not free to destroy.** This used
+                # to `continue`, so a target whose `output` is zero contributed neither
+                # cost nor benefit -- and a familiar's output *is* zero, it owns no
+                # attack. Measured consequence: the party aimed 20 attacks at its own
+                # side across twelve level-10 fights for 176 hit points, and the
+                # majority landed on the familiar -- 43 of 47 in one fight, 24 of 28 in
+                # another. It was exactly free, so the blast took it every time.
+                #
+                # Priced at the hit points actually destroyed instead, which is the
+                # floor under any target: killing something is worth at least the
+                # something. Still small, so a familiar does not outrank an enemy -- it
+                # just stops being worth nothing.
+                got = min(T.expected_vs(world, actor, action.ref, t),
+                          float(T.effective_hp(world, t))) if health.hp > 0 else 0.0
             # **An undying creature, and the blow that would drop it.** #318.
             # Damage above 0 sticks normally, so an ordinary swing at a healthy
             # troll wears it down and is priced as such. The blow that *reduces it
