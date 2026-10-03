@@ -74,9 +74,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import fight
 from combat_engine.engine import Ident
-from combat_engine.engine.components import Build, Health, Position, Powers
+from combat_engine.engine.components import (
+    Build,
+    Health,
+    Position,
+    Powers,
+    Side,
+)
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import Dropped, OpportunityWindow, SurgeSpent
+from combat_engine.engine.events import (
+    DamageApplied,
+    Dropped,
+    Hit,
+    OpportunityWindow,
+    SurgeSpent,
+)
 from combat_engine.engine.grid import distance
 from combat_engine.engine.query import alive, enemies
 from combat_engine.engine.types import Usage
@@ -332,6 +344,43 @@ def play(level: int, seed: int, pol: Counted, cap: int = 30) -> int:
 
     world.bus.on(OpportunityWindow, provoked)
 
+    # **Camille's reading: damage provoked beats a count of provocations.**
+    # Walking past a minion and walking past a brute are the same number and
+    # not the same mistake, so `oa_conceded` prices a correct risk and a
+    # reckless one identically. This is the hit points it actually cost.
+    #
+    # Latched rather than read off `DamageApplied` directly, because the flag
+    # lives on the *attack*: `resolve` hangs `opportunity` on the `Hit` as a
+    # plain attribute -- the same road `charge` and `as_` ride -- and the
+    # damage event that follows carries only source, target and amount. One
+    # slot keyed on the pair, set by the hit and spent by the blow.
+    oa_hit: set[tuple[int, int]] = set()
+
+    def swung(ev) -> None:  # noqa: ANN001
+        if getattr(ev, "opportunity", False):
+            oa_hit.add((ev.attacker, ev.target))
+
+    def hurt(ev) -> None:  # noqa: ANN001
+        pair = (ev.source, ev.target)
+        if pair in oa_hit:
+            oa_hit.discard(pair)
+            # Charged to the creature that **provoked** it, which is the one
+            # that chose: the victim is the side that walked, not the side that
+            # swung.
+            pol.n[f"{side_of(world, ev.target)}/oa_damage"] += ev.amount
+        # **Self-damage, per side.** A burst that catches your own fighter is
+        # the cost #266 is about, and the ally-clipping counters above say how
+        # often rather than how much. Excludes a creature damaging itself --
+        # that is `self_harm`, priced against its own hit points.
+        if ev.source != ev.target:
+            mine = world.get(ev.source, Side)
+            theirs = world.get(ev.target, Side)
+            if mine is not None and theirs is not None and mine.team is theirs.team:
+                pol.n[f"{side_of(world, ev.source)}/self_damage"] += ev.amount
+
+    world.bus.on(Hit, swung)
+    world.bus.on(DamageApplied, hurt)
+
     # **Attrition, which is what 4e actually spends.** Camille's call on #267: a
     # party beating a standard encounter from full resources is the *intended*
     # outcome, so a win rate is measuring the wrong thing. What a fight costs is
@@ -437,6 +486,8 @@ def measure(levels: tuple[int, ...]) -> dict:
                 "decisions": pol.n[f"{side}/decisions"],
                 "oa_conceded": pol.n[f"{side}/oa_conceded"],
                 "oa_per_fight": round(pol.n[f"{side}/oa_conceded"] / len(SEEDS), 2),
+                "oa_damage": pol.n[f"{side}/oa_damage"],
+                "self_damage": pol.n[f"{side}/self_damage"],
                 "inert_chosen": pol.n[f"{side}/inert_chosen"],
                 "self_harm": pol.n[f"{side}/self_harm"],
                 "ally_blasts": pol.n[f"{side}/ally_blasts"],
@@ -464,6 +515,11 @@ def measure(levels: tuple[int, ...]) -> dict:
 
 ROWS = [
     ("oa_per_fight", "opportunity attacks conceded / fight", "lower"),
+    # **The better of the two, per Camille.** Walking past a minion and walking
+    # past a brute are the same count and not the same mistake, so the line above
+    # prices a correct risk and a reckless one identically.
+    ("oa_damage", "...hit points it cost them", "lower"),
+    ("self_damage", "damage dealt to their own side", "lower"),
     ("inert_chosen", "inert rows chosen", "lower"),
     ("self_harm", "caught in own blast", "lower"),
     ("ally_blasts", "attacks that caught an ally", "lower"),
