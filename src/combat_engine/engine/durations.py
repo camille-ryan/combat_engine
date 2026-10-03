@@ -477,6 +477,16 @@ class Effects:
             if eff.when is When.EOT:
                 self.end(eff, "end of turn")
             elif eff.when in (When.EONT, When.EOTNT):
+                # **A refreshed condition announces nothing, and that reads as a
+                # stuck one.** When a second effect carries a condition the
+                # creature already has, `apply` does not re-emit
+                # `ConditionApplied` -- it is already true -- and `end` does not
+                # emit `ConditionEnded` while another live effect still holds it.
+                # Both are right. The consequence is that a creature re-dazed
+                # every round shows one application, then nothing until teardown,
+                # which was filed as a seven-round duration bug on exactly that
+                # evidence. The latch below was correct the whole time. If a
+                # duration looks stuck, count the applications first.
                 if eff.latch:
                     eff.latch = False
                 else:

@@ -35,6 +35,23 @@ uv run scripts/fight.py --seed 7 --level 10 > /tmp/log7.txt
   agent's is worth reading and nothing more.
 * Then measure. Every number below.
 
+### Two things a log does not say, both of which have cost a day
+
+**A condition that is re-applied every round looks exactly like a stuck one.** There
+is no event when an effect refreshes a condition the creature already has, so the
+reader sees one `ConditionApplied`, then silence, then `why='encounter over'` at
+teardown. A creature dazed for seven straight rounds was filed as a duration bug on
+that evidence; it was being re-dazed every round by a free-action burst, and the
+`latch` logic was correct throughout. **Count the applications before believing the
+duration** -- grep the attacker's hits on that target per round.
+
+**Two different seeds used to be the same encounter.** `story.opposition` drew the
+first four monsters by ref, so `--seed` varied the party, the terrain and the dice
+and never the opposition. Three agents reading three "different" level-10 logs all
+reported the same elite because it was in all three. Fixed -- the seed draws from
+every usable monster now -- but the lesson survives: **check who is actually on the
+board before generalising from a log**, and prefer several levels to several seeds.
+
 ## Two ways a policy term is silently false
 
 Both cost a day each, and neither showed up as a failure anywhere.
