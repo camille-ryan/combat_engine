@@ -1665,10 +1665,27 @@ class DoctrinePolicy:
         # condition never fired. A predicate reading a field its source does not carry,
         # which is the failure the component file opens with -- and it looked exactly
         # like a working fix, because the scorecard printed identically.
+        # **Also when the row's effect is already on everyone it names.** #314. The
+        # gate asked only about the caster, so a debuff re-applied to the *same
+        # enemy* was invisible: two agents on two different fights found a wizard
+        # spending both its minors on the same enemy debuff back to back, where the
+        # second cannot do anything. `inert_costs_turn` could not see it either --
+        # it prices a move or a standard and 243 of 354 inert choices are minors,
+        # which is right in general and leaves "the same minor twice" unpriced.
+        mine_only = not action.targets or tuple(action.targets) == (actor,)
         on_already = bool(action.ref) and (
-            not action.targets or tuple(action.targets) == (actor,)
-        ) and running(world, actor, action.ref)
-        if action.ref and (inert(world, actor, action.ref) or on_already):
+            running(world, actor, action.ref) if mine_only
+            else all(running(world, t, action.ref) for t in action.targets)
+        )
+        # **An attack row chosen with nobody to attack.** #314. `inert` answers
+        # False for anything with an attack line, which is right for a row that
+        # *has* a target and wrong for one that found none: a trample declaring an
+        # attack and taking its targets from a walk was observed twice producing
+        # zero attack rolls -- a standard action spent on empty floor -- while
+        # collecting the full flat `is_power`. Checked here rather than in `inert`
+        # because that caches on `(world, actor, ref)` and this depends on targets.
+        nobody = bool(action.ref) and not action.targets and _is_attack(action.ref)
+        if action.ref and (inert(world, actor, action.ref) or on_already or nobody):
             # **An inert row is not a power, for scoring purposes.** `is_power` is a
             # flat +6.0, which made any row beat any alternative -- so a row that can
             # accomplish nothing was chosen 231 times in 1,127 decisions. Zeroed
