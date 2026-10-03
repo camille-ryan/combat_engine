@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>dnd4e — replay</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body class="replay-page">
+    <header>
+      <h1>dnd4e</h1>
+      <span id="where" class="turn">Loading…</span>
+
+      <!-- Record a fight, or open one already on disk. The seed is the whole
+           identity of a recording: the same seed is the same fight, so a note
+           pinned to "s303 round 4" still means something next week. -->
+      <form id="config" class="config" onsubmit="return false">
+        <label class="field">
+          level
+          <input id="level" type="number" min="1" max="10" value="10" />
+        </label>
+        <label class="field">
+          seed
+          <input id="seed" type="number" min="1" placeholder="any" />
+        </label>
+        <button id="play" type="button">Record</button>
+        <label class="field">
+          open
+          <select id="pick"></select>
+        </label>
+      </form>
+    </header>
+
+    <p class="replay-note">
+      Every decision the AI made, with what it passed over and what each was
+      worth. <strong>Nothing here can change the fight</strong> — step the
+      timeline, and comment on a decision you disagree with.
+    </p>
+
+    <main class="replay-main">
+      <section class="pane">
+        <h2>board</h2>
+        <!-- The three overlay layers, same size, absolutely positioned, siblings
+             inside `.board-wrap`. `coords.place` writes identical offsets into
+             all three, so nesting them differently draws the board in the wrong
+             place and nothing says so. -->
+        <div class="board-wrap">
+          <div id="board" class="board"></div>
+          <div id="movement" class="movement"></div>
+          <div id="highlights" class="highlights"></div>
+        </div>
+        <div id="order" class="order"></div>
+        <div id="timeline" class="timeline"></div>
+      </section>
+
+      <section class="pane">
+        <h2>decision <span id="decision-where" class="chargen-count"></span></h2>
+        <div id="decision"></div>
+        <form id="note-form" class="replay-note-form" onsubmit="return false">
+          <textarea id="note" rows="3" placeholder="what it should have done, and why"></textarea>
+          <button id="save-note" type="button">Pin this note</button>
+          <span id="note-said" class="status"></span>
+        </form>
+        <ol id="notes" class="replay-notes"></ol>
+      </section>
+
+      <section class="pane">
+        <h2>log</h2>
+        <label class="field">
+          <input id="show-raw" type="checkbox" /> raw events
+        </label>
+        <div id="log"></div>
+      </section>
+    </main>
+
+    <!-- `card.js` renders into this and finds it by id. Outside `main` so it is
+         not clipped by a scrolling pane. -->
+    <div id="card" class="card" hidden></div>
+
+    <script type="module" src="./replay.js"></script>
+  </body>
+</html>

@@ -1402,3 +1402,91 @@ main {
 
 .term-good { color: var(--good, #8c8); }
 .term-bad { color: var(--bad, #d88); }
+
+/* ---------------------------------------------------------------- replay */
+/*
+ * The replay viewer. Its own body class, like `chargen-page`, so the grid here
+ * does not fight `main`'s three columns on the encounter page.
+ *
+ * Classes are **added**, never renamed: `scripts/browser.py` asserts on class
+ * names, so a rename is a two-file change and an addition is free.
+ */
+.replay-page .replay-main {
+  display: grid;
+  grid-template-columns: auto 24rem 22rem;
+  gap: 1rem;
+  align-items: start;
+  padding: 0 1rem 1rem;
+}
+/* A grid item's default `min-width: auto` refuses to shrink below its content, so
+   a 736px board in a window narrower than the three columns need does not get a
+   scrollbar -- it overflows and covers the next pane. Caught by a headless run at
+   1280px wide, where a decision row could not be hovered because a board tile was
+   on top of it. */
+.replay-page .replay-main > .pane {
+  min-width: 0;
+  overflow: auto;
+}
+.replay-note {
+  padding: 0 1rem;
+  margin: 0.25rem 0 0.75rem;
+  color: var(--dim, #9aa);
+}
+/* One chip per turn. Wraps, because a twenty-round fight is more chips than a
+   board is wide, and a horizontal scrollbar under the board reads as part of
+   the board. */
+.timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+.timeline .leg {
+  cursor: pointer;
+}
+.replay-choice {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0.45rem;
+  border-left: 3px solid transparent;
+  font-variant-numeric: tabular-nums;
+}
+.replay-choice:nth-child(even) {
+  background: rgba(255, 255, 255, 0.03);
+}
+.replay-choice.taken {
+  border-left-color: #6c8;
+}
+.replay-choice.passed {
+  color: var(--dim, #9aa);
+}
+.replay-choice .choice-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.replay-empty {
+  color: var(--dim, #9aa);
+  padding: 0.3rem 0.45rem;
+}
+.replay-note-form {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+.replay-note-form textarea {
+  width: 100%;
+  font: inherit;
+}
+.replay-notes {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+}
+.replay-note-row {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
