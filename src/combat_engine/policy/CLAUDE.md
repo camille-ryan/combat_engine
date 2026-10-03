@@ -68,6 +68,21 @@ something else. Each of these produced a paradigm comparison that had to be with
 * **A mean over three fights hides the only fight worth reading.** "6.7 party drops"
   for the solo shape was one fight with 18 and two with 0. Print per fight; let the
   outlier be visible rather than averaged into a property of the paradigm.
+* **"eids 1-4 are the party, 5 and up are the opposition" is FALSE.** The wizard's
+  familiar is party-side and is spawned *after* the monsters, so it lands at eid 6, 7,
+  9, 10, 14 or 15 depending on how many there are. **Read `Side` off the component**;
+  never infer a side from the number. Inferring turns friendly fire into legitimate
+  attacks, a party-side death into a kill, and -- in a leader fight, where the familiar
+  has few hit points and sits past nine monsters -- a familiar into a minion.
+
+  This was given to four subagents as fact, twice. The second time, three of the four
+  worked it out from the logs and corrected it themselves; the first time, two did and
+  **it was not registered**, so the same wrong rule went out again. When an agent
+  contradicts the brief, that is the most valuable line in its report.
+
+  What it was hiding: party-on-party attacks were **20, not 11**, and damage landed on
+  the party's own side was **176, not 74** -- most of it on the familiar, which the
+  scorer had priced at nothing because its `output` is zero.
 
 And the positive version: read the event's **definition** rather than inferring its
 fields from one printed line. `Dropped`'s repr omits defaulted fields, which is what
