@@ -653,6 +653,29 @@ class Pinned:
     weakened: bool = False
     #: Penalty to the creature's own attack rolls, as a number of faces.
     attack: int = 0
+    #: One action for the whole turn instead of a standard, a move and a minor.
+    #:
+    #: **Without this, dazing anything was worth exactly nothing.** `DAZED` is
+    #: `grants_ca + one_action + no_reactions` and `DOMINATED` is the same three, so
+    #: `from_rules` returned a bare `Pinned()` for both and `_denial`'s
+    #: `if pin == Pinned()` guard dropped the row before measuring it. The
+    #: `rounds-table` column read `0.00` on all sixteen monsters on the board.
+    #:
+    #: Priced as **it may move or attack, not both**, which is what one action
+    #: buys: see `_speed_under`. That makes it worth a lot against a creature that
+    #: has to close and nothing against one already in your face -- the same shape
+    #: Camille signed off on for an immobilise, and for the same reason.
+    #:
+    #: **So a daze comes out equal to an immobilise, and that is a floor of the
+    #: model rather than a bug.** A daze should be worth strictly more: the
+    #: immobilised creature keeps its minor action and its opportunity attacks and
+    #: the dazed one loses both. `per_round` is a `max` over single rows, not a
+    #: simulation of a turn, so it cannot see a second action being taken away --
+    #: from anybody, which is why no other condition is understated by it either.
+    #: Putting a multiplier here to make up the difference would be exactly the
+    #: hand-set constant #314 exists to remove. Pricing `no_reactions` is the real
+    #: fix and it wants a term for conceded opportunity attacks.
+    one_action: bool = False
 
 
 def from_rules(conds: Sequence[Condition], mods: Sequence[Any] = ()) -> Pinned:
@@ -681,6 +704,7 @@ def from_rules(conds: Sequence[Condition], mods: Sequence[Any] = ()) -> Pinned:
             halve_speed=out.halve_speed or r.halve_speed,
             weakened=out.weakened or r.weakened,
             attack=out.attack + r.attack,
+            one_action=out.one_action or r.one_action,
         )
     extra = sum(m.value for m in mods if getattr(m, "what", "") == "attack")
     if extra:
@@ -697,6 +721,14 @@ def _speed_under(world: Any, eid: int, pin: Pinned | None) -> int:
     if pin is None:
         return speed
     if pin.cannot_move:
+        return 0
+    if pin.one_action:
+        # **One action is spent either closing or attacking.** `per_round` asks what
+        # the best *damage* this round is, and a turn spent walking deals none -- so
+        # the honest reading of one action is "attack from where you stand", which
+        # is zero squares of approach. Deliberately not a separate field in
+        # `per_round`: the quantity being changed really is the reach, and
+        # expressing it here keeps one answer to "how far can it get".
         return 0
     if pin.halve_speed:
         speed //= 2

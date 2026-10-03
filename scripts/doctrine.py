@@ -143,7 +143,7 @@ def rounds_table(level: int, seed: int) -> None:
     sq = world.get(pcs[0], Position).square
     print(f"\nrounds of damage denied, level {level}, seed {seed}")
     print(f"  {'monster':<22} {'where':<9} {'pot':>5} {'immob':>6} {'save':>6} "
-          f"{'stun':>5} {'weak':>5} {'prone':>6}  attacks with")
+          f"{'stun':>5} {'daze':>5} {'weak':>5} {'prone':>6}  attacks with")
     for mon in mons:
         known = world.get(mon, Powers)
         kinds = sorted({p.reach.kind for r in (known.known if known else ())
@@ -163,6 +163,14 @@ def rounds_table(level: int, seed: int) -> None:
                   f"{denied(T.When.EONT, Condition.IMMOBILIZED):>6.2f} "
                   f"{denied(T.When.SAVE_ENDS, Condition.IMMOBILIZED):>6.2f} "
                   f"{denied(T.When.EONT, Condition.STUNNED):>5.2f} "
+                  # **The column that was missing, and it read 0.00 everywhere.**
+                  # `DAZED` is `grants_ca + one_action + no_reactions`, and
+                  # `Pinned` held none of those three, so `from_rules` returned a
+                  # bare `Pinned()` and `_denial` skipped the row entirely. Dazing
+                  # anything was worth nothing, on a board where a creature had
+                  # been measured dazed for seven consecutive rounds. `DOMINATED`
+                  # is the same three fields and was equally free.
+                  f"{denied(T.When.EONT, Condition.DAZED):>5.2f} "
                   f"{denied(T.When.EONT, Condition.WEAKENED):>5.2f} "
                   f"{denied(T.When.EOTNT, Condition.PRONE):>6.2f}  "
                   f"{'+'.join(kinds)}")
