@@ -337,6 +337,12 @@ def usable(ref: str) -> bool:
 def pick(level: int, *, role: str | None = None, limit: int = 20) -> list[str]:
     """Monsters at a level whose abilities are all written.
 
+    **`limit=0` means all of them**, and the caller that fields an encounter
+    wants that. The default truncates to the first 20 **by ref**, which is a
+    deterministic slice rather than a sample: at level 10 that was 20 of 41
+    usable monsters, so four fifths of the written content could never appear
+    in a fight. See `story.opposition`.
+
     A monster is only offered once every ability on its stat block has a
     function, so a fight never quietly leaves out the thing that makes a
     monster interesting -- and never if it is in `UNUSABLE`, which is the
@@ -360,6 +366,6 @@ def pick(level: int, *, role: str | None = None, limit: int = 20) -> list[str]:
     for row in db.execute(sql + " ORDER BY ref", params):
         if usable(row["ref"]) and not load(row["ref"]).missing:
             out.append(row["ref"])
-        if len(out) >= limit:
+        if limit > 0 and len(out) >= limit:
             break
     return out

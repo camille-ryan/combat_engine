@@ -29,6 +29,7 @@ exactly one thing that knows how to field one.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from random import Random
 
 from combat_engine import chargen
 from combat_engine.content import loader, terrain
@@ -385,16 +386,33 @@ def mixed(pool: list[str]) -> list[str]:
     return out
 
 
-def opposition(level: int) -> tuple[list[str], int]:
+def opposition(level: int, draw: Random | None = None) -> tuple[list[str], int]:
     """Monsters to field, and the level they came from.
 
     Falls back down the levels while content is thin: a fight against nothing is
     not useful, so rather than refuse, this drops to whatever level has been
     written and reports which. The caller decides whether to mention it.
+
+    **`draw` is what makes two seeds fight different monsters, and without it
+    they did not.** `loader.pick`'s default truncates to the first 20 by ref and
+    `field_encounter` then took `pool[i % len(pool)]`, so *every* fight at a
+    level faced the same four creatures however the seed fell -- at level 10,
+    `m112`, `m2931`, `m2914` and `m221`, out of 41 written. Twenty-four scorecard
+    "fights" were twenty-four rolls of the dice against one fixed encounter, and
+    three agents reading three "different" logs all reported the same elite
+    because it was in all three.
+
+    So the whole usable set goes in and the seed picks from it. `mixed` still
+    interleaves by role afterwards, because a mixed encounter is a better test
+    than four brutes.
     """
     for candidate in range(min(max(level, 1), 13), 0, -1):
-        pool = loader.pick(candidate)
+        pool = loader.pick(candidate, limit=0)
         if pool:
+            if draw is not None and len(pool) > SIDE:
+                # Three times the slots, so `mixed`'s role interleave still has
+                # something to interleave.
+                pool = draw.sample(pool, min(len(pool), SIDE * 3))
             return mixed(pool), candidate
     return [], level
 
@@ -470,7 +488,11 @@ def field_encounter(
     if enemies:
         pool = list(enemies)
     else:
-        pool, found_at = opposition(level)
+        # **Its own stream, not `world.rng`.** Drawing from the world's dice
+        # would shift every roll after it, so a change to how monsters are
+        # chosen would also change every attack in the fight and the two could
+        # not be told apart.
+        pool, found_at = opposition(level, Random(seed))
     if not pool:
         return Fielded(world=world, enemies=[], found_at=found_at)
 

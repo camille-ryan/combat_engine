@@ -45,6 +45,7 @@ PARTY = story.PARTY
 def build(
     seed: int, level: int, scaling: str, math: str = "printed",
     feats: dict[str, list[str]] | None = None,
+    enemies: list[str] | None = None,
 ) -> tuple[World, Encounter]:
     """One fight, built from a seed.
 
@@ -55,10 +56,17 @@ def build(
     and a real regression could have ridden in under a feat-draw change
     without anybody seeing it. Pinning them makes the fixture a test of
     the engine again rather than of the corpus's size.
+
+    `enemies` pins the opposition, for exactly the same reason one step over.
+    Which monsters a seed fields is drawn from every usable monster at the level
+    now -- it used to be the first four by ref, the same four every seed -- so
+    writing one more monster would otherwise change the draw and re-diverge every
+    fixture. `replay.py` names them per case.
     """
 
     fielded = story.field_encounter(
-        seed, level, scaling=scaling, math=math, feats=feats
+        seed, level, scaling=scaling, math=math, feats=feats,
+        enemies=enemies,
     )
     world = fielded.world
     if not fielded.enemies:

@@ -41,26 +41,33 @@ FEAT = re.compile(r"f\d+[a-z]?")
 
 #: Each fixture is a fight this engine should always play the same way.
 CASES = [
-    {"name": "level-1-full", "seed": 7, "level": 1, "scaling": "full"},
-    {"name": "level-1-alt", "seed": 11, "level": 1, "scaling": "full"},
-    {"name": "level-1-bounded", "seed": 7, "level": 1, "scaling": "bounded"},
-    {"name": "level-3-full", "seed": 5, "level": 3, "scaling": "full"},
-    {"name": "level-5-full", "seed": 3, "level": 5, "scaling": "full"},
-    {"name": "level-5-bounded", "seed": 3, "level": 5, "scaling": "bounded"},
+    {"name": "level-1-full", "seed": 7, "level": 1, "scaling": "full",
+     "enemies": ['m145', 'm264', 'm2998', 'm2978']},
+    {"name": "level-1-alt", "seed": 11, "level": 1, "scaling": "full",
+     "enemies": ['m441', 'm2821', 'm5029', 'm4865']},
+    {"name": "level-1-bounded", "seed": 7, "level": 1, "scaling": "bounded",
+     "enemies": ['m145', 'm264', 'm2998', 'm2978']},
+    {"name": "level-3-full", "seed": 5, "level": 3, "scaling": "full",
+     "enemies": ['m4851', 'm371', 'm2824', 'm3020']},
+    {"name": "level-5-full", "seed": 3, "level": 5, "scaling": "full",
+     "enemies": ['m4801', 'm4709', 'm2817', 'm4852']},
+    {"name": "level-5-bounded", "seed": 3, "level": 5, "scaling": "bounded",
+     "enemies": ['m4801', 'm4709', 'm2817', 'm4852']},
     # **Level 10, because the net stopped at 5 and the project stops at 10** --
     # and because scoring the power draw cost `SecondWind` its only coverage.
     # A party that picks its cards on purpose wins before anybody is hurt
     # enough to need one, so the rule went from exercised to unreached, which
     # `coverage` is here to catch and did. This seed is the one of three tried
     # that bloodies somebody.
-    {"name": "level-10-full", "seed": 3, "level": 10, "scaling": "full"},
+    {"name": "level-10-full", "seed": 3, "level": 10, "scaling": "full",
+     "enemies": ['m4964', 'm3069', 'm5002', 'm221']},
 ]
 
 
 def play(case: dict) -> list[str]:
     world, encounter = build(
         case["seed"], case["level"], case["scaling"],
-        feats=case.get("feats"),
+        feats=case.get("feats"), enemies=case.get("enemies"),
     )
     policy = DoctrinePolicy()
     install(world, encounter, {}, default=policy)
