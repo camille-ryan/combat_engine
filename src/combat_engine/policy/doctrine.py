@@ -764,6 +764,39 @@ DAY = 4
 #: when threat is above some threshold".
 THRESHOLD = 1.0
 
+#: How hard the reservation may bite, as a multiple of the row's own worth.
+#:
+#: **Needed because the day factor alone cannot reach the decision.** `day` is at most
+#: `(4-1)/4 = 0.75`, so without this the cost could never exceed three quarters of what
+#: the row is worth -- and a daily only loses to an at-will when the charge exceeds
+#: roughly `daily_worth - atwill_worth`, which on a level-10 board is about 27 of 40.
+#: Measured at `RESERVE = 1.0`: the easy-fight charge came out at 16.4 against a 40-point
+#: daily, the daily still netted 23.6 against an at-will's 13, and dailies in an L-3
+#: fight went *up* rather than down.
+#:
+#: This is the one hand-set number in the family and it is declared rather than hidden:
+#: a daily's true cost is what it would have been worth in a later fight, which no board
+#: state contains. Everything else here is read off the board.
+RESERVE = 2.0
+
+#: How badly hurt an ally has to be before a limited row becomes free regardless of how
+#: the fight is going. **Bloodied, and a quarter was measured and rejected.**
+#:
+#: It is a generous release -- it fires on about 92% of the dailies actually chosen,
+#: because in any real fight somebody is usually under half. Tightening it to a quarter
+#: ("about to drop") did reduce easy-fight spending, and cost more than it saved:
+#:
+#:      release at        <= 1/2    <= 1/4
+#:      L-3 dailies          6.8      6.2
+#:      L+0 drops            3.0      5.6     <- and wins 7/8 -> 6/8
+#:      L+3 rounds          10.5     12.1     drops 12.2 -> 13.8
+#:
+#: Removing it altogether is worse again: drops went 40 -> 74 and one fight ran to 31
+#: rounds. So the party genuinely needs these rows, which is Camille's point on #305 --
+#: a daily that stops incoming damage saves surges, and surges are what a day is made
+#: of. The remaining easy-fight spend is a **budget** problem, not a pricing one.
+EMERGENCY = 0.5
+
 
 def reserved(world: Any, actor: int, worth: float) -> float:
     """What spending a daily costs, in hit points, beyond what the row itself does.
@@ -817,11 +850,11 @@ def reserved(world: Any, actor: int, worth: float) -> float:
             continue
         health = world.get(ally, Health)
         if health is not None and health.max_hp and \
-                T.effective_hp(world, ally) <= health.max_hp * 0.5:
+                T.effective_hp(world, ally) <= health.max_hp * EMERGENCY:
             return 0.0
     other = Team.ENEMY if mine.team is Team.PC else Team.PC
     need = min(1.0, losing(world, mine.team, other) / THRESHOLD) if THRESHOLD else 1.0
-    return worth * day * (1.0 - need)
+    return worth * day * (1.0 - need) * RESERVE
 
 
 def losing(world: Any, ours: Any, theirs: Any) -> float:
@@ -845,7 +878,14 @@ def losing(world: Any, ours: Any, theirs: Any) -> float:
         looking at the measure instead of the constant.
     """
     def output(team: Any) -> float:
-        return sum(T.per_round(world, e) for e in creatures(world)
+        # **`potential`, not `per_round`.** `per_round` is reach-limited -- it asks what
+        # a creature can do from where it stands *now* -- and at the top of a fight
+        # everybody is spread out, so every melee creature reads 0 and the fight looks
+        # safe. Measured: a level-10 elite pair read 10.1 output between them at setup
+        # because one of the two could not reach anybody yet. `potential` drops the
+        # reach test and asks what a round looks like once the creature is standing
+        # where it wants to be, which is the right question for "who wins the race".
+        return sum(T.potential(world, e) for e in creatures(world)
                    if alive(world, e)
                    and (s := world.get(e, Side)) is not None and s.team is team)
 

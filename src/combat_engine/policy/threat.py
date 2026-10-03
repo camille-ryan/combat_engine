@@ -813,6 +813,38 @@ _ROUND: dict[tuple[int, int, int, Pinned | None, bool, Any], float] = {}
 _DENIED: dict[tuple[int, int, int, tuple], float] = {}
 
 
+def area_bodies(kind: str, size: int) -> int:
+    """How many enemies an area row should be *assumed* to catch. Camille's figures.
+
+    Two for a 3x3 footprint, three for 5x5 or larger, one for anything smaller. The
+    caller takes `min` with how many enemies are actually on the field, so a rule that
+    assumes three cannot invent a third enemy.
+
+    **This replaced counting the live crowd, which made `per_round` a fact about the
+    board rather than about the creature.** An area row was multiplied by however many
+    enemies stood inside it, so the same level-10 party measured **16.0** output against
+    two enemies and **262.3** against ten -- a 16-fold swing with nothing about the
+    party changed. Everything is built on that figure: `potential`, `output`, what a
+    target is *worth*, `taken_from`, `risked`, and so `hp_swing`. #332.
+
+    It also broke every attempt at a difficulty measure, because both sides' strength
+    moved with the body count rather than with their level: a ratio of the two read the
+    *easier* encounter as more dangerous, at any threshold.
+
+    A footprint is `2 * size + 1` across for a burst, which is centred, and `size` for
+    a blast or a wall, which is not.
+
+    Deliberately **not** used by `doctrine._in_area`, which feeds `best_from` and
+    `reach_gained`. That asks "would stepping here bring more of them under the blast",
+    and the honest answer there is the real count -- the whole point of the term is that
+    it varies with the board.
+    """
+    span = 2 * max(0, size) + 1 if kind in ("close_burst", "area_burst") else max(1, size)
+    if span <= 1:
+        return 1
+    return 2 if span < 5 else 3
+
+
 def per_round(world: Any, eid: int, pin: Pinned | None = None,
               *, anywhere: bool = False, where: Any = None) -> float:
     """The best damage this creature could do in one round, in hit points.
@@ -892,14 +924,7 @@ def _per_round(world: Any, eid: int, pin: Pinned | None,
             got = expected_vs(world, eid, ref, target,
                               attack=pin.attack if pin else 0)
             if area:
-                # Everything else it would catch, standing where it stands. Close
-                # enough: the origin it would choose is not known here.
-                got *= sum(
-                    1 for other in foes
-                    if (o := world.get(other, Position)) is not None
-                    and (anywhere or distance(stand, o.square)
-                         <= max(1, p.reach.size) + speed)
-                )
+                got *= min(area_bodies(p.reach.kind, p.reach.size), len(foes))
             if pin is not None and pin.weakened:
                 got /= 2        # `Rules.weakened`: the damage it deals is halved
             best = max(best, got)

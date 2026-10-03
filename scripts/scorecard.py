@@ -116,6 +116,11 @@ BASELINE = Path(__file__).resolve().parent / "fixtures" / "scorecard.json"
 #: the truth, which is the fault it exists to catch.
 DERIVED = frozenset({
     "hp_swing",
+    # Measured: the row's own worth times `losing()` times how much of the day is left.
+    # Omitted when it was added, so `static_pct` read 47.9% on a run whose measured
+    # share was really near 40 -- the same misclassification this set was rewritten to
+    # stop, committed by the person who rewrote it.
+    "reserve_cost",
     "threat_conceded",
     "ca_conceded",
     "reach_gained",
