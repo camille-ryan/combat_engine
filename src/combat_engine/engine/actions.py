@@ -1251,5 +1251,26 @@ def recharge(world: World, actor: int) -> None:
         p = get(ref)
         if p is None or p.usage is not Usage.RECHARGE or p.recharge <= 0:
             continue
-        if world.rng.d20().total >= p.recharge:
+        # **A d6, not a d20.** A printed "Recharge 6" is *roll a d6, recharge on a 6* --
+        # one chance in six. Rolling a d20 against the same threshold made it
+        # `P(d20 >= 6) = 15/20`, so:
+        #
+        #     declared        was        is
+        #     recharge=6      75%        17%
+        #     recharge=5      80%        33%
+        #     recharge=4      85%        50%
+        #
+        # **307 of the 314 declared recharge values in `content/` are `recharge=6`**, so
+        # effectively every recharge row in the tree fired about 4.5 times too often.
+        # Measured in play before the fix: one elite's 2d10+6-and-stun fired on 10 of 13
+        # acting rounds in one fight and 4 of 8 in another -- 14/21, against a printed 17%.
+        #
+        # It lands hardest where it is least visible. A recharge row is where an elite or a
+        # solo keeps most of its damage and a standard monster mostly has none, so the
+        # error was concentrated in exactly the encounter shapes that read as too long and
+        # too lethal. #320.
+        #
+        # `roll` rather than `die`, because `die` does not append to `Rng.rolls` and this
+        # module's contract is that every draw is recorded in order.
+        if world.rng.roll("1d6").total >= p.recharge:
             known.restore(ref)
