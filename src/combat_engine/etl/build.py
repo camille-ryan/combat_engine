@@ -1709,6 +1709,27 @@ def _cross_reference_rest(
         if not held_by or (len(ref), ref) < (len(held_by), held_by):
             by_feat[name] = ref
 
+    # **The names that are not rows**, for `_elsewhere`. A ritual, a disease,
+    # a hazard, a deity, a theme and a paragon path are compendium pages with
+    # an entry in `names.json` and no row in any table -- 4,700 of them -- so
+    # no index built from imported rows can reach one. Kept apart from
+    # `by_name` deliberately: resolving a ritual onto a power that shares its
+    # name would hand an author a confident pointer at the wrong row.
+    #
+    # Lowest ref wins a tie, only so the build is deterministic; where two
+    # pages share a name either answer says the same thing, which is "a name
+    # was here and it is not something we hold".
+    by_other: dict[str, str] = {}
+    for ref, entry in names.items():
+        if not re.match(r"^x\d*_", ref):
+            continue
+        name = _low((entry.get("name") or "").strip())
+        if len(name) < 3:
+            continue
+        held = by_other.get(name, "")
+        if not held or (len(ref), ref) < (len(held), held):
+            by_other[name] = ref
+
     # **Which class is speaking.** The disambiguator was there all
     # along: a class feature's ref names its class, a power's row
     # stores it, and a feat's gate usually states it. A feat's sub-rows
@@ -1867,6 +1888,13 @@ def _cross_reference_rest(
             # ordinary words -- `quick draw`, `ritual caster` -- which
             # is precisely what `identifies` waives.
             fixed = _named_feats(fixed, by_feat, ref)
+            # **Outside the `others` guard**, for the third time and the same
+            # reason the two passes above are: that guard skips a row whose
+            # spec names nothing `identifies` believes, and a ritual or a
+            # disease is very often two ordinary words -- which is precisely
+            # what `identifies` waives. The rows this serves are the ones it
+            # was skipping. #340.
+            fixed = _elsewhere(fixed, by_other, rules)
             if others:
                 fixed = scrub(fixed, others)
                 if table == "feat":
@@ -2012,6 +2040,28 @@ _NAMED_FEAT = re.compile(
     r"\b([A-Za-z][\w'\u2019-]*(?:\s+[A-Za-z][\w'\u2019-]*){0,4}?)\s+feat\b"
 )
 
+
+#: **A ritual, named where the sentence says it is one.** "You have mastered
+#: the *<name>* ritual", "the *<name>* and *<name>* rituals".
+#:
+#: Non-greedy and bounded, like `_NAMED_FEAT`, and for the same reason: the
+#: noun after the run is what makes the position proof, so the run must not
+#: swallow the sentence before it.
+#: **The separator allows a comma**, because the corpus writes these as lists:
+#: "the Detect Object, x0_42, Find the Path, and x0_262 rituals". With `\s+`
+#: the run stopped at the first comma and only the final member resolved --
+#: which is how eight more names survived the first version of this pass.
+_NAMED_RITUAL = re.compile(
+    r"\b([A-Za-z][\w'\u2019-]*(?:[\s,]+[A-Za-z][\w'\u2019-]*){0,16}?)\s+rituals?\b"
+)
+
+#: **A disease, named where the sentence says it is one.** "the target
+#: contracts *<name>*", "the target is exposed to *<name>*". The compendium
+#: writes both and almost nothing else.
+_CONTRACTED = re.compile(
+    r"\b(?:contracts|exposed to)\s+"
+    r"([A-Za-z][\w'\u2019-]*(?:\s+[A-Za-z][\w'\u2019-]*){0,3})"
+)
 
 #: The same name on the other side of the noun: "you gain the barbarian
 #: **class feature** *<name>*". Rare -- one row in the corpus asks for it
@@ -2361,6 +2411,65 @@ def _named_feats(spec: str, by_feat: dict[str, str], own: str) -> str:
         return m.group(0)
 
     return _NAMED_FEAT.sub(swap, spec)
+
+
+def _elsewhere(spec: str, by_other: dict[str, str], rules: set[str]) -> str:
+    """Swap a ritual's or a disease's printed name for its ref.
+
+    The fourth position-based pass, and it exists for the reason the three
+    above it do: `identifies` waives a two-word phrase of two ordinary words
+    because in running prose such a phrase is usually a coincidence, and its
+    docstring says out loud that the cost is missing a real name of that
+    shape. **In these two positions it is never a coincidence.** A phrase
+    directly before "ritual" or "rituals", or directly after "contracts" or
+    "exposed to", is a name by construction -- the compendium writes both
+    sentences the same way everywhere.
+
+    So the test is `sanitise.cited`, which is `identifies` with the length
+    clause dropped and the clauses about the phrase itself kept. #340.
+
+    **The index is the names that are not rows**, which is the other half of
+    why this was invisible. A ritual, a disease, a hazard, a deity and a
+    paragon path are compendium *pages*: 4,700 of them have an entry in
+    `names.json` and **none has a row in any table**. So they can never be
+    reached through `by_name`, which is built from imported rows -- and
+    resolving onto `by_name` would be worse than nothing, because a ritual
+    sharing a name with a power would point an author at the power.
+
+    What an author gets is a ref that resolves to no row, and that is the
+    honest answer rather than a shortcoming: it says "a named thing the
+    database does not model" where the prose said "go and look this up".
+    `x0_9` was already reaching specs this way through the general pass; the
+    names this adds are the ones that general test waives.
+
+    Longest match first within each conjunct, so `the <name> ritual` loses
+    "the" rather than keeping a fragment, and `<name> and <name> rituals`
+    resolves **both** -- the conjunction is split before matching, because one
+    run of five words holding two names cannot be resolved from either end.
+    """
+    def one(run: str) -> str:
+        words = run.split()
+        for size in range(len(words), 0, -1):
+            name = _low(" ".join(words[-size:]))
+            ref = by_other.get(name)
+            if not ref or not sanitise.cited(name, rules):
+                continue
+            head = " ".join(words[:-size])
+            return " ".join(w for w in (head, ref) if w)
+        return run
+
+    def swap(m: re.Match) -> str:
+        # Commas and "and" are split before matching, never looked for inside a
+        # candidate name: printed names do contain "and", but not in this
+        # position and not between two other members of a list. Separators are
+        # kept and put back, so a spec reads as the compendium set it.
+        run = m.group(1)
+        parts = re.split(r"(\s*,\s*|\s+and\s+)", run)
+        done = "".join(p if i % 2 else one(p) for i, p in enumerate(parts))
+        return m.group(0).replace(run, done, 1)
+
+    spec = _NAMED_RITUAL.sub(swap, spec)
+    return _CONTRACTED.sub(swap, spec)
 
 
 def _label_refs(
