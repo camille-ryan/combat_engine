@@ -1264,9 +1264,10 @@ def loadout(
     # the pool so the rows a wizard *can* use were less likely to be drawn, and they
     # sat in the policy's menu to be scored and chosen.
     #
-    # Excluded outright rather than gated on a build, because there is no bladesinger
-    # build to gate on: `BUILDS["wizard"]` is control and war. When one is added this
-    # becomes "unless the build is that one", and the keyword is what it will ask.
+    # Excluded outright rather than gated on a build, because the subclass these
+    # belong to has no leg to gate on: `BUILDS["wizard"]` holds two, and neither is
+    # it. When one is added this becomes "unless the build is that one", and the
+    # keyword is what it will ask.
     from combat_engine.engine.types import Keyword as _Kw
 
     out = sorted(p.ref for p in mine

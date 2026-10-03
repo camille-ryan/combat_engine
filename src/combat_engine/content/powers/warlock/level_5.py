@@ -287,7 +287,7 @@ def p4076(c: Cast) -> None:
 def p6858(c: Cast) -> None:
     """`c.burns` is the once-a-turn bite the printed line asks for, and it
     rolls its dice per bite rather than once when the zone was made.
-    Concealment is not denied -- nothing suppresses it -- and the Ugar pact
+    Concealment is not denied -- nothing suppresses it -- and this row's pact
     boon has no leg to ask for."""
     if c.target is not None and c.strike():
         c.damage("1d10", c.con_mod, dtype=DamageType.FIRE)

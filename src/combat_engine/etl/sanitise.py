@@ -170,9 +170,12 @@ def scrub(
     `replacements` are swapped **as whole phrases only**. `by_word` are
     swapped a word at a time as well, and the distinction matters:
 
-    * A **stat block refers to itself by a fragment of its own name.** It
-      writes "the goblin shifts 1 square" and "the blackblade's previous
-      space", never the full name, so a monster's name has to come apart.
+    * A **stat block refers to itself by a fragment of its own name.** A
+      two-word monster whose first word is its type writes "the <type>
+      shifts 1 square" using that half, and "the <other half>'s previous
+      space" using the other -- never the full name. So a monster's name has
+      to come apart. `m237` is the worked example: both halves appear alone
+      in its own rules text and neither is the whole name.
     * An **ability never refers to itself by a fragment.** A trait whose
       name ends in a damage type is not written as "the cold" anywhere --
       but its rules text says *"whenever it takes cold damage"*, and taking

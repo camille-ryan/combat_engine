@@ -538,7 +538,7 @@ def p6855(c: Cast) -> None:
     attack=Attack(CON, vs=REF),
 )
 def p6856(c: Cast) -> None:
-    # The Khaeleth pact boon has no leg to ask for.
+    # This row's pact boon has no leg to ask for.
     extra = c.int_mod * len(c.within(1, side="ally"))
     if c.strike():
         c.damage("1d8", c.con_mod + extra)
@@ -559,8 +559,8 @@ def p6856(c: Cast) -> None:
 )
 def p6857(c: Cast) -> None:
     """"Cannot walk or run" is written as immobilised, which is the nearest
-    card: it also stops a shift, which the printed line leaves alone. The
-    Mount Vaelis pact boon has no leg to ask for."""
+    card: it also stops a shift, which the printed line leaves alone. This
+    row's pact boon has no leg to ask for."""
     if c.strike():
         c.damage("2d8", c.con_mod, dtype=DamageType.THUNDER)
         c.immobilized(until=When.SAVE_ENDS)

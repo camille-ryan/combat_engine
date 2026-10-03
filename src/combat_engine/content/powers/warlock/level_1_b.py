@@ -124,7 +124,7 @@ def p10379(c: Cast) -> None:
     attack=Attack(CON, vs=REF),
 )
 def p11303(c: Cast) -> None:
-    """The Thaxter pact boon is dropped: no such leg in the class's builds."""
+    """This row's pact boon is dropped: no such leg in the class's builds."""
     if c.int_mod > 0 and c.may("step", who=c.me):
         c.shift(c.int_mod)  # "before or after"; before is what a body can take
     if c.strike():

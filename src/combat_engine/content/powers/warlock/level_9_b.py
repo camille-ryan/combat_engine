@@ -381,7 +381,7 @@ def p4287(c: Cast) -> None:
     attack=Attack(CON, vs=REF),
 )
 def p6860(c: Cast) -> None:
-    # The Ilmeth pact boon has no leg to ask for.
+    # This row's pact boon has no leg to ask for.
     victim = c.target
     if c.strike():
         c.damage("2d10", c.con_mod, dtype=DamageType.PSYCHIC)
@@ -410,7 +410,7 @@ def p6860(c: Cast) -> None:
     attack=Attack(CON, vs=FORT),
 )
 def p6861(c: Cast) -> None:
-    # The Shax pact boon has no leg to ask for.
+    # This row's pact boon has no leg to ask for.
     if c.target is None:
         return
     c.prone()  # an Effect line: everything the blast covers falls
