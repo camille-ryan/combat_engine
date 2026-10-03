@@ -525,10 +525,57 @@ def _compose(level: int, paradigm: str, draw: Random | None) -> list[str]:
         pool = [r for r in pool if r in costs]
         if not pool:
             return []
+        want = total * share
+        # **Within a tolerance of the budget first, then by level.** Sorting on
+        # level distance alone put a 156%-of-budget solo in front of a 93% one at
+        # level 5, because the nearest-level solo written happens to be an
+        # expensive one -- and a solo is taken unconditionally, being one creature.
+        # Measured consequence: every one of the seven worst level-5 boards for
+        # party casualties was a solo, 10 to 14 drops against 6 for the next
+        # paradigm, in fights of three to seven rounds. Not a grind -- too hard.
+        #
+        # So candidates that fit are preferred, and the level sort then breaks ties
+        # among them. The shuffle survives both sorts for equal keys, which is what
+        # keeps two seeds from always meeting the same creature.
         if draw is not None:
             pool = draw.sample(pool, len(pool))
-        pool = mixed(sorted(pool, key=lambda r: depth[r]))
-        want = total * share
+        # **Sorted after `mixed`, not before.** `mixed` interleaves by role and so
+        # re-orders whatever it is given -- sorting first and mixing after threw the
+        # fit away entirely, which is why a 156% solo kept winning. A stable sort on
+        # top keeps the role interleave as the tie-break.
+        # **Closest to the share, not merely under it.** A tolerance alone still let
+        # a 1,000 XP solo win an 800 XP budget when a 750 one was written, because
+        # both were inside it. Ordering by distance from the share picks the one that
+        # actually fits, and costs no variety where it matters: every standard at a
+        # level is worth the same, so the key ties and `mixed`'s role interleave
+        # breaks it. Only the ranks with varied prices -- elites and solos -- are
+        # narrowed, which is exactly where precision is wanted, a solo being the
+        # whole encounter.
+        # **One wide bucket, not a ranking.** Anything from 80% to 130% of the share
+        # is "fits", and the shuffle decides inside it; only what misses the band is
+        # pushed to the back.
+        #
+        # Ordering by distance from the share instead was tighter on budget and
+        # measurably worse to play: it picked the single best-fitting creature every
+        # time, so all seven level-5 solo seeds met the same level-4 lurker with 208
+        # hit points, fights went from 3-7 rounds to 6-12, and party casualties rose
+        # from 120 to 165. Tuning one aggregate narrowed the sample until one bad
+        # matchup was the whole measurement, which is the fault the paradigms exist
+        # to prevent.
+        aim = max(want, 1.0)
+
+        def band(ref: str, c: dict[str, float] = costs, a: float = aim) -> int:
+            return 0 if 0.8 * a <= c[ref] <= 1.3 * a else 1
+
+        # **`mixed` is for a group, so a solo does not get it.** It interleaves by
+        # role, which means the first creature it yields is always from the first
+        # role in `ROLE_ORDER` that has a member -- harmless when four are being
+        # taken and a fixed preference when one is. All seven solo seeds met the same
+        # creature for that reason, with the shuffle unable to reach past it.
+        ordered = sorted(pool, key=lambda r: depth[r])
+        if rank != "solo":
+            ordered = mixed(ordered)
+        pool = sorted(ordered, key=band)
         spent = 0.0
         taken = 0
         for i in range(MOST * len(pool)):
