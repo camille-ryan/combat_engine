@@ -45,15 +45,20 @@ name to authors with nothing saying so. See `names_a_race` in
 
 from __future__ import annotations
 
+import contextlib
 import re
 import sqlite3
 import subprocess
 import sys
 from pathlib import Path
 
-from combat_engine.etl.build import ROOT, game, localisation
+from combat_engine.etl.build import ROOT, SOURCE, game, localisation
 from combat_engine.etl.sanitise import (
+    ALLOWED,
+    COMMON_ENOUGH,
     RULES_TERMS,
+    SHORTEST,
+    ordinary,
 )
 from combat_engine.etl.sanitise import (
     identifies as _identifies,
@@ -73,6 +78,29 @@ from combat_engine.etl.sanitise import (
 #: never needs editing for it.
 CORE = set(RULES_TERMS)
 
+
+#: Component words that are a **ref slug today**, each waiting on the issue
+#: that removes it. Not an allow-list of coincidences -- every one is a real
+#: printed name sitting in a real identifier, and the entry records which piece
+#: of work takes it out.
+#:
+#: Hand-kept on purpose, and the opposite way round from the lists `lint.py`
+#: warns about. A *derived* exemption -- "excuse any word used as a ref slug" --
+#: would be self-fulfilling: the next author to mint a ref from a printed name
+#: would be excused by the act of doing it, which is precisely what this pass
+#: exists to report. A named list cannot do that.
+#:
+#: **A stale entry is a failure.** If a word here stops appearing, the work
+#: landed and the entry is dead weight, so `main` says so and exits non-zero --
+#: the discipline `todo.py` applies to a marker whose symbol has arrived. It
+#: earned its keep immediately: `weaponmaster` was in here until the first run
+#: pointed out that build words already come off the source's own `Class` name,
+#: parentheses included, so `_type_words` excuses it and the entry was dead.
+DEFERRED = {
+    "battlerager": "#339 -- a sub-option name used as a BUILDS key",
+    "kusari-gama": "#339 -- a weapon ref is its slugified printed name",
+    "winterkin": "#341 -- one of 113 racial-trait refs minted from a label",
+}
 
 SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__", "data", "localization"}
 TEXT_SUFFIXES = {".py", ".md", ".js", ".css", ".html", ".json", ".toml", ".txt", ".sql"}
@@ -107,6 +135,113 @@ def _index(names: dict) -> tuple[dict[str, list[str]], dict[str, str]]:
         index.setdefault(key, []).append(ref)
         printed.setdefault(key, name)
     return index, printed
+
+
+def _type_words() -> set[str]:
+    """Words the engine asks a creature *by*, which are never a name here.
+
+    A race's name, a creature's kind, its role and its origin are printed
+    beside the numbers because they are mechanical -- `is_kind("<type>")` is a
+    real query and "the <type> shifts 1 square" is a rules sentence. The
+    single-word pass already waives all of these through `names_a_race`; the
+    component pass below needs the same list, because the identifying half of a
+    two-word creature name is very often its type.
+
+    **Read off the database, never listed.** Nothing in this file should have to
+    spell a name in order to excuse it, which is the trap `_slot`'s allow-list
+    in the ETL was written to avoid.
+
+    **Class and build names are in here, and that is a deferral rather than a
+    decision.** Of 28 distinct class values only three are invented compounds
+    this pass would report; the other 25 are ordinary English. A class name is
+    also the content tree's primary mechanical key -- `cls=`, the `cf:` refs, 27
+    directories, 6,070 sites -- so the fix is to give `class` the compendium id
+    it already has and never uses, which is #339. Until that lands these are
+    excused, because a permanently red `leaks.py` is a check nobody reads.
+    """
+    out: set[str] = set()
+    # **The build the class page prints in parentheses** -- "Fighter
+    # (Weaponmaster)" -- is a key in `chargen.BUILDS` and inside 76 `cf:` refs,
+    # so it is load-bearing exactly as a class name is. Read from the source's
+    # own Name column, which is where the slug came from in the first place.
+    with (
+        sqlite3.connect(f"file:{SOURCE}?mode=ro", uri=True) as src,
+        contextlib.suppress(sqlite3.OperationalError),
+    ):
+        for (name,) in src.execute("SELECT Name FROM Class"):
+            for word in re.findall(r"[a-z']{3,}", (name or "").lower()):
+                out.add(word)
+    db = game()
+    for table, column in (("monster", "kind"), ("monster", "role"),
+                          ("monster", "origin"), ("class", "name")):
+        try:
+            rows = db.execute(f"SELECT DISTINCT {column} FROM {table}").fetchall()
+        except sqlite3.OperationalError:
+            continue  # The table or column is absent from an older build.
+        for (value,) in rows:
+            # `kind` arrives with the parentheses a stat block prints around a
+            # sub-type, so the brackets come off with the word split.
+            for word in re.findall(r"[a-z']{3,}", (value or "").lower()):
+                out.add(word)
+    for ref, entry in localisation().items():
+        if ref.startswith("r") and ref[1:].isdigit():
+            for word in re.findall(r"[a-z']{3,}", (entry.get("name") or "").lower()):
+                out.add(word)
+    return out
+
+
+def _components(names: dict, rules: set[str]) -> dict[str, list[str]]:
+    """Words that only ever appear *inside* a printed name, never as one.
+
+    The whole-name index cannot reach these by construction -- `_hits` looks a
+    phrase up and the phrase is never a key -- so a subclass, a build, a named
+    entity or a hyphenated half is invisible to every other pass. **6,801 words
+    of six characters or more are in this shape.** #338.
+
+    Four tests, and the third is what makes it usable at all:
+
+    * **long enough**, `SHORTEST`, as the lone-word rule already requires;
+    * **rare enough**, naming at most `COMMON_ENOUGH` printed names, because a
+      word inside hundreds of names identifies none of them;
+    * **not an ordinary word**, inflections included -- `sanitise.ordinary`.
+      Without the inflections this reports 141 words and nearly all of them are
+      English that some printed name happens to contain;
+    * **not a type word** the engine asks by -- `_type_words`.
+
+    Measured on this corpus: 141 candidates present in the tree before the
+    inflection test, 46 after it, 11 after the type words, and the remainder are
+    the ref-naming issues #339 and #341 already describe, held in `DEFERRED`.
+    """
+    whole = {(e.get("name") or "").strip().lower() for e in names.values()}
+    inside: dict[str, set[str]] = {}
+    for ref, entry in names.items():
+        name = (entry.get("name") or "").strip().lower()
+        for word in re.findall(r"[a-z][a-z'-]*", name):
+            if len(word) >= SHORTEST and word not in whole:
+                inside.setdefault(word, set()).add(ref)
+    types = _type_words()
+
+    def excused(word: str) -> bool:
+        # **The possessive comes off before the comparison.** The type list
+        # holds `battlemind`; the corpus writes `battlemind's`, which is the
+        # form a two-word name leaves behind. Without this the exemption misses
+        # every possessive and reports the class names it exists to excuse.
+        bare = word
+        for suffix in ("'s", "s'", "'"):
+            if bare.endswith(suffix) and len(bare) > len(suffix) + 2:
+                bare = bare[: -len(suffix)]
+                break
+        return bare in types or word in types or bare in ALLOWED
+
+    return {
+        word: sorted(refs)
+        for word, refs in inside.items()
+        if len(refs) <= COMMON_ENOUGH
+        and word not in rules
+        and word not in ALLOWED
+        and not excused(word)
+        and not ordinary(word)
+    }
 
 
 def tracked() -> list[Path]:
@@ -259,8 +394,15 @@ def main() -> int:
     index, printed = _index(names)
 
     rules = vocabulary()
+    parts = _components(names, rules)
+    inside = re.compile(r"\b(" + "|".join(
+        sorted((re.escape(w) for w in parts), key=len, reverse=True)
+    ) + r")\b") if parts else None
     findings: list[tuple[Path, int, str, list[str]]] = []
     quiet: list[tuple[Path, int, str, list[str]]] = []
+    #: (file, word) -> the first line it was seen on.
+    components: dict[tuple[Path, str], int] = {}
+    deferred_seen: set[str] = set()
 
     for path in tracked():
         if path.suffix not in TEXT_SUFFIXES or not path.exists():
@@ -275,6 +417,17 @@ def main() -> int:
             for name, refs in _hits(line, index):
                 where = findings if _identifies(name, refs, rules, line) else quiet
                 where.append((path.relative_to(ROOT), n, name, refs))
+            # The component pass. One alternation over every candidate rather
+            # than a pass per word: there are a few thousand and 2,800 files.
+            # **Recorded per word and file, not per line** -- one fixture
+            # mentions a build name on sixty lines and that is one thing to fix,
+            # the same reason `specs` reports per row.
+            if inside is not None:
+                for found in set(inside.findall(line.lower())):
+                    if found in DEFERRED:
+                        deferred_seen.add(found)
+                        continue
+                    components.setdefault((path.relative_to(ROOT), found), n)
 
     for path, n, name, refs in findings:
         # The printed spelling, not the normalised key -- a reader told the name
@@ -282,6 +435,11 @@ def main() -> int:
         # wrong string.
         shown = printed.get(name, name)
         print(f"{path}:{n}: {shown!r} is the printed name of {', '.join(refs[:3])}")
+
+    for (path, word), n in sorted(components.items()):
+        # **"part of", not "is"** -- it is not a whole printed name, and a reader
+        # sent looking for a row called that would not find one.
+        print(f"{path}:{n}: {word!r} names part of {', '.join(parts[word][:3])}")
 
     if quiet:
         words = sorted({name for _, _, name, _ in quiet})
@@ -291,8 +449,25 @@ def main() -> int:
             + (" ..." if len(words) > 12 else "")
         )
 
-    if findings:
-        print(f"\n{len(findings)} leaks. Names belong in localization/, not in the tree.")
+    if DEFERRED:
+        print(f"\n{len(deferred_seen)} of {len(DEFERRED)} deferred slugs still present:")
+        for word in sorted(deferred_seen):
+            print(f"  {word}: {DEFERRED[word]}")
+
+    stale = sorted(set(DEFERRED) - deferred_seen)
+    if stale:
+        print(
+            f"\n{len(stale)} deferred slug(s) no longer appear, so the work landed "
+            "and the entry should go: " + ", ".join(stale)
+        )
+
+    if findings or components:
+        whole = f"{len(findings)} whole" if findings else ""
+        part = f"{len(components)} partial" if components else ""
+        print(f"\n{', '.join(x for x in (whole, part) if x)} leaks. "
+              "Names belong in localization/, not in the tree.")
+        return 1
+    if stale:
         return 1
     print("no printed names in tracked files")
     return 0

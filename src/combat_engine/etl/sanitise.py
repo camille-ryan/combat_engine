@@ -419,7 +419,28 @@ STOPWORDS = {
 #: Emptied once the phrase rule above learned to ask whether any word in a
 #: phrase is actually a word. Both entries that lived here -- "from the
 #: shadows" and "meat shield" -- are now suppressed on their merits.
-ALLOWED: set[str] = set()
+#:
+#: **Two closed compounds back in it**, for the component-word pass (#338).
+#: Each is the whole printed name of one row *and* an everyday compound, and
+#: the rule that would clear them automatically -- two dictionary halves --
+#: also clears five printed names, so `ordinary` refuses to make it. Both have
+#: been read:
+#:
+#: * `shortcut`: used in `scripts/audit.py` about the harness, and in one feat
+#:   docstring about the clause it skips. Neither is about the row it collides
+#:   with.
+#: * `lockdown`: used in one plan file about a tactical pattern.
+#: * `spellbook`: the object a wizard's rows read and write, in 14 files. It is
+#:   part of three printed names and is itself the mechanical noun -- the same
+#:   case as a creature's type word, which `_type_words` excuses for the same
+#:   reason.
+#: * `campsite`: part of three printed names and an everyday word; used once,
+#:   about where a rest happens.
+#:
+#: This list goes wrong by staying quiet, which is why each entry names where
+#: it is used and why -- the same argument `REVIEWED` in `scripts/leaks.py`
+#: makes for itself.
+ALLOWED: set[str] = {"shortcut", "lockdown", "spellbook", "campsite"}
 
 
 #: The system word list, where there is one. `builder`, `dispatch` and
@@ -427,6 +448,84 @@ ALLOWED: set[str] = set()
 #: amount of counting tells those apart from an invented name -- a
 #: dictionary does it in one lookup. Absent on some machines, hence the fallbacks.
 DICTIONARY = Path("/usr/share/dict/words")
+
+#: Webster's hyphenated and multi-word entries, beside the single words above.
+#: `low-light` is in here and in no stat block's vocabulary, so without it a
+#: perfectly ordinary compound reads as invented. 76,205 entries.
+DICTIONARY_PHRASES = Path("/usr/share/dict/web2a")
+
+
+@lru_cache(maxsize=1)
+def english() -> frozenset[str]:
+    """Every word the system lists, both files, lowered."""
+    out: set[str] = set()
+    for path in (DICTIONARY, DICTIONARY_PHRASES):
+        if path.exists():
+            out.update(
+                w.strip().lower()
+                for w in path.read_text(errors="ignore").splitlines()
+                if w.strip()
+            )
+    return frozenset(out)
+
+
+#: Suffix pairs: strip the first, add the second, look the result up.
+_INFLECTIONS = (
+    ("s", ""), ("es", ""), ("ed", ""), ("ed", "e"), ("ing", ""), ("ing", "e"),
+    ("d", ""), ("er", ""), ("ers", ""), ("est", ""), ("ly", ""),
+    ("ies", "y"), ("ied", "y"), ("iest", "y"), ("ier", "y"),
+)
+
+#: A consonant that doubles before `-ed`, `-ing`, `-er`: planning, rigged.
+_DOUBLED = re.compile(r"^(.*?)([bdfglmnprt])\2(ed|ing|er|est)$")
+
+
+def ordinary(word: str) -> bool:
+    """Is this an ordinary English word -- **inflections and all**?
+
+    `word in english()` is not enough and the gap is not academic. The system
+    list is Webster's Second: it holds `create` and `shake` and not `created`
+    or `shakes`, holds `plan` and not `planning`, `rig` and not `rigged`. Each
+    of those inflections is also some row's printed name, and each is a word
+    anybody writing a docstring will use -- so a bare membership test reports
+    twenty coincidences for every real find. Measured when the `common_word`
+    guard first went in: **20 of its first 25 findings were that mistake.**
+
+    `_stem` below is not this. It is crudely singular, for the possessive
+    inside a phrase, and deliberately does not reach a participle.
+
+    **A closed compound is not tested**, and the reason is worth keeping:
+    splitting a word into two dictionary halves does clear `shortcut` and
+    `lockdown`, and it equally clears `runepriest`, `swordmage`,
+    `battlemind`, `weaponmaster` and `winterkin` -- every one of which is a
+    printed name, because an invented name in this corpus is very often two
+    ordinary words joined. A rule that cannot tell those apart is worse than
+    the two coincidences it would fix, so the coincidences go in `ALLOWED`
+    having been read, and this stays strict. A hyphen *is* honoured, because
+    `web2a` lists hyphenated entries and the hyphen is the author's own signal
+    that the parts are separate words.
+    """
+    words = english()
+    if word in words:
+        return True
+    for suffix in ("'s", "s'", "n't", "'"):
+        if word.endswith(suffix) and len(word) > len(suffix) + 2:
+            return ordinary(word[: -len(suffix)])
+    parts = [p for p in word.split("-") if p]
+    if len(parts) > 1 and all(_inflected(p, words) for p in parts):
+        return True
+    return _inflected(word, words)
+
+
+def _inflected(word: str, words: frozenset[str]) -> bool:
+    if word in words:
+        return True
+    for suffix, add in _INFLECTIONS:
+        if (word.endswith(suffix) and len(word) > len(suffix) + 2
+                and word[: -len(suffix)] + add in words):
+            return True
+    doubled = _DOUBLED.match(word)
+    return bool(doubled and doubled.group(1) + doubled.group(2) in words)
 
 
 def vocabulary() -> set[str]:
