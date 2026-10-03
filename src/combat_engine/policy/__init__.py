@@ -554,7 +554,11 @@ WEIGHTS: dict[str, float] = {
     # Strictly worse than walking: it covers the same ground and hands
     # every enemy combat advantage until your next turn. Worth it only
     # when `closes_distance` is large enough to pay for that.
-    "is_run": -3.0,
+    # **Was -3.0, standing in for the combat advantage a run concedes.** That is
+    # `ca_conceded` now, which scales with how many enemies gain it (#314). What is
+    # left here is the run's *own* cost -- the printed -5 to the runner's attack
+    # rolls -- which is real and is not about the enemies at all.
+    "is_run": -1.0,
     # A whole extra action for a free one, and it is only offered when the
     # turn has nothing left -- so the alternative really is ending. Worth
     # more than ending a turn and less than a good attack, because the

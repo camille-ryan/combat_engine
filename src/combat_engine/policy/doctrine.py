@@ -330,6 +330,8 @@ DOCTRINE: dict[str, float] = {
     # attacks over 20 fights at level 5 to 140. The flat pair is a calibrated
     # baseline; this is the part that varies with who is swinging.
     "threat_conceded": -SHARE,
+    # Combat advantage handed out by running, per enemy that gains it. #314.
+    "ca_conceded": -SHARE,
     # And what the move *buys*. Camille's rule: the OA is worth paying when the
     # square on the far side of it is worth more than the swing costs -- getting
     # a close blast onto the whole enemy party being the case that makes it
@@ -1239,6 +1241,23 @@ def doctrine_features(
             gained = best_from(world, actor, dest) - best_from(world, actor, here)
             if gained:
                 f["reach_gained"] = gained
+
+    # **Running hands every enemy combat advantage, and -3.0 could not say how
+    # many.** #314's clearest conversion: `is_run` is one number whether two
+    # enemies gain the +2 or five do, and `threat_conceded` right above is
+    # explicitly per-enemy for exactly this reason. Two agents reading two
+    # different level-10 fights independently found three monsters running on round
+    # one and handing the whole party combat advantage for a round; the party made
+    # 23 rolls at advantage in one of those round ones.
+    #
+    # Priced as a tenth of a free swing from each of them, because +2 on a d20 is
+    # two twentieths of the die and `conceded` already values a whole swing in the
+    # currency this needs -- a share of the runner's own hit points. So the figure
+    # moves with *who* gains it, which is the whole point.
+    if action.kind == "run":
+        gaining = [e for e in foes(world, actor) if alive(world, e)]
+        if gaining:
+            f["ca_conceded"] = conceded(world, actor, gaining) * 0.1
 
     # **The other way a swing is conceded, and the commoner one.** A ranged or area
     # row used with somebody standing over you hands *each* of them an attack, and
