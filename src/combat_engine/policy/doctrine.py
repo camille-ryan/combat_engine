@@ -217,9 +217,10 @@ from combat_engine.engine.query import (
     flankers,
     is_,
     squares,
+    surge_value,
 )
 from combat_engine.engine.turns import Encounter
-from combat_engine.engine.types import ActionType, Condition, Team
+from combat_engine.engine.types import ActionType, Condition
 
 from . import (
     WEIGHTS,
@@ -311,13 +312,35 @@ DOCTRINE: dict[str, float] = {
     # opportunity attacks against `LinearPolicy`'s 116, for no gain in win rate
     # and a slightly *lower* hit rate. 20.0 puts its mean contribution near
     # `hit_chance`'s, which is where a tiebreaker between attacks belongs.
-    "threat_removed": SHARE,
+    # **Replaced by `hp_swing`, which is the same idea in hit points.** #314.
+    # `threat_removed` divided by `T.capacity`, so it was a share of the enemy
+    # side's threat-weighted durability -- and six other terms divided by three
+    # *different* denominators, so "one currency, one weight" was never true.
+    # Measured, the constants it competed against were 90.2% of all weighted
+    # magnitude and `hit_chance` + `expected_hits` re-applied the hit chance
+    # `expected_vs` already contains, outweighing it 3.1 to 1.
+    #
+    # `hp_swing` is weight **1.0** because the feature is already the answer: hit
+    # points of advantage this action creates, enemies positive and our own side
+    # negative. Nothing to convert, so nothing to fit, so no `SHARE`.
+    "hp_swing": 1.0,
+    # Reporting only, at 0.0. `scripts/scorecard.py` reads this through `explain`,
+    # which filters to this table, so deleting the key would take its counter to
+    # zero with nothing raising. The quantity itself is inside `hp_swing` now --
+    # the actor is just another creature in the signed loop -- and paying for it
+    # twice is what a leftover weight here would do.
+    "self_harm": 0.0,
     # **What a condition buys the party, which was worth exactly nothing.** A -2
     # to a target's AC, or anything that makes it grant combat advantage, raises
     # every attack the party makes at it. Same currency as the three above -- a
     # share of a health pool -- but the *enemy's* pool, because it is our damage
     # going up rather than theirs coming down.
-    "party_enabled": SHARE,
+    # Folded into `hp_swing` via `T.enabled`, which already answers in hit points
+    # and already sums the output of everyone *not* on the target's team -- so the
+    # same call prices the party's gain against an enemy and the enemy's gain
+    # against one of ours, which is how handing an ally combat advantage against
+    # itself came to cost something.
+    "party_enabled": 0.0,
     # **What provoking actually costs, on top of the flat penalty rather than
     # instead of it.** Camille's point is that -5.0 cannot distinguish a brute's
     # free swing from a minion's, and this is what does -- the expected damage of
@@ -329,21 +352,33 @@ DOCTRINE: dict[str, float] = {
     # provoking from -9.0 to about -0.8, and the party went from 53 opportunity
     # attacks over 20 fights at level 5 to 140. The flat pair is a calibrated
     # baseline; this is the part that varies with who is swinging.
-    "threat_conceded": -SHARE,
+    # Hit points of my own output put at risk, so weight 1.0 like `hp_swing`.
+    # Negative is carried in the sign of nothing -- `conceded` returns a positive
+    # cost, so the weight is what makes it a cost.
+    "threat_conceded": -1.0,
     # Combat advantage handed out by running, per enemy that gains it. #314.
-    "ca_conceded": -SHARE,
+    # Same units, and `conceded * 0.1` stands in for "+2 faces on every swing at
+    # me" rather than converting the faces properly the way `T.enabled` does. The
+    # one approximation left in this family; it wants the `enabled` treatment.
+    "ca_conceded": -1.0,
     # And what the move *buys*. Camille's rule: the OA is worth paying when the
     # square on the far side of it is worth more than the swing costs -- getting
     # a close blast onto the whole enemy party being the case that makes it
     # obvious. Same weight as the two above, because it is the same currency.
-    "reach_gained": SHARE,
+    # Hit points the best row from there would deal, minus the same from here. 1.0
+    # like the rest, now that `best_from` answers in hit points.
+    #
+    # **Still a difference of baselines, which is its known flaw.** It cannot
+    # express "avoid this", only "anywhere but here" -- netting friendly fire into
+    # it once made friendly fire worse, 20 to 25, and was reverted. #293 is where
+    # a real lookahead replaces it.
+    "reach_gained": 1.0,
     # **Standing in your own blast.** `policy.features` excludes the caster from
     # `allies_caught` -- `t != actor` -- which it does so that a `target=SELF` buff
     # is not read as friendly fire, and which makes catching *yourself* in your own
     # area attack completely free. Two reviewers of a level-10 sweep found the same
     # wizard doing it for seven rounds and dying of it. Priced against its own hit
     # points, exactly like `threat_conceded`.
-    "self_harm": -SHARE,
     # **A buff that is already on you.** Re-applying it adds nothing and costs the
     # action. `policy.features` has `swaps_stance` for the `STANCE`-tagged case and
     # nothing for the rest, so a defender spent three consecutive rounds re-casting
@@ -387,7 +422,8 @@ DOCTRINE: dict[str, float] = {
     # What a heal puts back, as a share of the **party's** pool -- the same
     # currency as the three above, so mending the fighter and killing the brute
     # are weighed against one another rather than on two different scales.
-    "healing_given": SHARE,
+    # Hit points of a creature's own output restored, so 1.0 like `hp_swing`.
+    "healing_given": 1.0,
     # Healing somebody who is not hurt. A separate term from the above rather
     # than a zero in it, so that choosing the wrong target is visibly penalised
     # instead of merely scoring nothing.
@@ -691,7 +727,7 @@ def watchers(world: Any, actor: int) -> list[int]:
 
 
 def conceded(world: Any, actor: int, foes: list[int]) -> float:
-    """What conceding these swings costs, as a share of **my own** hit points.
+    """What conceding these swings costs, in hit points of my own output.
 
     **Camille's correction, and the reason this is not a flat number.** A
     provocation is priced at what it actually hands over, and a -5.0 that does not
@@ -727,8 +763,18 @@ def conceded(world: Any, actor: int, foes: list[int]) -> float:
     health = world.get(actor, Health)
     if health is None or health.hp <= 0:
         return 0.0
-    incoming = sum(T.row_damage(world, f, _basic_of(world, f)) for f in foes)
-    return min(1.0, incoming / health.hp)
+    # **Hit points, and `expected_vs` rather than `row_damage`.** #314. This used to
+    # return `incoming / my_hp` clamped at 1 -- a fraction, which could only be
+    # compared with other fractions, and which priced a swing that would kill me the
+    # same as one that would take me to 1. `T.risked` keeps the fragility reading
+    # Camille built this for (divide by my own health, not my side's pool) and adds
+    # what the fraction could not say: *what is at risk*, which is my own output.
+    #
+    # `expected_vs` scales by the real chance of the swing landing against my real
+    # defences; `row_damage` is the baseline figure and charged a soldier and a
+    # wizard the same for standing next to the same brute.
+    incoming = sum(T.expected_vs(world, f, _basic_of(world, f), actor) for f in foes)
+    return T.risked(world, actor, incoming)
 
 
 def _in_area(world: Any, actor: int, origin: Any, ref: str) -> int:
@@ -831,10 +877,6 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
     theirs = world.get(actor, Side)
     if known is None or theirs is None:
         return 0.0
-    other = Team.ENEMY if theirs.team is Team.PC else Team.PC
-    pool = T.pool(world, other)
-    if not pool:
-        return 0.0
     best = 0.0
     for ref in known.known:
         # **Only what it could actually use.** Counting a spent daily inflated
@@ -861,8 +903,13 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
             if 2 <= distance(origin, there) <= span:
                 best = max(best, T.row_damage(world, actor, basic))
                 break
-    _BEST[key] = best / pool
-    return _BEST[key]
+    # **Hit points, not a share of the enemy pool.** #314. Dividing by the pool made
+    # `reach_gained` a difference of two fractions that needed `SHARE` to mean
+    # anything beside a hit-point figure, and the pool shrinks as the fight goes on,
+    # so the same reposition was worth more in round six than in round one for no
+    # tactical reason whatever.
+    _BEST[key] = best
+    return best
 
 
 def fights_in_melee(world: Any, actor: int) -> bool:
@@ -1090,66 +1137,33 @@ def doctrine_features(
     # -- threat removal, in rounds: hit points and control in one currency ----
     removed = 0.0
     worse_off = 0.0
-    gained_hp = 0.0
     if action.ref:
         laid = T.row_effects(world, actor, action.ref)
-        # The denominator for both halves below, read once. `capacity` is
-        # `pool`'s threat-weighted sibling: hit points say how much is left and
-        # this says how much *capability* is left, which is what a blow removes.
-        other_team = (Team.ENEMY if mine is not None and mine.team is Team.PC
-                      else Team.PC)
-        cap = T.capacity(world, other_team)
         for t in action.targets:
             theirs = world.get(t, Side)
-            if t == actor or mine is None or theirs is None:
-                continue
-            if theirs.team is mine.team or not alive(world, t):
+            if mine is None or theirs is None or not alive(world, t):
                 continue
             health = world.get(t, Health)
             if health is None:
                 continue
-            if health.hp <= 0:
+            # **One signed loop, in hit points, for every creature the row names.**
+            # Camille's call, and it replaces nine terms: `threat_removed`,
+            # `threat_conceded`, `ca_conceded`, `party_enabled`, `self_harm`,
+            # `allies_caught`, `enemies_caught`, `target_damage_taken` and
+            # `targets_bloodied`. Catching an ally now costs exactly what catching an
+            # enemy earns, measured the same way, so there is no deterrent constant
+            # to outbid and nothing to keep in step.
+            #
+            # The thing a flat `allies_caught` could not express at all: a row that
+            # **dazes** an ally costs that ally's own output for the duration, which
+            # is `taken_from`'s control half pointed at my own side. At -7.0 a
+            # blast that disabled the party's best attacker cost the same as one
+            # that tickled its worst.
+            ours = theirs.team is mine.team
+            budget = T.output(world, t)
+            if budget <= 0:
                 continue
-            # **Rounds of damage denied, which is what makes control comparable
-            # with killing.** Camille's rubric: a kill takes all three rounds, an
-            # end-of-next-turn immobilise on a creature that cannot then reach
-            # anybody takes one, save-ends takes 1.8 because a save is 55%.
-            dealt = T.expected_vs(world, actor, action.ref, t)
-            # **Hit points removed, not a fraction of what is left.** #316, and
-            # Camille's formulation: a side's capacity is `sum(threat * effHP)`, so
-            # a blow removes `threat * min(dealt, effHP)` of it. Dividing by the
-            # target's *current* hit points inflated every attack on a nearly-dead
-            # creature -- `min(1, dealt / hp)` clamps to 1.0 for one point of
-            # damage against a creature on 1 hp, so it collected that creature's
-            # whole threat share for a scratch. Measured consequence: three of
-            # eight monster standard actions in one fight went into a 15-hp
-            # companion that never attacked, and one into its corpse.
-            effhp = float(T.effective_hp(world, t))
-            shoved = T.row_push(world, actor, action.ref)
-            denied = T.denial(world, t, laid, pushed=shoved)
-            # **Signed, and the only term here that can be.** See `shove_value`:
-            # the same push is good or bad depending on where the creature it
-            # wants is standing, and `denial` scores both at zero. Summed over
-            # targets like the rest of this loop, so a blast that shoves three
-            # enemies off the wizard is worth three times one.
-            if shoved:
-                worse_off += shove_value(world, t, shoved)
-            # **Divided by the side's capacity, not by this creature's own hit
-            # points.** That was the defect: `min(1, dealt / hp)` clamps to 1.0 the
-            # moment `dealt` reaches what is left, so one point of damage against a
-            # creature on 1 hp collected its **whole** threat share. Measured
-            # before the change, the same blow against the same creature:
-            #
-            #     at 296/296 hp   threat_removed 0.0152
-            #     at   5/296 hp   threat_removed 0.9003
-            #     at   1/296 hp   threat_removed 1.6302
-            #
-            # Camille's formulation instead: a side's capacity is
-            # `sum(threat * effHP)` and a blow removes `threat * min(dealt, effHP)`
-            # of it. The numerator is hit points, so a scratch is a scratch however
-            # close to dead the target is, and the denominator is the whole side, so
-            # the figure stays the share of enemy capability it always was.
-            took = T.threat(world, t) * min(dealt, effhp)
+            got = T.taken_from(world, actor, action.ref, t) if health.hp > 0 else 0.0
             # **An undying creature, and the blow that would drop it.** #318.
             # Damage above 0 sticks normally, so an ordinary swing at a healthy
             # troll wears it down and is priced as such. The blow that *reduces it
@@ -1161,30 +1175,28 @@ def doctrine_features(
             #
             # Read off a declared `Undying`, not guessed: the row implementing the
             # clause now says so, and a policy cannot read a body.
-            if dealt >= effhp and _undying(world, t):
-                took = (T.threat(world, t) * float(health.max_hp)
-                        if _finishes(world, t, action.ref) else 0.0)
-            # Control, in the same currency: the creature's whole contribution,
-            # withheld for the rounds denied. Capped with the damage at what the
-            # creature had to give, so overkill and a stack of conditions cannot
-            # between them remove more than all of it.
-            took += (T.threat(world, t) * effhp
-                     * min(denied, float(T.ROUNDS)) / T.ROUNDS)
-            ceiling = T.threat(world, t) * max(
-                effhp, float(health.max_hp) if _undying(world, t) else 0.0)
-            removed += min(took, ceiling) / (cap or 1.0)
-            # The other sign: an effect that makes it easier for the party to hit
-            # does not reduce its damage, so `denial` cannot see it at all.
-            gained_hp += T.enabled(world, t, laid)
+            if _undying(world, t):
+                dealt = T.expected_vs(world, actor, action.ref, t)
+                if dealt >= float(T.effective_hp(world, t)):
+                    got = budget if _finishes(world, t, action.ref) else 0.0
+            # An effect that makes a creature easier to hit does not reduce its own
+            # damage, so `taken_from` cannot see it. Pointed at an enemy this is the
+            # party's extra damage; pointed at one of ours it is the enemy's, because
+            # `enabled` sums the output of everyone *not* on the target's team. Same
+            # call, correct sign on both sides, which is why handing an ally combat
+            # advantage against itself now costs something.
+            got += T.enabled(world, t, laid)
+            # **A shove is the one thing here that is signed by geometry, not side.**
+            # See `shove_value`: the same push is good or bad depending on where the
+            # creature it wants is standing, and `denial` scores both at zero.
+            shoved = T.row_push(world, actor, action.ref)
+            if shoved:
+                worse_off += shove_value(world, t, shoved) * (-1.0 if ours else 1.0)
+            removed += -got if ours else got
     if removed:
-        f["threat_removed"] = removed
+        f["hp_swing"] = removed
     if worse_off:
         f["shoved_from_prey"] = worse_off
-    if gained_hp:
-        other = Team.ENEMY if mine is not None and mine.team is Team.PC else Team.PC
-        theirs_pool = T.pool(world, other)
-        if theirs_pool:
-            f["party_enabled"] = gained_hp / theirs_pool
 
     # -- position, at the square this action would leave us in ---------------
     dest = action.dest if action.dest is not None else here
@@ -1292,11 +1304,19 @@ def doctrine_features(
         given = 0.0
         wasted = 0.0
         dying = 0.0
-        # The same denominator `threat` uses, so a heal and a kill are measured
-        # against the same thing. Against the target's own maximum -- which is
-        # what this did first -- healing the wizard and healing the fighter came
-        # out equal, and the party pool is what actually has to last the fight.
-        ours = T.pool(world, mine.team) if mine is not None else 0
+        # **Hit points of output put back, which is the mirror of `T.risked`.** #314.
+        # This used to be `missing / party_pool` -- a share of how much room there
+        # was to heal, which is not what a heal buys and could not be compared with
+        # an attack at all. A heal of `h` hit points restores `output(t) * h / effHP`
+        # of that creature's future damage, exactly as taking `h` risks it. So the
+        # fighter and the wizard come out different, which Camille's original note
+        # wanted, and for the right reason: it is the output behind the hit points
+        # that differs, not the pool they belong to.
+        #
+        # `h` is a surge's worth, which is what nearly every such row grants and the
+        # only figure available without running the row -- `heals()` is a body grep,
+        # not a damage line. Capped by the room available, so a top-up on a healthy
+        # creature is worth what it actually restores and not what the row could do.
         for t in action.targets:
             health = world.get(t, Health)
             if health is None:
@@ -1308,7 +1328,7 @@ def doctrine_features(
             if missing == 0:
                 wasted += 1.0
                 continue
-            given += missing / ours if ours else 0.0
+            given += T.risked(world, t, float(min(missing, surge_value(world, t))))
             if health.hp <= 0 or health.bloodied:
                 dying += 1.0
         if given:

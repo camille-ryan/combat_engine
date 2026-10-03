@@ -126,6 +126,7 @@ def clear() -> None:
     _PUSH.clear()
     _ROUND.clear()
     _DENIED.clear()
+    _VS.clear()
 
 
 def _level_of(world: Any, eid: int) -> int:
@@ -596,6 +597,21 @@ def capacity(world: Any, of: Team) -> float:
     return total
 
 
+#: `expected_vs` per (board, round, attacker, row, target, attack shift). #314.
+#:
+#: **Added because converting the provocation cost made this hot.** `conceded` asks
+#: it once per adjacent enemy for every candidate action, where the old flat -5.0
+#: asked nothing and the previous `row_damage` form hit `_ROWS` on a key with no
+#: target in it. Unmemoised, the scorecard went from 168 seconds to over 600.
+#:
+#: Keyed by round, which is the granularity `_BEST`, `_COVER`, `_ROUND` and `_DENIED`
+#: already use. The cost is that a hit chance changing *within* a round -- a flank
+#: taken, a condition landing -- is not seen until the next one. That is the same
+#: trade those four already make, and the alternative is a live `p.hit_chance` per
+#: candidate action per target.
+_VS: dict[tuple[int, int, int, str, int, int], float] = {}
+
+
 def expected_vs(world: Any, eid: int, ref: str, target: int,
                 *, attack: int = 0) -> float:
     """What one row would deal to a **real** target, in hit points.
@@ -614,6 +630,18 @@ def expected_vs(world: Any, eid: int, ref: str, target: int,
     A row with no attack line at all is damage that does not need to land, so it
     is returned unscaled rather than being scaled by a hit chance of `None`.
     """
+    key = (id(world), getattr(world, "round", 0), eid, ref, target, attack)
+    seen = _VS.get(key)
+    if seen is not None:
+        return seen
+    got = _expected_vs(world, eid, ref, target, attack=attack)
+    _VS[key] = got
+    return got
+
+
+def _expected_vs(world: Any, eid: int, ref: str, target: int,
+                 *, attack: int = 0) -> float:
+    """`expected_vs` without the memo. Split so the cache has one entry point."""
     from combat_engine.engine.dsl import get
 
     dmg = row_damage(world, eid, ref)
@@ -1045,6 +1073,130 @@ def pool(world: Any, of: Team) -> int:
         if health is not None:
             total += max(0, health.hp)
     return total
+
+
+def output(world: Any, eid: int) -> float:
+    """Hit points `eid` would still deal if nothing interfered. #314.
+
+    `potential * ROUNDS` -- the same product `threat` divides by a pool to turn into
+    a share. In hit points there is nothing to divide by, which is the point: a
+    share needs a denominator that varies about sevenfold across levels and made
+    `SHARE` a level-5 fitting that no longer held anywhere else.
+
+    **This is what a creature is worth as a target**, and it is deliberately not its
+    hit points. A minion deals a full creature's damage and has one hit point, so
+    priced by durability it was worth about a sixtieth of what it actually does:
+    measured, a minion pack held 1.0-1.7% of modelled enemy capacity while dealing
+    32-68% of the damage the party took. Priced by output it comes out right without
+    anything knowing what a minion is.
+
+    **It is a best case, and in hit points that no longer cancels.** `per_round`
+    multiplies an area row by how many enemies fall inside it, so a creature holding
+    a burst is priced at the burst times the crowd -- on a ten-body board, measured,
+    a 6.2-damage burst came out at 31.2 a round and a 12.3-damage melee row at 47.5.
+    As a share of a pool every creature was inflated alike and the denominator
+    absorbed it. Here it does not, so `output` is **crowd-dependent**: the same
+    creature is worth more as a target when your own side is bunched up. That is
+    arguably right -- the damage really is coming -- but it is an upper bound and the
+    thing to suspect first if the scorer starts over-prioritising whoever owns a
+    burst.
+
+    **Discounted by how long the creature will actually last.** A flat `ROUNDS` says
+    every creature gets three more turns, and for a one-hit-point minion that is
+    plainly false -- flat, it priced a minion holding a burst at 140 hit points of
+    future damage, which made deleting one worth more than anything else on the board
+    and made the opportunity attack it cost look free. Measured over 48 fights with
+    the flat form, against a pre-conversion baseline: opportunity attacks conceded
+    went 1.12 to 3.88 a fight and the hit points they cost went 231 to 426.
+    """
+    return potential(world, eid) * min(float(ROUNDS), _survives(world, eid))
+
+
+def _survives(world: Any, eid: int) -> float:
+    """Rounds `eid` has left before the other side kills it, capped at `ROUNDS`.
+
+    `effective_hp` over what the other side can put into it in one round. The job is
+    to stop `output` promising three rounds of damage from a creature that will not
+    see two: a minion has one hit point and dies to the first thing that touches it,
+    so its future output is a round of output at most.
+
+    Floored at one round, because a creature about to die still gets the turn it is
+    standing in -- and because zero would make killing anything nearly dead worth
+    nothing, which is the inversion #316 was filed for.
+
+    Cheap: `per_round` is memoised per creature per round, so this is a handful of
+    dict hits after the first caller on each board.
+    """
+    left = float(effective_hp(world, eid))
+    if left <= 0:
+        return 0.0
+    mine = world.get(eid, Side)
+    if mine is None:
+        return float(ROUNDS)
+    incoming = sum(
+        per_round(world, a) for a in creatures(world)
+        if alive(world, a) and (s := world.get(a, Side)) is not None
+        and s.team is not mine.team)
+    if incoming <= 0:
+        return float(ROUNDS)
+    return max(1.0, min(float(ROUNDS), left / incoming))
+
+
+def taken_from(world: Any, eid: int, ref: str, target: int) -> float:
+    """Hit points of `target`'s own future output that `ref` takes away.
+
+    Damage and control in **one** number, because they come out of the same budget
+    and asking for them separately invites counting the same round twice: a row that
+    hits for half a creature's remaining hit points *and* dazes it has not stopped
+    more than the whole creature.
+
+    The damage half is the fraction of what the creature has left, applied to what it
+    would still have done -- `min(dealt, left) / left`. So a scratch on something
+    healthy is a scratch, a killing blow takes everything, and a minion's single hit
+    point means any hit at all takes the lot.
+
+    Signed by the caller, never here. `doctrine` subtracts this when `target` is on
+    the actor's own side, which is what makes catching an ally cost exactly what
+    catching an enemy earns -- including the ally's output denied by a condition,
+    which a flat penalty could not express at all.
+    """
+    budget = output(world, target)
+    if budget <= 0:
+        return 0.0
+    hurt = risked(world, target, expected_vs(world, eid, ref, target))
+    rounds = denial(world, target, row_effects(world, eid, ref),
+                   pushed=row_push(world, eid, ref))
+    held = budget * min(rounds, float(ROUNDS)) / ROUNDS
+    return min(hurt + held, budget)
+
+
+def risked(world: Any, eid: int, incoming: float) -> float:
+    """Hit points of `eid`'s own output that taking `incoming` damage puts at risk.
+
+    The fraction of what it has left, applied to what it would still have done. So
+    this is the same arithmetic as `taken_from`'s damage half with the sign and the
+    subject swapped, which is the point: what a blow is worth to the hitter and what
+    it costs the creature hit are one quantity, and pricing them with two formulas is
+    how they came to disagree.
+
+    **It keeps the fragility reading that `conceded` was built for.** Camille's
+    correction there was that 15 damage is an inconvenience to an 85-hit-point
+    fighter and most of a wizard, so the cost has to be against the creature's own
+    health rather than its side's pool. Dividing by `effective_hp` does exactly that,
+    and multiplying by `output` then says *what* is at risk -- which is the half the
+    fraction alone could not say, and the reason scaling by `threat` was tried and
+    inverted the signal.
+
+    Overstates non-lethal damage, deliberately and as before: in these rules a
+    creature fights at full strength until it drops, so losing a quarter of its hit
+    points does not cut its output by a quarter. Read it as risk, not as loss.
+    """
+    if incoming <= 0:
+        return 0.0
+    left = float(effective_hp(world, eid))
+    if left <= 0:
+        return 0.0
+    return output(world, eid) * min(incoming, left) / left
 
 
 def threat(world: Any, eid: int) -> float:

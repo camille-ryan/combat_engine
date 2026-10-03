@@ -98,12 +98,29 @@ from combat_engine.policy import threat as T
 
 BASELINE = Path(__file__).resolve().parent / "fixtures" / "scorecard.json"
 
-#: Terms whose value is a measured quantity rather than a number somebody picked:
-#: a share of a side's threat pool, weighted by `SHARE`. Seven of them against 51
-#: constants, which is #314.
-DERIVED = frozenset(
-    k for k, v in D.DOCTRINE.items() if abs(abs(v) - D.SHARE) < 1e-9
-)
+#: Terms whose value is a measured quantity rather than a number somebody picked.
+#: #314.
+#:
+#: **Declared, because a weight cannot be asked where its value came from.** This was
+#: `abs(abs(w) - SHARE) < 1e-9`, which is a float comparison against one module
+#: constant, and it got three things wrong at once: `shoved_from_prey` is a measured
+#: signed quantity priced in `WEIGHTS` and so could never qualify; any measured term
+#: given a weight other than `SHARE` was filed as a constant; and a constant that
+#: happened to equal 15.0 was filed as measured.
+#:
+#: It then broke outright. `hp_swing` is measured in hit points and weighted **1.0**
+#: -- the feature is already the answer -- so the old test called it static and
+#: `static_pct` reported **95.9%** on a run where the measured share was **64.9%**.
+#: The one number in the repo that watches this balance was reporting the opposite of
+#: the truth, which is the fault it exists to catch.
+DERIVED = frozenset({
+    "hp_swing",
+    "threat_conceded",
+    "ca_conceded",
+    "reach_gained",
+    "healing_given",
+    "shoved_from_prey",
+})
 
 #: Fixed so two runs are comparable.
 #:

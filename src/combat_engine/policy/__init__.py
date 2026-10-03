@@ -542,15 +542,22 @@ WEIGHTS: dict[str, float] = {
     # inequality reserves -- see its note -- so it does not outbid the whole
     # threat model the way an early flanking weight once did.
     "is_coup_de_grace": 6.0,
-    "expected_hits": 4.0,
-    "hit_chance": 3.0,
+    # Unweighted now -- the same quantity again; still computed for `Memory`, just not priced. #314.
+    # Still computed in `features`, because three scorecard counters read it.
+    # Unweighted now -- `expected_vs` already scales by the live hit chance. #314.
+    # Still computed in `features`, because three scorecard counters read it.
     "targets": 0.0,      # counted by side instead; see below
-    "enemies_caught": 2.0,
+    # Unweighted now -- a body count; `hp_swing` sums what each body actually loses. #314.
+    # Still computed in `features`, because three scorecard counters read it.
     # Worth more than an enemy is worth catching, so a burst that would clip
     # one ally to catch one enemy is not worth taking.
-    "allies_caught": -7.0,
-    "targets_bloodied": 3.0,
-    "target_damage_taken": 1.0,
+    # Unweighted now -- an ally in the blast costs its own output, via
+    # `hp_swing`, including the output a condition on it denies. #314.
+    # Still computed in `features`, because three scorecard counters read it.
+    # Unweighted now -- `taken_from` reads how much of the target is left, per target. #314.
+    # Still computed in `features`, because three scorecard counters read it.
+    # Unweighted now -- same, and it averaged 0.51 over 665 firings -- it decided nothing. #314.
+    # Still computed in `features`, because three scorecard counters read it.
     "usage_daily": -3.0,
     "usage_encounter": -0.5,
     # **A square of separation between an enemy and the creature it wants.**
@@ -566,13 +573,16 @@ WEIGHTS: dict[str, float] = {
     "closes_distance": 2.0,
     "nearest_enemy": -0.1,
     # Worth about one attack, which is what it hands over.
-    "provokes_now": -5.0,
+    # Deleted -- `threat_conceded` prices the same event in hit points now, by
+    # asking who is standing there and what their basic would actually do to me.
+    # A flat -5.0 could not tell a brute's free swing from a minion's. #314.
     # Provoking when a free shift would have avoided it. Stacks on top of
     # `provokes_now`, so an avoidable provocation costs 9.0 against an
     # unavoidable one's 5.0 -- enough to put a ranged attack from inside melee
     # below the shift that fixes it, and not enough to stop a creature that has
     # already moved from attacking anyway.
-    "provokes_avoidably": -4.0,
+    # Deleted -- the avoidable half was only ever a second flat charge stacked on
+    # the first, and the measured cost already knows whether the swing lands. #314.
     # Stepping out of reach so the next action does not provoke. Worth more than
     # the -0.5 a shift costs and less than a good attack, because the point is to
     # make "step out, then shoot" beat "shoot from inside melee" without making a
