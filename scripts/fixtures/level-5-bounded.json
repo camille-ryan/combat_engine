@@ -1743,7 +1743,7 @@
   "EffectExpired(actor=5, what='e126[p12660 attack-2, end of encounter]', why='died')",
   "PowerResolved(actor=3, power='rba', targets=[5], rolls=[AttackResult(hit=True, critical=False, natural=19, total=26, target_defence=17, advantage=False, cancelled=False, forced=False, target=5, treated='', rolls=[19])])",
   "ActionSpent(actor=3, cost=<ActionType.MOVE: 'move'>)",
-  "MoveStart(actor=3, kind_='walk')",
+  "MoveStart(actor=3, kind_='run')",
   "LeaveSquare(actor=3, square=(12, 9))",
   "EnterSquare(actor=3, square=(12, 8))",
   "Moved(actor=3, from_=(12, 9), to=(12, 8))",
@@ -1792,7 +1792,8 @@
   "AdjacencyLost(actor=4, other=3)",
   "AdjacencyLost(actor=3, other=8)",
   "AdjacencyLost(actor=8, other=3)",
-  "MoveEnd(actor=3, at=(11, 3), kind_='walk')",
+  "MoveEnd(actor=3, at=(11, 3), kind_='run')",
+  "EffectApplied(source=3, target=3, duration=\"start of source's next turn\", label='running')",
   "TurnEnd(actor=3, round=6)",
   "EffectExpired(actor=3, what='e8[cf:rogue-scoundrel-f1 cf:rogue-scoundrel-f4 damage+2, end of encounter]', why='encounter over')",
   "EffectExpired(actor=3, what='e9[cf:rogue-scoundrel-f1s3 damage+2, end of encounter]', why='encounter over')",
@@ -1861,6 +1862,7 @@
   "EffectExpired(actor=4, what=\"e128[p11353 damage+2, end of source's next turn]\", why='encounter over')",
   "EffectExpired(actor=1, what=\"e129[p11353 damage+2, end of source's next turn]\", why='encounter over')",
   "EffectExpired(actor=2, what=\"e130[p11353 damage+2, end of source's next turn]\", why='encounter over')",
-  "EffectExpired(actor=3, what=\"e131[p11353 damage+2, end of source's next turn]\", why='encounter over')"
+  "EffectExpired(actor=3, what=\"e131[p11353 damage+2, end of source's next turn]\", why='encounter over')",
+  "EffectExpired(actor=3, what=\"e132[running, start of source's next turn]\", why='encounter over')"
  ]
 }
