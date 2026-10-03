@@ -29,6 +29,18 @@ import {
   squareRect,
   squaresRect,
 } from "./coords.js";
+import {
+  actorsById,
+  hovers,
+  hpFraction,
+  isDown,
+  paintMovement,
+  renderBoard as drawBoard,
+  renderOrder,
+  renderPendingSquares,
+  shortLabel,
+  withNames,
+} from "./board.js";
 import { clear, div } from "./dom.js";
 
 // Tells index.html this module resolved and ran. Without it, a module that
@@ -145,10 +157,6 @@ const el = {
 
 const key = (sq) => `${sq[0]},${sq[1]}`;
 
-function setOf(squares) {
-  return new Set((squares || []).map(key));
-}
-
 async function getJSON(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText} — ${url}`);
@@ -183,112 +191,19 @@ function say(text, kind) {
 
 // -------------------------------------------------------------------- board
 
+// Draw the board, then the two overlays the live page adds on top of it.
+//
+// `board.renderBoard` is shared with the replay page and deliberately does not paint
+// the movement range: on this page the range is the answer to having pressed Move, and
+// a replay has nobody pressing anything.
 function renderBoard(s) {
-  const board = s.board || {};
-  const width = board.width || 0;
-  const height = board.height || 0;
-
-  clear(el.board);
-  clear(el.movement);
-  clear(el.highlights);
-  // The aim squares went with that layer, so nothing is aimed until somebody
-  // lights them again — otherwise the next mouse move over the board redraws
-  // a power the player has already put down.
+  // The aim squares went with the highlights layer, so nothing is aimed until
+  // somebody lights them again -- otherwise the next mouse move over the board
+  // redraws a power the player has already put down.
   aimed = null;
   aimedAt = null;
-
-  const size = boardPixelSize(width, height);
-  for (const layer of [el.board, el.movement, el.highlights]) {
-    layer.style.width = `${size.width}px`;
-    layer.style.height = `${size.height}px`;
-  }
-
-  const blocking = setOf(board.blocking);
-  const difficult = setOf(board.difficult);
-  const obscuring = setOf(board.obscuring);
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const k = `${x},${y}`;
-      const tile = div("tile");
-      if (blocking.has(k)) tile.classList.add("t-blocking");
-      if (difficult.has(k)) tile.classList.add("t-difficult");
-      if (obscuring.has(k)) tile.classList.add("t-obscuring");
-      place(tile, squareRect(x, y));
-      el.board.appendChild(tile);
-    }
-  }
-
-  (board.zones || []).forEach((zone, i) => {
-    const squares = zone.squares || [];
-    for (const sq of squares) {
-      const z = div(`zone zone-${i % 4}`);
-      place(z, squareRect(sq[0], sq[1]));
-      // Hoverable, unlike every other overlay: the shading is the only sign
-      // an aura is there at all, and a player who cannot find out whose it is
-      // cannot find out what it does. Tokens are appended after these, so a
-      // creature standing in a zone still wins the hover.
-      const owner = (actorsById().get(zone.owner) || {}).label || zone.owner;
-      hovers(z, () => zoneCard(zone, owner));
-      el.board.appendChild(z);
-    }
-    if (squares.length) {
-      const tag = div("zone-label", zone.label || zone.id || "");
-      const r = squaresRect(squares);
-      tag.style.left = `${r.left}px`;
-      tag.style.top = `${r.top}px`;
-      el.board.appendChild(tag);
-    }
-  });
-
-  // Traps, scenery and conjurations. Appended after the zones and before the
-  // tokens, so a creature standing on one still wins the hover — the same
-  // ordering argument the zone loop makes.
-  //
-  // A trap only arrives here once it is sprung or somebody has noticed it;
-  // the server decides that, because passive Perception is a rule and this
-  // file does not know any.
-  for (const thing of board.things || []) {
-    for (const sq of thing.squares || []) {
-      const t = div(`thing thing-${thing.kind}${thing.sprung ? " sprung" : ""}`);
-      place(t, squareRect(sq[0], sq[1]));
-      hovers(t, () => thingCard(thing));
-      el.board.appendChild(t);
-    }
-  }
-
-  for (const actor of s.actors || []) {
-    const squares =
-      actor.squares && actor.squares.length
-        ? actor.squares
-        : actor.square
-          ? [actor.square]
-          : [];
-    if (!squares.length) continue;
-
-    const down = isDown(actor);
-    const token = div(`token side-${actor.side || "npc"}`);
-    if (actor.is_current) token.classList.add("current");
-    if (down) token.classList.add("dead");
-    if (actor.bloodied && !down) token.classList.add("bloodied");
-    place(token, squaresRect(squares));
-    token.dataset.actor = actor.id;
-    hovers(token, () => creatureCard(actor, withNames));
-
-    token.appendChild(div("token-name", shortLabel(actor.label || actor.id)));
-    const bar = div("token-hp");
-    const fill = div("token-hp-fill");
-    fill.style.width = `${hpFraction(actor) * 100}%`;
-    bar.appendChild(fill);
-    token.appendChild(bar);
-
-    el.board.appendChild(token);
-  }
-
+  drawBoard(s);
   renderMovement(s.movement);
-  // With a question open there is no movement range — the turn is not where
-  // you can walk, it is what you owe an answer to — so the same layer shows
-  // the squares the answers are on instead.
   renderPendingSquares(s.pending);
 }
 
@@ -312,35 +227,6 @@ function renderMovement(movement) {
 // The squares one way of moving reaches, in two tones. Risky first, because
 // `scripts/browser.py` clicks `.mv-free` and relies on knowing which order the
 // overlay is built in.
-function movementTones(movement, mode) {
-  const m = movement || {};
-  // A shift provokes nothing at all, by rule, so none of its squares are ever
-  // the yellow kind.
-  if (mode === "shift") return [["risky", []], ["free", m.shift || []]];
-  if (mode === "run") {
-    // Running reaches further and the extra squares are risky for exactly the
-    // same reason the near ones are: `warnings` is per square and the server
-    // filled it in for every square any option ends on.
-    const warned = m.warnings || {};
-    const risky = [];
-    const free = [];
-    for (const sq of m.run || []) (warned[key(sq)] ? risky : free).push(sq);
-    return [["risky", risky], ["free", free]];
-  }
-  return [["risky", m.risky || []], ["free", m.free || []]];
-}
-
-function paintMovement(movement, mode) {
-  clear(el.movement);
-  for (const [tone, squares] of movementTones(movement, mode)) {
-    for (const sq of squares) {
-      const h = div(`mv mv-${tone}`);
-      place(h, squareRect(sq[0], sq[1]));
-      el.movement.appendChild(h);
-    }
-  }
-}
-
 // The route to the square under the pointer, drawn a step at a time.
 //
 // The server sends every route with the squares, because the line drawn has
@@ -375,23 +261,6 @@ function previewPath(at) {
 // finished with two actors on negative hp and `dead` false throughout, so a
 // panel keyed on `dead` never once marked anybody down — which is exactly the
 // thing a player needs to see at a glance.
-function isDown(actor) {
-  return Boolean(actor.dead) || (actor.hp ?? 1) <= 0;
-}
-
-function hpFraction(actor) {
-  const max = actor.hp_max || 0;
-  if (max <= 0) return 0;
-  const hp = Math.max(0, Math.min(actor.hp ?? 0, max));
-  return hp / max;
-}
-
-function shortLabel(label) {
-  const words = String(label).trim().split(/\s+/);
-  if (words.length === 1) return words[0].slice(0, 6);
-  return words.map((w) => w[0]).join("").slice(0, 4).toUpperCase();
-}
-
 // Attach the hover card to anything. `build` is called on entry rather than
 // up front, so a card is only assembled for the one thing being looked at —
 // and so it reads whatever the latest snapshot says rather than whatever the
@@ -400,12 +269,6 @@ function shortLabel(label) {
 // `mousemove` as well as `mouseenter`: the card follows the pointer, which is
 // what keeps it out of the way of the square underneath it on a board where
 // tokens are two squares wide.
-function hovers(node, build) {
-  node.addEventListener("mouseenter", (ev) => showCard(build(), ev));
-  node.addEventListener("mousemove", moveCard);
-  node.addEventListener("mouseleave", hideCard);
-}
-
 // The squares an option lights up as its target.
 //
 // `affected` is the *area*, and the engine only fills it in for bursts and
@@ -413,10 +276,6 @@ function hovers(node, build) {
 // the victim in `targets` instead. Highlighting `affected` alone therefore
 // lights up nothing for most attacks, which is the one hover a player most
 // needs. Fall back to wherever the named targets are standing.
-function actorsById() {
-  return new Map((state && state.actors ? state.actors : []).map((a) => [a.id, a]));
-}
-
 function affectedSquares(option) {
   if ((option.affected || []).length) return option.affected;
   const byId = actorsById();
@@ -428,19 +287,6 @@ function affectedSquares(option) {
     out.push(...squares);
   }
   return out;
-}
-
-// Wire ids, as the names on screen. The server sends `pc_1` inside an effect's
-// text and its duration — deliberately, because an id is what survives the
-// name switch — and a player reading a card wants the creature. A rewrite, not
-// a rule: wire ids have one fixed shape, so this cannot mistranslate, and with
-// names off every label *is* its wire id and it does nothing.
-const WIRE_ID = /\b(?:pc|npc)_\d+\b/g;
-
-function withNames(text) {
-  if (!text) return text;
-  const byId = actorsById();
-  return String(text).replace(WIRE_ID, (id) => (byId.get(id) || {}).label || id);
 }
 
 /** An option's targets as the names on screen, not the ActorIds on the wire. */
@@ -486,56 +332,6 @@ function highlight(option) {
 // nothing afterwards — worse, two creatures that rolled the same total are
 // indistinguishable by it, so the one thing it looked like it was telling you
 // it could not tell you. The order is the information; this is the order.
-
-function renderOrder(s) {
-  clear(el.order);
-  for (const a of s.actors || []) {
-    const down = isDown(a);
-    const chip = div(`unit side-${a.side || "npc"}`);
-    chip.dataset.actor = a.id;
-    if (a.is_current) chip.classList.add("current");
-    if (down) chip.classList.add("dead");
-
-    const face = div("unit-face", shortLabel(a.label || a.id));
-    chip.appendChild(face);
-
-    const bar = div("unit-hp");
-    const fill = div("unit-hp-fill");
-    if (a.bloodied) fill.classList.add("bloodied");
-    if (down) fill.classList.add("gone");
-    fill.style.width = `${hpFraction(a) * 100}%`;
-    bar.appendChild(fill);
-    chip.appendChild(bar);
-
-    chip.appendChild(div("unit-name", a.label || a.id));
-    // One dot per effect, so "something is on this creature" survives the
-    // shrink to an icon. What the something is, is on the card.
-    //
-    // Both lists, added. It was `||`, which reads as "effects, or else
-    // conditions" and means a creature with two effects and three
-    // conditions shows two dots -- the smaller number, chosen for no
-    // reason, whenever both are non-empty.
-    const marks = (a.effects || []).length + (a.conditions || []).length;
-    if (marks) {
-      const dots = div("unit-dots");
-      for (let i = 0; i < Math.min(marks, 4); i++) dots.appendChild(div("unit-dot"));
-      chip.appendChild(dots);
-    }
-
-    chip.addEventListener("mouseenter", (ev) => {
-      const token = el.board.querySelector(`.token[data-actor="${CSS.escape(a.id)}"]`);
-      if (token) token.classList.add("peek");
-      showCard(creatureCard(a, withNames), ev);
-    });
-    chip.addEventListener("mousemove", moveCard);
-    chip.addEventListener("mouseleave", () => {
-      for (const t of el.board.querySelectorAll(".token.peek")) t.classList.remove("peek");
-      hideCard();
-    });
-
-    el.order.appendChild(chip);
-  }
-}
 
 // ------------------------------------------------------------------ actions
 
@@ -682,17 +478,6 @@ function highlightSquares(squares) {
 }
 
 /** Every square any answer sits on, drawn so a player can see where to click. */
-function renderPendingSquares(pending) {
-  if (!pending) return;
-  for (const a of pending.answers || []) {
-    for (const sq of a.squares || []) {
-      const h = div("mv mv-answer");
-      place(h, squareRect(sq[0], sq[1]));
-      el.movement.appendChild(h);
-    }
-  }
-}
-
 /**
  * Freeform: the powers, and nothing worked out for you.
  *
