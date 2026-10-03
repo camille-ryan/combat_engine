@@ -214,13 +214,13 @@ def features(
     hurt = 0.0
     nearly = 0.0
     friendly = 0.0
+    friends_hurt = 0.0
+    friends_nearly = 0.0
     mine = world.get(actor, Side)
     for t in action.targets:
         health = world.get(t, Health)
         if health is None:
             continue
-        hurt += 1.0 - health.hp / max(1, health.max_hp)
-        nearly += float(health.bloodied)
         theirs = world.get(t, Side)
         # A burst says "each creature", and that includes your own side.
         # Counting them as targets is how the wizard came to be aiming a
@@ -229,11 +229,49 @@ def features(
         # gave every `target=SELF` row a score of 6 - 7 = -1, so the policy
         # preferred almost anything to a class feature and the marks, the
         # channels and the strikers' riders were never used at all.
-        if t != actor and mine and theirs and mine.team is theirs.team:
+        ally = (t != actor and mine is not None and theirs is not None
+                and mine.team is theirs.team)
+        if ally:
             friendly += 1.0
+            # Kept, but **separately and unweighted**. "How badly hurt is this
+            # target" is exactly the right signal for a heal and exactly the wrong
+            # one for a blast, and the first draft of this fix dropped both: a
+            # fixture caught the party abandoning a two-charge heal on a wounded
+            # ally for an inert debuff, because `target_damage_taken` had been
+            # quietly paying for that heal. `weighed` folds these back in for a row
+            # that benefits whom it names -- the same gate that clears
+            # `allies_caught` -- so neither use has to borrow the other's number.
+            friends_hurt += max(0.0, 1.0 - health.hp / max(1, health.max_hp))
+            friends_nearly += float(health.bloodied)
+            continue
+        # **The two "finish the wounded one" sums ask about an *enemy*.** #321.
+        # They were accumulated over every target, so a hurt ally in a blast paid
+        # `targets_bloodied` 3.0 and `target_damage_taken` ~1.0 back against the
+        # -7.0 it cost -- making the real deterrent about -2.7, and **shrinking it
+        # the more wounded the ally was**, since `1 - hp/max_hp` keeps climbing as
+        # hit points go negative. The ally a blast would actually kill was the
+        # cheapest one to include. Measured: a wizard dropped its own healer, then
+        # blasted an already-unconscious ally twice more, in a fight with one enemy
+        # left. The actor itself is deliberately still counted -- that is existing
+        # behaviour for a self-targeted row and a separate question.
+        if health.hp <= 0:
+            # Already out of the fight, so both sums would peak on it -- which is
+            # how a monster came to spend an action point on a body it had just
+            # dropped, and an encounter power on one at -2 hp, with four healthy
+            # targets standing. `threat_removed` skips these for the same reason
+            # (#316); the flat pair was left behind. Finishing a dying creature is
+            # still reachable: `is_coup_de_grace` is 6.0 and #318 prices an
+            # `Undying` one.
+            continue
+        hurt += max(0.0, 1.0 - health.hp / max(1, health.max_hp))
+        nearly += float(health.bloodied)
     f["target_damage_taken"] = hurt
     f["targets_bloodied"] = nearly
     f["allies_caught"] = friendly
+    # Carried for `weighed`, not scored here: neither key is in `WEIGHTS`, and
+    # `weigh` reads `weights.get(k, 0.0)`, so they are inert until folded in.
+    f["allies_damage_taken"] = friends_hurt
+    f["allies_bloodied"] = friends_nearly
     # **The caster is not an enemy it caught.** `friendly` skips `t == actor` above,
     # for the stated reason -- aiming at yourself does not clip an ally -- but only
     # that half was fixed, so the actor fell straight through into `enemies_caught`

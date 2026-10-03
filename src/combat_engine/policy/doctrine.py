@@ -1660,6 +1660,15 @@ class DoctrinePolicy:
             # on purpose. Cleared before `weigh` rather than compensated for after,
             # so the number is never wrong in between.
             f["allies_caught"] = 0.0
+            # **And for the same reason, how hurt they are is the point.** #321 made
+            # `target_damage_taken` and `targets_bloodied` count enemies only, since
+            # a wounded *ally* in a blast was refunding most of the -7.0 above. But a
+            # heal wants exactly that reading of exactly those creatures, and taking
+            # it away cost one: a fixture caught the party dropping a two-charge heal
+            # on a wounded ally in favour of an inert debuff. `features` carries the
+            # ally halves separately and unweighted; this is where they are spent.
+            f["target_damage_taken"] += f.get("allies_damage_taken", 0.0)
+            f["targets_bloodied"] += f.get("allies_bloodied", 0.0)
         # `running` asked directly, **not** read off `f`: it is a doctrine term and `f`
         # is `policy.features`'s dict, so `f.get("already_on")` was always None and the
         # condition never fired. A predicate reading a field its source does not carry,
