@@ -72,6 +72,10 @@ _KEYWORDS = [
     "fire", "cold", "lightning", "thunder", "necrotic", "radiant", "poison", "psychic",
     "acid", "force", "healing", "charm", "fear", "illusion", "teleportation", "conjuration",
     "zone", "stance", "reliable", "invigorating", "rattling", "beast", "form", "polymorph",
+    # **A subclass gate, not a mechanic.** Printed on six wizard rows whose trigger
+    # only one subclass can meet, and dropped here until now -- so `chargen` had
+    # nothing to exclude them by and dealt them to every wizard. #319.
+    "bladespell",
 ]
 
 

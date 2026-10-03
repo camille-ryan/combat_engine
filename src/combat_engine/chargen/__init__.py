@@ -1256,7 +1256,21 @@ def loadout(
             riders.setdefault(printed_beside, []).append(p.ref)
             mine.remove(p)
 
-    out = sorted(p.ref for p in mine if p.level == 0)
+    # **A subclass's rows are not every character's.** #319. A level-0 row carries
+    # the *base* class in `cls`, so `loadout` dealt six bladespells to every wizard
+    # -- rows whose printed trigger is "you hit with a one-handed melee basic attack
+    # while your other hand holds no weapon or shield", which is one subclass's whole
+    # premise and something no build here can do. They were never usable, they padded
+    # the pool so the rows a wizard *can* use were less likely to be drawn, and they
+    # sat in the policy's menu to be scored and chosen.
+    #
+    # Excluded outright rather than gated on a build, because there is no bladesinger
+    # build to gate on: `BUILDS["wizard"]` is control and war. When one is added this
+    # becomes "unless the build is that one", and the keyword is what it will ask.
+    from combat_engine.engine.types import Keyword as _Kw
+
+    out = sorted(p.ref for p in mine
+                 if p.level == 0 and _Kw.BLADESPELL not in (p.keywords or ()))
     # Not already dealt: a class whose heal is itself a level-0 row was
     # handed it twice, so `Powers.known` carried the ref twice over. The
     # bard and the ardent are the two.

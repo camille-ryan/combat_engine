@@ -295,7 +295,7 @@ def p14285(c: Cast) -> None:
     action=ActionType.NONE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[Keyword.ARCANE, Keyword.FIRE],
+    keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.BLADESPELL],
     trigger="you hit an enemy with a one-handed melee basic attack on your turn",
     on=BLADESPELL,
 )
@@ -312,7 +312,7 @@ def p14286(c: Cast) -> None:
     action=ActionType.NONE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[Keyword.ARCANE, Keyword.RADIANT],
+    keywords=[Keyword.ARCANE, Keyword.RADIANT, Keyword.BLADESPELL],
     trigger="you hit an enemy with a one-handed melee basic attack on your turn",
     on=BLADESPELL,
 )
@@ -329,7 +329,7 @@ def p14287(c: Cast) -> None:
     action=ActionType.NONE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[Keyword.ARCANE, Keyword.COLD],
+    keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.BLADESPELL],
     trigger="you hit an enemy with a one-handed melee basic attack on your turn",
     on=BLADESPELL,
 )
@@ -346,7 +346,7 @@ def p14288(c: Cast) -> None:
     action=ActionType.NONE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[Keyword.ARCANE, Keyword.LIGHTNING],
+    keywords=[Keyword.ARCANE, Keyword.LIGHTNING, Keyword.BLADESPELL],
     trigger="you hit an enemy with a one-handed melee basic attack on your turn",
     on=BLADESPELL,
 )
@@ -374,7 +374,7 @@ def p14289(c: Cast) -> None:
     action=ActionType.NONE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[Keyword.ARCANE, Keyword.NECROTIC],
+    keywords=[Keyword.ARCANE, Keyword.NECROTIC, Keyword.BLADESPELL],
     trigger="you hit an enemy with a one-handed melee basic attack on your turn",
     on=BLADESPELL,
 )
@@ -393,7 +393,7 @@ def p14290(c: Cast) -> None:
     action=ActionType.NONE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[Keyword.ARCANE, Keyword.FORCE],
+    keywords=[Keyword.ARCANE, Keyword.FORCE, Keyword.BLADESPELL],
     trigger="you hit an enemy with a one-handed melee basic attack on your turn",
     on=BLADESPELL,
 )

@@ -78,6 +78,11 @@ class Keyword(StrEnum):
     # `c.rattled` asks it back, which is the whole of what the keyword is.
     RATTLING = "rattling"
     STANCE = "stance"
+    #: A wizard subclass's rider on its own melee basic attack. Printed as a
+    #: keyword and dropped by the ETL until now, which left `chargen.loadout` with
+    #: nothing to gate on -- so six of them were dealt to **every** wizard, whose
+    #: build can never satisfy their trigger. #319.
+    BLADESPELL = "bladespell"
     CONJURATION = "conjuration"
     SUMMONING = "summoning"
     POLYMORPH = "polymorph"
