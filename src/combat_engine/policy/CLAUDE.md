@@ -56,16 +56,20 @@ made.
 
 ## The currency is small, and that is the usual reason a term does nothing
 
-`threat_removed`, `threat_lost`, `conceded` and `reach_gained` are shares of a
-side's threat pool, weighted by `SHARE`. A share is a small number: a blast
-catching three enemies is worth about 1.3 after weighting, against `is_power` at
-6.0 and `allies_caught` at −7.0.
+`threat_removed`, `threat_conceded`, `reach_gained` and four others are shares of a
+side's threat pool, weighted by `SHARE`. A share is a small number: a blast catching
+three enemies is worth about 1.3 after weighting, against `is_power` at 6.0 and
+`allies_caught` at −7.0. **Seven terms are derived this way and 51 are hand-set
+constants** (#314).
 
 So **a principled term in this currency routinely cannot carry a decision.**
-Measured on the differential threat term: worth **0.58** where the decision needed
-about **7**, and swapping it in for the flat deterrent broke the acceptance test it
-was built to satisfy. Before building, estimate the term's weighted size and
-compare it with what it has to outrank.
+Measured on a differential threat term built for #266 and then reverted: worth
+**0.58** where the decision needed about **7**, and swapping it in for the flat
+deterrent broke the acceptance test it was built to satisfy. Before building,
+estimate the term's weighted size and compare it with what it has to outrank — and
+expect that **converting one term at a time makes the AI worse**, because the two
+currencies are an order of magnitude apart. That is #314's subject and it is a
+whole-table recalibration, not a sequence of substitutions.
 
 ## Isolate a term before believing it
 
