@@ -582,8 +582,13 @@ WEIGHTS: dict[str, float] = {
     # Still computed in `features`, because three scorecard counters read it.
     # Unweighted now -- same, and it averaged 0.51 over 665 firings -- it decided nothing. #314.
     # Still computed in `features`, because three scorecard counters read it.
-    "usage_daily": -3.0,
-    "usage_encounter": -0.5,
+    # Deleted -- `reserve_cost` prices a daily at what holding it is worth, which a
+    # flat -3.0 could not: it charged the same for a row swinging 40 hit points and
+    # one swinging 5, and said nothing about how much of the day was left. #314.
+    # Deleted outright rather than converted. An encounter row comes back on a short
+    # rest, so there is no day to hoard it across and the honest cost of spending one
+    # is zero -- "use it or lose it" is the correct play and -0.5 was arguing against
+    # it, feebly. #314.
     # **A square of separation between an enemy and the creature it wants.**
     # Signed: `doctrine.shove_value` returns negative when the shove drives the
     # enemy *at* that creature, which is the case a defender is most likely to be

@@ -208,6 +208,13 @@ def _a_day(args: argparse.Namespace) -> int:
         if not fielded.enemies:
             raise SystemExit("no monster anywhere has all of its abilities written.")
         encounter = Encounter(world)
+        # **How many fights are left, including this one.** `policy.doctrine.reserved`
+        # prices a daily partly on this: one spent in the first of four fights has three
+        # fights to regret it in and one spent in the last has none. This loop is the
+        # only thing in the tree that knows, and without it the policy falls back to
+        # `doctrine.DAY` -- which is the right default for a standalone fight but makes
+        # every fight look like fight one of four, including the last.
+        world.fights_left = args.fights - n + 1
         policy = DoctrinePolicy()
         install(world, encounter, {}, default=policy)
         encounter.start()

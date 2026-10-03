@@ -221,7 +221,7 @@ from combat_engine.engine.query import (
     surge_value,
 )
 from combat_engine.engine.turns import Encounter
-from combat_engine.engine.types import ActionType, Condition
+from combat_engine.engine.types import ActionType, Condition, Team, Usage
 
 from . import (
     WEIGHTS,
@@ -325,6 +325,11 @@ DOCTRINE: dict[str, float] = {
     # points of advantage this action creates, enemies positive and our own side
     # negative. Nothing to convert, so nothing to fit, so no `SHARE`.
     "hp_swing": 1.0,
+    # The cost of spending a daily, in hit points, beyond what the row does. See
+    # `reserved`: scaled by the row's own worth, by how much of the day is left, and by
+    # whether this fight still needs it. Replaces `usage_daily` -3.0, `usage_encounter`
+    # -0.5 and the untabled `+6.0`-while-desperate bonus in `weigh`.
+    "reserve_cost": -1.0,
     # Reporting only, at 0.0. `scripts/scorecard.py` reads this through `explain`,
     # which filters to this table, so deleting the key would take its counter to
     # zero with nothing raising. The quantity itself is inside `hp_swing` now --
@@ -745,6 +750,80 @@ def watchers(world: Any, actor: int) -> list[int]:
         if there is not None and distance(here, there) <= _reach_of(world, foe):
             out.append(foe)
     return out
+
+
+#: How many fights a day is. Camille's figure, and `policy/CLAUDE.md` states it:
+#: "What a fight costs is surges, dailies and action points, and **a day is four
+#: fights**." #305 measures against the same number -- a 4-fight day needs 18 dailies
+#: and the party has 12.
+DAY = 4
+
+#: When the enemy side still has this much capability left relative to ours, a limited
+#: row costs nothing: the fight needs it now. At 1.0 the line is "they can still
+#: out-fight us", which is Camille's wording on #305 -- "only use limited resources
+#: when threat is above some threshold".
+THRESHOLD = 1.0
+
+
+def reserved(world: Any, actor: int, worth: float) -> float:
+    """What spending a daily costs, in hit points, beyond what the row itself does.
+
+    **The one quantity here that is not read off the board**, and it says so. A daily's
+    true cost is what it would have been worth in a later fight, which no board state
+    contains. Camille's call is to approximate it with two factors:
+
+    * **how much of the day is left.** A daily spent in the first of four fights has
+      three fights to regret it in; one spent in the last has none. `world.fights_left`
+      carries this and defaults to `DAY`, because a standalone fight is still a fight in
+      a day -- defaulting to 1 would make the cost zero everywhere except in the one
+      instrument that plays days, which is how a term comes to decide nothing.
+    * **whether this fight needs it.** While the enemy side can still out-fight ours the
+      cost is nothing: that is what a daily is *for*. Once the fight is in hand it costs
+      full price, which is the "spent it on a nearly-dead enemy" case.
+
+    Returned as a positive cost; `DOCTRINE` carries the sign.
+
+    **Encounter rows are deliberately not reserved at all.** They come back on a short
+    rest, so there is no day to hoard them across and the honest cost is zero -- which
+    is why `usage_encounter` is deleted rather than converted. `usage_daily` -3.0 and the
+    untabled `+6.0`-while-desperate bonus in `weigh` are both replaced by this.
+
+    What this does **not** do is answer #305 on its own terms. That issue is about a
+    whole day's budget and this is still a per-decision price; the day factor only bites
+    when something sets `fights_left`, which today is `fight.py --fights` alone.
+    """
+    if worth <= 0:
+        return 0.0
+    left = max(1, int(getattr(world, "fights_left", DAY) or DAY))
+    day = (left - 1) / left
+    if day <= 0:
+        return 0.0
+    mine = world.get(actor, Side)
+    if mine is None:
+        return 0.0
+    # **Somebody on our side is about to drop, so hold nothing back.** The side-capacity
+    # ratio below cannot say this, and that is measured rather than argued: with the
+    # ratio alone, dailies fell 187 -> 171 at level 10 and party drops went 40 -> 74 with
+    # one fight running to 31 rounds. Capacity is a whole-side figure and what kills a
+    # character is local -- the party reads as ahead while one of it is two hits from the
+    # floor. The `+6.0`-while-desperate bonus this replaced was covering exactly that
+    # case, gated on the *acting* creature's hit points; this asks about the whole side,
+    # because a controller holding a daily while the fighter dies is the same failure.
+    for ally in creatures(world):
+        if not alive(world, ally):
+            continue
+        side = world.get(ally, Side)
+        if side is None or side.team is not mine.team:
+            continue
+        health = world.get(ally, Health)
+        if health is not None and health.max_hp and \
+                T.effective_hp(world, ally) <= health.max_hp * 0.5:
+            return 0.0
+    other = Team.ENEMY if mine.team is Team.PC else Team.PC
+    ours = T.capacity(world, mine.team)
+    danger = (T.capacity(world, other) / ours) if ours else 1.0
+    need = min(1.0, danger / THRESHOLD) if THRESHOLD else 1.0
+    return worth * day * (1.0 - need)
 
 
 def conceded(world: Any, actor: int, foes: list[int]) -> float:
@@ -1218,6 +1297,15 @@ def doctrine_features(
         f["hp_swing"] = removed
     if worse_off:
         f["shoved_from_prey"] = worse_off
+    # **What spending a daily costs on top of what it does.** Scaled by the row's own
+    # worth, so a daily that would swing 40 hit points is held back harder than one
+    # that would swing 5 -- which a flat -3.0 could not say.
+    if action.ref and removed > 0:
+        spending = get(action.ref)
+        if spending is not None and spending.usage is Usage.DAILY:
+            held = reserved(world, actor, removed)
+            if held:
+                f["reserve_cost"] = held
 
     # -- position, at the square this action would leave us in ---------------
     dest = action.dest if action.dest is not None else here
@@ -1671,6 +1759,10 @@ class DoctrinePolicy:
         default_factory=lambda: {**WEIGHTS, **DOCTRINE})
     memory: Memory | None = None
     #: Keeps a daily in hand until the fight is going badly.
+    #: Retired with the `+6.0`-while-desperate bonus it gated. `reserved` asks whether
+    #: the *fight* needs the daily, measured from both sides' capability, rather than
+    #: whether this one creature is low on hit points -- which said nothing about a
+    #: controller holding a daily while the fighter died. #314.
     desperate_at: float = 0.4
 
     def score(
@@ -1821,8 +1913,6 @@ class DoctrinePolicy:
         total = sum(self.weights.get(k, 0.0) * v for k, v in f.items())
         if self.memory is not None and action.ref:
             total += self.memory.worth(action.ref, 5.0) * f.get("expected_hits", 0.0) * 0.4
-        if f.get("usage_daily") and f.get("my_hp_fraction", 1.0) < self.desperate_at:
-            total += 6.0
         hurt = f.get("my_hp_fraction", 1.0)
         if f.get("is_second_wind") and hurt <= 0.5:
             # **Bloodied, and scaled by how far past it.** This was a cliff at 0.3
