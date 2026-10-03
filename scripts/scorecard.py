@@ -98,6 +98,13 @@ from combat_engine.policy import threat as T
 
 BASELINE = Path(__file__).resolve().parent / "fixtures" / "scorecard.json"
 
+#: Terms whose value is a measured quantity rather than a number somebody picked:
+#: a share of a side's threat pool, weighted by `SHARE`. Seven of them against 51
+#: constants, which is #314.
+DERIVED = frozenset(
+    k for k, v in D.DOCTRINE.items() if abs(abs(v) - D.SHARE) < 1e-9
+)
+
 #: Fixed so two runs are comparable.
 #:
 #: **Twenty-four, not twelve, and the round count is why.** Twelve is plenty for the
@@ -262,6 +269,19 @@ class Counted(D.DoctrinePolicy):
                 # same figure `doctrine.inert` already asks for, so it is cached.
                 or T.row_damage(world, actor, got.ref) > 0):
             self.n[f"{side}/attacks"] += 1
+        # **How much of this decision was a measured quantity and how much was a
+        # constant somebody picked.** #314's meter: the recalibration it proposes
+        # needs a number to move, and there was none. Read off `weighed`, not
+        # `explain`, because `explain` promises the doctrine half only.
+        raw_all = self.weighed(world, encounter, actor, got)
+        for k, v in raw_all.items():
+            w = abs(self.weights.get(k, 0.0) * v)
+            if not w:
+                continue
+            kind = "derived_mag" if k in DERIVED else "static_mag"
+            # Hundredths, kept as an integer: `Counter` is integer-valued and a
+            # fraction of a point either way does not change a percentage.
+            self.n[f"{side}/{kind}"] += round(w * 100)
         d = self.explain(world, encounter, actor, got)
         if d.get("self_harm"):
             self.n[f"{side}/self_harm"] += 1
@@ -488,6 +508,10 @@ def measure(levels: tuple[int, ...]) -> dict:
                 "oa_per_fight": round(pol.n[f"{side}/oa_conceded"] / len(SEEDS), 2),
                 "oa_damage": pol.n[f"{side}/oa_damage"],
                 "self_damage": pol.n[f"{side}/self_damage"],
+                "static_pct": (
+                    round(100 * pol.n[f"{side}/static_mag"]
+                          / max(1, pol.n[f"{side}/static_mag"]
+                                + pol.n[f"{side}/derived_mag"]), 1)),
                 "inert_chosen": pol.n[f"{side}/inert_chosen"],
                 "self_harm": pol.n[f"{side}/self_harm"],
                 "ally_blasts": pol.n[f"{side}/ally_blasts"],
@@ -520,6 +544,11 @@ ROWS = [
     # prices a correct risk and a reckless one identically.
     ("oa_damage", "...hit points it cost them", "lower"),
     ("self_damage", "damage dealt to their own side", "lower"),
+    # **#314's meter.** What share of a chosen action's weighted magnitude came from
+    # a hand-set constant rather than a measured quantity. Not "lower is better" --
+    # some constants are genuine preferences and should stay -- but it is the number
+    # a recalibration has to move, and there was none before.
+    ("static_pct", "of the decision that was a hand-set constant (%)", ""),
     ("inert_chosen", "inert rows chosen", "lower"),
     ("self_harm", "caught in own blast", "lower"),
     ("ally_blasts", "attacks that caught an ally", "lower"),
