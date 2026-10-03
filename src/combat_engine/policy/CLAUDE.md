@@ -52,6 +52,27 @@ reported the same elite because it was in all three. Fixed -- the seed draws fro
 every usable monster now -- but the lesson survives: **check who is actually on the
 board before generalising from a log**, and prefer several levels to several seeds.
 
+### Three ways a statistic over a log lies, all three paid for in one sitting
+
+A log is grep-able, which makes it easy to produce a confident number that is about
+something else. Each of these produced a paradigm comparison that had to be withdrawn:
+
+* **`PowerUsed` is not an attack.** A turn uses several non-attack rows -- stances,
+  marks, features that fire on entry -- so counting uses read **138** where
+  `AttackDeclared` read **94**. The first number said a party was idle in a fight
+  where it was attacking nine times a round.
+* **`Dropped` fires for both sides.** Unsplit, enemy deaths are counted as party
+  casualties, which is the opposite verdict. **eids 1-4 are the party**; everything
+  from 5 up is opposition, including summons and conjurations that take their own
+  turns, so a one-enemy board legitimately shows eid 8.
+* **A mean over three fights hides the only fight worth reading.** "6.7 party drops"
+  for the solo shape was one fight with 18 and two with 0. Print per fight; let the
+  outlier be visible rather than averaged into a property of the paradigm.
+
+And the positive version: read the event's **definition** rather than inferring its
+fields from one printed line. `Dropped`'s repr omits defaulted fields, which is what
+made it look like an event about something other than hit points.
+
 ## Two ways a policy term is silently false
 
 Both cost a day each, and neither showed up as a failure anywhere.
