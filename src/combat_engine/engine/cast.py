@@ -3455,7 +3455,10 @@ class Cast:
                 {"actor": ev.actor, "provoker": ev.provoker, "why": ev.why,
                  # How and by what means the provoker moved, for the rows that
                  # narrow by it. Empty for a window a move did not open. #301.
-                 "kind": ev.kind, "mode": ev.mode}
+                 # The ctx key stays `kind`; the event field is `kind_` because a
+                 # field named `kind` shadows `Event.kind`. Content rows read
+                 # `ctx.get("kind")` and must not have to care.
+                 "kind": ev.kind_, "mode": ev.mode}
             ):
                 return
             ev.cancel("the power says it does not provoke")

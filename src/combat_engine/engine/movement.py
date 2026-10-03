@@ -154,7 +154,7 @@ def step(
             if left:
                 world.bus.emit(
                     OpportunityWindow(actor=other, provoker=eid, why="moved away",
-                                      kind=kind, mode=mode)
+                                      kind_=kind, mode=mode)
                 )
 
     world.grid.lift(eid)

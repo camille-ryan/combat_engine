@@ -274,7 +274,24 @@ class OpportunityWindow(Decision):
     #: and a flight alike, so "your movement **during the charge** does not
     #: provoke" had nothing to test -- while `step` had both facts in scope on the
     #: line that emits this. Four rows wanted them. #301.
-    kind: str = ""
+    #:
+    #: **Named `kind_` because a field called `kind` shadows `Event.kind`**, the
+    #: property that returns the class name -- and this event was the only one in the
+    #: file that got it wrong. `MoveStart`, `MoveEnd`, `RelationSet` and
+    #: `RelationCleared` all carry `kind_` for exactly this reason.
+    #:
+    #: What the shadowing did, all of it silent: `str()` rendered the event as
+    #: `run(actor=1, ...)` and `wire()["kind"]` returned `"run"`, so the class name was
+    #: gone from every serialised form. The committed fixtures held 31 of these under
+    #: the names `walk`, `""`, `charge` and `run` and **none** under
+    #: `OpportunityWindow`; `replay.py coverage` reported the class as never exercised
+    #: while it fired 31 times; `render.event_dto` shipped `kind: ""` where the page
+    #: expects `"opportunity"`; and `narrate` branches on the class name, so the
+    #: opportunity-attack sentence was never once emitted.
+    #:
+    #: The **ctx key stays `"kind"`** -- see `Cast.does_not_provoke`. That dict is a
+    #: separate contract and content rows read `ctx.get("kind")`.
+    kind_: str = ""
     #: And how it travelled: `walk`, `fly`, `swim`, `burrow`, resolved by
     #: `movement.mode_of`. "Your **flying** does not provoke" is one row.
     mode: str = ""
