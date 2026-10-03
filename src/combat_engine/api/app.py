@@ -25,13 +25,36 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import dto, render
+from . import dto, render, replay
 from .session import SESSIONS, Session
 from .wire import names_enabled
 
 WEB = Path(__file__).resolve().parents[3] / "web"
 
 app = FastAPI(title="combat-engine")
+
+
+class NewRecording(BaseModel):
+    """A fight to play with nobody watching, so it can be watched afterwards."""
+
+    level: int = 1
+    seed: int | None = None
+    scaling: str = "full"
+
+
+class Note(BaseModel):
+    """One judgement, pinned to one decision.
+
+    Deliberately loose about `note` and strict about where it points: the whole value of a
+    comment is that it says *which* decision, and a free-text field nobody can locate
+    again is worth nothing.
+    """
+
+    round: int = 0
+    actor: str = ""
+    seq: int = 0
+    action: str = ""
+    note: str = ""
 
 
 class NewEncounter(BaseModel):
@@ -352,6 +375,49 @@ def _draw() -> int:
     import secrets
 
     return secrets.randbelow(1 << 31)
+
+
+# -- replays ---------------------------------------------------------------
+#
+# **Read-only, and that is the point.** There is deliberately no `act`, `aim`, `decide` or
+# `end` under `/api/replay/`: a recording is a thing that already happened and nothing here
+# can change a fight. The one write is `note`, and it touches a log.
+
+
+@app.post("/api/replay")
+def record_replay(body: NewRecording | None = None) -> dict:
+    """Play a fight headless and keep it. Blocking, hence a plain `def`.
+
+    About seven seconds at level 10, which is too long for the event loop -- the same
+    argument the encounter routes above make, for the same reason.
+    """
+    body = body or NewRecording()
+    seed = body.seed if body.seed is not None else _draw()
+    try:
+        got = replay.record(seed, body.level, scaling=body.scaling)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"name": got["name"], "rounds": got["rounds"], "winner": got["winner"]}
+
+
+@app.get("/api/replay")
+async def list_replays() -> list[dict]:
+    return replay.listing()
+
+
+@app.get("/api/replay/{name}")
+async def read_replay(name: str) -> dict:
+    got = replay.read(name)
+    if got is None:
+        raise HTTPException(404, f"no recording {name}")
+    return got
+
+
+@app.post("/api/replay/{name}/note")
+async def add_note(name: str, body: Note) -> dict:
+    if not replay.note(name, body.model_dump()):
+        raise HTTPException(404, f"no recording {name}")
+    return {"ok": True}
 
 
 if WEB.exists():
