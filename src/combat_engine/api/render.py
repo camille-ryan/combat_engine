@@ -210,7 +210,16 @@ def actor_dto(session: Session, eid: int) -> dto.ActorDTO:
         hp_max=health.max_hp,
         temp_hp=health.temp,
         surges=health.surges,
-        surges_max=health.surges,
+        # **`max_surges`, not `surges` twice.** Both read the same field, so the pair
+        # could never disagree and the page's "Surges 3 / 3" was full for the whole of
+        # every fight however many had been spent. `Health.max_surges` is the right
+        # source and has been there all along -- it exists precisely because "`surges`
+        # is spent down during the day".
+        #
+        # It matters more than a cosmetic: surges are what #267 says a fight costs, so
+        # a recording taken off this DTO could not show the one quantity the attrition
+        # metric is made of.
+        surges_max=health.max_surges,
         bloodied=health.bloodied,
         bloodied_value=health.max_hp // 2,
         dead=not alive(world, eid),
