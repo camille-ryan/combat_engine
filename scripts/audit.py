@@ -206,6 +206,21 @@ KNOWN_SILENT = {
     # radiant, pushes 4 and immobilises; the other two likewise.
     "p12601": "affects only undead; the auto-targeter never picks the board's one undead",
     "p5330": "affects only undead; the auto-targeter never picks the board's one undead",
+    # **The same shape as the two above, and the first of a large family.** The
+    # card targets a dazed creature. `Target` cannot say that -- it filters on
+    # side, count, size and what is in hand -- so the row gates in its body, and
+    # `_auto_targets` picks the nearest enemy rather than a dazed one. The board
+    # does daze somebody, so the condition is here; it is on the wrong body for
+    # a targeter that aims by distance.
+    #
+    # Unlike the three siblings this round converted, a `requires=` cannot help:
+    # the restriction is on **somebody else's** state, not the caster's.
+    #
+    # **2,863 monster abilities print a condition-restricted target line**, 21%
+    # of the corpus, so this entry is the first of many unless #361 lands first.
+    # That is the argument for fixing #361 rather than excusing them one at a
+    # time, and it is why this excuse names the issue.
+    "m5423a4": "targets a dazed creature; the auto-targeter aims by distance -- #361",
     # Reduces a target's necrotic resistance, and nothing on the board has
     # any. Giving the undead some would change what every necrotic row in
     # the tree reports, which is a worse trade than one excused row.

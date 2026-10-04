@@ -131,6 +131,12 @@ _USAGES = (
 #: about other rows. Both read as a usage when the whole spec was searched.
 _BODY_STARTS = re.compile(r"\b(?:Attack|Hit|Miss|Effect|Trigger|Requirement)\s*:")
 
+#: `Melee or Ranged 10` -- two shapes on one line, the first with no number of
+#: its own because it means "as far as the weapon in hand reaches".
+_EITHER = re.compile(
+    r"\b(?:melee\s+or\s+ranged|ranged\s+or\s+melee)\b", re.I
+)
+
 #: `encounter` in this phrase is a duration and never a usage.
 _DURATION = re.compile(r"\bend of (?:the|its|his|her)\b[^.;]{0,24}$", re.I)
 
@@ -156,6 +162,13 @@ KNOWN = {
                "through -- and the header rounds it to 1",
     "m4962a3": "`Recharge when no enemy is dominated by this power` is a "
                "condition rather than a die roll, so the header chose at-will",
+    # Not a missing value like #360's 88 -- a **contradictory** one. The card
+    # prints `Melee 10/20`: a range band on a melee line, which cannot be both.
+    # One row in 13,432. The header takes the normal half of the band and says so
+    # in its docstring; this is waived rather than taught to the reader, because
+    # a reader that accepts `Melee N/M` would stop checking the shape at all.
+    "m6277a3": "the card prints `Melee 10/20` -- a range band on a melee line, "
+               "which is contradictory rather than missing; see #360",
 }
 
 
@@ -208,6 +221,17 @@ def _card_range(spec: str) -> tuple[str, int] | None:
     # first.
     cut = re.search(r"\bSecondary\b", spec, re.I)
     spec = spec[: cut.start()] if cut else spec
+    # **A two-kind line where one kind carries no number.** The books print
+    # `Melee or Ranged 10`: the melee half is the wielded weapon's reach and has
+    # no digit, so `_RANGES` cannot see it and the check saw only `ranged 10` --
+    # reporting a correct `MeleeOrRanged(1, 10)` header as wrong. The bail below
+    # only caught the case where *both* kinds carry a digit.
+    #
+    # Found by a content agent, which then declined to add it to `KNOWN`: the
+    # row was right and the instrument was not, and `KNOWN` is for the other
+    # way round. That is the correct call and worth recording.
+    if _EITHER.search(spec):
+        return None
     hits = [
         (pattern.search(spec).start(), kind, pattern.search(spec))
         for kind, pattern in _RANGES
