@@ -2273,7 +2273,7 @@ def m3637a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignores_difficult(while_shifting=)",),
+    todo=("c.ignores_difficult(when=)",),
 )
 def m3637a6(c: Cast) -> None:
     """"Ignores difficult terrain when shifting" has no verb narrowed to the

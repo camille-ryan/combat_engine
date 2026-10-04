@@ -652,7 +652,7 @@ def i2068p1(c: Cast) -> None:
 
 @power("i2070p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignores_difficult(while_shifting=)",))
+       dropped=("c.ignores_difficult(when=)",))
 def i2070p1(c: Cast) -> None:
     """"When you shift" is the missing gate; rough ground is ignored on
     every kind of move instead, which is more than the card gives."""

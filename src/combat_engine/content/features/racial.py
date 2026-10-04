@@ -350,7 +350,7 @@ def rt_r4_t3(c: Cast) -> None:
 
 @power("rt:r4-t4", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.ignores_difficult(shift=)",))
+       todo=("c.ignores_difficult(when=)",))
 def rt_r4_t4(c: Cast) -> None:
     """`c.ignores_difficult` is per terrain kind and board-wide, and the
     printed line is per *kind of move*. Laid blanket it would exempt a

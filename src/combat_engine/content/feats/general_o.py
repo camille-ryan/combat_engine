@@ -1025,7 +1025,7 @@ def f3073(c: Cast) -> None:
 
 @power("f3074", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.ignores_difficult(shift=)",))
+       todo=("c.ignores_difficult(when=)",))
 def f3074(c: Cast) -> None:
     """Re-aimed: "a r44 racial power" is three declared refs now, so the
     trigger is writable. The benefit is not. `c.ignores_difficult` is

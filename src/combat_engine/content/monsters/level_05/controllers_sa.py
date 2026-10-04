@@ -716,9 +716,25 @@ def m3291a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
+    todo=("c.ignores_difficult(when=)",),
 )
 def m3291a5(c: Cast) -> None:
-    c.ignores_difficult(kind="shift", on=c.me, until=When.ENCOUNTER)
+    """The whole of this row is a narrowing nothing can express: rough ground is
+    ignored **when it shifts** and not when it walks.
+
+    **It used to say `c.ignores_difficult(kind="shift")`, which did nothing.**
+    That parameter names *which sort of terrain* -- its own docstring says "the
+    labels are the ones the map and `c.zone(difficult=...)` give their squares",
+    and those are `ice`, `rubble`, `water` and `web`. No square is ever labelled
+    `shift`, so the waiver was laid against a terrain that does not exist and the
+    row reported finished while being inert. `audit.py` credited it because
+    laying the effect is an `EffectApplied` either way.
+
+    Twenty-seven other rows wait on the same gap under this symbol, which is the
+    general form: thirteen of them are about shifting and six about something
+    else entirely -- not wearing heavy armour, standing beside a spirit
+    companion, running.
+    """
 
 
 # ==========================================================================

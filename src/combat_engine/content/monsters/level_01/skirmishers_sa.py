@@ -1206,7 +1206,7 @@ def m4688a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignores_difficult(shifting=True)",),
+    todo=("c.ignores_difficult(when=)",),
 )
 def m4688a3(c: Cast) -> None:
     """Rough ground does not slow its *shift*, which is narrower than the one

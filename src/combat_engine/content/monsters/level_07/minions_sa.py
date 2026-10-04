@@ -525,7 +525,7 @@ def m5615a0(c: Cast) -> None:
 
 
 @power("m5783a0", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
-       dropped=("c.ignores_difficult(while_shifting=)",))
+       dropped=("c.ignores_difficult(when=)",))
 def m5783a0(c: Cast) -> None:
     """"Whenever it shifts" is narrower than `c.ignores_difficult` can say --
     it takes a terrain kind, not a move kind -- so this is granted for all

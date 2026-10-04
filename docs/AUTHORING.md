@@ -111,6 +111,25 @@ that never applies.
   their subject `target` -- `ConditionApplied` is the common one -- are
   false under it forever. Use `targets_me` there. `lint.py` now catches this
   statically, so a bad one fails the run rather than shipping.
+
+  **The four attack events are the exception worth memorising**: `AttackDeclared`,
+  `AttackRolled`, `Hit` and `Miss` carry `attacker` and `target` and **no
+  `actor`**, where `Bloodied` and `Dropped` carry `actor`. Three rows in one wave
+  had it backwards. `not_me` and `by_me` cope -- both fall back to `attacker` --
+  but `about_me` does not.
+
+  And `lint.py` only caught this for a *bare* predicate until today: `both(...)`
+  and `either(...)` return a closure, so **505 triggers were being skipped**. They
+  declare their parts now and the walk unwraps them.
+* **`Trigger()` takes no `once=`.** Its parameters are `event`, `when`, `text`,
+  `window`, and passing anything else raises at **import**, which at least fails
+  loudly. A printed "the first time X happens" on an at-will row needs a guard in
+  the body -- a one-shot flag the watch closes over.
+* **The condition shortcuts take no `escalate=`.** `c.weakened(...)`,
+  `c.dazed(...)` and their siblings are convenience wrappers; only the generic
+  `c.condition(Condition.X, ..., escalate=fn)` carries the "first failed save
+  makes it worse" callback. Passing it to a shortcut raises when the row **runs**,
+  not when it imports, so the audit is what finds it rather than the import.
 * **`kind=` is the word the card prints before "bonus", and nothing else.**
   Not a default, not a guess, and **not "power" because most bonuses are**.
   A card that says "+2 bonus to AC" means untyped, and writing `kind="power"`

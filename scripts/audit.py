@@ -229,7 +229,15 @@ KNOWN_SILENT = {
     # on a fresh board, so the sibling never ran -- `m467a2`'s family.
     "m1929a1": "attacks a creature grabbed by it; the grab is m1929a0's",
     "m1936a3": "hauls what it has grabbed; the harness never makes it grab",
-    "m6655a5": "widens its own aura; m6655a0 has not laid one here",
+    # **This reason was wrong and is the kind of wrong that matters.** I wrote it
+    # in round 7 as "m6655a0 has not laid one here", which reads as a board gap.
+    # Driven since, with the aura laid first: the row *does* widen it, 1 to 3. It
+    # is silent because resizing a zone **announces nothing** -- the radius is a
+    # plain field that `Zones.refresh` re-reads, so there is no event for
+    # `DID_SOMETHING` to recognise. The row is correct and invisible, not inert.
+    # A `c.resize_aura()` that mutates and announces would fix both; filed.
+    "m6655a5": "widens its own aura, which emits no event for the audit to see",
+    "m6650a4": "widens its own aura, which emits no event for the audit to see",
     "m3637a4": "rerolls an attack roll; fired alone there is no roll behind it",
     "m3473a2": "lets m3473a1 ignore its own Requirement; nothing has attacked "
                "this creature yet when it is fired",
@@ -316,6 +324,30 @@ KNOWN_SILENT = {
     # Concealment and cover the bare grid does not provide.
     "m1167a3": "requires concealment; no terrain here grants any",
     "m3675a2": "requires cover; no terrain here grants any",
+    # **Round 10's twelve.** Checked individually against the `_restricted_to`
+    # trap first; none of them is that shape. `m822a4` looked like it -- it
+    # returns when its target is not undead -- but its header is `EACH_ALLY`, so
+    # the body runs once per ally and the return is correct filtering.
+    #
+    # A target state `_provoke` does not produce.
+    "m1812a4": "targets a prone creature; nothing here is",
+    "m2245a2": "targets an unconscious creature; nothing here is",
+    "m3300a2": "targets a grabbed creature; nothing here is grabbed",
+    "m5574a2": "targets an immobilized, stunned or unconscious creature; "
+               "the board has none of the three",
+    "m5466a3": "ends an ongoing effect or condition; the target carries neither",
+    "m5494a5": "needs a bloodied creature it has already clawed this turn",
+    "m115865a2": "attacks a creature grabbed by it; nothing here is grabbed",
+    "m2303a2": "attacks a creature grabbed by it; nothing here is grabbed",
+    # Nothing in flight to reroll. Both are free actions answering a roll that,
+    # fired alone, has not happened.
+    "m3290a4": "rerolls an attack roll; fired alone there is none behind it",
+    "m3645a4": "rerolls an attack roll; fired alone there is none behind it",
+    # The board's one ally is a copy of the caster at **full** health, so a heal
+    # lands on nobody who needs it.
+    "m822a4": "heals undead allies in a burst; the board's one ally is unhurt",
+    # Terrain a bare grid has not got.
+    "m960a5": "requires icy ground to teleport from; the board has none",
     # The one that is an instrument gap rather than a board gap, and is filed as
     # #374 rather than excused: `c.set_origin` labels its effect `origin:<word>`
     # because `kinds_of` reads the word back out of the label, so it cannot carry

@@ -384,7 +384,7 @@ def f2928(c: Cast) -> None:
 
 @power("f2929", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignores_difficult(while_shifting=)",))
+       dropped=("c.ignores_difficult(when=)",))
 def f2929(c: Cast) -> None:
     """The terrain is ignored; the narrowing to shifts is dropped.
 

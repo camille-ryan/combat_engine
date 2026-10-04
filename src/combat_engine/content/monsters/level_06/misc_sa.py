@@ -815,7 +815,7 @@ def m6371a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_difficult(while_shifting=)",),
+    dropped=("c.ignores_difficult(when=)",),
 )
 def m6544a0(c: Cast) -> None:
     """"Whenever she shifts" is narrower than what `c.ignores_difficult` can
