@@ -398,6 +398,78 @@ KNOWN_SILENT = {
     "m5625a0": "its printed effect -- an enemy cannot enter its square -- is "
                "already true of every creature by collision, so there is nothing "
                "for the row to do and nothing to see it do",
+    # **Round 12's fifty-five, over 1,127 rows.** Nineteen are the grab family,
+    # which has led every round since `m467a2` and is now unambiguously the
+    # board's biggest structural limit -- a row wanting a creature its own sibling
+    # has grabbed, fired alone on a fresh board.
+    "m115863a4": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m3795a1": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m4007a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m5160a3": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m6642a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m1089a1": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m1089a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m1163a3": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m5814a3": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m5813a3": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m5330a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m4014a1": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m4014a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m5529a3": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m5997a7": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m115875a1": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m3997a1": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m115910a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    "m5132a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
+    # A target state `_provoke` does not produce. It makes an attack; it does not
+    # daze, slow, immobilise, stun, knock prone or mark.
+    "m1101a1": "its target must carry a condition the board never applies",
+    "m2092a2": "its target must carry a condition the board never applies",
+    "m6365a1": "its target must carry a condition the board never applies",
+    "m939a1": "its target must carry a condition the board never applies",
+    "m1062a2": "its target must carry a condition the board never applies",
+    "m1172a4": "its target must carry a condition the board never applies",
+    "m1173a3": "its target must carry a condition the board never applies",
+    "m2596a1": "its target must carry a condition the board never applies",
+    "m5578a1": "its target must carry a condition the board never applies",
+    "m5543a4": "its target must carry a condition the board never applies",
+    "m5418a3": "its target must carry a condition the board never applies",
+    "m5596a2": "its target must carry a condition the board never applies",
+    "m3273a2": "its target must carry a condition the board never applies",
+    "m3253a5": "its target must carry a condition the board never applies",
+    # **Not board limits -- #375's family.** Each of these changes real state by
+    # assigning a field or rolling a number, and emits nothing for a log-based
+    # check to see: a second initiative, an extra turn, a change of form. The rows
+    # work; the audit cannot watch them. Same cause as the aura resize above.
+    "m5875a0": "changes state without emitting anything for the audit to see (#375)",
+    "m6282a0": "changes state without emitting anything for the audit to see (#375)",
+    "m953a2": "changes state without emitting anything for the audit to see (#375)",
+    "m5671a0": "changes state without emitting anything for the audit to see (#375)",
+    "m790a5": "changes state without emitting anything for the audit to see (#375)",
+    "m4325a5": "changes state without emitting anything for the audit to see (#375)",
+    "m5596a7": "changes state without emitting anything for the audit to see (#375)",
+    # Needs an effect a *sibling row* laid and the harness never ran.
+    "m5709a2": "acts on a creature carrying a sibling row's own effect",
+    "m6686a1": "acts on a creature carrying a sibling row's own effect",
+    "m3295a3": "acts on a creature carrying a sibling row's own effect",
+    "m2784a3": "acts on a creature carrying a sibling row's own effect",
+    # Flanking, which the board's fixed layout does not arrange.
+    "m5971a3": "its Requirement is flanking; the board does not set one up",
+    "m6284a2": "its Requirement is flanking; the board does not set one up",
+    # An ally of a kind the board's one ally cannot be -- it is a copy of the
+    # caster, so a row wanting an ally of a *different* kind finds none.
+    "m6180a0": "wants an ally of a kind its own copy is not",
+    "m6180a2": "wants an ally of a kind its own copy is not",
+    "m5787a8": "wants an ally of a kind its own copy is not",
+    # Gated on a form change having happened first, which needs the sibling row
+    # that performs it.
+    "m5786a3": "its Requirement is a form the creature has not changed into",
+    "m5596a5": "its Requirement is a form the creature has not changed into",
+    "m5596a6": "its Requirement is a form the creature has not changed into",
+    # The last three, each its own shape.
+    "m1193a2": "douses a light source; the board models no light",
+    "m3315a5": "stays hidden on a miss; it is not hidden to begin with",
+    "m5596a3": "contracts a disease; no disease system exists to carry one",
     # The one that is an instrument gap rather than a board gap, and is filed as
     # #374 rather than excused: `c.set_origin` labels its effect `origin:<word>`
     # because `kinds_of` reads the word back out of the label, so it cannot carry

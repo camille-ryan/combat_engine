@@ -110,7 +110,12 @@ BORROWED = {
 #: Keyed by ref, as the two above are, which means a waived row's *correct*
 #: typed call stops being checked too. That is the cost of the simpler key and
 #: is worth saying out loud.
-ELSEWHERE = {"f1766b", "f2913", "m915a4", "m970a3"}
+#: `m2079a5` is the same shape a fourth time, two levels up: "+1 **power** bonus
+#: to her next attack roll ... it deals an extra 7 damage". Same split, same
+#: judgement. Four rows of one card shape is the point at which it is worth saying
+#: that this is a *recurring* printed form rather than four oddities -- a typed
+#: bonus to the roll and an untyped rider on the damage, in two sentences.
+ELSEWHERE = {"f1766b", "f2913", "m915a4", "m970a3", "m2079a5"}
 
 #: A type word is printed as "a **power** bonus" or "+2 **item** bonus".
 #: The same word after "the" or "equal to the" is an *amount* being
