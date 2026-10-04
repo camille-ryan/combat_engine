@@ -39,6 +39,9 @@ class Wire:
     to_wire: dict[int, str] = field(default_factory=dict)
     to_eid: dict[str, int] = field(default_factory=dict)
     labels: dict[str, str] = field(default_factory=dict)
+    #: `labels` in the possessive, read from the localisation rather than built
+    #: with `+ "'s"`. See `possessive`.
+    possessives: dict[str, str] = field(default_factory=dict)
     zones: dict[int, str] = field(default_factory=dict)
     things: dict[int, str] = field(default_factory=dict)
     show_names: bool = True
@@ -56,6 +59,7 @@ class Wire:
             w.to_wire[eid] = wid
             w.to_eid[wid] = eid
             w.labels[wid] = w._label(ident, table, counts)
+            w.possessives[wid] = w._possessive(ident, table, w.labels[wid])
         for eid, _zone in world.each(Zone):
             w.zones[eid] = f"zone_{eid}"
         return w
@@ -75,6 +79,31 @@ class Wire:
         name = entry.get("name") or _plain(ident.ref)
         return f"{name} {ident.tag}" if ident.tag else name
 
+    def _possessive(self, ident: Ident, table: dict, shown: str) -> str:
+        """`<label>'s`, from the localisation when it has one.
+
+        **The rule is wrong once in twelve**, and this is where that was being
+        paid: a name ending in `s` or `z` takes a bare apostrophe, 8% of names
+        do, and seven call sites in `render.py` were each building `+ "'s"` by
+        hand. #350.
+
+        Falls back to the rule, because a stored form is only available for the
+        namespaces `build._INFLECT` asks for -- and because a tagged creature
+        ("<name> B") has no entry of its own under that label.
+        """
+        from combat_engine.etl.sanitise import possessive as by_rule
+
+        entry = table.get(ident.ref) or {}
+        stored = (entry.get("possessive") or "").strip()
+        if stored and not ident.tag:
+            return stored
+        # **A tagged creature takes the rule, not the stored form.** The tag goes
+        # outside the name -- "<name> B" -- so the apostrophe belongs after the
+        # tag, and the stored possessive is the wrong string to build from. The
+        # first version tried to undo it with `rstrip("'s")`, which strips a
+        # character *set* and turned a name ending in s into one that did not.
+        return by_rule(shown)
+
     # -- lookups ------------------------------------------------------------
 
     def id(self, eid: int | None) -> str | None:
@@ -86,6 +115,15 @@ class Wire:
     def label(self, eid: int | None) -> str:
         wid = self.id(eid)
         return self.labels.get(wid, wid or "?")
+
+    def possessive(self, eid: int | None) -> str:
+        """What `label` returns, in the possessive. One place, not seven."""
+        from combat_engine.etl.sanitise import possessive as by_rule
+
+        wid = self.id(eid)
+        if wid in self.possessives:
+            return self.possessives[wid]
+        return by_rule(self.labels.get(wid, wid or "?"))
 
     def zone(self, eid: int) -> str:
         return self.zones.setdefault(eid, f"zone_{eid}")

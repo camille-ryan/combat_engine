@@ -315,13 +315,16 @@ def _duration_text(session: Session, effect) -> str:  # noqa: ANN001
     initiative strip, not just the one effect. A duration nobody has
     phrased yet should read a little flatly, not blank the screen.
     """
-    who = session.wire.label(effect.clock)
+    # **The possessive comes from the localisation, not from `+ "'s"`.** A name
+    # ending in s or z takes a bare apostrophe and 8% of them do, so building it
+    # here was wrong once in twelve on the line a player reads most often. #350.
+    who = session.wire.possessive(effect.clock)
     return {
-        When.EOT: f"end of {who}'s turn",
-        When.EONT: f"end of {who}'s next turn",
-        When.SONT: f"start of {who}'s next turn",
-        When.EOTNT: f"end of {who}'s next turn",
-        When.SOTNT: f"start of {who}'s next turn",
+        When.EOT: f"end of {who} turn",
+        When.EONT: f"end of {who} next turn",
+        When.SONT: f"start of {who} next turn",
+        When.EOTNT: f"end of {who} next turn",
+        When.SOTNT: f"start of {who} next turn",
         When.SAVE_ENDS: "save ends",
         When.ENCOUNTER: "end of the fight",
         When.STANCE: "stance",
@@ -1073,7 +1076,7 @@ def narrate_span(session: Session, events: list[Event]) -> str:
         elif kind == "MoveEnd":
             lines.append(f"{wire.label(d['actor'])} {_moved(d)} {tuple(d['at'])}")
         elif kind == "TurnStart" and not d.get("ghost"):
-            lines.append(f"{wire.label(d['actor'])}'s turn")
+            lines.append(f"{wire.possessive(d['actor'])} turn")
         elif kind == "OpportunityWindow":
             lines.append(
                 f"{wire.label(d['actor'])} gets an opportunity attack on "
@@ -1100,7 +1103,8 @@ def narrate(session: Session, event: Event) -> str:
     if kind == "RoundStart":
         return f"Round {d['round']}"
     if kind == "TurnStart":
-        return f"{who('actor')}'s turn" + (" (dead)" if d.get("ghost") else "")
+        return f"{wire.possessive(d['actor'])} turn" + (
+            " (dead)" if d.get("ghost") else "")
     if kind == "TurnEnd":
         return ""
     if kind == "PowerUsed":

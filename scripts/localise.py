@@ -501,7 +501,7 @@ def main() -> int:
     missing: dict[str, list[str]] = defaultdict(list)
     width = max(len(k) for k in wanted) if wanted else 4
     print(f"  {'':{width}}  {'rows':>6}  field        filled   of    missing")
-    rows_total = filled_total = asked_total = 0
+    rows_total = filled_total = asked_total = derived_total = 0
 
     for ns in sorted(wanted):
         refs = sorted(scope.get(ns, ()))
@@ -519,13 +519,25 @@ def main() -> int:
                     continue
             have = [r for r in asked if _filled(names.get(r) or {}, field)]
             gap = [r for r in asked if r not in set(have)]
+            # **A guess is not a completion.** `possessive`, `plural` and
+            # `aliases` are authored data the compendium states nowhere, so the
+            # build fills them from an English rule and records that it did. A
+            # figure that counted those as filled would read 100% for work no
+            # human has looked at -- and the rule is wrong once in twelve on the
+            # possessive and once in nine on the plural. #350.
+            guessed = [r for r in have
+                       if field in ((names.get(r) or {}).get("derived") or ())]
             asked_total += len(asked)
             filled_total += len(have)
+            derived_total += len(guessed)
             pct = 100 * len(have) / len(asked)
             label = ns if first else ""
             count = f"{len(refs)}" if first else ""
             first = False
             note = "  (of those that print one)" if sql else ""
+            if guessed:
+                note += (f"  {len(guessed)} derived by rule, "
+                         f"{len(have) - len(guessed)} stated")
             print(f"  {label:{width}}  {count:>6}  {field:<11} "
                   f"{pct:5.0f}%  {len(asked):>5}  {len(gap):>6}{note}")
             if gap:
@@ -535,6 +547,18 @@ def main() -> int:
     overall = 100 * filled_total / asked_total if asked_total else 100.0
     print(f"  {filled_total} of {asked_total} fields filled across "
           f"{rows_total} rows -- {overall:.1f}%")
+    # **Both figures, because the first one counts guesses.** `possessive`,
+    # `plural` and `aliases` are derived from an English rule the compendium
+    # does not state, and the rule is wrong once in twelve on the possessive.
+    # Printing only the headline would report a 99.8% for work no human has
+    # read -- the same overclaim that reporting `rules_text` at 81% was an
+    # underclaim. #350.
+    if derived_total:
+        stated = filled_total - derived_total
+        asked_stated = asked_total - derived_total
+        pct = 100 * stated / asked_stated if asked_stated else 100.0
+        print(f"  {derived_total} of those are derived by rule and await a "
+              f"human; {stated} of {asked_stated} are stated -- {pct:.1f}%")
     tier = "every tier" if args.all_tiers else (
         f"heroic: character options to {CHARACTER_CEILING}, "
         f"monsters and traps to {MONSTER_CEILING}")

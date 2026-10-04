@@ -608,6 +608,120 @@ def _inflected(word: str, words: frozenset[str]) -> bool:
     return bool(doubled and doubled.group(1) + doubled.group(2) in words)
 
 
+#: Nouns whose plural is not `+s`, as **suffix** rules so one entry serves every
+#: name ending that way. Written down because English does not derive them and
+#: the compendium states none: these are the irregulars a `+s` rule gets wrong.
+#:
+#: Suffixes, not whole words, because 85% of names are multi-word and the
+#: inflection lands on the **last** word -- so a rule keyed on the whole string
+#: would have to list every phrase ending in the same noun.
+_PLURAL_RULES = (
+    ("man", "men"), ("woman", "women"), ("child", "children"),
+    ("tooth", "teeth"), ("foot", "feet"), ("goose", "geese"),
+    ("mouse", "mice"), ("louse", "lice"), ("ox", "oxen"),
+    ("person", "people"), ("die", "dice"), ("knife", "knives"),
+    ("life", "lives"), ("wife", "wives"), ("wolf", "wolves"),
+    ("elf", "elves"), ("shelf", "shelves"), ("thief", "thieves"),
+    ("loaf", "loaves"), ("leaf", "leaves"), ("half", "halves"),
+    ("calf", "calves"), ("self", "selves"), ("dwarf", "dwarves"),
+    ("hoof", "hooves"),
+)
+
+#: Nouns spelled the same in the plural. A `+s` on one of these reads as a
+#: mistake rather than a plural.
+_UNCHANGED_PLURAL = frozenset({
+    "deer", "sheep", "fish", "swine", "series", "species", "offspring",
+    "aircraft", "bison", "moose", "salmon", "trout", "cod", "squid",
+})
+
+
+def possessive(name: str) -> str:
+    """`<name>'s`, with the 8% the naive rule gets wrong handled.
+
+    **The rule is about the last letter, not the last word.** A name ending in
+    `s` or `z` takes a bare apostrophe in the house style the books use, and
+    2,672 of 32,371 names end that way -- so `+ "'s"` is wrong once in twelve,
+    which is exactly often enough to be noticed by a player and not often
+    enough to be noticed by whoever wrote it.
+
+    `api/render.py` built this inline in three places before #350.
+    """
+    bare = name.rstrip()
+    if not bare:
+        return ""
+    return f"{bare}'" if bare[-1].lower() in "sz" else f"{bare}'s"
+
+
+def plural(name: str) -> str:
+    """`<name>` in the plural, inflecting the **last word**.
+
+    85% of names are more than one word and the plural belongs to the head
+    noun, which in English is the last one -- so inflecting the string is wrong
+    for five names in six.
+
+    Three rules, in order: a noun that does not change, an irregular suffix, and
+    otherwise the ordinary `+s`/`+es`. **A name already ending in a bare `s` is
+    left alone** -- 2,081 of them do, and most are already plural; guessing
+    between "already plural" and "singular ending in s" is the judgement this
+    declines to make, which is what the stated/derived split in `localise.py`
+    is for.
+    """
+    bare = name.rstrip()
+    if not bare:
+        return ""
+    head, _, last = bare.rpartition(" ")
+    word = last or bare
+    low = word.lower()
+    if low in _UNCHANGED_PLURAL or low.endswith("s"):
+        return bare
+    for suffix, becomes in _PLURAL_RULES:
+        if low.endswith(suffix) and len(low) >= len(suffix):
+            # **Case comes from the word being replaced, not from the rule.**
+            # The rules are written lowercase, so a bare substitution turned a
+            # printed name into `dwarves` and `Fey wolves` -- a name a player
+            # reads, with its capital taken off by a table.
+            tail = word[-len(suffix):]
+            if tail[:1].isupper():
+                becomes = becomes[:1].upper() + becomes[1:]
+            word = word[: -len(suffix)] + becomes
+            break
+    else:
+        if re.search(r"[^aeiou]y$", low):
+            word = word[:-1] + "ies"
+        elif low.endswith(("s", "x", "z", "ch", "sh")):
+            word = word + "es"
+        else:
+            word = word + "s"
+    return f"{head} {word}".strip() if head else word
+
+
+def aliases(name: str) -> list[str]:
+    """The fragments a stat block uses to refer to itself.
+
+    **This is the guess that `by_word` already makes, written down.** A stat
+    block never prints its own full name in its rules -- it writes "the
+    <type> shifts 1 square" -- so `scrub` has always had to split a creature's
+    name into words and swap each one. Storing the list turns an inference
+    into data, and `localise.py` can then say which rows have a stated list and
+    which are still relying on the split.
+
+    The inference stays as the fallback, deliberately: it works, and a wrong
+    alias is worse than a missing one -- it would swap a word the sentence was
+    about.
+    """
+    bare = " ".join((name or "").split())
+    if not bare:
+        return []
+    out = [bare]
+    for word in re.findall(r"[A-Za-z']{3,}", bare):
+        low = word.strip("'")
+        if len(low) < 3 or low.lower() in STOPWORDS or low == bare:
+            continue
+        if low not in out:
+            out.append(low)
+    return out
+
+
 def vocabulary() -> set[str]:
     """Words this script will not call a name.
 

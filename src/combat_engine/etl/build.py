@@ -353,6 +353,7 @@ class Report:
     feat_cards: int = 0
     races: int = 0
     racial_traits: int = 0
+    inflected: int = 0
     traits_are_powers: int = 0
     racial: int = 0
     themed: int = 0
@@ -409,6 +410,8 @@ class Report:
             f"prereq terms  {self.terms:6d}  (a printed name a prerequisite asks for)",
             f"other names   {self.aliases:6d}  (rituals, deities: indexed, never content)",
             f"names         {self.names:6d}  (localization/names.json, gitignored)",
+            f"  inflected   {self.inflected:6d}  "
+            f"(possessive, plural, aliases -- derived, not stated: #350)",
             f"common words  {self.common:6d}  (what leaks.py treats as English)",
             f"  cited names {self.cited_names:6d}  (frequent, but somebody's whole name)",
             "",
@@ -490,6 +493,7 @@ def build() -> Report:
     out.commit()
     out.close()
 
+    report.inflected = _inflect(names)
     NAMES.write_text(json.dumps(names, indent=1, sort_keys=True))
     localisation.cache_clear()
     report.names = len(names)
@@ -2996,33 +3000,13 @@ def _common_words(
     # `COMMON_ENOUGH` is `sanitise`'s own threshold for "names too many rows to
     # identify one", so the two halves cannot come to different opinions about
     # what identifies.
-    english = {
-        w.strip().lower()
-        for w in sanitise.DICTIONARY.read_text(errors="ignore").splitlines()
-        if w.strip()
-    } if sanitise.DICTIONARY.exists() else set()
-
-    def ordinary(word: str) -> bool:
-        """Is this an English word, **inflections included**?
-
-        The dictionary is web2, which holds `create` and `shake` and not
-        `created` or `shakes`. The first version of this guard asked
-        `word in english` and went red on both of those -- "created" and
-        "shakes" are each some row's printed name, and each is also a word
-        anybody writing a docstring will use. 20 of the first 25 findings were
-        that mistake. `sanitise._stem` was built for the possessive and does
-        not reach a participle, so the suffixes are stripped here.
-        """
-        if word in english:
-            return True
-        for suffix, add in (("s", ""), ("es", ""), ("ed", ""), ("ed", "e"),
-                            ("ing", ""), ("ing", "e"), ("d", ""), ("er", ""),
-                            ("ers", ""), ("ies", "y")):
-            if (word.endswith(suffix) and len(word) > len(suffix) + 2
-                    and word[: -len(suffix)] + add in english):
-                return True
-        return False
-
+    # **One inflection table, in `sanitise`.** This held a second, shorter one
+    # -- ten suffix pairs against fifteen, and no apostrophe, hyphen or doubled
+    # consonant -- written for this guard before `sanitise.ordinary` was
+    # promoted to do the same job. Two tables answering one question is the
+    # fault this project keeps finding, and the local one was strictly weaker:
+    # it called `planning` and `rigged` names. #350.
+    ordinary = sanitise.ordinary
     # **A race keeps its place, because something else already owns that
     # decision.** A race's name is the one printed name that is also a *type*
     # word -- the engine asks `is_kind("<type>")` and "the <type> shifts 1
@@ -3129,6 +3113,82 @@ def game() -> sqlite3.Connection:
     `_connections`.
     """
     return _open_game()
+
+
+#: Which namespaces are asked for which inflected form, and why. The same
+#: question `scripts/localise.py` asks, answered in the one place that can
+#: write them -- a second table would be a second opinion.
+#:
+#: A possessive is wanted wherever the rules say "the <thing>'s turn": a
+#: creature, a race, a class, a companion. A plural wherever several are
+#: carried or fielded. Aliases only where a stat block refers to itself by a
+#: fragment, which is a creature or a companion and nothing else.
+_INFLECT = (
+    ("possessive", ("m", "r", "c", "comp:")),
+    ("plural", ("m", "r", "w", "i")),
+    ("aliases", ("m", "comp:")),
+)
+
+
+def _namespace(ref: str) -> str:
+    """The namespace a ref belongs to, for `_INFLECT`."""
+    for prefix in ("comp:", "cf:", "rt:", "t:"):
+        if ref.startswith(prefix):
+            return prefix
+    head = re.match(r"[a-z]+", ref)
+    return head.group(0) if head else ""
+
+
+def _inflect(names: dict[str, dict[str, str]]) -> int:
+    """Fill `possessive`, `plural` and `aliases` from the English rule.
+
+    **Marked `derived`, and that is the point of this function rather than an
+    afterthought.** The compendium states none of these three -- no `Alias`,
+    `Short` or `Abbrev` column, and no inflected form anywhere -- so every value
+    written here is a *guess by rule*, and the rule is wrong often enough to
+    matter: the possessive once in twelve, the plural once in nine.
+
+    So each entry records which of its fields were derived, and
+    `scripts/localise.py` reports stated against derived instead of counting a
+    guess as completeness. A human correcting one removes it from `derived`, and
+    nothing here will overwrite a value already marked stated. #350.
+    """
+    from . import sanitise as _s
+
+    filled = 0
+    for ref, entry in names.items():
+        name = (entry.get("name") or "").strip()
+        if not name:
+            continue
+        ns = _namespace(ref)
+        # A monster ability lives in the `m` namespace and is not a creature;
+        # only a bare `m<id>` is. Same for an item block against an item.
+        creature = bool(re.fullmatch(r"m\d+", ref))
+        if ns == "m" and not creature:
+            continue
+        was = set(entry.get("derived") or ())
+        derived = set(was)
+        rules = {"possessive": _s.possessive, "plural": _s.plural,
+                 "aliases": _s.aliases}
+        for want, namespaces in _INFLECT:
+            if ns not in namespaces:
+                continue
+            # **Never overwrite a stated value.** A field that is present and
+            # not listed in `derived` was corrected by a human, and this runs
+            # on every build.
+            if entry.get(want) and want not in was:
+                continue
+            value = rules[want](name)
+            # An empty answer is not an answer. A plural equal to the singular
+            # *is* one -- that is what an unchanged noun looks like.
+            if not value:
+                continue
+            entry[want] = value
+            derived.add(want)
+            filled += 1
+        if derived:
+            entry["derived"] = sorted(derived)
+    return filled
 
 
 @lru_cache(maxsize=1)
