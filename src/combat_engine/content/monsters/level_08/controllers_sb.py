@@ -324,9 +324,12 @@ def m4451a4(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m4451a5(c: Cast) -> None:
-    """A dwarf racial trait, not specific to this stat block: forced
-    movement is one square short and a fall to prone can be shrugged off
-    with a save. `_saves_off_prone` already carries the second half."""
+    """An `r2` racial trait, not specific to this stat block: forced movement is
+    one square short and a fall to prone can be shrugged off with a save.
+    `_saves_off_prone` already carries the second half.
+
+    The race is named by ref because naming it by word is a leak -- that word is
+    `r2`'s printed name, and `leaks.py` reported this line."""
     c.resist_forced(on=c.me, until=When.ENCOUNTER)
     _saves_off_prone(c)
 

@@ -289,9 +289,23 @@ def _components(names: dict, rules: set[str]) -> dict[str, list[str]]:
 
 
 def tracked() -> list[Path]:
+    """Every file that ships -- **including the ones not committed yet.**
+
+    This was a bare `git ls-files`, which lists the *index*, so a brand-new file
+    was invisible until it had been committed. That is exactly backwards for the
+    way this check is used: a wave writes new files, the session runs `leaks.py`
+    before committing them, and the one thing it most needs to look at is the only
+    thing it could not see. A printed race name shipped in a new file's docstring
+    on that blind spot and only surfaced on the next round's run.
+
+    `--cached --others --exclude-standard` is the index plus untracked files minus
+    anything `.gitignore` covers -- so `data/` and `localization/` stay out, which
+    they must.
+    """
     try:
         out = subprocess.run(
-            ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
         ).stdout.split()
         return [ROOT / p for p in out]
     except (subprocess.CalledProcessError, FileNotFoundError):

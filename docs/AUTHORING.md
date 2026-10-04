@@ -567,6 +567,38 @@ eid, ctx)`, `Keyword.RAGE`, `Dropped.source`. A sentence is refused at
 import, because the whole point is that a tool can go and look for the
 thing. Name every symbol you wanted, not just the first.
 
+**Name what is missing, not what is there.** This is the single most repeated
+marker fault of the monster sweep -- two a round, still, after the obvious advice
+was written down -- and the obvious advice is not the problem. Everyone does grep
+for the verb. The trap is one level in:
+
+```python
+todo=("c.extra_turn(at=)",)              # `at` IS a parameter. Resolves.
+todo=("c.grant_action(what='move_zone')",)  # `what` IS a parameter. Resolves.
+```
+
+Both of those name something that already exists, so `blocked.py` answers *yes*
+and `todo.py` reports the row **arrived** the moment the file lands. A marker that
+cannot go from absent to present is not a marker.
+
+The gap in each was narrower than the spelling suggested. `c.extra_turn(at)`
+exists and wants an initiative count handed to it -- what is missing is any way to
+roll a *second independent* one, so the symbol is `c.second_initiative()`. And
+`actions._granted` is only ever read for five words (`instinctive`, `command`,
+`stand`, `escape`, `shift`), so granting `move_zone` lays something nothing
+consults -- `c.grant_action(move_zone)`, with no `what=`, names the unread word
+and does not resolve.
+
+So: after writing a marker, **check it answers False**:
+
+```
+uv run scripts/blocked.py --refs '<your symbol>'      names your row? good
+uv run scripts/todo.py                                 silent? good. ARRIVED? re-aim
+```
+
+Six markers in two rounds, then two more in each of the next two, were caught by
+`todo.py` after the fact. It is cheaper to ask before.
+
 What that buys, and why it is not a stub:
 
 * **It is refused in play.** `dsl.usable` returns `not finished yet` for any
