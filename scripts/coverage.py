@@ -60,9 +60,10 @@ def main() -> int:
     ap.add_argument("--class", dest="cls", action="append", help="only this class; repeatable")
     ap.add_argument(
         "--kind",
-        choices=("powers", "monsters", "items", "feats"),
+        choices=("powers", "monsters", "items", "feats", "features", "traits",
+                 "traps", "companions", "all"),
         default="powers",
-        help="what to count",
+        help="what to count; `all` is the roll-up every plan should be built from",
     )
     ap.add_argument("--monsters", action="store_true", help="alias for --kind monsters")
     ap.add_argument("--max-level", type=int, help="stop at this level")
@@ -89,26 +90,95 @@ def main() -> int:
     db = game()
 
     kind = "monsters" if args.monsters else args.kind
-    found, a, b = {
+    readers = {
         "monsters": lambda: (_monsters(db, args), "level", "role"),
         "items": lambda: (_items(db, args), "category", "base_level"),
         "feats": lambda: (_feats(db, args), "gate", "min_level"),
         "powers": lambda: (_powers(db, args), "class", "level"),
-    }[kind]()
+        "features": lambda: (_features(db, args), "class", "build"),
+        "traits": lambda: (_traits(db, args), "race", "ord"),
+        "traps": lambda: (_traps(db, args), "level", "role"),
+        "companions": lambda: (_companions(db, args), "kind", "level"),
+    }
+    if kind == "all":
+        return _roll_up(db, readers, done, partial, args)
+    found, a, b = readers[kind]()
     _report(found, done, partial, a, b, args)
-    # **Never a bare percentage.** The monster figure read 100% for a long time
-    # against a denominator of a fifth of the corpus, and nothing on the line said
-    # which fifth. An instrument that scopes itself has to print the scope. #308.
+    print(f"  {_scope(kind, args, db)}")
+    return 0
+
+
+def _scope(kind: str, args: argparse.Namespace, db) -> str:  # noqa: ANN001
+    """What the figure above was counted against.
+
+    **Never a bare percentage**, and #308 established that for monsters only --
+    the fix went into one branch of this function while `--book` quietly scoped
+    the powers figure to a single book. It read `330 of 333 (99%)` where every
+    book reads `4,024 of 4,254`, and I quoted the 99% in #345 as "character
+    options are essentially done" on the strength of it. #357.
+    """
     if kind == "monsters":
         every = db.execute("SELECT COUNT(*) FROM monster").fetchone()[0]
         mm13 = db.execute(
             "SELECT COUNT(*) FROM monster WHERE book != ''").fetchone()[0]
         if args.mm13:
-            print(f"  counting the three Monster Manuals -- "
-                  f"{mm13} of {every} imported monsters")
-        else:
-            print(f"  counting all {every} imported monsters; "
-                  f"--mm13 narrows to the {mm13} in the Monster Manuals")
+            return (f"counting the three Monster Manuals -- "
+                    f"{mm13} of {every} imported monsters")
+        return (f"counting all {every} imported monsters; "
+                f"--mm13 narrows to the {mm13} in the Monster Manuals")
+    if kind == "powers":
+        every = db.execute("SELECT COUNT(*) FROM power").fetchone()[0]
+        if args.book:
+            return (f"counting only powers printed in {args.book!r}; "
+                    f'--book "" counts all {every}')
+        return f"counting all {every} imported powers, every book"
+    if kind == "feats":
+        if args.all_tiers:
+            return "counting every tier"
+        return "counting heroic feats -- tier, or min_level <= 10 where none is printed"
+    if kind == "items":
+        return ("counting every Property and Power block; --book is not applied, "
+                "see _items")
+    if kind == "traits":
+        return "counting every printed racial trait; new in #341"
+    if kind == "traps":
+        return "counting every imported trap and hazard"
+    if kind == "companions":
+        return "counting every familiar and beast companion"
+    return "counting every class feature and sub-option"
+
+
+def _roll_up(db, readers: dict, done: set[str],  # noqa: ANN001
+             partial: dict, args: argparse.Namespace) -> int:
+    """One line per kind, which is what an implementation plan is built from.
+
+    Reading six commands to get these figures is how one of them gets
+    forgotten -- and two of them (traps, companions) had no command at all,
+    so 736 rows at 0% were in nobody's work list. #357.
+    """
+    print(f"  {'kind':12} {'written':>8} {'of':>7}   {'':4}  unfinished")
+    tot = fin = unf = 0
+    for kind in ("powers", "feats", "items", "features", "traits", "traps",
+                 "companions", "monsters"):
+        # The readers return `(rows, bucket_a, bucket_b)` for `_report`; the
+        # roll-up wants only the rows.
+        rows, _a, _b = readers[kind]()
+        refs = [r["ref"] for r in rows]
+        n = sum(1 for r in refs if r in done)
+        part = sum(1 for r in refs if r in partial)
+        tot += len(refs)
+        fin += n
+        unf += part
+        pct = 100 * n / len(refs) if refs else 100.0
+        print(f"  {kind:12} {n:8} {len(refs):7}   {pct:3.0f}%  {part:>6}")
+    pct = 100 * fin / tot if tot else 100.0
+    print(f"\n  {fin} of {tot} rows written ({pct:.0f}%), {unf} declared but "
+          f"unfinished, {tot - fin - unf} not declared at all")
+    # The powers line obeys `--book`, so say so here too rather than leaving the
+    # roll-up to be read as the whole corpus when it is not.
+    if args.book:
+        print(f"  powers counted only for {args.book!r}; "
+              f're-run with --book "" for every book')
     return 0
 
 
@@ -161,6 +231,62 @@ def _powers(db, args: argparse.Namespace) -> list:  # noqa: ANN001
         r
         for r in db.execute(sql + " ORDER BY class, level, ref", params)
         if not args.book or args.book in json.loads(r["books"] or "[]")
+    ]
+
+
+def _features(db, args: argparse.Namespace) -> list:  # noqa: ANN001
+    """Every class feature and sub-option, bucketed by class and build.
+
+    Had no mode at all until #357, so 290 rows sat outside the only
+    instrument that asks whether a row is written -- and 148 of them are not.
+    """
+    sql = "SELECT ref, class, build FROM class_feature"
+    params: list = []
+    if args.cls:
+        sql += " WHERE lower(class) IN (" + ",".join("?" * len(args.cls)) + ")"
+        params.extend(c.lower() for c in args.cls)
+    return [
+        {"ref": r["ref"], "class": r["class"], "build": r["build"] or "-"}
+        for r in db.execute(sql + " ORDER BY class, build, ref", params)
+    ]
+
+
+def _traits(db, args: argparse.Namespace) -> list:  # noqa: ANN001
+    """Every printed racial trait. New in #341, so a low figure here is work
+    that has only just become visible rather than work that regressed."""
+    return [
+        {"ref": r["ref"], "race": r["race"], "ord": r["ord"]}
+        for r in db.execute(
+            "SELECT ref, race, ord FROM racial_trait ORDER BY race, ord")
+    ]
+
+
+def _traps(db, args: argparse.Namespace) -> list:  # noqa: ANN001
+    """Every trap and hazard. **0 of 631 are written**, and nothing said so.
+
+    They were imported because `content/terrain.py` was inventing numbers off
+    the monster curve for want of a row to read. Having imported them, the
+    work list never learned they existed.
+    """
+    sql = "SELECT ref, role, level FROM trap"
+    params: list = []
+    if args.max_level:
+        sql += " WHERE level <= ?"
+        params.append(args.max_level)
+    return [
+        {"ref": r["ref"], "role": r["role"] or "-", "level": r["level"] or 0}
+        for r in db.execute(sql + " ORDER BY level, role, ref", params)
+    ]
+
+
+def _companions(db, args: argparse.Namespace) -> list:  # noqa: ANN001
+    """Every familiar and beast companion. **0 of 105 are written.**
+
+    Imported because `c.familiar()` had been written against nothing.
+    """
+    return [
+        {"ref": r["ref"], "kind": r["kind"] or "-", "level": 0}
+        for r in db.execute("SELECT ref, kind FROM companion ORDER BY kind, ref")
     ]
 
 
