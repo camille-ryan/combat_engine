@@ -186,6 +186,29 @@ KNOWN_SILENT = {
     # not take first. Driven by hand: two limbs on one creature deal 10
     # necrotic and the m467 is healed by the same amount.
     "m467a2": "drains what it is grabbing; the harness never makes it grab",
+    # **The level-5 wave's eight, and six of them are `m467a2`'s family.** A row
+    # whose target line reads "one creature grabbed by it" needs the grab that a
+    # *sibling row on the same stat block* lays, and the harness fires each row
+    # once on a fresh board -- so the sibling has never run. Nothing here is a
+    # row fault and nothing is fixable by widening the board: making the caster
+    # grab before every row would change what every other row on the board is
+    # being tested against. Each card's target line was read to confirm the
+    # dependency rather than inferred from the verdict.
+    "m5302a3": "attacks a creature grabbed by it; the grab is m5302a2's",
+    "m5302a4": "attacks a creature grabbed by it; the grab is m5302a2's",
+    "m5838a2": "attacks a creature grabbed by it; the grab is m5838a1's",
+    "m3556a3": "acts on what it has grabbed; the grab is m3556a2's",
+    "m5602a4": "commands a conjuration; m5602a3 is what conjures one",
+    "m3219a5": "reanimates a dead ally; the board's one ally is at full health",
+    # The two that are not a sibling dependency, and each is a different gap.
+    # `m3291a4` rerolls an attack roll, so fired alone there is no roll behind
+    # it to reroll -- the row is correct and the harness offers it nothing.
+    # `m1113a2` hands an ally an immediate save against a save-ends effect, and
+    # the board's single ally is a copy of the caster carrying no such effect:
+    # both halves of its target line are absent at once.
+    "m3291a4": "rerolls an attack roll; fired alone there is no roll behind it",
+    "m1113a2": "an ally saves against a save-ends effect; the board's ally "
+               "carries none",
     # Sends one of the m4967's own mossling minions running, and the board
     # spawns a second m4967 rather than a mossling. Driven by hand: with an
     # m4971 beside it the minion moves its full speed as a free action.
