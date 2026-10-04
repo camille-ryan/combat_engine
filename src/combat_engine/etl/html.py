@@ -52,6 +52,74 @@ def paragraphs(fragment: str) -> list[tuple[str, str]]:
     return out
 
 
+def lead_prose(fragment: str) -> str:
+    """The prose a page opens with, in either of the two shapes it takes.
+
+    **Not every dialect puts prose in a `<p>`**, which is why `paragraphs`
+    cannot find this. A full race page writes `</h1><i>...</i>`; a sub-race
+    page writes `</h1><br/>` and then a bare text node, with no element
+    around it at all. Both are the same thing to a reader and 9 rows were
+    empty for being the second shape.
+
+    An **empty `<i></i>` is not a shape, it is an absence** -- 9 race pages
+    print one -- so it returns `""` and the row is honestly recorded as having
+    no prose rather than being chased by a wider pattern.
+    """
+    after = re.split(r"</h1>", fragment, maxsplit=1)
+    if len(after) < 2:
+        return ""
+    rest = after[1].lstrip()
+    italic = re.match(r"(?:<br\s*/?>\s*)*<i>(.*?)</i>", rest, re.S)
+    if italic:
+        return text(italic.group(1))
+    bare = re.match(r"(?:<br\s*/?>\s*)*([^<]{40,})", rest)
+    return text(bare.group(1)) if bare else ""
+
+
+def after_blockquote(fragment: str) -> str:
+    """The bare text node a class page puts its prose in.
+
+    A class page is `<h1>`, then one `<p class="flavor">` holding the whole
+    `CLASS TRAITS` blockquote, and **then the prose, outside any element**.
+    Reading the flavour paragraph instead glued the two together: a class's
+    extracted text ran to a median of 4,650 characters where the prose alone
+    is a few hundred.
+    """
+    cut = fragment.find("</blockquote>")
+    if cut < 0:
+        return ""
+    rest = fragment[cut + len("</blockquote>"):]
+    rest = re.sub(r"^\s*(?:</p>|<br\s*/?>)*", "", rest)
+    bare = re.match(r"([^<]{40,})", rest)
+    return text(bare.group(1)) if bare else ""
+
+
+def classed_prose(fragment: str, *classes: str) -> str:
+    """The first paragraph in one of `classes` that carries no label.
+
+    `paragraphs` swallows a `<span>` sibling into the paragraph before it,
+    because its lookahead stops only at `<p>`, `<h1>` and `<h2>`. That is
+    harmless for the dialects that built the specs and wrong for prose: a
+    companion's came out at 492 characters where the prose is about 100, and
+    an old-dialect trap's at 1,062. Matching the **closing** tag is exact.
+
+    Not a change to `paragraphs`, deliberately -- it is shared by every
+    dialect reader including `power_rules` and `item_rules`, so widening its
+    lookahead would move `spec` for 24,000 rows to fix five namespaces.
+    """
+    for cls in classes:
+        for m in re.finditer(
+            rf'<p class="{re.escape(cls)}"[^>]*>(.*?)</p>', fragment, re.S
+        ):
+            inner = m.group(1)
+            italic = re.search(r"<i>(.*?)</i>", inner, re.S)
+            flat = text(italic.group(1) if italic else inner)
+            # A labelled line is mechanics; this reader wants only prose.
+            if flat and labelled(inner) is None:
+                return flat
+    return ""
+
+
 def headings(fragment: str) -> list[tuple[int, str, int]]:
     """Every `<h1>`/`<h2>` as `(level, text, offset)`."""
     return [

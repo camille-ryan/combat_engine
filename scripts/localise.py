@@ -101,9 +101,14 @@ WANTED: dict[str, dict[str, str]] = {
         "name": "the ability's printed heading",
         "rules_text": "the printed Attack, Hit and Effect lines",
     },
+    # **A feat is asked for no description, and that is measured.** Its page
+    # is a title, one all-mechanics paragraph and the publication line: no
+    # prose class, no prose label, and **0 of 3,271** carry a bare text node
+    # after the heading. The 220 that appeared to have prose carry it inside a
+    # second `<h1 class="encounterpower">` -- the granted power's flavour,
+    # which belongs on the card's ref and is where it now stays. #352.
     "f": {
         "name": "the feat's title",
-        "description": "the prose above the benefit",
         "rules_text": "the printed Prerequisite and Benefit",
     },
     "i": {
@@ -118,6 +123,13 @@ WANTED: dict[str, dict[str, str]] = {
     "ib": {
         "rules_text": "the printed Power or Property this block is",
     },
+    # **84% is the answer, not a gap.** 46 of 55 race pages print prose and all
+    # 46 are read -- 37 in an `<i>` after the title and 9 as a bare text node on
+    # the sub-race layout, which is the half that was being missed. The other 9
+    # print `<i></i>`, an italic tag with nothing in it, so the field is
+    # correctly empty. Left visible rather than filtered: a per-row absence is
+    # worth a reader confirming, and unlike a creature's rules text it is not
+    # the wrong question to ask of the namespace. #352.
     "r": {
         "name": "the race's title",
         "description": "the page's own prose section",
@@ -139,11 +151,13 @@ WANTED: dict[str, dict[str, str]] = {
     },
     "comp:": {
         "name": "what the companion is called",
+        "description": "the prose paragraph above the statistics",
         "possessive": "'your <companion>'s attack' is a printed phrase",
         "aliases": "a stat block names a companion by a fragment",
     },
     "t:": {
         "name": "what the trap is called",
+        "description": "the italic line the older layout opens with",
         "rules_text": "the printed trigger, attack and countermeasures",
     },
     "rt:": {
@@ -151,6 +165,24 @@ WANTED: dict[str, dict[str, str]] = {
         "rules_text": "the printed trait text",
     },
 }
+
+#: Fields only *some* rows in a namespace are asked for, and the SQL that says
+#: which.
+#:
+#: **Relevance is not always per namespace**, and pretending it is produces the
+#: same dishonest average that bundling creature with ability did. A trap is the
+#: case: the older layout opens with an italic prose line and the newer one goes
+#: straight into its mechanics and prints none. 423 old against 208 new, so
+#: asking all of them for a description would report a 67% that is really the
+#: source's shape rather than anybody's missing work.
+#:
+#: This is exactly why `trap.dialect` was added -- the component rule says to
+#: record which layout a row came from, `monster` always has, and traps did not,
+#: so nothing downstream *could* tell a gap from an absence.
+ONLY: dict[tuple[str, str], str] = {
+    ("t:", "description"): "SELECT ref FROM trap WHERE dialect = 'old'",
+}
+
 
 #: Namespaces that carry a name and nothing else, on purpose.
 #:
@@ -457,16 +489,24 @@ def main() -> int:
         rows_total += len(refs)
         first = True
         for field, _why in wanted[ns].items():
-            have = [r for r in refs if _filled(names.get(r) or {}, field)]
-            gap = [r for r in refs if r not in set(have)]
-            asked_total += len(refs)
+            asked = refs
+            sql = ONLY.get((ns, field))
+            if sql:
+                allowed = {r for (r,) in db.execute(sql)}
+                asked = [r for r in refs if r in allowed]
+                if not asked:
+                    continue
+            have = [r for r in asked if _filled(names.get(r) or {}, field)]
+            gap = [r for r in asked if r not in set(have)]
+            asked_total += len(asked)
             filled_total += len(have)
-            pct = 100 * len(have) / len(refs)
+            pct = 100 * len(have) / len(asked)
             label = ns if first else ""
             count = f"{len(refs)}" if first else ""
             first = False
+            note = "  (of those that print one)" if sql else ""
             print(f"  {label:{width}}  {count:>6}  {field:<11} "
-                  f"{pct:5.0f}%  {len(refs):>5}  {len(gap):>6}")
+                  f"{pct:5.0f}%  {len(asked):>5}  {len(gap):>6}{note}")
             if gap:
                 missing[field].extend(gap)
 

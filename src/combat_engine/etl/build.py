@@ -289,7 +289,12 @@ CREATE INDEX weapon_group ON weapon(grp, category);
 -- notices it.
 CREATE TABLE trap (
   ref TEXT PRIMARY KEY, id INTEGER, level INTEGER, role TEXT, kind TEXT,
-  perception_dc INTEGER, attack INTEGER, defence TEXT, damage TEXT, spec TEXT
+  perception_dc INTEGER, attack INTEGER, defence TEXT, damage TEXT, spec TEXT,
+  -- Which of the two layouts the page used. `monster` has carried this since
+  -- it was written and the component rule says to record it for every dialect
+  -- pair; traps did not, and without it nothing can tell a trap that *prints*
+  -- no prose from one whose prose was missed. 423 old, 208 new.
+  dialect TEXT
 );
 CREATE INDEX trap_level ON trap(level);
 """
@@ -679,6 +684,9 @@ def _classes(
     number that nothing would catch -- the powers would all work and the
     character would quietly be wrong.
     """
+    from .html import after_blockquote
+    from .html import detail as _detail
+
     # Matched on the bare name, because the compendium files a class under
     # its *build*: "Cleric (Templar)", "Fighter (Weaponmaster)", and six
     # separate wizards. Asking for exact names found the twenty classes
@@ -727,7 +735,14 @@ def _classes(
         )
         # The printed name, where printed names live. `bare` is the slug and
         # stays in the table as the key the content tree is organised by.
-        names[f"c{row['ID']}"] = {"name": bare}
+        #
+        # The prose is **outside every element** on a class page -- a bare text
+        # node after the `CLASS TRAITS` blockquote closes -- so no paragraph
+        # reader can reach it and all 77 rows had none. #352.
+        names[f"c{row['ID']}"] = {
+            "name": bare,
+            "description": after_blockquote(_detail(row["Txt"] or "")),
+        }
         minted.add(bare)
         written += 1
     # **Tell the scrubber these are mechanics**, now that they are in its index.
@@ -1358,9 +1373,12 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
     reason a monster's is: `world.scaling` takes the level back out, so the
     two sides of a fight move together when the treadmill is turned down.
     """
+    from .html import classed_prose
+    from .html import detail as _detail
+
     written = 0
-    for tid, name, level, role, kind, plain in source.execute(
-        "SELECT ID, Name, Level, Role, Type, PlainTxt FROM Trap ORDER BY ID"
+    for tid, name, level, role, kind, plain, raw in source.execute(
+        "SELECT ID, Name, Level, Role, Type, PlainTxt, Txt FROM Trap ORDER BY ID"
     ):
         spec = " ".join((plain or "").split())
         # The page opens by repeating its own name, sometimes twice, the way
@@ -1375,8 +1393,14 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
         dc = _TRAP_DC.search(spec)
         hit = _TRAP_ATTACK.search(spec)
         dmg = _TRAP_DAMAGE.search(spec)
+        # **The older layout is the one with prose**, in a `<p class="flavor">`
+        # italic line; the newer one opens straight into `<span class="traplead">`
+        # and prints none at all. Recorded rather than inferred downstream.
+        page = _detail(raw or "")
+        dialect = "old" if 'class="flavor"' in (raw or "") else "new"
+        prose = classed_prose(page, "flavor") if dialect == "old" else ""
         out.execute(
-            "INSERT OR REPLACE INTO trap VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO trap VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (
                 ref,
                 tid,
@@ -1388,11 +1412,12 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
                 hit.group(2).strip().lower() if hit else None,
                 dmg.group(1).replace(" ", "") if dmg else None,
                 sanitise.scrub(spec, {name: ref}),
+                dialect,
             ),
         )
         # `spec` here is the text *before* the scrub two lines up, which is
         # exactly the printed rules. One extraction, two destinations. #349.
-        names[ref] = {"name": name, "rules_text": spec}
+        names[ref] = {"name": name, "rules_text": spec, "description": prose}
         written += 1
     return written
 
@@ -1406,9 +1431,12 @@ def _companions(source: sqlite3.Connection, out: sqlite3.Connection,
     `Companion` are the beasts and carry a whole stat block; the
     ninety-four familiars carry Constant and Active Benefits.
     """
+    from .html import classed_prose
+    from .html import detail as _detail
+
     written = 0
-    for cid, name, kind, plain in source.execute(
-        "SELECT ID, Name, Type, PlainTxt FROM Companion ORDER BY ID"
+    for cid, name, kind, plain, raw in source.execute(
+        "SELECT ID, Name, Type, PlainTxt, Txt FROM Companion ORDER BY ID"
     ):
         spec = " ".join((plain or "").split())
         # ...and closes with the publication line.
@@ -1426,7 +1454,15 @@ def _companions(source: sqlite3.Connection, out: sqlite3.Connection,
             "INSERT OR REPLACE INTO companion VALUES (?,?,?)",
             (ref, (kind or "").strip().lower(), sanitise.scrub(spec, {name: ref})),
         )
-        names[ref] = {"name": name}
+        # Two prose classes on this dialect and the mechanics use a third
+        # (`flavor indent`), so both are asked for and a labelled paragraph is
+        # refused. #352.
+        names[ref] = {
+            "name": name,
+            "description": classed_prose(
+                _detail(raw or ""), "flavortext", "flavor"
+            ),
+        }
         written += 1
     return written
 

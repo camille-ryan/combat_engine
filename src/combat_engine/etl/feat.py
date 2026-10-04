@@ -278,10 +278,9 @@ def feats(
         books = json.dumps(
             [b.strip() for b in (row["Source"] or "").split(",") if b.strip()]
         )
-        card_description = ""
         for n, start in enumerate(cards, start=1):
             stop = next((h.start() for h in _HEAD.finditer(body, start + 1)), len(body))
-            card_description = _card(
+            _card(
                 body[start:stop], f"{ref}{chr(ord('a') + n)}", row, tier, books, out, names
             )
             report.feat_cards += 1
@@ -293,8 +292,18 @@ def feats(
                 books, _trimmed(source, row, _benefit(head, ref, row["Name"] or "")),
             ),
         )
+        # **No description, and that is the answer rather than a gap.** A feat
+        # page is a title, one all-mechanics paragraph (`Tier`, `Prerequisite`,
+        # `Benefit`) and the publication line: no prose class, no prose label,
+        # and zero of 3,271 carry a bare text node after the heading. The 220
+        # that *look* like they have prose carry it inside a second
+        # `<h1 class="encounterpower">` -- the card's flavour, which `_card`
+        # already files on the card's own ref.
+        #
+        # This read that line and copied it **up** to the parent, so a feat
+        # borrowed its granted power's prose; and it was assigned inside the
+        # card loop, so a feat printing two cards kept only the last one's. #352.
         names[ref] = {"name": (row["Name"] or "").strip(),
-                      "description": card_description,
                       "rules_text": _rules_text(head)}
         report.feats += 1
         report.unparsed += opaque
@@ -311,7 +320,7 @@ def _card(
     books: str,
     out: sqlite3.Connection,
     names: dict[str, dict[str, str]],
-) -> str:
+) -> None:
     """One power card printed inside a feat, as a row of its own.
 
     Suffixed off the parent exactly as `power.parse_extra` suffixes a second
@@ -341,7 +350,6 @@ def _card(
     # `power_rules` -- the same lines `power_spec` scrubs two lines up. #349.
     names[ref] = {"name": name, "description": description(fragment),
                   "rules_text": power_rules(fragment)}
-    return description(fragment)
 
 
 def _rules_text(head: str) -> str:

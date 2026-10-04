@@ -27,7 +27,7 @@ import re
 import sqlite3
 from typing import Any
 
-from .html import detail, labelled, paragraphs, text
+from .html import detail, labelled, lead_prose, paragraphs, text
 from .sanitise import item_rules, item_spec, scrub
 
 #: The project's scope. Items are gear for characters, so this follows the
@@ -133,7 +133,9 @@ def races(
         )
         spec = re.split(r"\s*Published in\b", spec)[0].strip()
 
-        flavour = re.search(r"</h1>\s*<i>(.*?)</i>", body, re.S)
+        # Both shapes: `<i>` on the 46 full pages, a bare text node on the 9
+        # sub-races. Reading only the first left those 9 empty. #352.
+        flavour = lead_prose(body)
         # **The "choose one" family gets refs of its own.** Swapped here as well
         # as the race's own name, so the spec an author reads says `rt:r33-s0`
         # where it said a printed label -- and registered in `names` so the other
@@ -145,10 +147,7 @@ def races(
             (ref, row["ID"], size, json.dumps(_scores(spec)),
              scrub(spec, {name: ref, **options})),
         )
-        names[ref] = {
-            "name": name,
-            "description": text(flavour.group(1)) if flavour else "",
-        }
+        names[ref] = {"name": name, "description": flavour}
         for label, option_ref in options.items():
             names.setdefault(option_ref, {"name": label})
         report.races += 1

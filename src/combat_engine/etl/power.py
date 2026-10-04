@@ -166,6 +166,12 @@ def parse_extra(row: dict, document: str) -> list[Power]:
             p.action = re.sub(r"\s+", " ", p.action)
         p.spec = power_spec(card, p.ref, p.name)
         p.rules_text = power_rules(card)
+        # A second card prints its own italic line under its own title, and
+        # this read the rules but never the prose -- so 41 of them reached the
+        # localisation with an empty `description` while `p` as a whole read
+        # 96% and looked like source absence. The card is the fragment, so the
+        # same reader the parent uses works unchanged. #354.
+        p.description = read_description(card)
         # And the **parent's** name, which `power_spec` does not know
         # about: a second card almost always names the first ("the
         # <parent> power must be active in order to use this"), and
