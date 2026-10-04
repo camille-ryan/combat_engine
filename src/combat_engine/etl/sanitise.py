@@ -273,8 +273,13 @@ def description(document: str) -> str:
 _ITEM_COLUMNS = ("enhancement bonus", "critical")
 
 
-def item_spec(document: str, ref: str, name: str) -> str:
-    """One item's mechanical lines, or one Property or Power block of one.
+def item_rules(document: str) -> str:
+    """One item's printed mechanical lines, **names left in**.
+
+    This is `item_spec` before the scrub. The two exist so the printed rules and
+    the author-facing spec come out of one reader and cannot drift -- #349 keeps
+    the printed half in the localisation, and two separate extractions would
+    have been two sets of rules.
 
     The same routine does both, because an item's head and its blocks are
     written in the same dialect and only differ in what has to come out. It
@@ -319,11 +324,26 @@ def item_spec(document: str, ref: str, name: str) -> str:
             continue
         lines.append(f"{pair[0]}: {pair[1]}".strip())
     kept = [line for line in lines if line.strip()]
-    return scrub("\n".join(kept), {name: ref})
+    return "\n".join(kept)
 
 
-def power_spec(document: str, ref: str, name: str) -> str:
-    """One power's mechanical lines, with nothing an agent must not see.
+def item_spec(document: str, ref: str, name: str) -> str:
+    """One item's mechanical lines, scrubbed -- what an author is shown.
+
+    The lines themselves are `item_rules`; this is that with the row's own name
+    swapped for its ref. **Two returns of one extraction**, so the printed text
+    and the sanitised text cannot come to hold different rules: #349 keeps the
+    printed half in the localisation and the only honest way to do that is for
+    both to come out of one reader.
+    """
+    return scrub(item_rules(document), {name: ref})
+
+
+def power_rules(document: str) -> str:
+    """One power's printed mechanical lines, **names left in**.
+
+    `power_spec` is this with the row's own name swapped for its ref. See
+    `item_rules` for why it is one reader and two returns.
 
     Keeps `powerstat` paragraphs outright -- they are the usage, keywords,
     action and range -- plus any paragraph carrying a mechanical label. Drops
@@ -376,7 +396,17 @@ def power_spec(document: str, ref: str, name: str) -> str:
         for line in lines
         if line.strip() and not re.match(r"^\s*Update", line, re.I)
     ]
-    return scrub("\n".join(kept), {name: ref})
+    return "\n".join(kept)
+
+
+def power_spec(document: str, ref: str, name: str) -> str:
+    """One power's mechanical lines, scrubbed -- what an author is shown.
+
+    The lines themselves are `power_rules`; this is that with the row's own name
+    swapped for its ref. See `item_spec` for why it is one reader and two
+    returns rather than two readers.
+    """
+    return scrub(power_rules(document), {name: ref})
 
 
 # --------------------------------------------------------------------------

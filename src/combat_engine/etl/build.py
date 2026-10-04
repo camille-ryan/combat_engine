@@ -605,7 +605,10 @@ def _monsters(
                     a.recharge, json.dumps(a.keywords), a.spec,
                 ),
             )
-            names[ref] = {"name": a.name}
+            # The printed lines, names left in. `a.spec` is the same text with
+            # this creature's name swapped for its ref, so the two are one
+            # extraction and cannot hold different rules. #349.
+            names[ref] = {"name": a.name, "rules_text": a.rules_text}
             report.abilities += 1
     report.scores["monster"] = sum(scores) / max(1, len(scores))
     report.worst = sorted(report.worst, key=lambda p: p[1])[:10]
@@ -982,7 +985,11 @@ def _feature_row(
         "INSERT OR REPLACE INTO class_feature VALUES (?,?,?,?,?,NULL)",
         (ref, cls, ord_, build, spec),
     )
-    names[ref] = {"name": name}
+    # **The spec here is never scrubbed**, so it already *is* the printed rules:
+    # this branch flattens prose rather than reading the power dialect, and no
+    # name is swapped out of it. Writing it to the localisation keeps the 196
+    # features this path produces from being the only `cf:` rows with none. #349.
+    names[ref] = {"name": name, "rules_text": spec}
     return 1
 
 
@@ -1063,7 +1070,8 @@ def _card_row(
         "INSERT OR REPLACE INTO class_feature VALUES (?,?,?,?,?,?)",
         (ref, cls, ord_, build, spec, _reprint_of(out, spec)),
     )
-    names[ref] = {"name": name, "description": sanitise.description(fragment)}
+    names[ref] = {"name": name, "description": sanitise.description(fragment),
+                  "rules_text": sanitise.power_rules(fragment)}
     return 1
 
 
@@ -1128,7 +1136,8 @@ def _powers(
                 p.spec, p.score,
             ),
         )
-        names[p.ref] = {"name": p.name, "description": p.description}
+        names[p.ref] = {"name": p.name, "description": p.description,
+                        "rules_text": p.rules_text}
 
     for row in rows:
         p = power_parser.parse(dict(row), row["Txt"])
@@ -1381,7 +1390,9 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
                 sanitise.scrub(spec, {name: ref}),
             ),
         )
-        names[ref] = {"name": name}
+        # `spec` here is the text *before* the scrub two lines up, which is
+        # exactly the printed rules. One extraction, two destinations. #349.
+        names[ref] = {"name": name, "rules_text": spec}
         written += 1
     return written
 

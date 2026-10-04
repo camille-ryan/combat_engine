@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 from .html import detail, text
 from .sanitise import description as read_description
-from .sanitise import power_spec, scrub
+from .sanitise import power_rules, power_spec, scrub
 
 
 @dataclass
@@ -34,6 +34,7 @@ class Power:
     #: For the localisation table only. Never stored in game.db.
     name: str = ""
     description: str = ""
+    rules_text: str = ""
     #: Set on a **second card printed inside another power's entry**. The
     #: compendium gives such a card no id of its own, so a row that must
     #: *name* it -- "you regain the use of that form's attack", "the ally
@@ -95,6 +96,9 @@ def parse(row: dict, document: str) -> Power:
     )
     body = detail(document)
     p.spec = power_spec(document, p.ref, p.name)
+    # The same lines with the names left in, for the localisation. One
+    # reader, two returns -- see `sanitise.power_spec`. #349.
+    p.rules_text = power_rules(document)
     p.description = read_description(document)
     _shape(p, body)
     return p
@@ -161,6 +165,7 @@ def parse_extra(row: dict, document: str) -> list[Power]:
             p.action = (act.group(1) or act.group(2) or "standard").lower()
             p.action = re.sub(r"\s+", " ", p.action)
         p.spec = power_spec(card, p.ref, p.name)
+        p.rules_text = power_rules(card)
         # And the **parent's** name, which `power_spec` does not know
         # about: a second card almost always names the first ("the
         # <parent> power must be active in order to use this"), and

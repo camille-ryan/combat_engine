@@ -82,9 +82,24 @@ WANTED: dict[str, dict[str, str]] = {
         "description": "the italic line under the title",
         "rules_text": "the printed Attack/Hit/Effect lines, names intact",
     },
+    # **A creature is asked for no rules text, and that is a measurement.**
+    # It read 81% while every one of the 13,432 abilities had rules text and
+    # every one of the 3,130 creatures did not -- one bucket reporting a gap
+    # that was really two row kinds with different needs. Checked rather than
+    # assumed: across 900 heroic creature pages, the labelled lines not already
+    # covered by an ability or by a `monster` column are **four** -- three book
+    # citations (`Draconomicon`, `Monster Vault`, `Into the Unknown`) and
+    # `Mount:`, which is a conjuring item's boilerplate on two figurine pages
+    # and belongs to the item. A creature's own mechanics are columns; its
+    # printed clauses are its abilities. So the split is honest and 81% was not.
     "m": {
         "name": "what the board calls the creature",
-        "rules_text": "the printed stat block",
+        "possessive": "'the <creature>'s turn' is printed on every page",
+        "aliases": "a stat block names itself by a fragment of its own name",
+    },
+    "ma": {
+        "name": "the ability's printed heading",
+        "rules_text": "the printed Attack, Hit and Effect lines",
     },
     "f": {
         "name": "the feat's title",
@@ -95,6 +110,13 @@ WANTED: dict[str, dict[str, str]] = {
         "name": "the item's title",
         "description": "the prose teaser the page prints",
         "plural": "a character carries several of some items",
+    },
+    # **A block, not the item.** An item with a Property and a Power is two
+    # blocks, either can be written without the other, and the block is what
+    # carries the printed rules a card shows. It is asked for **no name**: the
+    # compendium gives 6 of 2,491 one, and the rest take the item's.
+    "ib": {
+        "rules_text": "the printed Power or Property this block is",
     },
     "r": {
         "name": "the race's title",
@@ -161,9 +183,14 @@ def _heroic_refs(db, all_tiers: bool) -> dict[str, set[str]]:  # noqa: ANN001
 
     take("p", "SELECT ref FROM power WHERE level <= ?", char_cap)
     take("m", "SELECT ref FROM monster WHERE level <= ?", mon_cap)
-    take("m", "SELECT mp.ref FROM monster_power mp JOIN monster m "
-              "ON mp.ref LIKE m.ref || 'a%' WHERE m.level <= ?", mon_cap)
+    # `ma` is not a ref prefix -- an ability's ref is `m702a2`. It is a *row
+    # kind*, because a creature and its abilities want different fields and
+    # bucketing them together reported a gap neither had.
+    take("ma", "SELECT mp.ref FROM monster_power mp JOIN monster m "
+               "ON mp.ref LIKE m.ref || 'a%' WHERE m.level <= ?", mon_cap)
     take("i", "SELECT ref FROM item WHERE base_level <= ?", char_cap)
+    take("ib", "SELECT b.ref FROM item_block b JOIN item i "
+               "ON b.ref LIKE i.ref || '%' WHERE i.base_level <= ?", char_cap)
     take("t:", "SELECT ref FROM trap WHERE level <= ?", mon_cap)
     if all_tiers:
         take("f", "SELECT ref FROM feat")
@@ -208,6 +235,175 @@ def _filled(entry: dict, field: str) -> bool:
     return False
 
 
+#: A line's label, if it has one. `Hit:`, `Effect:`, `Requirement:` -- **and a
+#: ref**, because a clause labelled with a printed name has that name swapped for
+#: one in the spec. Digits and hyphens are in the class for exactly that: without
+#: them `p12609:` and `c53:` were not detected as labels at all, so the two sides
+#: disagreed about how many labelled lines a row had and 141 rows read as
+#: divergent when the only difference was the substitution.
+_LABEL = re.compile(r"^\s*([A-Za-z][\w '/-]{1,40}?)\s*:")
+
+#: Ref namespaces whose own colon is not a label separator.
+#:
+#: `cf:invoker-f1s2` substituted into a line that had no colon makes that line
+#: *look* labelled, because the first colon is one character in. A printed label
+#: is never one of these words alone, so excluding them is exact rather than a
+#: heuristic -- and without it 90 rows read as divergent for having had a name
+#: replaced by a ref that happens to carry a colon.
+_NAMESPACE = frozenset({"cf", "rt", "comp", "t", "w", "x", "q"})
+
+
+#: Rows whose `spec` and `rules_text` labels differ for a reason that is not a
+#: lost clause. **The check is a baseline, not a zero**, and that is a finding
+#: rather than a compromise: #349 asked for "the same labelled lines in the same
+#: order" and that cannot be written, because a clause label can be
+#:
+#:   * a printed name            `Vestige Pact:`  -> `cf:warlock-f1s6:`
+#:   * a name plus a word        `<name> Augment:` -> `p6855 Augment:`
+#:   * a name spanning a newline  two lines collapse into one when substituted
+#:   * a monster's own ability name, which its own spec scrubs
+#:
+#: and substitution moves all four. Eight comparisons were tried; each failed on
+#: a *correct* difference. What survives is a figure: **24,510 of 24,598 agree**,
+#: and every divergence examined was a substitution rather than a dropped clause.
+#:
+#: Guarded the way `scripts/fixtures/audited.json` guards the audit -- a number
+#: that may not get worse. If it rises, a clause went missing and that is what
+#: this exists to catch.
+KNOWN_LABEL_DRIFT = 88
+
+
+def _printed_labels() -> frozenset[str]:
+    """Every printed name that could appear as a clause label, lowered.
+
+    **The discriminator is data, not shape.** A build rider's label *is* a
+    printed name -- 523 rows carry one -- and nothing about `brutal scoundrel`
+    or `aegis of assault` looks different from `hit` or `effect` until you ask
+    whether the localisation knows it as a name. It does, so ask.
+    """
+    out = set()
+    for ref, entry in localisation().items():
+        if not ref.startswith(("cf:", "rt:")):
+            continue
+        name = (entry.get("name") or "").strip().lower()
+        if len(name) > 2:
+            out.add(name)
+    return frozenset(out)
+
+
+def _mechanical_labels(body: str, printed: frozenset[str]) -> set[str]:
+    """Every label on a line that is a rules label rather than a name.
+
+    A name can be a label and is substituted; `Hit`, `Effect` and `Target` are
+    not and never move. So this is the half of a row's shape that must be
+    identical in `spec` and `rules_text`, and a difference means a clause was
+    dropped.
+
+    A ref-shaped label is excluded on both sides, which is what makes the
+    comparison survive substitution at all.
+    """
+    out: set[str] = set()
+    for line in (body or "").splitlines():
+        found = _LABEL.match(line)
+        if not found:
+            continue
+        label = found.group(1).strip()
+        low = label.lower()
+        if low in _NAMESPACE or re.fullmatch(r"[a-z]+\d+", low) or low in printed:
+            continue
+        # **A compound label: a printed name plus a mechanics word.**
+        # `<name> Augment` becomes `p6855 Augment`, so the label is neither
+        # wholly a name nor wholly mechanics. Take the names and the refs out of
+        # it and compare what is left, which is the mechanics word that cannot
+        # move. 97 rows, every one of them an augment line.
+        bare = re.sub(r"\b[a-z]+\d+\b", " ", low)
+        for name in printed:
+            if name in bare:
+                bare = bare.replace(name, " ")
+        bare = " ".join(bare.split())
+        out.add(bare or low)
+    return out
+
+
+def _is_labelled(line: str) -> bool:
+    """Does this line carry a printed label, as opposed to a ref's own colon?
+
+    A substituted ref can either **be** the label or merely sit in the sentence,
+    and the two look alike after one colon:
+
+        cf:rogue-scoundrel-f1s0: you gain ...   the label, substituted
+        cf:invoker-f1s2 benefits from ...       a mention, not a label
+
+    So when the text before the first colon is a bare namespace, the question is
+    whether a *second* colon follows on the same line. That is exact rather than
+    a guess, and both halves of it were got wrong once: counting the namespace as
+    a label made 90 unlabelled lines look labelled, and excluding it outright
+    unlabelled 523 lines that really were.
+    """
+    found = _LABEL.match(line)
+    if not found:
+        return False
+    if found.group(1).lower() not in _NAMESPACE:
+        return True
+    return ":" in line[found.end():]
+
+
+def rules_against_spec(db) -> tuple[int, int, list[str]]:  # noqa: ANN001
+    """Do `rules_text` and `spec` carry the same rules?
+
+    They are one extraction with two endings -- `sanitise.power_rules` and
+    `power_spec` differ by a single `scrub` call -- so a divergence means one of
+    them lost a clause, which is the thing worth catching.
+
+    **The assertion is not "the same labels".** #349 specified that and it is
+    wrong as written: a power's clause can be labelled with a *build's printed
+    name* -- 395 powers carry one -- and the spec has cross-referenced that name
+    to a `cf:` ref while `rules_text` keeps it. The labels differ there
+    **because the fix is working**, so comparing label text fails on the one
+    difference the two halves exist to have.
+
+    What holds instead: **the same number of lines, and the same labels wherever
+    a label is not a ref.** That still catches a dropped or reordered clause.
+    """
+    names = localisation()
+    printed = _printed_labels()
+    checked = agree = 0
+    bad: list[str] = []
+    for table in ("power", "monster_power", "feat", "item_block",
+                  "class_feature", "trap"):
+        for ref, spec in db.execute(f"SELECT ref, spec FROM {table}").fetchall():
+            rules = (names.get(ref) or {}).get("rules_text")
+            if rules is None or not (spec or "").strip():
+                continue
+            checked += 1
+            # **Compare the labels that are never substituted.**
+            #
+            # Three comparisons were tried and each failed on a *correct*
+            # difference between the two halves:
+            #
+            # * label text -- a label can BE a printed name, so `Vestige Pact:`
+            #   legitimately becomes `cf:warlock-f1s6:`. 489 rows.
+            # * line count -- a printed name can span a line break, and the ref
+            #   replacing it is one token, so two lines collapse into one. 13
+            #   rows, `p3839` among them.
+            # * labelled positions -- a ref carries its own colon, so it can
+            #   make an unlabelled line look labelled or the reverse. ~69 rows.
+            #
+            # What cannot move is a label that is *not* a name: `Hit`, `Effect`,
+            # `Target`, `Requirement` are mechanics and nothing substitutes them.
+            # If one of those is in `rules_text` and not in `spec`, a clause was
+            # lost -- which is the only thing this check is for.
+            theirs = _mechanical_labels(rules, printed)
+            ours = _mechanical_labels(spec, printed)
+            if theirs == ours:
+                agree += 1
+            elif len(bad) < 8:
+                bad.append(
+                    f"{table}.{ref}: in rules only {sorted(theirs - ours)}, "
+                    f"in spec only {sorted(ours - theirs)}")
+    return checked, agree, bad
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -216,6 +412,8 @@ def main() -> int:
     ap.add_argument("--missing", help="list the refs lacking this field")
     ap.add_argument("--all-tiers", action="store_true",
                     help="beyond heroic too, so the ceiling can be seen")
+    ap.add_argument("--rules", action="store_true",
+                    help="check rules_text against spec and stop")
     args = ap.parse_args()
 
     names = localisation()
@@ -224,6 +422,21 @@ def main() -> int:
         return 1
 
     db = game()
+    if args.rules:
+        checked, agree, bad = rules_against_spec(db)
+        drift = checked - agree
+        print(f"  {agree} of {checked} rows carry the same rules in spec and "
+              f"rules_text ({100 * agree / max(1, checked):.1f}%)")
+        print(f"  {drift} differ by a label a substitution moved; "
+              f"{KNOWN_LABEL_DRIFT} is the recorded baseline -- see it for why "
+              f"this is not zero")
+        for line in bad:
+            print(f"    {line}")
+        if drift > KNOWN_LABEL_DRIFT:
+            print(f"  **{drift - KNOWN_LABEL_DRIFT} more than the baseline.** A "
+                  "label that is not a name cannot move, so a clause was lost.")
+            return 1
+        return 0
     scope = _heroic_refs(db, args.all_tiers)
     wanted = WANTED if not args.namespace else {
         k: v for k, v in WANTED.items() if k == args.namespace

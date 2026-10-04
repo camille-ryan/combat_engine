@@ -199,26 +199,40 @@ class Wire:
 
 @lru_cache(maxsize=4096)
 def _spec_lines(ref: str) -> dict[str, str]:
-    """Split one row's stored spec into its labelled lines.
+    """Split one row's printed mechanics into its labelled lines.
 
-    The spec is the mechanical text the row was written from, and it lives in
-    `game.db` -- which is therefore built from your own compendium and is not
-    redistributable, for the same reason the name table is not.
+    Two sources, and which one is used decides whether the caller's docstring
+    is true. `localization/names.json` holds `rules_text` -- the mechanical
+    lines with **names intact**, which is what a card is for. `game.db` holds
+    `spec`, the same lines with every name swapped for a ref, because that is
+    what an author may be shown.
+
+    This read served `spec` for as long as it existed, so a hover card said
+    "Hit: p4291 is dazed" and `printed()` claimed above to be serving "the
+    publisher's sentences". Prefer `rules_text`; fall back to `spec` so a row
+    the localisation has not reached still shows its mechanics rather than
+    nothing.
+
+    Neither file is redistributable. Both are built from your own compendium.
     """
     from combat_engine.etl.build import game
 
-    table = "monster_power" if (ref.startswith("m") and "a" in ref[1:]) else "power"
-    try:
-        row = game().execute(
-            f"SELECT spec FROM {table} WHERE ref = ?",
-            (ref,),
-        ).fetchone()
-    except Exception:
-        return {}
-    if row is None:
-        return {}
+    text = (localisation().get(ref) or {}).get("rules_text") or ""
+    if not text:
+        table = ("monster_power" if (ref.startswith("m") and "a" in ref[1:])
+                 else "power")
+        try:
+            row = game().execute(
+                f"SELECT spec FROM {table} WHERE ref = ?",
+                (ref,),
+            ).fetchone()
+        except Exception:
+            return {}
+        if row is None:
+            return {}
+        text = row["spec"] or ""
     out: dict[str, str] = {}
-    for line in (row["spec"] or "").split("\n"):
+    for line in text.split("\n"):
         label, sep, rest = line.partition(":")
         if sep and len(label) < 32:
             key = label.strip().lower()

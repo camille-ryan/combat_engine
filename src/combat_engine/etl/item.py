@@ -28,7 +28,7 @@ import sqlite3
 from typing import Any
 
 from .html import detail, labelled, paragraphs, text
-from .sanitise import item_spec, scrub
+from .sanitise import item_rules, item_spec, scrub
 
 #: The project's scope. Items are gear for characters, so this follows the
 #: character ceiling rather than the monster one.
@@ -265,8 +265,16 @@ def _one_item(
                 json.dumps(list(keywords)), item_spec(fragment, ref, name),
             ),
         )
+        # **An entry for every block, named only when the page names one.** A
+        # block is a Power or a Property *inside* an item and the compendium
+        # usually gives it no name of its own -- 6 of 2,491 have one -- so this
+        # wrote nothing at all for the rest. It still carries printed rules,
+        # which is what an item's card shows, so the entry exists either way.
+        # #349.
+        entry: dict[str, str] = {"rules_text": item_rules(fragment)}
         if head:
-            names[block_ref] = {"name": head}
+            entry["name"] = head
+        names[block_ref] = entry
         report.item_blocks += 1
 
     return score

@@ -43,7 +43,14 @@ from functools import lru_cache
 from typing import Any
 
 from .html import detail, paragraphs, text
-from .sanitise import RULES_TERMS, description, mechanical, power_spec, scrub
+from .sanitise import (
+    RULES_TERMS,
+    description,
+    mechanical,
+    power_rules,
+    power_spec,
+    scrub,
+)
 
 #: A whole power card printed inside a feat's entry. 227 feats carry one,
 #: and it is the power dialect exactly -- verified on feat 595 -- so
@@ -286,7 +293,9 @@ def feats(
                 books, _trimmed(source, row, _benefit(head, ref, row["Name"] or "")),
             ),
         )
-        names[ref] = {"name": (row["Name"] or "").strip(), "description": card_description}
+        names[ref] = {"name": (row["Name"] or "").strip(),
+                      "description": card_description,
+                      "rules_text": _rules_text(head)}
         report.feats += 1
         report.unparsed += opaque
 
@@ -328,12 +337,15 @@ def _card(
         "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?)",
         (ref, row["ID"], tier, 1, None, 0, books, spec),
     )
-    names[ref] = {"name": name, "description": description(fragment)}
+    # A card is read in the power dialect, so its printed rules are
+    # `power_rules` -- the same lines `power_spec` scrubs two lines up. #349.
+    names[ref] = {"name": name, "description": description(fragment),
+                  "rules_text": power_rules(fragment)}
     return description(fragment)
 
 
-def _benefit(head: str, ref: str, name: str) -> str:
-    """The feat's rules text: everything on the page that is not furniture.
+def _rules_text(head: str) -> str:
+    """The feat's printed rules text, **names left in**.
 
     The feat dialect puts the tier, the prerequisite and the benefit in one
     `<p class="flavor">` separated by `<br/>`, so `html.labelled` sees a
@@ -368,7 +380,17 @@ def _benefit(head: str, ref: str, name: str) -> str:
             if _FURNITURE.match(bare):
                 continue
             lines.append(line)
-    return scrub("\n".join(lines), {name: ref})
+    return "\n".join(lines)
+
+
+def _benefit(head: str, ref: str, name: str) -> str:
+    """The feat's rules text, scrubbed -- what an author is shown.
+
+    `_rules_text` is the same lines with the name left in. One reader and two
+    returns, for the reason `sanitise.power_spec` gives: the printed rules and
+    the author-facing spec must not be two extractions. #349.
+    """
+    return scrub(_rules_text(head), {name: ref})
 
 
 def _prerequisite(document: str) -> str:

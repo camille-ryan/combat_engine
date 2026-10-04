@@ -43,6 +43,8 @@ class Ability:
     #: Carried only so the localisation table can be built. Never stored in
     #: `game.db` and never handed to anyone writing code.
     name: str = ""
+    #: The same lines as `spec`, with the names left in. Localisation only.
+    rules_text: str = ""
 
 
 @dataclass
@@ -298,6 +300,12 @@ def parse(
     # goblin's rules would hide a word the spec already prints in its tags.
     keep = {m.role, m.size, m.origin, m.kind, "minion", "elite", "solo", "leader"}
     for a in m.abilities:
+        # **The printed lines, taken before the scrub.** This is the only place
+        # the unscrubbed text exists, and the localisation wants it: `a.spec` is
+        # about to become the same lines with this creature's name swapped for
+        # its ref, so taking it here makes the two one extraction rather than
+        # two readers that can come to disagree about the rules. #349.
+        a.rules_text = a.spec
         a.spec = scrub(a.spec, {**swaps, m.name: m.ref_id}, keep,
                        by_word={m.name: m.ref_id})
         # The keywords too. A fifth of them are whole printed sentences --
