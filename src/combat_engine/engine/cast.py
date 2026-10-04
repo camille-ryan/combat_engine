@@ -1642,8 +1642,19 @@ class Cast:
         # Marked as granted even when the swinger is the caster: the
         # defender's punishment is a self-grant, and eight feats are
         # about exactly that swing and no other.
+        #
+        # **The trigger is forwarded, and a death throe depends on it.**
+        # `dsl.use` derives its `dying` exemption from the trigger it is
+        # handed -- "this row answers the actor's own `Dropped`" -- and this
+        # call passed none, so `dying` was always False and `usable`'s
+        # "can it act?" gate refused the swing for a creature that had
+        # already gone down. That is precisely the gate a death throe exists
+        # to be exempt from, so a row whose whole content is "when it drops,
+        # it makes a basic attack" emitted `PowerUsed` and no
+        # `AttackDeclared`: finished-looking and inert.
         return use(
             self.world, attacker, ref, targets=[target], spend=False,
+            trigger=self.trigger,
             granted_by=self.me, granted_via=self.ref,
         )
 
