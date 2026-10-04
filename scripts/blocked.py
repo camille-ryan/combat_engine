@@ -206,6 +206,16 @@ def _queue(
 #: else's symbol. So the index grew and the fallback did not.
 _FALLBACK: set[str] = set()
 
+#: The owners that fallback may be used *on*, which is the other half of the same
+#: rule and was missing. The pool was engine-only; the *question* was not, so a
+#: marker naming `etl.monster.scenery()` searched the engine pool, found
+#: `query.scenery` and `dsl.scenery`, and reported the gap closed. That row's own
+#: docstring says the opposite -- finding scenery was never the gap, putting a
+#: piece of it on the board is, one component away. Same word, different thing,
+#: which is what a component boundary means. So the fallback now needs the owner
+#: to be engine-owned too.
+_ENGINE_OWNERS: set[str] = set()
+
 
 def _surface() -> dict[str, object]:
     """Everything a row can call, by name, with the thing itself.
@@ -246,6 +256,10 @@ def _surface() -> dict[str, object]:
 
     _FALLBACK.clear()
     _FALLBACK.update(have)
+    _ENGINE_OWNERS.clear()
+    _ENGINE_OWNERS.update(
+        {"c"} | {info.name for info in pkgutil.iter_modules(engine_pkg.__path__)}
+    )
 
     # **Not only the engine.** A marker names the owner it thinks a symbol belongs
     # to, and 21 of them -- 148 row-slots -- name `chargen.` or `spec.`, which this
@@ -265,6 +279,22 @@ def _surface() -> dict[str, object]:
             if not n.startswith("_"):
                 have.setdefault(f"chargen.{n}", getattr(mod, n))
                 have.setdefault(f"{info.name}.{n}", getattr(mod, n))
+
+    # **`etl` too, for the same reason and with the same evidence.** A marker
+    # naming `etl.monster.scenery()` could not be answered at all while this
+    # index stopped at `chargen`, and an unanswerable question went through the
+    # fallback and came back "arrived" off a same-named engine function. Covering
+    # it makes the answer real: `etl.monster` has no `scenery`, so the row is
+    # still blocked, which is what its docstring has said all along. Every etl
+    # module imports without the database.
+    import combat_engine.etl as etl_pkg
+
+    for info in pkgutil.iter_modules(etl_pkg.__path__):
+        mod = importlib.import_module(f"combat_engine.etl.{info.name}")
+        have.setdefault(f"etl.{info.name}", mod)
+        for n in dir(mod):
+            if not n.startswith("_"):
+                have.setdefault(f"etl.{info.name}.{n}", getattr(mod, n))
 
     # `spec.py` is an instrument rather than a component, and it is what a marker
     # means by `spec.`: the brief handed to an author. Sideways rather than downward,
@@ -367,9 +397,27 @@ def _one(token: str, have: dict[str, object]) -> bool:
         # for a lowercase owner, which is a module: `Dropped.source` is
         # a field on one named class and must not match a `source`
         # somewhere else.
+        #
+        # **A `c.` method is not a module function and must not satisfy
+        # one.** This fallback reported `etl.monster.scenery()` arrived
+        # because `c.scenery` exists -- and that row's own docstring says
+        # `c.scenery` was never the gap: the gap is that nothing puts a
+        # piece of scenery on the board, one component away. The marker
+        # had not guessed the wrong module; it had named a different
+        # thing with the same word. A row wanting a verb writes
+        # `c.verb()`, which the `head in have` test above already
+        # answers, so excluding the `c.` keys here costs nothing and
+        # stops the one crossing that is never a typo.
         pool = _FALLBACK or have
-        return owner.islower() and any(
-            k.endswith(f".{attr}") or k == attr for k in pool
+        engine_owned = owner.split(".")[0] in (_ENGINE_OWNERS or {owner.split(".")[0]})
+        return (
+            owner.islower()
+            and engine_owned
+            and any(
+                k.endswith(f".{attr}") or k == attr
+                for k in pool
+                if not k.startswith("c.")
+            )
         )
     return False
 

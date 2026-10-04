@@ -126,15 +126,19 @@ from combat_engine.engine.query import (
 #: `c.on_defiling()` is the hook two other rows already wait on. A ref would
 #: not help; the hook would.
 PROSE = ("c.on_defiling()",)
-#: A rider on a row the compendium has and this build does not import.
-#: `etl/build.py` takes powers whose `Class` is one of the 25 playable
-#: classes, plus a second pass for the races; `Class = 'Theme Power'` and
-#: `Class = 'Wild Talent Power'` are taken by neither, so ten wild talents
-#: and every theme power are absent from `data/game.db` and therefore from
-#: the registry. Widening that filter is the whole of the gap. The theme
-#: powers themselves are declared now, so what is left here is the rows
-#: naming a *set* of them by category, with no ref to watch.
-NO_IMPORT = ("etl.build.CLASSES",)
+#: A rider on a *set* of powers the card names by category rather than by ref.
+#: One row means a theme's own attacks, the other the ten wild talents; both
+#: want the same thing, which is the registry asked by its `class` value.
+#:
+#: **Re-aimed off `etl.build.CLASSES`, which was never able to go green.** That
+#: marker said the powers were missing from `data/game.db` -- and they are not:
+#: the eleven theme classes (`x7_661` and the rest) and `wild talent` are all in
+#: the `power` table today, so the import gap it named is closed. Worse, the
+#: symbol it named *already existed*, so `todo.py` could only ever report it
+#: arrived, which is exactly what it did. A marker has to name something absent
+#: or it is not a marker. Nothing enumerates the registry by class, so that is
+#: the gap, and it is one gap for both rows.
+NO_IMPORT = ("dsl.powers_of(cls)",)
 #: "You swap one of your level N powers for this one." The card is handed
 #: over; giving a power up is a build-time exchange.
 SWAP = ("chargen.power_swap()",)
