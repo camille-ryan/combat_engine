@@ -201,7 +201,7 @@ def main() -> int:
         # counted anywhere from 40 to 48 checks. A count that moves hides
         # both a skip and a failure -- one run in five failed here and the
         # next one passed, which is worse than either answer.
-        _restart(page, START_SEED)
+        _restart(page, START_SEED, served)
         _play(page, check, problems, served, calls)
 
         _check_chargen(page, check, problems)
@@ -215,6 +215,49 @@ def main() -> int:
     return 1 if check.failed else 0
 
 
+def _texts(page, selector: str) -> list[str]:  # noqa: ANN001
+    """Every matching element's text, read in **one** call.
+
+    The shape this replaces was `[loc.nth(i).inner_text() for i in
+    range(loc.count())]`, which is one round trip per element with the page
+    free to re-render between any two of them. When it did, `nth(i)` waited
+    30 seconds for an index that no longer existed and the run failed on a
+    locator timeout rather than on anything about the page -- `nth(63)` of
+    `#actions button` was the one that showed up. #355.
+
+    One `evaluate` cannot tear: the list is read inside the page, in a single
+    task, so there is no window to re-render through.
+    """
+    return [
+        " ".join(t.split())
+        for t in page.eval_on_selector_all(
+            selector, "els => els.map(e => e.innerText || '')"
+        )
+    ]
+
+
+def _settled(page, selector: str, least: int, timeout: int = 15000) -> int:  # noqa: ANN001
+    """Wait until `selector` has at least `least` matches; return the count.
+
+    **Waiting for the first of a list and then asserting the length is the
+    bug this exists to remove.** `wait_for_selector("#board .token")` returns
+    on token one, and the board draws them one at a time, so a run that got
+    in between saw 6 and reported "the board drew 6 tokens" -- about half of
+    them did. The wait now belongs to the condition actually being asserted.
+
+    Returns the count so a caller can report the real number, and returns
+    whatever it reached on timeout rather than raising: the check is then the
+    thing that fails, with its own message, instead of a locator timeout that
+    says nothing about what was wrong.
+    """
+    deadline = time.monotonic() + timeout / 1000
+    count = page.locator(selector).count()
+    while count < least and time.monotonic() < deadline:
+        page.wait_for_timeout(100)
+        count = page.locator(selector).count()
+    return count
+
+
 def _check_chargen(page, check: Checks, problems: list[str]) -> None:  # noqa: ANN001
     """The advisor page: ranked, explained, and choosing nothing by itself.
 
@@ -225,10 +268,13 @@ def _check_chargen(page, check: Checks, problems: list[str]) -> None:  # noqa: A
     page.goto(page.url.split("/index.html")[0].rstrip("/") + "/chargen.html")
     page.wait_for_selector(".choice", timeout=20000)
 
+    # Both lists, each waited for in its own right. Waiting for `.choice` only
+    # returns on the first one drawn anywhere on the page. #355.
+    n_races = _settled(page, "#races .choice", 21, timeout=20000)
+    n_feats = _settled(page, "#feats .choice", 101, timeout=20000)
     races = page.locator("#races .choice")
-    feats = page.locator("#feats .choice")
-    check.that(races.count() > 20 and feats.count() > 100,
-               f"chargen lists {races.count()} races and {feats.count()} feats")
+    check.that(n_races > 20 and n_feats > 100,
+               f"chargen lists {n_races} races and {n_feats} feats")
 
     # **Sorted by score is the feature**, so it is asserted rather than assumed:
     # the page is for reading down the score column and an unsorted list of 400
@@ -271,9 +317,8 @@ def _check_chargen(page, check: Checks, problems: list[str]) -> None:  # noqa: A
 
 def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa: ANN001
           calls: list[str]) -> None:
-    page.wait_for_selector("#board .token", timeout=15000)
-    tokens = page.locator("#board .token")
-    check.that(tokens.count() >= 8, f"the board drew {tokens.count()} tokens")
+    drawn = _settled(page, "#board .token", 8)
+    check.that(drawn >= 8, f"the board drew {drawn} tokens")
 
     # The log. This is the one that was silently empty: the stream was fine
     # and the frames were named something the page does not listen for.
@@ -423,16 +468,16 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
     # Started again on a fixed seed first, because whether the creature whose
     # turn it is happens to carry an area power is otherwise a coin toss, and
     # a check that skips itself on half its runs is not a check.
-    _restart(page, BLAST_SEED)
+    _restart(page, BLAST_SEED, served)
     _check_footprint(page, check, served[-1] if served else None)
 
     # A burst that takes no aim must still show what it covers, and must fire
     # when pressed rather than waiting for a square nobody can give it.
-    _restart(page, AIMLESS_SEED)
+    _restart(page, AIMLESS_SEED, served)
     _check_aimless_area(page, check, served[-1] if served else None, calls)
 
     # A trap the party has spotted must be on the board and hoverable.
-    _restart(page, TRAP_SEED)
+    _restart(page, TRAP_SEED, served)
     _check_things(page, check, served[-1] if served else None)
 
     # Play on, so attacks happen and the log has a fight in it rather than a
@@ -531,7 +576,7 @@ def _play_on(page, rounds: int) -> None:  # noqa: ANN001
         buttons = page.locator("#actions button:not([disabled])")
         if not buttons.count():
             return
-        labels = [buttons.nth(i).inner_text().lower() for i in range(buttons.count())]
+        labels = [t.lower() for t in _texts(page, "#actions button:not([disabled])")]
         pick = _first(labels, lambda t: "->" in t and "second wind" not in t)
         if pick is None:
             pick = _first(labels, lambda t: t.startswith("move to"))
@@ -637,9 +682,16 @@ def _check_enemies_animate(page, check: Checks) -> None:  # noqa: ANN001
     # clears the transforms, so a watcher that looks only between clicks
     # sees a board at rest and concludes nothing moved.
     for _ in range(8):
-        for btn in page.query_selector_all("#actions button:not([disabled])"):
-            if "end turn" in (btn.inner_text() or "").lower():
-                btn.click()
+        # A locator for the same reason as `_press_move`: these handles go
+        # stale the moment the list redraws, and this loop deliberately waits
+        # 2.2 seconds between turns, which is ample time for that. #355.
+        ends = _texts(page, "#actions button:not([disabled])")
+        for i, label in enumerate(ends):
+            if "end turn" in label.lower():
+                with contextlib.suppress(Exception):
+                    page.locator(
+                        "#actions button:not([disabled])"
+                    ).nth(i).click(timeout=5000)
                 break
         page.wait_for_timeout(2200)
     slid = set(page.evaluate("Array.from(window.__slid)"))
@@ -657,11 +709,25 @@ def _positions(page) -> dict:  # noqa: ANN001
 
 
 def _press_move(page) -> bool:  # noqa: ANN001
-    """Press the Move row in the action list, the way a player would."""
-    for b in page.query_selector_all("#actions button"):
-        label = (b.inner_text() or "").strip().lower()
+    """Press the Move row in the action list, the way a player would.
+
+    **A locator, not an `ElementHandle`.** `query_selector_all` hands back
+    snapshots of the elements as they were; the action list re-renders on
+    every state change, which detaches them, and the click then dies with
+    "Element is not attached to the DOM". A locator re-resolves the selector
+    at click time, so a re-render between finding the row and pressing it is
+    survivable rather than fatal.
+
+    This failed about half of all runs, and it only started being *visible*
+    when the per-element label loops nearby were replaced by one `evaluate`:
+    those sixty round trips had been acting as an accidental sleep, holding
+    the instrument back until the page had settled. Removing the delay did
+    not cause the bug -- it stopped hiding it. #355.
+    """
+    labels = [t.lower() for t in _texts(page, "#actions button")]
+    for i, label in enumerate(labels):
         if label.startswith("move") and "move to" not in label:
-            b.click(force=True)
+            page.locator("#actions button").nth(i).click(force=True)
             page.wait_for_timeout(200)
             return True
     return False
@@ -886,8 +952,7 @@ def _check_enumerated_move(page, check: Checks) -> None:  # noqa: ANN001
     # move left is otherwise a coin toss.
     _restart(page, BLAST_SEED)
 
-    rows = page.locator("#actions button")
-    labels = [rows.nth(i).inner_text().strip().lower() for i in range(rows.count())]
+    labels = [t.lower() for t in _texts(page, "#actions button")]
     per_square = [text for text in labels if "move to" in text or "run to" in text]
     check.that(
         not per_square,
@@ -952,11 +1017,27 @@ TRAP_SEED = 22
 START_SEED = 2
 
 
-def _restart(page, seed: int) -> None:  # noqa: ANN001
-    """Start a fresh fight from the page's own form, on a known seed."""
+def _restart(page, seed: int, served: list[dict] | None = None) -> None:  # noqa: ANN001
+    """Start a fresh fight from the page's own form, on a known seed.
+
+    **Waits for the new snapshot to arrive, not merely for a token to exist.**
+    Every caller then reads `served[-1]`, and the old wait -- first token plus
+    600ms -- did not guarantee the restart's own response had been recorded.
+    So `served[-1]` was sometimes the *previous* seed's board, and a check
+    written against this seed silently ran against the last one: that is how
+    "no trap, scenery or conjuration was served at all" appeared on a seed
+    whose board the server returns a trap for 8 times out of 8. The server was
+    deterministic the whole time; the instrument was reading the wrong board.
+    #355.
+    """
+    mark = len(served) if served is not None else 0
     page.fill("#seed", str(seed))
     page.click("#restart")
     page.wait_for_selector("#board .token", timeout=15000)
+    if served is not None:
+        deadline = time.monotonic() + 15
+        while len(served) <= mark and time.monotonic() < deadline:
+            page.wait_for_timeout(100)
     page.wait_for_timeout(600)
 
 
@@ -982,7 +1063,7 @@ def _check_footprint(page, check: Checks, state: dict | None) -> None:  # noqa: 
     name = power["name"].lower()
     buttons = page.locator("#actions button")
     pick = _first(
-        [buttons.nth(i).inner_text().lower() for i in range(buttons.count())],
+        [t.lower() for t in _texts(page, "#actions button")],
         lambda t: t.startswith(name),
     )
     if pick is None:
