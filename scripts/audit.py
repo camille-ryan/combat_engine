@@ -218,6 +218,44 @@ KNOWN_SILENT = {
     "m3291a4": "rerolls an attack roll; fired alone there is no roll behind it",
     "m1113a2": "an ally saves against a save-ends effect; the board's ally "
                "carries none",
+    # **The level-6 wave's seventeen.** Four families, each read off the card
+    # rather than guessed from the verdict. Three more rows reported silent in
+    # the same run and are **not** here, because they were row faults and are
+    # fixed instead: `_revenge_bonus` and `m4120a4` snapshotted "who has hit me"
+    # when the minor action was spent and returned early on an empty set, which
+    # is the shape `m915a4` settled by asking at the moment of the swing.
+    #
+    # A sibling's grab, aura or earlier attack. The harness fires each row once
+    # on a fresh board, so the sibling never ran -- `m467a2`'s family.
+    "m1929a1": "attacks a creature grabbed by it; the grab is m1929a0's",
+    "m1936a3": "hauls what it has grabbed; the harness never makes it grab",
+    "m6655a5": "widens its own aura; m6655a0 has not laid one here",
+    "m3637a4": "rerolls an attack roll; fired alone there is no roll behind it",
+    "m3473a2": "lets m3473a1 ignore its own Requirement; nothing has attacked "
+               "this creature yet when it is fired",
+    # A rider the board has nobody to be. Its one ally is a copy of the caster
+    # at full health, so it is never hurt, never undead and never a minion.
+    "m6675a3": "heals an undead ally; the board's one ally is a copy of the caster",
+    "m1531a2": "heals allies in a burst; the board's one ally is at full health",
+    "m6343a3": "commands a minion plant ally; the board has neither",
+    "m3184a2": "grants its rider concealment; the board sets up no rider",
+    "m4032a2": "grants its rider a bonus; the board sets up no rider",
+    # A target state the board does not produce. `_provoke` makes an attack, not
+    # a condition of the harness's choosing.
+    "m937a2": "targets prone enemies; nothing on the board is prone",
+    "m3465a1": "ends a mark on itself; nobody here marks",
+    "m1741a1": "affects only creatures taking ongoing poison; none are",
+    "m3473a1": "affects only creatures taking ongoing poison; none are",
+    # Terrain the board has none of. It is a bare grid by design -- two entries
+    # already record that dressing it would cost every other row its legal shift.
+    "m6662a3": "requires being in water; the board has none",
+    "m6662a4": "requires water and loose ground; the board has neither",
+    # The one that is an instrument gap rather than a board gap, and is filed as
+    # #374 rather than excused: `c.set_origin` labels its effect `origin:<word>`
+    # because `kinds_of` reads the word back out of the label, so it cannot carry
+    # the ref that `_claimed` credits by. Driven by hand: the effect *is* laid.
+    # Left reporting silent on purpose -- waiving it here would hide the gap, and
+    # three baseline rows share it.
     # Sends one of the m4967's own mossling minions running, and the board
     # spawns a second m4967 rather than a mossling. Driven by hand: with an
     # m4971 beside it the minion moves its full speed as a free action.
