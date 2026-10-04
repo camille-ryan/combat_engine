@@ -38,6 +38,19 @@ regex handled one level of nesting and silently skipped a call whose gate was a
 lambda, and one row in sixty-one was wrong that way while the script reported
 the file clean.)
 
+## Running it during a concurrent wave
+
+`--level N` reads **every** declared ability at that level, including rows a
+sibling agent is still writing. During a round of 3-4 concurrent waves that
+makes the output move between runs -- one agent reported this as the
+instrument being non-deterministic, which it is not: five runs on a settled
+level are byte-identical and there is no randomness in this file at all. What
+moved was the tree.
+
+So while siblings are writing, **pass your own refs** rather than `--level`.
+The disagreement that agent saw had been fixed by its owner four minutes
+later.
+
 ## Only where both sides speak
 
 A card that states nothing is not a disagreement. Three real shapes where the
@@ -187,7 +200,22 @@ def _card_damage(spec: str) -> tuple[str, int] | None:
     Takes the **first** expression that is not ongoing. A row printing a Hit
     and a Miss states the Hit first, and a header's `Damage` is the Hit line --
     `half_on_miss` carries the other half rather than a second expression.
+
+    **Read after the attack line, because a target count is dice too.** One card
+    prints `targets 1d4 random creatures in the burst; +5 vs AC; 1d10+1 damage`:
+    the first dice expression on the line is how many creatures it hits, not how
+    hard. Damage always follows the attack clause on a monster card, in both
+    dialects, so starting there settles it without having to tell a count from a
+    die by looking at it.
+
+    An earlier version required the word `damage` to follow the dice, which
+    fixed this case and broke another -- `1d8+5 plus 1d10 cold damage`, where
+    the row's own damage is the expression the word does *not* follow. Anchoring
+    on the attack line fixes both.
     """
+    attack = _ATTACK.search(spec)
+    if attack:
+        spec = spec[attack.end():]
     for found in _DAMAGE.finditer(spec):
         lead = spec[max(0, found.start() - 24): found.start()]
         if _ONGOING.search(lead):

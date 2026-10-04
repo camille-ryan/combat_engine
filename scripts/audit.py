@@ -221,6 +221,13 @@ KNOWN_SILENT = {
     # That is the argument for fixing #361 rather than excusing them one at a
     # time, and it is why this excuse names the issue.
     "m5423a4": "targets a dazed creature; the auto-targeter aims by distance -- #361",
+    # The trigger is **this creature's own** earlier bite burning somebody: the
+    # row answers the ongoing poison its sibling laid. The harness fires each row
+    # once on a fresh board, so that bite has never landed -- the same reason
+    # `f961b` and `i1875p1` are excused. It does fire 3 of 8 attempts, on the
+    # board's own ongoing poison, and then correctly declines: that poison is not
+    # its bite's and the carrier is not adjacent.
+    "m5537a1": "answers its own bite's ongoing poison; nothing has bitten yet",
     # Reduces a target's necrotic resistance, and nothing on the board has
     # any. Giving the undead some would change what every necrotic row in
     # the tree reports, which is a worse trade than one excused row.
