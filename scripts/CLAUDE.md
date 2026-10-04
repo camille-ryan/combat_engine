@@ -63,6 +63,22 @@ it improves, red when it regresses, never a bare allowance. #372.
   plus `killpg`.
 * Use `$CLAUDE_JOB_DIR/tmp` or a uniquely named scratch file. The scratchpad
   is shared and two agents have overwritten each other's.
+* **Do not change the tree while an instrument is reading it.** Twice in one
+  session a result was misread because of this, and both times the first
+  diagnosis was that the instrument was flaky:
+
+  * `audit.board` was edited mid-run, so mount rows passed and failed between
+    runs. Not non-determinism -- the board had changed under them.
+  * A content file was edited during a full sweep, and `audit.py` reported a
+    **raise** on a row in it. The row is fine: `inspect.getsource` reads the
+    file from disk, so shifting line numbers under a function imported earlier
+    makes `getblock` tokenize from the wrong offset and die on an unterminated
+    string. It did not reproduce on a stable tree.
+
+  The second one is the worse trap, because a raise is the one number this
+  project treats as inviolable -- so a spurious one costs real time, and a real
+  one hidden among spurious ones costs more. A full sweep is ~750s: wait it out,
+  and do not start a content wave underneath it either.
 
 ## What each is for
 
