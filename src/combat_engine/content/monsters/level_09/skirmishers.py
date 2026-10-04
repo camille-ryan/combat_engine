@@ -779,7 +779,7 @@ def m2976a3(c: Cast) -> None:
 @power(
     "m2976a4",
     level=9,
-    usage=ENCOUNTER,
+    usage=AT_WILL,
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
@@ -978,7 +978,7 @@ _M3072_TYPES = (
 @power(
     "m3072a3",
     level=9,
-    usage=ENCOUNTER,
+    usage=AT_WILL,
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,

@@ -807,7 +807,7 @@ def m2963a2(c: Cast) -> None:
 @power(
     "m2963a3",
     level=13,
-    usage=ENCOUNTER,
+    usage=AT_WILL,
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,

@@ -153,6 +153,29 @@ _EITHER = re.compile(
 #: `encounter` in this phrase is a duration and never a usage.
 _DURATION = re.compile(r"\bend of (?:the|its|his|her)\b[^.;]{0,24}$", re.I)
 
+#: A determiner in front of the word means it is a **noun in a sentence**, never
+#: a printed label. `Encounter` and `At-Will` are printed standing alone or in a
+#: parenthetical; nothing on a card prints "the Encounter" as its usage.
+#:
+#: This is the `_DURATION` guard's family, and that guard only knew one member of
+#: it -- "until the end of the encounter". The rest got through:
+#:
+#:     At the start of an encounter, ...        -> read as usage=encounter
+#:     The first time it is hit during an encounter, ...
+#:     Before the encounter begins, ...
+#:
+#: 22 cards across the tree, every one a trait the column records correctly as
+#: `at-will` or as no usage at all. **Eight written rows had already followed the
+#: wrong advice**, which is the part that matters: this instrument is what an
+#: author checks a header against, so a false positive here does not just fail to
+#: catch an error, it causes one. Same shape as `bonuses.py`'s `_AS_TYPE`, where a
+#: type word after "the" is an amount being pointed at rather than a type named.
+#: **`per` is deliberately not in this list.** "twice per encounter" is a real
+#: usage printed as a limit rather than as a label, and three cards state it that
+#: way with the column agreeing. Excluding `per` suppressed all three and bought
+#: nothing -- none of the 22 false positives used it.
+_AS_PROSE = re.compile(r"\b(?:an?|the|each|this|every)\s+$", re.I)
+
 _DEFENCES = {"ac": "AC", "armor class": "AC",
              "fortitude": "FORT", "reflex": "REF", "will": "WILL"}
 
@@ -182,6 +205,15 @@ KNOWN = {
     # a reader that accepts `Melee N/M` would stop checking the shape at all.
     "m6277a3": "the card prints `Melee 10/20` -- a range band on a melee line, "
                "which is contradictory rather than missing; see #360",
+    # The fourth member of the conditional-usage family above, and the only
+    # survivor of the 22 the `_AS_PROSE` guard took out. The card states both
+    # usages in one parenthetical -- `recharge 5, or at-will while bloodied` --
+    # so `_earliest` takes the recharge and the column took the at-will. Neither
+    # is wrong; `usage` holds one value. Listed before the row is written so
+    # whoever writes it is not told to "fix" a header that is already right,
+    # which is how the other 22 did their damage.
+    "m2777a8": "the card prints `recharge 5, or at-will while bloodied` -- two "
+               "usages in one parenthetical, and `usage` holds one",
 }
 
 
@@ -285,7 +317,8 @@ def _card_usage(spec: str) -> tuple[str, int | None] | None:
     if not found:
         return None
     kind, match = found
-    if _DURATION.search(head[: match.start()]):
+    before = head[: match.start()]
+    if _DURATION.search(before) or _AS_PROSE.search(before):
         return None
     if kind == "recharge":
         digit = match.group(1)
