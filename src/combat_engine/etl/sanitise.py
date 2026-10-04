@@ -245,7 +245,17 @@ def scrub(
     for name, ref in (by_word or {}).items():
         if not name:
             continue
-        for token in {name, *re.findall(r"[A-Za-z]+", name)}:
+        # **Letters, not ASCII letters.** This was `[A-Za-z]+`, so a name word
+        # holding an accent came apart at the accent -- a five-letter one split
+        # into its first four, and `_apostrophes` wraps every pattern in `\b`,
+        # which does not fall between a letter and the accented letter after it.
+        # The fragment therefore matched nothing and the word survived into the
+        # brief. One monster was shown to an author that way, found by reading a
+        # spec rather than by any check: `leaks.py` waives a five-letter word as
+        # a coincidence (`SHORTEST` is 6) and that is the right call across
+        # 32,000 names, so nothing reported it. Same family as the curly
+        # apostrophe this function already handles two notes down.
+        for token in {name, *re.findall(r"[^\W\d_]+", name)}:
             if len(token) > 2 and token.lower() not in kept:
                 usable.setdefault(token, ref)
     # Only the names that are actually in this text. The index of every

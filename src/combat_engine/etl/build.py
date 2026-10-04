@@ -460,6 +460,10 @@ def build() -> Report:
     report.classes = _classes(source, out, names)
     report.weapons = _weapons(source, out, names)
     report.features = _features(source, out, names)
+    # Right here and not inside `_powers`: a class feature's prose names the
+    # powers its class is built around, and this table does not exist yet when
+    # the power pass runs. See `_cross_reference`.
+    report.crossed += _cross_reference(out, names, table="class_feature")
     report.companions = _companions(source, out, names)
     report.traps = _traps(source, out, names)
     report.build_powers = _build_powers(source, out, names)
@@ -1578,8 +1582,26 @@ def _links_resolve(source: sqlite3.Connection, out: sqlite3.Connection) -> tuple
     return found, total
 
 
-def _cross_reference(out: sqlite3.Connection, names: dict[str, dict[str, str]]) -> int:
+def _cross_reference(
+    out: sqlite3.Connection,
+    names: dict[str, dict[str, str]],
+    table: str = "power",
+) -> int:
     """Swap one power's name for its ref wherever another power prints it.
+
+    `table` is which rows get swept. **`class_feature` needs the same sweep and
+    never had it**: a feature's opening paragraph introduces the powers its class
+    is built around -- "Three powers: <name>, <name> and <name> help you ..." --
+    which is a printed cross-reference exactly like a power naming a power, and
+    it reached an author verbatim. One row today, `cf:battlemind-f1`, invisible
+    until `leaks.py` learned to match a name holding a curly apostrophe (#371).
+
+    **It has to be called after `_features`, not from `_powers`.** The first
+    attempt swept both tables here and changed nothing, because `_powers` runs
+    before `_features` and so `class_feature` is still empty -- the same "read
+    the table the build is in the middle of writing" trap the note on
+    `set_common` at the top of `build` was written about. The index this builds
+    is `power`, which is finished by then either way.
 
     Monsters have had this since they were imported (`etl/monster.py`);
     powers never did, so a row whose whole Effect is "you regain the use
@@ -1600,13 +1622,14 @@ def _cross_reference(out: sqlite3.Connection, names: dict[str, dict[str, str]]) 
             by_class.setdefault(cls, {})[name] = ref
 
     changed = 0
-    for ref, cls, spec in out.execute("SELECT ref, class, spec FROM power").fetchall():
+    rows = out.execute(f"SELECT ref, class, spec FROM {table}").fetchall()
+    for ref, cls, spec in rows:
         others = {n: r for n, r in by_class.get(cls, {}).items() if r != ref}
         if not others:
             continue
         fixed = scrub(spec, others)
         if fixed != spec:
-            out.execute("UPDATE power SET spec=? WHERE ref=?", (fixed, ref))
+            out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
             changed += 1
     return changed
 

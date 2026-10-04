@@ -129,10 +129,38 @@ def _index(names: dict) -> tuple[dict[str, list[str]], dict[str, str]]:
         name = (entry.get("name") or "").strip().lower()
         if len(name) <= 2:
             continue
-        key = " ".join(name.replace("-", " ").split())
+        key = " ".join(_fold(name).replace("-", " ").split())
         index.setdefault(key, []).append(ref)
         printed.setdefault(key, name)
     return index, printed
+
+
+def _fold(text: str) -> str:
+    """Letters outside ASCII, made matchable on both sides.
+
+    **The hyphen bug again, and much larger.** `_hits` captures prose with
+    `[a-z']`, which is ASCII, so a printed name holding any other letter was
+    **unmatchable by construction** -- not missed through a judgement call. 332
+    of 32,371 printed names hold one, and 323 of those are the *curly*
+    apostrophe the compendium actually prints, U+2019, where this file's regex
+    reads the straight one. Six hold `û` and five `é`.
+
+    That is a hole in both halves of the check at once: neither a tracked file
+    nor a spec could be caught printing any of those 332 names. Found by reading
+    a monster ability brief that printed an accented name at a full `--specs`
+    run reporting clean.
+
+    Normalising is the same remedy the hyphen took, and for the same reason: a
+    file writing the straight apostrophe where the compendium writes the curly
+    one is just as much a leak, so folding catches that too.
+    """
+    import unicodedata
+
+    # Escaped rather than written literally: ruff's RUF001 refuses an ambiguous
+    # character in a string, and it is right to -- these are invisible in a diff.
+    swapped = text.replace("\u2019", "'").replace("\u02bc", "'")
+    flat = unicodedata.normalize("NFKD", swapped)
+    return "".join(ch for ch in flat if not unicodedata.combining(ch))
 
 
 def _type_words() -> set[str]:
@@ -499,7 +527,9 @@ def _hits(line: str, index: dict[str, list[str]]) -> list[tuple[str, list[str]]]
     # Within runs of prose only. Punctuation is a boundary -- a method
     # signature is not a sentence, and reading across the opening bracket
     # made every `def <verb>(self` pair look like a two-word name.
-    for run in re.findall(r"[a-z'](?:[a-z' -]*[a-z'])?", line.lower()):
+    # Folded the same way the index is, so an accented or curly-apostrophe
+    # name is reachable at all. See `_fold`.
+    for run in re.findall(r"[a-z'](?:[a-z' -]*[a-z'])?", _fold(line.lower())):
         words = re.findall(r"[a-z']+", run)
         for size in range(min(6, len(words)), 0, -1):
             for i in range(len(words) - size + 1):
