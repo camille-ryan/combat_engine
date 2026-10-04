@@ -59,6 +59,7 @@ figures. A silently narrowed check is worse than a red one.
 | `blocked.py` | unfinished rows and what each waits on; the work queue |
 | `todo.py` | are the markers still true; fails when a wanted symbol arrives |
 | `coverage.py` | written / not written / half-written on purpose |
+| `localise.py` | does every heroic row carry the localisation fields it needs; `--freeze`, `--drift`, `--snapshot`, `--rules` |
 | `replay.py` | the regression net over `fixtures/`; `record`, `verify` |
 | `api_smoke.py` | play an encounter over HTTP |
 | `browser.py` | drive the real page in headless Chromium |
@@ -68,6 +69,26 @@ figures. A silently narrowed check is worse than a red one.
 | `show.py` | one row, printed text beside emitted events |
 | `build.py` | rebuild `data/game.db` |
 | `bonuses.py`, `legs.py`, `mm3.py`, `issues.py`, `progress.py`, `waves.py`, `transcript.py` | narrower checks and ledgers |
+
+## Freezing the localisation
+
+`localization/` is git-ignored and must stay so, so the freeze is a **manifest
+of digests** in `fixtures/localisation.json` -- never the names. `--drift`
+compares the file against it and names the ref and field that moved.
+
+* **Re-freeze only once every change is explained.** The manifest is there to
+  make a changed value visible; re-freezing to clear it is the same mistake as
+  re-recording a fixture to clear a divergence.
+* **`--drift` is not in `check.py`**, for the reason the rest of `localise.py`
+  is not: every legitimate ETL change moves a value, so a gate on it would be
+  red most of the time and get ignored.
+* **The snapshot is the half a manifest cannot do.** A manifest detects loss; it
+  cannot undo it, and once possessive, plural and alias forms are
+  hand-corrected this file holds work that exists nowhere else -- the compendium
+  carries none of those three fields. `--snapshot` writes a whole copy to
+  git-ignored `logs/localization/`, and a restore has been proven end to end:
+  emptying the file and copying a snapshot back gives a byte-identical
+  localisation and a clean `--drift`.
 
 ## Re-recording fixtures
 

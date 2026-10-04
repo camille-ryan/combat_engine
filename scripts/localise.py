@@ -49,8 +49,12 @@ is the thing that gets forgotten.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
 from collections import defaultdict
+from datetime import UTC, datetime
+from pathlib import Path
 
 from combat_engine.etl.build import game, localisation
 
@@ -195,6 +199,162 @@ ONLY: dict[tuple[str, str], str] = {
 #: `q` is a prerequisite *term* -- a printed phrase a feat asks for. 227 of the
 #: 308 carry no name and that is correct: the phrase is the content.
 NAME_ONLY = ("x", "q")
+
+
+#: The committed freeze. **Digests, never names** -- `localization/` is
+#: git-ignored and must stay so, which is the whole legal basis of the project,
+#: so freezing cannot mean committing the file. This is the same trick
+#: `scripts/fixtures/audited.json` plays for the audit: a committed number a
+#: later run compares itself against.
+#:
+#: One line per ref, rather than compact, on purpose: it costs 0.26 MB of the
+#: 2.26 and it makes `git diff` name the rows that moved. A drift report that
+#: can only say "something changed" is the thing this exists to be better than.
+FREEZE = Path(__file__).parent / "fixtures" / "localisation.json"
+
+#: Timestamped whole copies, git-ignored like the rest of `logs/`.
+#:
+#: **Whole copies, not diffs**, and the reason is what is being protected: once
+#: possessive, plural and alias forms are hand-corrected this file holds human
+#: effort that exists in no other place -- the compendium carries none of those
+#: three fields. A restore has to be obvious under pressure.
+SNAPSHOTS = Path(__file__).parents[1] / "logs" / "localization"
+
+#: `derived` is not frozen. It records *how* a value was arrived at rather than
+#: what it is, so a human correcting a guess would read as drift in two fields
+#: instead of one -- and the value's own digest already says it changed.
+NOT_FROZEN = frozenset({"derived"})
+
+
+def _digest(value: object) -> str:
+    """A short sha256 of one field's value.
+
+    Eight hex characters, which is four bytes. The question this answers is
+    "did *this* value change", not "can an adversary find a collision" -- so
+    the chance of a changed value hashing the same is about 1 in 4 billion, and
+    across the roughly 100,000 fields here the expected number of misses is
+    0.000025. The full digest would quadruple a committed 2 MB file to buy
+    nothing measurable.
+    """
+    if isinstance(value, (list, tuple)):
+        value = "\x1f".join(str(x) for x in value)
+    return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:8]
+
+
+def _manifest(names: dict[str, dict]) -> dict[str, dict[str, str]]:
+    """Every ref's filled fields, each as a digest."""
+    out: dict[str, dict[str, str]] = {}
+    for ref, entry in names.items():
+        row = {
+            key: _digest(value)
+            for key, value in sorted(entry.items())
+            if key not in NOT_FROZEN and value
+        }
+        if row:
+            out[ref] = row
+    return out
+
+
+def _source_sha(db) -> str:  # noqa: ANN001
+    """The compendium's own digest, which the build records in `meta`.
+
+    **Frozen beside the manifest, because without it a different copy of the
+    compendium reads as corruption.** The compendium is not redistributable and
+    everybody builds from their own; a drift report that cannot say "the source
+    underneath this moved" would send the next person looking for a bug in the
+    localisation that is not there.
+    """
+    try:
+        row = db.execute(
+            "SELECT value FROM meta WHERE key = 'source_sha256'"
+        ).fetchone()
+    except Exception:
+        return ""
+    return (row[0] if row else "") or ""
+
+
+def snapshot(names: dict[str, dict], stamp: str) -> Path:
+    """Write a whole copy of the localisation to `logs/localization/`."""
+    SNAPSHOTS.mkdir(parents=True, exist_ok=True)
+    out = SNAPSHOTS / f"names-{stamp}.json"
+    out.write_text(json.dumps(names, indent=1, sort_keys=True))
+    return out
+
+
+def freeze(names: dict[str, dict], db) -> int:  # noqa: ANN001
+    """Write the manifest, and take a snapshot while doing it."""
+    entries = _manifest(names)
+    # **`refs` counts frozen entries, not entries in the file.** One ref holds a
+    # single empty string and nothing else, so it has no field to digest; the
+    # first version reported `len(names)` here and every clean run then read
+    # "frozen at 35085 refs; now 35084", which looks like a lost row.
+    body = {
+        "source_sha256": _source_sha(db),
+        "refs": len(entries),
+        "entries": entries,
+    }
+    lines = ["{", f'  "source_sha256": {json.dumps(body["source_sha256"])},',
+             f'  "refs": {body["refs"]},', '  "entries": {']
+    keys = sorted(entries)
+    for i, ref in enumerate(keys):
+        comma = "," if i + 1 < len(keys) else ""
+        lines.append(f"    {json.dumps(ref)}: "
+                     f"{json.dumps(entries[ref], sort_keys=True)}{comma}")
+    lines += ["  }", "}"]
+    FREEZE.parent.mkdir(parents=True, exist_ok=True)
+    FREEZE.write_text("\n".join(lines) + "\n")
+    kept = snapshot(names, datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S"))
+    print(f"  froze {len(entries)} refs to {FREEZE.relative_to(Path.cwd())}")
+    print(f"  snapshot: {kept}")
+    return 0
+
+
+def drift(names: dict[str, dict], db) -> int:  # noqa: ANN001
+    """Has the localisation moved since it was frozen?
+
+    Four kinds of movement, reported separately because they mean different
+    things: a **changed** value is the one that needs explaining, a **dropped**
+    field is a regression, a **new** ref is ordinary growth, and a **gone** ref
+    means something stopped being imported.
+    """
+    if not FREEZE.exists():
+        print("  not frozen yet. Run: uv run scripts/localise.py --freeze")
+        return 0
+    frozen = json.loads(FREEZE.read_text())
+    was, now = frozen.get("entries") or {}, _manifest(names)
+    source_then = frozen.get("source_sha256") or ""
+    source_now = _source_sha(db)
+    if source_then and source_now and source_then != source_now:
+        print("  **the compendium underneath this changed.** Frozen against "
+              f"{source_then[:12]}, built from {source_now[:12]} -- so drift "
+              "below is a different source, not a damaged localisation.")
+    new = sorted(set(now) - set(was))
+    gone = sorted(set(was) - set(now))
+    changed: list[str] = []
+    dropped: list[str] = []
+    for ref in sorted(set(was) & set(now)):
+        for key, dig in was[ref].items():
+            if key not in now[ref]:
+                dropped.append(f"{ref}.{key}")
+            elif now[ref][key] != dig:
+                changed.append(f"{ref}.{key}")
+    print(f"  frozen at {frozen.get('refs', '?')} refs; now {len(now)}")
+    for label, items in (("changed", changed), ("dropped", dropped),
+                         ("gone", gone), ("new", new)):
+        if not items:
+            continue
+        print(f"  {len(items)} {label}: {', '.join(items[:8])}"
+              + (" ..." if len(items) > 8 else ""))
+    if changed or dropped or gone:
+        print("  **the freeze no longer describes the file.** A changed value "
+              "or a dropped field is the thing this watches for; re-freeze only "
+              "once each one is explained.")
+        return 1
+    if new:
+        print("  only new refs, which is growth rather than drift.")
+    else:
+        print("  no drift.")
+    return 0
 
 
 def _heroic_refs(db, all_tiers: bool) -> dict[str, set[str]]:  # noqa: ANN001
@@ -465,6 +625,12 @@ def main() -> int:
     ap.add_argument("--missing", help="list the refs lacking this field")
     ap.add_argument("--all-tiers", action="store_true",
                     help="beyond heroic too, so the ceiling can be seen")
+    ap.add_argument("--freeze", action="store_true",
+                    help="write the committed manifest and take a snapshot")
+    ap.add_argument("--drift", action="store_true",
+                    help="compare the file against the frozen manifest")
+    ap.add_argument("--snapshot", action="store_true",
+                    help="timestamped whole copy to logs/localization/")
     ap.add_argument("--rules", action="store_true",
                     help="check rules_text against spec and stop")
     args = ap.parse_args()
@@ -475,18 +641,26 @@ def main() -> int:
         return 1
 
     db = game()
+    if args.snapshot:
+        print(f"  snapshot: "
+              f"{snapshot(names, datetime.now(tz=UTC).strftime('%Y%m%d-%H%M%S'))}")
+        return 0
+    if args.freeze:
+        return freeze(names, db)
+    if args.drift:
+        return drift(names, db)
     if args.rules:
         checked, agree, bad = rules_against_spec(db)
-        drift = checked - agree
+        moved = checked - agree
         print(f"  {agree} of {checked} rows carry the same rules in spec and "
               f"rules_text ({100 * agree / max(1, checked):.1f}%)")
-        print(f"  {drift} differ by a label a substitution moved; "
+        print(f"  {moved} differ by a label a substitution moved; "
               f"{KNOWN_LABEL_DRIFT} is the recorded baseline -- see it for why "
               f"this is not zero")
         for line in bad:
             print(f"    {line}")
-        if drift > KNOWN_LABEL_DRIFT:
-            print(f"  **{drift - KNOWN_LABEL_DRIFT} more than the baseline.** A "
+        if moved > KNOWN_LABEL_DRIFT:
+            print(f"  **{moved - KNOWN_LABEL_DRIFT} more than the baseline.** A "
                   "label that is not a name cannot move, so a clause was lost.")
             return 1
         return 0
