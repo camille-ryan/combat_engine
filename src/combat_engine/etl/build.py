@@ -99,12 +99,23 @@ CREATE TABLE power (
 );
 CREATE INDEX power_class ON power(class, level);
 
+-- `ref` is the compendium's own id, `c<id>`, and the printed name goes to the
+-- localisation like every other printed name. **This table had neither**: it was
+-- keyed on `name`, which is the printed word, so a class had no identity apart
+-- from what it is called.
+--
+-- `name` stays, as the **slug** -- the matching key the content tree is
+-- organised by, which `cls=` uses at 6,070 sites and 27 directories. That is
+-- the distinction the weapon work settled: a slug serving as a *key* is fine
+-- and a slug serving as the *identity* is the fault. So this is additive and
+-- moves no call site. #339.
 CREATE TABLE class (
   name TEXT PRIMARY KEY, role TEXT, source TEXT,
   hp_first INTEGER, hp_per_level INTEGER, surges INTEGER,
   defences TEXT, armour TEXT, weapons TEXT, implements TEXT,
-  abilities TEXT
+  abilities TEXT, ref TEXT, id INTEGER
 );
+CREATE INDEX class_ref ON class(ref);
 
 -- The features themselves, which `class` above never carried. Only the
 -- chassis numbers were read off the page, so every `cf:` ref in the tree
@@ -240,11 +251,22 @@ CREATE TABLE prereq_term (
 -- `dagger` and thirty more are in `sanitise.RULES_TERMS` -- and three live
 -- sites need it, because a card reading "you must be wielding a whip" names
 -- one weapon and a whip has no group of its own.
+-- `priced` is whether the page prints a cost, and it is the one thing in the
+-- data that tells a **weapon type** from a **named weapon**. 98 of 117 are
+-- priced; of the 19 that are not, eleven are the second head of a double
+-- weapon, two are a fist and a bundle of thrown blades, and **six are unique
+-- named weapons** the compendium happens to file on an equipment page with a
+-- Proficient line, so they import as base weapons.
+--
+-- Nothing else separates them: all six carry a group and a category exactly
+-- like a generic type, and `Item.IsMundane` is `0` for all 117. `sanitise`
+-- needs the distinction because a weapon *type* is mechanics an author must be
+-- able to say, and a named weapon is a printed name.
 CREATE TABLE weapon (
   ref TEXT PRIMARY KEY, id INTEGER, category TEXT, hands TEXT,
   melee INTEGER, damage TEXT, proficiency INTEGER, grp TEXT,
   reach INTEGER, range_short INTEGER, range_long INTEGER, properties TEXT,
-  slug TEXT
+  slug TEXT, priced INTEGER
 );
 CREATE INDEX weapon_group ON weapon(grp, category);
 
@@ -404,8 +426,8 @@ def build() -> Report:
     monster_parser.set_common(_common_words(source, out, report))
     _monsters(source, out, report, names)
     _powers(source, out, report, names)
-    report.classes = _classes(source, out)
-    report.weapons = _weapons(source, out)
+    report.classes = _classes(source, out, names)
+    report.weapons = _weapons(source, out, names)
     report.features = _features(source, out, names)
     report.companions = _companions(source, out, names)
     report.traps = _traps(source, out, names)
@@ -642,7 +664,10 @@ _CHASSIS = {
 }
 
 
-def _classes(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
+def _classes(
+    source: sqlite3.Connection, out: sqlite3.Connection,
+    names: dict[str, dict[str, str]],
+) -> int:
     """Every non-hybrid class's chassis, off its own page.
 
     `chargen` needs hit points, surges, defence bonuses and proficiencies
@@ -659,11 +684,12 @@ def _classes(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
     # Hybrids are excluded by name -- they are a way of combining two
     # classes rather than a class, and the goal says so.
     written = 0
+    minted: set[str] = set()
     wanted = {c.lower() for c in CLASSES}
     rows = [
         r
         for r in source.execute(
-            "SELECT Name, Role, Source, Abilities, PlainTxt, Txt FROM Class"
+            "SELECT ID, Name, Role, Source, Abilities, PlainTxt, Txt FROM Class"
         )
         if not r["Name"].lower().startswith("hybrid")
         and r["Name"].split("(")[0].strip().lower() in wanted
@@ -683,7 +709,7 @@ def _classes(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
             if m:
                 found[field_] = m.group(1).strip()
         out.execute(
-            "INSERT OR REPLACE INTO class VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO class VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 bare, row["Role"] or "", row["Source"] or "",
                 int(found.get("hp_first", 0) or 0),
@@ -692,9 +718,19 @@ def _classes(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
                 found.get("defences", ""), found.get("armour", ""),
                 found.get("weapons", ""), found.get("implements", ""),
                 row["Abilities"] or "",
+                f"c{row['ID']}",
+                row["ID"],
             ),
         )
+        # The printed name, where printed names live. `bare` is the slug and
+        # stays in the table as the key the content tree is organised by.
+        names[f"c{row['ID']}"] = {"name": bare}
+        minted.add(bare)
         written += 1
+    # **Tell the scrubber these are mechanics**, now that they are in its index.
+    # A class name in a spec is the power's own classification, never a citation;
+    # see `sanitise._CLASS_NAMES`. Without this, 664 specs read `c8 Utility 6`.
+    sanitise.set_classes(frozenset(minted))
     return written
 
 
@@ -725,7 +761,10 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
-def _weapons(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
+def _weapons(
+    source: sqlite3.Connection, out: sqlite3.Connection,
+    names: dict[str, dict[str, str]],
+) -> int:
     """The base weapons, off the equipment pages.
 
     A base weapon is four numbers and two lists -- damage die, proficiency
@@ -740,10 +779,20 @@ def _weapons(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
     other piece of equipment does. Implements are deliberately not here:
     an orb has no damage die and no proficiency bonus, so there is no stat
     line to load and `chargen` declares them itself.
+
+    **The name goes to the localisation, which it never did.** A base weapon is
+    parsed out of the `Item` source rows and then filtered *out* of the `item`
+    table -- that table is the magic items -- so a weapon's name had no home
+    and the ref was carrying it instead: `w:short-sword`. **0 of 117 weapons
+    had a localisation entry**, and that single omission is what every hack
+    around weapon naming was working around, `Weapon.slug` included. #339.
     """
     written = 0
+    #: The names `sanitise` may treat as mechanics -- priced weapons only. See
+    #: `sanitise.weapon_names` for why the price is the test.
+    minted: set[str] = set()
     for row in source.execute(
-        "SELECT ID, Name, PlainTxt FROM Item "
+        "SELECT ID, Name, PlainTxt, Cost FROM Item "
         "WHERE Category IN ('Weapon', 'Equipment') ORDER BY ID"
     ):
         text = row["PlainTxt"] or ""
@@ -758,8 +807,11 @@ def _weapons(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
             p.strip().lower() for p in _TERM.findall(sections.get("properties", ""))
         ]
         ranged = _RANGE.search(text)
+        # Whether the page prints a price -- see the schema note. The column is
+        # whitespace rather than NULL when absent.
+        priced = int(bool((row["Cost"] or "").strip()))
         out.execute(
-            "INSERT OR REPLACE INTO weapon VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO weapon VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 # **The id, not the name.** This was `f"w:{_slug(row['Name'])}"`
                 # -- a ref minted by slugifying a printed name, with the
@@ -783,9 +835,21 @@ def _weapons(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
                 int(ranged.group(2)) if ranged else None,
                 json.dumps(properties + groups[1:]),
                 _slug(row["Name"]),
+                # Whether the page prints a price -- see the schema note. The
+                # column is whitespace rather than NULL when absent.
+                priced,
             ),
         )
+        # The printed name, where every other printed name lives.
+        names[f"w{row['ID']}"] = {"name": (row["Name"] or "").strip()}
+        if priced:
+            minted.add(_slug(row["Name"]).replace("-", " "))
         written += 1
+    # **Injected, not read back.** `identifies` consults this during
+    # `_cross_reference_rest`, and a reader that opened `game.db` here would
+    # block on the build's own write lock -- which it did, for ten minutes at
+    # 0.0% CPU. Same arrangement as `set_races` and `set_classes`.
+    sanitise.set_weapons(frozenset(minted))
     return written
 
 

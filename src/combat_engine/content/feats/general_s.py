@@ -558,7 +558,7 @@ def f3698(c: Cast) -> None:
     strike, and the flurry retriggered off an opportunity attack with it.
 
     `mba` is the ref to swap, not the monk's weapon: the card says "when
-    making a melee basic attack **with** your monk unarmed strike", so the
+    making a melee basic attack **with** your `w3678`", so the
     row being rolled is the basic attack and the strike is the gate on it.
     Gated with `when=` rather than checked once, because the swap is laid
     when the feat arms and a hand can be filled later.

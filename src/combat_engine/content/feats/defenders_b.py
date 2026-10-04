@@ -465,7 +465,7 @@ def f3293(c: Cast) -> None:
 @power("f3298", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f3298(c: Cast) -> None:
-    """"A weapon other than your monk unarmed strike" is readable: the
+    """"A weapon other than your `w3678`" is readable: the
     chassis deals that one as `w:unarmed` with a group of its own, so the
     test is a held weapon that is neither it nor an implement. Asked per
     roll rather than once, because the grip changes mid-fight."""
@@ -553,7 +553,7 @@ def _crit_unarmed(world: Any, me: int, ev: Any) -> bool:
 
 @power("f3327", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       trigger="you score a critical hit with your monk unarmed strike",
+       trigger="you score a critical hit with your w3678",
        on=Trigger(Hit, _crit_unarmed, "a critical hit with an unarmed strike"))
 def f3327(c: Cast) -> None:
     """The payout is the target's own resistance taken away rather than

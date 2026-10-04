@@ -590,6 +590,119 @@ def set_races(names: frozenset[str]) -> None:
     _RACES = frozenset(n.strip().lower() for n in names if len(n.strip()) > 2)
 
 
+#: Every class's printed name. **Waived outright, unlike a race's.**
+#:
+#: A race's name needs the line it sits on to tell a name from a type word, which
+#: is what `names_a_race` is for. A class name needs no such test because there
+#: is no position in this corpus where it is a citation: "Warlord Utility 6" is a
+#: power's own classification, "a fighter may" is a rules sentence, and `cls=` is
+#: how the engine asks. It is mechanics wherever it appears.
+#:
+#: This exists because giving classes a localisation entry -- which is the right
+#: thing, and is what stopped the printed name being the table's primary key --
+#: put them in the scrubber's index for the first time, and **664 specs came back
+#: reading `c8 Utility 6`**. The name belongs in the localisation *and* in the
+#: spec; those are not in tension, they are two different jobs.
+#:
+#: Injected by the build for the reason `_RACES` is: the table a reader would
+#: consult is the one being written -- and read back off `game.db` by
+#: `class_names()` when there is no build, which is how `leaks.py` sees it.
+#: `None` until something says otherwise, exactly as `_RACES` is: an empty set
+#: and "nobody has told me yet" are different answers, and reading them as the
+#: same is what made `scripts/leaks.py` report every class name in `docs/`.
+_CLASS_NAMES: frozenset[str] | None = None
+
+
+def set_classes(names: frozenset[str]) -> None:
+    """Tell the sanitiser which names are classes', during a build."""
+    global _CLASS_NAMES
+    _CLASS_NAMES = frozenset(n.strip().lower() for n in names if len(n.strip()) > 2)
+
+
+#: `None` until told, like `_RACES` and `_CLASS_NAMES`. **The injection is not a
+#: convenience, it is what stops a deadlock.** `identifies` is called from
+#: `_cross_reference_rest` during a build, so a reader here opens `game.db` while
+#: the build holds it for writing -- and sqlite blocks the reader forever.
+#: Observed: a build sat at 0.0% CPU for ten minutes with the file open twice,
+#: fd 4 for write and fd 6 for read.
+_WEAPON_NAMES: frozenset[str] | None = None
+
+
+def set_weapons(names: frozenset[str]) -> None:
+    """Tell the sanitiser which names are base weapons', during a build."""
+    global _WEAPON_NAMES
+    _WEAPON_NAMES = frozenset(n.strip().lower() for n in names if len(n.strip()) > 2)
+
+
+def weapon_names() -> frozenset[str]:
+    """Every base weapon's printed name, read off `weapon.slug`.
+
+    **A weapon type is mechanics here**, and that is this project's own ruling
+    rather than a new one: thirty of them are listed in `RULES_TERMS` by hand
+    precisely so the scrubber leaves them alone, and for months a weapon's *ref*
+    was its slugified name. Camille's requirement is explicit -- a thing must be
+    searchable by name, "for weapons specifically, we will need both weapon name
+    and weapon group" -- so the name has to stay sayable.
+
+    Needed because giving weapons localisation entries put them in the whole-name
+    index for the first time, and `RULES_TERMS` was never complete: it has
+    `fullblade` and not `lotulis`, which is an accident of which weapons somebody
+    had hit a problem with rather than a distinction.
+
+    **Six of the 117 are unique named weapons and must stay reportable**, and
+    `weapon.priced` is what tells them apart: the compendium prints a cost for a
+    weapon you can buy and none for a named one. 98 of 117 are priced.
+
+    Nothing else separates them -- all six carry a group and a category exactly
+    like a generic type, and `Item.IsMundane` is `0` for all 117. The first
+    version of this tested the *shape* of the name (`" of "`, a possessive) and
+    missed one immediately, which is why the derived column exists instead.
+
+    The rule over-excludes by thirteen: eleven are the second head of a double
+    weapon, and two are a fist and a bundle of thrown blades, none of which has a
+    price either. That costs a finding on one of them and is the right direction
+    to err -- a name reported and dismissed is cheap, a name waived is invisible.
+    """
+    if _WEAPON_NAMES is not None:
+        return _WEAPON_NAMES
+    found: set[str] = set()
+    with contextlib.suppress(Exception):
+        from .build import game
+
+        for (slug,) in game().execute(
+            "SELECT slug FROM weapon WHERE slug != '' AND priced = 1"
+        ):
+            spaced = (slug or "").replace("-", " ").strip().lower()
+            if len(spaced) > 2:
+                found.add(spaced)
+    return frozenset(found)
+
+
+def class_names() -> frozenset[str]:
+    """Every class's printed name, from the build or from `game.db`.
+
+    The same two-source arrangement `races()` has, and for the same reason: the
+    build is writing the table a reader would consult, so it injects; everything
+    else reads the finished database.
+
+    **Without the fallback this is silently empty outside a build**, which is not
+    a theoretical failure -- it reported three class names in `docs/` and 500-odd
+    specs the moment classes were given localisation entries, because `leaks.py`
+    does not run inside a build.
+    """
+    if _CLASS_NAMES is not None:
+        return _CLASS_NAMES
+    found: set[str] = set()
+    with contextlib.suppress(Exception):
+        from .build import game
+
+        for (name,) in game().execute("SELECT name FROM class"):
+            low = (name or "").strip().lower()
+            if len(low) > 2:
+                found.add(low)
+    return frozenset(found)
+
+
 def races() -> frozenset[str]:
     """Every race's printed name, from the build or from `game.db`."""
     if _RACES is not None:
@@ -732,6 +845,12 @@ def identifies(
     """
     if names_a_race(name, context):
         return True
+    # A class's or a base weapon's name is mechanics wherever it appears -- see
+    # `_CLASS_NAMES` and `weapon_names`. Both are printed names and both are words
+    # the engine asks by, which is the same case `RULES_TERMS` was hand-listing.
+    low = name.lower()
+    if low in class_names() or low in weapon_names():
+        return False
     if name in rules or name in ALLOWED or _stem(name) in rules:
         return False
     # **A mechanic with its value is still a mechanic.** `Regeneration` is in

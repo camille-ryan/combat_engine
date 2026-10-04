@@ -85,7 +85,9 @@ SHAPES = {
 GATE_ONLY = ("melee weapon", "ranged weapon")
 
 
-def _vocabulary(out: sqlite3.Connection) -> tuple[list[str], dict[str, str]]:
+def _vocabulary(
+    out: sqlite3.Connection,
+) -> tuple[list[str], dict[str, str], dict[str, str]]:
     """The groups, and every weapon name that implies one.
 
     **From the `slug` column, not from un-slugging the ref.** This used to read
@@ -109,7 +111,12 @@ def _vocabulary(out: sqlite3.Connection) -> tuple[list[str], dict[str, str]]:
             "SELECT slug, grp FROM weapon WHERE grp != '' AND slug != ''"
         )
     }
-    return groups, by_name
+    # And by ref, for the named weapons the scrubber substitutes. See `_groups_in`.
+    by_ref = {
+        ref: grp
+        for ref, grp in out.execute("SELECT ref, grp FROM weapon WHERE grp != ''")
+    }
+    return groups, by_name, by_ref
 
 
 def _fragments(text: str) -> list[str]:
@@ -127,15 +134,34 @@ def _fragments(text: str) -> list[str]:
     return out
 
 
-def _groups_in(text: str, groups: list[str], by_name: dict[str, str]) -> set[str]:
+#: A weapon's ref where its name used to be. The scrubber substitutes one when
+#: the weapon is a *named* weapon rather than a type, which is 51 specs.
+_WEAPON_REF = re.compile(r"\bw(\d{3,})\b")
+
+
+def _groups_in(
+    text: str, groups: list[str], by_name: dict[str, str],
+    by_ref: dict[str, str] | None = None,
+) -> set[str]:
     """Every weapon group this text names.
 
     A text naming one *weapon* counts under that weapon's group -- "wielding a
     dagger" is a light-blade clause, narrower than the group but on the same
     axis. Longest name first, so `spiked chain` is not read as `chain`, and
     `pike` is never found inside `spiked`.
+
+    **A ref counts as well as a name, and has to.** Giving weapons localisation
+    entries let the scrubber do its job on the six that are *named* weapons
+    rather than types, so 51 specs now read `w3740` where the name used to be --
+    and reading only names lost their group. `weapon rows` fell **329 to 320**
+    twice over before this was added, once for each attempt.
     """
     found: set[str] = set()
+    if by_ref:
+        for m in _WEAPON_REF.finditer(text):
+            group = by_ref.get(f"w{m.group(1)}")
+            if group:
+                found.add(group)
     for fragment in _fragments(text):
         for group in groups:
             if re.search(rf"(?<!\w){re.escape(group)}(?!\w)", fragment):
@@ -159,7 +185,10 @@ def _shapes_in(text: str) -> set[str]:
     return {shape for shape, words in SHAPES.items() if any(w in low for w in words)}
 
 
-def of(spec: str, groups: list[str], by_name: dict[str, str]) -> dict[str, list[str]]:
+def of(
+    spec: str, groups: list[str], by_name: dict[str, str],
+    by_ref: dict[str, str] | None = None,
+) -> dict[str, list[str]]:
     """What one power's text says about weapons, split by relationship."""
     spec = spec or ""
     printed = REQUIREMENT.search(spec)
@@ -171,7 +200,7 @@ def of(spec: str, groups: list[str], by_name: dict[str, str]) -> dict[str, list[
     fires = TRIGGER.search(spec)
     if fires and WIELDING.search(fires.group(1)):
         gate = f"{gate} {fires.group(1)}".strip()
-    gate_groups = _groups_in(gate, groups, by_name) if gate else set()
+    gate_groups = _groups_in(gate, groups, by_name, by_ref) if gate else set()
     gate_shapes = (_shapes_in(gate) | _categories_in(gate)) if gate else set()
 
     # The rider axis: the sentences of the card, minus its Requirement, that are
@@ -187,7 +216,7 @@ def of(spec: str, groups: list[str], by_name: dict[str, str]) -> dict[str, list[
     )
     # A group named in the gate is not also a rider: the same sentence would be
     # counted twice under two relationships that mean different things.
-    rider_groups = _groups_in(rest, groups, by_name) - gate_groups
+    rider_groups = _groups_in(rest, groups, by_name, by_ref) - gate_groups
     rider_shapes = (
         (_shapes_in(rest) | _categories_in(rest)) - gate_shapes - set(GATE_ONLY)
     )
@@ -208,10 +237,10 @@ def record(out: sqlite3.Connection) -> int:
 
     Returns how many rows got a non-empty answer.
     """
-    groups, by_name = _vocabulary(out)
+    groups, by_name, by_ref = _vocabulary(out)
     filled = 0
     for ref, spec in out.execute("SELECT ref, spec FROM power").fetchall():
-        found = of(spec or "", groups, by_name)
+        found = of(spec or "", groups, by_name, by_ref)
         if not any(found.values()):
             continue
         out.execute(

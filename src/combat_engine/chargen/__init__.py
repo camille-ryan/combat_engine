@@ -110,33 +110,38 @@ class ClassLine:
         return self.weapons[0] if self.weapons else None
 
 
-LONGSWORD = Weapon(ref="w3610", slug="longsword", category="military", damage="1d8", proficiency=3,
+# **No `slug` on any of these.** `_table` reads the slug off the `weapon`
+# table, which is where the printed name belongs; writing it here would put
+# one in tracked source for the sake of a fallback that only runs when there
+# is no database at all. The cost is that `query.holding("<weapon>")` cannot
+# match by name in that state, which is a luxury when the database is missing.
+LONGSWORD = Weapon(ref="w3610", category="military", damage="1d8", proficiency=3,
                    group="heavy blade")
-MACE = Weapon(ref="w3596", slug="mace",
+MACE = Weapon(ref="w3596",
               category="simple", damage="1d8", proficiency=2, group="mace")
-DAGGER = Weapon(ref="w3594", slug="dagger",
+DAGGER = Weapon(ref="w3594",
                 category="simple", damage="1d4", proficiency=3, group="light blade",
                 thrown=(5, 10),
                 properties=frozenset({"light blade", "off-hand"}))
-SHORTSWORD = Weapon(ref="w3611", slug="short-sword",
+SHORTSWORD = Weapon(ref="w3611",
                     category="military", damage="1d6", proficiency=3,
                     group="light blade",
                     properties=frozenset({"light blade", "off-hand"}))
-LONGBOW = Weapon(ref="w3631", slug="longbow",
+LONGBOW = Weapon(ref="w3631",
                  category="military", damage="1d10", proficiency=2, group="bow",
                  ranged=(20, 40), properties=frozenset({"two-handed"}))
-CROSSBOW = Weapon(ref="w3629", slug="crossbow", category="simple", damage="1d8", proficiency=2,
+CROSSBOW = Weapon(ref="w3629", category="simple", damage="1d8", proficiency=2,
                   group="crossbow", ranged=(15, 30),
                   properties=frozenset({"two-handed"}))
-ROD = Weapon(ref="w:rod", slug="rod", damage="1d4", proficiency=0, group="implement")
+ROD = Weapon(ref="w:rod", damage="1d4", proficiency=0, group="implement")
 #: The two implements nobody was carrying. The class pages print one for
 #: the wizard (orbs, staffs, wands, tomes) and one for the cleric and the
 #: paladin (holy symbols), and neither chassis held anything -- the wizard
 #: held nothing at all. That cost nothing while every implement was plain,
 #: and costs an enhancement bonus per fight the moment one is magic, which
 #: is the largest bucket of magic items there is.
-ORB = Weapon(ref="w:orb", slug="orb", damage="1d4", proficiency=0, group="implement")
-HOLY_SYMBOL = Weapon(ref="w:holy-symbol", slug="holy-symbol",
+ORB = Weapon(ref="w:orb", damage="1d4", proficiency=0, group="implement")
+HOLY_SYMBOL = Weapon(ref="w:holy-symbol",
                      damage="1d4", proficiency=0, group="implement")
 
 #: The eight Player's Handbook classes. Numbers off the class pages.
@@ -190,19 +195,19 @@ CLASSES: dict[str, ClassLine] = {
 
 
 #: A few more weapons, for the classes that arrived with phase C.
-GREATAXE = Weapon(ref="w3612", slug="greataxe", category="military", damage="1d12", proficiency=2,
+GREATAXE = Weapon(ref="w3612", category="military", damage="1d12", proficiency=2,
                   group="axe", properties=frozenset({"two-handed"}))
-QUARTERSTAFF = Weapon(ref="w3601", slug="quarterstaff",
+QUARTERSTAFF = Weapon(ref="w3601",
                       category="simple", damage="1d8", proficiency=2,
                       group="staff", properties=frozenset({"two-handed"}))
-LONGSPEAR = Weapon(ref="w3617", slug="longspear", category="military", damage="1d10", proficiency=2,
+LONGSPEAR = Weapon(ref="w3617", category="military", damage="1d10", proficiency=2,
                    group="spear", properties=frozenset({"two-handed", "reach"}))
 #: **The monk's strike, under the ref the database already has for it.** This was
 #: `w:unarmed`, which `game.db` does not contain -- and its 1d8 and +3 are
 #: `w3678`'s numbers exactly, so the two were always one weapon
 #: under two spellings. Dealt only on the proficiency line that names the monk
 #: strike, which is how the duplicate went unnoticed. #282.
-MONK_STRIKE = Weapon(ref="w3678", slug="monk-unarmed-strike", category="simple", damage="1d8",
+MONK_STRIKE = Weapon(ref="w3678", category="simple", damage="1d8",
                      proficiency=3, group="unarmed",
                      properties=frozenset({"off-hand"}))
 #: **A bare fist**, which the tree had none of: every row in the `unarmed` group is
@@ -218,15 +223,15 @@ MONK_STRIKE = Weapon(ref="w3678", slug="monk-unarmed-strike", category="simple",
 #:
 #: Keeps the `w:unarmed` ref, which is now what it says: the plain one. Nothing
 #: in the database claims it.
-UNARMED = Weapon(ref="w:unarmed", slug="unarmed", category="", damage="1d4", proficiency=0,
+UNARMED = Weapon(ref="w:unarmed", category="", damage="1d4", proficiency=0,
                  group="unarmed")
-STAFF = Weapon(ref="w:staff", slug="staff", damage="1d8", proficiency=0, group="implement")
-TOTEM = Weapon(ref="w:totem", slug="totem", damage="1d4", proficiency=0, group="implement")
+STAFF = Weapon(ref="w:staff", damage="1d8", proficiency=0, group="implement")
+TOTEM = Weapon(ref="w:totem", damage="1d4", proficiency=0, group="implement")
 #: The last two implements nothing was carrying. Declared rather than
 #: derived for the reason the five above are: an implement prints no
 #: damage die and no proficiency bonus, so there is no stat line to load.
-WAND = Weapon(ref="w:wand", slug="wand", damage="1d4", proficiency=0, group="implement")
-KI_FOCUS = Weapon(ref="w:ki-focus", slug="ki-focus", damage="1d4", proficiency=0, group="implement")
+WAND = Weapon(ref="w:wand", damage="1d4", proficiency=0, group="implement")
+KI_FOCUS = Weapon(ref="w:ki-focus", damage="1d4", proficiency=0, group="implement")
 
 IMPLEMENTS = {w.ref: w for w in (ROD, ORB, HOLY_SYMBOL, STAFF, TOTEM, WAND, KI_FOCUS)}
 
@@ -294,6 +299,48 @@ def _printed_weapons() -> dict[str, Weapon]:
 
 
 PRINTED: dict[str, Weapon] = _printed_weapons()
+
+
+def _with_slugs() -> None:
+    """Give the hand-written constants the slug the table holds for them.
+
+    **The constants are what a character actually carries**, not a fallback --
+    `ClassLine.weapons` references them by name -- so they need every field a
+    gate reads. `Weapon.slug` is the printed word a card can name a weapon by,
+    and `chargen.meets`' `weapon_prof` test and `query.holding` both ask for it.
+
+    It is **not written beside them**, because a slug is a printed name and the
+    constants are tracked source. Read off the `weapon` table instead, which is
+    where the name belongs and the only place it is kept.
+
+    Measured when it was missing: four rows went from usable to *never usable
+    here* -- `audit.py` read 776 against a watermark of 772 -- because their
+    printed Requirement names one weapon and nothing on the character could
+    answer which weapon it was holding. That is the whole reason this exists; a
+    `slug=""` on a dealt weapon is a silently un-gateable row.
+
+    **Set in place rather than rebound.** `CLASSES` and `IMPLEMENTS` are built
+    above this and hold the constant *objects*, so replacing the module globals
+    with copies left every one of those references on the slugless original --
+    which looked fixed from the outside and was not. `Weapon` is not frozen, so
+    one assignment reaches every holder.
+    """
+    for value in list(globals().values()):
+        if not isinstance(value, Weapon) or value.slug:
+            continue
+        table = PRINTED.get(value.ref)
+        if table is not None and table.slug:
+            value.slug = table.slug
+        elif value.ref.startswith("w:"):
+            # **An implement, and the ref already is the word.** The compendium's
+            # weapon table carries no implements -- an orb has no damage die and
+            # no proficiency bonus -- so these refs were invented here, out of
+            # words that are in `sanitise.RULES_TERMS` and are mechanics. Taking
+            # the slug from the ref writes no new name down.
+            value.slug = value.ref.removeprefix("w:")
+
+
+_with_slugs()
 
 #: The arms the chassis dealt none of, and that a printed benefit names.
 #:

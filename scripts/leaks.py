@@ -192,6 +192,14 @@ def _type_words() -> set[str]:
                 out.add(low)
             for word in re.findall(r"[a-z'-]{3,}", low):
                 out.add(word.strip("-"))
+                # **And the halves of a hyphenated one.** The regex above keeps
+                # the hyphen, so a two-part slug went in whole and its parts did
+                # not -- and a *part* is what the component pass reports, which
+                # is the only reason this list exists. One such slug was still
+                # being flagged after the whole value was added.
+                for part in word.split("-"):
+                    if len(part) >= 3:
+                        out.add(part)
     for ref, entry in localisation().items():
         if ref.startswith("r") and ref[1:].isdigit():
             for word in re.findall(r"[a-z']{3,}", (entry.get("name") or "").lower()):
