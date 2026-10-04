@@ -1202,7 +1202,7 @@ def f3615(c: Cast) -> None:
     weapon table carries, and the garrote, the blowgun and the shortbow
     are three rows in it."""
     me = c.me
-    _NAMED_ARMS = ("w:garrote", "w:blowgun", "w:shortbow")
+    _NAMED_ARMS = ("w3663", "w3662", "w3630")
 
     def one_handed(ctx: dict[str, Any]) -> bool:
         arm = _main(c)
@@ -1640,7 +1640,7 @@ def f3640(c: Cast) -> None:
 
 @power("f3641", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF, dropped=("c.make_thrown()",),
-       proficiency=("w:warhammer",))
+       proficiency=("w3607",))
 def f3641(c: Cast) -> None:
     """The implement half plays: `c.as_implement` writes the fact onto
     the weapon in hand, and hammer is a group the weapon table carries.

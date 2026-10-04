@@ -464,7 +464,7 @@ def f472(c: Cast) -> None:
 
 
 @power("f64", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, proficiency=("w:spear",))
+       reach=PERSONAL, target=SELF, proficiency=("w3598",))
 def f64(c: Cast) -> None:
     """Both halves now. The grant is header data `chargen` reads when the
     character is built, and one ref stands for the whole printed group
@@ -483,7 +483,7 @@ def f64(c: Cast) -> None:
 
 @power("f69", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w:battleaxe", "w:warhammer"))
+       proficiency=("w3603", "w3607"))
 def f69(c: Cast) -> None:
     """Same shape as f64, for axes and hammers.
 

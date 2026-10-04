@@ -1241,7 +1241,7 @@ def f2156(c: Cast) -> None:
 
 
 @power("f2157", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, proficiency=("w:short-sword",))
+       reach=PERSONAL, target=SELF, proficiency=("w3611",))
 def f2157(c: Cast) -> None:
     """Light blade is a group the engine carries, so the damage half is
     exact, and the grant is header data `chargen` reads at build time."""
@@ -1857,8 +1857,8 @@ def f2290(c: Cast) -> None:
 
 @power("f2301", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w:khopesh", "w:scourge", "w:sickle", "w:scythe",
-                    "w:scimitar", "w:falchion"))
+       proficiency=("w3637", "w3639", "w3597", "w3602",
+                    "w3609", "w3633"))
 def f2301(c: Cast) -> None:
     """Six named weapons rather than a group, and the weapon table carries
     all six by ref -- so the bonus is gated exactly. Gating on heavy blade
@@ -1867,15 +1867,15 @@ def f2301(c: Cast) -> None:
     c.bonus(
         "damage", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
         when=lambda ctx: _ref_in(
-            c, "w:khopesh", "w:scourge", "w:sickle", "w:scythe",
-            "w:scimitar", "w:falchion",
+            c, "w3637", "w3639", "w3597", "w3602",
+            "w3609", "w3633",
         ),
     )
 
 
 @power("f2420", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w:warhammer", "w:war-pick"))
+       proficiency=("w3607", "w3608"))
 def f2420(c: Cast) -> None:
     """Hammer and pick are printed groups the weapon table carries and
     `chargen` now deals, so the gate is asked. Heroic tier, so +2."""
@@ -1970,14 +1970,14 @@ def f2893(c: Cast) -> None:
 
 @power("f2894", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w:shortbow",))
+       proficiency=("w3630",))
 def f2894(c: Cast) -> None:
     """All three clauses. The weapon table keys on the ref, so the bonus
     is narrowed to the shortbow rather than widened to the bow group --
     which would have paid a longbow as well. Heroic tier, so +1."""
     me = c.me
-    holding = lambda ctx: _ref_in(c, "w:shortbow")  # noqa: E731
-    if _ref_in(c, "w:shortbow"):
+    holding = lambda ctx: _ref_in(c, "w3630")  # noqa: E731
+    if _ref_in(c, "w3630"):
         c.as_implement(on=me)
     c.bonus("damage", 1, on=me, until=When.ENCOUNTER, kind="feat",
             when=holding)

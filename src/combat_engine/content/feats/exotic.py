@@ -100,7 +100,7 @@ def _swap(ref: str, card: str):  # noqa: ANN202
 
 @power("f959", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.forgo_damage()",),
-       proficiency=("w:bola",))
+       proficiency=("w3661",))
 def f959(c: Cast) -> None:
     """The weapon exists now and `chargen` deals it. What is left is the
     shape of the rider: the immobilise is bought by giving the damage up,
@@ -161,7 +161,7 @@ def f962b(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit with a weapon attack using a net",
        on=Trigger(Hit, _hit_with_a_net, "you hit with a net"),
-       proficiency=("w:net",))
+       proficiency=("w3660",))
 def f963(c: Cast) -> None:
     """Both halves. `AT_WILL` because the card prints no limit, and an
     encounter budget on "when you hit" would spend the feat on the first
@@ -221,7 +221,7 @@ def f966b(c: Cast) -> None:
        trigger="you hit a target with a whip",
        on=Trigger(Hit, _hit_with_a_whip, "you hit with a whip"),
        once_per_round=True,
-       proficiency=("w:whip",))
+       proficiency=("w3622",))
 def f967(c: Cast) -> None:
     """The penalty, narrowed to the one creature it protects.
 

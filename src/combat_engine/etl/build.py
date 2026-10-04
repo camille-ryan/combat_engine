@@ -229,10 +229,22 @@ CREATE TABLE prereq_term (
 --
 -- `ref` is `w:<slug>`, which is what `Weapon.ref` already carried and what
 -- a printed base-item restriction is matched against.
+-- `slug` is the printed name, lowered and hyphenated. **It is a matching key
+-- and never an identity**, which is the distinction #339 is about: `ref` used
+-- to be this string, so one column was answering both "which weapon is this"
+-- and "which weapon does this printed word mean", and the second job kept the
+-- first one wrong.
+--
+-- The name is allowed in a column here where it would not be in a ref: a
+-- weapon's name is mechanics by this project's own reckoning -- `longsword`,
+-- `dagger` and thirty more are in `sanitise.RULES_TERMS` -- and three live
+-- sites need it, because a card reading "you must be wielding a whip" names
+-- one weapon and a whip has no group of its own.
 CREATE TABLE weapon (
   ref TEXT PRIMARY KEY, id INTEGER, category TEXT, hands TEXT,
   melee INTEGER, damage TEXT, proficiency INTEGER, grp TEXT,
-  reach INTEGER, range_short INTEGER, range_long INTEGER, properties TEXT
+  reach INTEGER, range_short INTEGER, range_long INTEGER, properties TEXT,
+  slug TEXT
 );
 CREATE INDEX weapon_group ON weapon(grp, category);
 
@@ -747,9 +759,18 @@ def _weapons(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
         ]
         ranged = _RANGE.search(text)
         out.execute(
-            "INSERT OR REPLACE INTO weapon VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO weapon VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
-                f"w:{_slug(row['Name'])}",
+                # **The id, not the name.** This was `f"w:{_slug(row['Name'])}"`
+                # -- a ref minted by slugifying a printed name, with the
+                # compendium's own id sitting on the very next line. All 117
+                # weapons carry one, so there was nothing to extract. #339.
+                #
+                # The slugified name still exists, as `slug` at the end of the
+                # row: three sites match a printed word against a weapon and
+                # were using the ref to do it, which is the second job this
+                # column now carries on its own.
+                f"w{row['ID']}",
                 row["ID"],
                 arm.group(1).lower(),
                 arm.group(2).lower(),
@@ -761,6 +782,7 @@ def _weapons(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
                 int(ranged.group(1)) if ranged else None,
                 int(ranged.group(2)) if ranged else None,
                 json.dumps(properties + groups[1:]),
+                _slug(row["Name"]),
             ),
         )
         written += 1

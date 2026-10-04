@@ -427,7 +427,7 @@ def f2379(c: Cast) -> None:
     advantage while the grant is still standing."""
     me = c.me
     c.bonus("skill:acrobatics", 2, kind="feat", on=me, until=When.ENCOUNTER)
-    blades = ("w:longsword", "w:rapier", "w:short-sword")
+    blades = ("w3610", "w3620", "w3611")
 
     def on_use(ev: Any) -> None:
         if ev.actor != me or ev.power not in ("p2105", "p653"):
@@ -447,7 +447,7 @@ def f2379(c: Cast) -> None:
 def f2381(c: Cast) -> None:
     """Every enemy beside the one you crit, and not that one: the card
     says "each enemy adjacent to that enemy"."""
-    if not _named(c, "w:longsword", "w:rapier", "w:short-sword"):
+    if not _named(c, "w3610", "w3620", "w3611"):
         return
     c.as_basic("p634", "p1428", window="opportunity")
 
@@ -548,7 +548,7 @@ def f2400(c: Cast) -> None:
     ref (#282), so the clause aims at that one ref and leaves the monk's
     strike and the gauntlet alone. By ref, never by group, for exactly the
     reason above."""
-    c.weapon_dice("1d8", ref="w:spiked-gauntlet", on=c.me)
+    c.weapon_dice("1d8", ref="w3635", on=c.me)
     c.weapon_dice("1d6", ref="w:unarmed", on=c.me)
 
 
@@ -593,7 +593,7 @@ def f2411(c: Cast) -> None:
     on its other targets. Named rather than left in prose.
     """
     me = c.me
-    if not (_named(c, "w:longsword") or _holding(c, "spear")):
+    if not (_named(c, "w3610") or _holding(c, "spear")):
         return
     for foe in enemies(c.world, me):
         c.penalty(
@@ -652,7 +652,7 @@ def f2421(c: Cast) -> None:
     """
     me = c.me
     gear = c.world.get(me, Gear)
-    mace = next((w for w in gear.melee if w.ref == "w:mace"), None) if gear else None
+    mace = next((w for w in gear.melee if w.ref == "w3596"), None) if gear else None
     if mace is None:
         return
     c.bonus(
@@ -935,7 +935,7 @@ def f2801(c: Cast) -> None:
     them would look finished and fire half as often."""
     me = c.me
     c.bonus("skill:acrobatics", 2, kind="feat", on=me, until=When.ENCOUNTER)
-    blades = ("w:scimitar", "w:double-scimitar")
+    blades = ("w3609", "w3668")
 
     def on_swing(ev: Any) -> None:
         if (
@@ -965,7 +965,7 @@ def f2802(c: Cast) -> None:
     where the card says "one target you hit". The dropped clause is the
     other benefit: turning a push the power grants into a slide.
     """
-    if not _named(c, "w:scimitar", "w:double-scimitar"):
+    if not _named(c, "w3609", "w3668"):
         return
     foe = c.trigger.target
     c.shift(2)

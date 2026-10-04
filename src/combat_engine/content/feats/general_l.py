@@ -1512,7 +1512,7 @@ def f2785(c: Cast) -> None:
 
 @power("f2793", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("c.reroll_attack(on=)",),
-       proficiency=("w:spear", "w:shortbow"))
+       proficiency=("w3598", "w3630"))
 def f2793(c: Cast) -> None:
     """The mounted damage half plays, and the grant is header data.
     Spears and shortbows are the spear and bow groups -- the closest
@@ -1533,7 +1533,7 @@ def f2793(c: Cast) -> None:
 
 @power("f2794", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w:scimitar", "w:falchion"),
+       proficiency=("w3609", "w3633"),
        dropped=("chargen.DOUBLE_SCIMITAR",))
 def f2794(c: Cast) -> None:
     """Three named weapons rather than a group, and the weapon table
@@ -1545,7 +1545,7 @@ def f2794(c: Cast) -> None:
     has one end, so `chargen` deals none."""
     c.bonus(
         "damage", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: _ref_in(c, "w:scimitar", "w:falchion"),
+        when=lambda ctx: _ref_in(c, "w3609", "w3633"),
     )
 
 
@@ -2271,7 +2271,7 @@ def f2624(c: Cast) -> None:
     the whole of what is missing.
 
     **Re-aimed off `chargen.proficiency()`, which arrived and is not the hold.**
-    `proficiency=("w:club", "w:mace")` is how a feat grants named arms and
+    `proficiency=("w3593", "w3596")` is how a feat grants named arms and
     `cf:rogue-scoundrel-f1s3` uses it; what the header cannot express is "one of
     your choice", because the tuple is fixed when the row is written. The card even
     says it may be taken more than once for a different implement each time, so the
@@ -2283,8 +2283,8 @@ def f2624(c: Cast) -> None:
 
 @power("f2783", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, out_of_combat=True,
-       proficiency=("w:battleaxe", "w:handaxe", "w:warhammer",
-                    "w:throwing-hammer"))
+       proficiency=("w3603", "w3604", "w3607",
+                    "w3606"))
 def f2783(c: Cast) -> None:
     """Four named weapons and nothing else. The whole benefit is the
     grant, it lands when the character is built, and nothing is left for
@@ -2293,7 +2293,7 @@ def f2783(c: Cast) -> None:
 
 @power("f2870", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w:warhammer", "w:battleaxe", "w:war-pick"))
+       proficiency=("w3607", "w3603", "w3608"))
 def f2870(c: Cast) -> None:
     """All three groups now, and the grant is header data. `c.as_implement`
     writes the fact onto the weapon in hand, which is what the printed

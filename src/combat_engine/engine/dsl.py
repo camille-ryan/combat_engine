@@ -723,7 +723,7 @@ class Power:
     #: player nor to the dealer.
     obsolete: str = ""
     #: Base items this row lets a character carry, by weapon ref --
-    #: `("w:warhammer",)`. **Build-time data, never run.** "You gain
+    #: `("w3607",)`. **Build-time data, never run.** "You gain
     #: proficiency with all hammers" cannot be a body: a `Cast` opens on a
     #: board with the gear already in hand, so the sentence has no moment
     #: to happen in. `chargen.proficiency` reads this when the character is

@@ -235,7 +235,7 @@ def f1219(c: Cast) -> None:
     two by name and no id in the tree answers to either."""
 
 
-@_trait("f1220", proficiency=("w:longsword",))
+@_trait("f1220", proficiency=("w3610",))
 def f1220(c: Cast) -> None:
     """`cf:swordmage-f0` is declared now, so the grant has something to
     hand over. That class's implement is a blade, which is why the
@@ -278,7 +278,7 @@ def f1223(c: Cast) -> None:
     )
 
 
-@_trait("f1224", proficiency=("w:dagger", "w:staff"))
+@_trait("f1224", proficiency=("w3594", "w:staff"))
 def f1224(c: Cast) -> None:
     """"Choose a damage type" is a build choice. `c.element` is the one
     place a chassis records one, and where it has none the choice is put
@@ -554,7 +554,7 @@ def f1270(c: Cast) -> None:
 
 
 @_trait("f1252", todo=("Weapon.double",),
-        proficiency=("w:spiked-chain",))
+        proficiency=("w3623",))
 def f1252(c: Cast) -> None:
     """The proficiency lands: the weapon table carries this one and
     `chargen` deals it. What is left is the four sentences that make it a
@@ -631,7 +631,7 @@ def f1255b(c: Cast) -> None:
 
 @_trait("f1277", todo=("c.weapon_range()", "c.counts_as(property=)",
                        "c.counts_as(group=)"),
-        proficiency=("w:blowgun",))
+        proficiency=("w3662",))
 def f1277(c: Cast) -> None:
     """The proficiency lands. What is left is the clauses that rewrite
     the weapon itself, and they are three different rewrites rather than
@@ -706,7 +706,7 @@ def f1279b(c: Cast) -> None:
         c.dazed(until=When.SAVE_ENDS)
 
 
-@_trait("f1288", usage=AT_WILL, proficiency=("w:garrote",),
+@_trait("f1288", usage=AT_WILL, proficiency=("w3663",),
         dropped=("c.two_handed()", "c.counts_as(group=)"))
 def f1288(c: Cast) -> None:
     """The proficiency lands and the penalty hangs on the grab being made
@@ -720,7 +720,7 @@ def f1288(c: Cast) -> None:
     def seized(ev: Any) -> None:
         if ev.kind_ is not Relation.GRABBED_BY or ev.source != me:
             return
-        if any(w.ref == "w:garrote" for w in c.held(on=me)):
+        if any(w.ref == "w3663" for w in c.held(on=me)):
             c.penalty("escape", 2, on=ev.target, until=When.ENCOUNTER)
 
     c.watch(RelationSet, seized, until=When.ENCOUNTER, on=me)

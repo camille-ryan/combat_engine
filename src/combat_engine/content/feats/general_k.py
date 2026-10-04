@@ -462,7 +462,7 @@ def f1697(c: Cast) -> None:
 
 @power("f1704", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("SkillCheck.target",), proficiency=("w:short-sword",))
+       dropped=("SkillCheck.target",), proficiency=("w3611",))
 def f1704(c: Cast) -> None:
     """Re-aimed from `todo` to `dropped`. The grant is header data and the
     damage half is writable -- the weapon table keys on the ref -- so
@@ -473,7 +473,7 @@ def f1704(c: Cast) -> None:
     "that enemy" has no referent. Untyped is wrong here for once -- the
     card prints the word "feat"."""
     c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
-            when=lambda ctx: _wielding_ref(c, "w:short-sword"))
+            when=lambda ctx: _wielding_ref(c, "w3611"))
 
 
 @power("f1751", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -858,7 +858,7 @@ def f1721(c: Cast) -> None:
 
 
 @power("f1772", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, proficiency=("w:bastard-sword",))
+       reach=PERSONAL, target=SELF, proficiency=("w3621",))
 def f1772(c: Cast) -> None:
     """The damage half plays and the grant is header data. One superior
     heavy blade stands for the printed list, which is that group plus

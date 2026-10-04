@@ -180,7 +180,7 @@ def _light_blade_or_bow(world: World, eid: int) -> bool:
 
 #: The ids of the arms the rogue's two talents name. Weapons are ids here
 #: like everything else, and `chargen` gives the class both of these.
-_DAGGER = "w:dagger"
+_DAGGER = "w3594"
 _SHOOTERS = ("crossbow", "sling")
 
 

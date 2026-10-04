@@ -570,7 +570,7 @@ def f3698(c: Cast) -> None:
     `Attack.ability_for` reads the swap, so the roll is right; `mba`'s damage
     names its modifier in its own body and is not this row's to rewrite.
     """
-    c.rolls_with("mba", Ability.DEX, when=_wielding_ref("w:monk-unarmed-strike"))
+    c.rolls_with("mba", Ability.DEX, when=_wielding_ref("w3678"))
 
     # **"Your flurry of blows power" is whichever one the tradition granted**, and
     # `c.flurry_of_blows()` names it -- there are five and a row naming any single
@@ -584,7 +584,7 @@ def f3698(c: Cast) -> None:
     def struck(ev: Hit) -> None:
         if ev.attacker != me or not getattr(ev, "opportunity", False):
             return
-        if not _wielding_ref("w:monk-unarmed-strike")(c.world, me):
+        if not _wielding_ref("w3678")(c.world, me):
             return
         flurry = c.flurry_of_blows()
         if flurry:
@@ -644,14 +644,14 @@ def f3701(c: Cast) -> None:
 
 @power("f3702", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w:sickle",),
+       proficiency=("w3597",),
        todo=("c.pre_empt(ref, clause)",))
 def f3702(c: Cast) -> None:
     """**Both of this row's old markers were false.** It claimed the sickle
     could not be asked for and that the flurry had no ref. Neither holds:
 
-    * `_holding_ref(c, "w:sickle")` is in this file and the weapon table
-      carries `w:sickle` -- `query.holding` matches a ref as well as a group,
+    * `_holding_ref(c, "w3597")` is in this file and the weapon table
+      carries `w3597` -- `query.holding` matches a ref as well as a group,
       precisely so a card naming one weapon has something to ask. A sickle not
       being one of the ten groups was never the obstacle.
     * `c.flurry_of_blows()` arrived with #277 and f3701, directly above, uses
@@ -679,7 +679,7 @@ def f3702(c: Cast) -> None:
 
 @power("f3703", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w:glaive", "w:halberd"))
+       proficiency=("w3614", "w3615"))
 def f3703(c: Cast) -> None:
     """Both halves. Polearm is a printed group the weapon table carries
     and `chargen` now deals, so the slide has something to hang on. It
@@ -1474,7 +1474,7 @@ def f3766(c: Cast) -> None:
     once -- so the limbs were never the gap. What was left of the printed line
     is the ranged attacks not provoking, and `c.no_provoke` takes a gate now."""
     c.no_provoke(on=c.me, until=When.ENCOUNTER,
-                 when=_ranged_while_armed(c, "w:hand-crossbow"))
+                 when=_ranged_while_armed(c, "w3627"))
 
 
 @power("f3767", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1483,7 +1483,7 @@ def f3767(c: Cast) -> None:
     """The thrown-weapon twin of `f3766`. A light thrown weapon is a thrown one
     in the light-blade group, which is the dagger and its superior cousin."""
     c.no_provoke(on=c.me, until=When.ENCOUNTER,
-                 when=_ranged_while_armed(c, "w:dagger", "w:widow-s-knife"))
+                 when=_ranged_while_armed(c, "w3594", "w3727"))
 
 
 @power("f3768", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1663,7 +1663,7 @@ def f3779(c: Cast) -> None:
 
 
 @power("f3780", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, proficiency=("w:flail", "w:spear"))
+       reach=PERSONAL, target=SELF, proficiency=("w3605", "w3598"))
 def f3780(c: Cast) -> None:
     """Both groups now: flail is one the weapon table carries and
     `chargen` deals. Heroic tier, so +2."""
@@ -1831,7 +1831,7 @@ def f3793(c: Cast) -> None:
 @power("f3794", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        dropped=("c.counts_as(property=)",),
-       proficiency=("w:sickle", "w:scythe"))
+       proficiency=("w3597", "w3602"))
 def f3794(c: Cast) -> None:
     """Neither is a group, but both are rows in the weapon table, so the
     bonus is gated on the ref. Heroic tier, so +2.
@@ -1840,7 +1840,7 @@ def f3794(c: Cast) -> None:
     `Weapon.properties` is read off the weapon and nothing writes to the
     one in hand."""
     c.bonus("damage", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
-            when=lambda ctx: _holding_ref(c, "w:sickle", "w:scythe"))
+            when=lambda ctx: _holding_ref(c, "w3597", "w3602"))
 
 
 f3795 = _grants("f3795", "f3795b")

@@ -747,7 +747,7 @@ def f3499(c: Cast) -> None:
 @power("f3500", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        todo=("c.counts_as(group=)",),
-       proficiency=("w:quarterstaff",))
+       proficiency=("w3601",))
 def f3500(c: Cast) -> None:
     """One absence, three times over.
 

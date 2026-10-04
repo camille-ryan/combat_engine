@@ -651,7 +651,7 @@ def f2923(c: Cast) -> None:
         if ev.attacker != me or ev.power not in ("p1724", "p1567"):
             return
         gear = c.world.get(me, Gear)
-        if gear is None or gear.main is None or gear.main.ref != "w:longsword":
+        if gear is None or gear.main is None or gear.main.ref != "w3610":
             return
         if c.turn_of() != me:
             return

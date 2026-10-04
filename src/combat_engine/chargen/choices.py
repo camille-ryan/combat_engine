@@ -49,7 +49,7 @@ if TYPE_CHECKING:  # pragma: no cover
 class Choice:
     """One candidate, its score, and what the score was made of.
 
-    `ref` is a ref and never a name -- `r3`, `f1252`, `w:spiked-chain`. The
+    `ref` is a ref and never a name -- `r3`, `f1252`, `w3623`. The
     advisor turns it into something readable through the same `wire` the fight
     page uses, which is what keeps `CE_NAMES=off` honest.
 

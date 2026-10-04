@@ -1081,6 +1081,17 @@ class Gear:
 @dataclass
 class Weapon:
     ref: str
+    #: The printed name, lowered and hyphenated -- **a matching key, never an
+    #: identity.** A card reading "you must be wielding a whip" names one
+    #: weapon and a whip has no group of its own, so `query.holding` and
+    #: `chargen.meets` have to be able to ask by the printed word.
+    #:
+    #: `ref` used to be this string, so one field answered both "which weapon
+    #: is this" and "which weapon does that word mean". Splitting them is #339;
+    #: a weapon's name is mechanics here -- thirty of them are in
+    #: `sanitise.RULES_TERMS` -- so it is fine in a field and was never fine in
+    #: an identifier.
+    slug: str = ""
     damage: str = "1d8"
     proficiency: int = 2
     reach: int = 1

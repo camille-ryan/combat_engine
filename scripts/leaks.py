@@ -98,7 +98,6 @@ CORE = set(RULES_TERMS)
 #: parentheses included, so `_type_words` excuses it and the entry was dead.
 DEFERRED = {
     "battlerager": "#339 -- a sub-option name used as a BUILDS key",
-    "kusari-gama": "#339 -- a weapon ref is its slugified printed name",
     "winterkin": "#341 -- one of 113 racial-trait refs minted from a label",
 }
 
@@ -172,17 +171,27 @@ def _type_words() -> set[str]:
             for word in re.findall(r"[a-z']{3,}", (name or "").lower()):
                 out.add(word)
     db = game()
+    # **A weapon's name is mechanics**, which this project settled long before
+    # #339: thirty of them are in `sanitise.RULES_TERMS` and none has an entry
+    # in `names.json` at all. So the `slug` column joins the type words -- and
+    # that is only askable now that the slug is a column rather than the ref.
     for table, column in (("monster", "kind"), ("monster", "role"),
-                          ("monster", "origin"), ("class", "name")):
+                          ("monster", "origin"), ("class", "name"),
+                          ("weapon", "slug")):
         try:
             rows = db.execute(f"SELECT DISTINCT {column} FROM {table}").fetchall()
         except sqlite3.OperationalError:
             continue  # The table or column is absent from an older build.
         for (value,) in rows:
-            # `kind` arrives with the parentheses a stat block prints around a
-            # sub-type, so the brackets come off with the word split.
-            for word in re.findall(r"[a-z']{3,}", (value or "").lower()):
-                out.add(word)
+            low = (value or "").lower().strip()
+            # **The whole value as well as its words.** The word split is what
+            # takes the parentheses off a stat block's sub-type, and it also
+            # takes a hyphen off -- so a hyphenated weapon slug went in as two
+            # halves and the hyphenated word itself was still reported.
+            if len(low) >= 3:
+                out.add(low)
+            for word in re.findall(r"[a-z'-]{3,}", low):
+                out.add(word.strip("-"))
     for ref, entry in localisation().items():
         if ref.startswith("r") and ref[1:].isdigit():
             for word in re.findall(r"[a-z']{3,}", (entry.get("name") or "").lower()):

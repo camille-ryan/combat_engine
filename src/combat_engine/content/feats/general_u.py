@@ -410,7 +410,7 @@ def f3442(c: Cast) -> None:
     swaps blades mid-fight is not a case this card contemplates.
     """
     gear = c.world.get(c.me, Gear)
-    if gear is None or not any(w.ref == "w:longsword" for w in gear.held):
+    if gear is None or not any(w.ref == "w3610" for w in gear.held):
         return
     c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER,
             when=lambda ctx: ctx["power"] == "p7402")

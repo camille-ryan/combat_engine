@@ -327,14 +327,14 @@ def f2264(c: Cast) -> None:
 #: The two arms the card names. The secondary end is the same weapon's
 #: other blade and is held as a row of its own.
 _RAISES_THE_FIELD = (
-    "w:falchion",
-    "w:double-scimitar",
-    "w:double-scimitar-secondary-end",
+    "w3633",
+    "w3668",
+    "w3677",
 )
 
 
 @power("f2795", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, proficiency=("w:falchion",))
+       reach=PERSONAL, target=SELF, proficiency=("w3633",))
 def f2795(c: Cast) -> None:
     """Both arms are rows in the weapon table, so the grip test is real,
     and the benefit is written the way `f1143` writes its own: an extra

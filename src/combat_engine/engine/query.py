@@ -125,14 +125,20 @@ def holding(world: World, eid: int, what: str = "") -> list[Any]:
     if what == "magic":
         return [w for w in out if w.enhancement > 0]
     if what:
-        # By ref as well as by group. A card naming one weapon -- "you
+        # By name as well as by group. A card naming one weapon -- "you
         # must be wielding a whip" -- has no group to ask for: a whip is
         # filed under flail, and so are thirteen other things.
-        named = f"w:{what.replace(' ', '-')}"
+        #
+        # **`slug`, not `ref`.** This built `f"w:{what.replace(' ', '-')}"` and
+        # compared it to the ref, which only worked while a ref *was* the
+        # slugified name. The ref is the compendium id now (#339) and the name
+        # has its own field, so the question is asked of the field that answers
+        # it. It would not have raised -- it would have matched nothing.
+        named = what.replace(" ", "-")
         return [
             w for w in out
             if what in w.properties or w.group == what or w.category == what
-            or w.ref == named
+            or w.slug == named
         ]
     return out
 

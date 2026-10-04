@@ -110,29 +110,34 @@ class ClassLine:
         return self.weapons[0] if self.weapons else None
 
 
-LONGSWORD = Weapon(ref="w:longsword", category="military", damage="1d8", proficiency=3,
+LONGSWORD = Weapon(ref="w3610", slug="longsword", category="military", damage="1d8", proficiency=3,
                    group="heavy blade")
-MACE = Weapon(ref="w:mace", category="simple", damage="1d8", proficiency=2, group="mace")
-DAGGER = Weapon(ref="w:dagger", category="simple", damage="1d4", proficiency=3, group="light blade",
+MACE = Weapon(ref="w3596", slug="mace",
+              category="simple", damage="1d8", proficiency=2, group="mace")
+DAGGER = Weapon(ref="w3594", slug="dagger",
+                category="simple", damage="1d4", proficiency=3, group="light blade",
                 thrown=(5, 10),
                 properties=frozenset({"light blade", "off-hand"}))
-SHORTSWORD = Weapon(ref="w:short-sword", category="military", damage="1d6", proficiency=3,
+SHORTSWORD = Weapon(ref="w3611", slug="short-sword",
+                    category="military", damage="1d6", proficiency=3,
                     group="light blade",
                     properties=frozenset({"light blade", "off-hand"}))
-LONGBOW = Weapon(ref="w:longbow", category="military", damage="1d10", proficiency=2, group="bow",
+LONGBOW = Weapon(ref="w3631", slug="longbow",
+                 category="military", damage="1d10", proficiency=2, group="bow",
                  ranged=(20, 40), properties=frozenset({"two-handed"}))
-CROSSBOW = Weapon(ref="w:crossbow", category="simple", damage="1d8", proficiency=2,
+CROSSBOW = Weapon(ref="w3629", slug="crossbow", category="simple", damage="1d8", proficiency=2,
                   group="crossbow", ranged=(15, 30),
                   properties=frozenset({"two-handed"}))
-ROD = Weapon(ref="w:rod", damage="1d4", proficiency=0, group="implement")
+ROD = Weapon(ref="w:rod", slug="rod", damage="1d4", proficiency=0, group="implement")
 #: The two implements nobody was carrying. The class pages print one for
 #: the wizard (orbs, staffs, wands, tomes) and one for the cleric and the
 #: paladin (holy symbols), and neither chassis held anything -- the wizard
 #: held nothing at all. That cost nothing while every implement was plain,
 #: and costs an enhancement bonus per fight the moment one is magic, which
 #: is the largest bucket of magic items there is.
-ORB = Weapon(ref="w:orb", damage="1d4", proficiency=0, group="implement")
-HOLY_SYMBOL = Weapon(ref="w:holy-symbol", damage="1d4", proficiency=0, group="implement")
+ORB = Weapon(ref="w:orb", slug="orb", damage="1d4", proficiency=0, group="implement")
+HOLY_SYMBOL = Weapon(ref="w:holy-symbol", slug="holy-symbol",
+                     damage="1d4", proficiency=0, group="implement")
 
 #: The eight Player's Handbook classes. Numbers off the class pages.
 CLASSES: dict[str, ClassLine] = {
@@ -185,18 +190,19 @@ CLASSES: dict[str, ClassLine] = {
 
 
 #: A few more weapons, for the classes that arrived with phase C.
-GREATAXE = Weapon(ref="w:greataxe", category="military", damage="1d12", proficiency=2,
+GREATAXE = Weapon(ref="w3612", slug="greataxe", category="military", damage="1d12", proficiency=2,
                   group="axe", properties=frozenset({"two-handed"}))
-QUARTERSTAFF = Weapon(ref="w:quarterstaff", category="simple", damage="1d8", proficiency=2,
+QUARTERSTAFF = Weapon(ref="w3601", slug="quarterstaff",
+                      category="simple", damage="1d8", proficiency=2,
                       group="staff", properties=frozenset({"two-handed"}))
-LONGSPEAR = Weapon(ref="w:longspear", category="military", damage="1d10", proficiency=2,
+LONGSPEAR = Weapon(ref="w3617", slug="longspear", category="military", damage="1d10", proficiency=2,
                    group="spear", properties=frozenset({"two-handed", "reach"}))
 #: **The monk's strike, under the ref the database already has for it.** This was
 #: `w:unarmed`, which `game.db` does not contain -- and its 1d8 and +3 are
-#: `w:monk-unarmed-strike`'s numbers exactly, so the two were always one weapon
+#: `w3678`'s numbers exactly, so the two were always one weapon
 #: under two spellings. Dealt only on the proficiency line that names the monk
 #: strike, which is how the duplicate went unnoticed. #282.
-MONK_STRIKE = Weapon(ref="w:monk-unarmed-strike", category="simple", damage="1d8",
+MONK_STRIKE = Weapon(ref="w3678", slug="monk-unarmed-strike", category="simple", damage="1d8",
                      proficiency=3, group="unarmed",
                      properties=frozenset({"off-hand"}))
 #: **A bare fist**, which the tree had none of: every row in the `unarmed` group is
@@ -212,15 +218,15 @@ MONK_STRIKE = Weapon(ref="w:monk-unarmed-strike", category="simple", damage="1d8
 #:
 #: Keeps the `w:unarmed` ref, which is now what it says: the plain one. Nothing
 #: in the database claims it.
-UNARMED = Weapon(ref="w:unarmed", category="", damage="1d4", proficiency=0,
+UNARMED = Weapon(ref="w:unarmed", slug="unarmed", category="", damage="1d4", proficiency=0,
                  group="unarmed")
-STAFF = Weapon(ref="w:staff", damage="1d8", proficiency=0, group="implement")
-TOTEM = Weapon(ref="w:totem", damage="1d4", proficiency=0, group="implement")
+STAFF = Weapon(ref="w:staff", slug="staff", damage="1d8", proficiency=0, group="implement")
+TOTEM = Weapon(ref="w:totem", slug="totem", damage="1d4", proficiency=0, group="implement")
 #: The last two implements nothing was carrying. Declared rather than
 #: derived for the reason the five above are: an implement prints no
 #: damage die and no proficiency bonus, so there is no stat line to load.
-WAND = Weapon(ref="w:wand", damage="1d4", proficiency=0, group="implement")
-KI_FOCUS = Weapon(ref="w:ki-focus", damage="1d4", proficiency=0, group="implement")
+WAND = Weapon(ref="w:wand", slug="wand", damage="1d4", proficiency=0, group="implement")
+KI_FOCUS = Weapon(ref="w:ki-focus", slug="ki-focus", damage="1d4", proficiency=0, group="implement")
 
 IMPLEMENTS = {w.ref: w for w in (ROD, ORB, HOLY_SYMBOL, STAFF, TOTEM, WAND, KI_FOCUS)}
 
@@ -251,6 +257,10 @@ def _printed_weapons() -> dict[str, Weapon]:
     for row in rows:
         out[row["ref"]] = Weapon(
             ref=row["ref"],
+            # The printed word a card can name this weapon by. The ref used to
+            # be this string and three sites un-slugged it to ask; see
+            # `Weapon.slug`. #339.
+            slug=row["slug"] or "",
             category=row["category"],
             damage=row["damage"],
             proficiency=row["proficiency"],
@@ -292,25 +302,25 @@ PRINTED: dict[str, Weapon] = _printed_weapons()
 #: line, and for the weapon where the card names a weapon. One per line,
 #: the way `_arms` deals one per proficiency line: a character holds one
 #: thing, and a second hammer would only be a second way to be the same.
-HAMMER = PRINTED.get("w:warhammer")
-POLEARM = PRINTED.get("w:halberd")
-FLAIL = PRINTED.get("w:flail")
-PICK = PRINTED.get("w:war-pick")
-AXE = PRINTED.get("w:battleaxe")
-SPEAR = PRINTED.get("w:spear")
-FALCHION = PRINTED.get("w:falchion")
-SHORTBOW = PRINTED.get("w:shortbow")
-SLING = PRINTED.get("w:sling")
-BASTARD_SWORD = PRINTED.get("w:bastard-sword")
-SPIKED_CHAIN = PRINTED.get("w:spiked-chain")
-SCIMITAR = PRINTED.get("w:scimitar")
-SICKLE = PRINTED.get("w:sickle")
-SCYTHE = PRINTED.get("w:scythe")
-BLOWGUN = PRINTED.get("w:blowgun")
-GARROTE = PRINTED.get("w:garrote")
-BOLA = PRINTED.get("w:bola")
-NET = PRINTED.get("w:net")
-WHIP = PRINTED.get("w:whip")
+HAMMER = PRINTED.get("w3607")
+POLEARM = PRINTED.get("w3615")
+FLAIL = PRINTED.get("w3605")
+PICK = PRINTED.get("w3608")
+AXE = PRINTED.get("w3603")
+SPEAR = PRINTED.get("w3598")
+FALCHION = PRINTED.get("w3633")
+SHORTBOW = PRINTED.get("w3630")
+SLING = PRINTED.get("w3628")
+BASTARD_SWORD = PRINTED.get("w3621")
+SPIKED_CHAIN = PRINTED.get("w3623")
+SCIMITAR = PRINTED.get("w3609")
+SICKLE = PRINTED.get("w3597")
+SCYTHE = PRINTED.get("w3602")
+BLOWGUN = PRINTED.get("w3662")
+GARROTE = PRINTED.get("w3663")
+BOLA = PRINTED.get("w3661")
+NET = PRINTED.get("w3660")
+WHIP = PRINTED.get("w3622")
 
 
 def _from_the_book() -> dict[str, ClassLine]:
@@ -1395,7 +1405,9 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
     if "weapon_prof" in node:
         wanted = node["weapon_prof"].lower()
         return any(
-            wanted in (w.group, w.category, w.ref.removeprefix("w:").replace("-", " "))
+            # `slug`, not the ref -- see `Weapon.slug`. The ref is the
+            # compendium id now and un-slugging it would match nothing. #339.
+            wanted in (w.group, w.category, w.slug.replace("-", " "))
             for w in who.line.weapons
         )
     # term, skill, source: nothing on a character answers them yet.
@@ -1463,7 +1475,7 @@ def proficiency(feats: list[str]) -> list[Weapon]:
     and nothing a `Cast` can answer: the fight opens with the gear
     already in hand, so the clause has no moment to happen in. The feat
     says which base items it opens up in its own header --
-    `proficiency=("w:warhammer",)` -- and this is what reads them, the
+    `proficiency=("w3607",)` -- and this is what reads them, the
     way `feats_for` reads the registry rather than keeping a list beside
     it that would go stale.
 

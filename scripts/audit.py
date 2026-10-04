@@ -473,14 +473,22 @@ class Result:
 def _weapon_words() -> dict[str, str]:
     """Every word a `requires_text` can name a weapon by, longest first.
 
-    The same four things `query.holding` matches on -- a group, a property,
-    a category, or the ref's own tail -- built from the 117 printed weapons
-    rather than listed here, so a weapon added to the table becomes askable
-    for without touching this.
+    The same four things `query.holding` matches on -- a group, a property, a
+    category, or the weapon's own **slug** -- built from the 117 printed weapons
+    rather than listed here, so a weapon added to the table becomes askable for
+    without touching this.
+
+    **It was the ref's own tail**, `w.ref.split(":", 1)[1]`, which worked only
+    while a ref was `w:<slugified name>`. #339 made the ref the compendium id,
+    and that expression then raised `IndexError` on every weapon: a full sweep
+    reported **2,602 rows raising** against a watermark of 0. Loud, immediately,
+    and from the one instrument that reads every row -- which is the argument
+    for paying its ten minutes before committing an engine change.
     """
     out: dict[str, str] = {}
     for w in chargen.PRINTED.values():
-        out.setdefault(w.ref.split(":", 1)[1].replace("-", " "), w.ref)
+        if w.slug:
+            out.setdefault(w.slug.replace("-", " "), w.ref)
         if w.group:
             out.setdefault(w.group, w.ref)
         for prop in w.properties:
@@ -750,7 +758,7 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
         # what reads the other field: `chargen.proficiency` hands over the
         # arms a feat grants and `chargen.power_swap` takes back the card
         # a feat trades for. Neither looks at `powers`, so the 54 feats
-        # declaring `proficiency=("w:net",)` were audited on a character
+        # declaring `proficiency=("w3660",)` were audited on a character
         # that had never been given the weapon they exist to grant.
         a_feat = not carried and not declared.cls and ref.startswith("f")
         # And the race its prerequisite names, so `meets` and `c.build`

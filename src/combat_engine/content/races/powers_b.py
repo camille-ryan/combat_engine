@@ -685,7 +685,7 @@ def p2479(c: Cast) -> None:
 )
 def p16465(c: Cast) -> None:
     """The marker this replaces said a sling is not a group the engine
-    has. `w:sling` is a row in the weapon table with `sling` for its
+    has. `w3628` is a row in the weapon table with `sling` for its
     group, so "with this sling" is an ordinary test on what the blow was
     struck with, and `engine.basic.RANGED` is the ranged basic attack's
     own ref, which is the other half of the printed sentence.
@@ -701,7 +701,7 @@ def p16465(c: Cast) -> None:
         if spent["yet"] or ev.attacker != c.me or ev.power != RANGED:
             return
         weapon = c.struck_with(ev)
-        if weapon is None or weapon.ref != "w:sling":
+        if weapon is None or weapon.ref != "w3628":
             return
         spent["yet"] = True
         if loaded <= 2:

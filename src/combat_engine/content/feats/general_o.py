@@ -267,7 +267,7 @@ def f2901b(c: Cast) -> None:
 
 @power("f2902", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w:blowgun",), swap=Swap(1, Usage.AT_WILL))
+       proficiency=("w3662",), swap=Swap(1, Usage.AT_WILL))
 def f2902(c: Cast) -> None:
     """The card is handed over here, and the weapon it is fired from rolls a
     d6 rather than a d4.
@@ -278,7 +278,7 @@ def f2902(c: Cast) -> None:
     rather than `c.change_dice`, edited on the character's own copy. The ref
     is the one the header already names, so there is nothing to guess."""
     c.grant_row("f2902b", on=c.me, until=When.ENCOUNTER)
-    c.weapon_dice("1d6", ref="w:blowgun", on=c.me)
+    c.weapon_dice("1d6", ref="w3662", on=c.me)
 
 
 @power("f2902b", level=1, cls="", usage=AT_WILL, action=STANDARD,
@@ -314,7 +314,7 @@ def f2903b(c: Cast) -> None:
 
 @power("f2904", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w:net",), swap=Swap(1, Usage.AT_WILL))
+       proficiency=("w3660",), swap=Swap(1, Usage.AT_WILL))
 def f2904(c: Cast) -> None:
     """All three clauses. The weapon table keys on the ref, so the +1 is
     narrowed to the net rather than widened to the flail group it is
@@ -323,7 +323,7 @@ def f2904(c: Cast) -> None:
     c.grant_row("f2904b", on=me, until=When.ENCOUNTER)
     c.bonus("attack", 1, on=me, until=When.ENCOUNTER,
             when=lambda ctx: _keyworded(ctx, Keyword.WEAPON)
-            and _implement(c, "w:net"))
+            and _implement(c, "w3660"))
 
 
 @power("f2904b", level=1, cls="", usage=AT_WILL, action=STANDARD,
@@ -1596,7 +1596,7 @@ def f3148(c: Cast) -> None:
 
 
 @power("f3149", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, proficiency=("w:sling",))
+       reach=PERSONAL, target=SELF, proficiency=("w3628",))
 def f3149(c: Cast) -> None:
     """Sling is a printed group the weapon table carries and `chargen`
     now deals, so the attack bonus plays. Heroic tier, so +1.

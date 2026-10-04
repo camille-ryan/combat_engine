@@ -131,7 +131,7 @@ def rogue_tactic_cunning(c: Cast) -> None:
     """
 
 
-_CLUBS = ("w:club", "w:mace")
+_CLUBS = ("w3593", "w3596")
 
 
 def _weapon_swung(world: World, eid: int, ctx: dict[str, Any]) -> Weapon | None:
@@ -165,7 +165,7 @@ def _weapon_swung(world: World, eid: int, ctx: dict[str, Any]) -> Weapon | None:
     # `chargen.proficiency` reads this and hands the arms over at build time, which
     # is the only moment the clause can happen in -- `f2783` is the same shape. The
     # marker named it as missing and it had arrived.
-    proficiency=("w:club", "w:mace"),
+    proficiency=("w3593", "w3596"),
     dropped=("c.counts_as(group=)",),
 )
 def rogue_tactic_bludgeon(c: Cast) -> None:

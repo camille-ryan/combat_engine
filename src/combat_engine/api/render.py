@@ -405,7 +405,7 @@ def option_dto(session: Session, index: int, action: Action) -> dto.OptionDTO:
     return dto.OptionDTO(
         index=index,
         kind=action.kind,
-        label=_option_label(session, action, p),
+        label=_option_label(session, action, p, actor),
         cost=action.cost.value,
         targets=[wire.id(t) or str(t) for t in action.targets],
         dest=action.dest,
@@ -450,7 +450,32 @@ def _notes(session: Session, action: Action, p) -> list[str]:  # noqa: ANN001
     return [f"provokes an opportunity attack from {who}"]
 
 
-def _option_label(session: Session, action: Action, p) -> str:  # noqa: ANN001
+def _weapon_word(session: Session, actor: int, ref: str) -> str:
+    """What to call the weapon this option takes up.
+
+    `Weapon.slug` is the printed word and it is mechanics -- thirty weapon
+    names are in `sanitise.RULES_TERMS` and none is in `names.json` -- so it is
+    the right thing to show and the only place it lives now that `ref` is the
+    compendium id (#339).
+
+    `Gear.weapons` is everything the creature has and `held` is the subset not
+    in `stowed`, so this asks the whole list: the point of the option is that
+    the weapon is **not** in hand yet.
+
+    Falls back to the ref, which is honest if unlovely, rather than un-slugging
+    it and inventing a word -- which is what the line before this one did.
+    """
+    from combat_engine.engine.components import Gear
+
+    gear = session.world.get(actor, Gear)
+    if gear is not None:
+        for weapon in gear.weapons:
+            if weapon.ref == ref and weapon.slug:
+                return weapon.slug.replace("-", " ")
+    return ref
+
+
+def _option_label(session: Session, action: Action, p, actor: int = 0) -> str:  # noqa: ANN001
     """What this option says on its button.
 
     An area power gets one option per square it may be centred on, and they
@@ -481,11 +506,19 @@ def _option_label(session: Session, action: Action, p) -> str:  # noqa: ANN001
         return f"run to {tuple(action.dest)}"
     if action.kind == "wield":
         # **Which weapon.** Every swap read "wield", so three of them on a
-        # ranger's card were the same word three times. The ref is an
-        # engine constant rather than a compendium row, so there is no
-        # name to look up and no name to leak -- `w:short-sword` is the
-        # word already.
-        return f"take up {action.ref.removeprefix('w:').replace('-', ' ')}"
+        # ranger's card were the same word three times.
+        #
+        # **From the weapon's `slug`, not from un-slugging the ref.** This read
+        # `action.ref.removeprefix('w:').replace('-', ' ')` under a comment
+        # saying "there is no name to look up and no name to leak -- the ref is
+        # the word already", which was the admission that the ref *was* the
+        # printed name: this built a player-facing label out of an identifier,
+        # around `wire`, so `CE_NAMES=off` served the name here too. #342's
+        # shape in a second place.
+        #
+        # It is also what #339 would have broken -- the ref is `w3611` now, so
+        # this printed "take up w3611" until it asked the right field.
+        return f"take up {_weapon_word(session, actor, action.ref)}"
     if action.kind == "action_point":
         return f"spend an action point for a {action.ref} action"
     return {"stand": "stand up", "second_wind": "second wind", "end": "end turn"}.get(

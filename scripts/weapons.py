@@ -119,9 +119,13 @@ def _vocabulary() -> tuple[list[str], dict[str, str]]:
     """
     db = game()
     groups = sorted({r[0] for r in db.execute("SELECT grp FROM weapon") if r[0]})
+    # `slug`, not the ref. The ref is the compendium id now and un-slugging it
+    # would match nothing -- silently, which is the half that matters. #339.
     by_name = {
-        ref.removeprefix("w:").replace("-", " "): grp
-        for ref, grp in db.execute("SELECT ref, grp FROM weapon WHERE grp != ''")
+        slug.replace("-", " "): grp
+        for slug, grp in db.execute(
+            "SELECT slug, grp FROM weapon WHERE grp != '' AND slug != ''"
+        )
     }
     return groups, by_name
 

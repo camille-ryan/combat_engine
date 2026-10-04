@@ -103,9 +103,9 @@ _SOFTENING = ("blinded", "immobilized", "slowed", "weakened")
 #: The printed weapons that `chargen` has no entry for. Asking by ref
 #: keeps the row exact; see the module docstring for why the group is
 #: not good enough.
-_RAPIER = ("w:rapier",)
-_SWORDS = ("w:longsword", "w:short-sword", "w:rapier")
-_CLUBS = ("w:club", "w:mace")
+_RAPIER = ("w3620",)
+_SWORDS = ("w3610", "w3611", "w3620")
+_CLUBS = ("w3593", "w3596")
 
 
 def _holding(c: Cast, *groups: str) -> bool:

@@ -355,7 +355,7 @@ def f934(c: Cast) -> None:
 
 
 @power("f1004", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, proficiency=("w:greataxe",))
+       reach=PERSONAL, target=SELF, proficiency=("w3612",))
 def f1004(c: Cast) -> None:
     """Both halves, as `f64` and `f69` now write the same sentence. One
     military two-handed weapon stands for the whole printed line, which
@@ -1273,7 +1273,7 @@ def f621(c: Cast) -> None:
     """One named weapon rolls a d8, and becomes high crit.
 
     The die is written -- `c.weapon_dice` edits the character's own copy of
-    the weapon, and `w:hand-crossbow` is in the database at the d6 the card
+    the weapon, and `w3627` is in the database at the d6 the card
     is raising.
 
     **High crit is the dropped clause, and the gap moved from the reader to the
@@ -1289,7 +1289,7 @@ def f621(c: Cast) -> None:
     critical, not a wider one, and the modifier sits on the wielder where the
     property belongs to the weapon. The second named `c.counts_as(property=)`,
     a writer, when the writer turned out to be the half that was easy."""
-    c.weapon_dice("1d8", ref="w:hand-crossbow", on=c.me)
+    c.weapon_dice("1d8", ref="w3627", on=c.me)
 
 
 @power("f999", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1412,7 +1412,7 @@ def f933(c: Cast) -> None:
         if row is None or gear is None or Keyword.WEAPON not in row.keywords:
             return False
         held = gear.held
-        return (any(w.ref == "w:hand-crossbow" for w in held)
+        return (any(w.ref == "w3627" for w in held)
                 and any(w.group == "light blade" for w in held))
 
     c.no_provoke(on=c.me, until=When.ENCOUNTER, when=firing_it)

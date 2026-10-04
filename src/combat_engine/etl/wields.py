@@ -86,11 +86,28 @@ GATE_ONLY = ("melee weapon", "ranged weapon")
 
 
 def _vocabulary(out: sqlite3.Connection) -> tuple[list[str], dict[str, str]]:
-    """The groups, and every weapon name that implies one."""
+    """The groups, and every weapon name that implies one.
+
+    **From the `slug` column, not from un-slugging the ref.** This used to read
+    `ref.removeprefix("w:").replace("-", " ")`, which only worked because a ref
+    *was* the printed name slugified -- the fault #339 fixes, so it had to go
+    with it.
+
+    The obvious replacement was the localisation, and it is wrong: **no weapon
+    has an entry in `names.json`.** A weapon's name is mechanics by this
+    project's reckoning -- thirty are in `sanitise.RULES_TERMS` -- so it was
+    never sent there, and the ref was carrying it instead. Reading
+    `names.get(ref)` therefore returned `None` 117 times out of 117 and emptied
+    this index silently: `power.wields` fell **329 rows to 304** with nothing
+    raising. Caught by stashing the change and rebuilding for a before figure,
+    which is the only reason the number was looked at.
+    """
     groups = sorted({r[0] for r in out.execute("SELECT grp FROM weapon") if r[0]})
     by_name = {
-        ref.removeprefix("w:").replace("-", " "): grp
-        for ref, grp in out.execute("SELECT ref, grp FROM weapon WHERE grp != ''")
+        slug.replace("-", " "): grp
+        for slug, grp in out.execute(
+            "SELECT slug, grp FROM weapon WHERE grp != '' AND slug != ''"
+        )
     }
     return groups, by_name
 

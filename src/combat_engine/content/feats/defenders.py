@@ -275,8 +275,8 @@ def f2602(c: Cast) -> None:
     class's numbers under a generic ref -- and the row that *is* in the
     database spells it out. Both are named so the row is right whichever the
     character ends up holding, and the mismatch itself is filed."""
-    c.weapon_dice("1d10", ref="w:monk-unarmed-strike", on=c.me)
-    c.weapon_dice("1d10", ref="w:monk-unarmed-strike", on=c.me)
+    c.weapon_dice("1d10", ref="w3678", on=c.me)
+    c.weapon_dice("1d10", ref="w3678", on=c.me)
 
 
 #: **The feature has refs after all.** Both of these were marked
@@ -343,7 +343,7 @@ def f3166(c: Cast) -> None:
     me, world = c.me, c.world
 
     def monk_implement(ctx: dict[str, Any]) -> bool:
-        if not any(w.ref == "w:longsword" for w in holding(world, me)):
+        if not any(w.ref == "w3610" for w in holding(world, me)):
             return False
         p = get(ctx.get("power") or "")
         return (
@@ -367,7 +367,7 @@ def f3166(c: Cast) -> None:
         held = holding(world, me)
         return (
             len(held) == 1
-            and held[0].ref == "w:longsword"
+            and held[0].ref == "w3610"
             and not c.wielding("shield")
         )
 

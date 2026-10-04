@@ -259,7 +259,7 @@ def rt_r2_poison_save(c: Cast) -> None:
 @power("rt:r2-hammers", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        out_of_combat=True,
-       proficiency=("w:throwing-hammer", "w:warhammer"))
+       proficiency=("w3606", "w3607"))
 def rt_r2_hammers(c: Cast) -> None:
     """Which weapons a character may pick up is settled when it is built,
     so the whole benefit is the header field `chargen.proficiency` reads.
@@ -300,7 +300,7 @@ _inert("rt:r3-skill-training",
        "training model at all -- a check is the ability modifier plus "
        "half level -- so there is nothing for the +5 to be laid on.")
 _inert("rt:r3-longsword", "Proficiency, which is a build-time sentence.",
-       proficiency=("w:longsword",))
+       proficiency=("w3610",))
 _inert("rt:r3-trance",
        "Four hours of trance for six of sleep. A rest rule; no fight "
        "reaches it.")
@@ -321,7 +321,7 @@ def rt_r3_will(c: Cast) -> None:
 # -- r4 ----------------------------------------------------------------
 
 _inert("rt:r4-elven-bows", "Proficiency, which is a build-time sentence.",
-       proficiency=("w:longbow", "w:shortbow"))
+       proficiency=("w3631", "w3630"))
 _origin("r4", "fey")
 
 

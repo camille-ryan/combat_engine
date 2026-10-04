@@ -19,4 +19,4 @@ def dagger(world: World, eid: int) -> bool:
     gear = world.get(eid, Gear)
     if gear is None or gear.main is None:
         return False
-    return gear.main.group == "dagger" or gear.main.ref == "w:dagger"
+    return gear.main.group == "dagger" or gear.main.ref == "w3594"

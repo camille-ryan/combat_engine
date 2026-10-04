@@ -12,7 +12,7 @@ line the monster corpus actually sits on:
 
     uv run scripts/expect.py --class fighter --level 10
     uv run scripts/expect.py --class fighter --level 1 \\
-        --weapons w:greataxe,w:fullblade --feats f1032
+        --weapons w3612,w3650 --feats f1032
     uv run scripts/expect.py --class rogue --level 5 --rows 12
 
 Nothing here is a pass/fail check. It reports a number so a weight can be set
@@ -137,7 +137,8 @@ def main() -> int:
     ap.add_argument("--class", dest="cls", default="fighter")
     ap.add_argument("--level", type=int, default=1)
     ap.add_argument("--race", default="", help="pin the race; omit to let the dealer choose")
-    ap.add_argument("--weapons", default="", help="comma-separated refs, one column each")
+    ap.add_argument("--weapons", default="",
+                    help="comma-separated refs or weapon names, one column each")
     ap.add_argument("--feats", default="", help="comma-separated refs, given to the character")
     ap.add_argument("--rows", type=int, default=20, help="how many rows to print")
     ap.add_argument("--scored", action="store_true",
@@ -151,7 +152,12 @@ def main() -> int:
     chargen.SCORED_CHOICES = args.scored
 
     feats = [f for f in args.feats.split(",") if f]
-    weapons = [w for w in args.weapons.split(",") if w]
+    # **A name as well as a ref**, because #339 made the ref the compendium id
+    # and nobody can guess `w3612`. The slug is the weapon's printed word and is
+    # mechanics here, so it is a fair thing to type on a command line.
+    by_slug = {w.slug: w.ref for w in chargen.PRINTED.values() if w.slug}
+    by_slug |= {w.slug.replace("-", " "): w.ref for w in chargen.PRINTED.values() if w.slug}
+    weapons = [by_slug.get(w.strip(), w.strip()) for w in args.weapons.split(",") if w]
     hp = 24 + 8 * args.level
     started = time.perf_counter()
 
