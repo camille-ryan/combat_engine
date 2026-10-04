@@ -146,8 +146,18 @@ _BODY_STARTS = re.compile(r"\b(?:Attack|Hit|Miss|Effect|Trigger|Requirement)\s*:
 
 #: `Melee or Ranged 10` -- two shapes on one line, the first with no number of
 #: its own because it means "as far as the weapon in hand reaches".
+#: **The number may sit between the two words.** This required them adjacent, so
+#: `Ranged 10 or melee`, `Melee 1 or Ranged` and `Ranged 5/10 or melee` did not
+#: match -- 14 cards against the 83 that print the words together -- and
+#: `_card_range` read each as a plain ranged line, then reported a correct
+#: `MeleeOrRanged` header as "reach melee but the card says ranged". Found by a
+#: level-6 wave that checked its header was right and said so instead of changing
+#: it, which is the only reason it surfaced rather than becoming a wrong row.
+#:
+#: The gap is deliberately small -- up to a range band and nothing more -- so a
+#: sentence that merely mentions both words cannot match across a clause.
 _EITHER = re.compile(
-    r"\b(?:melee\s+or\s+ranged|ranged\s+or\s+melee)\b", re.I
+    r"\b(?:melee|ranged)\b(?:\s+\d+(?:/\d+)?)?\s+or\s+(?:melee|ranged)\b", re.I
 )
 
 #: `encounter` in this phrase is a duration and never a usage.
@@ -190,8 +200,21 @@ _DEFENCES = {"ac": "AC", "armor class": "AC",
 #:
 #: These are not excused, they are **queued**: #358.
 KNOWN = {
-    "m302a2": "the card prints At-Will (3/encounter) -- at-will with a cap, "
-              "which `usage` alone cannot say; wants `uses=3`",
+    # **At-will with a cap, which one `usage` value cannot say.** The card prints
+    # `At-Will (N/encounter)`; the row writes `usage=ENCOUNTER, uses=N` because
+    # `dsl.usable` only consults `uses` when the usage is *not* at-will
+    # (`dsl.py:1611`), so declaring the printed word would make the cap
+    # decoration. Both rows already do this -- the waiver is for the label
+    # disagreeing, not for anything left undone. An earlier version of this entry
+    # read "wants `uses=3`", which sounded like a gap when the row had it.
+    #
+    # Exactly two cards in 13,432 print this shape, so it is a pair of waivers
+    # rather than a feature; `Usage.AT_WILL` plus a respected `uses` would be the
+    # real fix and is not worth it for two.
+    "m302a2": "the card prints At-Will (3/encounter); the row says "
+              "`usage=ENCOUNTER, uses=3` so the cap is enforced",
+    "m6011a1": "the card prints At-Will (6/encounter); the row says "
+               "`usage=ENCOUNTER, uses=6` so the cap is enforced",
     "m476a2": "the card's parenthetical says at-will and the header says "
               "encounter; the row is a standing modifier, so at-will looks right",
     "m4950a3": "the card prints `Melee 0` -- the square the creature is moving "
