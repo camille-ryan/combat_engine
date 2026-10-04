@@ -574,12 +574,14 @@ def ordinary(word: str) -> bool:
 
     **A closed compound is not tested**, and the reason is worth keeping:
     splitting a word into two dictionary halves does clear `shortcut` and
-    `lockdown`, and it equally clears `runepriest`, `swordmage`,
-    `battlemind`, `weaponmaster` and `winterkin` -- every one of which is a
-    printed name, because an invented name in this corpus is very often two
-    ordinary words joined. A rule that cannot tell those apart is worse than
-    the two coincidences it would fix, so the coincidences go in `ALLOWED`
-    having been read, and this stays strict. A hyphen *is* honoured, because
+    `lockdown`, and it equally clears **five class and race names** in this
+    corpus -- each one two ordinary words joined, which is how an invented
+    name in this genre is very often built. A rule that cannot tell those
+    apart is worse than the two coincidences it would fix, so the
+    coincidences go in `ALLOWED` having been read, and this stays strict.
+    (The five were spelled out here until #341; they are names, so they
+    belong in `localization/` and the count makes the point without them.)
+    A hyphen *is* honoured, because
     `web2a` lists hyphenated entries and the hyphen is the author's own signal
     that the parts are separate words.
     """

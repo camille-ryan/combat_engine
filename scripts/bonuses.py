@@ -71,9 +71,13 @@ MECHANICS = ("cover", "shield", "proficiency", "concealment")
 #: instrument exists to avoid making. It fails the useful way round: a
 #: row that stops needing its waiver is reported, not silently excused.
 BORROWED = {
-    ("f2095", "racial"),   # extends rt:r39-bold's save bonus
-    ("f3163", "racial"),   # replaces rt:r24-heedless-charge's +2
-    ("f2398", "racial"),   # raises rt:r8-bloodied-enemies' +1 to +2
+    # `rt:r39-...` was here and race 39 does not exist in the compendium at
+    # all -- the feat's own prerequisite says r5. A ref minted from a printed
+    # label cannot be checked against anything, which is how a typo in one
+    # survived in a comment. #341.
+    ("f2095", "racial"),   # extends rt:r5-t0's save bonus
+    ("f3163", "racial"),   # replaces rt:r24-t2's +2
+    ("f2398", "racial"),   # raises rt:r8-t0' +1 to +2
 }
 
 #: Rows where a `c.bonus` call is **not** the card's printed bonus, so

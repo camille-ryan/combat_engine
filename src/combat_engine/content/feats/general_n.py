@@ -115,7 +115,7 @@ from combat_engine.engine.query import (
 
 #: A racial power or trait the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
-#: The `rt:r6-dilettante` choice: an at-will borrowed from another
+#: The `rt:r6-t3` choice: an at-will borrowed from another
 #: class, picked at build time and recorded nowhere. The same symbol
 #: `features/racial._option` carries.
 RACE_OPTION = ("c.race_option()",)
@@ -1635,7 +1635,7 @@ def f2408(c: Cast) -> None:
 @power("f2442", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=RACE_OPTION)
 def f2442(c: Cast) -> None:
-    """Re-aimed: the trait is `rt:r6-dilettante` and it is declared. The
+    """Re-aimed: the trait is `rt:r6-t3` and it is declared. The
     card it hands over is a 1st-level at-will borrowed from another
     class, chosen when the character is built, and nothing records the
     choice -- so there is no ref to hand a second use to."""

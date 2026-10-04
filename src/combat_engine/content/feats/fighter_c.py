@@ -823,7 +823,7 @@ def f2472(c: Cast) -> None:
     """A minor action rather than a trait, which is what the card prints.
     The mark and the range are ordinary, and `c.expend_row` would charge
     the price -- re-aimed off that half. What is left is the row to
-    charge: the cantrip is granted by `rt:r20-master-trickster` and the
+    charge: the cantrip is granted by `rt:r20-t2` and the
     grant names it in prose, so there is no ref to expend."""
 
 

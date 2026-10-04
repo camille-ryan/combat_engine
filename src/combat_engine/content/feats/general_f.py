@@ -407,7 +407,7 @@ def f602(c: Cast) -> None:
     written against exactly that.
 
     What is left is the whole payload. The bonus is +3 *of a type chosen
-    by the manifestation*, and `rt:r33-manifestation` is the declared
+    by the manifestation*, and `rt:r33-t0` is the declared
     row whose own marker says why: thirteen manifestations, one choice,
     recorded nowhere. `c.element` reads a build's element and a genasi
     has none, so the type has no source and there is no bonus to lay."""

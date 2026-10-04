@@ -105,7 +105,7 @@ ITEM = "item"
 RAMPAGE = "cf:barbarian-f3"
 
 #: One of r3's racial traits, which only an r3 character carries.
-R3 = "rt:r3-trance"
+R3 = "rt:r3-t5"
 
 
 # -- shared reading of the board --------------------------------------------

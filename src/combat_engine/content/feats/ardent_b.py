@@ -370,7 +370,7 @@ def f2786(c: Cast) -> None:
 #: The racial trait this rides on is a declared row and its whole body is
 #: an aura filed under its own ref, so "an ally benefiting from it" is a
 #: membership question rather than a printed name.
-_GROUP_DIPLOMACY = "rt:r6-group-diplomacy"
+_GROUP_DIPLOMACY = "rt:r6-t1"
 
 
 def _ally_in_my_trait_aura(world: Any, me: int, ev: Any) -> bool:
@@ -402,7 +402,7 @@ def f3115(c: Cast) -> None:
     """The trait is a row and it lays an aura, so "an ally benefiting from
     it" is answerable.
 
-    `rt:r6-group-diplomacy` is declared in `features/racial.py` and its
+    `rt:r6-t1` is declared in `features/racial.py` and its
     whole body is `c.grants_in(c.aura(10, label=<its ref>), ...)`, which
     is why the label is the thing to ask for -- `c.in_my_aura` narrows to
     one aura, and this character may be standing in several of its own.

@@ -15,7 +15,7 @@ there is no independent mode and no leash to lengthen.
 **An `x_` token is the extractor's, not a missing row.** Two feats here
 name one -- `x_m1031a4`, `x_m5139a3` -- and neither matches a ref. The
 race's own spec line resolves both: it reads "p6188 : You have the
-x_m5139a3 power", and the trait is `rt:r8-bloodied-enemies`. Read the
+x_m5139a3 power", and the trait is `rt:r8-t0`. Read the
 race before concluding a racial thing is undeclared.
 
 Four things this batch found that were thought to be gaps.
@@ -425,7 +425,7 @@ def f2803(c: Cast) -> None:
 def f2398(c: Cast) -> None:
     """The racial attack bonus, raised against the quarry.
 
-    The trait the card names has a row -- `rt:r8-bloodied-enemies`,
+    The trait the card names has a row -- `rt:r8-t0`,
     which lays +1 `kind="racial"` gated on the target being bloodied.
     Two bonuses of one kind do not add and the larger wins, so
     "increases to +2" is a second racial bonus of 2 and not a second +1.

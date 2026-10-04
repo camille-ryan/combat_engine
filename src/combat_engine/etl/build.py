@@ -222,6 +222,23 @@ CREATE TABLE race (
   ref TEXT PRIMARY KEY, id INTEGER, size TEXT, scores TEXT, spec TEXT
 );
 
+-- One racial trait, as the page prints it: a labelled line inside the race's
+-- own block. These were **prose and nothing else** until #341 -- so content
+-- needing a stable name for one invented a ref out of the printed label, 94 of
+-- them, which put a printed name in tracked source and left every declaration
+-- with nothing a checker could compare it against.
+--
+-- `ref` is positional (`rt:r44-t2`), mirroring `cf:<class>-<build>-f<i>`: the
+-- identity is where the trait sits on the page, never what it is called.
+-- `slug` is the printed label, lowered and hyphenated, and is a **matching
+-- key** rather than an identity -- the distinction the weapon work settled, and
+-- the thing that lets content's 94 invented refs be re-pointed mechanically.
+CREATE TABLE racial_trait (
+  ref TEXT PRIMARY KEY, race TEXT, ord INTEGER, slug TEXT, spec TEXT
+);
+CREATE INDEX racial_trait_race ON racial_trait(race);
+CREATE INDEX racial_trait_slug ON racial_trait(slug);
+
 -- A prerequisite clause that is a printed name rather than a mechanic: a
 -- race, a deity, a regional background. Keyed on a **global** dictionary
 -- of clause texts rather than per feat, so that answering "must worship
@@ -335,6 +352,8 @@ class Report:
     feats: int = 0
     feat_cards: int = 0
     races: int = 0
+    racial_traits: int = 0
+    traits_are_powers: int = 0
     racial: int = 0
     themed: int = 0
     talents: int = 0
@@ -381,6 +400,10 @@ class Report:
             f"  unparsed    {self.unparsed:6d}  (prerequisite clauses left opaque)",
             f"races         {self.races:6d}",
             f"  racial rows {self.racial:6d}  (a power a race grants, never imported)",
+            f"  traits      {self.racial_traits:6d}  "
+            f"(a printed trait, a row at last -- #341)",
+            f"  ...as powers{self.traits_are_powers:6d}  "
+            f"(printed twice; the card is the row)",
             f"theme rows    {self.themed:6d}  (a power a theme grants, never imported)",
             f"  wild talents{self.talents:6d}  (the cantrips no owner is printed for)",
             f"prereq terms  {self.terms:6d}  (a printed name a prerequisite asks for)",

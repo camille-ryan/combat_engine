@@ -1611,12 +1611,12 @@ def f1063(c: Cast) -> None:
 def f1066(c: Cast) -> None:
     """Both rolls of the basic attack the racial feature hands out.
 
-    `rt:r24-ferocity` calls `c.basic`, so the swing carries that ref and
+    `rt:r24-t0` calls `c.basic`, so the swing carries that ref and
     the gate is the ref rather than "a basic attack", which would also
     pay for every ordinary one. No type word is printed.
     """
     gate = lambda ctx: (  # noqa: E731
-        ctx.get("granted_via") == "rt:r24-ferocity"
+        ctx.get("granted_via") == "rt:r24-t0"
         and ctx.get("granted_by") == c.me
     )
     c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER, when=gate)

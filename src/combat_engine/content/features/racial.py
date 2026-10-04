@@ -91,9 +91,12 @@ from combat_engine.engine.query import concealment_of, cover_between, flanked_by
 #: A trait is armed once at the start of the fight and holds all fight.
 _HOLDS = When.ENCOUNTER
 
-#: The conditions the "defended mind" family of saves names.
+#: The three conditions the mind-defence family of saves names. Spelled by
+#: condition rather than by the family's printed name, which belongs in
+#: `localization/` -- `leaks.py` reported it here the moment racial traits got
+#: rows and their labels got indexed. #341.
 _MIND = frozenset({Condition.DAZED, Condition.DOMINATED, Condition.STUNNED})
-#: And the one the "elusive" family names.
+#: And the three the movement-freeing family names.
 _HELD = frozenset({Condition.IMMOBILIZED, Condition.RESTRAINED, Condition.SLOWED})
 
 
@@ -224,9 +227,9 @@ def _inert(ref: str, why: str, **header: Any) -> None:
 # -- r1 ----------------------------------------------------------------
 
 
-@power("rt:r1-surge-value", level=0, cls="", usage=AT_WILL,
+@power("rt:r1-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r1_surge_value(c: Cast) -> None:
+def rt_r1_t0(c: Cast) -> None:
     """A quarter of maximum hit points is what `query.surge_value`
     already answers; the Constitution modifier is laid on top of it.
     Untyped -- the page prints no word in front of it and does not call
@@ -234,9 +237,9 @@ def rt_r1_surge_value(c: Cast) -> None:
     c.bonus("surge_value", c.con_mod, on=c.me, until=_HOLDS)
 
 
-@power("rt:r1-bloodied-attack", level=0, cls="", usage=AT_WILL,
+@power("rt:r1-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r1_bloodied_attack(c: Cast) -> None:
+def rt_r1_t1(c: Cast) -> None:
     """Gated rather than laid when the blooding happens: a trait is armed
     once and the condition comes and goes with healing."""
     me = c.me
@@ -247,29 +250,29 @@ def rt_r1_bloodied_attack(c: Cast) -> None:
 # -- r2 ----------------------------------------------------------------
 
 
-@power("rt:r2-poison-save", level=0, cls="", usage=AT_WILL,
+@power("rt:r2-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r2_poison_save(c: Cast) -> None:
+def rt_r2_t0(c: Cast) -> None:
     """"Against poison" is read off the keywords of the row that laid the
     effect, which is what the save context carries."""
     c.bonus("save", 5, kind="racial", on=c.me, until=_HOLDS,
             when=_keyword(Keyword.POISON))
 
 
-@power("rt:r2-hammers", level=0, cls="", usage=AT_WILL,
+@power("rt:r2-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        out_of_combat=True,
        proficiency=("w3606", "w3607"))
-def rt_r2_hammers(c: Cast) -> None:
+def rt_r2_t2(c: Cast) -> None:
     """Which weapons a character may pick up is settled when it is built,
     so the whole benefit is the header field `chargen.proficiency` reads.
     The body has nothing to do in a fight."""
 
 
-@power("rt:r2-armour-speed", level=0, cls="", usage=AT_WILL,
+@power("rt:r2-t3", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        dropped=("Gear.load",))
-def rt_r2_armour_speed(c: Cast) -> None:
+def rt_r2_t3(c: Cast) -> None:
     """The armour penalty is a square taken off in `chargen.spawn`, so
     giving it back is a square of speed rather than a rule about armour --
     and it is laid only when there is a penalty to undo, or a dwarf in
@@ -279,10 +282,10 @@ def rt_r2_armour_speed(c: Cast) -> None:
         c.bonus("speed", 1, on=c.me, until=_HOLDS)
 
 
-@power("rt:r2-stand-your-ground", level=0, cls="", usage=AT_WILL,
+@power("rt:r2-t4", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        dropped=("query.knocked_prone()",))
-def rt_r2_stand_your_ground(c: Cast) -> None:
+def rt_r2_t4(c: Cast) -> None:
     """One square less of any forced move is exactly `c.resist_forced`.
 
     The prone half is dropped: `ConditionApplied` says who applied the
@@ -295,21 +298,21 @@ def rt_r2_stand_your_ground(c: Cast) -> None:
 
 # -- r3 ----------------------------------------------------------------
 
-_inert("rt:r3-skill-training",
+_inert("rt:r3-t0",
        "Training in a skill of your choice. `engine/skills.py` has no "
        "training model at all -- a check is the ability modifier plus "
        "half level -- so there is nothing for the +5 to be laid on.")
-_inert("rt:r3-longsword", "Proficiency, which is a build-time sentence.",
+_inert("rt:r3-t1", "Proficiency, which is a build-time sentence.",
        proficiency=("w3610",))
-_inert("rt:r3-trance",
+_inert("rt:r3-t5",
        "Four hours of trance for six of sleep. A rest rule; no fight "
        "reaches it.")
 _origin("r3", "fey")
 
 
-@power("rt:r3-will", level=0, cls="", usage=AT_WILL, action=ActionType.NONE,
+@power("rt:r3-t2", level=0, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
-def rt_r3_will(c: Cast) -> None:
+def rt_r3_t2(c: Cast) -> None:
     """Both halves are printed racial, so neither stacks with another
     racial bonus to the same thing."""
     me = c.me
@@ -320,15 +323,15 @@ def rt_r3_will(c: Cast) -> None:
 
 # -- r4 ----------------------------------------------------------------
 
-_inert("rt:r4-elven-bows", "Proficiency, which is a build-time sentence.",
+_inert("rt:r4-t1", "Proficiency, which is a build-time sentence.",
        proficiency=("w3631", "w3630"))
 _origin("r4", "fey")
 
 
-@power("rt:r4-group-perception", level=0, cls="", usage=AT_WILL,
+@power("rt:r4-t3", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        dropped=("c.grants_in(unless=)",))
-def rt_r4_group_perception(c: Cast) -> None:
+def rt_r4_t3(c: Cast) -> None:
     """An aura and not a snapshot: the printed line is about standing
     within 5 squares, so it has to end when an ally walks out, which is
     what `c.grants_in` says and a plain `c.bonus` cannot.
@@ -345,10 +348,10 @@ def rt_r4_group_perception(c: Cast) -> None:
                 "skill:perception", 1, side="ally", kind="racial")
 
 
-@power("rt:r4-wild-step", level=0, cls="", usage=AT_WILL,
+@power("rt:r4-t4", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        todo=("c.ignores_difficult(shift=)",))
-def rt_r4_wild_step(c: Cast) -> None:
+def rt_r4_t4(c: Cast) -> None:
     """`c.ignores_difficult` is per terrain kind and board-wide, and the
     printed line is per *kind of move*. Laid blanket it would exempt a
     full run as well as a shift, which is a much larger rule.
@@ -368,17 +371,17 @@ def rt_r4_wild_step(c: Cast) -> None:
 # -- r5 ----------------------------------------------------------------
 
 
-@power("rt:r5-fear-save", level=0, cls="", usage=AT_WILL,
+@power("rt:r5-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r5_fear_save(c: Cast) -> None:
+def rt_r5_t0(c: Cast) -> None:
     """Read off the keywords of the row that laid the effect."""
     c.bonus("save", 5, kind="racial", on=c.me, until=_HOLDS,
             when=_keyword(Keyword.FEAR))
 
 
-@power("rt:r5-nimble-reaction", level=0, cls="", usage=AT_WILL,
+@power("rt:r5-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r5_nimble_reaction(c: Cast) -> None:
+def rt_r5_t1(c: Cast) -> None:
     """The attack context carries `opportunity`, so the narrowing is a
     gate rather than a guess at which row an opportunity attack is."""
     c.bonus(AC, 2, kind="racial", on=c.me, until=_HOLDS,
@@ -387,15 +390,15 @@ def rt_r5_nimble_reaction(c: Cast) -> None:
 
 # -- r6 ----------------------------------------------------------------
 
-_inert("rt:r6-dual-heritage",
+_inert("rt:r6-t0",
        "Which feats a character may take. `chargen.meets` reads one race "
        "off `Character.race`; counting as two is a second field there, "
        "not a thing that happens in a fight.")
 
 
-@power("rt:r6-dilettante", level=0, cls="", usage=AT_WILL,
+@power("rt:r6-t3", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r6_dilettante(c: Cast) -> None:
+def rt_r6_t3(c: Cast) -> None:
     """"A 1st-level at-will attack power from a class different from
     yours, which you can use as an encounter power" -- the multiclass
     sentence, and `c.borrow_row` is the verb nineteen feats already say
@@ -425,9 +428,9 @@ def rt_r6_dilettante(c: Cast) -> None:
     c.borrow_row(among=among, uses=1)
 
 
-@power("rt:r6-group-diplomacy", level=0, cls="", usage=AT_WILL,
+@power("rt:r6-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r6_group_diplomacy(c: Cast) -> None:
+def rt_r6_t1(c: Cast) -> None:
     """An aura for the same reason the perception one is: the bonus is
     about where an ally is standing now."""
     c.grants_in(c.aura(10, label=c.ref, until=_HOLDS),
@@ -436,17 +439,17 @@ def rt_r6_group_diplomacy(c: Cast) -> None:
 
 # -- r7 ----------------------------------------------------------------
 
-_inert("rt:r7-bonus-feat",
+_inert("rt:r7-t0",
        "An extra feat at 1st level. Already true: `chargen.feat_slots` "
        "deals this race one more, which is where a build-time rule "
        "belongs.")
-_inert("rt:r7-bonus-skill",
+_inert("rt:r7-t1",
        "Training in one more skill, and there is no training model.")
 
 
-@power("rt:r7-bonus-at-will", level=0, cls="", usage=AT_WILL,
+@power("rt:r7-t4", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r7_bonus_at_will(c: Cast) -> None:
+def rt_r7_t4(c: Cast) -> None:
     """"One extra 1st-level at-will attack power from your class."
 
     `c.borrow_row` reads that set off the registry by class, level and
@@ -455,7 +458,7 @@ def rt_r7_bonus_at_will(c: Cast) -> None:
     benefit: an extra one, every turn.
 
     The other leg of the fork is the racial power the page offers
-    instead, read off `Powers.known` the way `rt:r6-dilettante` reads it.
+    instead, read off `Powers.known` the way `rt:r6-t3` reads it.
     """
     if _holds(c, "p13213"):
         return
@@ -464,9 +467,9 @@ def rt_r7_bonus_at_will(c: Cast) -> None:
         c.borrow_row(mine, level=1, usage=AT_WILL, uses=0)
 
 
-@power("rt:r7-defences", level=0, cls="", usage=AT_WILL,
+@power("rt:r7-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r7_defences(c: Cast) -> None:
+def rt_r7_t2(c: Cast) -> None:
     """Three separate modifiers, because a defence bonus is keyed by the
     defence it is a bonus to."""
     me = c.me
@@ -477,9 +480,9 @@ def rt_r7_defences(c: Cast) -> None:
 # -- r8 ----------------------------------------------------------------
 
 
-@power("rt:r8-bloodied-enemies", level=0, cls="", usage=AT_WILL,
+@power("rt:r8-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r8_bloodied_enemies(c: Cast) -> None:
+def rt_r8_t0(c: Cast) -> None:
     """The attack context names its target, so "against bloodied enemies"
     is asked of the creature being swung at rather than of the swinger."""
     me = c.me
@@ -489,9 +492,9 @@ def rt_r8_bloodied_enemies(c: Cast) -> None:
     )
 
 
-@power("rt:r8-fire-resist", level=0, cls="", usage=AT_WILL,
+@power("rt:r8-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r8_fire_resist(c: Cast) -> None:
+def rt_r8_t1(c: Cast) -> None:
     """Five plus half level, which is the printed formula and not a
     number to transcribe."""
     c.resist(5 + c.level // 2, DamageType.FIRE, on=c.me, until=_HOLDS)
@@ -500,10 +503,10 @@ def rt_r8_fire_resist(c: Cast) -> None:
 # -- r10 ---------------------------------------------------------------
 
 
-@power("rt:r10-oversized", level=0, cls="", usage=AT_WILL,
+@power("rt:r10-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        todo=("c.oversized()",))
-def rt_r10_oversized(c: Cast) -> None:
+def rt_r10_t0(c: Cast) -> None:
     """Wielding a weapon a size up. `Weapon` carries no size and nothing
     refuses one for being too big, so the permission has nothing to
     permit."""
@@ -514,25 +517,25 @@ def rt_r10_oversized(c: Cast) -> None:
 _origin("r14", "shapechanger")
 
 
-@power("rt:r14-will", level=0, cls="", usage=AT_WILL,
+@power("rt:r14-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r14_will(c: Cast) -> None:
+def rt_r14_t2(c: Cast) -> None:
     """A flat racial bonus to one defence."""
     c.bonus(WILL, 1, kind="racial", on=c.me, until=_HOLDS)
 
 
 # -- r16 ---------------------------------------------------------------
 
-_inert("rt:r16-trance", "A rest rule; no fight reaches it.")
+_inert("rt:r16-t2", "A rest rule; no fight reaches it.")
 _origin("r16", "fey")
 
 
 # -- r17 ---------------------------------------------------------------
 
 
-@power("rt:r17-willpower", level=0, cls="", usage=AT_WILL,
+@power("rt:r17-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r17_willpower(c: Cast) -> None:
+def rt_r17_t1(c: Cast) -> None:
     """**Untyped, both halves.** The card prints no word in front of
     "bonus" here where its cousins print "racial", so these two stack
     with a racial bonus to the same thing and the others do not."""
@@ -544,20 +547,20 @@ def rt_r17_willpower(c: Cast) -> None:
 # -- r18 ---------------------------------------------------------------
 
 
-@power("rt:r18-defended-mind", level=0, cls="", usage=AT_WILL,
+@power("rt:r18-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r18_defended_mind(c: Cast) -> None:
+def rt_r18_t1(c: Cast) -> None:
     """The save context carries the conditions the effect holds, so the
     three the card names are a gate."""
     c.bonus("save", 2, kind="racial", on=c.me, until=_HOLDS,
             when=_against(*_MIND))
 
 
-@power("rt:r18-shifting-fortunes", level=0, cls="", usage=AT_WILL,
+@power("rt:r18-t3", level=0, cls="", usage=AT_WILL,
        action=ActionType.FREE, reach=PERSONAL, target=NO_TARGET,
        trigger="you use your second wind",
        on=Trigger(SecondWind, about_me, "you use your second wind"))
-def rt_r18_shifting_fortunes(c: Cast) -> None:
+def rt_r18_t3(c: Cast) -> None:
     """`SecondWind` is the event that exists for exactly this sentence;
     `SurgeSpent` is not a substitute, since a dozen leader rows spend a
     surge without a second wind being taken."""
@@ -567,18 +570,18 @@ def rt_r18_shifting_fortunes(c: Cast) -> None:
 # -- r19 ---------------------------------------------------------------
 
 
-@power("rt:r19-blood-fury", level=0, cls="", usage=AT_WILL,
+@power("rt:r19-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r19_blood_fury(c: Cast) -> None:
+def rt_r19_t0(c: Cast) -> None:
     """Untyped: the card prints no word in front of "bonus". The 21st
     level step is paragon and out of scope."""
     me = c.me
     c.bonus("damage", 2, on=me, until=_HOLDS, when=lambda ctx: c.bloodied(me))
 
 
-@power("rt:r19-pack-attack", level=0, cls="", usage=AT_WILL,
+@power("rt:r19-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r19_pack_attack(c: Cast) -> None:
+def rt_r19_t2(c: Cast) -> None:
     """The damage context carries the target and whether the attack was
     ranged, which is both halves of the printed line. `c.allies` leaves
     the character itself out, which is what "two or more of your allies"
@@ -596,25 +599,25 @@ def rt_r19_pack_attack(c: Cast) -> None:
 
 # -- r20 ---------------------------------------------------------------
 
-_inert("rt:r20-master-trickster",
+_inert("rt:r20-t2",
        "A wizard cantrip once an encounter, and every cantrip in the "
        "tree is itself out of combat.")
 _origin("r20", "fey")
 
 
-@power("rt:r20-illusion-save", level=0, cls="", usage=AT_WILL,
+@power("rt:r20-t4", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r20_illusion_save(c: Cast) -> None:
+def rt_r20_t4(c: Cast) -> None:
     """Read off the keywords of the row that laid the effect."""
     c.bonus("save", 5, kind="racial", on=c.me, until=_HOLDS,
             when=_keyword(Keyword.ILLUSION))
 
 
-@power("rt:r20-reactive-stealth", level=0, cls="", usage=AT_WILL,
+@power("rt:r20-t3", level=0, cls="", usage=AT_WILL,
        action=ActionType.FREE, reach=PERSONAL, target=NO_TARGET,
        trigger="you make an initiative check",
        on=Trigger(InitiativeRolled, about_me, "you make an initiative check"))
-def rt_r20_reactive_stealth(c: Cast) -> None:
+def rt_r20_t3(c: Cast) -> None:
     """Written as a **triggered** row rather than a trait, which is what
     reaches the moment the card names.
 
@@ -648,9 +651,9 @@ def rt_r20_reactive_stealth(c: Cast) -> None:
 # -- r21 ---------------------------------------------------------------
 
 
-@power("rt:r21-reflexes", level=0, cls="", usage=AT_WILL,
+@power("rt:r21-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r21_reflexes(c: Cast) -> None:
+def rt_r21_t0(c: Cast) -> None:
     """A flat racial bonus to one defence."""
     c.bonus(REF, 1, kind="racial", on=c.me, until=_HOLDS)
 
@@ -658,9 +661,9 @@ def rt_r21_reflexes(c: Cast) -> None:
 # -- r22 ---------------------------------------------------------------
 
 
-@power("rt:r22-phalanx", level=0, cls="", usage=AT_WILL,
+@power("rt:r22-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r22_phalanx(c: Cast) -> None:
+def rt_r22_t2(c: Cast) -> None:
     """Both shields and the adjacency are asked when the bonus is read
     rather than when it is laid: the line is about where the two of them
     are standing at the moment of the blow."""
@@ -679,9 +682,9 @@ def rt_r22_phalanx(c: Cast) -> None:
 _origin("r23", "reptile")
 
 
-@power("rt:r23-trap-sense", level=0, cls="", usage=AT_WILL,
+@power("rt:r23-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r23_trap_sense(c: Cast) -> None:
+def rt_r23_t2(c: Cast) -> None:
     """The attack context names the attacker, and `c.is_trap` is the
     question the engine already answers about one -- a trap is a thing on
     the board with no `Health` and no `Side`."""
@@ -698,12 +701,12 @@ def rt_r23_trap_sense(c: Cast) -> None:
 # -- r24 ---------------------------------------------------------------
 
 
-@power("rt:r24-ferocity", level=0, cls="", usage=AT_WILL,
+@power("rt:r24-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL,
        target=NO_TARGET,
        trigger="you drop to 0 hit points or fewer",
        on=Trigger(Dropped, about_me, "you drop to 0 hit points or fewer"))
-def rt_r24_ferocity(c: Cast) -> None:
+def rt_r24_t0(c: Cast) -> None:
     """An interrupt, so the swing happens while the character is still
     up. A melee basic needs somebody in reach and there may be nobody --
     a death throe with no neighbour simply does not land."""
@@ -712,10 +715,10 @@ def rt_r24_ferocity(c: Cast) -> None:
         c.basic(on=near[0])
 
 
-@power("rt:r24-heedless-charge", level=0, cls="", usage=AT_WILL,
+@power("rt:r24-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        dropped=("query.charging()",))
-def rt_r24_heedless_charge(c: Cast) -> None:
+def rt_r24_t2(c: Cast) -> None:
     """The attack context's `charge` is the *attacker's* charge, and the
     printed narrowing is to opportunity attacks provoked during **your**
     charge -- which nothing records. Widened to every opportunity attack
@@ -734,9 +737,9 @@ def rt_r24_heedless_charge(c: Cast) -> None:
 # -- r25 ---------------------------------------------------------------
 
 
-@power("rt:r25-running-charge", level=0, cls="", usage=AT_WILL,
+@power("rt:r25-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r25_running_charge(c: Cast) -> None:
+def rt_r25_t0(c: Cast) -> None:
     """`query.speed` is handed `{"charge": True}` by the three places
     that measure a charge's run and nothing by everything else, so the
     gate is the whole of the printed narrowing."""
@@ -749,9 +752,9 @@ def rt_r25_running_charge(c: Cast) -> None:
 _origin("r26", "shadow")
 
 
-@power("rt:r26-winterkin", level=0, cls="", usage=AT_WILL,
+@power("rt:r26-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r26_winterkin(c: Cast) -> None:
+def rt_r26_t2(c: Cast) -> None:
     """A death save is labelled `death` in the save context, which is how
     "to death saving throws" is kept apart from a blanket save bonus."""
     me = c.me
@@ -764,22 +767,22 @@ def rt_r26_winterkin(c: Cast) -> None:
 
 # -- r28 ---------------------------------------------------------------
 
-_inert("rt:r28-living-construct",
+_inert("rt:r28-t0",
        "No eating, drinking, breathing or sleeping. None of the four is "
        "modelled and the trait says all other effects apply normally.")
-_inert("rt:r28-unsleeping-watcher", "A rest rule; no fight reaches it.")
+_inert("rt:r28-t1", "A rest rule; no fight reaches it.")
 
 
-@power("rt:r28-mind", level=0, cls="", usage=AT_WILL,
+@power("rt:r28-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r28_mind(c: Cast) -> None:
+def rt_r28_t2(c: Cast) -> None:
     """A flat racial bonus to one defence."""
     c.bonus(WILL, 1, kind="racial", on=c.me, until=_HOLDS)
 
 
-@power("rt:r28-resilience", level=0, cls="", usage=AT_WILL,
+@power("rt:r28-t3", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r28_resilience(c: Cast) -> None:
+def rt_r28_t3(c: Cast) -> None:
     """Two printed halves. The first is a gate: the save context says
     whether the effect carries ongoing damage.
 
@@ -836,9 +839,9 @@ _MANIFESTATIONS = (
 )
 
 
-@power("rt:r33-manifestation", level=0, cls="", usage=AT_WILL,
+@power("rt:r33-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r33_manifestation(c: Cast) -> None:
+def rt_r33_t0(c: Cast) -> None:
     """Thirteen legs, and the one taken is the one `Powers.known` holds.
 
     This carried `c.race_option()` on the grounds that a choice made when
@@ -847,7 +850,7 @@ def rt_r33_manifestation(c: Cast) -> None:
     `RaceLine.granted` already puts that one ref and no other in
     `Powers.known`. Nothing new had to be recorded.
 
-    Resistances are flat 5 through heroic, as `rt:r49-crystalline-mind`'s
+    Resistances are flat 5 through heroic, as `rt:r49-t0`'s
     is: each block prints a step at 11th and another at 21st and both are
     out of scope. Breathing underwater and shrugging off the weather are
     printed on three of these legs and are not written -- no fight
@@ -908,9 +911,9 @@ def rt_r33_manifestation(c: Cast) -> None:
 _origin("r35", "immortal")
 
 
-@power("rt:r35-astral-majesty", level=0, cls="", usage=AT_WILL,
+@power("rt:r35-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r35_astral_majesty(c: Cast) -> None:
+def rt_r35_t0(c: Cast) -> None:
     """Untyped -- the card prints no word before "bonus" -- and gated on
     the attacker, which the attack context names."""
     me = c.me
@@ -923,9 +926,9 @@ def rt_r35_astral_majesty(c: Cast) -> None:
         c.bonus(defence, 1, on=me, until=_HOLDS, when=by_the_wounded)
 
 
-@power("rt:r35-astral-resistance", level=0, cls="", usage=AT_WILL,
+@power("rt:r35-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r35_astral_resistance(c: Cast) -> None:
+def rt_r35_t1(c: Cast) -> None:
     """Two resistances, not one of two types: the card names both."""
     me = c.me
     amount = 5 + c.level // 2
@@ -936,20 +939,20 @@ def rt_r35_astral_resistance(c: Cast) -> None:
 # -- r36 ---------------------------------------------------------------
 
 
-@power("rt:r36-resilience", level=0, cls="", usage=ENCOUNTER,
+@power("rt:r36-t1", level=0, cls="", usage=ENCOUNTER,
        action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
        trigger="the first time you are bloodied during an encounter",
        on=Trigger(Bloodied, about_me, "you are bloodied"))
-def rt_r36_resilience(c: Cast) -> None:
+def rt_r36_t1(c: Cast) -> None:
     """`ENCOUNTER` is what "the first time" means: the row is refused the
     second time its trigger fires. The 11th and 21st level steps are out
     of scope."""
     c.temp_hp(5, on=c.me)
 
 
-@power("rt:r36-swift-charge", level=0, cls="", usage=AT_WILL,
+@power("rt:r36-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r36_swift_charge(c: Cast) -> None:
+def rt_r36_t2(c: Cast) -> None:
     """Untyped, and gated on the one key `query.speed` is handed."""
     c.bonus("speed", 2, on=c.me, until=_HOLDS,
             when=lambda ctx: bool(ctx.get("charge")))
@@ -957,14 +960,14 @@ def rt_r36_swift_charge(c: Cast) -> None:
 
 # -- r37 ---------------------------------------------------------------
 
-_inert("rt:r37-powerful-athlete",
+_inert("rt:r37-t1",
        "Roll twice on an Athletics check to jump or climb. `c.check` "
        "rolls once and nothing rerolls a skill check before it is made.")
 
 
-@power("rt:r37-tenacity", level=0, cls="", usage=AT_WILL,
+@power("rt:r37-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r37_tenacity(c: Cast) -> None:
+def rt_r37_t0(c: Cast) -> None:
     """A flat racial bonus to one defence."""
     c.bonus(WILL, 1, kind="racial", on=c.me, until=_HOLDS)
 
@@ -972,16 +975,16 @@ def rt_r37_tenacity(c: Cast) -> None:
 # -- r38 ---------------------------------------------------------------
 
 
-@power("rt:r38-acid-resist", level=0, cls="", usage=AT_WILL,
+@power("rt:r38-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r38_acid_resist(c: Cast) -> None:
+def rt_r38_t0(c: Cast) -> None:
     """Five plus half level, the printed formula."""
     c.resist(5 + c.level // 2, DamageType.ACID, on=c.me, until=_HOLDS)
 
 
-@power("rt:r38-barbed-body", level=0, cls="", usage=AT_WILL,
+@power("rt:r38-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r38_barbed_body(c: Cast) -> None:
+def rt_r38_t1(c: Cast) -> None:
     """**Escaping a grab announces itself now.** `engine/escape.py` emits
     `Escaped`, carrying `actor` (whoever struggled), `holder` (the
     grabber) and `success` -- which is both printed directions in one
@@ -1013,9 +1016,9 @@ def rt_r38_barbed_body(c: Cast) -> None:
 # -- r41 ---------------------------------------------------------------
 
 
-@power("rt:r41-swamp-walk", level=0, cls="", usage=AT_WILL,
+@power("rt:r41-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r41_swamp_walk(c: Cast) -> None:
+def rt_r41_t1(c: Cast) -> None:
     """Said once per printed word, which is the shape `ignores_difficult`
     takes: the labels are the ones the map gives its squares."""
     me = c.me
@@ -1023,10 +1026,10 @@ def rt_r41_swamp_walk(c: Cast) -> None:
     c.ignores_difficult("shallow water", on=me, until=_HOLDS)
 
 
-@power("rt:r41-rancid-air", level=0, cls="", usage=AT_WILL,
+@power("rt:r41-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        keywords=[Keyword.POISON])
-def rt_r41_rancid_air(c: Cast) -> None:
+def rt_r41_t0(c: Cast) -> None:
     """An aura and a listener: the aura is the geometry the printed line
     names and `SurgeSpent` is the moment it pays out. Asking the aura at
     the moment the surge is spent is the point -- a snapshot taken when
@@ -1046,12 +1049,12 @@ def rt_r41_rancid_air(c: Cast) -> None:
 
 # -- r43 ---------------------------------------------------------------
 
-_inert("rt:r43-mimicry", "Imitating a sound, behind a Bluff check.")
+_inert("rt:r43-t2", "Imitating a sound, behind a Bluff check.")
 
 
-@power("rt:r43-flock-effect", level=0, cls="", usage=AT_WILL,
+@power("rt:r43-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r43_flock_effect(c: Cast) -> None:
+def rt_r43_t0(c: Cast) -> None:
     """Combat advantage's +2 is computed in `resolve.attack` and is not a
     modifier, so the printed "+3 rather than +2" is written as the
     difference: one more, only when the advantage came from flanking."""
@@ -1071,7 +1074,7 @@ def rt_r43_flock_effect(c: Cast) -> None:
 # -- r44 ---------------------------------------------------------------
 
 _origin("r44", "fey")
-_inert("rt:r44-aspects",
+_inert("rt:r44-t2",
        "An aspect of nature chosen at every extended rest, and each of "
        "the three is a power and nothing else -- 'you can use p744N "
        "while you are in this aspect' is the whole of every one of them. "
@@ -1082,9 +1085,9 @@ _inert("rt:r44-aspects",
        "reaches it.")
 
 
-@power("rt:r44-hardy-form", level=0, cls="", usage=AT_WILL,
+@power("rt:r44-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r44_hardy_form(c: Cast) -> None:
+def rt_r44_t1(c: Cast) -> None:
     """The card says choose, so the row asks rather than picking one for
     the character: `c.choose` puts it to whoever is playing it."""
     defence = c.choose([FORT, REF, WILL], "which defence is hardened")
@@ -1094,16 +1097,16 @@ def rt_r44_hardy_form(c: Cast) -> None:
 
 # -- r46 ---------------------------------------------------------------
 
-_inert("rt:r46-telepathy",
+_inert("rt:r46-t2",
        "Two-way speech within 5 squares. Nothing in a fight turns on "
        "whether a creature can talk.")
 
 
-@power("rt:r46-dual-soul", level=0, cls="", usage=AT_WILL,
+@power("rt:r46-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
        trigger="the start of your turn",
        on=Trigger(TurnStart, about_me, "the start of your turn"))
-def rt_r46_dual_soul(c: Cast) -> None:
+def rt_r46_t1(c: Cast) -> None:
     """One save per qualifying effect, named by its own label so that the
     extra throw reaches the daze and not every save-ends effect standing.
 
@@ -1118,17 +1121,17 @@ def rt_r46_dual_soul(c: Cast) -> None:
 
 # -- r47 ---------------------------------------------------------------
 
-_inert("rt:r47-past-life",
+_inert("rt:r47-t1",
        "Counting as a second race for prerequisites. `Character.race` "
        "holds one ref and `chargen.meets` reads that one.")
 _origin("r47", "undead", "living", dropped=("query.living()",), why=_BOTH)
 
 
-@power("rt:r47-unnatural-vitality", level=0, cls="", usage=AT_WILL,
+@power("rt:r47-t3", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
        trigger="you drop to 0 hit points or fewer",
        on=Trigger(Dropped, about_me, "you drop to 0 hit points or fewer"))
-def rt_r47_unnatural_vitality(c: Cast) -> None:
+def rt_r47_t3(c: Cast) -> None:
     """Dazed instead of unconscious while dying.
 
     `resolve` lays one effect labelled "dropped" carrying all three of
@@ -1173,15 +1176,15 @@ def rt_r47_unnatural_vitality(c: Cast) -> None:
 
 # -- r49 ---------------------------------------------------------------
 
-_inert("rt:r49-living-construct",
+_inert("rt:r49-t2",
        "No eating, drinking, breathing or sleeping; none is modelled.")
-_inert("rt:r49-telepathy", "Speech within 5 squares.")
+_inert("rt:r49-t4", "Speech within 5 squares.")
 _origin("r49", "immortal")
 
 
-@power("rt:r49-crystalline-mind", level=0, cls="", usage=AT_WILL,
+@power("rt:r49-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r49_crystalline_mind(c: Cast) -> None:
+def rt_r49_t0(c: Cast) -> None:
     """Flat 5 through heroic; the 11th and 21st level steps are out of
     scope."""
     c.resist(5, DamageType.PSYCHIC, on=c.me, until=_HOLDS)
@@ -1189,21 +1192,21 @@ def rt_r49_crystalline_mind(c: Cast) -> None:
 
 # -- r50 ---------------------------------------------------------------
 
-_inert("rt:r50-born-of-two-races",
+_inert("rt:r50-t0",
        "Counting as a second race for prerequisites, which is one field "
        "on `Character` and not a rule in a fight.")
-_inert("rt:r50-tireless", "A rest rule.")
+_inert("rt:r50-t3", "A rest rule.")
 
 
 # -- r51 ---------------------------------------------------------------
 
-_inert("rt:r51-torpor", "A rest rule.")
+_inert("rt:r51-t3", "A rest rule.")
 
 
-@power("rt:r51-multiple-arms", level=0, cls="", usage=AT_WILL,
+@power("rt:r51-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        todo=("c.draw()",))
-def rt_r51_multiple_arms(c: Cast) -> None:
+def rt_r51_t0(c: Cast) -> None:
     """Drawing or sheathing a weapon costs nothing here because it is not
     an action the engine has: `Gear.stowed` is set when the character is
     built and nothing moves a weapon in or out of it mid-fight.
@@ -1215,10 +1218,10 @@ def rt_r51_multiple_arms(c: Cast) -> None:
     """
 
 
-@power("rt:r51-natural-jumper", level=0, cls="", usage=AT_WILL,
+@power("rt:r51-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        todo=("c.running_start()",))
-def rt_r51_natural_jumper(c: Cast) -> None:
+def rt_r51_t1(c: Cast) -> None:
     """`c.jump` takes a number of squares and knows nothing about a
     run-up, so "always considered to have a running start" has nothing to
     be true of."""
@@ -1226,52 +1229,52 @@ def rt_r51_natural_jumper(c: Cast) -> None:
 
 # -- r52 ---------------------------------------------------------------
 
-_inert("rt:r52-master-of-shadows",
+_inert("rt:r52-t1",
        "Trading a class utility for a racial one, which is a choice made "
        "when the character is built.")
-_inert("rt:r52-practiced-sneak",
+_inert("rt:r52-t3",
        "Training in Stealth, and there is no training model.")
 _origin("r52", "shadow")
 
 
 # -- r53 ---------------------------------------------------------------
 
-_inert("rt:r53-human-heritage", "A Bluff bonus for passing as something.")
-_inert("rt:r53-vampiric-heritage",
+_inert("rt:r53-t1", "A Bluff bonus for passing as something.")
+_inert("rt:r53-t5",
        "Trading a class utility for a racial one, made when the "
        "character is built.")
 _origin("r53", "undead", "living", dropped=("query.living()",), why=_BOTH)
 
 
-@power("rt:r53-blood-dependency", level=0, cls="", usage=AT_WILL,
+@power("rt:r53-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r53_blood_dependency(c: Cast) -> None:
+def rt_r53_t0(c: Cast) -> None:
     """Gated rather than laid when the blooding happens, for the reason
-    `rt:r1-bloodied-attack` is: a trait is armed once and bloodied comes
+    `rt:r1-t1` is: a trait is armed once and bloodied comes
     and goes with healing."""
     me = c.me
     c.penalty("surge_value", 2, on=me, until=_HOLDS,
               when=lambda ctx: c.bloodied(me))
 
 
-@power("rt:r53-necrotic-resist", level=0, cls="", usage=AT_WILL,
+@power("rt:r53-t4", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r53_necrotic_resist(c: Cast) -> None:
+def rt_r53_t4(c: Cast) -> None:
     """Five plus half level, the printed formula."""
     c.resist(5 + c.level // 2, DamageType.NECROTIC, on=c.me, until=_HOLDS)
 
 
 # -- r60 ---------------------------------------------------------------
 
-_inert("rt:r60-oaken-vitality",
+_inert("rt:r60-t4",
        "Endurance against starvation and thirst, and meditation instead "
        "of sleep.")
 _origin("r60", "fey")
 
 
-@power("rt:r60-forest-walk", level=0, cls="", usage=AT_WILL,
+@power("rt:r60-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r60_forest_walk(c: Cast) -> None:
+def rt_r60_t2(c: Cast) -> None:
     """One call per printed word, which is how the labels the map gives
     its squares are matched."""
     me = c.me
@@ -1279,9 +1282,9 @@ def rt_r60_forest_walk(c: Cast) -> None:
         c.ignores_difficult(kind, on=me, until=_HOLDS)
 
 
-@power("rt:r60-tree-mind", level=0, cls="", usage=AT_WILL,
+@power("rt:r60-t5", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r60_tree_mind(c: Cast) -> None:
+def rt_r60_t5(c: Cast) -> None:
     """The three conditions the card names, read off the effect."""
     c.bonus("save", 2, kind="racial", on=c.me, until=_HOLDS,
             when=_against(*_MIND))
@@ -1289,8 +1292,8 @@ def rt_r60_tree_mind(c: Cast) -> None:
 
 # -- r61 ---------------------------------------------------------------
 
-_inert("rt:r61-speak-with-beasts", "Talking to animals.")
-_inert("rt:r61-wee-warrior",
+_inert("rt:r61-t2", "Talking to animals.")
+_inert("rt:r61-t3",
        "A reach of 1 rather than the 0 a Tiny creature normally has. "
        "Reach is not derived from size here -- every creature reaches 1 "
        "unless a weapon says otherwise -- so this is already true. The "
@@ -1300,18 +1303,18 @@ _origin("r61", "fey")
 
 # -- r62 ---------------------------------------------------------------
 
-_inert("rt:r62-pleasant-recovery",
+_inert("rt:r62-t4",
        "Extra hit points per surge spent during a short rest; a rest is "
        "not played out.")
-_inert("rt:r62-sly-words", "Bluff as a class skill; there is no skill list.")
+_inert("rt:r62-t5", "Bluff as a class skill; there is no skill list.")
 _origin("r62", "fey")
 
 
-@power("rt:r62-light-of-heart", level=0, cls="", usage=AT_WILL,
+@power("rt:r62-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
        trigger="the start of your turn",
        on=Trigger(TurnStart, about_me, "the start of your turn"))
-def rt_r62_light_of_heart(c: Cast) -> None:
+def rt_r62_t1(c: Cast) -> None:
     """The printed line is an *extra* throw at the start of the turn; the
     end-of-turn one is the ordinary save `Effects.roll_saves` already
     makes. Named by label, so the extra throw reaches the fear effect and
@@ -1323,20 +1326,20 @@ def rt_r62_light_of_heart(c: Cast) -> None:
 
 # -- r65 ---------------------------------------------------------------
 
-_inert("rt:r65-animal-form",
+_inert("rt:r65-t0",
        "A +2 to one skill, picked from a list of twelve animals. The "
        "choice is recorded nowhere and every option is a skill bonus.")
-_inert("rt:r65-language-of-beasts", "Talking to animals.")
+_inert("rt:r65-t4", "Talking to animals.")
 _origin("r65", "fey", "beast", "humanoid", "shapechanger",
         why="Three printed sentences and one row: the page gives a type, "
-            "an origin and a subtype, and `rt:r65-origin` is the only "
+            "an origin and a subtype, and `rt:r65-t3` is the only "
             "trait ref the race has for any of them, so all four words go "
             "on together.")
 
 
-@power("rt:r65-elusive", level=0, cls="", usage=AT_WILL,
+@power("rt:r65-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r65_elusive(c: Cast) -> None:
+def rt_r65_t2(c: Cast) -> None:
     """The saving-throw half is a gate on the conditions the effect
     carries.
 
@@ -1354,14 +1357,14 @@ def rt_r65_elusive(c: Cast) -> None:
 
 # -- r66 ---------------------------------------------------------------
 
-_inert("rt:r66-under-dweller",
+_inert("rt:r66-t3",
        "Dungeoneering as a class skill; there is no skill list.")
 _origin("r66", "fey")
 
 
-@power("rt:r66-earth-walk", level=0, cls="", usage=AT_WILL,
+@power("rt:r66-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF)
-def rt_r66_earth_walk(c: Cast) -> None:
+def rt_r66_t0(c: Cast) -> None:
     """One call per printed word."""
     me = c.me
     for kind in ("rubble", "uneven stone", "earthen construction"):
@@ -1370,15 +1373,15 @@ def rt_r66_earth_walk(c: Cast) -> None:
 
 # -- r69 ---------------------------------------------------------------
 
-_inert("rt:r69-quick-fix",
+_inert("rt:r69-t1",
        "Arcana and Thievery checks as a minor action at a penalty. "
        "Neither check is made in a fight and neither costs an action.")
 
 
-@power("rt:r69-improvised", level=0, cls="", usage=AT_WILL,
+@power("rt:r69-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        todo=("c.improvised()",))
-def rt_r69_improvised(c: Cast) -> None:
+def rt_r69_t2(c: Cast) -> None:
     """Proficiency with improvised weapons. There is no improvised weapon
     in the `weapon` table to be proficient with, so the header field has
     no ref to name."""

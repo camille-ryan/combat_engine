@@ -89,7 +89,7 @@ from combat_engine.engine.components import Health
 from combat_engine.engine.events import PowerUsed
 from combat_engine.engine.query import alive, allies, distance_between, holding, team
 
-#: The `rt:r6-dilettante` choice: a 1st-level at-will borrowed from
+#: The `rt:r6-t3` choice: a 1st-level at-will borrowed from
 #: another class, picked when the character is built and recorded
 #: nowhere. Same symbol `features/racial._option` carries.
 RACE_OPTION = ("c.race_option()",)
@@ -832,10 +832,10 @@ def f2842(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        todo=RACE_OPTION)
 def f2871(c: Cast) -> None:
-    """Swaps which ability the `rt:r6-dilettante` power attacks with.
+    """Swaps which ability the `rt:r6-t3` power attacks with.
 
     **One hold now.** `c.rolls_with` exists and would say this in a line, but
-    it takes a ref: `rt:r6-dilettante` deals a 1st-level at-will borrowed
+    it takes a ref: `rt:r6-t3` deals a 1st-level at-will borrowed
     from another class, picked when the character is built and recorded
     nowhere, so there is no ref to name. `c.race_option()` was always the
     real hold and is now the only one on the marker.
@@ -847,7 +847,7 @@ def f2871(c: Cast) -> None:
 @power("f2873", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=RACE_OPTION)
 def f2873(c: Cast) -> None:
-    """A mark on hitting with the `rt:r6-dilettante` power. Which row
+    """A mark on hitting with the `rt:r6-t3` power. Which row
     that is, is the build choice nothing records."""
 
 
@@ -871,7 +871,7 @@ def f2877(c: Cast) -> None:
 @power("f2879", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=RACE_OPTION)
 def f2879(c: Cast) -> None:
-    """Extra healing after hitting with the `rt:r6-dilettante` power,
+    """Extra healing after hitting with the `rt:r6-t3` power,
     which is the build choice nothing records."""
 
 
@@ -1939,7 +1939,7 @@ def f2781(c: Cast) -> None:
     target.
 
     "Instead of the attack that trait grants you" is dropped, and the
-    trait is no longer why. `rt:r24-ferocity` is a declared row now and
+    trait is no longer why. `rt:r24-t0` is a declared row now and
     `c.forbid` would take it away -- but it is an immediate interrupt
     and this is a free action, so `triggers` gathers and resolves it a
     whole window earlier. By the time this body could forbid it, it has

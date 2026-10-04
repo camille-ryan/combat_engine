@@ -782,7 +782,7 @@ def _racial(ref: str, what: str, *, wants: tuple[str, ...] = RACIAL) -> None:
     feat.__doc__ = f"{what} The racial power is named in prose with no ref."
 
 
-#: The `rt:r6-dilettante` choice: an at-will borrowed from another
+#: The `rt:r6-t3` choice: an at-will borrowed from another
 #: class, picked when the character is built and recorded nowhere. The
 #: same symbol `features/racial._option` carries.
 RACE_OPTION = ("c.race_option()",)

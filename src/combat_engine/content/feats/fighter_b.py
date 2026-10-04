@@ -868,7 +868,7 @@ def f795(c: Cast) -> None:
     """**Re-aimed twice, and down to one symbol.** The granted swing is
     readable -- it carries `granted_via`, and `f1732` beside it gates on
     exactly that. Which manifestation the character is in is readable
-    too: `rt:r33-manifestation` no longer claims the choice is recorded
+    too: `rt:r33-t0` no longer claims the choice is recorded
     nowhere, it is the one of the thirteen racial rows in `Powers.known`,
     and `c.element` names the type that leg is sworn to.
 

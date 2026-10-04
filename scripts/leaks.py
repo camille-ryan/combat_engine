@@ -98,7 +98,6 @@ CORE = set(RULES_TERMS)
 #: parentheses included, so `_type_words` excuses it and the entry was dead.
 DEFERRED = {
     "battlerager": "#339 -- a sub-option name used as a BUILDS key",
-    "winterkin": "#341 -- one of 113 racial-trait refs minted from a label",
 }
 
 SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__", "data", "localization"}

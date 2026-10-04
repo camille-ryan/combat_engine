@@ -104,7 +104,7 @@ from combat_engine.engine.query import concealment_of, creatures, is_, team, uns
 FEATURE = ("c.class_feature()",)
 #: A racial power named by its race rather than by a ref.
 RACIAL_POWER = ("c.on_racial_power()",)
-#: "The aspect of nature you are manifesting" -- `rt:r44-aspects` is a
+#: "The aspect of nature you are manifesting" -- `rt:r44-t2` is a
 #: declared row and it is refused in play: which of the three a character
 #: has chosen is a build decision with nowhere to write it down, which is
 #: the marker that row carries itself.
@@ -859,7 +859,7 @@ def f3504(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        todo=("query.knocked_prone()",))
 def f3507(c: Cast) -> None:
-    """The racial row is `rt:r2-stand-your-ground`, a declared ref, and
+    """The racial row is `rt:r2-t4`, a declared ref, and
     `c.reroll_save` is the printed "twice, and use the better" -- neither
     is the hold. The hold is that the trait's prone half is itself
     dropped on the same symbol: `ConditionApplied` says who applied a
@@ -1191,7 +1191,7 @@ def f3529b(c: Cast) -> None:
 @power("f3530", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=(*ASPECT, "c.resist(once=)"))
 def f3530(c: Cast) -> None:
-    """"Whenever you choose an aspect of nature" is `rt:r44-aspects` --
+    """"Whenever you choose an aspect of nature" is `rt:r44-t2` --
     a declared racial trait, and one that is refused in play because
     nothing records which aspect was chosen or when. So there is no
     moment to hang this on; and resistance spent by the first hit that

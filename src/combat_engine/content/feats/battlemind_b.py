@@ -483,7 +483,7 @@ def f3322(c: Cast) -> None:
 
     Spending power points emits a `Note` and no event, so "the first
     time you drop to 0" has nothing to watch. The range is the race's
-    telepathy: `rt:r46-telepathy` is a declared row and it is declared
+    telepathy: `rt:r46-t2` is a declared row and it is declared
     `out_of_combat` -- deliberately inert, because the trait is a way of
     talking -- so the radius this sentence measures in is not a number
     anything on the board carries."""

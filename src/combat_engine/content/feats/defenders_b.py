@@ -176,7 +176,7 @@ def f1142(c: Cast) -> None:
     "Add the bonus to the resistance" is the second half, and a gated
     `c.resist` is exactly an addition: given a `when=` it lays a modifier
     that `resolve.damage` reads on top of the flat number
-    `rt:r35-astral-resistance` wrote, rather than competing with it. So
+    `rt:r35-t1` wrote, rather than competing with it. So
     the amount handed over is the field's own worth and the trait's
     number never has to be known -- and the two readings bucket under one
     kind, so +1 and +3 pick the larger here too.

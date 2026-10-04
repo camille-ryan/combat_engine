@@ -100,6 +100,67 @@ def sub_options(spec: str, ref: str) -> dict[str, str]:
     return out
 
 
+#: Labels on a race page that are **chassis, not traits**. Every one is already
+#: a column or is read into one, and all of them are printed with the same
+#: `Label :` shape as a real trait -- which is why the raw count of labelled
+#: lines is 591 and the number of traits is 185.
+#:
+#: `benefits` is the odd one and worth naming: the sub-race layout heads its
+#: whole amendment block with it, so it appears on 22 pages and names nothing.
+#: These are mechanics words rather than printed names, so writing them down is
+#: not a leak -- the same ground `MECHANICAL` stands on.
+_CHASSIS = frozenset({
+    "average height", "average weight", "ability scores", "size", "speed",
+    "vision", "languages", "language", "skill bonuses", "skill bonus", "age",
+    "benefits", "benefit",
+})
+
+
+#: A trait line's label, which `_LABELLED` cannot match and must not be widened
+#: to: `sub_options` depends on its exact shape.
+#:
+#: Two things the trait list does that a sub-option never does, each of which
+#: cost a trait until the content sweep found it by failing to map:
+#:
+#: * **a race qualifier in brackets** -- the books write `Forest Walk
+#:   (Hamadryad):` where a trait name is shared between races. The bracket is
+#:   not part of the name, and the race is already in the ref.
+#: * **a digit in the name** -- one trait is `<name> 5:`, the 5 being its range.
+#:
+#: Found the right way round: content had declared all three and *this reader*
+#: was missing them, which is the opposite of what I expected to find and the
+#: reason the mapping was checked rather than applied.
+_TRAIT_LABEL = re.compile(
+    "(?m)^([A-Z][A-Za-z0-9'\u2019\\- ]{2,40}?)\\s*(?:\\([^)]*\\))?\\s*:\\s*(.+)$"
+)
+
+
+def _trait_lines(spec: str, skip: dict[str, str]) -> list[tuple[str, str]]:
+    """`[(printed label, its rules text)]` for one race, in page order.
+
+    The traits are already sitting in the race's own block as `Label : text`,
+    one per line, which is regular enough to read -- and until #341 that is all
+    they were. Nothing held them as rows, so a content author needing to name
+    one had to invent an identifier from the label.
+
+    `skip` is the "choose one" family, which `sub_options` has already claimed
+    and which nests **under** the trait that offers it rather than sitting
+    beside it.
+    """
+    out: list[tuple[str, str]] = []
+    for found in _TRAIT_LABEL.finditer(spec or ""):
+        label = " ".join(found.group(1).split())
+        if label.lower() in _CHASSIS or label in skip:
+            continue
+        out.append((label, found.group(2).strip()))
+    return out
+
+
+def trait_slug(label: str) -> str:
+    """The printed label as a matching key. Never an identity -- see the table."""
+    return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
+
+
 def races(
     source: sqlite3.Connection,
     out: sqlite3.Connection,
@@ -142,15 +203,54 @@ def races(
         # tables that name one can be swapped too, and so `leaks.py` can finally
         # see them.
         options = sub_options(spec, ref)
+        # **Each printed trait becomes a row of its own.** They were prose and
+        # only prose, so content needing to name one invented a ref out of the
+        # printed label -- 94 of them in tracked source, each with nothing a
+        # checker could compare it against. #341.
+        traits = _trait_lines(spec, options)
+        # **A trait that is already a power keeps the power's ref.** 42 of the
+        # 185 are printed twice: once as a line in the traits list and once as a
+        # whole card, which the compendium files under the race in its Class
+        # column -- so `power` already holds the firing row. Minting an `rt:`
+        # ref for those would be one thing with two identities, which is the
+        # fault this repo keeps finding, and it showed up immediately as 23
+        # specs that stopped resolving a power because the new ref won first.
+        granted = {
+            (names.get(p_ref) or {}).get("name", ""): p_ref
+            for (p_ref,) in out.execute(
+                "SELECT ref FROM power WHERE class = ?", (ref,)
+            )
+        }
+        granted.pop("", None)
+        trait_refs: dict[str, str] = {}
+        rows: list[tuple[str, int, str, str]] = []
+        for i, (label, rules) in enumerate(traits):
+            if label in granted:
+                trait_refs[label] = granted[label]
+                continue
+            trait_ref = f"rt:{ref}-t{i}"
+            trait_refs[label] = trait_ref
+            rows.append((trait_ref, i, label, rules))
+        for trait_ref, i, label, rules in rows:
+            out.execute(
+                "INSERT OR REPLACE INTO racial_trait VALUES (?,?,?,?,?)",
+                (trait_ref, ref, i, trait_slug(label),
+                 scrub(rules, {name: ref, **trait_refs, **options})),
+            )
+            # The label where every other printed name lives, and the rules text
+            # beside it -- taken before the scrub, so the two are one extraction.
+            names[trait_ref] = {"name": label, "rules_text": rules}
         out.execute(
             "INSERT INTO race VALUES (?,?,?,?,?)",
             (ref, row["ID"], size, json.dumps(_scores(spec)),
-             scrub(spec, {name: ref, **options})),
+             scrub(spec, {name: ref, **trait_refs, **options})),
         )
         names[ref] = {"name": name, "description": flavour}
         for label, option_ref in options.items():
             names.setdefault(option_ref, {"name": label})
         report.races += 1
+        report.racial_traits += len(rows)
+        report.traits_are_powers += len(traits) - len(rows)
 
 
 #: "+2 Charisma, +2 Constitution or +2 Strength". 46 of the 55 races print

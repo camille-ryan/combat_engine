@@ -447,7 +447,7 @@ def f1670(c: Cast) -> None:
 @power("f1674", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.extend_shift()",))
 def f1674(c: Cast) -> None:
-    """Re-aimed: the row it rides on is `rt:r18-shifting-fortunes`, which
+    """Re-aimed: the row it rides on is `rt:r18-t3`, which
     is declared, so the naming gap is closed. What is left is that
     nothing lengthens the shift *another named row* makes -- `c.shift`
     here would be a second, separate shift. Same hold `f2600` carries."""
@@ -501,11 +501,11 @@ def f1751(c: Cast) -> None:
 
 @power("f1773", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       trigger="you use rt:r18-shifting-fortunes to shift",
-       on=Trigger(PowerResolved, _resolved("rt:r18-shifting-fortunes"),
+       trigger="you use rt:r18-t3 to shift",
+       on=Trigger(PowerResolved, _resolved("rt:r18-t3"),
                   "you shift with that racial trait"))
 def f1773(c: Cast) -> None:
-    """The row is `rt:r18-shifting-fortunes` and it is declared, so
+    """The row is `rt:r18-t3` and it is declared, so
     `Moved.power` was the wrong question -- the shift does not have to be
     picked out of every other move, it is announced by the row that made
     it. `PowerResolved` and not `PowerUsed`: the trait's body is where the
@@ -523,7 +523,7 @@ def f1773(c: Cast) -> None:
 @power("f1832", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.ignore_concealment()",))
 def f1832(c: Cast) -> None:
-    """`rt:r4-group-perception` is declared and lays an aura, so "each
+    """`rt:r4-t3` is declared and lays an aura, so "each
     ally affected by it" is the creatures standing in that aura, and
     `c.grants_in` would carry a modifier to them.
 
@@ -966,7 +966,7 @@ def f2037(c: Cast) -> None:
 @power("f2095", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f2095(c: Cast) -> None:
-    """The widening half is writable now: `rt:r5-fear-save` is declared
+    """The widening half is writable now: `rt:r5-t0` is declared
     and lays +5 `kind="racial"` on saves whose effect carries the fear
     keyword, so the same bonus under the same kind covers the two extra
     cases the card adds. Two of a kind do not stack and the larger wins,

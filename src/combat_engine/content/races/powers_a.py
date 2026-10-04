@@ -829,7 +829,7 @@ def p16470(c: Cast) -> None:
     the whole burst.
 
     "For creatures that lack earth walk" is the `difficult=` label rather
-    than a side: `rt:r66-earth-walk` is three `c.ignores_difficult` calls,
+    than a side: `rt:r66-t0` is three `c.ignores_difficult` calls,
     one of which is "rubble", and `Grid.rough` skips a square whose kind
     the mover ignores. So naming the going is what exempts them, and it
     exempts every other earth walker on the board too."""

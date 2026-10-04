@@ -1181,7 +1181,7 @@ def f1552(c: Cast) -> None:
 
     **Re-aimed, and the marker was naming the wrong half.** It said
     `spec.power_ref()`, as though the other power were a name the ETL had
-    failed to resolve. It is not: `rt:r6-dilettante` is declared, and
+    failed to resolve. It is not: `rt:r6-t3` is declared, and
     what it is short of is the *choice* -- the card the player picked,
     which nothing records. So the pair cannot be made exclusive. Granting
     the chosen power alone is not over-generous; the card does give it as
@@ -1412,12 +1412,12 @@ def f1642(c: Cast) -> None:
     """**Re-aimed, and written.** The marker said `c.counts_as(kind=)`
     and that verb arrived: `c.set_origin` writes a type word onto a
     creature and `instead_of` takes one off, which is the only thing
-    that can. `rt:r47-origin` writes both `undead` and `living` onto
+    that can. `rt:r47-t2` writes both `undead` and `living` onto
     this race; this feat takes the second back.
 
     The eating, drinking and breathing half is not a fight.
 
-    Dropped, and it is the clause `rt:r47-origin` drops for the same
+    Dropped, and it is the clause `rt:r47-t2` drops for the same
     reason: no row in the tree asks whether a creature is living. They
     all spell it as the absence of `undead`, so taking the word off
     changes no answer until one reader settles it."""
@@ -1432,7 +1432,7 @@ def f1643(c: Cast) -> None:
     moment, so neither half is what is missing.
 
     **Re-aimed at the trait this hangs off.** The condition is "if you
-    choose to remain conscious due to `rt:r47-unnatural-vitality`", and
+    choose to remain conscious due to `rt:r47-t3`", and
     that row is itself unwritten on `c.dying_as()` -- `resolve` applies
     the dying condition and nothing chooses what comes with it. Until it
     does, there is no choice to have made and this row would pay out on
@@ -1516,7 +1516,7 @@ def f1656(c: Cast) -> None:
 
     **Re-aimed.** Races are declared now, so "there is no race to hold
     it" is no longer true and the marker was naming a gap that closed.
-    `rt:r6-dilettante` is declared -- and is one of the twenty-one rows
+    `rt:r6-t3` is declared -- and is one of the twenty-one rows
     `_option` leaves on `c.race_option()`, because the feature is a
     *pick* from a printed set and nothing records which card was taken.
     An either/or between `p8278` and a card nobody can name has no

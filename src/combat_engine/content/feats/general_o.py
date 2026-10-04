@@ -1032,7 +1032,7 @@ def f3074(c: Cast) -> None:
     per terrain kind and board-wide, and the printed line is per *kind
     of move* -- laid blanket it would exempt a full run as well as a
     shift, which is a much larger rule and the whole of this feat.
-    `rt:r4-wild-step` is held back by the same sentence."""
+    `rt:r4-t4` is held back by the same sentence."""
 
 
 @power("f3091", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1785,11 +1785,11 @@ def f3161(c: Cast) -> None:
 
 @power("f3162", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       trigger="you use rt:r24-ferocity",
-       on=Trigger(PowerUsed, _used("rt:r24-ferocity"),
+       trigger="you use rt:r24-t0",
+       on=Trigger(PowerUsed, _used("rt:r24-t0"),
                   "you use that racial trait"))
 def f3162(c: Cast) -> None:
-    """`rt:r24-ferocity` is a declared row and a triggered one, so its
+    """`rt:r24-t0` is a declared row and a triggered one, so its
     firing announces itself like any other use -- and `PowerUsed` is
     announced above the body, which is the one window in which a
     modifier can still reach the swing it is about to make.
@@ -1805,7 +1805,7 @@ def f3162(c: Cast) -> None:
 @power("f3163", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("query.charging()",))
 def f3163(c: Cast) -> None:
-    """`rt:r24-heedless-charge` is declared and lays +2 `kind="racial"`
+    """`rt:r24-t2` is declared and lays +2 `kind="racial"`
     on the same gate. Two of a kind do not stack and the larger wins,
     so laying the modifier under the same kind *is* "the bonus is equal
     to" for any character whose better mod is 2 or more -- which the

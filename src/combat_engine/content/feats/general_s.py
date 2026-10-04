@@ -1818,7 +1818,7 @@ def f3792(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        todo=("c.extra_target()",))
 def f3793(c: Cast) -> None:
-    """The first clause has nothing to cancel. `rt:r69-quick-fix` is
+    """The first clause has nothing to cancel. `rt:r69-t1` is
     declared and declared deliberately inert -- the checks it covers are
     not made in a fight and cost no action there -- so the -4 this feat
     lifts is never laid.

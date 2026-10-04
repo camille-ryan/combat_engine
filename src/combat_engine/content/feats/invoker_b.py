@@ -502,7 +502,7 @@ def f1521(c: Cast) -> None:
     protected. Re-aimed: the ally is on the card's trigger and that is
     carried now. Which of the five legs is current is not -- two of them
     are not damage types at all, so `c.element` cannot stand in, and
-    `rt:r33-manifestation` carries the same marker."""
+    `rt:r33-t0` carries the same marker."""
 
 
 @power("f1525", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
