@@ -41,6 +41,54 @@ MECHANICAL = {
 }  # fmt: skip
 
 
+#: The rules' own label grammar, for the families that are generative.
+#:
+#: `MECHANICAL` above is a flat set and these three families are not: the books
+#: write `Sustain Minor`, `Sustain Standard`, `Sustain Free`, `Sustain Move`;
+#: `First`/`Second`/`Third`/`Sixth Failed Saving Throw` and the same ordinals
+#: against `Check`; and the three action types as bare labels. Enumerating every
+#: combination is a list that grows every time a book invents an ordinal, and a
+#: label this misses gets treated as a **name** -- so the cost of missing one is
+#: a rules label scrubbed into a ref, where an author can no longer read it.
+_LABEL_FAMILIES = (
+    r"sustain\s+(?:standard|minor|move|free|immediate)",
+    r"(?:first|second|third|fourth|fifth|sixth|seventh|each|every|any)\s+"
+    r"(?:failed\s+)?(?:saving\s+throw|check|save)",
+    r"(?:standard|minor|move|free|immediate|opportunity)\s+action",
+    r"(?:successful|failed)\s+(?:saving\s+throw|check|save)",
+)
+
+
+def mechanical_label(label: str) -> bool:
+    """Is this clause label a rules label rather than a printed name?
+
+    The question matters because of what the two answers do: a rules label is
+    left alone for an author to read, and a name is swapped for a ref. Get it
+    wrong in one direction and a printed name reaches somebody who must not see
+    one; wrong in the other and `Sustain Minor` becomes an id.
+
+    **An allow-list, for the reason `_slot`'s is one.** Writing down the names
+    this must refuse would itself be the leak, so what is written down is the
+    mechanics -- the flat set, the three generative families above, and the
+    engine's own vocabulary off the enums.
+
+    A label every one of whose words the engine already names is mechanics too:
+    that is what catches `Insubstantial` and `Regeneration 5`, which restate a
+    rules term rather than naming a power. Digits are neutral, so the `5` does
+    not make the phrase a name.
+    """
+    low = " ".join(label.strip().rstrip(":").lower().split())
+    if not low:
+        return True
+    if low in MECHANICAL:
+        return True
+    if any(re.fullmatch(pattern, low) for pattern in _LABEL_FAMILIES):
+        return True
+    words = [w for w in re.findall(r"[a-z]+", low) if w]
+    engine = _MECHANICAL_WORDS()
+    return bool(words) and all(w in engine or w in STOPWORDS for w in words)
+
+
 #: Rules terms that are also, unhelpfully, printed names. A monster ability
 #: called "Combat Advantage" must not turn the words *combat advantage* into
 #: an id wherever they appear -- the sentence "against any target it has

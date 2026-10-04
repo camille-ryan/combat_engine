@@ -614,6 +614,14 @@ def _monsters(
             # this creature's name swapped for its ref, so the two are one
             # extraction and cannot hold different rules. #349.
             names[ref] = {"name": a.name, "rules_text": a.rules_text}
+            # **And each choice this ability offers, by its own ref.** These
+            # names were reaching nobody's index: not a row, so `scrub` had
+            # nothing to swap them for, and not an entry, so `leaks.py` could
+            # not report them either -- invisible to both halves of the
+            # arrangement, which is the state `_other_names` exists to prevent.
+            # The same fix a race's "choose one" family got in #277. #353.
+            for label, option_ref in a.sub_options.items():
+                names.setdefault(option_ref, {"name": label})
             report.abilities += 1
     report.scores["monster"] = sum(scores) / max(1, len(scores))
     report.worst = sorted(report.worst, key=lambda p: p[1])[:10]

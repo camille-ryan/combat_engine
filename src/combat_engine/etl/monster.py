@@ -45,6 +45,10 @@ class Ability:
     name: str = ""
     #: The same lines as `spec`, with the names left in. Localisation only.
     rules_text: str = ""
+    #: `{printed label: its own ref}` for a clause this ability names as one of
+    #: several choices -- "uses one power chosen from the list below". Local to
+    #: this ability, which is the whole point. Localisation only.
+    sub_options: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -306,7 +310,18 @@ def parse(
         # its ref, so taking it here makes the two one extraction rather than
         # two readers that can come to disagree about the rules. #349.
         a.rules_text = a.spec
-        a.spec = scrub(a.spec, {**swaps, m.name: m.ref_id}, keep,
+        # **This ability's own choices get refs inside this ability**, and they
+        # win the scrub outright. A stat block never reaches for another
+        # creature's power -- a monster power belongs hierarchically to the
+        # monster printing it -- so a name labelling one of its clauses can only
+        # be its own.
+        #
+        # Without this they fell to `others` and came out as a *stranger's* bare
+        # creature ref: four distinct choices on one satyr's pipes all read
+        # `m5592:`, which is another creature that happens to print the same
+        # four, so an author could not tell which line was which. #353.
+        a.sub_options = _sub_options(a, f"{m.ref_id}a{a.index}")
+        a.spec = scrub(a.spec, {**swaps, m.name: m.ref_id, **a.sub_options}, keep,
                        by_word={m.name: m.ref_id})
         # The keywords too. A fifth of them are whole printed sentences --
         # "recharges after the use of <a power's name>", "when a melee
@@ -317,10 +332,58 @@ def parse(
         # body beside it was scrubbed. That is the one rule the project
         # cannot break.
         a.keywords = tuple(
-            scrub(k, {**swaps, m.name: m.ref_id}, keep, by_word={m.name: m.ref_id})
+            scrub(k, {**swaps, m.name: m.ref_id, **a.sub_options}, keep,
+                  by_word={m.name: m.ref_id})
             for k in a.keywords
         )
     return m
+
+
+#: A clause label on its own line, with any trailing keyword group left out of
+#: the name. A choice is sometimes printed `<its name> (Fire):`, and the
+#: parenthesis holds the damage type rather than part of what it is called --
+#: so keeping it would mint two refs for one choice on the pages that print it
+#: and one on the pages that do not.
+#:
+#: (An earlier draft of this comment spelled such a name as the example, and
+#: `leaks.py` reported it. That is the check working: the name belongs in
+#: `localization/`, and it is there now, which is the whole point of #353.)
+# `\u2019` spelled as an escape: the source uses a curly apostrophe and a
+# literal one here trips ruff's ambiguous-character rule.
+_SUB_LABEL = re.compile(
+    "^([A-Z][\\w '\u2019/-]{1,40}?)\\s*(?:\\([^)]*\\))?\\s*:", re.M
+)
+
+#: The longest a choice's name runs. Four words covers every one in the corpus;
+#: the thing on the other side of the line is a **sentence** -- one stat block
+#: labels an attack with its own flavour, five words of it -- and a sentence is
+#: not a name, so minting a ref for it would put an id where prose belongs.
+_SUB_WORDS = 4
+
+
+def _sub_options(a: Ability, ref: str) -> dict[str, str]:
+    """`{printed label: its own ref}` for the choices this ability offers.
+
+    **Structural, and it spells no printed name.** A choice is a labelled line
+    whose label is not one of the rules' own labels, which `mechanical_label`
+    answers from an allow-list for the reason `_slot`'s is one: writing down the
+    names to refuse would be the leak.
+
+    Numbered by order of appearance -- deterministic from the page -- and
+    suffixed `s0`, `s1` the way a race's "choose one" family already is, because
+    it is the same idea: option N of one entry.
+    """
+    from .sanitise import mechanical_label
+
+    out: dict[str, str] = {}
+    for found in _SUB_LABEL.finditer(a.rules_text or ""):
+        label = found.group(1).strip()
+        if mechanical_label(label) or len(label.split()) > _SUB_WORDS:
+            continue
+        if label == a.name:
+            continue
+        out.setdefault(label, f"{ref}s{len(out)}")
+    return out
 
 
 
