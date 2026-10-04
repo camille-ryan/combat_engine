@@ -437,11 +437,15 @@ def check_hosted(check: Checks) -> None:
             for b in entry["builds"]
         ]
         # **Lower case is not the test, and testing it is how four printed names
-        # got served.** This asserted `lb != lb.lower()`, and four warden legs
-        # were named for their printed class-feature options -- `earthstrength`
-        # and three more, every one already lower case. The check passed on all
-        # of them while `Wire.build`'s fallback returned the printed word
-        # verbatim under `CE_NAMES=off`. #342, found by #337 rather than here.
+        # got served.** This asserted `lb != lb.lower()`, and the four legs of
+        # `cf:warden-f1s0` to `f1s3` were named for their printed options --
+        # every one already lower case. The check passed on all four while
+        # `Wire.build`'s fallback returned the printed word verbatim under
+        # `CE_NAMES=off`. #342, found by #337 rather than here.
+        #
+        # (The first draft of this comment spelled one of those names out, and
+        # `leaks.py` caught it in the very commit that strengthened `leaks.py`.
+        # Refs, even when the whole point of the sentence is the name.)
         #
         # So the test is the one the question actually asks: **is this label a
         # printed name?** Read off the localisation, which this script may do --
