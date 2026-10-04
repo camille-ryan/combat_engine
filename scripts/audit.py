@@ -251,7 +251,27 @@ KNOWN_SILENT = {
     # gate is read by nothing and the row is armed regardless. That is why the
     # body has to ask the same question again, and why `requires=` on a trait
     # buys honest reporting and nothing else.
-    "m1461a1": "pays a 5th-level rider; the board's rider is level 1",
+    # **Refused at arming, not silent in play.** Its mount is level 4 and the
+    # card wants a rider of 5th or higher, so `requires=` is false when
+    # `arm_traits_of` tries to arm it -- and `dsl.use` refuses it outright. It
+    # reports SILENT rather than UNUSED only because the trait branch counts a
+    # row as fired without calling `use`, which is its own defect.
+    #
+    # The board's rider is now levelled to the mount (see `board`), which fixed
+    # the other five of this family; this one asks for a level above its own
+    # mount's, so it is the single row the board cannot satisfy without
+    # inventing a rider out of proportion to what it carries.
+    "m1461a1": "wants a rider above its own mount's level; refused at arming",
+    # **Three of #361's family.** Each has a printed target line the board has
+    # nobody to satisfy -- the restriction is on another creature's state, so no
+    # `requires=` can reach it and the body correctly declines. All three were
+    # driven by hand by the agent that wrote them, patching one board ally to
+    # qualify: they emitted `AttackDeclared`/`Hit`, `EffectApplied` and `Healed`
+    # respectively. They stop needing an excuse the day #361 lands, because the
+    # targeter will aim at a creature that qualifies.
+    "m4644a4": "its target line qualifies nobody on this board -- #361",
+    "m4687a2": "its target line qualifies nobody on this board -- #361",
+    "m4766a3": "its target line qualifies nobody on this board -- #361",
     # Reduces a target's necrotic resistance, and nothing on the board has
     # any. Giving the undead some would change what every necrotic row in
     # the tree reports, which is a worse trade than one excused row.
@@ -922,6 +942,26 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     # printed wording of the two. The second ally is the one carrying it,
     # so neither relation is a creature riding itself.
     world.relations.set(Relation.RIDDEN_BY, second, caster)
+
+    # **And the rider is levelled up to the mount.** Every printed mount trait
+    # is gated on "a friendly rider of Nth level or higher", and N tracks the
+    # mount: 16 rows ask it, at levels 2, 3, 4, 5, 7 and 10. The board's ally is
+    # level 1, so **all sixteen were unexercisable** -- five reported SILENT
+    # together in one round, each correctly declining to hand a resistance or a
+    # damage bonus to a rider too green to have it.
+    #
+    # Raised rather than excused, because the alternative is sixteen hand-argued
+    # entries in `KNOWN_SILENT` for one missing number, and the family grows with
+    # every level the sweep reaches.
+    #
+    # Only the *level* moves, and only upwards: the rider's own statistics are
+    # whatever `chargen` dealt it, so nothing else about the board changes.
+    from combat_engine.engine.components import Stats as _Stats
+
+    _mount_stats = world.get(caster, _Stats)
+    _rider_stats = world.get(ally, _Stats)
+    if _mount_stats is not None and _rider_stats is not None:
+        _rider_stats.level = max(_rider_stats.level, _mount_stats.level)
 
     # Where everybody was put, so setup can be undone. Several things
     # between here and the return move creatures -- the caster's own

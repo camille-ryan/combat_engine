@@ -230,8 +230,20 @@ def _hauls_the_grabbed(c: Cast, victim: int) -> None:
 
 
 def _ridden_by_fourth_level(world: World, eid: int) -> bool:
-    """"While mounted by a friendly rider of 4th level or higher"."""
-    for rider in world.relations.sources(Relation.RIDDEN_BY, eid):
+    """"While mounted by a friendly rider of 4th level or higher".
+
+    **`targets`, not `sources`.** The relation is `set(RIDDEN_BY, mount, rider)`,
+    so a mount's riders are its `targets`; its `sources` are whatever *it* rides,
+    which for a mount is empty every time. `c.rider` and `c.mount` are those two
+    directions.
+
+    This asked `sources`, so the gate was false forever -- which also silently
+    emptied the watch body it guards. The identical mistake was fixed in
+    `level_02/skirmishers_sa.py` earlier in the same campaign; two files made it
+    independently, which is the argument for `query` owning this question
+    (#362).
+    """
+    for rider in world.relations.targets(Relation.RIDDEN_BY, eid):
         stats = world.get(rider, Stats)
         if stats is not None and stats.level >= 4:
             return True

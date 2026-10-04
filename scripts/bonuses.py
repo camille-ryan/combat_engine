@@ -96,7 +96,21 @@ BORROWED = {
 #: place of your Charisma modifier", written as the difference between
 #: the two. That is a substitution, not a bonus, and it is untyped
 #: because two of a kind would not stack and it must.
-ELSEWHERE = {"f1766b", "f2913"}
+#: `m915a4`, `m970a3` — the same shape a third time, and the first monster
+#: rows to need it. Each card prints two numbers in two sentences: "+1 **power**
+#: bonus to its next attack roll", then "if the attack hits and deals damage, it
+#: deals an extra N damage". The type word belongs to the attack roll and both
+#: rows already write `kind="power"` there. The flagged call is the extra damage,
+#: which the card types as nothing, and writing "power" onto it would make two
+#: untyped dice fail to stack where the card has them stacking. This is the
+#: "one card, two numbers, which call is which" limit this file's own notes
+#: name -- the checker cannot tell which sentence a call came from, so the
+#: judgement is recorded here rather than guessed there.
+#:
+#: Keyed by ref, as the two above are, which means a waived row's *correct*
+#: typed call stops being checked too. That is the cost of the simpler key and
+#: is worth saying out loud.
+ELSEWHERE = {"f1766b", "f2913", "m915a4", "m970a3"}
 
 #: A type word is printed as "a **power** bonus" or "+2 **item** bonus".
 #: The same word after "the" or "equal to the" is an *amount* being

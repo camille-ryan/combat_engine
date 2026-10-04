@@ -156,6 +156,18 @@ def _squeezes_freely(c: Cast) -> None:
     three separate counterweights being written against it. `Effects.apply`
     installs everything before it announces, which is what makes ending an
     effect from inside `ConditionApplied` safe.
+
+    **Only for a card that waives all three.** Ending the hold waives the lot,
+    and most cards printing a squeezing clause waive a *subset*: eight of the
+    nine rows carrying `c.ignore_squeeze_penalty()` waive one or two -- full
+    speed alone, or the attack penalty and the combat advantage but not the
+    speed, or in one case a **-2** penalty instead of -5. For those this helper
+    over-grants, which is why that marker group is not stale. Checked once;
+    recorded so it is not re-triaged.
+
+    There is an identical copy of this in `level_02/skirmishers.py`. Two copies
+    of one helper is the shape this project keeps finding; whichever is kept
+    should be the one the others import.
     """
     me, ref = c.me, c.ref
 
