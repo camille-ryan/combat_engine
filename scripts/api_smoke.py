@@ -39,6 +39,34 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _printed_feature_names() -> set[str]:
+    """Every class feature's printed name, normalised for comparison.
+
+    Read straight off `localization/names.json` rather than through the
+    package. **This harness imports no `combat_engine` on purpose** -- it is an
+    HTTP client and the server is the thing under test, so sharing the server's
+    code would let one bug agree with itself. `scripts/leaks.py` reads the same
+    file the same way.
+
+    Empty when the file is absent, which makes the check that uses it vacuous
+    rather than wrong. It says so where it is used.
+    """
+    path = ROOT / "localization" / "names.json"
+    if not path.is_file():
+        return set()
+    try:
+        table = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return set()
+    out = {
+        (entry.get("name") or "").strip().lower().replace("-", " ")
+        for ref, entry in table.items()
+        if ref.startswith("cf:")
+    }
+    out.discard("")
+    return out
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -171,7 +199,11 @@ class Checks:
             print(f"  FAIL  {what}" + (f"\n          {detail}" if detail else ""))
 
 
-def play(server: Server, check: Checks, *, show: bool) -> tuple[str, dict]:
+def play(
+    server: Server, check: Checks, *, show: bool,
+    seen_labels: set[tuple[str, str]] | None = None,
+) -> tuple[str, dict]:
+    seen_labels = seen_labels if seen_labels is not None else set()
     state = server.post("/api/encounter", {"level": 1, "seed": 3})
     eid = state["id"]
     check_roster(check, state)  # while somebody is still acting; it empties at the end
@@ -201,6 +233,13 @@ def play(server: Server, check: Checks, *, show: bool) -> tuple[str, dict]:
         options = state["options"]
         if not options:
             break
+        # Every label the fight ever offers, kept for `check_option_labels`.
+        # **Checking only the state in hand is why a wield label went unseen**:
+        # the opening state has no stowed weapon to take up, so a check written
+        # against one snapshot passed while the label said `take up w3611`.
+        seen_labels.update(
+            (o["kind"], o["label"] or "") for o in options
+        )
         best = max(range(len(options)), key=lambda i: options[i]["score"])
         if show:
             print(f"        {state['current']}: {options[best]['label']}")
@@ -259,6 +298,40 @@ def check_no_engine_ids(check: Checks, state: dict, events: list[dict]) -> None:
         if e["actor"] is not None and e["actor"] not in known
     ]
     check.that(not stray, "every event names a wire id", str(stray[:2]))
+
+
+#: A ref where a word belongs. `w3611`, `p12609`, `m145a2`, `w:rod`, `cf:...`.
+_REFFY = re.compile(r"\b(?:[wpmifr]\d{2,}(?:a\d+)?|w:[a-z-]+|cf:[a-z0-9-]+)\b")
+
+
+def check_option_labels(check: Checks, seen: set[tuple[str, str]]) -> None:
+    """No option's label is a ref, across **every** option the fight offered.
+
+    A different question from "every option targets a wire id", and nobody was
+    asking it. `render._option_label` built the `wield` label by string surgery
+    on the weapon ref: before #339 that served the printed name straight to the
+    page around `wire` (#342), and after it the label read `take up w3611`.
+    Either way the tell is an identifier where a word should be.
+
+    **Accumulated over the whole fight rather than read off one state**, which
+    is the correction that makes this cover anything. Written against the
+    opening state it passed with the broken label still in place -- there is no
+    stowed weapon to take up on round one, so the option it exists to check was
+    never in the snapshot. The first version of this check was as weak as the
+    casing test it was written to replace.
+
+    Reports which kinds were actually seen, because a check that silently
+    covered three option kinds out of eight is not a check -- `scripts/CLAUDE.md`
+    on an instrument that must not skip itself quietly.
+    """
+    raw = sorted(f"{kind}: {label}" for kind, label in seen if _REFFY.search(label))
+    kinds = sorted({kind for kind, _ in seen})
+    check.that(
+        not raw,
+        f"no option label is a bare ref, over {len(seen)} labels "
+        f"of {len(kinds)} kinds ({', '.join(kinds)})",
+        str(raw[:3]),
+    )
 
 
 def check_roster(check: Checks, state: dict) -> None:
@@ -363,10 +436,27 @@ def check_hosted(check: Checks) -> None:
             for entry in server.get("/api/chargen/classes")
             for b in entry["builds"]
         ]
-        leaked = [lb for lb in legs if lb != lb.lower()]
+        # **Lower case is not the test, and testing it is how four printed names
+        # got served.** This asserted `lb != lb.lower()`, and four warden legs
+        # were named for their printed class-feature options -- `earthstrength`
+        # and three more, every one already lower case. The check passed on all
+        # of them while `Wire.build`'s fallback returned the printed word
+        # verbatim under `CE_NAMES=off`. #342, found by #337 rather than here.
+        #
+        # So the test is the one the question actually asks: **is this label a
+        # printed name?** Read off the localisation, which this script may do --
+        # it is `scripts/leaks.py`'s whole method and the server is the thing
+        # under test, not this.
+        # Vacuous without a name table, which is the right failure: a machine
+        # with no `localization/` has nothing to leak.
+        printed = _printed_feature_names()
+        leaked = [
+            lb for lb in legs
+            if lb != lb.lower() or lb.lower().replace("-", " ") in printed
+        ]
         check.that(
             not leaked,
-            "with names off, a build leg is its slug",
+            "with names off, a build leg is its slug and not a printed name",
             str(leaked[:3]),
         )
         # A score is not a name and must survive the hosted mode: a page that
@@ -397,9 +487,11 @@ def main() -> int:
     check = Checks()
     print("playing a fight over HTTP")
     with Server() as server:
-        eid, state = play(server, check, show=args.show)
+        labels: set[tuple[str, str]] = set()
+        eid, state = play(server, check, show=args.show, seen_labels=labels)
         events = check_stream(server, check, eid)
         check_no_engine_ids(check, state, events)
+        check_option_labels(check, labels)
     print("\nthe same game with CE_NAMES=off")
     check_hosted(check)
 

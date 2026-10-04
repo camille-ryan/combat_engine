@@ -134,6 +134,19 @@ class Wire:
         printed = self.power(f"cf:{cls}-{leg}")
         if printed and not printed.startswith(("cf:", "Cf:")):
             return printed
+        # **The fallbacks honour `show_names` too, which they did not.** Every
+        # other reader on this class checks it first; these two returned a
+        # prettified slug whatever the setting, and four legs whose slug *was*
+        # a printed class-feature name were served verbatim under
+        # `CE_NAMES=off`. Those four are renamed now (#337), so this is the
+        # guard rather than the fix -- the next slug with a printed word in it
+        # will not get out through here. #342.
+        #
+        # Prettifying is a *display* transformation: with names off the answer
+        # is the slug exactly as the repo holds it, which is what every other
+        # ref-shaped answer looks like.
+        if not self.show_names:
+            return leg
         if leg.startswith("second-"):
             return f"secondary {leg[len('second-'):]}"
         return leg.replace("-", " ")
@@ -269,4 +282,18 @@ def _plain(ref: str) -> str:
         return OWN_NAMES[ref]
     if ref.startswith(("c:", "w:", "z:")):
         return ref.split(":", 1)[1].replace("-", " ").title()
+    # **A thing a row spawned is called what it is.** `Cast.call_companion`
+    # mints `Ident(ref=f"{self.ref}:{kind}")`, so a familiar's ref is the owning
+    # row's ref with `:familiar` on it -- and with no entry in the name table
+    # this returned the whole thing, so an option label read "Cloud of Daggers
+    # -> cf:wizard-sha-ir-f1:familiar". A player saw the identifier, and that
+    # identifier carries a slugified printed build name.
+    #
+    # The tail is the mechanical kind -- familiar, spirit, beast, summon, wall --
+    # and it is a word, not a name. Taken only when it is purely letters, so
+    # `cf:rogue-scoundrel-f4` still answers as itself: a class feature *is* its
+    # own id and serving it whole is what no printed name looks like.
+    head, _, tail = ref.rpartition(":")
+    if head and tail.isalpha():
+        return tail.title()
     return ref
