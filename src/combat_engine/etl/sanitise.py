@@ -255,8 +255,23 @@ def scrub(
         # a coincidence (`SHORTEST` is 6) and that is the right call across
         # 32,000 names, so nothing reported it. Same family as the curly
         # apostrophe this function already handles two notes down.
+        # **Two letters is long enough here, as long as it is not a
+        # stopword.** The floor was `> 2` and it is right for `replacements`,
+        # which holds every name in the compendium: 119 monster names contain
+        # the word `of`, and letting that substitute would wreck every card it
+        # touched. But `by_word` is one creature's *own* name applied to its
+        # *own* card -- `etl/monster.py` passes `{m.name: m.ref_id}` -- so the
+        # blast radius is a single stat block, and the names this excluded are
+        # not prose. Nine creatures print a two-letter part of their own name
+        # as a short form across 20 briefs, and an author was shown one.
+        #
+        # `STOPWORDS` is a closed set of function words, so this cannot grow
+        # into a list that needs feeding, and `of`, `in` and `an` -- the only
+        # two-letter words that appear in many names -- are all in it.
         for token in {name, *re.findall(r"[^\W\d_]+", name)}:
-            if len(token) > 2 and token.lower() not in kept:
+            low = token.lower()
+            long_enough = len(token) > 2 or (len(token) == 2 and low not in STOPWORDS)
+            if long_enough and low not in kept:
                 usable.setdefault(token, ref)
     # Only the names that are actually in this text. The index of every
     # creature in the compendium is four thousand entries, and running a
