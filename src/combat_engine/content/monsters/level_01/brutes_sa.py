@@ -115,6 +115,14 @@ def _shattered(c: Cast) -> None:
     `Health`, so the drop goes through `ecs.damage` and `Dropped` is announced
     the one way everything else announces it -- which is what the other row on
     one of these blocks is listening for.
+    
+    **Approximated, and marked.** `c.flat` goes through `deal_damage`, so the
+    blow is absorbed by temporary hit points and stopped outright by resist-all
+    -- and the card says "reduced to 0 hit points" with no condition. Paying it
+    as damage is right about the common case and wrong about the creature that
+    has been given temp hp, which is why the tree's other rows of this shape
+    carry `c.kill()` and these now do too. Two readings of one sentence cannot
+    both be right.
     """
     me, ref = c.me, c.ref
 
@@ -403,7 +411,8 @@ def m4457a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-)
+
+    dropped=("c.kill()",),)
 def m4457a2(c: Cast) -> None:
     _shattered(c)
 
@@ -905,7 +914,8 @@ def m5413a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-)
+
+    dropped=("c.kill()",),)
 def m5448a0(c: Cast) -> None:
     _shattered(c)
 

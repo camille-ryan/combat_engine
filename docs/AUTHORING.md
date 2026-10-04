@@ -192,6 +192,13 @@ that never applies.
   `Moved` now carries `kind_` as well, and it is the only one of the three
   that also carries `from_` -- so "an ally adjacent to you **before** the
   teleport" is asked there and nowhere else.
+* **A trait's `requires=` is never consulted.** `turns.arm_traits_of` arms
+  every `action=NONE` row at the start of the fight and never calls `usable`,
+  which is the only reader of `requires`. So a trait's printed Requirement has
+  to be asked **again, in the body** -- a gate written only in the header is
+  read by nothing and the row arms itself in every fight. Write both anyway:
+  `requires_text` is what the card shows, and it is what makes `audit.py` say
+  UNUSED rather than SILENT. Trust neither alone.
 * **Two of those fields are set at emission, not declared on the event**, and
   reading the dataclass will tell you they do not exist. `movement.py` does
   `moved.kind_ = kind` on every emission -- the comment there says "so

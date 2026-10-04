@@ -199,6 +199,14 @@ def _crit_drops_it(c: Cast) -> None:
     whatever the critical left standing. `c.flat` rather than reaching into
     `Health`: the drop has to announce itself or nothing downstream -- a
     `Dropped` watcher, the scorer, the log -- sees the creature fall.
+    
+    **Approximated, and marked.** `c.flat` goes through `deal_damage`, so the
+    blow is absorbed by temporary hit points and stopped outright by resist-all
+    -- and the card says "reduced to 0 hit points" with no condition. Paying it
+    as damage is right about the common case and wrong about the creature that
+    has been given temp hp, which is why the tree's other rows of this shape
+    carry `c.kill()` and these now do too. Two readings of one sentence cannot
+    both be right.
     """
     me, ref = c.me, c.ref
 
@@ -700,7 +708,8 @@ def m3533a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-)
+
+    dropped=("c.kill()",),)
 def m3533a4(c: Cast) -> None:
     _crit_drops_it(c)
 
@@ -785,7 +794,8 @@ def m3537a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-)
+
+    dropped=("c.kill()",),)
 def m3537a3(c: Cast) -> None:
     _crit_drops_it(c)
 

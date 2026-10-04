@@ -309,8 +309,19 @@ def _has_cursed_somebody(world: World, eid: int) -> bool:
 
 
 def _ridden_by_second_level(world: World, eid: int) -> bool:
-    """"While mounted by a friendly rider of 2nd level or higher"."""
-    for rider in world.relations.sources(Relation.RIDDEN_BY, eid):
+    """"While mounted by a friendly rider of 2nd level or higher".
+
+    **`targets`, not `sources`.** The relation is stored
+    `set(RIDDEN_BY, mount, rider)`, so a mount's riders are its `targets` and
+    its `sources` are whatever *it* is riding -- empty for a mount, every time.
+    `c.rider` and `c.mount` are the two directions and read exactly that way.
+
+    This asked `sources`, so the gate was false forever and the two rows that
+    require it were never offered -- a Requirement that cannot be met reads as
+    a board limitation in `audit.py`, which is why nothing caught it. Found by
+    an agent at level 4 hitting the same clause and getting it right.
+    """
+    for rider in world.relations.targets(Relation.RIDDEN_BY, eid):
         stats = world.get(rider, Stats)
         if stats is not None and stats.level >= 2:
             return True

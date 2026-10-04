@@ -228,6 +228,30 @@ KNOWN_SILENT = {
     # board's own ongoing poison, and then correctly declines: that poison is not
     # its bite's and the carrier is not adjacent.
     "m5537a1": "answers its own bite's ongoing poison; nothing has bitten yet",
+    # **The row works and the engine says nothing about it.** `turns.extra_turn`
+    # duplicates the creature's slot in `order` and emits no event at all, so
+    # there is nothing for `DID_SOMETHING` to recognise -- the same shape as
+    # `c.summon`, which `Cast.watch`'s docstring already records.
+    #
+    # Driven by hand with both controls by the agent that wrote it: the
+    # two-slot creature gets `order == [1, 1, 2]` and a control monster beside
+    # it gets one slot.
+    #
+    # The real fix is an event, not an excuse -- `DID_SOMETHING` cannot be
+    # taught to see a list mutation. Until there is one this is the honest
+    # verdict.
+    "m3301a2": "its whole content is a second turn, and `extra_turn` emits nothing",
+    # A mount's trait that pays its rider, gated on the rider being 5th level
+    # or higher. The board's rider is level 1, so the body correctly declines.
+    # Proved with a positive control by the agent that wrote it: raise the
+    # board's rider to level 5 and the bonus lands, gated on the charge.
+    #
+    # It reports SILENT rather than UNUSED because **a trait's `requires=` is
+    # never consulted** -- `turns.arm_traits_of` does not call `usable`, so the
+    # gate is read by nothing and the row is armed regardless. That is why the
+    # body has to ask the same question again, and why `requires=` on a trait
+    # buys honest reporting and nothing else.
+    "m1461a1": "pays a 5th-level rider; the board's rider is level 1",
     # Reduces a target's necrotic resistance, and nothing on the board has
     # any. Giving the undead some would change what every necrotic row in
     # the tree reports, which is a worse trade than one excused row.
