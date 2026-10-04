@@ -2980,6 +2980,18 @@ def main() -> int:
     # board cannot exercise it, which is the opposite of the claim. Counted
     # on its own line below instead.
     ok = len(chosen) - len(broken) - len(silent) - len(never) - len(known_quiet)
+    # **An empty scope is a skip, not a pass.** `--changed` reads `git status`, so
+    # on a clean tree it selects nothing and this printed "0 of 0 rows fire and do
+    # something" -- which `check.py` rendered as `ok audit 0.4s`, indistinguishable
+    # from a sweep that found nothing wrong. That is the one thing
+    # `scripts/CLAUDE.md` says an instrument must never do: report a skip as a
+    # skip rather than passing. The exit code is unchanged -- nothing was wrong,
+    # because nothing was looked at -- but the line now says which.
+    if not chosen:
+        print("\n  SKIPPED -- no row was in scope, so nothing was checked")
+        print("  (`--changed` reads `git status`; on a clean tree use `--since` "
+              "for everything touched since the last full sweep)")
+        return 0
     print(f"\n  {ok} of {len(chosen)} rows fire and do something")
     # **Fires and does something is not the same as finished.** A `dropped=`
     # row is fired and lands in this total, which is honest about what it did

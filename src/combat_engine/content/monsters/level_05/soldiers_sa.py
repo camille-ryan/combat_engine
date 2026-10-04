@@ -702,7 +702,7 @@ def m1113a2(c: Cast) -> None:
     if mate is None:
         return
     for eff in sorted(c.world.effects.of(mate), key=lambda e: -e.id):
-        if eff.until is When.SAVE_ENDS:
+        if eff.when is When.SAVE_ENDS:
             c.world.effects.save(eff)
             return
 

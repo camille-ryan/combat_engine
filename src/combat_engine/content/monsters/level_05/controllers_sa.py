@@ -160,7 +160,7 @@ def _shake_off_latest_hold(c: Cast) -> None:
     names no effect of its own, so the most recent save-ends hold standing
     on it is what was just applied."""
     for eff in sorted(c.world.effects.of(c.me), key=lambda e: -e.id):
-        if eff.until is When.SAVE_ENDS:
+        if eff.when is When.SAVE_ENDS:
             c.world.effects.save(eff)
             return
 

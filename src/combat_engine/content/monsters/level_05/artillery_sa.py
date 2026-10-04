@@ -461,7 +461,7 @@ def m1501a3(c: Cast) -> None:
     standing. `Effects.save` rolls, announces and ends, so a success really
     does shake it off and a failure leaves it in place."""
     for eff in sorted(c.world.effects.of(c.me), key=lambda e: -e.id):
-        if eff.until is When.SAVE_ENDS:
+        if eff.when is When.SAVE_ENDS:
             c.world.effects.save(eff)
             return
 

@@ -67,6 +67,13 @@ def main() -> int:
         )
         faults += 1
 
+    for where, read in _effect_attrs():
+        print(
+            f"{where}: `{read}` -- an Effect has no such field, so this raises"
+            f" the moment the row runs. The duration is `when`."
+        )
+        faults += 1
+
     for ref, why in _spent_once_a_fight():
         print(f"{ref}: {why}")
         faults += 1
@@ -467,6 +474,62 @@ def _dead_triggers() -> list[tuple[str, str, str, str]]:
                 out.append(
                     (p.ref, name, trig.event.__name__, ", ".join(sorted(fields)))
                 )
+    return out
+
+
+def _effect_fields() -> set[str]:
+    """What an `Effect` actually carries, read off the dataclass."""
+    import dataclasses
+
+    from combat_engine.engine.durations import Effect
+
+    return {f.name for f in dataclasses.fields(Effect)} | {
+        n for n in dir(Effect) if not n.startswith("_")
+    }
+
+
+def _effect_attrs() -> list[tuple[str, str]]:
+    """Reads of a field an `Effect` does not have.
+
+    **`Effect.until` does not exist -- the duration field is `when`** -- and four
+    rows across four files wrote `eff.until is When.SAVE_ENDS`. Every one raised
+    `AttributeError` the moment its trigger fired, and every one looked finished:
+    three were committed and `audit.py` reported them UNUSED, because the trigger
+    they wait for is not one the board produces, so the raise never happened
+    where anybody could see it. Proven both ways before this walk was written --
+    the old spelling raises at `artillery_sa.py:464`, the new one rolls a
+    `SavingThrow`.
+
+    Exactly the `_dead_triggers` shape one object over: a name spelled correctly
+    against the wrong class. The engine's own `CLAUDE.md` calls this component's
+    failure mode *silently false* and says to read the event before reading a
+    field off it; the same goes for an effect.
+
+    Scoped to names bound by iterating `effects.of(...)`, which is how a row gets
+    hold of one. A wider net would have to guess what every local is.
+    """
+    fields = _effect_fields()
+    out = []
+    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.For) or not isinstance(node.target, ast.Name):
+                continue
+            if "effects.of" not in ast.unparse(node.iter):
+                continue
+            bound = node.target.id
+            for inner in ast.walk(node):
+                if (
+                    isinstance(inner, ast.Attribute)
+                    and isinstance(inner.value, ast.Name)
+                    and inner.value.id == bound
+                    and inner.attr not in fields
+                ):
+                    rel = path.relative_to(ROOT)
+                    out.append((f"{rel}:{inner.lineno}", f"{bound}.{inner.attr}"))
     return out
 
 
