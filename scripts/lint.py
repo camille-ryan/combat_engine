@@ -30,6 +30,7 @@ import re
 import subprocess
 import sys
 from collections import Counter
+from functools import cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -67,11 +68,20 @@ def main() -> int:
         )
         faults += 1
 
-    for where, read in _effect_attrs():
+    for where, ref in _dropped_but_empty():
         print(
-            f"{where}: `{read}` -- an Effect has no such field, so this raises"
-            f" the moment the row runs. The duration is `when`."
+            f"{where}: {ref} is marked `dropped=` and its body does nothing"
+            f" -- `dropped=` means it plays with one clause missing. A row that"
+            f" cannot play is `todo=`, which is refused rather than counted ok."
         )
+        faults += 1
+
+    for where, read, what in _effect_attrs():
+        hint = ("an Effect has no such field, so this raises the moment the row"
+                " runs. The duration is `when`." if what == "effect" else
+                "an AttackResult has no such field, so this raises the moment the"
+                " row runs. A critical is `critical`, not `crit`.")
+        print(f"{where}: `{read}` -- {hint}")
         faults += 1
 
     for ref, why in _spent_once_a_fight():
@@ -316,19 +326,74 @@ def _unhandled_half_on_miss() -> list[tuple[str, str]]:
                 for d in node.decorator_list
                 for n in ast.walk(d)
             )
-            if not declared or _deals_half(node):
+            if not declared or _deals_half(node, _module_defs(tree)):
                 continue
             out.append((f"{path.relative_to(ROOT)}:{start}", ref))
     return out
 
 
-def _deals_half(node: ast.AST) -> bool:
+def _dropped_but_empty() -> list[tuple[str, str]]:
+    """Rows marked `dropped=` whose body does nothing at all.
+
+    The three markers draw one distinction and this is it: `dropped=` means the
+    row **plays** with one named clause missing, `todo=` means nothing works and
+    the row is refused in play. A body that is a docstring and nothing else
+    cannot play, so `dropped=` is the wrong word -- and it is not cosmetic.
+    `audit.py` fires a `dropped=` row and counts it inside the headline `ok`,
+    so seven rows were being reported as working while doing nothing, and each
+    showed up as an unexplained SILENT instead of as the refusal it was.
+
+    Seven across the tree when this was written -- five from one week of the
+    monster sweep and two older -- which is the rate a hand-applied distinction
+    drifts at. One of the seven also carried `out_of_combat=True` beside its
+    marker, a pair that claims the row is both finished-and-inert and missing a
+    clause; `dsl.use` refuses `out_of_combat` with `todo` outright, so converting
+    it surfaced the contradiction.
+    """
+    out = []
+    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for start, _end, ref, node in _rows(tree):
+            dec = " ".join(ast.unparse(d) for d in node.decorator_list)
+            if "dropped=" not in dec:
+                continue
+            real = [
+                n for n in node.body
+                if not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant)
+                        and isinstance(n.value.value, str))
+            ]
+            if not real or all(isinstance(n, ast.Pass) for n in real):
+                out.append((f"{path.relative_to(ROOT)}:{start}", ref))
+    return out
+
+
+def _module_defs(tree: ast.Module) -> dict[str, ast.AST]:
+    """Module-level functions, by name, so a shared helper can be followed."""
+    return {
+        n.name: n for n in tree.body
+        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
+    }
+
+
+def _deals_half(node: ast.AST, helpers: dict[str, ast.AST] | None = None,
+                _depth: int = 0) -> bool:
     """Does this body pay out a half-damage branch anywhere in it?
 
     An `else:` on any `if` counts, because a row that bothered to write
     one on an attack row is handling the miss -- being generous here is
     deliberate, since the fault this catches is the *absence* of any miss
     handling at all and a false alarm would get the walk ignored.
+
+    **A shared helper counts too.** This walked the decorated function alone, so
+    two near-duplicate monsters paying the miss out through one
+    `_helper(c)` were both reported as faults -- a false alarm, and the wave that
+    hit it inlined the branch twice to satisfy the check rather than the other way
+    round. Following a call to a module-level function in the same file fixes it;
+    one level is enough for the shape this is about, and bounding the depth keeps
+    a helper calling a helper from looping.
     """
     for n in ast.walk(node):
         if isinstance(n, ast.If) and n.orelse:
@@ -340,6 +405,12 @@ def _deals_half(node: ast.AST) -> bool:
         if any(
             k.arg == "half" and isinstance(k.value, ast.Constant) and k.value.value
             for k in n.keywords
+        ):
+            return True
+        called = getattr(n.func, "id", "")
+        if (
+            helpers and _depth < 2 and called in helpers
+            and _deals_half(helpers[called], helpers, _depth + 1)
         ):
             return True
     return False
@@ -529,8 +600,53 @@ def _effect_attrs() -> list[tuple[str, str]]:
                     and inner.attr not in fields
                 ):
                     rel = path.relative_to(ROOT)
-                    out.append((f"{rel}:{inner.lineno}", f"{bound}.{inner.attr}"))
+                    out.append(
+                        (f"{rel}:{inner.lineno}", f"{bound}.{inner.attr}", "effect")
+                    )
+        # **`.result.<attr>` is the same trap on `AttackResult`.** A level-7 wave
+        # wrote `ev.result.crit`, which raises: the field is `critical`, and
+        # `c.crit` on `Cast` is a differently-named convenience that makes the
+        # wrong spelling look familiar. It caught its own on a row whose trigger
+        # does fire; a row whose trigger the board never produces would have
+        # shipped, which is exactly how the four `eff.until` rows did.
+        #
+        # **Both spellings.** `ev.result.crit` is an attribute on an attribute;
+        # `result = ...` then `result.crit` is an attribute on a local name, and
+        # that is the commoner shape in this tree. The first version of this walk
+        # only matched the former, so breaking a real line to test it produced
+        # nothing -- the line was `bool(result and result.critical)`. Checked by
+        # breaking it again afterwards.
+        # **Reads only.** `result.blurred = True` *writes* an ad-hoc attribute,
+        # which a dataclass allows, and a sibling row on the same stat block reads
+        # it back with `getattr(..., "blurred", False)` -- a deliberate out-of-band
+        # channel between two rows, not a mistake. Flagging the store called it
+        # one. A read of a field that is not there is the thing that raises.
+        for inner in ast.walk(tree):
+            if not isinstance(inner, ast.Attribute):
+                continue
+            if not isinstance(inner.ctx, ast.Load):
+                continue
+            holder = inner.value
+            looks_like_result = (
+                isinstance(holder, ast.Attribute) and holder.attr == "result"
+            ) or (isinstance(holder, ast.Name) and holder.id == "result")
+            if looks_like_result and inner.attr not in _attack_result_fields():
+                rel = path.relative_to(ROOT)
+                out.append((f"{rel}:{inner.lineno}", f"result.{inner.attr}", "attack"))
     return out
+
+
+@cache
+def _attack_result_fields() -> frozenset[str]:
+    """What an `AttackResult` carries, read off the dataclass."""
+    import dataclasses
+
+    from combat_engine.engine.resolve import AttackResult
+
+    return frozenset(
+        {f.name for f in dataclasses.fields(AttackResult)}
+        | {n for n in dir(AttackResult) if not n.startswith("_")}
+    )
 
 
 _CONDITION_EVENTS = ("ConditionApplied", "ConditionEnded")

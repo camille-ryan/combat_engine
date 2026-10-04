@@ -228,15 +228,15 @@ KNOWN = {
     # a reader that accepts `Melee N/M` would stop checking the shape at all.
     "m6277a3": "the card prints `Melee 10/20` -- a range band on a melee line, "
                "which is contradictory rather than missing; see #360",
-    # The fourth member of the conditional-usage family above, and the only
-    # survivor of the 22 the `_AS_PROSE` guard took out. The card states both
-    # usages in one parenthetical -- `recharge 5, or at-will while bloodied` --
-    # so `_earliest` takes the recharge and the column took the at-will. Neither
-    # is wrong; `usage` holds one value. Listed before the row is written so
-    # whoever writes it is not told to "fix" a header that is already right,
-    # which is how the other 22 did their damage.
-    "m2777a8": "the card prints `recharge 5, or at-will while bloodied` -- two "
-               "usages in one parenthetical, and `usage` holds one",
+    # **`m2777a8` was here and is gone, because the row solved it.** The card
+    # states two usages in one parenthetical -- `recharge 5, or at-will while
+    # bloodied` -- and I waived it ahead of the row being written so whoever
+    # wrote it would not be told to "fix" a correct header. The level-7 wave did
+    # better than the waiver assumed: it declares `usage=RECHARGE, recharge=5`,
+    # which is what the prose says, and pays the bloodied half out in the body by
+    # restoring the use the moment it fires. Nothing disagrees, so the waiver was
+    # dead weight and the stale-waiver guard said so on the first run after the
+    # row landed. That guard earning its keep is worth more than the entry was.
 }
 
 

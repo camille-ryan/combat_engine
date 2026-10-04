@@ -2429,12 +2429,21 @@ def f2717(c: Cast) -> None:
 
 
 @power("f2718", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True,
-       dropped=("c.terrain('outdoor')",))
+       reach=PERSONAL, target=SELF,
+       todo=("c.terrain('outdoor')",))
 def f2718(c: Cast) -> None:
     """The Perception bonus is a check. Hiding as the fight opens would
     be real, but it is gated on being outdoors with cover, and `c.terrain`
-    answers a word no encounter in this tree sets."""
+    answers a word no encounter in this tree sets.
+
+    **Not `out_of_combat=True`, which this carried alongside a `dropped=`.**
+    That pair claims two things at once -- the row is finished and inert in a
+    fight, *and* a clause is missing -- and the sentence above says which is
+    true: the hide is a real combat clause with nowhere to land. An empty body
+    does nothing, so the marker is `todo=`, and the row is refused in play
+    rather than fired and counted. `dsl.use` refuses the pair outright, which is
+    how the contradiction surfaced.
+    """
 
 
 @power("f2728", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

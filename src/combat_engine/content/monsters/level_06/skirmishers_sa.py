@@ -29,10 +29,16 @@ on a board; both are read as flavour and dropped, which loses nothing a
 fight can tell the difference about. `m1741a2`'s own Effect line also names
 a second ref that is not a zone this creature owns -- read the same way.
 
-Two short words in two different cards -- "Sword" on `m3237a1` and
-"fireblade" on `m3642a1` -- read as capitalised nicknames rather than
-ordinary nouns. Both are written as "it", per the hard rule against a
-printed name; said again here because it is the only place to say it.
+Two cards -- `m3237a1` and `m3642a1` -- print a capitalised short word where
+the sentence wants a pronoun, and in both the word is part of the creature's
+own printed name rather than an ordinary noun. Both rows write "it".
+
+**The words themselves are not repeated here, and the first version of this
+note repeated them.** `leaks.py` reported it: one of the two is part of two
+creatures' names, so writing it down to explain the judgement put a printed
+name into a tracked file, which is the one rule with no exceptions -- "not a
+comment, a docstring, a variable, a column". Naming the refs is enough for
+anybody who needs to check the call.
 """
 
 from __future__ import annotations
@@ -3089,7 +3095,7 @@ def m6655a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.move(through=)",),
+    todo=("c.move(through=)",),
 )
 def m6655a1(c: Cast) -> None:
     """Entering an occupied square has no verb; everything that leans on it

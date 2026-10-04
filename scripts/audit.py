@@ -250,6 +250,41 @@ KNOWN_SILENT = {
     # already record that dressing it would cost every other row its legal shift.
     "m6662a3": "requires being in water; the board has none",
     "m6662a4": "requires water and loose ground; the board has neither",
+    # **Round 8's fifteen, and three rows that looked like these and were not.**
+    # `m5373a3`/`m5373a5` returned when the chooser aimed them at a creature their
+    # target line forbids, where `_restricted_to` redirects to one in reach that
+    # qualifies -- the settled answer across 112 rows. `m4400a2` gated on
+    # `c.wielding`, which is false in every fight because `loader.py` gives every
+    # stat block an empty `Gear()` (#366). All three fire now and are not here.
+    #
+    # A target state `_provoke` does not produce. It makes an attack; it does not
+    # daze, immobilise, knock prone or bring anybody to dying.
+    "m1760a2": "targets a dazed, stunned, unconscious or helpless creature; "
+               "the board produces none of the four",
+    "m1950a1": "targets an immobilized creature; nothing here is",
+    "m1192a2": "targets an immobilized creature; nothing here is",
+    "m5504a1": "targets a prone creature; nothing here is",
+    "m5576a1": "its Requirement is an immobilized, stunned or unconscious target",
+    "m5577a2": "its Requirement is an immobilized, stunned or unconscious target",
+    "m5825a4": "finishes a dying humanoid; nobody here is dying",
+    "m2777a4": "targets a bloodied ally of one origin; the board bloodies the "
+               "caster, not its one full-health ally",
+    # A sibling's grab. The harness fires each row once on a fresh board, so the
+    # row that does the grabbing never ran -- `m467a2`'s family again.
+    "m1981a1": "attacks a creature grabbed by it; the grab is m1981's own",
+    "m2233a1": "grabbed target only; nothing here is grabbed",
+    "m4645a2": "grabbed target only; nothing here is grabbed",
+    "m5857a3": "acts on what it has grabbed; the grab is m5857a2's",
+    # Terrain and geometry the bare grid does not have.
+    "m3993a7": "requires being submerged in water; the board has none",
+    "m4148a7": "requires being submerged in water; the board has none",
+    # Driven by hand rather than assumed: the board seats this creature *adjacent*
+    # to the single bloodied enemy, and the best square its three squares of
+    # shifting can reach is also adjacent, so "move closer to a bloodied
+    # creature" correctly has nowhere to go. The row is right and the geometry
+    # gives it nothing to do.
+    "m5373a4": "shifts closer to a bloodied creature; it starts adjacent to the "
+               "only one",
     # The one that is an instrument gap rather than a board gap, and is filed as
     # #374 rather than excused: `c.set_origin` labels its effect `origin:<word>`
     # because `kinds_of` reads the word back out of the label, so it cannot carry

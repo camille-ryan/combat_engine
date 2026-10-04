@@ -381,7 +381,7 @@ def f2026(c: Cast) -> None:
 
 @power("f3433", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, proficiency=("w3643", "w3619"),
-       dropped=("c.counts_as(group=)",))
+       todo=("c.counts_as(group=)",))
 def f3433(c: Cast) -> None:
     """Re-aimed, and half of it lands.
 
