@@ -364,6 +364,18 @@ content file for style**. The examples are the style.
 
   Six rows had the header and not the branch. `lint.py` refuses that pair
   now, so you will be told rather than finding out in play.
+* **`c.revives_unless` does not stand anything up.** Its own docstring says
+  "declaration only — it implements nothing": it records the *fact* for the AI
+  policy, because `threat_removed` writes off anything at or below 0 hit points
+  and so a troll lying at 0 was worth nothing to finish. The creature actually
+  getting back up is the row's own body — a `DamageApplied` watch remembering
+  the damage type, and a `Dropped` watch healing inside that window, because
+  `Dropped` says who struck the blow and not what with. Call both or the row
+  audits SILENT. `level_02/soldiers_sa.py`'s `m3533a3` is the worked example.
+
+  Two rows were written with the declaration alone and both reported SILENT;
+  this is the same shape as `half_on_miss` above — a name that reads like
+  machinery and is data.
 * A **minion** deals its damage on a hit and takes none of this specially —
   its 1 hp is in the database.
 * Auras, regeneration and "the first time each round" are all in

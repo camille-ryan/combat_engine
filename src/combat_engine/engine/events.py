@@ -207,7 +207,18 @@ class AdjacencyGained(Event):
 
 @dataclass
 class AdjacencyLost(Event):
-    """`actor` stopped being adjacent to `other`. So do opportunity attacks."""
+    """`actor` stopped being adjacent to `other`. So do opportunity attacks.
+
+    **Emitted twice, mirrored, so either creature can answer it** --
+    `movement.py:209-210`, exactly as `AdjacencyGained` above. Said here because
+    it was not: a reader who took this docstring at its word and `AdjacencyGained`'s
+    at its word would conclude the two differ, and filter one of them wrong.
+
+    It has **no `mover`**, which `AdjacencyGained` grew for a real reason: without
+    it, "when an enemy moves away from it" also fires when the creature itself
+    walks off, which is not the printed sentence and is true half the time. The
+    same hole is open on this side and no row has it to read.
+    """
 
     actor: int
     other: int
