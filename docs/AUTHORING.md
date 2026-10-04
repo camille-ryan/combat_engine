@@ -111,6 +111,40 @@ that never applies.
   their subject `target` -- `ConditionApplied` is the common one -- are
   false under it forever. Use `targets_me` there. `lint.py` now catches this
   statically, so a bad one fails the run rather than shipping.
+* **`kind=` is the word the card prints before "bonus", and nothing else.**
+  Not a default, not a guess, and **not "power" because most bonuses are**.
+  A card that says "+2 bonus to AC" means untyped, and writing `kind="power"`
+  there makes two bonuses fail to stack where the card stacks them. This is
+  the single most repeated mistake of the monster sweep -- three rows a round,
+  every round -- and `bonuses.py` catches every one, so it costs a correction
+  rather than a bug. Where a card prints two numbers in two sentences, the type
+  word belongs to the sentence it is in: "+1 **power** bonus to the attack
+  roll, and 2 extra damage" is one typed call and one untyped one.
+* **Do not return when the chooser aims you at the wrong creature -- redirect.**
+  `Target` filters on side, count and size and **not** on what a creature is
+  suffering, so a row whose printed line says "targets a prone creature" gets
+  handed whoever is nearest. Returning throws the row away while somebody else
+  in reach qualifies. `_restricted_to(c, reach, test)` is the settled answer
+  across 112 rows, and `Target.kind` is the marker. Seven rows in two rounds
+  returned instead, and each read as a row that does nothing.
+* **Do not snapshot a window the card leaves open.** "+1 to its next attack
+  against an enemy that hit it since its last turn" must ask *inside the gate*,
+  when the swing happens -- not take the set when the action is spent. Taken
+  early it is already stale if anybody hits in between, and returning on an
+  empty set means the row does nothing at all when used *before* being hit,
+  which is when a monster usually spends a minor action. `m915a4` is the shape.
+* **An empty body is `todo=`, never `dropped=`.** The markers draw one
+  distinction and that is it: `dropped=` means the row **plays** with one clause
+  missing, `todo=` means nothing works and the row is refused in play. It is not
+  cosmetic -- `audit.py` fires a `dropped=` row and counts it inside the headline
+  `ok`, so seven rows were reported working while being empty. `lint.py` refuses
+  the pair now.
+* **Explaining a name is still writing it down.** Where you decline to use a
+  printed word, name the **ref** and not the word. One file's module docstring
+  quoted the two words it had carefully kept out of its rows, to say why -- and
+  one of them was part of two creatures' names, so `leaks.py` reported the
+  docstring. The rule lists the case: *not a comment, a docstring, a variable, a
+  column.*
 * **A gate on a key the context does not carry is false, not an error.**
   So the two lists below are load-bearing, and this passage was wrong
   about them for two sessions -- it said the damage side had no `ranged`
