@@ -72,7 +72,14 @@ _ABILITY = re.compile(r"m\d+a\d+")
 
 #: `+13 vs. AC`, `+6 vs Reflex`. The defence word is spelled out in full on
 #: both dialects, and `vs.` loses its stop on the earlier one.
-_ATTACK = re.compile(r"([+-]\s*\d+)\s+vs\.?\s+(AC|Fortitude|Reflex|Will)\b", re.I)
+#:
+#: `Armor Class` written out is the long form of `AC` and three cards use it.
+#: Three of 7,812 is not worth a regex on its own -- it is worth one because
+#: without it those three have no card value and this check is **silent** about
+#: them, which reads exactly like approval.
+_ATTACK = re.compile(
+    r"([+-]\s*\d+)\s+vs\.?\s+(Armor Class|AC|Fortitude|Reflex|Will)\b", re.I
+)
 
 #: `1d8 + 8`, `1d4+4`, `2d6 + 5`. **The word `damage` is not required to
 #: follow it**, and requiring it was wrong: one card prints
@@ -127,7 +134,8 @@ _BODY_STARTS = re.compile(r"\b(?:Attack|Hit|Miss|Effect|Trigger|Requirement)\s*:
 #: `encounter` in this phrase is a duration and never a usage.
 _DURATION = re.compile(r"\bend of (?:the|its|his|her)\b[^.;]{0,24}$", re.I)
 
-_DEFENCES = {"ac": "AC", "fortitude": "FORT", "reflex": "REF", "will": "WILL"}
+_DEFENCES = {"ac": "AC", "armor class": "AC",
+             "fortitude": "FORT", "reflex": "REF", "will": "WILL"}
 
 #: Rows whose header disagrees with its card for a reason a person has looked
 #: at. Four of 2,630, every one found by this check on its first run, and
