@@ -56,6 +56,11 @@ CHECKS = (
                "no `todo=` waits on a symbol that now exists"),
     Instrument("bonuses", ("uv", "run", "scripts/bonuses.py", "--quiet"),
                "every bonus says the type its card prints"),
+    # Beside `bonuses` because it is the same question about a different corpus:
+    # does the code say the printed number. A monster ability's whole content is
+    # its header, so this is most of what can be wrong with one.
+    Instrument("cards", ("uv", "run", "scripts/cards.py", "--quiet"),
+               "every monster header says the numbers its stat block prints"),
     Instrument("replay", ("uv", "run", "scripts/replay.py", "verify"),
                "the engine still plays the recorded fights"),
     Instrument("fight", ("uv", "run", "scripts/fight.py", "--quiet"),

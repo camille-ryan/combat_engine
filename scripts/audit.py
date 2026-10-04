@@ -2735,9 +2735,16 @@ def main() -> int:
         if p.dropped:
             # A row that works with one clause missing. Unlike `todo` it
             # **is** fired, because the part that works has to be checked
-            # like anything else -- but it is reported beside the `todo`
-            # rows rather than counted done, because the clause that is
-            # gone is gone whether or not the rest of it passes.
+            # like anything else -- and because it is in `chosen`, a dropped
+            # row that fires **is counted in the headline**. That is correct:
+            # the headline claims "fires and does something" and a dropped row
+            # does both.
+            #
+            # This comment used to say it was "reported beside the `todo` rows
+            # rather than counted done", which was false in the second half --
+            # and `dropped=` is the marker a monster wave reaches for most, so
+            # the figure is printed separately below rather than left to be
+            # read as finished.
             partial.append((ref, p.dropped, "DROP"))
         if p.out_of_combat:
             # Declared inert. A cantrip that lights a torch is not a silent
@@ -2824,6 +2831,14 @@ def main() -> int:
     # on its own line below instead.
     ok = len(chosen) - len(broken) - len(silent) - len(never) - len(known_quiet)
     print(f"\n  {ok} of {len(chosen)} rows fire and do something")
+    # **Fires and does something is not the same as finished.** A `dropped=`
+    # row is fired and lands in this total, which is honest about what it did
+    # and silent about the clause that is missing. Printed on its own line so
+    # the headline cannot be read as a completion figure.
+    playing = sum(1 for ref, _w, how in partial if how == "DROP")
+    if playing:
+        print(f"  {playing} of those play with a clause missing -- "
+              f"counted here because they fire, not because they are done")
     if inert:
         print(f"  {len(inert)} declared out of combat, not fired: {', '.join(inert[:6])}"
               + (" ..." if len(inert) > 6 else ""))

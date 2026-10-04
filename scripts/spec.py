@@ -77,6 +77,12 @@ def main() -> int:
     )
     ap.add_argument("--monsters", type=int, help="every monster at this level")
     ap.add_argument("--role", help="narrow --monsters to one role")
+    ap.add_argument(
+        "--mm13",
+        action="store_true",
+        help="--monsters: only the three Monster Manuals, which was the old "
+        "default and is 630 of 3,130 imported monsters",
+    )
     ap.add_argument("--items", action="store_true", help="magic items, heroic tier")
     ap.add_argument("--slot", help="narrow --items to one slot: weapon, implement, neck ...")
     ap.add_argument("--feats", action="store_true", help="feats, heroic tier")
@@ -126,7 +132,7 @@ def main() -> int:
     elif args.cls or args.level:
         refs += _powers(db, args.cls, args.level, args.book)
     if args.monsters is not None:
-        refs += _monsters(db, args.monsters, args.role)
+        refs += _monsters(db, args.monsters, args.role, book=args.mm13)
     if not refs:
         # Only help when nothing was *asked*. Filters that match nothing
         # used to print usage too, which reads as "you typed it wrong"
@@ -232,8 +238,20 @@ def _powers(db, cls: str | None, levels: list[int] | None, book: str = "") -> li
     ]
 
 
-def _monsters(db, level: int, role: str | None, book: bool = True) -> list[str]:  # noqa: ANN001
-    """Monsters at a level. Monster Manual 1 to 3 only, which is the scope."""
+def _monsters(db, level: int, role: str | None, book: bool = False) -> list[str]:  # noqa: ANN001
+    """Monsters at a level. **Every imported source, not MM1-3.**
+
+    This filtered on `book != ''` and its docstring asserted that was the
+    scope. It is not: 630 of the 3,130 imported monsters carry a book, and
+    those 630 are **exactly the ones already written** -- so the one tool that
+    briefs an author could not list a single one of the 10,802 outstanding
+    abilities. `coverage.py` had the same defect and the same fix in #357;
+    `--mm13` keeps the old view.
+
+    The per-ref path was never affected -- naming a ref has always worked --
+    which is why this went unnoticed: an author could be briefed, but a wave
+    could not be listed.
+    """
     sql = "SELECT ref FROM monster WHERE level = ?"
     params: list = [level]
     if book:

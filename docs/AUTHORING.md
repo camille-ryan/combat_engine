@@ -519,9 +519,12 @@ def i1(c: Cast) -> None:
 * **It is still named.** `todo.py` lists every such row under the skill it
   narrows, so the set stays readable and a skill collecting excuses is
   visible.
-* **It is audited like any other finished row.** A `dropped=` row is exempt
-  from the audit's run; a `narrative=` row is not, so one that claimed this
-  and then did nothing in a fight is caught silent.
+* **It is audited like any other finished row**, so one that claimed this and
+  then did nothing in a fight is caught silent. So is a `dropped=` row: this
+  said a `dropped=` row was "exempt from the audit's run" and it never has
+  been -- `audit.py` fires it deliberately, because the half that works has to
+  be checked like anything else. The audit prints the dropped count on its own
+  line, so "fires and does something" is not read as "finished".
 
 `narrative=` with `todo=` is refused — a `todo` row is refused in play and
 has no combat half for the clause to sit beside. `narrative=` with
