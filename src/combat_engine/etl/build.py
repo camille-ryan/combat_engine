@@ -1784,7 +1784,7 @@ def _cross_reference_rest(
     specs shipped a neighbour's printed name while both halves believed
     they agreed.
     """
-    from .sanitise import identifies, scrub, set_races, vocabulary
+    from .sanitise import identifies, plural, scrub, set_races, vocabulary
 
     rules = vocabulary()
     # Which names are races', for `identifies` and for `_racial_labels`
@@ -1864,6 +1864,19 @@ def _cross_reference_rest(
         words = re.findall(r"[A-Za-z']+", low)
         if words:
             by_word.setdefault(words[0], []).append((name, ref))
+            # **And under its plural**, because a card naming *another*
+            # creature very often names several of them: "two <name>s appear".
+            # The bucket is keyed on the singular first word and the spec's own
+            # words are cut the same way, so the plural landed in no bucket and
+            # the name stayed in the brief as prose. 26 briefs printed another
+            # monster's name that way. The replacement half is added beside
+            # `others[name]` below -- a key with no plural *replacement* would
+            # match and then fail to substitute, because `_apostrophes` wraps
+            # every pattern in `\b` and the singular does not sit on a word
+            # boundary inside its own plural.
+            many = plural(words[0])
+            if many and many.lower() != words[0]:
+                by_word.setdefault(many.lower(), []).append((plural(name), ref))
 
     # A name one class holds resolves as it always did. A name several
     # hold becomes an **alternatives list**, `a/b/c`, which `_pick`
@@ -2030,6 +2043,12 @@ def _cross_reference_rest(
                         other = f"x_{other}"
                         names.setdefault(other, {"name": name})
                     others[name] = other
+                    # The plural form too, for the reason the `by_word` note
+                    # above gives: the key found it, the substitution needs a
+                    # pattern that actually matches what the card printed.
+                    many_name = plural(name)
+                    if many_name and many_name != name:
+                        others[many_name] = other
             cls = speaker.get(ref) or speaker.get(re.sub(r"[a-z]\d*$", "", ref), "")
             # **The clause label is not a feat's construction.** It was
             # found on a feat and the pass was written where it was

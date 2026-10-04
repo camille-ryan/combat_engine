@@ -268,11 +268,40 @@ def scrub(
         # `STOPWORDS` is a closed set of function words, so this cannot grow
         # into a list that needs feeding, and `of`, `in` and `an` -- the only
         # two-letter words that appear in many names -- are all in it.
+        # **And the plural of each, because a card pluralises an alias.** A
+        # creature called "<Word> <Word>" carries `plural` for the whole name in
+        # the localisation and nothing for its parts, so a card saying "<words>s
+        # in the burst regain 10 hit points" -- the plural of the *first word* --
+        # matched nothing and the name reached the brief. **59 briefs across 58
+        # creatures** did that, which is the largest leak this campaign has found,
+        # and it is the same shape as the accent and the two-letter short form
+        # above: a form the card uses and the index does not hold.
+        #
+        # Filtered through `kept` exactly as the singular is, so a creature whose
+        # name is an ordinary word does not take that word's plural out of every
+        # rules sentence on its own card.
+        # The plural is gated on **its singular**, not on itself. Checking the
+        # plural against `kept` let a creature named after an ordinary word lose
+        # that word's plural from its own rules text -- `keep={"guard"}` does not
+        # contain "guards", so "the guards in the area" was scrubbed. The word a
+        # reader needs protected is the one in `kept`, and its plural inherits
+        # that protection.
         for token in {name, *re.findall(r"[^\W\d_]+", name)}:
             low = token.lower()
             long_enough = len(token) > 2 or (len(token) == 2 and low not in STOPWORDS)
-            if long_enough and low not in kept:
-                usable.setdefault(token, ref)
+            if not long_enough or low in kept:
+                continue
+            usable.setdefault(token, ref)
+            many = plural(token)
+            if many and many.lower() != low:
+                usable.setdefault(many, ref)
+            # **And a prefixed compound**, because `\b` cannot see a name that a
+            # card has glued a prefix onto: "non<name> creatures" is two briefs,
+            # and the word boundary sits before the prefix, not before the name.
+            # A closed set of prefixes, so this cannot grow into a list that needs
+            # feeding; `non` is the only one the corpus actually uses.
+            for pre in _NAME_PREFIXES:
+                usable.setdefault(pre + token.lower(), ref)
     # Only the names that are actually in this text. The index of every
     # creature in the compendium is four thousand entries, and running a
     # regex for each against every spec is twenty-four million
@@ -499,6 +528,12 @@ COMMON_ENOUGH = 3
 
 #: And a very short word is a coincidence waiting to happen either way.
 SHORTEST = 6
+
+#: Prefixes a card glues onto a creature's own name, where `\b` then sits
+#: before the prefix and the name itself never matches. Closed, and `non` is
+#: the only one the corpus uses -- the rest are here because the cost of a
+#: miss is a printed name in a brief and the cost of a spare entry is nothing.
+_NAME_PREFIXES = ("non", "anti", "semi", "sub", "un", "half")
 
 #: Function words. A multi-word match made only of these is a coincidence in
 #: ordinary prose -- there is a power called `Not It`. Closed set, unlike a
