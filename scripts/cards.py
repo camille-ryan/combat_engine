@@ -373,6 +373,22 @@ def main() -> int:
     refs = [r for r in sorted(REGISTRY) if _ABILITY.fullmatch(r)]
     if wanted is not None:
         refs = [r for r in refs if r in wanted]
+        # **Refuse rather than report nothing.** `0 of 0 agree` is
+        # success-shaped: it exits 0, says no row disagreed, and is exactly what
+        # a run that checked nothing looks like. An agent reported this as the
+        # instrument failing above some argument count; the real cause was the
+        # shell -- **zsh does not word-split an unquoted `$VAR`**, so a ref list
+        # held in a variable arrives as one argument full of spaces and matches
+        # no ref. `${=VAR}` splits it, and `$(cat file)` splits too.
+        #
+        # Either way the lesson is the instrument's: say so loudly.
+        if not refs:
+            given = sorted(wanted)[:4]
+            print(f"  none of the {len(wanted)} ref(s) given is a declared "
+                  f"monster ability: {', '.join(given)}"
+                  + (" ..." if len(wanted) > 4 else ""))
+            print("  (in zsh an unquoted $VAR is one argument -- use ${=VAR})")
+            return 1
 
     faults: dict[str, list[str]] = {}
     nocard = checked = skipped = 0
