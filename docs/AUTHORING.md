@@ -192,6 +192,15 @@ that never applies.
   `Moved` now carries `kind_` as well, and it is the only one of the three
   that also carries `from_` -- so "an ally adjacent to you **before** the
   teleport" is asked there and nowhere else.
+* **Two of those fields are set at emission, not declared on the event**, and
+  reading the dataclass will tell you they do not exist. `movement.py` does
+  `moved.kind_ = kind` on every emission -- the comment there says "so
+  `ev.kind_` is never missing" -- and `resolve.attack` does
+  `landed.among = among or (target,)`, which is the whole target list of one
+  use. Both are real and both are safe to read. Two authors in one afternoon
+  checked `dataclasses.fields(...)`, found them absent, and concluded one that
+  a doc was wrong and the other that a clause was unaskable; one of them marked
+  a finished row as blocked. **Check the emission site, not the declaration.**
 * **`PowerUsed` is announced *before* the body runs, and it is the same
   trap.** `dsl.use` calls `cast.used()` above `p.body(cast)`, so a row
   watching `PowerUsed` sees a world in which the power has not happened

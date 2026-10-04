@@ -1396,12 +1396,29 @@ def m5746a3(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it drops to 0 hit points",
     on=Trigger(Dropped, about_me, "it drops to 0 hit points"),
-    todo=("c.lose_surge()",),
 )
 def m5746a4(c: Cast) -> None:
-    """The whole of this row is one healing surge leaving an enemy's pool
-    without healing anybody. `c.regain_surge` hands them out and refuses a
-    negative count deliberately, so there is no way back down."""
+    """One healing surge leaves an enemy's pool and heals nobody.
+
+    `c.spend_surge(on=)` is exactly that -- "Spend a surge and gain nothing for
+    it", written for the paladin's touch where the payer and the healed are
+    different creatures. This row was marked `todo=("c.lose_surge()",)` on the
+    reasoning that `c.regain_surge` refuses a negative count, which is true and
+    was the wrong verb to look at: it is a death throe refused in play for want
+    of a method that has existed all along.
+
+    `todo.py` could not catch it either -- its staleness check matches the
+    symbol a marker names, and the name invented here is not the name of the
+    thing that exists.
+    """
+    # "One enemy that it can see" -- the row has no target line of its own, so
+    # the choice is made here. Nearest first, which is the convention the
+    # auto-targeter uses and the only ordering available without asking.
+    seen = [who for who in c.enemies() if c.can_see(who)]
+    if not seen:
+        return
+    seen.sort(key=lambda who: c.distance(who))
+    c.spend_surge(on=seen[0])
 
 
 @power(
