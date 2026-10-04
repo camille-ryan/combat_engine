@@ -59,6 +59,14 @@ def main() -> int:
         )
         faults += 1
 
+    for where, ref in _unhandled_half_on_miss():
+        print(
+            f"{where}: {ref} declares half_on_miss=True and never deals it"
+            f" -- nothing in the engine reads that flag, so the printed"
+            f" Miss line is dropped. Write `else: c.hit(half=True)`."
+        )
+        faults += 1
+
     for ref, why in _spent_once_a_fight():
         print(f"{ref}: {why}")
         faults += 1
@@ -267,6 +275,67 @@ def _unread_modifiers() -> list[tuple[str, str]]:
                 rel = path.relative_to(ROOT)
                 out.append((f"{rel}:{node.lineno}", key))
     return out
+
+
+def _unhandled_half_on_miss() -> list[tuple[str, str]]:
+    """Rows declaring `half_on_miss=True` whose body never deals the half.
+
+    The flag is **declared data and nothing more**: `Damage.half_on_miss`
+    is read by `scripts/cards.py` and by no line of the engine, and the
+    page's Miss sentence comes from the printed prose, not from here. So
+    a row that sets it and writes a bare `if c.strike(): c.hit()` drops
+    its printed Miss line in play while looking finished -- six did, all
+    in one file, found only because a wave's agent read the engine.
+
+    Wiring the flag into `resolve` instead is not available: 123 of the
+    129 declarations already carry the branch and would double-apply.
+    """
+    out = []
+    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for start, _end, ref, node in _rows(tree):
+            declared = any(
+                isinstance(n, ast.Call)
+                and getattr(n.func, "id", getattr(n.func, "attr", "")) == "Damage"
+                and any(
+                    k.arg == "half_on_miss"
+                    and isinstance(k.value, ast.Constant)
+                    and k.value.value is True
+                    for k in n.keywords
+                )
+                for d in node.decorator_list
+                for n in ast.walk(d)
+            )
+            if not declared or _deals_half(node):
+                continue
+            out.append((f"{path.relative_to(ROOT)}:{start}", ref))
+    return out
+
+
+def _deals_half(node: ast.AST) -> bool:
+    """Does this body pay out a half-damage branch anywhere in it?
+
+    An `else:` on any `if` counts, because a row that bothered to write
+    one on an attack row is handling the miss -- being generous here is
+    deliberate, since the fault this catches is the *absence* of any miss
+    handling at all and a false alarm would get the walk ignored.
+    """
+    for n in ast.walk(node):
+        if isinstance(n, ast.If) and n.orelse:
+            return True
+        if not isinstance(n, ast.Call):
+            continue
+        if getattr(n.func, "attr", "") in ("half_damage", "half"):
+            return True
+        if any(
+            k.arg == "half" and isinstance(k.value, ast.Constant) and k.value.value
+            for k in n.keywords
+        ):
+            return True
+    return False
 
 
 #: A card that really does limit itself says so in one of these ways.

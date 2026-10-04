@@ -192,13 +192,26 @@ that never applies.
   `Moved` now carries `kind_` as well, and it is the only one of the three
   that also carries `from_` -- so "an ally adjacent to you **before** the
   teleport" is asked there and nowhere else.
-* **A trait's `requires=` is never consulted.** `turns.arm_traits_of` arms
-  every `action=NONE` row at the start of the fight and never calls `usable`,
-  which is the only reader of `requires`. So a trait's printed Requirement has
-  to be asked **again, in the body** -- a gate written only in the header is
-  read by nothing and the row arms itself in every fight. Write both anyway:
-  `requires_text` is what the card shows, and it is what makes `audit.py` say
-  UNUSED rather than SILENT. Trust neither alone.
+* **A `requires=` on a trait does not gate it -- it can kill it.**
+  `turns.arm_traits_of` arms every `action=NONE` row **through `dsl.use`**,
+  which calls `usable`, which evaluates `requires` via `can_branch`. There is
+  no exemption for a no-action row. So a trait whose Requirement is false at
+  the moment of arming is **refused once and never armed again for the whole
+  fight** -- and a Requirement that could become true later (a rider mounting,
+  a shape being taken, an ally arriving) never gets the chance.
+
+  So: ask the Requirement **in the body**, inside the watch, where it is
+  re-read every time the clause might pay. `requires_text` alone is safe and
+  is what the card shows; `requires=` on a trait is only safe when the
+  Requirement is a fact that cannot change during a fight.
+
+  (An earlier version of this entry said the opposite -- that `requires=` on a
+  trait is never consulted, so writing it was harmless. That was wrong in both
+  halves, and the advice would have silently killed any trait gated on
+  something that starts false. `audit.py` makes it hard to see: its trait
+  branch counts the row as fired without calling `use`, so a trait refused by
+  its own Requirement reports **SILENT rather than UNUSED**, which reads as a
+  board limitation.)
 * **Two of those fields are set at emission, not declared on the event**, and
   reading the dataclass will tell you they do not exist. `movement.py` does
   `moved.kind_ = kind` on every emission -- the comment there says "so
@@ -333,6 +346,24 @@ content file for style**. The examples are the style.
   a callable. `Damage(..., kind=LIMITED)` for a recharge or encounter power,
   `kind=MINION` for a minion's fixed damage. Import from
   `combat_engine.engine.monster_math`.
+* **`half_on_miss=True` does nothing on its own. Write the branch.** The
+  flag is declared data — `scripts/cards.py` reads it to check your header
+  against the card, and **no line of the engine reads it at all.** The
+  page's Miss sentence comes from the printed prose, not from the flag. So
+  a row that sets it and writes a bare `if c.strike(): c.hit()` drops its
+  Miss line in play and looks finished. Say it both ways:
+
+  ```python
+  damage=Damage("2d6", 4, half_on_miss=True),   # what the card prints
+  ...
+      if c.strike():
+          c.hit()
+      else:
+          c.hit(half=True)                      # what actually happens
+  ```
+
+  Six rows had the header and not the branch. `lint.py` refuses that pair
+  now, so you will be told rather than finding out in play.
 * A **minion** deals its damage on a hit and takes none of this specially —
   its 1 hp is in the database.
 * Auras, regeneration and "the first time each round" are all in

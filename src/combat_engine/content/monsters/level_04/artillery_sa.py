@@ -601,6 +601,8 @@ def m1431a3(c: Cast) -> None:
     _recharge_when_bloodied(c)
     if c.strike():
         c.hit()
+    else:
+        c.hit(half=True)
 
 
 @power(
@@ -617,6 +619,8 @@ def m1431a3(c: Cast) -> None:
 def m1431a4(c: Cast) -> None:
     if c.strike():
         c.hit()
+    else:
+        c.hit(half=True)
 
 
 # ==========================================================================
@@ -1489,6 +1493,8 @@ def m3571a3(c: Cast) -> None:
     looser set."""
     if c.strike():
         c.hit()
+    else:
+        c.hit(half=True)
 
 
 _M3571_BLOODIED = "it is first bloodied"
@@ -1543,6 +1549,8 @@ def m3571a5(c: Cast) -> None:
 def m3571a6(c: Cast) -> None:
     if c.strike():
         c.hit()
+    else:
+        c.hit(half=True)
 
 
 @power(
@@ -1718,6 +1726,8 @@ def m4142a4(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.push(3)
+    else:
+        c.hit(half=True)
 
 
 _M4142_BLOODIED = "it is first bloodied"
@@ -3288,6 +3298,8 @@ def m6581a3(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(5, DamageType.COLD)
+    else:
+        c.hit(half=True)
 
 
 # ==========================================================================
