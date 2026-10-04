@@ -30,6 +30,15 @@ A row gets several attempts with different seeds before it is called silent,
 because an attack power that misses three times running has done nothing and
 is fine.
 
+**Silence is graded against a baseline, by ref.** `fixtures/audited.json` holds
+the refs that were silent at the last full sweep, and a run fails for a silent
+row that is *not* on that list, for a listed row that does something now, or for
+a raise. Carried rows are named and pass. Before this the verdict compared the
+count against zero while the same file recorded `silent: 223` -- so the
+instrument failed for finding exactly what it had written down, and `check.py`
+reported `FAIL audit` on every run that reached any of them. A check that cannot
+pass stops being read. #372.
+
 Generated from the registry, like `show.py`. No per-row ceremony: writing a
 power costs a function and nothing else, which is the entire arrangement
 this repository is built on.
@@ -2912,8 +2921,40 @@ def main() -> int:
     for r in broken:
         print(f"\n  RAISED  {r.ref}")
         print("      " + r.error.strip().replace("\n", "\n      ")[-900:])
-    for r in silent:
+    # **The 223 are a measurement, and this used to treat them as a failure.**
+    # The watermark recorded `silent: 223` and the verdict compared the count
+    # against zero, so the instrument failed for finding exactly what it had
+    # written down -- and `check.py` reported `FAIL audit` on every run whose
+    # scope reached any of them, which since an `engine/` change widens to the
+    # whole tree is most runs. A check that cannot pass stops being read.
+    #
+    # So the baseline is **per ref**, not a count, and that is strictly stricter
+    # than the count ever was rather than looser. A count cannot tell a narrow
+    # run anything: `--changed` over 600 rows finding 4 silent says nothing
+    # about 223. Worse, a sweep where ten rows healed and ten different rows
+    # broke reads as 223 and passes under any count-based gate. Per ref:
+    #
+    # * a silent row **in** the list is carried -- named, not a failure;
+    # * a silent row **not in** it is a regression -- red, with the ref;
+    # * a listed row that does something now is `leaks.DEFERRED`'s case -- the
+    #   work landed, so say so and tighten the list. Also red, because a stale
+    #   entry is a loosening already in place.
+    #
+    # Only refs actually audited this run are judged, or a narrow run would
+    # report every absent baseline row as healed.
+    base = set(mark.get("silent_refs") or ())
+    graded = bool(base)
+    fresh = [r for r in silent if r.ref not in base] if graded else list(silent)
+    carried = [r for r in silent if r.ref in base] if graded else []
+    looked = set(chosen)
+    quiet_now = {r.ref for r in silent} | {r.ref for r in known_quiet}
+    quiet_now |= {r.ref for r in never} | {r.ref for r in broken}
+    healed = sorted((base & looked) - quiet_now) if graded else []
+
+    for r in fresh:
         print(f"  SILENT  {r.ref:<10} fired {r.fired}/{TRIES} times and did nothing")
+    for r in carried:
+        print(f"  carried {r.ref:<10} silent at the last full sweep too")
     for r in never:
         print(f"  UNUSED  {r.ref:<10} could not be used on the test board at all")
     for r in known_quiet:
@@ -2970,7 +3011,18 @@ def main() -> int:
               + ", ".join(ref for ref, _, _ in retired[:6])
               + (" ..." if len(retired) > 6 else ""))
     if broken or silent:
-        print(f"  {len(broken)} raise, {len(silent)} silent")
+        if graded:
+            print(f"  {len(broken)} raise, {len(fresh)} newly silent, "
+                  f"{len(carried)} silent at the last full sweep too")
+        else:
+            print(f"  {len(broken)} raise, {len(silent)} silent")
+    if healed:
+        print(f"  {len(healed)} row(s) do something now -- remove from "
+              f"`silent_refs` in {WATERMARK.name}: " + ", ".join(healed[:8])
+              + (" ..." if len(healed) > 8 else ""))
+    if not graded and silent:
+        print(f"  (no per-ref baseline in {WATERMARK.name}, so every silent row "
+              f"counts as new. A bare `audit.py` writes one.)")
     if never:
         print(f"  {len(never)} never usable here -- often a Requirement the board cannot meet")
         if args.never:
@@ -2999,13 +3051,20 @@ def main() -> int:
                 "fired": ok,
                 "silent": len(silent),
                 "never": len(never),
+                # **The refs, not just the count.** See the note beside `base`
+                # above: a count cannot tell a narrow run whether its silent
+                # rows are the known ones, and cannot see ten healing while
+                # ten break. Written by a full sweep only, like the rest.
+                "silent_refs": sorted(r.ref for r in silent),
             }, indent=2) + "\n")
             print(f"\n  watermark written at {got.stdout.strip()[:9]}")
 
     # `refused` fails the run. An engine that announces a thing and then
     # does it anyway is a worse fault than any single row being wrong, and
     # it is the one that has been silent four times.
-    return 1 if (broken or silent or refused or outgrown) else 0
+    # `fresh` rather than `silent`: a carried row is the recorded baseline,
+    # and `healed` fails because a stale entry is a loosening already in place.
+    return 1 if (broken or fresh or healed or refused or outgrown) else 0
 
 
 if __name__ == "__main__":

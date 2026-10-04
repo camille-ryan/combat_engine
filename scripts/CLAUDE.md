@@ -26,6 +26,22 @@ Both directions have happened here and both were caught by being explicit:
 So when a number moves the wrong way, say so plainly in the commit with both
 figures. A silently narrowed check is worse than a red one.
 
+**And a check that cannot pass is the same failure pointed the other way.**
+`audit.py` wrote `silent: 223` into `fixtures/audited.json` and then failed for
+finding 223, because the verdict compared the count against zero and nothing ever
+read the file back. `check.py` therefore reported `FAIL audit` on every run whose
+scope reached any of those rows — which, since an `engine/` change widens to the
+whole tree, was most runs. The one run that mattered would have looked identical
+to the two hundred that did not.
+
+The fix is **not** raising the number. It is a per-ref baseline that may not get
+worse: a silent row not on the list is red, a listed row that works is red, a
+listed row still silent is named and passes. That is *stricter* than a count,
+which cannot tell a narrow run whether its silent rows are the known ones and
+cannot see ten rows healing while ten others break. The same shape as
+`localise.KNOWN_LABEL_DRIFT`, `cards.KNOWN` and `leaks.DEFERRED` — tightened when
+it improves, red when it regresses, never a bare allowance. #372.
+
 ## Rules
 
 * **An instrument must not skip itself quietly.** A check that runs on half
