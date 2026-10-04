@@ -313,6 +313,30 @@ naming it. **`uv run scripts/vocab.py` is the authority** -- it is generated
 from the code, so it cannot be stale; this page can be and has been. (This
 line used to cite a `vocab.txt`, which has never existed.)
 
+* **An `AttackResult` is truthy when it hit.** `__bool__` returns `self.hit`
+  (`resolve.py:101`), which is why `if c.strike():` and `if c.attack(...):`
+  read the way they do. Worth knowing because the signature says
+  `-> AttackResult` and nothing else said this, so a correct `if c.attack(...)`
+  looks like it is testing an object for existence and invites being "fixed"
+  into something that reads `.hit` by hand.
+* **The live result can be changed from a plain watch, not only an
+  interrupt.** `AttackRolled` carries the real `AttackResult` as `ev.result`,
+  and after emitting it `resolve.attack` recomputes the outcome **from that
+  object** rather than from its own locals -- its comment says "From the
+  **result**, not from the local `natural`/`total`". So setting
+  `ev.result.natural` or `ev.result.total` inside an ordinary
+  `c.watch(AttackRolled, ...)` changes whether the blow hits and whether it
+  crits. `c.reroll_attack` is the packaged form of this for an interrupt; the
+  lever is not limited to one.
+
+  Verified with both controls rather than inferred -- a forced `d20=2` announces
+  `Miss`, and the same roll with a plain watch setting `natural=20` announces
+  `Hit` with `critical=True`. Two level-8 rows use it for a shared mount-and-rider
+  miss and for a printed crit rider.
+* **A `todo=`/`dropped=` symbol naming a header field needs the dotted form.**
+  `dsl._SYMBOL` reads a bare `reach_alt` as prose and **refuses the import with a
+  `ValueError`**, not a lint warning. Write `Power.reach_alt`, the way
+  `Dropped.source` already does.
 * **Movement as a state:** `c.moving_as("climb")` -- what a creature is
   doing *now*, held past the end of the move, where `Movement.modes` only
   ever said what it *could* do. `query.moving_as(world, eid, mode)` is the
