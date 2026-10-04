@@ -147,7 +147,7 @@ def races(
         )
         names[ref] = {
             "name": name,
-            "flavour": text(flavour.group(1)) if flavour else "",
+            "description": text(flavour.group(1)) if flavour else "",
         }
         for label, option_ref in options.items():
             names.setdefault(option_ref, {"name": label})
@@ -236,7 +236,7 @@ def _one_item(
             spec, score,
         ),
     )
-    names[ref] = {"name": name, "flavour": _flavour(body)}
+    names[ref] = {"name": name, "description": _description(body)}
     report.items += 1
 
     for level, plus, cost in steps:
@@ -284,7 +284,7 @@ def _own_page(body: str) -> str:
     return body[: cuts[1]] if len(cuts) > 1 else body
 
 
-def _flavour(body: str) -> str:
+def _description(body: str) -> str:
     found = re.search(r'<p class="miflavor">(.*?)</p>', body, re.S)
     if found is None:
         # A set page opens with an unclassed paragraph instead.

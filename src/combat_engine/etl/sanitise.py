@@ -235,7 +235,7 @@ def _apostrophes(name: str) -> str:
     return r"\b" + re.sub(r"['\u2019]", "['\u2019]", re.escape(name)) + r"\b"
 
 
-def flavour(document: str) -> str:
+def description(document: str) -> str:
     """The prose `power_spec` throws away.
 
     The two halves are cut from the same page and neither should be derived

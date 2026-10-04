@@ -90,7 +90,7 @@ class Monster:
     found: set[str] = field(default_factory=set)
     #: For the localisation table only. Never stored in game.db.
     name: str = ""
-    flavour: str = ""
+    description: str = ""
 
     @property
     def ref_id(self) -> str:
@@ -143,6 +143,32 @@ def book_of(source: str) -> str:
     return ""
 
 
+#: The one paragraph on a stat block that is prose: `<p class="flavor">
+#: <b>Description</b>: ...`. 344 of 5,326 compendium rows carry it, 156 of them
+#: imported, median 258 characters.
+#:
+#: Matched by its **label**, not its class. Every `<p>` on the page is `flavor`,
+#: `flavor alt`, `flavorIndent` or `publishedIn`, so a class tells you nothing
+#: here -- which is why `sanitise.description`'s class-based reader returns the
+#: whole stat block and why a survey of classes alone concludes, wrongly, that
+#: there is no prose.
+_DESCRIPTION = re.compile(
+    r'<p class="flavor"\s*>\s*<b>\s*Description\s*</b>\s*:?\s*(.*?)</p>',
+    re.S | re.I,
+)
+
+
+def _description(body: str) -> str:
+    """The stat block's own prose, or nothing.
+
+    Nothing is the common case and the correct one: 2,974 of the 3,130 imported
+    monsters print no description, so an empty field is the answer rather than a
+    gap for `scripts/localise.py` to report.
+    """
+    found = _DESCRIPTION.search(body)
+    return text(found.group(1)).strip() if found else ""
+
+
 def parse(
     row_id: int,
     document: str,
@@ -185,10 +211,33 @@ def parse(
     _abilities(m, body)
     # A stat block names itself in its own rules text, so its name and its
     # abilities' names come out of every spec before anyone sees one.
-    from .sanitise import flavour as read_flavour
     from .sanitise import scrub
 
-    m.flavour = read_flavour(document)
+    # **A stat block's prose is one labelled paragraph, and the general reader
+    # cannot find it.** `sanitise.description` keeps any paragraph without a
+    # mechanical label and filters furniture by a list of line *prefixes* --
+    # `alignment|skills|equipment|str |hp |ac |...`. That works on a power page
+    # and cannot work here: a monster's whole page is `flavorIndent`,
+    # `flavor alt` and `flavor`, its trait bodies start with none of those words,
+    # and 33,588 of its paragraphs carry no label at all, so nothing filters
+    # them.
+    #
+    # Measured: 2,662 of 3,129 monster entries (**85%**) held a mechanical label,
+    # median 673 characters against a power's 94. `m217`'s was 1,005 characters
+    # of its own stat block -- a **third** copy of text already held as columns
+    # (`level`, `hp`, `ac`, `fort`) and as 973 characters of `monster_power.spec`,
+    # sitting in the one field reserved for prose.
+    #
+    # **But the page does carry prose, on 344 of 5,326 rows:** a `<b>Description</b>`
+    # label inside a `flavor` paragraph, median 258 characters, 156 of them
+    # imported. I first wrote `m.description = ""` here on the strength of a
+    # 120-page sample that showed four `<p>` classes and no lore class -- which
+    # was true about *classes* and wrong about prose, because this is found by
+    # its **label**. At 6% of rows a 120-page sample expects seven hits and I
+    # had not looked for them. It would have discarded all 156.
+    #
+    # So: the labelled description, and nothing else. #348.
+    m.description = _description(body)
 
     # Only the stat block's own name comes apart into words -- it is the one
     # thing that refers to itself by a fragment. An ability named "Sensitive

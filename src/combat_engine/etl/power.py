@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 
 from .html import detail, text
-from .sanitise import flavour as read_flavour
+from .sanitise import description as read_description
 from .sanitise import power_spec, scrub
 
 
@@ -33,7 +33,7 @@ class Power:
     spec: str = ""
     #: For the localisation table only. Never stored in game.db.
     name: str = ""
-    flavour: str = ""
+    description: str = ""
     #: Set on a **second card printed inside another power's entry**. The
     #: compendium gives such a card no id of its own, so a row that must
     #: *name* it -- "you regain the use of that form's attack", "the ally
@@ -95,7 +95,7 @@ def parse(row: dict, document: str) -> Power:
     )
     body = detail(document)
     p.spec = power_spec(document, p.ref, p.name)
-    p.flavour = read_flavour(document)
+    p.description = read_description(document)
     _shape(p, body)
     return p
 

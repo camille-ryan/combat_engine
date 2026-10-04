@@ -595,7 +595,7 @@ def _monsters(
                 int(m.conjuration),
             ),
         )
-        names[m.ref_id] = {"name": m.name, "flavour": m.flavour}
+        names[m.ref_id] = {"name": m.name, "description": m.description}
         for a in m.abilities:
             ref = f"{m.ref_id}a{a.index}"
             out.execute(
@@ -1063,7 +1063,7 @@ def _card_row(
         "INSERT OR REPLACE INTO class_feature VALUES (?,?,?,?,?,?)",
         (ref, cls, ord_, build, spec, _reprint_of(out, spec)),
     )
-    names[ref] = {"name": name, "flavour": sanitise.flavour(fragment)}
+    names[ref] = {"name": name, "description": sanitise.description(fragment)}
     return 1
 
 
@@ -1128,7 +1128,7 @@ def _powers(
                 p.spec, p.score,
             ),
         )
-        names[p.ref] = {"name": p.name, "flavour": p.flavour}
+        names[p.ref] = {"name": p.name, "description": p.description}
 
     for row in rows:
         p = power_parser.parse(dict(row), row["Txt"])

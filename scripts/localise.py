@@ -176,17 +176,16 @@ def _heroic_refs(db, all_tiers: bool) -> dict[str, set[str]]:  # noqa: ANN001
     return out
 
 
-#: Fields that are still stored under an older name.
+#: Fields still stored under an older name, as a transition.
 #:
-#: `description` is `flavour` until #348 renames it -- and that rename waits on a
-#: bug, because `flavour` currently holds **rules text** for monsters and feats.
-#: Counting `flavour` as `description` here is the honest reading: the prose is
-#: present for 31% of entries and the field it sits in is simply misnamed, so
-#: reporting 0% would describe work that is already done.
+#: **Empty, and it earned being emptied.** `description` was `flavour` until
+#: #348, and this read the older key so the figure described work already done
+#: for 31% of entries rather than reporting 0%. The rename has landed, so an
+#: entry here now would be a lie about where the data lives.
 #:
-#: The alias goes away with the rename. `localise.py --missing description` is
-#: what says whether it still has anything to do.
-ALIASED = {"description": ("flavour",)}
+#: Kept as a mechanism rather than deleted, because the next field to be renamed
+#: wants it and the argument for it is above.
+ALIASED: dict[str, tuple[str, ...]] = {}
 
 
 def _filled(entry: dict, field: str) -> bool:

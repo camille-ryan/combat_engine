@@ -43,7 +43,7 @@ from functools import lru_cache
 from typing import Any
 
 from .html import detail, paragraphs, text
-from .sanitise import RULES_TERMS, flavour, mechanical, power_spec, scrub
+from .sanitise import RULES_TERMS, description, mechanical, power_spec, scrub
 
 #: A whole power card printed inside a feat's entry. 227 feats carry one,
 #: and it is the power dialect exactly -- verified on feat 595 -- so
@@ -271,10 +271,10 @@ def feats(
         books = json.dumps(
             [b.strip() for b in (row["Source"] or "").split(",") if b.strip()]
         )
-        card_flavour = ""
+        card_description = ""
         for n, start in enumerate(cards, start=1):
             stop = next((h.start() for h in _HEAD.finditer(body, start + 1)), len(body))
-            card_flavour = _card(
+            card_description = _card(
                 body[start:stop], f"{ref}{chr(ord('a') + n)}", row, tier, books, out, names
             )
             report.feat_cards += 1
@@ -286,7 +286,7 @@ def feats(
                 books, _trimmed(source, row, _benefit(head, ref, row["Name"] or "")),
             ),
         )
-        names[ref] = {"name": (row["Name"] or "").strip(), "flavour": card_flavour}
+        names[ref] = {"name": (row["Name"] or "").strip(), "description": card_description}
         report.feats += 1
         report.unparsed += opaque
 
@@ -328,8 +328,8 @@ def _card(
         "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?)",
         (ref, row["ID"], tier, 1, None, 0, books, spec),
     )
-    names[ref] = {"name": name, "flavour": flavour(fragment)}
-    return flavour(fragment)
+    names[ref] = {"name": name, "description": description(fragment)}
+    return description(fragment)
 
 
 def _benefit(head: str, ref: str, name: str) -> str:
@@ -646,7 +646,7 @@ def _is_gear(kit: str) -> bool:
 def _key(clause: str, ordinary: set[str]) -> str:
     """Which half of a `names.json` entry an opaque clause belongs in.
 
-    `leaks.py` indexes `name` and not `flavour`, so anything put under
+    `leaks.py` indexes `name` and not `description`, so anything put under
     `name` becomes a phrase it will hunt for in every tracked file. Two
     kinds of clause must stay out of that index:
 
@@ -661,7 +661,7 @@ def _key(clause: str, ordinary: set[str]) -> str:
     """
     words = re.findall(r"[a-z']+", clause.lower())
     if len(clause.split()) > 4 or all(w in ordinary for w in words):
-        return "flavour"
+        return "description"
     return "name"
 
 

@@ -151,10 +151,10 @@ class Wire:
             return f"secondary {leg[len('second-'):]}"
         return leg.replace("-", " ")
 
-    def flavour(self, ref: str) -> str:
+    def description(self, ref: str) -> str:
         if not self.show_names:
             return ""
-        return (localisation().get(ref) or {}).get("flavour") or ""
+        return (localisation().get(ref) or {}).get("description") or ""
 
     def printed(self, ref: str) -> dict[str, str]:
         """The power's own mechanical lines, by label: Hit, Miss, Effect.
