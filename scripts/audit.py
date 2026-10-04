@@ -285,6 +285,37 @@ KNOWN_SILENT = {
     # gives it nothing to do.
     "m5373a4": "shifts closer to a bloodied creature; it starts adjacent to the "
                "only one",
+    # **Round 9's sixteen, and one row that looked like these and was not.**
+    # `m4296a1` returned when the chooser aimed it at a creature its target line
+    # forbids; it redirects with `_restricted_to` now. It is still here, because
+    # nothing on this board is slowed or immobilized for the redirect to find --
+    # but the shape is right for a real fight either way.
+    #
+    # A grab a sibling row lays, which the harness never runs. `m467a2`'s family,
+    # now the largest of these groups by some distance.
+    "m1937a1": "attacks a creature grabbed by its stablemate; nothing grabs here",
+    "m4012a1": "attacks a creature grabbed by it; the grab is a sibling's",
+    "m4755a2": "attacks a grabbed creature; nothing here is grabbed",
+    "m5128a4": "sustains a grab; there is none to sustain",
+    "m6436a3": "acts on what it has grabbed; nothing here is grabbed",
+    # A target state `_provoke` does not produce. It makes an attack; it does not
+    # slow, immobilise, stun or mark.
+    "m4296a1": "targets a slowed or immobilized creature; nothing here is either",
+    "m5571a1": "redirects to an immobilized, stunned or unconscious creature; "
+               "the board has none",
+    "m5738a2": "redirects to a creature it has already slowed; it has not",
+    "m4508a4": "cures a mark on itself; nobody here marks",
+    "m6429a4": "answers a condition it starts its turn carrying; it carries none",
+    # An ally or a board state the single full-health copy of the caster cannot be.
+    "m2785a3": "a bonus while a natural beast ally is near; the board's one ally "
+               "is a copy of the caster",
+    "m3467a3": "a bonus against a creature taking ongoing necrotic; none is",
+    "m946a3": "its Requirement is no enemy within 3; the board starts them adjacent",
+    "m3453a2": "saves against the effect that triggered it; the board lands no "
+               "save-ends effect on this creature",
+    # Concealment and cover the bare grid does not provide.
+    "m1167a3": "requires concealment; no terrain here grants any",
+    "m3675a2": "requires cover; no terrain here grants any",
     # The one that is an instrument gap rather than a board gap, and is filed as
     # #374 rather than excused: `c.set_origin` labels its effect `origin:<word>`
     # because `kinds_of` reads the word back out of the label, so it cannot carry

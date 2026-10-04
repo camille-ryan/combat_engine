@@ -506,9 +506,19 @@ def _spent_once_a_fight() -> list[tuple[str, str]]:
 #: `ev.attacker`, which that event spells `source`, and the walk approved it
 #: because `target` was present. The check existed and was itself too
 #: forgiving, which is worse than not having it.
+#: **`not_me` reads two fields, and this said one.** It is
+#: `getattr(ev, "actor", getattr(ev, "attacker", None)) != me` -- it falls back
+#: to `attacker` -- so listing only `actor` called six correct rows dead the
+#: moment the combinator blind spot below was closed and they became visible at
+#: all. Proven before changing anything: on a `Hit` with `attacker=7`, `not_me`
+#: is False for 7 and True for 9, which is exactly right.
+#:
+#: That is the shape this table's own note warns about pointing the other way, so
+#: it is worth saying which was wrong here: the six rows were fine and the entry
+#: was not.
 PREDICATE_FIELDS = {
     "about_me": ("actor",),
-    "not_me": ("actor",),
+    "not_me": ("actor", "attacker"),
     "by_me": ("attacker", "source"),
     "targets_me": ("target",),
     "hits_me": ("attacker", "target"),
@@ -527,25 +537,43 @@ def _dead_triggers() -> list[tuple[str, str, str, str]]:
     out = []
     for p in REGISTRY.values():
         for trig in p.triggers:
-            name = getattr(trig.when, "__name__", "")
-            want = PREDICATE_FIELDS.get(name)
-            if want is None:
-                continue
             fields = {f.name for f in dataclasses.fields(trig.event)}
-            # A predicate that reads several fields is satisfied by any one
-            # of a pair it treats as alternatives, and refused when it needs
-            # both. `hits_me` wants an attacker *and* a target; `by_me`
-            # takes an attacker or a source.
-            if name == "hits_me":
-                ok = "target" in fields and bool({"attacker"} & fields)
-            else:
-                ok = bool(set(want) & fields)
-            if not ok:
-                want = "/".join(want)
-                out.append(
-                    (p.ref, name, trig.event.__name__, ", ".join(sorted(fields)))
-                )
+            for name in _predicates(trig.when):
+                want = PREDICATE_FIELDS.get(name)
+                if want is None:
+                    continue
+                # A predicate that reads several fields is satisfied by any one
+                # of a pair it treats as alternatives, and refused when it needs
+                # both. `hits_me` wants an attacker *and* a target; `by_me`
+                # takes an attacker or a source.
+                if name == "hits_me":
+                    ok = "target" in fields and bool({"attacker"} & fields)
+                else:
+                    ok = bool(set(want) & fields)
+                if not ok:
+                    out.append(
+                        (p.ref, name, trig.event.__name__, ", ".join(sorted(fields)))
+                    )
     return out
+
+
+def _predicates(when: object, _depth: int = 0) -> list[str]:
+    """Every named predicate inside one `when=`, unwrapping the combinators.
+
+    **`both(...)` and `either(...)` return a closure called `check`**, so looking
+    a predicate up by `__name__` skipped every trigger built with one -- 505 of
+    them across the tree, which is most of the triggers there are. A level-7 wave
+    wrote `about_me` on `Hit` eight times; the three bare ones went red and the
+    five inside `both(...)` sailed through, and the agent found those by reading
+    every trigger by hand.
+
+    `triggers.both`/`either` hang their constituents on `check.parts` for this.
+    Nested, because a combinator inside a combinator is legal and two rows do it.
+    """
+    parts = getattr(when, "parts", None)
+    if parts and _depth < 4:
+        return [n for part in parts for n in _predicates(part, _depth + 1)]
+    return [getattr(when, "__name__", "")]
 
 
 def _effect_fields() -> set[str]:

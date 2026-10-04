@@ -597,9 +597,21 @@ def check_failed(world: World, me: int, ev: Event) -> bool:
 
 
 def both(*checks: Callable[[World, int, Event], bool]) -> Callable[[World, int, Event], bool]:
+    """All of these.
+
+    **`parts` is here so `lint.py` can see inside.** `_dead_triggers` looks a
+    predicate up by `__name__` to find which field it reads, and a closure is
+    called `check` -- so every trigger built with a combinator was **silently
+    skipped**, 505 of them across the tree. A level-7 wave wrote `about_me` on
+    `Hit` eight times, which reads `ev.actor` on an event that has only
+    `attacker` and `target`; lint caught the three bare ones and missed the five
+    wrapped in here. One attribute makes all 505 checkable again.
+    """
+
     def check(world: World, me: int, ev: Event) -> bool:
         return all(c(world, me, ev) for c in checks)
 
+    check.parts = checks  # type: ignore[attr-defined]
     return check
 
 
@@ -610,6 +622,7 @@ def either(*checks: Callable[[World, int, Event], bool]) -> Callable[[World, int
     def check(world: World, me: int, ev: Event) -> bool:
         return any(c(world, me, ev) for c in checks)
 
+    check.parts = checks  # type: ignore[attr-defined]
     return check
 
 

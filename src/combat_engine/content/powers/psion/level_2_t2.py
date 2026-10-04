@@ -13,8 +13,8 @@ from combat_engine.engine import (
     Moved,
     Trigger,
     World,
+    about_me,
     both,
-    by_me,
     power,
     spread,
 )
@@ -37,7 +37,7 @@ def _a_teleport(world: World, me: int, ev: Event) -> bool:
     target=SELF,
     keywords=[Keyword.PSIONIC, Keyword.TELEPORTATION],
     trigger="you teleport or a creature teleports you",
-    on=Trigger(Moved, both(by_me, _a_teleport), "you teleport"),
+    on=Trigger(Moved, both(about_me, _a_teleport), "you teleport"),
 )
 def p13315(c: Cast) -> None:
     """The printed target is "one ally adjacent to you **before** the

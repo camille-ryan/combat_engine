@@ -44,10 +44,12 @@ per use and carries the whole target list, which is the printed question.
 set in the interrupt window before the die is rolled. `resolve.attack` reads
 the defence back off the event now, where it used to read the enclosing
 parameter -- so this row was left out of the tree until it did. The other
-half of the same sentence, "deal fire damage", is not kept: `DamageRolled`
-carries a mutable `dtype` and `deal_damage` reads its own local for
-resistance and for the announcement, so a listener that sets it changes
-nothing. See the report.
+half of the same sentence, "deal fire damage", **is kept now.** This passage
+said a listener setting `DamageRolled.dtype` changes nothing, because
+`deal_damage` read its own local; it reads `rolled.dtype` and `rolled.dtypes`
+back off the event today, so the swap is honoured for resistance and for the
+announcement alike. Found stale by a level-8 wave reading `resolve.py` rather
+than this note.
 """
 
 from __future__ import annotations
@@ -1203,14 +1205,23 @@ def m61a5(c: Cast) -> None:
     attacks" is not a named row and the creature has two of them.
 
     The other half of the printed sentence -- that those attacks deal fire
-    damage -- is not kept. `DamageRolled.dtype` is mutable and nothing reads
-    it back, so setting it would be a line that looks like it works.
+    damage -- **is kept now, and used not to be.** `resolve.deal_damage` reads
+    `rolled.dtype` and `rolled.dtypes` back off the event after emitting it, so
+    a listener setting the type is honoured for resistance and for the
+    announcement alike. This row and the note at the top of the file both said
+    the opposite, from a time when `deal_damage` read its own local instead.
+    Checked both ways before writing it: without the listener the blow lands
+    `untyped`, with it `fire`, on `DamageRolled` and `DamageApplied` together.
     """
     me = c.me
 
     def aim(ev: AttackDeclared) -> None:
         if ev.attacker == me and _is_weapon_row(ev.power):
             ev.vs = REF
+
+    def burn(ev: DamageRolled) -> None:
+        if ev.source == me and _is_weapon_row(getattr(ev, "detail", "") or ""):
+            ev.dtype = DamageType.FIRE
 
     c.watch(
         AttackDeclared,
@@ -1220,6 +1231,7 @@ def m61a5(c: Cast) -> None:
         on=me,
         label=c.ref,
     )
+    c.watch(DamageRolled, burn, until=When.SONT, on=me, label=f"{c.ref} fire")
 
 
 # ==========================================================================

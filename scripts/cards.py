@@ -226,6 +226,23 @@ KNOWN = {
     # One row in 13,432. The header takes the normal half of the band and says so
     # in its docstring; this is waived rather than taught to the reader, because
     # a reader that accepts `Melee N/M` would stop checking the shape at all.
+    # **An area burst with no origin to measure from.** An `Area burst N within M`
+    # needs both numbers; this card prints only the radius. Six cards omit the
+    # `within`, and four of those say "centered on <something>", which supplies
+    # the origin a different way -- so a genuinely bare one is this and one other.
+    # The row reads it as self-centred, which its own next clause supports: the
+    # creature takes half the damage itself.
+    "m3378a4": "the card prints a bare `Area burst 2` with no `within`, so there "
+               "is no origin to measure from; read as self-centred",
+    # **A "while" clause is a trait, whatever the action column says.** The card
+    # reads "(standard; encounter) ... gains a +2 bonus to AC *while* at least one
+    # ally is adjacent" -- always on, for as long as the condition holds, which is
+    # not something a standard action once per encounter can express. The tree's
+    # settled reading is that a row costing no action with no target is a trait
+    # whatever the compendium filed it as; this is that, and the usage column is
+    # what disagrees.
+    "m3453a3": "the card's own clause is a standing `while ...` trait; the "
+               "`encounter` column cannot describe it",
     "m6277a3": "the card prints `Melee 10/20` -- a range band on a melee line, "
                "which is contradictory rather than missing; see #360",
     # **`m2777a8` was here and is gone, because the row solved it.** The card
