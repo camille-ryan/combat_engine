@@ -323,12 +323,19 @@ def _symbols(wants: str) -> list[str]:
     `c.halt(on=)`, `AttackResult.parity`, `Keyword.RAGE` -- a sentence
     almost always contains the symbol it is waiting for, even when it
     also contains a paragraph about why.
+
+    **The whole dotted path, not its first two segments.** This stopped after
+    one dot, so `dsl.Range.by_ability` came out as `dsl.Range` -- a class that
+    has existed since before the entry was written, so the entry read *ready*
+    from the day it was filed. Every such wait is for a new attribute on an
+    existing thing, which is the commonest shape there is, and the instrument
+    could not see any of them.
     """
     import re
 
     out: list[str] = []
-    for token in re.findall(r"\b[A-Za-z_][\w.]*\s*\([^)]*\)|\b[a-z_]+\.[A-Za-z_]\w*"
-                            r"|\b[A-Z][A-Za-z]*\.[A-Za-z_]\w*", wants):
+    for token in re.findall(r"\b[A-Za-z_][\w.]*\s*\([^)]*\)|\b[a-z_]+(?:\.[A-Za-z_]\w*)+"
+                            r"|\b[A-Z][A-Za-z]*(?:\.[A-Za-z_]\w*)+", wants):
         token = token.strip()
         head = token.partition("(")[0].strip()
         # Not a symbol: an English phrase that happens to hold a dot, and
@@ -387,7 +394,11 @@ def _one(token: str, have: dict[str, object]) -> bool:
         owner, _, attr = head.rpartition(".")
         thing = have.get(owner)
         if thing is not None and hasattr(thing, attr):
-            return True
+            # **The parameter still has to be there.** Reached this way the
+            # answer used to be a bare yes, so a `wants` naming an existing
+            # function and a new keyword -- which is most of them -- reported
+            # arrived on the function alone.
+            return _params_ok_on(getattr(thing, attr), rest)
         # **The marker may have guessed the wrong module.** A symbol is
         # written from memory while the row is being written, so
         # `query.keywords_of` gets named for something that lives in
@@ -408,16 +419,22 @@ def _one(token: str, have: dict[str, object]) -> bool:
         # `c.verb()`, which the `head in have` test above already
         # answers, so excluding the `c.` keys here costs nothing and
         # stops the one crossing that is never a typo.
+        #
+        # **And the parameter is checked against whatever it matched.** This
+        # answered on the name alone, so `c.deals_half(when=)` reported arrived
+        # off `query.deals_half(world, eid)` -- a function that exists and takes
+        # no `when`. The whole wait was for that keyword. Asked the other way
+        # round, `query.deals_half(when=)`, the same instrument said blocked,
+        # correctly: one path checked parameters and the other did not.
         pool = _FALLBACK or have
         engine_owned = owner.split(".")[0] in (_ENGINE_OWNERS or {owner.split(".")[0]})
-        return (
-            owner.islower()
-            and engine_owned
-            and any(
-                k.endswith(f".{attr}") or k == attr
-                for k in pool
-                if not k.startswith("c.")
-            )
+        if not (owner.islower() and engine_owned):
+            return False
+        return any(
+            (k.endswith(f".{attr}") or k == attr)
+            and _params_ok_on(have.get(k), rest)
+            for k in pool
+            if not k.startswith("c.")
         )
     return False
 
@@ -452,7 +469,38 @@ def _exists(wants: str, have: dict[str, object]) -> bool | None:
     named = _wants_of(wants)
     if not named:
         return None
+    # **A container's existence cannot answer a wait for what goes inside it.**
+    # Seven entries read READY on `dsl.REGISTRY`, `dsl.Summon`, `chargen.BUILDS`
+    # and `etl.sanitise` -- every one a thing that has existed since long before
+    # the entry was filed, where the wait is for an *entry in* it: a ref in the
+    # registry, a third command on the summon, a leg in the builds, an Augment
+    # body in the import. None of those is a symbol, so none of them can be
+    # looked up, and answering yes on the container sent a reader to write a row
+    # that still cannot be written. That is the `None` case this function
+    # already has a name for.
+    if all(_is_container(n, have) for n in named):
+        return None
     return all(_one(n, have) for n in named)
+
+
+def _is_container(token: str, have: dict[str, object]) -> bool:
+    """Is this token a module, class or plain collection, named bare?
+
+    Bare meaning no parameter clause and no attribute after it -- `dsl.Summon`
+    rather than `dsl.Summon.command` or `c.summon(heal=)`. With either of those
+    the wait names something that can be absent, and `_one` can answer it.
+    """
+    head, _, rest = token.partition("(")
+    if rest or head not in have:
+        return False
+    thing = have[head]
+    import inspect
+
+    return (
+        inspect.ismodule(thing)
+        or inspect.isclass(thing)
+        or isinstance(thing, dict | tuple | list | set | frozenset)
+    )
 
 
 def _params_ok(head: str, rest: str, have: dict[str, object]) -> bool:
@@ -475,6 +523,30 @@ def _params_ok(head: str, rest: str, have: dict[str, object]) -> bool:
         params = inspect.signature(have[head]).parameters  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return True          # not callable: a field on an event, name is all we have
+    return all(p in params for p in wanted)
+
+
+def _params_ok_on(thing: object, rest: str) -> bool:
+    """`_params_ok` against an object already in hand rather than a key.
+
+    The two paths in `_one` that resolve a symbol *without* a surface key --
+    `getattr` on a named owner, and the wrong-module fallback -- both used to
+    answer on the name alone, so a `wants` for a new keyword on an existing
+    function read as arrived. They share this.
+    """
+    import inspect
+
+    wanted = [
+        p.split("=")[0].strip() for p in rest.rstrip(")").split(",") if p.strip()
+    ]
+    if not wanted:
+        return True
+    if thing is None:
+        return False
+    try:
+        params = inspect.signature(thing).parameters  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return True          # not callable: a field, where the name is all there is
     return all(p in params for p in wanted)
 
 
