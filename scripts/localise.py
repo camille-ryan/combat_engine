@@ -284,6 +284,15 @@ _LABEL = re.compile(r"^\s*([A-Za-z][\w '/-]{1,40}?)\s*:")
 #: replaced by a ref that happens to carry a colon.
 _NAMESPACE = frozenset({"cf", "rt", "comp", "t", "w", "x", "q"})
 
+#: What a ref looks like once it has been substituted into a label position.
+#:
+#: `[a-z]+\d+` was enough until a monster's own choices got refs inside their
+#: ability (#353): `m702a2s0` is letters and digits **alternating**, so the
+#: simpler pattern did not recognise it and one row read as divergent for a
+#: substitution that was working. The baseline caught that, which is what it is
+#: for -- the fix is to teach the check the new shape, never to raise the number.
+_REF_SHAPED = re.compile(r"[a-z]+\d+(?:[a-z]+\d+)*")
+
 
 #: Rows whose `spec` and `rules_text` labels differ for a reason that is not a
 #: lost clause. **The check is a baseline, not a zero**, and that is a finding
@@ -296,13 +305,22 @@ _NAMESPACE = frozenset({"cf", "rt", "comp", "t", "w", "x", "q"})
 #:   * a monster's own ability name, which its own spec scrubs
 #:
 #: and substitution moves all four. Eight comparisons were tried; each failed on
-#: a *correct* difference. What survives is a figure: **24,510 of 24,598 agree**,
+#: a *correct* difference. What survives is a figure: **24,515 of 24,598 agree**,
 #: and every divergence examined was a substitution rather than a dropped clause.
+#:
+#: **Tightened from 88 to 83 when #353 landed**, which is the direction this
+#: number is allowed to move on its own. Teaching the check that `m702a2s0` is a
+#: ref resolved five rows that had been counted as drift; leaving the baseline at
+#: 88 would have left five rows of slack for a future regression to hide in.
 #:
 #: Guarded the way `scripts/fixtures/audited.json` guards the audit -- a number
 #: that may not get worse. If it rises, a clause went missing and that is what
 #: this exists to catch.
-KNOWN_LABEL_DRIFT = 88
+KNOWN_LABEL_DRIFT = 83
+
+#: A monster ability's own choice. Its name labels a clause, so it belongs in
+#: `_printed_labels` beside the build riders. #353.
+_SUB_REF = re.compile(r"m\d+a\d+s\d+")
 
 
 def _printed_labels() -> frozenset[str]:
@@ -315,7 +333,10 @@ def _printed_labels() -> frozenset[str]:
     """
     out = set()
     for ref, entry in localisation().items():
-        if not ref.startswith(("cf:", "rt:")):
+        # `cf:`/`rt:` are the build riders and racial traits whose names label a
+        # clause. `m<id>a<n>s<n>` joined them in #353: a monster ability's own
+        # choices, whose printed names label exactly this way.
+        if not (ref.startswith(("cf:", "rt:")) or _SUB_REF.fullmatch(ref)):
             continue
         name = (entry.get("name") or "").strip().lower()
         if len(name) > 2:
@@ -341,7 +362,7 @@ def _mechanical_labels(body: str, printed: frozenset[str]) -> set[str]:
             continue
         label = found.group(1).strip()
         low = label.lower()
-        if low in _NAMESPACE or re.fullmatch(r"[a-z]+\d+", low) or low in printed:
+        if low in _NAMESPACE or _REF_SHAPED.fullmatch(low) or low in printed:
             continue
         # **A compound label: a printed name plus a mechanics word.**
         # `<name> Augment` becomes `p6855 Augment`, so the label is neither
