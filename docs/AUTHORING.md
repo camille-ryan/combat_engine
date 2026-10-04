@@ -121,6 +121,27 @@ that never applies.
   And `lint.py` only caught this for a *bare* predicate until today: `both(...)`
   and `either(...)` return a closure, so **505 triggers were being skipped**. They
   declare their parts now and the walk unwraps them.
+* **`query.scenery(..., within=N)` with no `of` returns nothing, silently.** The
+  guard is `if within and (of is None or distance_between(...) > within)`, so an
+  absent origin skips every candidate rather than defaulting to one. The
+  module-level function exists precisely for a `requires=` gate, which is handed
+  `(world, eid)` and no `Cast` -- so that is exactly where the parameter is easiest
+  to forget. Pass `of=eid`.
+
+  `c.scenery` is **not** affected: it fills `of=self.me` before calling through. A
+  wave reported the bug against the `Cast` method and "fixed" two rows by passing
+  `of=c.me` explicitly, which changed nothing -- the rows were silent because the
+  audit board carries only `fire` and `object` scenery and they want a tree. Worth
+  the distinction: the trap is real, and it is one function over from where it was
+  reported.
+* **`c.basic(who=X)` names the *attacker*, and the victim still defaults to
+  `c.target`.** The two parameters are easy to conflate: `who` is who swings, `on`
+  is who gets hit, and `_who(None)` returns `self.target`. So on a row whose header
+  is `EACH_ALLY`, granting a basic attack without `on=` aims it at **the ally being
+  iterated** -- friendly fire that looks like a grant -- and on a `NO_TARGET` row
+  `c.target` is None and the attack simply does not happen. Four rows in one wave
+  had it, found by the agent driving them rather than by any instrument. Pass `on=`
+  explicitly whenever the row's own target is not the thing you mean to hit.
 * **`Trigger()` takes no `once=`.** Its parameters are `event`, `when`, `text`,
   `window`, and passing anything else raises at **import**, which at least fails
   loudly. A printed "the first time X happens" on an at-will row needs a guard in

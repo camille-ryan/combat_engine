@@ -348,6 +348,56 @@ KNOWN_SILENT = {
     "m822a4": "heals undead allies in a burst; the board's one ally is unhurt",
     # Terrain a bare grid has not got.
     "m960a5": "requires icy ground to teleport from; the board has none",
+    # Round 11: the board carries `fire` and `object` scenery and nothing else, so
+    # a row wanting a tree has none to find. `m115702a2` is the same cause.
+    "m3787a2": "teleports beside a tree; the board has no tree scenery",
+    "m5183a1": "teleports beside a tree; the board has no tree scenery",
+    # **Round 11's twenty-eight, and the grab family is now most of them.** Sixteen
+    # of the twenty-eight want a creature the stat block's *own sibling row* has
+    # grabbed, and the harness fires each row once on a fresh board, so the grab
+    # never happened. `m467a2` opened this family and it has grown every round --
+    # at this rate it is the single biggest structural limit of the monster board,
+    # and worth a line in #214 rather than more entries here if it keeps growing.
+    "m3474a3": "attacks what it has grabbed; the grab is its own sibling's",
+    "m5098a2": "its Requirement is holding a grab; it holds none",
+    "m6092a2": "attacks a humanoid it has grabbed; nothing here is grabbed",
+    "m1177a1": "affects what it has grabbed; nothing here is grabbed",
+    "m1915a2": "attacks what it has grabbed; nothing here is grabbed",
+    "m1949a1": "attacks what its stablemate has grabbed; nothing here is grabbed",
+    "m1982a2": "hits each creature it has grabbed; it has grabbed none",
+    "m1982a3": "sustains a grab as a free action; there is none to sustain",
+    "m2078a2": "grabbed targets only; nothing here is grabbed",
+    "m3988a3": "attacks what it has grabbed; nothing here is grabbed",
+    "m4005a1": "attacks what it has grabbed; nothing here is grabbed",
+    "m5654a3": "attacks a Large or smaller creature it has grabbed; none is",
+    "m6113a3": "attacks what it is grabbing; it is grabbing nothing",
+    "m6172a2": "attacks a creature it has grabbed; nothing here is grabbed",
+    "m6174a1": "attacks what it has grabbed; nothing here is grabbed",
+    "m6663a2": "attacks what it has grabbed; nothing here is grabbed",
+    # An ally of a kind the board's one ally cannot be. It is a copy of the caster,
+    # so a row wanting an ally of a *different* kind finds none -- checked rather
+    # than assumed: both casters below read as `humanoid`, never undead or animate.
+    "m3983a2": "grants an undead or beast ally an attack; its only ally is a "
+               "humanoid copy of itself",
+    "m5655a2": "grants an allied animate an attack; its only ally is a humanoid "
+               "copy of itself",
+    "m5625a2": "slides an allied minion of one kind; the board spawns none",
+    # A target state `_provoke` does not produce.
+    "m5779a4": "targets a slowed creature; nothing here is slowed",
+    "m5926a2": "targets a prone creature; nothing here is prone",
+    "m1828a1": "its target must be prone; nothing here is",
+    "m5336a5": "pulls a creature its own sibling immobilized; nothing is",
+    # #366's family: the target must be wearing or wielding an item, and
+    # `loader.spawn` gives every stat block an empty `Gear()`.
+    "m3448a1": "targets a creature wielding a magic item; no monster carries gear",
+    # The remaining four, each its own shape.
+    "m5948a6": "raises a dead ally; nobody here is dead",
+    "m3288a6": "rerolls an attack roll; fired alone there is none behind it",
+    "m5468a3": "cures an ally's condition at the start of its turn; the board's "
+               "one ally carries none",
+    "m5625a0": "its printed effect -- an enemy cannot enter its square -- is "
+               "already true of every creature by collision, so there is nothing "
+               "for the row to do and nothing to see it do",
     # The one that is an instrument gap rather than a board gap, and is filed as
     # #374 rather than excused: `c.set_origin` labels its effect `origin:<word>`
     # because `kinds_of` reads the word back out of the label, so it cannot carry
