@@ -1563,21 +1563,18 @@ def m5307a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="One creature grabbed by it"),
+    target=Target(
+        side="enemy", count=1, label="One creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=7),
     damage=Damage("3d4", 5),
-    requires=_holding_somebody,
-    requires_text="it must have a creature grabbed",
-    dropped=("Target.relation",),
 )
 def m5307a2(c: Cast) -> None:
-    """"One creature grabbed by the m5307" is both halves at once: the gate is
-    about the caster's own state, so it is a real `requires=`, and the target
-    line itself is the part `Target` cannot say."""
-    victim = c.target
-    if victim is None or victim not in c.grabbing(of=c.me):
-        return
+    """The caster-side gate came out with the body's re-pick: an empty pool
+    already refuses the row, so "it must have a creature grabbed" was the same
+    sentence said a second way."""
     if c.strike():
         c.hit()
         c.ongoing(5)

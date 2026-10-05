@@ -1361,21 +1361,23 @@ def m115927a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="it must have hold of a creature",
+        relation=Relation.GRABBED_BY,
+    ),
     damage=Damage("2d8", 3),
-    requires=_grabbed_by_me_in_reach,
-    requires_text="it must have hold of a creature",
-    dropped=("Target.relation",),
 )
 def m115927a1(c: Cast) -> None:
     """No attack line: the printed Effect simply deals the damage, which
     `c.hit` applies from the header whether or not anything was rolled.
-    "One creature grabbed by it" is a target line `Target` cannot say -- it is
-    a relation to the caster, so the gap is `Target.relation` -- and the offer
-    is gated by `requires=` with the victim chosen here. #361."""
-    victim = _restricted_to(c, 1, lambda foe: foe in c.grabbing(of=c.me))
-    if victim is not None:
-        c.hit(on=victim)
+
+    "One creature grabbed by it" is now the target line itself. The `requires=`
+    gate and the body's re-pick both came out: an empty pool already makes
+    `_can_land` false, so the row stops being offered when nothing is held --
+    which is the same refusal the gate was spelling by hand, from one place
+    instead of two. #401."""
+    c.hit()
 
 
 # --------------------------------------------------------------------------
@@ -1982,19 +1984,17 @@ def m3525a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="usable only against a target it has grabbed",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=AC, printed=10),
     damage=Damage("1d10", 9),
-    requires=_grabbed_by_me_in_reach,
-    requires_text="usable only against a target it has grabbed",
-    dropped=("Target.relation",),
 )
 def m3525a1(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda foe: foe in c.grabbing(of=c.me))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
 
 
 _M3525_FELLED = "it drops to 0 hit points"
@@ -2955,12 +2955,13 @@ def m5427a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("3d4", 7, kind=LIMITED),
-    requires=_grabbed_by_me_in_reach,
-    requires_text="one creature grabbed by it",
-    dropped=("Target.relation",),
 )
 def m5427a2(c: Cast) -> None:
     """"Cannot stand up until the grab ends" is `Condition.PINNED` laid beside
@@ -2969,15 +2970,13 @@ def m5427a2(c: Cast) -> None:
     and lifted by the escape."""
     if c.first:
         _recharge_when_bloodied(c)
-    victim = _restricted_to(c, 1, lambda foe: foe in c.grabbing(of=c.me))
-    if victim is None:
+    victim = c.target
+    if not c.strike():
         return
-    if not c.strike(on=victim):
-        return
-    c.hit(on=victim)
-    c.prone(on=victim)
+    c.hit()
+    c.prone()
     _until_escape(
-        c, victim, c.condition(Condition.PINNED, until=When.ENCOUNTER, on=victim)
+        c, victim, c.condition(Condition.PINNED, until=When.ENCOUNTER)
     )
 
 
@@ -3830,24 +3829,22 @@ def m854a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="marked target only",
+        relation=Relation.MARKED_BY,
+    ),
     attack=Attack(vs=REF, printed=8),
     damage=Damage("1d8", 2),
-    requires=_marked_by_me_in_reach,
-    requires_text="marked target only",
-    dropped=("Target.relation",),
 )
 def m854a1(c: Cast) -> None:
     """"And is marked" on a row that may only be used against something it has
     already marked is a refresh, not a new condition -- the mark is laid again
     so the clock starts over."""
-    victim = _restricted_to(c, 1, lambda foe: c.marked(on=foe, by=c.me))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.ongoing(5, on=victim)
-        c.mark(on=victim, until=When.EONT)
+    if c.strike():
+        c.hit()
+        c.ongoing(5)
+        c.mark(until=When.EONT)
 
 
 # --------------------------------------------------------------------------

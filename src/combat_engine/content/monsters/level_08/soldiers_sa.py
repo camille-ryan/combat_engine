@@ -927,19 +927,19 @@ def m1937a0(c: Cast) -> None:
 
 @power(
     "m1937a1", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(2),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy", count=1, label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=AC, printed=15), damage=Damage("2d6", 5),
-    dropped=("Target.relation",),
 )
 def m1937a1(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """The necrotic line carries no attack roll, so it lands whether the swing
+    did or not."""
+    if c.strike():
+        c.hit()
     c.shift(3, share=True)
-    c.flat(c.roll("1d10") + 5, dtype=DamageType.NECROTIC, on=victim)
+    c.flat(c.roll("1d10") + 5, dtype=DamageType.NECROTIC)
 
 
 @power(
@@ -1298,19 +1298,23 @@ def m4012a0(c: Cast) -> None:
 
 @power(
     "m4012a1", level=8, usage=AT_WILL, action=MINOR, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy", count=1, label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     once_per_round=True, keywords=[Keyword.FIRE],
     attack=Attack(vs=FORT, printed=13), damage=Damage("1d6", 5),
-    dropped=("Target.relation",),
+    dropped=("c.grant_action(move_grabbed)",),
 )
 def m4012a1(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.damage("1d4", 0, dtype=DamageType.FIRE, on=victim)
+    """The third clause -- for the rest of its turn it may haul the captive for
+    a move action rather than a standard -- has nothing to cheapen: moving a
+    grabbed creature is not an action `actions.legal` builds, so a word granting
+    it is carried and never read. The marker was previously spent on the target
+    line, which hid it."""
+    if c.strike():
+        c.hit()
+        c.damage("1d4", 0, dtype=DamageType.FIRE)
 
 
 @power(
@@ -1563,17 +1567,16 @@ def m4370a1(c: Cast) -> None:
 
 @power(
     "m4370a2", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="enemy marked by it"),
+    target=Target(
+        side="enemy", count=1, label="enemy marked by it",
+        relation=Relation.MARKED_BY,
+    ),
     keywords=[Keyword.WEAPON], attack=Attack(vs=AC, printed=13), damage=Damage("3d10", 5),
-    dropped=("Target.relation",),
 )
 def m4370a2(c: Cast) -> None:
-    victim = c.target
-    if victim is None or not c.marked(on=victim, by=c.me):
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.immobilized(until=When.SAVE_ENDS, on=victim)
+    if c.strike():
+        c.hit()
+        c.immobilized(until=When.SAVE_ENDS)
 
 
 @power(
@@ -1840,14 +1843,15 @@ def m4755a1(c: Cast) -> None:
 
 @power(
     "m4755a2", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
-    damage=Damage("2d8", 4), dropped=("Target.relation",),
+    target=Target(
+        side="enemy", count=1, label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
+    damage=Damage("2d8", 4),
 )
 def m4755a2(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is not None:
-        c.damage("2d8", 4, on=victim)
+    """No attack line: the printed damage simply lands on whoever it holds."""
+    c.hit()
 
 
 @power(
@@ -2051,17 +2055,16 @@ def m5325a1(c: Cast) -> None:
 
 @power(
     "m5325a2", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="creature marked by it"),
+    target=Target(
+        side="enemy", count=1, label="creature marked by it",
+        relation=Relation.MARKED_BY,
+    ),
     keywords=[Keyword.WEAPON], attack=Attack(vs=AC, printed=15), damage=Damage("2d8", 7),
-    dropped=("Target.relation",),
 )
 def m5325a2(c: Cast) -> None:
-    victim = c.target
-    if victim is None or not c.marked(on=victim, by=c.me):
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.immobilized(on=victim)
+    if c.strike():
+        c.hit()
+        c.immobilized()
 
 
 @power(
@@ -2599,18 +2602,18 @@ def m5646a2(c: Cast) -> None:
 
 @power(
     "m5646a3", level=8, usage=Usage.RECHARGE, recharge=6, action=MINOR,
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy", count=1, label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     reach=Melee(1), attack=Attack(vs=FORT, printed=11), damage=Damage("1d6", 3, kind=LIMITED),
-    dropped=("Target.relation",),
 )
 def m5646a3(c: Cast) -> None:
     if c.first:
         _recharge_when_bloodied(c)
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is not None and c.strike(on=victim):
-        c.hit(on=victim)
-        c.blinded(until=When.SAVE_ENDS, on=victim)
+    if c.strike():
+        c.hit()
+        c.blinded(until=When.SAVE_ENDS)
 
 
 # ==========================================================================

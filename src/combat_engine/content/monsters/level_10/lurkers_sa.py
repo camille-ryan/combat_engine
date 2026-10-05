@@ -161,20 +161,25 @@ def m115875a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(10),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=REF, printed=13),
     damage=Damage("4d10", 5, half_on_miss=True),
-    dropped=("Target.relation",),
 )
 def m115875a1(c: Cast) -> None:
-    victim = _restricted_to(c, 10, lambda f: f in c.grabbing(of=c.me))
+    """The Effect pulls before anything is rolled, and the grab ends on both
+    branches -- so the release is outside the hit test, not inside it."""
+    victim = c.target
     if victim is None:
         return
-    c.pull(10, on=victim)
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    c.pull(10)
+    if c.strike():
+        c.hit()
     else:
-        c.hit(on=victim, half=True)
+        c.hit(half=True)
     for hold in list(c.world.effects.of(victim)):
         if hold.label == "m115875a0":
             c.world.effects.end(hold, "the grab ends")
@@ -887,10 +892,14 @@ def m3997a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("3d6", 3),
-    dropped=("Target.relation", "EffectExpired.effect_id"),
+    dropped=("EffectExpired.effect_id",),
 )
 def m3997a1(c: Cast) -> None:
     """Domination plays; "ignores the dying condition until it saves
@@ -898,12 +907,9 @@ def m3997a1(c: Cast) -> None:
     and `EffectExpired` carries no id to tell one hold's expiry from
     another's -- so the nearest honest thing left is a plain `c.condition`
     rather than a tied one."""
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.condition(Condition.DOMINATED, until=When.SAVE_ENDS, on=victim)
+    if c.strike():
+        c.hit()
+        c.condition(Condition.DOMINATED, until=When.SAVE_ENDS)
 
 
 def _dominated_by_any_m3997(c: Cast, who: int) -> bool:

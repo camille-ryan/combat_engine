@@ -59,10 +59,6 @@ from combat_engine.content.monsters.level_03.skirmishers import (
     _is_bloodied,
     _vanish_until_it_swings,
 )
-from combat_engine.content.monsters.level_04.lurkers_sa import (
-    _blind_to_me,
-    _cannot_see_me_in_reach,
-)
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -763,15 +759,19 @@ def m1986a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(2),
-    target=Target(side="enemy", count=1, label="one creature granting combat advantage to it"),
+    target=Target(
+        side="enemy",
+        count=1,
+        label="one creature granting combat advantage to it",
+        grants_ca=True,
+    ),
     keywords=[Keyword.HEALING],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("2d10", 6, kind=LIMITED),
-    dropped=("Target.grants_ca",),
 )
 def m1986a2(c: Cast) -> None:
-    from combat_engine.engine.query import has_combat_advantage
-
+    """"Loses a healing surge" is the *target* paying, and `c.spend_surge`
+    defaults to the caster -- so that one stays named. #401."""
     me = c.me
     label = f"{c.ref} recharge"
     if not any(eff.label == label for eff in c.world.effects.of(me)):
@@ -782,22 +782,10 @@ def m1986a2(c: Cast) -> None:
 
         c.watch(Bloodied, bled, until=When.ENCOUNTER, on=me, label=label)
 
-    victim = c.target
-    if victim is not None and not has_combat_advantage(c.world, me, victim):
-        victim = next(
-            (
-                foe
-                for foe in c.enemies()
-                if has_combat_advantage(c.world, me, foe) and c.distance(foe) <= 2
-            ),
-            None,
-        )
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.weakened(on=victim, until=When.SAVE_ENDS)
-        c.spend_surge(on=victim)
+    if c.strike():
+        c.hit()
+        c.weakened(until=When.SAVE_ENDS)
+        c.spend_surge(on=c.target)
         c.heal(12, on=me)
 
 
@@ -1293,21 +1281,24 @@ def m4241a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="one creature that cannot see it"),
+    target=Target(
+        side="enemy", count=1,
+        label="one creature that cannot see it",
+        relation=Relation.HIDDEN_FROM,
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d6", 4),
-    requires=_cannot_see_me_in_reach,
-    requires_text="a creature that cannot see it must be within reach",
-    dropped=("Target.relation",),
 )
 def m4241a1(c: Cast) -> None:
-    victim = _blind_to_me(c, 1)
-    if victim is None or not c.strike(on=victim):
-        return
-    c.hit(on=victim)
-    c.dazed(on=victim, until=When.SAVE_ENDS)
-    c.ongoing(5, on=victim)
+    """The restriction is the target line now, routed through
+    `query.unseen_by` rather than the stored triple, so an enemy seeing through
+    the hiding is excluded and one whose sight range cannot reach is included.
+    #401."""
+    if c.strike():
+        c.hit()
+        c.dazed(until=When.SAVE_ENDS)
+        c.ongoing(5)
 
 
 @power(
@@ -1490,24 +1481,28 @@ def m5302a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="one creature grabbed by it"),
+    target=Target(
+        side="enemy",
+        count=1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.POISON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d6", 6, dtype=DamageType.POISON),
-    dropped=("Target.relation",),
 )
 def m5302a3(c: Cast) -> None:
-    victim = c.target
-    if victim not in c.grabbing():
-        victim = next(iter(c.grabbing()), None)
-    if victim is None or not c.strike(on=victim):
+    """"If the target is already slowed, it is instead immobilized" is a swap
+    and not a second condition, so the slow is cured before the hold goes on --
+    two counts standing at once would make the clear-up wrong either way."""
+    if not c.strike():
         return
-    c.hit(on=victim)
-    if c.is_(Condition.SLOWED, on=victim):
-        c.cure(Condition.SLOWED, on=victim)
-        c.immobilized(on=victim, until=When.SAVE_ENDS)
+    c.hit()
+    if c.is_(Condition.SLOWED):
+        c.cure(Condition.SLOWED)
+        c.immobilized(until=When.SAVE_ENDS)
     else:
-        c.slowed(on=victim, until=When.SAVE_ENDS)
+        c.slowed(until=When.SAVE_ENDS)
 
 
 @power(
@@ -1521,9 +1516,15 @@ def m5302a3(c: Cast) -> None:
     ),
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("2d8", 6),
-    dropped=("Target.condition", "Target.relation"),
+    dropped=("Target.condition", "Target.any_of"),
 )
 def m5302a4(c: Cast) -> None:
+    """**Deliberately not moved onto `Target.relation`.** The printed line is a
+    *disjunction* -- immobilized **or** grabbed by it -- and every target field
+    narrows the pool, so setting `relation=GRABBED_BY` would throw away the
+    immobilized half that is the other branch of the same sentence. Two gaps:
+    a condition filter, and some way to say "either of these". #401.
+    """
     victim = c.target
     held_already = victim is not None and (
         c.is_(Condition.IMMOBILIZED, on=victim) or victim in c.grabbing()
@@ -1841,20 +1842,24 @@ def m5838a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="one creature grabbed by it"),
+    target=Target(
+        side="enemy",
+        count=1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d10", 5),
-    dropped=("Target.relation",),
 )
 def m5838a2(c: Cast) -> None:
+    """"The grab then ends" is this creature's own hold, found by the label
+    m5838a1 laid on the victim."""
     victim = c.target
-    if victim not in c.grabbing():
-        victim = next(iter(c.grabbing()), None)
-    if victim is None or not c.strike(on=victim):
+    if victim is None or not c.strike():
         return
-    c.hit(on=victim)
-    c.ongoing(10, on=victim)
+    c.hit()
+    c.ongoing(10)
     for eff in list(c.world.effects.of(victim)):
         if eff.label == "m5838a1 grab":
             c.world.effects.end(eff, "grab released")

@@ -2769,18 +2769,18 @@ def m6174a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="grabbed by it"),
+    target=Target(
+        side="enemy", count=1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=12),
-    dropped=("Target.relation",),
 )
 def m6174a1(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing())
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.prone(on=victim)
+    if c.strike():
+        c.prone()
     else:
-        c.escape(on=victim, auto=True)
+        c.escape(auto=True)
 
 
 # ==========================================================================
@@ -3233,15 +3233,16 @@ def m6663a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="grabbed by it"),
+    target=Target(
+        side="enemy", count=1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("2d10", 15),
-    dropped=("Target.relation",),
 )
 def m6663a2(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing())
-    if victim is None:
-        return
+    victim = c.target
     before = c.bloodied(on=victim)
     if c.strike(on=victim):
         c.hit(on=victim)

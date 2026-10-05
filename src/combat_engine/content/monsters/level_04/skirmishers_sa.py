@@ -1410,20 +1410,17 @@ def m3502a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="a creature granting it combat advantage"),
+    target=Target(
+        side="enemy", count=1,
+        label="a creature granting it combat advantage",
+        grants_ca=True,
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("1d6", 2, dtype=DamageType.NECROTIC),
-    requires=_has_the_drop,
-    requires_text="must have combat advantage against the target",
-    dropped=("Target.grants_ca",),
 )
 def m3502a1(c: Cast) -> None:
-    """The target line restricts by how the creature stands to the attacker --
-    `Target.relation`, which `Target` has no field for -- so the gate is a
-    `requires=`: the row is simply not offered when nothing in reach
-    qualifies, which is what the printed line means.
-    `c.spend_surge` is the whole of "the target loses a healing surge"."""
+    """`c.spend_surge` is the whole of "the target loses a healing surge"."""
     if c.strike():
         c.hit()
         c.spend_surge(on=c.target)
@@ -2703,10 +2700,11 @@ def m5652a2(c: Cast) -> None:
     once_per_round=True,
     action=MINOR,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="a creature it flanks"),
-    requires=_flanked_creature_in_reach,
-    requires_text="must flank the target",
-    dropped=("Target.flanked_by",),
+    target=Target(
+        side="enemy", count=1,
+        label="one creature flanked by it",
+        flanked=True,
+    ),
 )
 def m5652a3(c: Cast) -> None:
     """No attack roll: the whole row is a trap laid on the target's own next
@@ -2714,8 +2712,6 @@ def m5652a3(c: Cast) -> None:
     that runs out *at* the end of a turn cannot be relied on to outlive the
     end of that turn -- which is the half that has to survive to be read."""
     victim = c.target
-    if victim is None:
-        return
     c.effect("watched for a long stride", until=When.EOTNT, on=victim)
     _moved_far(c, victim, 4, lambda: c.prone(on=victim))
 
@@ -3283,12 +3279,13 @@ def m6398a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="a creature granting it combat advantage"),
+    target=Target(
+        side="enemy", count=1,
+        label="one creature granting combat advantage to it",
+        grants_ca=True,
+    ),
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d12", 5),
-    requires=_has_the_drop,
-    requires_text="must have combat advantage against the target",
-    dropped=("Target.grants_ca",),
 )
 def m6398a3(c: Cast) -> None:
     if c.strike():

@@ -15,9 +15,9 @@ Conventions, inherited from the level-1 to level-9 minion sweeps:
 * a **trait** costs no action, has no target, and arms whatever holds it,
   whatever the compendium's action column claims;
 * "Target: a creature grabbed by it" is how the creature stands to the
-  attacker, not the chooser's business -- `Target` filters side, count and
-  size and nothing else, so `_restricted_to` (level_03) is reused here
-  and every use is marked `dropped=("Target.relation",)`;
+  attacker, so it is the target line itself --
+  `Target(..., relation=Relation.GRABBED_BY)`, which makes the pool empty
+  and the row unofferable while the creature holds nobody;
 * a printed escape DC has nowhere to go -- `c.grab` sets the hold and takes
   no number -- so every grab here is `dropped=("c.grab(dc=)",)`;
 * self-destruction ("turns to ash and is destroyed") is a flat, unresisted
@@ -32,7 +32,6 @@ teleport-beside-a-creature trait needs.
 
 from __future__ import annotations
 
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers import _free_square_beside
 from combat_engine.content.monsters.level_08.brutes import _aura
 from combat_engine.engine import (
@@ -61,6 +60,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    Relation,
     Target,
     When,
     World,
@@ -209,18 +209,18 @@ def m115910a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy", count=1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=AC, printed=15),
     damage=Damage("", 10, kind=MINION),
-    dropped=("Target.relation",),
 )
 def m115910a2(c: Cast) -> None:
-    """Restricted to the creature it is already holding; dazed "until the
-    grab ends" is a duration the enum has no word for, so the hold is ended
-    by hand on a successful escape."""
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
-    if victim is None:
-        return
+    """Dazed "until the grab ends" is a duration the enum has no word for, so
+    the hold is ended by hand on a successful escape."""
+    victim = c.target
     if c.is_(Condition.DAZED, on=victim) or c.strike(on=victim):
         c.hit(on=victim)
     else:

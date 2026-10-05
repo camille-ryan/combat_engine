@@ -15,8 +15,9 @@ creatures are, and the conventions are the ones that file settled:
   -- is asked in the body, because `Target` filters on side and size and
   nothing else. `label=` records it for the card, and the gap is named for what
   the line actually asks: `Target.condition` for "an immobilized creature",
-  `Target.relation` for "an enemy grabbed by it", `Target.ident` where the line
-  narrows to a stat block;
+  `Target.ident` where the line narrows to a stat block. **"An enemy grabbed
+  by it" is no longer one of them** -- `Target.relation` is a real field now,
+  so that line is the target line itself and carries no marker (#401);
 * a row that recharges on a printed condition rather than on a die keeps the
   die in the header, because that is what `actions.recharge` rolls and what
   the card shows, and arms the condition on top of it.
@@ -57,6 +58,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    Relation,
     Target,
     UpTo,
     Usage,
@@ -169,18 +171,16 @@ def m4452a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=Target(side="enemy", count=1, label="enemy grabbed by it"),
+    target=Target(
+        side="enemy", count=1, label="enemy grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=5),
     damage=Damage(bonus=2, kind=MINION),
-    requires=_has_a_hold,
-    requires_text="must have an enemy grabbed",
-    dropped=("Target.relation",),
 )
 def m4452a1(c: Cast) -> None:
     """The shift comes before the slide, because the square the target is slid
     to has to be adjacent to wherever the creature ended up."""
-    if c.target not in c.grabbing():
-        return
     if not c.strike():
         return
     c.hit()

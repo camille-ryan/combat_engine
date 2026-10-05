@@ -3303,12 +3303,19 @@ def m6172a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14),
     damage=Damage("3d6", 5, kind=LIMITED),
-    dropped=("Target.flanked_by", "Target.condition"),
+    dropped=("Target.any_of", "Target.condition"),
 )
 def m6172a2(c: Cast) -> None:
-    """"One creature it is flanking, or one prone creature." `Target`
-    cannot filter on either, so a qualifying creature in reach is found
-    rather than the row being thrown away."""
+    """"One creature it is flanking, **or** one prone creature" is a
+    disjunction, and that is the gap -- not the flanking half, which
+    `Target.flanked` now says. A target line can carry one restriction, so
+    narrowing to the flank alone would refuse every prone target the card
+    allows; the prone half needs `Target.condition` and the "or" needs
+    `Target.any_of`. Until both land the pick stays in the body, where a
+    qualifying creature in reach is found rather than the row thrown away.
+    The marker was `Target.flanked_by`, which named a symbol that can never
+    arrive -- the field is `Target.flanked` -- and would also have gone red
+    for a half this row cannot use on its own."""
     from combat_engine.engine.query import flanked_by as _flanked_by
 
     def qualifies(f: int) -> bool:

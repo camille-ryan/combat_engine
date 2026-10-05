@@ -442,33 +442,31 @@ def m1139a1(c: Cast) -> None:
             c.hit()
 
 
-_M1139_CURSED = "Target.relation"
-
-
 @power(
     "m1139a2",
     level=2,
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(20),
-    target=Target(side="any", count=99, everyone=True, label="suffering its curse"),
+    target=Target(
+        side="any", count=99, everyone=True,
+        label="suffering its curse",
+        relation=Relation.CURSED_BY,
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("2d8", 3, DamageType.NECROTIC, kind=LIMITED),
-    requires=_has_cursed_somebody,
-    requires_text="it must have cursed something",
-    dropped=(_M1139_CURSED,),
 )
 def m1139a2(c: Cast) -> None:
     """Everybody carrying the curse, and nobody else.
 
-    The narrowing is a condition and `Target` has no field for one, so the
-    burst is declared wide and the gate is in the body -- which means the row
-    is offered against creatures it will decline. The `requires=` recovers the
-    worst half of that: with nothing cursed anywhere the row is not offered at
-    all, rather than spent on a burst that touches nobody.
+    The narrowing is the target line now, so the burst is no longer declared
+    wide and then talked out of it in the body. Three things went with it: the
+    body's `c.cursed` gate, the `requires=` that kept the row from being spent
+    on a burst touching nobody, and the marker. An empty pool refuses the row
+    on its own, which is what both of the first two were spelling by hand.
     """
-    if c.cursed(on=c.target) and c.strike():
+    if c.strike():
         c.hit()
 
 
@@ -2806,25 +2804,20 @@ def m6511a0(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="grabbed by it"),
+    target=Target(
+        side="enemy", count=1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=REF, printed=5),
     damage=Damage("2d10", 4, kind=LIMITED),
-    requires=_grabbing_something,
-    requires_text="it must be holding a creature",
-    dropped=("Target.relation", "c.restrict_action()"),
+    dropped=("c.restrict_action()",),
 )
 def m6511a1(c: Cast) -> None:
-    """Two absences, and they are different absences.
-
-    "One creature grabbed by it" is a target line narrowed by a condition and
-    `Target` has no field for one, so the gate is in the body and the
-    `requires=` keeps the row from being offered at all when it is holding
-    nobody. "The target cannot use the escape action" is the second: actions
+    """"The target cannot use the escape action" is the one absence: actions
     can be *granted* (`c.grant_action` knows the word) and nothing takes one
     away, so the hold is not actually harder to get out of.
     """
-    if c.target not in c.grabbing():
-        return
     if c.strike():
         c.hit()
 

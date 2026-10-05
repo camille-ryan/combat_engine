@@ -99,6 +99,7 @@ from combat_engine.engine import (
     Melee,
     Ranged,
     Relation,
+    Target,
     UpTo,
     Usage,
     When,
@@ -133,7 +134,6 @@ from combat_engine.engine.query import (
     can_act,
     distance_between,
     enemies,
-    has_combat_advantage,
     is_,
     squares,
     team,
@@ -689,23 +689,24 @@ def m5372a3(c: Cast) -> None:
     once_per_round=True,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=12),
     damage=Damage("1d10", 5, dtype=DamageType.PSYCHIC),
-    requires=lambda world, eid: bool(world.relations.targets(Relation.GRABBED_BY, eid)),
-    requires_text="the m5372 must have a creature grabbed",
-    dropped=("Target.relation",),
 )
 def m5372a4(c: Cast) -> None:
-    grabbed = c.grabbing(of=c.me)
-    victim = c.target if c.target in grabbed else next(iter(grabbed), None)
-    if victim is None or not c.strike(on=victim):
+    """The ongoing clause reads the standing burn *before* the new one lands,
+    which is the only order that can tell "already taking it" from "now is"."""
+    if not c.strike():
         return
-    c.hit(on=victim)
-    standing = _ongoing_amount(c.world, victim, DamageType.PSYCHIC)
+    c.hit()
+    standing = _ongoing_amount(c.world, c.target, DamageType.PSYCHIC)
     c.condition(
-        Condition.DAZED, on=victim, until=When.SAVE_ENDS,
+        Condition.DAZED, until=When.SAVE_ENDS,
         ongoing=((standing + 5) if standing else 5, DamageType.PSYCHIC),
     )
 
@@ -1640,13 +1641,14 @@ def m5960a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.CHARM],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("3d10", 4),
-    requires=lambda world, eid: bool(world.relations.targets(Relation.GRABBED_BY, eid)),
-    requires_text="the m5960 must have a creature grabbed",
-    dropped=("Target.relation",),
 )
 def m5960a1(c: Cast) -> None:
     """The thrall clause is caught inside the `Dropped` window
@@ -1656,9 +1658,8 @@ def m5960a1(c: Cast) -> None:
     tree -- no new mechanism for being controlled was needed. It falls for
     good when the m5960 does, forced through the ordinary damage pipeline
     rather than by hand-setting hit points."""
-    grabbed = c.grabbing(of=c.me)
-    victim = c.target if c.target in grabbed else next(iter(grabbed), None)
-    if victim is None or not c.strike(on=victim):
+    victim = c.target
+    if not c.strike():
         return
     me = c.me
 
@@ -1677,8 +1678,8 @@ def m5960a1(c: Cast) -> None:
         c.watch(Dropped, thrall_falls, until=When.ENCOUNTER, on=me, label=f"{c.ref} thrall")
 
     c.watch(Dropped, rise, until=When.ENCOUNTER, on=me, once=True, label=f"{c.ref} revive")
-    c.hit(on=victim)
-    held = c.condition(Condition.DAZED, on=victim, until=When.ENCOUNTER)
+    c.hit()
+    held = c.condition(Condition.DAZED, until=When.ENCOUNTER)
     if held is not None:
         def freed(ev: RelationCleared) -> None:
             if ev.kind_ is Relation.GRABBED_BY and ev.target == victim and ev.source == me:
@@ -1921,11 +1922,14 @@ def m5985a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature granting combat advantage to it",
+        grants_ca=True,
+    ),
     keywords=[Keyword.HEALING],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("2d12", 10),
-    dropped=("Target.grants_ca",),
 )
 def m5985a2(c: Cast) -> None:
     if c.first:
@@ -1939,12 +1943,11 @@ def m5985a2(c: Cast) -> None:
             Bloodied, recharges, until=When.ENCOUNTER, on=me, once=True,
             label=f"{c.ref} recharge",
         )
-    victim = _restricted_to(c, 2, lambda f: has_combat_advantage(c.world, c.me, f))
-    if victim is None or not c.strike(on=victim):
+    if not c.strike():
         return
-    c.hit(on=victim)
-    c.spend_surge(on=victim)
-    c.weakened(until=When.SAVE_ENDS, on=victim)
+    c.hit()
+    c.spend_surge(on=c.target)  # defaults to the caster; the card spends the target's
+    c.weakened(until=When.SAVE_ENDS)
     c.heal(42, on=c.me)
 
 
@@ -2783,20 +2786,17 @@ def m822a1(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Ranged(10),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="it must have combat advantage against the target",
+        grants_ca=True,
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=12),
-    requires=lambda world, eid: any(
-        has_combat_advantage(world, eid, f) for f in enemies(world, eid)
-    ),
-    requires_text="the m822 must have combat advantage against the target",
-    dropped=("Target.grants_ca",),
 )
 def m822a2(c: Cast) -> None:
-    victim = _restricted_to(c, 10, lambda f: has_combat_advantage(c.world, c.me, f))
-    if victim is None or not c.strike(on=victim):
-        return
-    c.half_healing(on=victim, until=When.EONT)
+    if c.strike():
+        c.half_healing(until=When.EONT)
 
 
 def _has_ongoing_necrotic(world: World, eid: int) -> bool:

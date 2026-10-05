@@ -115,6 +115,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     Summon,
+    Target,
     UpTo,
     Usage,
     When,
@@ -2187,33 +2188,31 @@ def m5998a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(0),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.DISEASE, Keyword.POISON, Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage("1d4", 8, half_on_miss=True),
-    dropped=("Target.relation", "c.contract(ref)"),
+    dropped=("c.contract(ref)",),
 )
 def m5998a2(c: Cast) -> None:
     """Two packets, because the card prints two: an untyped blow in the
     header and a second one that is poison *and* psychic at once, which is
     what `dtypes` is for.
 
-    "One creature grabbed by the swarm" is a restriction `Target` cannot
-    express -- a relation to the caster, so `Target.relation` -- and the row is
-    redirected rather than thrown away. The disease at
-    the end of the encounter is the other dropped clause -- nothing contracts
-    one, and forty-five rows wait on the same verb.
+    The disease at the end of the encounter is the dropped clause -- nothing
+    contracts one, and forty-five rows wait on the same verb.
     """
-    victim = _restricted_to(c, 0, lambda w: c.me in c.grabbed_by(on=w))
-    if victim is None:
-        return
     both_types = (DamageType.POISON, DamageType.PSYCHIC)
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.damage("4d10", dtypes=both_types, on=victim)
+    if c.strike():
+        c.hit()
+        c.damage("4d10", dtypes=both_types)
     else:
-        c.hit(on=victim, half=True)
-        c.half_damage("4d10", dtypes=both_types, on=victim)
+        c.hit(half=True)
+        c.half_damage("4d10", dtypes=both_types)
 
 
 @power(
@@ -2850,21 +2849,17 @@ def m6183a2(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Melee(3),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=AC, printed=18),
     damage=Damage("3d8", 7),
-    dropped=("Target.relation",),
 )
 def m6183a3(c: Cast) -> None:
-    """"One creature grabbed by the m6183" is a restriction `Target` cannot
-    express -- grabbed **by it** is a relation to the caster, so
-    `Target.relation` -- and the row is redirected to one that qualifies rather
-    than thrown away when the chooser hands it somebody who does not."""
-    victim = _restricted_to(c, 3, lambda w: c.me in c.grabbed_by(on=w))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
 
 
 @power(

@@ -770,15 +770,14 @@ _granted("f2106", "f2106b", swap=Swap(3, Usage.ENCOUNTER))
 @power("f2106b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
        reach=Melee(1),
        target=Target(side="enemy", count=1,
-                     label="granting you combat advantage"),
-       keywords=WEAPON, attack=Attack(FORT, vs=FORT),
-       dropped=("Target.grants_ca",))
+                     label="granting you combat advantage", grants_ca=True),
+       keywords=WEAPON, attack=Attack(FORT, vs=FORT))
 def f2106b(c: Cast) -> None:
-    """The restriction on which creature may be picked is printed on the
-    target line and the header has nowhere to enforce it; `label=`
-    records it for the card and `Target.relation` is the gap -- what is
-    asked is a relation to the attacker, not a condition the target
-    carries.
+    """`grants_ca=True` rather than a `relation`: the stored grant is only
+    part of the answer, since flanking is computed and never stored. The
+    prerequisite stays a column -- `chargen.meets` enforces it and
+    `Power.requires` is the wrong tool for a fact that cannot change
+    mid-fight.
 
     "Falls prone if it takes damage while dazed **from this attack**" is
     a watch tied to the hold this row laid, so a daze from anywhere else
@@ -827,9 +826,8 @@ _granted("f2108", "f2108b", swap=Swap(9, Usage.DAILY))
 @power("f2108b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1),
        target=Target(side="enemy", count=1,
-                     label="granting you combat advantage"),
-       keywords=WEAPON, attack=Attack(FORT, vs=FORT),
-       dropped=("Target.grants_ca",))
+                     label="granting you combat advantage", grants_ca=True),
+       keywords=WEAPON, attack=Attack(FORT, vs=FORT))
 def f2108b(c: Cast) -> None:
     """The Effect lands whether the attack does, which is what "Effect"
     means, so both watches are armed outside the hit branch.

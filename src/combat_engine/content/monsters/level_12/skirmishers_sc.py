@@ -90,7 +90,6 @@ from combat_engine.content.monsters.level_08.brutes import _is_bloodied
 from combat_engine.content.monsters.level_08.skirmishers import _adjacent_foe
 from combat_engine.content.monsters.level_09.skirmishers import _underground
 from combat_engine.content.monsters.level_10.lurkers import EVERY_DEFENCE
-from combat_engine.content.monsters.level_10.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_11.skirmishers_sc import (
     _foe_within,
     _through_them,
@@ -143,6 +142,7 @@ from combat_engine.engine import (
     Relation,
     Size,
     Stats,
+    Target,
     TurnEnd,
     TurnStart,
     UpTo,
@@ -3529,21 +3529,17 @@ def m5355a1(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy", count=1,
+        label="one creature granting combat advantage to it",
+        grants_ca=True,
+    ),
     attack=Attack(vs=AC, printed=17),
     damage=Damage("1d10", 5),
-    dropped=("Target.grants_ca",),
 )
 def m5355a2(c: Cast) -> None:
-    """`Target` filters on side, count and size and not on what a creature is
-    granting, so the chooser may hand this row somebody its own target line
-    forbids -- and the row is aimed at one that qualifies rather than thrown
-    away."""
-    victim = _restricted_to(
-        c, 1, lambda foe: has_combat_advantage(c.world, c.me, foe)
-    )
-    if victim is not None and c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
 
 
 @power(

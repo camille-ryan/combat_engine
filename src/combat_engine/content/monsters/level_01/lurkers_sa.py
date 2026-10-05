@@ -302,20 +302,23 @@ def m5752a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="creature granting combat advantage"),
+    target=Target(
+        side="enemy",
+        count=1,
+        label="creature granting combat advantage",
+        grants_ca=True,
+    ),
     attack=Attack(vs=AC, printed=6),
     damage=Damage("4d4"),
-    dropped=("Target.grants_ca",),
 )
 def m5752a1(c: Cast) -> None:
     """The ongoing damage runs "until the grab ends", which is not one of the
     durations -- so it is laid for the encounter and ended off the grab's own
     `on_end`, which is the only moment that can be seen.
 
-    `label=` records the target restriction for the card and
-    `Target.relation` is the gap: the header filters on side and size, so the
-    row is offered against a creature that is not granting it combat
-    advantage.
+    The target restriction is the target line now: `grants_ca` folds in the
+    stored grant, the flanking geometry and whatever suppresses either, so the
+    pool cannot hold a creature that is not granting it combat advantage. #401.
     """
     if not c.strike():
         return

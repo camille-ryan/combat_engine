@@ -1289,10 +1289,18 @@ def m4014a0(c: Cast) -> None:
     reach=Melee(2),
     target=Target(side="enemy", count=1, label="immobilized by it"),
     attack=Attack(vs=FORT, printed=11),
-    dropped=("Target.relation", "c.sight_range(shared_only=)"),
+    dropped=("Relation.IMMOBILIZED_BY", "c.sight_range(shared_only=)"),
 )
 def m4014a1(c: Cast) -> None:
     """The restrained hold and the recurring damage both play.
+
+    The printed target is "a creature immobilized by it", which `Relation`
+    has no member for -- the six it carries are the grab, the mark,
+    domination, hiding, the curse and the quarry -- so `Target.relation`
+    cannot say this one and the pick stays in the body. Filtering on the
+    bare `Condition.IMMOBILIZED` would be wider than the card: it would
+    accept a creature held by somebody else entirely.
+
     "Line of sight and line of effect only to the m4014, and no creature
     has it to the target" has no vision gate narrow enough to lay only
     between two named creatures -- `c.sight_range` shrinks a radius, not
@@ -1319,16 +1327,18 @@ def m4014a1(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(2),
-    target=Target(side="enemy", count=1, label="grabbed by it"),
+    target=Target(
+        side="enemy", count=1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("2d8", 5),
-    dropped=("Target.relation",),
 )
 def m4014a2(c: Cast) -> None:
-    victim = next(iter(c.grabbing()), None)
-    if victim is not None and c.strike(on=victim):
-        c.hit(on=victim)
-        c.condition(Condition.IMMOBILIZED, until=When.SAVE_ENDS, on=victim)
+    if c.strike():
+        c.hit()
+        c.condition(Condition.IMMOBILIZED, until=When.SAVE_ENDS)
 
 
 # ==========================================================================
@@ -3068,15 +3078,17 @@ def m6284a1(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="flanked by it"),
+    target=Target(
+        side="enemy", count=1,
+        label="one enemy it is flanking",
+        flanked=True,
+    ),
     attack=Attack(vs=AC, printed=15),
     damage=Damage("1d8", 0),
-    dropped=("Target.flanked_by",),
 )
 def m6284a2(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: flanked_by(c.world, f, c.me))
-    if victim is not None and c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
 
 
 _M6284_DAMAGES = "its attack damages an enemy"

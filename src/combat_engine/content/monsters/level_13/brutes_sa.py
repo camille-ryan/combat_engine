@@ -793,16 +793,16 @@ def m2529a0(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy", count=1,
+        label="a creature it is grabbing",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=15),
     damage=Damage(bonus=5, kind=MINION),
-    dropped=("Target.relation",),
 )
 def m2529a1(c: Cast) -> None:
-    """"Targets a creature the m2529 is grabbing" is a restriction no `Target`
-    carries, so the victim is picked out of what the creature actually holds.
-
-    Hit and miss both let go, so the release is unconditional and only the
+    """Hit and miss both let go, so the release is unconditional and only the
     throw hangs on the roll.
 
     `c.cure` and not `c.end_effect(carrying=Condition.GRABBED)`: a grab is held
@@ -810,15 +810,11 @@ def m2529a1(c: Cast) -> None:
     hold that carries it lists no conditions at all and `carrying=` never
     matches it. Driven on a board, that spelling left the creature grabbed.
     """
-    held = sorted(c.grabbing())
-    if not held:
-        return
-    victim = c.target if c.target in held else held[0]
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.slide(3, on=victim)
-        c.prone(on=victim)
-    c.cure(Condition.GRABBED, on=victim)
+    if c.strike():
+        c.hit()
+        c.slide(3)
+        c.prone()
+    c.cure(Condition.GRABBED)
 
 
 # ==========================================================================

@@ -35,7 +35,16 @@ from .query import (
 )
 from .skills import SKILLS
 from .triggers import Trigger
-from .types import Ability, ActionType, DamageType, Defense, Keyword, Size, Usage
+from .types import (
+    Ability,
+    ActionType,
+    DamageType,
+    Defense,
+    Keyword,
+    Relation,
+    Size,
+    Usage,
+)
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -304,6 +313,37 @@ class Target:
     #: because they are two restrictions on one pool and not two pools.
     max_size: Size | None = None
     loose: bool = False
+    #: A printed target line narrowed by how the creature stands **to the
+    #: caster**: "one creature grabbed by it", "the creature marked by you".
+    #: Measured outward from the caster -- `holds(relation, actor, target)` --
+    #: because every one of these is asymmetric. "Grabbed by it" is not
+    #: "grabbed", which is exactly the distinction a `Condition` cannot draw,
+    #: and why these rows could not be written against `Conditions`.
+    #:
+    #: `HIDDEN_FROM` is the exception and is routed through `query.unseen_by`
+    #: rather than read off the triple -- see `_stands_right`. Sight has two
+    #: more inputs than the relation carries.
+    relation: Relation | None = None
+    #: Inverts `relation`. Three rows print the opposite -- "one creature
+    #: **not** grabbed by it", "one creature that **can see** it" -- and
+    #: without this they would silently become their own opposite, which is
+    #: worse than being unwritten.
+    without: bool = False
+    #: "One creature granting combat advantage to it." Deliberately **not** a
+    #: `relation` value, for two independent reasons. `Relation.GRANTS_CA_TO`
+    #: is stored with its arguments the other way round (`query.py` reads
+    #: `holds(GRANTS_CA_TO, target, attacker)`), so routed through the field
+    #: above it is inverted and still returns a bool. And the stored relation
+    #: is not the whole answer: flanking is computed and never stored, so only
+    #: `query.has_combat_advantage` folds in the grant, the geometry and the
+    #: clauses that suppress both.
+    grants_ca: bool = False
+    #: "One creature flanked by it", "one enemy it is flanking". **Narrower
+    #: than `grants_ca` and not a spelling of it**: a prone or dazed creature
+    #: grants combat advantage without being flanked, so a row that prints
+    #: flanking and filters on combat advantage accepts targets its card
+    #: refuses.
+    flanked: bool = False
 
     def __str__(self) -> str:
         if self.label:
@@ -1482,6 +1522,8 @@ def candidates(
     if aim.max_size is not None:
         cap = aim.max_size.order
         pool = [c for c in pool if _size_of(world, c).order <= cap]
+    if aim.relation is not None or aim.grants_ca or aim.flanked:
+        pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
 
     reach = p.reach_of(branch, augment)
     aimed = origin is not None and reach.kind in ("area_burst", "close_blast")
@@ -1665,6 +1707,54 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0, augment: int 
             distance_between(world, actor, foe) <= far for foe in enemies(world, actor)
         )
     return bool(candidates(world, actor, p, None, branch, augment))
+
+
+def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str = "") -> bool:
+    """Does that creature stand to the caster the way the target line demands?
+
+    The three relational halves of a printed target line, in one predicate
+    because **two callers must not disagree about it**: `candidates()`, which
+    decides what is offered, and `use`'s explicit-target arm, which decides what
+    connects. #381 was exactly that disagreement about reach -- at ten squares
+    `candidates()` offered a target zero times and `use` rolled the attack --
+    and a second copy of this logic would reproduce it one field over.
+    """
+    if aim.relation is Relation.HIDDEN_FROM:
+        # **Sight is never the bare relation.** `query.unseen_by` subtracts
+        # `sees_through` and folds in a capped sight range, and its own
+        # docstring says it exists so that "the sight and the combat advantage
+        # can never disagree" -- asked in one place rather than at each reader.
+        # Reading the triple directly here would have made this a third reader
+        # and wrong in both directions at once: too wide, accepting an enemy
+        # that plainly sees the caster past its hiding, and too narrow,
+        # refusing a *blinded* enemy -- including one blinded by the same stat
+        # block for the sake of this very row. 37 content sites set
+        # `see_invisible` or `sight_range`, so neither case is hypothetical.
+        from .query import unseen_by
+
+        if unseen_by(world, target, actor) is aim.without:
+            return False
+    # Outward from the caster, which is the direction every one of these is
+    # stored in: `Cast.grab` files `(GRABBED_BY, holder, victim)`, and the mark,
+    # the curse, the quarry and domination all put the imposer first. So
+    # "grabbed by it" is `holds(kind, actor, target)` and never the reverse,
+    # which would read as "grabbing it".
+    elif (
+        aim.relation is not None
+        and world.relations.holds(aim.relation, actor, target) is aim.without
+    ):
+        return False
+    if aim.grants_ca:
+        from .query import has_combat_advantage
+
+        if not has_combat_advantage(world, actor, target, ref):
+            return False
+    if aim.flanked:
+        from .query import flanked_by
+
+        if not flanked_by(world, target, actor):
+            return False
+    return True
 
 
 #: Events whose whole point is that the creature is leaving, or has left.
@@ -1889,6 +1979,12 @@ def use(
             for t in targets
             if _within_reach(world, actor, p, t, branch, augment,
                              trigger=trigger, charge=charge, reached=reached)
+            # **The same predicate `candidates()` uses, for the same reason the
+            # reach test is here.** A header saying "one creature grabbed by it"
+            # is a restriction on what may be struck, not advice to whoever
+            # aims: without this a body passing an explicit target connected
+            # with anybody, while the offered list refused all but the victim.
+            and _stands_right(world, actor, p.target, t, p.ref)
         ]
         if targets and not chosen:
             return False

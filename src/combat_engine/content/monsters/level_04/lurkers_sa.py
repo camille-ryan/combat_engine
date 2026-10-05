@@ -984,26 +984,24 @@ def m5485a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target("enemy", 1, label="one creature that cannot see it"),
+    target=Target(
+        "enemy", 1,
+        label="one creature that cannot see it",
+        relation=Relation.HIDDEN_FROM,
+    ),
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("2d6", 1, dtype=DamageType.POISON),
-    requires=_cannot_see_me_in_reach,
-    requires_text="a creature that cannot see it must be within reach",
-    dropped=("Target.relation",),
 )
 def m5485a2(c: Cast) -> None:
-    """`Target` narrows by side, count and size and not by what a creature can
-    see, so the restriction is recorded in the label, kept off the offer by the
-    `requires=`, and enforced here by **redirecting** to a creature in reach
-    that qualifies rather than returning -- returning would spend the action
-    on nothing, which is what a wrong row looks like."""
-    victim = _blind_to_me(c, 1)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.ongoing(10, DamageType.POISON, on=victim)
+    """The restriction is the target line now, routed through
+    `query.unseen_by` -- so the `requires=` that kept the row off the offer and
+    the body's redirect both came out, and the pool is narrower than
+    `_blind_to_me` was: `unseen_by` folds in a capped sight range, which
+    `query.hidden_from` on its own does not. #401."""
+    if c.strike():
+        c.hit()
+        c.ongoing(10, DamageType.POISON)
 
 
 @power(
@@ -1438,14 +1436,14 @@ def m6395a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=Target(
-        "enemy", 1, label="one creature granting combat advantage to it"
+        "enemy", 1,
+        label="one creature granting combat advantage to it",
+        grants_ca=True,
     ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=REF, printed=7),
     damage=Damage("2d8", 3),
-    requires=_opening_in_reach,
-    requires_text="a creature granting it combat advantage must be within reach",
-    dropped=("Target.grants_ca", "c.grab(dc=)"),
+    dropped=("c.grab(dc=)",),
 )
 def m6395a3(c: Cast) -> None:
     """"Sustain Standard" has a payout as well as a clock, and the clock alone
@@ -1455,12 +1453,15 @@ def m6395a3(c: Cast) -> None:
     the row is sustained is what "the grab persists" means.
 
     The printed escape DC is the dropped half; `c.grab` takes no number.
+
+    "Granting combat advantage to it" is the target line now, so the `requires=`
+    gate and the body's re-pick both came out. #401.
     """
-    victim = _exposed(c, 1)
-    if victim is None or not c.strike(on=victim):
+    victim = c.target
+    if not c.strike():
         return
-    c.hit(on=victim)
-    c.grab(on=victim, by=c.me)
+    c.hit()
+    c.grab(by=c.me)
     held = c.effect(c.ref, until=When.SUSTAIN, on=c.me, sustain=STANDARD)
 
     def again() -> None:

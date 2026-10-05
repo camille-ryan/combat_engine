@@ -961,18 +961,18 @@ def m5132a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=AC, printed=14),
     damage=Damage("3d6", 8),
-    dropped=("Target.relation",),
 )
 def m5132a2(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.dazed(on=victim, until=When.EONT)
+    if c.strike():
+        c.hit()
+        c.dazed(until=When.EONT)
 
 
 @power(

@@ -91,7 +91,9 @@ from combat_engine.engine import (
     Moved,
     Position,
     Ranged,
+    Relation,
     Size,
+    Target,
     TurnEnd,
     TurnStart,
     When,
@@ -982,23 +984,17 @@ def m6516a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy", count=1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     damage=Damage(bonus=15, kind=MINION),
-    dropped=("Target.relation",),
 )
 def m6516a1(c: Cast) -> None:
     """An Effect line with no attack roll: the fifteen simply lands, which is
-    why the header declares damage and no attack.
-
-    The printed target line is "one creature grabbed by it", which `Target`
-    cannot say, so the victim is taken from the grab rather than from
-    whoever the chooser offered -- `Target.relation` is the gap, and the AI
-    policy reading the header is what it costs.
-    """
-    held = sorted(c.grabbing())
-    if not held:
-        return
-    c.hit(on=held[0])
+    why the header declares damage and no attack."""
+    c.hit()
 
 
 # ==========================================================================

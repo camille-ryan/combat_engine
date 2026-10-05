@@ -31,7 +31,6 @@ from typing import Any
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy
 from combat_engine.content.monsters.level_02.minions_sa import _closes_ranks, _kin_within
 from combat_engine.content.monsters.level_02.soldiers_sa import _ref_of
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_04.minions_sa import _extra_with_advantage
 from combat_engine.engine import (
     AC,
@@ -57,6 +56,7 @@ from combat_engine.engine import (
     Melee,
     Ranged,
     Relation,
+    Target,
     Usage,
     When,
     World,
@@ -675,22 +675,21 @@ def m5609a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy", count=1,
+        label="targets a creature it has grabbed",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("", 8, kind=MINION),
-    requires=_grabbed_by_me_in_reach,
-    requires_text="targets a creature it has grabbed",
-    dropped=("Target.relation", "c.contract(ref)"),
+    dropped=("c.contract(ref)",),
 )
 def m5609a1(c: Cast) -> None:
-    """Where the chooser handed it somebody it is not holding and it *is* holding
-    somebody else in reach, the swing is redirected rather than thrown away."""
-    foe = _restricted_to(c, 1, lambda f: f in _grabbing(c))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
+    """The end-of-encounter saving throw against the disease has no contraction
+    mechanism to call; the blow plays."""
+    if c.strike():
+        c.hit()
 
 
 # --------------------------------------------------------------------------

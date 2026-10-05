@@ -24,8 +24,10 @@ level's `artillery_sa.py`, `brutes_sa.py`, `minions_sa.py` and `misc_sa.py`:
   Requirement that decides whether the row is offered at all, and a body
   redirect for when the chosen target does not qualify. The marker names
   which narrowing it is: `Target.condition` for a condition the creature
-  carries, `Target.relation` for one that is about the attacker ("marked by
-  it"), `Target.bloodied` for bloodied;
+  carries, `Target.bloodied` for bloodied. A narrowing that is about the
+  attacker ("marked by it", "granting it combat advantage") is no longer one
+  of those -- it is `Target.relation` and `Target.grants_ca` on the target
+  line, which is where m3245a1 and m5337a2 carry it;
 * a printed Requirement naming a weapon ("requires a scimitar") is not asked:
   a monster carries no `Gear`, and the blow is the block's own basic attack.
 
@@ -101,6 +103,7 @@ from combat_engine.engine import (
     Melee,
     Ranged,
     Relation,
+    Target,
     UpTo,
     Usage,
     When,
@@ -754,24 +757,20 @@ def m3245a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy", count=1,
+        label="it targets a creature marked by it",
+        relation=Relation.MARKED_BY,
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("2d6", 4),
-    requires=_any_enemy_marked_by_me,
-    requires_text="it targets a creature marked by it",
-    dropped=("Target.relation",),
 )
 def m3245a1(c: Cast) -> None:
-    victim = c.target
-    if victim is not None and not c.marked(on=victim):
-        victim = next((f for f in c.enemies() if c.marked(on=f)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.slide(2, on=victim)
-        c.slowed(until=When.SAVE_ENDS, on=victim)
+    if c.strike():
+        c.hit()
+        c.slide(2)
+        c.slowed(until=When.SAVE_ENDS)
 
 
 @power(
@@ -1728,24 +1727,18 @@ def m5337a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy", count=1,
+        label="it targets a creature granting it combat advantage",
+        grants_ca=True,
+    ),
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("2d6", 4),
-    requires=_has_an_opening,
-    requires_text="it targets a creature granting it combat advantage",
-    dropped=("Target.grants_ca",),
 )
 def m5337a2(c: Cast) -> None:
-    victim = c.target
-    if victim is not None and not has_combat_advantage(c.world, c.me, victim):
-        victim = next(
-            (f for f in c.enemies() if has_combat_advantage(c.world, c.me, f)), None
-        )
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.condition(Condition.DAZED, Condition.IMMOBILIZED, until=When.EONT, on=victim)
+    if c.strike():
+        c.hit()
+        c.condition(Condition.DAZED, Condition.IMMOBILIZED, until=When.EONT)
 
 
 @power(

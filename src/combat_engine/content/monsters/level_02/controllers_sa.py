@@ -16,8 +16,10 @@ settled:
 * a printed target restriction about what a creature is *suffering* or about
   what the attacker is holding is asked in the body, because `Target` filters
   on side and size and nothing else. `label=` records it for the card and the
-  marker is whichever symbol names what the line asks -- `Target.relation` for
-  a creature the attacker has hold of, `Target.ident` for one of its own kind;
+  marker is whichever symbol names what the line asks -- `Target.ident` for one
+  of its own kind. **"A creature the attacker has hold of" is no longer one of
+  them**: `Target.relation` is a real field, so that line is the target line
+  itself and carries no marker (#401);
 * a row that recharges on a printed condition rather than on a die keeps the
   die in the header, because that is what `actions.recharge` rolls and what the
   card shows, and arms the condition on top of it.
@@ -64,6 +66,7 @@ from combat_engine.engine import (
     Melee,
     Powers,
     Ranged,
+    Relation,
     Target,
     Usage,
     When,
@@ -258,19 +261,17 @@ def m4455a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=Target(side="enemy", count=1, label="a creature it is grabbing"),
+    target=Target(
+        side="enemy", count=1, label="a creature it is grabbing",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("1d8", 3),
-    requires=_holds_somebody,
-    requires_text="must have a creature grabbed",
-    dropped=("Target.relation",),
 )
 def m4455a1(c: Cast) -> None:
     """"Sustains the grab" is the grab not ending, and a grab does not lapse on
     a clock here -- so the printed sentence is satisfied by re-setting the hold
     rather than by a duration."""
-    if c.target not in c.grabbing():
-        return
     if c.strike():
         c.hit()
         c.grab()

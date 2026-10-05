@@ -67,12 +67,10 @@ from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers_sa import _reachable
 from combat_engine.content.monsters.level_03.soldiers_sa import (
     _adjacent_foe_looks_away,
-    _marked_by_me_in_reach,
     _marked_shifts,
     _shove_and_step,
     _shoveable,
 )
-from combat_engine.content.monsters.level_04.soldiers_sa import _marked_in_reach
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -109,6 +107,7 @@ from combat_engine.engine import (
     Melee,
     Ranged,
     Relation,
+    Target,
     UpTo,
     Usage,
     When,
@@ -490,21 +489,19 @@ def m1024a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets a creature it has marked",
+        relation=Relation.MARKED_BY,
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d8", 7),
-    requires=_marked_by_me_in_reach,
-    requires_text="targets a creature it has marked",
-    dropped=("Target.relation",),
 )
 def m1024a3(c: Cast) -> None:
-    foe = _restricted_to(c, 1, lambda f: c.marked(on=f, by=c.me))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        c.slowed(on=foe, until=When.SAVE_ENDS)
+    if c.strike():
+        c.hit()
+        c.slowed(until=When.SAVE_ENDS)
 
 
 @power(
@@ -1687,22 +1684,22 @@ def m3500a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(3),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets a creature it has marked",
+        relation=Relation.MARKED_BY,
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("1d10", 4, dtype=DamageType.NECROTIC),
-    requires=_marked_in_reach(3),
-    requires_text="targets a creature it has marked",
-    dropped=("Target.relation",),
 )
 def m3500a1(c: Cast) -> None:
-    foe = _restricted_to(c, 3, lambda f: c.marked(on=f, by=c.me))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        c.condition(Condition.DAZED, until=When.EONT, on=foe)
-        c.mark(on=foe, until=When.EONT)
+    """"And marked" on a row only usable against something it has already marked
+    is a refresh, so the mark is laid again and the clock starts over."""
+    if c.strike():
+        c.hit()
+        c.condition(Condition.DAZED, until=When.EONT)
+        c.mark(until=When.EONT)
 
 
 @power(
@@ -1773,25 +1770,24 @@ def m3638a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets a creature it has marked",
+        relation=Relation.MARKED_BY,
+    ),
     keywords=[Keyword.NECROTIC, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("1d10", 5, dtype=DamageType.NECROTIC),
-    requires=_marked_in_reach(1),
-    requires_text="targets a creature it has marked",
-    dropped=("Target.relation",),
 )
 def m3638a1(c: Cast) -> None:
     """"2 necrotic damage for each square it moves away each turn (save ends
     both)" ties the per-square toll to the slow's own save: one throw ends
     both, which is what the card means by "both" when neither half is a
     `Condition` that `c.condition` can hold alongside the other."""
-    foe = _restricted_to(c, 1, lambda f: c.marked(on=f, by=c.me))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        held = c.slowed(on=foe, until=When.SAVE_ENDS)
+    foe = c.target
+    if c.strike():
+        c.hit()
+        held = c.slowed(until=When.SAVE_ENDS)
         if held is not None:
             toll = _toll_per_square_away(c, foe)
             held.on_end.append(lambda: c.world.effects.end(toll, "saved"))
@@ -2097,24 +2093,23 @@ def m4740a0(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets a creature it has marked",
+        relation=Relation.MARKED_BY,
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("1d8", 6, kind=LIMITED),
-    requires=_marked_by_me_in_reach,
-    requires_text="targets a creature it has marked",
-    dropped=("Target.relation", "c.aftereffect()"),
+    dropped=("c.aftereffect()",),
 )
 def m4740a1(c: Cast) -> None:
     """The slow and the weaken are one `c.condition` call, so one save ends
     both. The Aftereffect -- a Fortitude penalty that follows once they
     end -- is the gap named in the module docstring."""
-    foe = _restricted_to(c, 1, lambda f: c.marked(on=f, by=c.me))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        c.condition(Condition.SLOWED, Condition.WEAKENED, until=When.SAVE_ENDS, on=foe)
+    if c.strike():
+        c.hit()
+        c.condition(Condition.SLOWED, Condition.WEAKENED, until=When.SAVE_ENDS)
 
 
 @power(

@@ -20,8 +20,10 @@ and the conventions are that file's and the level-1 to level-3 sweeps':
   the body redirects to a creature in reach that qualifies, a `requires=` keeps
   the row from being offered when nothing does, and the gap is the `Target.`
   symbol naming that particular narrowing: `Target.condition`,
-  `Target.relation`, `Target.bloodied`, `Target.creature_kind`,
-  `Target.ongoing` or `Target.ident` (#361);
+  `Target.bloodied`, `Target.creature_kind`, `Target.ongoing` or
+  `Target.ident` (#361). **`Target.relation` is no longer one of them** -- it
+  is a real field, so "a creature it is grabbing" is the target line itself,
+  with no `requires=`, no re-pick and no marker (#401);
 * a row that recharges on a printed condition keeps the die in the header,
   because that is what `actions.recharge` rolls and what the card shows, and
   arms the condition on top of it.
@@ -110,6 +112,7 @@ from combat_engine.engine import (
     Melee,
     Powers,
     Ranged,
+    Relation,
     Stats,
     Target,
     UpTo,
@@ -2950,24 +2953,24 @@ def m6116a3(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=Target("enemy", 1, label="one creature the creature is grabbing"),
+    target=Target(
+        "enemy", 1,
+        label="one creature it is grabbing",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("1d6", 3, dtype=DamageType.POISON),
-    requires=_holds_somebody,
-    requires_text="must be grabbing a creature",
-    dropped=("Target.relation",),
 )
 def m6116a4(c: Cast) -> None:
     """Two escalations on one hold, and `escalate=` fires on every failure --
     so the failures are counted and the first adds one condition, the second
     the other. `_also` joining the standing hold is what makes "save ends
     all" one saving throw rather than three."""
-    held = c.grabbing(of=c.me)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None or not c.strike(on=victim):
+    victim = c.target
+    if not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
     misses: list[int] = []
 
     def failed(eff: Effect) -> None:
@@ -2989,13 +2992,14 @@ def m6116a4(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(2),
-    target=Target("enemy", 1, label="one creature the creature is grabbing"),
+    target=Target(
+        "enemy", 1,
+        label="one creature it is grabbing",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.HEALING],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("2d8", 6, kind=LIMITED),
-    requires=_holds_somebody,
-    requires_text="must be grabbing a creature",
-    dropped=("Target.relation",),
 )
 def m6116a5(c: Cast) -> None:
     """The printed recharge is a condition rather than a die, so the die stays
@@ -3015,12 +3019,8 @@ def m6116a5(c: Cast) -> None:
 
     c.watch(Bloodied, fed, until=When.ENCOUNTER, on=me, label=f"{ref} recharge")
     c.watch(Hit, caught, until=When.ENCOUNTER, on=me, label=f"{ref} haul")
-    held = c.grabbing(of=me)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
         c.heal(10, on=me)
 
 

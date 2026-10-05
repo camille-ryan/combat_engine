@@ -57,7 +57,6 @@ from typing import Any
 
 from combat_engine.content.monsters.level_02.minions_sa import _kin_within
 from combat_engine.content.monsters.level_02.soldiers_sa import _ref_of
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_04.minions_sa import _extra_with_advantage
 from combat_engine.content.monsters.level_08.brutes import _aura
 from combat_engine.content.monsters.level_10.lurkers import EVERY_DEFENCE
@@ -92,6 +91,7 @@ from combat_engine.engine import (
     MoveEnd,
     Position,
     Ranged,
+    Relation,
     Target,
     Trigger,
     TurnStart,
@@ -104,7 +104,6 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.monster_math import MINION
-from combat_engine.engine.query import has_combat_advantage
 
 _REDUCED_TO_0 = "it is reduced to 0 hit points"
 
@@ -329,25 +328,22 @@ def m2006a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target("enemy", 1, label="granting it combat advantage"),
+    target=Target(
+        "enemy", 1,
+        label="requires combat advantage against the target",
+        grants_ca=True,
+    ),
     keywords=[Keyword.DISEASE, Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d4", 5, kind=MINION),
-    requires_text="requires combat advantage against the target",
-    dropped=("Target.grants_ca", "c.contract(ref)"),
+    dropped=("c.contract(ref)",),
 )
 def m2006a1(c: Cast) -> None:
-    """The Requirement is about a *pair* and `requires=` is handed a creature
-    and no target, so the row picks a victim it does have combat advantage
-    against instead of being thrown away when the chooser aims it elsewhere.
-    The disease (`x5_17`) has no contraction mechanism to call; the blow and
+    """The disease (`x5_17`) has no contraction mechanism to call; the blow and
     the burn both play."""
-    victim = _restricted_to(c, 1, lambda f: has_combat_advantage(c.world, c.me, f))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.ongoing(5, DamageType.NECROTIC, on=victim)
+    if c.strike():
+        c.hit()
+        c.ongoing(5, DamageType.NECROTIC)
 
 
 # ==========================================================================
@@ -392,19 +388,18 @@ def m2082a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=Target("enemy", 1, label="grabbed by it"),
+    target=Target(
+        "enemy", 1,
+        label="grabbed target only",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.NECROTIC],
     damage=Damage(bonus=10, dtype=DamageType.NECROTIC, kind=MINION),
-    dropped=("Target.relation",),
 )
 def m2082a1(c: Cast) -> None:
     """No attack roll is printed -- the damage simply lands on whoever it is
-    holding. The chooser filters on side and count and not on a grab, so the
-    row is aimed at its victim rather than returning."""
-    held = c.grabbing()
-    victim = c.target if c.target in held else next(iter(held), None)
-    if victim is not None:
-        c.hit(on=victim)
+    holding, which `c.hit` applies from the header."""
+    c.hit()
 
 
 @power(

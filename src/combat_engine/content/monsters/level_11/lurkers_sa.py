@@ -1605,15 +1605,21 @@ def m5492a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one living creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("4d10", 5, dtype=DamageType.NECROTIC),
-    dropped=("Target.relation", "Target.creature_kind"),
+    dropped=("Target.creature_kind",),
 )
 def m5492a3(c: Cast) -> None:
-    """"One living creature grabbed by the m5492" is narrower than `Target`
-    can say, so the aim is corrected here rather than thrown away.
+    """"Grabbed by it" is the target line now; "living" is still narrower than
+    any field, so the redirect stays -- and it keeps asking the relation too,
+    because a redirect that only tested the kind could walk out of the pool the
+    header just built and hit something the card forbids.
 
     "If this attack bloodies the target" is the line read on both sides of the
     blow: a creature already bloodied is not bloodied again by it. "The grab

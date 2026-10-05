@@ -77,7 +77,6 @@ from combat_engine.content.monsters.level_03.skirmishers_sa import (
 from combat_engine.content.monsters.level_03.soldiers_sa import (
     _crowding,
     _edge_when_mobbed,
-    _grabbed_by_me_in_reach,
     _mark_bites,
     _marked_adjacent_shifts,
 )
@@ -118,6 +117,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     Stats,
+    Target,
     UpTo,
     Usage,
     When,
@@ -595,22 +595,18 @@ def m1948a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets a creature it has grabbed",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=AC, printed=11),
     damage=Damage("1d10", 6),
-    requires=_grabbed_by_me_in_reach,
-    requires_text="targets a creature it has grabbed",
-    dropped=("Target.relation",),
 )
 def m1948a1(c: Cast) -> None:
-    """Where the chooser handed it somebody it is not holding and it *is* holding
-    somebody else in reach, the swing is redirected rather than thrown away."""
-    foe = _restricted_to(c, 1, lambda f: f in _grabbing(c))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        c.dazed(on=foe, until=When.SAVE_ENDS)
+    if c.strike():
+        c.hit()
+        c.dazed(until=When.SAVE_ENDS)
 
 
 @power(
@@ -926,28 +922,24 @@ def m3543a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets a creature it has marked",
+        relation=Relation.MARKED_BY,
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d10", 5),
-    requires=_marked_in_reach(2),
-    requires_text="targets a creature it has marked",
-    dropped=("Target.relation",),
 )
 def m3543a1(c: Cast) -> None:
-    """The printed weapon Requirement is not a gate (#366). The mark is, and it
-    has nowhere in `Target` to live -- marked **by it** is a relation to the
-    caster, so the gap is `Target.relation` -- so it is asked twice: once as an
-    entry gate and once here, redirecting to another marked creature in
-    reach."""
-    foe = _restricted_to(c, 2, lambda f: c.marked(on=f, by=c.me))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        c.slide(2, on=foe)
+    """The printed weapon Requirement is not a gate (#366). The mark is now the
+    target line itself, so the entry gate and the body's re-pick both came
+    out."""
+    if c.strike():
+        c.hit()
+        c.slide(2)
         if c.crit:
-            c.prone(on=foe)
+            c.prone()
 
 
 @power(
@@ -1198,21 +1190,19 @@ def m3770a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets an enemy it has marked",
+        relation=Relation.MARKED_BY,
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d4", 5),
-    requires=_marked_in_reach(2),
-    requires_text="targets an enemy it has marked",
-    dropped=("Target.relation",),
 )
 def m3770a2(c: Cast) -> None:
-    foe = _restricted_to(c, 2, lambda f: c.marked(on=f, by=c.me))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        c.slide(3, on=foe)
+    if c.strike():
+        c.hit()
+        c.slide(3)
 
 
 @power(
@@ -1895,15 +1885,18 @@ def m5429a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d4", 0),
-    dropped=("Target.relation",),
+    dropped=("Target.only_grabbed",),
 )
 def m5429a1(c: Cast) -> None:
     """Both of the card's second numbers are the same question asked twice --
     +11 instead of +9 and 2d4+10 instead of 2d4 -- so the attack takes a `plus`
-    and the damage takes a flat rider, and the base stays in the header. "While
-    it has a creature grabbed it can bite only that one" is a target
-    restriction with nowhere to live -- a relation to the caster, so
-    `Target.relation` -- and the swing is redirected instead."""
+    and the damage takes a flat rider, and the base stays in the header.
+
+    The printed target line is "one creature" and the narrowing is *conditional*:
+    only while it holds somebody is it restricted to that one. `Target.relation`
+    is unconditional, so declaring it here would refuse the row whenever nothing
+    is grabbed -- which is the row's ordinary use -- so this is the same gap
+    `m6346a2` names, and the swing is redirected in the body instead."""
     held = _grabbing(c)
     foe = c.target
     if held and foe not in held:
@@ -1925,24 +1918,23 @@ def m5429a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets a creature it has grabbed",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=9),
-    requires=_grabbed_by_me_in_reach,
-    requires_text="targets a creature it has grabbed",
-    dropped=("Target.relation", "c.aftereffect()"),
+    dropped=("c.aftereffect()",),
 )
 def m5429a2(c: Cast) -> None:
     """"Save ends both" is one effect carrying the slow and the burn, so the
     victim gets one throw and not two. The First Failed Saving Throw line is the
-    other named gap: `escalate` runs on a failure but nothing routes the printed
-    aftereffect through it."""
-    foe = _restricted_to(c, 1, lambda f: f in _grabbing(c))
-    if foe is None:
-        return
-    if c.strike(on=foe):
+    one remaining gap: `escalate` runs on a failure but nothing routes the
+    printed aftereffect through it."""
+    if c.strike():
         c.condition(
-            Condition.SLOWED, until=When.SAVE_ENDS, on=foe,
+            Condition.SLOWED, until=When.SAVE_ENDS,
             ongoing=(10, DamageType.POISON),
         )
 
@@ -2522,25 +2514,20 @@ def m6346a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("2d8", 4, kind=LIMITED, half_on_miss=True),
-    requires=_grabbed_by_me_in_reach,
-    requires_text="targets a creature it has grabbed",
-    dropped=("Target.relation",),
 )
 def m6346a3(c: Cast) -> None:
     """The captive is dragged to a named square rather than a distance, and the
     trip gives it no opening -- which is the printed "does not provoke". On a
     miss the grab ends, and ending it names the condition because the hold was
     laid by another row."""
-    foe = _restricted_to(c, 1, lambda f: f in _grabbing(c))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
+    foe = c.target
+    if c.strike():
+        c.hit()
         c.move(c.speed_of())
         _hauls_the_grabbed(c, foe)
     else:
-        c.hit(on=foe, half=True)
-        c.end_effect(on=foe, carrying=Condition.GRABBED, why="the grab ends")
+        c.hit(half=True)
+        c.end_effect(carrying=Condition.GRABBED, why="the grab ends")
     if c.first:
         _recharge_when_bloodied(c)
 

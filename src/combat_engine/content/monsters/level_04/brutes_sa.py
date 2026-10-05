@@ -62,7 +62,6 @@ from combat_engine.content.monsters.level_03.skirmishers_sa import (
 from combat_engine.content.monsters.level_04.brutes import (
     _change_shape,
     _crit_line,
-    _has_hold,
     _holding,
     _is_bloodied,
     _kin,
@@ -102,6 +101,7 @@ from combat_engine.engine import (
     Melee,
     Ranged,
     Relation,
+    Target,
     Usage,
     When,
     Window,
@@ -293,27 +293,21 @@ def m1023a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy", count=1,
+        label="grabbed target only",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("2d6", 4),
-    requires=_has_hold,
-    requires_text="it must have hold of a creature",
-    dropped=("Target.relation",),
 )
 def m1023a1(c: Cast) -> None:
-    """"Grabbed target only" is a target line `Target` cannot express, so the
-    narrowing is asked twice: `requires=` decides whether the row is offered at
-    all -- without it the row is a standard action spent on nothing -- and the
-    body swaps the creature chosen for the one actually held rather than
-    returning, which would look written and never act."""
-    held = _holding(c)
-    if not held:
-        return
-    victim = c.target if c.target in held else held[0]
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """The move is the creature's own and the pull drags the held target along,
+    so both take the creature's speed."""
+    if c.strike():
+        c.hit()
         c.move(c.speed_of())
-        c.pull(c.speed_of(), on=victim)
+        c.pull(c.speed_of())
 
 
 @power(

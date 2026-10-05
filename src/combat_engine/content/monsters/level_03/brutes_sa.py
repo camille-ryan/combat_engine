@@ -47,7 +47,6 @@ from combat_engine.content.monsters.level_02.skirmishers_sa import (
 from combat_engine.content.monsters.level_02.soldiers_sa import (
     _free_square_beside,
     _holding_nobody,
-    _holding_somebody,
 )
 from combat_engine.content.monsters.level_03.brutes import _holding, _same_row
 from combat_engine.content.monsters.level_03.skirmishers_sa import (
@@ -90,7 +89,9 @@ from combat_engine.engine import (
     Melee,
     Powers,
     Ranged,
+    Relation,
     Size,
+    Target,
     UpTo,
     Usage,
     When,
@@ -358,21 +359,15 @@ def m115817a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy", count=1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("3d6", 7, half_on_miss=True),
-    requires=_holding_somebody,
-    requires_text="it must have hold of a creature",
-    dropped=("Target.relation",),
 )
 def m115817a1(c: Cast) -> None:
-    """"One creature grabbed by it" is a target line `Target` cannot express --
-    it filters on side, count, size and what is in hand, never on what a
-    creature is suffering -- so the narrowing is asked twice: `requires=`
-    decides whether the row is offered at all and the body checks that the
-    creature chosen is the one being held."""
-    if c.target not in _holding(c.world, c.me):
-        return
     if c.strike():
         c.hit()
     else:
@@ -1982,17 +1977,16 @@ def m6508a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MOVE,
     reach=Melee(4),
-    target=EACH_ENEMY,
+    target=Target(
+        side="enemy", count=99, everyone=True,
+        label="creatures grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=6),
-    requires=_holding_somebody,
-    requires_text="it must have hold of a creature",
-    dropped=("Target.relation",),
 )
 def m6508a1(c: Cast) -> None:
-    """"Creatures grabbed by it" is a target line `Target` cannot say, so the
-    narrowing is a `requires=` plus a check in the body."""
-    if c.target not in _holding(c.world, c.me):
-        return
+    """Plural target line, so every creature it holds inside reach 4 is hit --
+    `everyone=True` beside the relation, rather than one pick."""
     if c.strike():
         spot = _free_square_beside(c, c.me)
         if spot is not None:

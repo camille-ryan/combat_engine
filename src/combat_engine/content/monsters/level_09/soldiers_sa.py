@@ -106,6 +106,7 @@ from combat_engine.engine import (
     Mod,
     Ranged,
     Relation,
+    Size,
     Target,
     UpTo,
     Usage,
@@ -368,18 +369,16 @@ def m1177a0(c: Cast) -> None:
 
 @power(
     "m1177a1", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy", count=1, label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=13), damage=Damage("2d6", 12),
-    dropped=("Target.relation",),
 )
 def m1177a1(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.dazed(until=When.EONT, on=victim)
+    if c.strike():
+        c.hit()
+        c.dazed(until=When.EONT)
 
 
 @power(
@@ -652,15 +651,14 @@ def m1915a1(c: Cast) -> None:
 
 @power(
     "m1915a2", level=9, usage=AT_WILL, action=FREE, once_per_round=True, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
-    dropped=("Target.relation",),
+    target=Target(
+        side="enemy", count=1, label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
 )
 def m1915a2(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    c.damage("2d6", 6, on=victim)
+    """No attack roll: the printed Effect simply deals the damage."""
+    c.damage("2d6", 6)
 
 
 def _enemy_dropped_nearby(world: World, me: int, ev: Dropped) -> bool:
@@ -732,20 +730,19 @@ def m1949a0(c: Cast) -> None:
 
 @power(
     "m1949a1", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy", count=1, label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=AC, printed=16), damage=Damage("1d10", 7),
-    dropped=("Target.relation",),
 )
 def m1949a1(c: Cast) -> None:
     """The target line names a sibling id for itself -- the same ref-shaped
-    misprint logged elsewhere in this tree."""
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.dazed(until=When.SAVE_ENDS, on=victim)
+    misprint logged elsewhere in this tree, so the relation is read outward
+    from this creature like every other."""
+    if c.strike():
+        c.hit()
+        c.dazed(until=When.SAVE_ENDS)
 
 
 @power(
@@ -866,14 +863,13 @@ def m2003a1(c: Cast) -> None:
 
 @power(
     "m2003a2", level=9, usage=AT_WILL, action=MINOR, once_per_round=True, reach=CloseBurst(3),
-    target=Target(side="enemy", count=1, label="creature marked by it"),
+    target=Target(
+        side="enemy", count=1, label="creature marked by it",
+        relation=Relation.MARKED_BY,
+    ),
     attack=Attack(vs=WILL, printed=14),
-    dropped=("Target.relation",),
 )
 def m2003a2(c: Cast) -> None:
-    victim = c.target
-    if victim is None or not c.marked(on=victim, by=c.me):
-        return
     if c.strike():
         c.condition(Condition.DOMINATED, until=When.EONT)
 
@@ -1046,19 +1042,17 @@ def m2078a1(c: Cast) -> None:
 
 @power(
     "m2078a2", level=9, usage=AT_WILL, action=MINOR, once_per_round=True,
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy", count=1, label="grabbed targets only",
+        relation=Relation.GRABBED_BY,
+    ),
     reach=Melee(2), keywords=[Keyword.POISON],
     attack=Attack(vs=AC, printed=14), damage=Damage("1d8", 5),
-    dropped=("Target.relation",),
 )
 def m2078a2(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.stunned(until=When.SAVE_ENDS, on=victim)
+    if c.strike():
+        c.hit()
+        c.stunned(until=When.SAVE_ENDS)
 
 
 # ==========================================================================
@@ -1494,18 +1488,17 @@ def m3988a2(c: Cast) -> None:
 
 @power(
     "m3988a3", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(2),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy", count=1, label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=AC, printed=15), damage=Damage("2d10", 6),
-    dropped=("Target.relation", "Condition.DISEASED"),
+    dropped=("Condition.DISEASED",),
 )
 def m3988a3(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.ongoing(10, on=victim)
+    if c.strike():
+        c.hit()
+        c.ongoing(10)
 
 
 @power("m3988a4", level=9, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
@@ -1561,15 +1554,15 @@ def m3998a1(c: Cast) -> None:
 
 @power(
     "m3998a2", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="creature marked by it"),
+    target=Target(
+        side="enemy", count=1, label="creature marked by it",
+        relation=Relation.MARKED_BY,
+    ),
     keywords=[Keyword.POISON, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=16), damage=Damage("1d12", 6),
-    dropped=("Target.relation",),
 )
 def m3998a2(c: Cast) -> None:
     victim = c.target
-    if victim is None or not c.marked(on=victim, by=c.me):
-        return
     if c.strike():
         c.hit()
     if _secondary(c, 14, FORT, victim):
@@ -1675,9 +1668,12 @@ def m4005a0(c: Cast) -> None:
 
 @power(
     "m4005a1", level=9, usage=AT_WILL, action=MINOR, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy", count=1, label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=10), damage=Damage("0", 0),
-    dropped=("Target.relation", "c.cannot_attack(opportunity=)", "c.sight_range(only=)"),
+    dropped=("c.cannot_attack(opportunity=)", "c.sight_range(only=)"),
 )
 def m4005a1(c: Cast) -> None:
     """Pulled into its own square, restrained, and burning until the hold
@@ -1687,12 +1683,9 @@ def m4005a1(c: Cast) -> None:
     of one creature at a time is left ungated for the same reason the a0
     cap is approximated rather than modelled square by square."""
     victim = c.target
-    held = _holding(c)
-    if victim not in held:
-        victim = next(iter(sorted(held)), None)
-    if victim is None or not c.strike(on=victim):
+    if not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
     me = c.me
     ongoing = c.world.effects.apply(
         victim, me, When.ENCOUNTER, label=f"{c.ref} swallowed",
@@ -2289,16 +2282,20 @@ def m5654a2(c: Cast) -> None:
 
 @power(
     "m5654a3", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="creature it is grabbing"),
+    target=Target(
+        side="enemy", count=1, label="Large or smaller creature grabbed by it",
+        relation=Relation.GRABBED_BY, max_size=Size.LARGE,
+    ),
     attack=Attack(vs=REF, printed=12), damage=Damage("4d10", 12),
-    dropped=("Target.relation",),
 )
 def m5654a3(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None or not c.strike(on=victim):
+    """The printed size cap goes in the header beside the relation: both are
+    halves of one target line, and the cap was the half the old label did
+    not say."""
+    victim = c.target
+    if not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
     me = c.me
     held_eff = c.world.effects.apply(
         victim, me, When.SAVE_ENDS, label=f"{c.ref} swallow", conditions=[Condition.RESTRAINED],
@@ -2752,14 +2749,13 @@ def m5962a2(c: Cast) -> None:
 
 @power(
     "m5962a3", level=9, usage=AT_WILL, action=MINOR, once_per_round=True, reach=Ranged(5),
-    target=Target(side="enemy", count=1, label="creature marked by it"),
+    target=Target(
+        side="enemy", count=1, label="creature marked by it",
+        relation=Relation.MARKED_BY,
+    ),
     attack=Attack(vs=WILL, printed=12),
-    dropped=("Target.relation",),
 )
 def m5962a3(c: Cast) -> None:
-    victim = c.target
-    if victim is None or not c.marked(on=victim, by=c.me):
-        return
     if c.strike():
         c.slide(3)
 
@@ -2903,19 +2899,21 @@ def m6113a2(c: Cast) -> None:
 
 @power(
     "m6113a3", level=9, usage=Usage.RECHARGE, recharge=0, action=STANDARD, reach=Melee(3),
-    target=Target(side="enemy", count=1, label="creature it is grabbing"),
+    target=Target(
+        side="enemy", count=1, label="creature it is grabbing",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.ACID], attack=Attack(vs=FORT, printed=12),
     damage=Damage("4d8", 12, kind=LIMITED),
-    dropped=("Target.relation", "c.grab(dc=)"),
+    dropped=("c.grab(dc=)",),
 )
 def m6113a3(c: Cast) -> None:
     """Recharges when the swallow ends -- the exact moment it releases
     whoever it is holding -- rather than on a die."""
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None or not c.strike(on=victim):
+    victim = c.target
+    if not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
     c.world.relations.clear(Relation.GRABBED_BY, c.me, victim, c.ref)
     me = c.me
     swallowed = c.world.effects.apply(

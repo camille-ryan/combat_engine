@@ -18,8 +18,11 @@ conventions are the ones the earlier sweeps settled and they are kept here:
   records it for the card, the body gates on it, a `requires=` keeps the row
   from being offered when nothing in reach qualifies, and `Target.condition`
   is the gap (#361). A line asking something else of the target wants its own
-  symbol: `Target.creature_kind` for a type word, `Target.relation` for a
-  creature the attacker has hold of, `Target.ident` for its own kind;
+  symbol: `Target.creature_kind` for a type word, `Target.ident` for its own
+  kind. **"A creature the attacker has hold of" wants no symbol at all** --
+  `Target.relation` is a real field now, so that line is the target line
+  itself and the printed Requirement is the empty pool refusing the row
+  (#401);
 * a row that recharges on a printed condition rather than on a die keeps the
   die in the header, because that is what `actions.recharge` rolls and what
   the card shows, and arms the condition on top of it;
@@ -50,7 +53,6 @@ from combat_engine.content.monsters.level_03.controllers import (
 from combat_engine.content.monsters.level_03.skirmishers import (
     _SMALL_ENOUGH,
     _free_square_beside,
-    _grabbing,
     _not_grabbing,
 )
 from combat_engine.content.monsters.level_03.skirmishers_sa import (
@@ -94,6 +96,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    Relation,
     Target,
     UpTo,
     Usage,
@@ -1922,22 +1925,19 @@ def m4596a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(2),
-    target=Target(side="enemy", label="the creature it is grabbing"),
+    target=Target(
+        side="enemy", label="the creature it is grabbing",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=6),
-    requires=_grabbing,
-    requires_text="it must be grabbing a creature",
-    dropped=("Target.relation",),
 )
 def m4596a2(c: Cast) -> None:
-    """"Targets the grabbed creature" is not a filter `Target` has, so the
-    victim is read off the hold and the row's own target is ignored when the
-    two disagree."""
-    victim = next(iter(c.grabbing()), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.condition(Condition.DAZED, until=When.SAVE_ENDS, on=victim)
-        c.spend_surge(on=victim)
+    """"Targets the grabbed creature" is the target line itself now, so the
+    pool cannot offer anything else and the printed Requirement is the empty
+    pool refusing the row. #401."""
+    if c.strike():
+        c.condition(Condition.DAZED, until=When.SAVE_ENDS)
+        c.spend_surge(on=c.target)  # defaults to the caster
 
 
 @power(

@@ -81,6 +81,8 @@ from combat_engine.engine import (
     Melee,
     Position,
     Ranged,
+    Relation,
+    Target,
     UpTo,
     Usage,
     When,
@@ -1055,18 +1057,23 @@ def m5173a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature that cannot see it",
+        relation=Relation.HIDDEN_FROM,
+    ),
     keywords=[Keyword.HEALING],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("4d6", 6),
-    dropped=("Target.relation",),
 )
 def m5173a3(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: unseen_by(c.world, f, c.me))
-    if victim is None or not c.strike(on=victim):
-        return
-    dealt = c.hit(on=victim)
-    c.heal(dealt // 2, on=c.me)
+    """`relation=Relation.HIDDEN_FROM` is routed through `query.unseen_by`, not
+    read off the stored triple, so the capped sight range and anything seeing
+    through the hiding are both folded in -- which is what this body was calling
+    `unseen_by` by hand to get. #401."""
+    if c.strike():
+        dealt = c.hit()
+        c.heal(dealt // 2, on=c.me)
 
 
 _M5173A4_TYPES = (
@@ -1764,18 +1771,24 @@ def _recharge_on_other_melee_hit(c: Cast) -> None:
     recharge=6,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature that can see it",
+        relation=Relation.HIDDEN_FROM,
+        without=True,
+    ),
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=11),
-    dropped=("Target.relation",),
 )
 def m5736a4(c: Cast) -> None:
+    """"One creature that **can** see it" -- the relation inverted by `without=`.
+    Safe to invert now only because the field routes through `query.unseen_by`:
+    inverting the bare triple would have refused an enemy that sees through the
+    hiding and accepted one whose sight range cannot reach it. #401."""
     _recharge_on_other_melee_hit(c)
-    victim = _restricted_to(c, 1, lambda f: not unseen_by(c.world, f, c.me))
-    if victim is None or not c.strike(on=victim):
-        return
-    c.push(1, on=victim)
-    c.immobilized(on=victim, until=When.EONT)
+    if c.strike():
+        c.push(1)
+        c.immobilized(until=When.EONT)
 
 
 # ==========================================================================

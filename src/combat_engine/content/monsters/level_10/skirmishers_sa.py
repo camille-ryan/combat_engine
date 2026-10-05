@@ -15,9 +15,10 @@ Conventions, inherited from the nine levels below and from this level's own
   the short number;
 * a card naming a creature's kind, size or condition rather than its side
   or count is read with `_restricted_to`, and the redirect carries the symbol
-  for the gap it has -- `Target.relation` for "grabbed by it",
-  `Target.condition` for a condition, `Target.ongoing` for a target taking
-  ongoing damage;
+  for the gap it has -- `Target.condition` for a condition, `Target.ongoing`
+  for a target taking ongoing damage. A line narrowed by how the creature
+  stands to the caster ("grabbed by it", "not grabbed by it") is the target
+  line itself: `Target(..., relation=..., without=...)`;
 * a close burst or blast whose card names no target set takes enemies,
   except where the card says "creatures in the burst" outright.
 
@@ -3369,17 +3370,18 @@ def m5813a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(4),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy", count=1,
+        label="one creature not grabbed by it",
+        relation=Relation.GRABBED_BY,
+        without=True,
+    ),
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d8", 9),
-    dropped=("Target.relation",),
 )
 def m5813a1(c: Cast) -> None:
-    victim = _restricted_to(c, 4, lambda f: f not in c.grabbing(of=c.me))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
 
 
 @power(
@@ -3388,15 +3390,18 @@ def m5813a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(4),
-    target=Target(side="enemy", count=1, max_size=Size.LARGE),
+    target=Target(
+        side="enemy", count=1,
+        label="one Large or smaller creature not grabbed by it",
+        max_size=Size.LARGE,
+        relation=Relation.GRABBED_BY,
+        without=True,
+    ),
     attack=Attack(vs=REF, printed=13),
     damage=Damage("2d8", 4),
-    dropped=("Target.relation",),
 )
 def m5813a2(c: Cast) -> None:
-    victim = _restricted_to(c, 4, lambda f: f not in c.grabbing(of=c.me))
-    if victim is None:
-        return
+    victim = c.target
     if c.strike(on=victim):
         c.hit(on=victim)
         c.pull(3, on=victim)
@@ -3412,18 +3417,18 @@ def m5813a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy", count=1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d6", 11),
-    dropped=("Target.relation",),
 )
 def m5813a3(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.no_healing(on=victim, until=When.SONT)
+    if c.strike():
+        c.hit()
+        c.no_healing(until=When.SONT)
 
 
 @power(

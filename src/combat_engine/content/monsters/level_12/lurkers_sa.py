@@ -135,6 +135,7 @@ from combat_engine.engine import (
     Relation,
     Size,
     SurgeSpent,
+    Target,
     TurnEnd,
     TurnStart,
     UpTo,
@@ -836,28 +837,27 @@ def m1763a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="requires combat advantage",
+        grants_ca=True,
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d6", 5),
-    requires_text="requires combat advantage against the target",
-    dropped=("Target.grants_ca",),
 )
 def m1763a1(c: Cast) -> None:
-    """The Requirement is about a *pair* and `requires=` is handed a creature
-    and no target, so the row picks a victim it does have combat advantage
-    against instead of being thrown away. A pair is what `Target.relation`
-    names.
+    """The Requirement is about a *pair*, which is what the target line says
+    now: `grants_ca` filters the pool, so there is nothing for a `requires=`
+    handed only a creature to spell and nothing for the body to re-pick.
 
     The card's second sentence calls this a melee basic attack and the
     header's own line is that attack's line, so the swing is rolled here
     rather than through `c.basic` -- which would reach for m1763a0, a
     different defence and a different die.
     """
-    victim = _restricted_to(c, 1, lambda f: has_combat_advantage(c.world, c.me, f))
-    if victim is None or not c.strike(on=victim):
-        return
-    c.hit(on=victim)
+    if c.strike():
+        c.hit()
 
 
 @power(
@@ -1202,23 +1202,28 @@ def m1999a0(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="requires combat advantage against the target",
+        grants_ca=True,
+    ),
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d8", 12, kind=LIMITED),
-    requires_text="requires combat advantage against the target",
-    dropped=("Target.grants_ca",),
 )
 def m1999a1(c: Cast) -> None:
     """"Each round that the m1999 sustains the grab" is a sustain and not a
     save: `c.on_sustain` is the only thing that pays out per sustain, and a
     `When.SAVE_ENDS` hold would hand the victim a roll the card never
     offers. The payout is asked of the relation each time, because a grab can
-    be broken between one sustain and the next."""
-    victim = _restricted_to(c, 1, lambda f: has_combat_advantage(c.world, c.me, f))
-    if victim is None or not c.strike(on=victim):
+    be broken between one sustain and the next.
+
+    `victim` is still held in a local because the sustain closure outlives the
+    body, where `c.target` does not."""
+    victim = c.target
+    if victim is None or not c.strike():
         return
-    c.hit(on=victim)
-    c.grab(on=victim)
+    c.hit()
+    c.grab()
     grip = c.effect(f"{c.ref} grip", until=When.SUSTAIN, sustain=MINOR, on=c.me)
 
     def each_round() -> None:
@@ -1362,28 +1367,31 @@ def m2011a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="requires combat advantage against the target",
+        grants_ca=True,
+    ),
     keywords=[Keyword.HEALING],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("2d12", 8, kind=LIMITED),
     requires=_wearing_a_body,
-    requires_text="the m2011 must be in a possessed body and have combat advantage",
-    dropped=("Target.grants_ca",),
+    requires_text="the m2011 must be in a possessed body",
 )
 def m2011a2(c: Cast) -> None:
-    """Half the Requirement is about the creature and half about a pair, so
-    the first is a gate and the second picks the victim.
+    """Half the Requirement is about the creature and half about a pair, so the
+    first is still a gate and the second is now the target line. `requires=`
+    keeps only the half that is not the target restriction.
 
     The sixteen is a printed number rather than a surge: no healing surge is
     named, and a monster spends one only where a row says so.
     """
     me = c.me
     _recharge_on(c, Bloodied, lambda ev: adjacent(c.world, me, ev.actor))
-    victim = _restricted_to(c, 1, lambda f: has_combat_advantage(c.world, me, f))
-    if victim is None or not c.strike(on=victim):
+    if not c.strike():
         return
-    c.hit(on=victim)
-    c.weakened(until=When.SAVE_ENDS, on=victim)
+    c.hit()
+    c.weakened(until=When.SAVE_ENDS)
     c.heal(16, on=me)
 
 
@@ -2348,21 +2356,21 @@ def m3822a3(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("3d6", 5),
-    requires=_grabbing_something,
-    requires_text="the m3822 must have a creature grabbed",
-    dropped=("Target.relation",),
 )
 def m3822a4(c: Cast) -> None:
-    """Half the sentence is about the creature and half about a pair, so the
-    first is a gate and the second picks the victim."""
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
-    if victim is None or not c.strike(on=victim):
-        return
-    c.hit(on=victim)
+    """The whole sentence is the target line now. The `requires=` was the same
+    restriction asked from the caster's end, so it came out with the body's
+    re-pick: an empty pool already makes `_can_land` false. #401."""
+    if c.strike():
+        c.hit()
 
 
 _M3822_SLIPPED = "an enemy grabbed by the m3822 escapes"
@@ -2940,13 +2948,19 @@ def m5480a1(c: Cast) -> None:
     target=UpTo(2),
     attack=Attack(vs=AC, printed=17),
     damage=Damage("4d12", 8, kind=LIMITED, half_on_miss=True),
-    dropped=("Target.relation",),
+    dropped=("Target.relation_from",),
 )
 def m5480a2(c: Cast) -> None:
     """"Grabbed by a tentacle" is read off its own side's grabs: the limbs
     are separate creatures, so the hold belongs to one of them and not to
     this one. `half_on_miss` is declared data nothing reads, so the Miss
     branch is written out.
+
+    **Deliberately not moved onto `Target.relation`.** That field is measured
+    outward from the *caster* -- `holds(relation, actor, target)` -- and this
+    hold belongs to an ally, so `relation=GRABBED_BY` would filter the pool to
+    the empty set and refuse the row for the whole fight. The gap is a way to
+    name whose relation is being asked about. #401.
 
     The printed recharge goes on top of the die the database files: being
     underground is `Movement.using` holding "burrow", which is held past the

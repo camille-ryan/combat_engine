@@ -108,6 +108,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    Relation,
     Target,
     UpTo,
     Usage,
@@ -734,25 +735,18 @@ def m1495a4(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Ranged(20),
-    target=Target(side="enemy", count=1, label="quarry"),
+    target=Target(
+        side="enemy", count=1,
+        label="its quarry",
+        relation=Relation.QUARRY_OF,
+    ),
     keywords=[Keyword.MARTIAL, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d10", 3, kind=LIMITED),
-    requires=_has_a_quarry,
-    requires_text="it must have named a quarry",
-    dropped=("Target.relation",),
 )
 def m1495a5(c: Cast) -> None:
-    """The printed target is the quarry and `Target` cannot narrow to a
-    relation to the caster -- `Target.relation` is the gap -- so the offer is
-    not narrowed either: but the shot is **redirected**
-    to the quarry rather than refused, because a row that looks written and
-    returns having done nothing is worse than one that aims itself."""
-    prey = next((foe for foe in c.enemies() if c.is_quarry(on=foe)), None) or c.target
-    if prey is None:
-        return
-    if c.strike(on=prey):
-        c.hit(on=prey)
+    if c.strike():
+        c.hit()
 
 
 @power(
@@ -1350,23 +1344,18 @@ def m3565a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(20),
-    target=Target(side="enemy", count=99, everyone=True, label="cursed"),
+    target=Target(
+        side="enemy", count=99, everyone=True,
+        label="cursed enemies",
+        relation=Relation.CURSED_BY,
+    ),
     keywords=[Keyword.IMPLEMENT, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("2d8", 5, dtype=DamageType.NECROTIC, kind=LIMITED),
-    requires=_has_cursed_somebody,
-    requires_text="it must have cursed an enemy",
-    dropped=("Target.relation",),
 )
 def m3565a2(c: Cast) -> None:
-    """The burst takes every enemy and the curse is asked in the body, because
-    `Target` filters on side, count and size and has nothing to say about a
-    relation to the caster, which is `Target.relation` -- cursed **by it** is
-    not cursed. The Requirement is the other half: without it the row is offered
-    every turn and comes back having done nothing."""
-    victim = c.target
-    if victim is None or not c.cursed(on=victim):
-        return
+    """Cursed **by it** is not cursed, which is why the relation and not a
+    condition narrows the burst."""
     if c.strike():
         c.hit()
 

@@ -59,6 +59,7 @@ from combat_engine.engine import (
     Melee,
     MeleeOrRanged,
     Ranged,
+    Relation,
     Target,
     UpTo,
     Usage,
@@ -874,16 +875,19 @@ def m4388a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="a creature it is grabbing"),
+    target=Target(
+        side="enemy",
+        count=1,
+        label="grabbed target only",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=5),
     damage=Damage("2d6", 3),
-    requires=_holds_somebody,
-    requires_text="must have a creature grabbed",
-    dropped=("Target.relation",),
 )
 def m4388a2(c: Cast) -> None:
-    if c.target not in c.grabbing():
-        return
+    """The printed restriction is the target line. An empty pool already makes
+    `_can_land` false, so the `requires=` gate that spelled the same refusal
+    by hand came out with the body's re-check. #401."""
     if c.strike():
         c.hit()
 

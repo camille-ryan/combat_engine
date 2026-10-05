@@ -15,14 +15,13 @@ ones that decide most rows here:
 * a close burst or blast whose card names no target set takes **enemies**;
   one reading "creatures in the blast" is `EACH_OTHER`, because
   `EACH_CREATURE` is side "any" and catches the creature using the power;
-* "Target: a creature it has grabbed", "a dazed enemy", "a creature granting
-  combat advantage" is the target's own state and not the chooser's
-  business -- `Target` filters side, count and size and nothing else, so
-  `_restricted_to` redirects and the marker names which narrowing it is:
-  `dropped=("Target.relation",)` where the line is about the attacker
-  ("grabbed by it", "granting it combat advantage"),
-  `dropped=("Target.condition",)` where it is a condition the creature
-  carries;
+* "Target: a creature it has grabbed" and "a creature granting combat
+  advantage" are the target line itself: `Target.relation` and
+  `Target.grants_ca` are real fields, so those rows carry no marker and no
+  body re-pick (#401). A line about a condition the creature merely *carries*
+  still has nowhere to live -- `Target` filters side, count and size -- so
+  `_restricted_to` redirects and the marker is
+  `dropped=("Target.condition",)`;
 * a two-type damage line has nowhere to live in the header, since `Damage`
   holds one `dtype`, so it is rolled in the body as one blow of two types
   and marked `dropped=("Damage(dtypes=)",)`;
@@ -2665,21 +2664,20 @@ def m2335a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(2),
-    target=Target(side="enemy", count=1, label="grabbed by it"),
+    target=Target(
+        side="enemy", count=1, label="grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.POISON],
     attack=Attack(vs=AC, printed=20),
     damage=Damage("1d6", 6),
-    dropped=("Target.relation",),
 )
 def m2335a1(c: Cast) -> None:
-    """"A creature it has grabbed" is the target's own state, which `Target`
-    cannot filter on -- so the chooser's answer is redirected rather than
-    thrown away, which would waste the row while a prisoner was in hand."""
-    victim = _restricted_to(c, 2, lambda f: f in c.grabbing())
-    if victim is None or not c.strike(on=victim):
-        return
-    c.hit(on=victim)
-    c.ongoing(5, DamageType.POISON, on=victim)
+    """"A creature it has grabbed" is the target line itself now, so the
+    chooser never offers anything else and the re-pick is gone. #401."""
+    if c.strike():
+        c.hit()
+        c.ongoing(5, DamageType.POISON)
 
 
 @power(
@@ -2689,19 +2687,21 @@ def m2335a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(2),
-    target=Target(side="enemy", count=1, label="grabbed by it"),
+    target=Target(
+        side="enemy", count=1, label="grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=18),
     damage=Damage("5d6", 6, kind=LIMITED),
-    dropped=("Target.relation",),
 )
 def m2335a2(c: Cast) -> None:
     """It throws what it was holding. The grab is ended by hand, before the
     push: a creature still held cannot be moved away, so the order is the
     printed one and not a matter of taste."""
-    victim = _restricted_to(c, 2, lambda f: f in c.grabbing())
-    if victim is None or not c.strike(on=victim):
+    victim = c.target
+    if not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
     for eff in list(c.world.effects.of(victim)):
         if (Relation.GRABBED_BY, c.me, victim) in eff.relations:
             c.world.effects.end(eff, "it let go")
@@ -4493,22 +4493,22 @@ def m5369a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(2),
-    target=Target(side="enemy", count=1, label="granting combat advantage to it"),
+    target=Target(
+        side="enemy", count=1, label="granting combat advantage to it",
+        grants_ca=True,
+    ),
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=17),
     damage=Damage("1d8", 6, dtype=DamageType.POISON),
     once_per_round=True,
-    dropped=("Target.grants_ca",),
 )
 def m5369a1(c: Cast) -> None:
-    """"One creature granting combat advantage to it" is the target's own
-    state, which `Target` cannot filter on, so the chooser's answer is
-    redirected rather than thrown away. "Save ends both" is one effect
-    carrying the daze and the hold."""
-    victim = _restricted_to(c, 2, lambda f: has_combat_advantage(c.world, c.me, f, c.ref))
-    if victim is None or not c.strike(on=victim):
+    """"Granting combat advantage to it" is the target line itself now. "Save
+    ends both" is one effect carrying the daze and the hold. #401."""
+    victim = c.target
+    if not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
     _held_and_softened(
         c, victim, conditions=(Condition.DAZED, Condition.IMMOBILIZED)
     )
@@ -4946,15 +4946,22 @@ def m6088a1(c: Cast) -> None:
     action=MOVE,
     reach=Ranged(5),
     target=Target(side="enemy", count=1, label="dominated by it"),
-    # Re-aimed from `Target.condition`: the card says dominated **by it**, and
-    # that asymmetry is what `Target.relation` names. The body asks only
-    # `Condition.DOMINATED`, which is the bug this marker now points at.
     keywords=[Keyword.CHARM],
-    dropped=("Target.relation",),
+    dropped=("c.dominate()",),
 )
 def m6088a2(c: Cast) -> None:
-    """No attack roll is printed: the slide is the whole Effect line. Being
-    dominated is the target's own state, which `Target` cannot filter on."""
+    """No attack roll is printed: the slide is the whole Effect line.
+
+    **Not moved onto `Target.relation`, and the marker is re-aimed rather than
+    deleted.** The field exists now and `Relation.DOMINATED_BY` is the right
+    member for "dominated by it" -- but nothing lays that relation. There is no
+    `c.dominate` beside `c.grab`, `c.mark`, `c.curse` and `c.quarry`: every
+    domination in the tree is a plain `Condition.DOMINATED`, which `relations`
+    only ever mirrors *outward*, so one site in 12,197 rows files the triple.
+    m6088a1 is one of the plain ones, so a relational filter here would empty
+    the pool against this creature's own setup and take the row out of play.
+    Asked as a condition instead, which is looser than the card -- it accepts a
+    creature somebody else is controlling -- and plays. #401."""
     victim = _restricted_to(c, 5, lambda f: c.is_(Condition.DOMINATED, on=f))
     if victim is not None:
         c.slide(3, on=victim)

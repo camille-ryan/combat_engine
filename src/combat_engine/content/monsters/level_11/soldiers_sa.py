@@ -124,6 +124,7 @@ from combat_engine.engine import (
     MoveEnd,
     MoveStart,
     Ranged,
+    Target,
     Trigger,
     UpTo,
     Usage,
@@ -796,25 +797,19 @@ def m1586a2(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="it must have combat advantage against the target",
+        grants_ca=True,
+    ),
     once_per_round=True,
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("1d8", 5),
-    requires=_m1586_has_an_edge,
-    requires_text="the m1586 must have combat advantage against the target",
-    dropped=("Target.grants_ca",),
 )
 def m1586a3(c: Cast) -> None:
-    """Aimed at a creature it actually has an edge on rather than thrown away:
-    `Target` filters on side, count and size and not on whether a swing would
-    have combat advantage, so the chooser may hand this row somebody its own
-    printed line forbids."""
-    victim = _restricted_to(c, 1, lambda f: has_combat_advantage(c.world, c.me, f))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.half_healing(on=victim, until=When.EONT)
+    if c.strike():
+        c.hit()
+        c.half_healing(until=When.EONT)
 
 
 @power(
@@ -2924,29 +2919,21 @@ def m5740a1(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature marked by it",
+        relation=Relation.MARKED_BY,
+    ),
     once_per_round=True,
     attack=Attack(vs=AC, printed=16),
-    dropped=("Target.relation",),
 )
 def m5740a2(c: Cast) -> None:
-    """No damage line: the daze is the whole of the hit.
-
-    "One creature marked by the m5740" is narrower than any `Target` can say,
-    so the row is aimed at one of its own marks rather than discarded when
-    the chooser hands it somebody else.
-
-    **`by=c.me` was missing and the docstring already claimed it.** `c.marked`
-    defaults `by` to nobody in particular, so this accepted a creature marked
-    by *anyone* -- a mark laid by a character made this creature's row legal.
-    Four rows at level 5 print the same line and all four pass `by=c.me`.
-    Found when `Target.kind` was split and the card was read against the body.
-    """
-    victim = _restricted_to(c, 1, lambda f: c.marked(on=f, by=c.me))
-    if victim is None:
-        return
-    if c.strike(on=victim, plus=2 if c.bloodied(on=c.me) else 0):
-        c.dazed(until=When.EONT, on=victim)
+    """No damage line: the daze is the whole of the hit. The mark is the target
+    line now, and `relation` is measured outward from the caster, so the
+    "marked by *it*" half the body used to have to spell with `by=c.me` is
+    what the pool already guarantees."""
+    if c.strike(plus=2 if c.bloodied(on=c.me) else 0):
+        c.dazed(until=When.EONT)
 
 
 @power(

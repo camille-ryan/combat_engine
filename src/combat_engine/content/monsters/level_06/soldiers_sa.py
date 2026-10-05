@@ -1808,16 +1808,16 @@ def m5857a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
-    dropped=("Target.relation",),
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
 )
 def m5857a3(c: Cast) -> None:
-    held = c.grabbing()
-    victim = c.target if c.target in held else (held[0] if held else None)
-    if victim is None:
-        return
-    c.damage("2d10", 0, on=victim)
-    c.ongoing(5, on=victim)
+    """An Effect and no attack line, so both halves land on whoever it holds."""
+    c.damage("2d10", 0)
+    c.ongoing(5)
 
 
 # ==========================================================================

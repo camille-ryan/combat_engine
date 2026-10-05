@@ -43,7 +43,6 @@ from combat_engine.content.monsters.level_02.skirmishers import _conceal, _had_a
 from combat_engine.content.monsters.level_03.skirmishers import (
     _an_enemy_is_poisoned,
     _free_square_beside,
-    _grabbing,
     _is_bloodied,
     _not_grabbing,
     _poisoned,
@@ -51,6 +50,7 @@ from combat_engine.content.monsters.level_03.skirmishers import (
     _vanish_until_it_swings,
 )
 from combat_engine.content.monsters.level_03.skirmishers_sa import _while_bloodied
+from combat_engine.content.powers.fighter.holds import release
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -84,6 +84,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    Relation,
     Square,
     Target,
     UpTo,
@@ -935,25 +936,26 @@ def m4685a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(label="one creature it is grabbing"),
+    target=Target(
+        label="grabbed targets only",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d8", 5),
-    requires=_grabbing,
-    requires_text="must have a creature grabbed",
-    dropped=("Target.relation",),
 )
 def m4685a2(c: Cast) -> None:
-    """"A creature it is grabbing" is a relation to the caster and not a thing
-    the creature carries, which is why the gap is `Target.relation`: `Target`
-    filters on side and size, so the restriction is asked here and `requires=`
-    keeps the row from being offered when there is nobody held at all."""
-    foe = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        for hold in c.grabbed_by(on=foe):
-            c.end_effect(hold, why="the grab ends")
+    """"A creature it is grabbing" is the target line now, so the `requires=`
+    gate and the body's re-pick both came out: an empty pool makes `_can_land`
+    false, which is the refusal the gate was spelling by hand.
+
+    "The grab ends" is this creature letting go, and it used to be written as
+    `c.end_effect` over `c.grabbed_by`, which returns **holder ids and not
+    effects** -- so the line raised on `int.ended` the moment it was reached.
+    `holds.release` is the spelling that works. #401.
+    """
+    if c.strike():
+        c.hit()
+        release(c, c.target)
 
 
 @power(
@@ -1199,23 +1201,28 @@ def m5286a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(label="one creature that cannot see it"),
+    target=Target(
+        label="one creature that cannot see it",
+        relation=Relation.HIDDEN_FROM,
+    ),
     attack=Attack(vs=AC, printed=8),
     damage=Damage("2d6", 3),
-    dropped=("Target.relation",),
+    dropped=("Rules.blind",),
 )
 def m5286a3(c: Cast) -> None:
-    """"Cannot see the creature" is two states and both are asked: hidden from
-    that enemy in particular, or blind to everything. No `requires=` here --
-    blinding an enemy is a thing this block does for itself and the row has to
-    be offered the turn it becomes legal."""
-    foe = _restricted_to(
-        c, 1, lambda f: c.is_hidden(from_=f) or c.is_(Condition.BLINDED, on=f)
-    )
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
+    """"Cannot see the creature" is two states and only one of them is
+    buildable.
+
+    The hiding half is the target line, routed through `query.unseen_by`. **The
+    blindness half cannot be written at all:** `Rules.blind` is set for
+    `Condition.BLINDED` and read by nothing, so no part of the engine thinks a
+    blinded creature cannot see -- and this stat block blinds enemies two rows
+    up expressly to set this one up. So the combination the page is built around
+    is refused, and the marker names that rather than the target field, which
+    now works. #406.
+    """
+    if c.strike():
+        c.hit()
 
 
 # --------------------------------------------------------------------------
@@ -1343,23 +1350,20 @@ def m5648a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=Target(label="one creature it is grabbing"),
+    target=Target(
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=REF, printed=6),
     damage=Damage("4d6", 8, half_on_miss=True),
-    requires=_grabbing,
-    requires_text="must have a creature grabbed",
-    dropped=("Target.relation",),
 )
 def m5648a2(c: Cast) -> None:
     """`half_on_miss` on the header is data for the card; the miss line is
     `c.hit(half=True)`, which rolls the expression and halves it."""
-    foe = _restricted_to(c, 2, lambda f: f in c.grabbing(of=c.me))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
+    if c.strike():
+        c.hit()
     else:
-        c.hit(on=foe, half=True)
+        c.hit(half=True)
 
 
 @power(

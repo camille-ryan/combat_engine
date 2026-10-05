@@ -157,7 +157,6 @@ from combat_engine.engine.query import (
     alive,
     creatures,
     distance_between,
-    flanked_by,
     has_combat_advantage,
     team,
 )
@@ -801,19 +800,19 @@ def m115863a3(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Melee(3),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy",
+        count=1,
+        label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("0", 10, dtype=DamageType.NECROTIC),
-    dropped=("Target.relation",),
 )
 def m115863a4(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
         c.heal(5, on=c.me)
 
 
@@ -1773,16 +1772,18 @@ def m3273a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(3),
-    target=Target(side="enemy", count=1, label="creature marked by it"),
+    target=Target(
+        side="enemy",
+        count=1,
+        label="creature marked by it",
+        relation=Relation.MARKED_BY,
+    ),
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=FORT, printed=13),
-    dropped=("Target.relation", *_NO_DISEASE),
+    dropped=_NO_DISEASE,
 )
 def m3273a2(c: Cast) -> None:
-    victim = _restricted_to(c, 3, lambda f: c.marked(on=f, by=c.me))
-    if victim is None:
-        return
-    c.strike(on=victim)
+    c.strike()
 
 
 @power("m3273a3", level=10, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
@@ -1900,19 +1901,19 @@ def m3795a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy",
+        count=1,
+        label="usable only against a grabbed target",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d8", 4),
-    dropped=("Target.relation",),
 )
 def m3795a1(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.ongoing(5, on=victim)
+    if c.strike():
+        c.hit()
+        c.ongoing(5)
 
 
 @power("m3795a2", level=10, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
@@ -2244,21 +2245,21 @@ def m4007a1(c: Cast) -> None:
     level=10,
     usage=AT_WILL,
     action=MINOR,
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy",
+        count=1,
+        label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     reach=Melee(2),
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("1d8", 4, dtype=DamageType.POISON),
-    dropped=("Target.relation",),
 )
 def m4007a2(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.condition(Condition.IMMOBILIZED, until=When.SAVE_ENDS, on=victim)
+    if c.strike():
+        c.hit()
+        c.condition(Condition.IMMOBILIZED, until=When.SAVE_ENDS)
 
 
 @power(
@@ -2654,23 +2655,23 @@ def m5160a2(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(2),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy",
+        count=1,
+        label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=REF, printed=13),
     damage=Damage("2d10", 7),
-    dropped=("Target.relation",),
 )
 def m5160a3(c: Cast) -> None:
     """ "Cannot escape the grab until it saves against this effect" is not
     modelled -- the grab and the restrained hold stay two independent
     things, which is the more generous reading rather than a stingier one."""
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
         c.condition(
-            Condition.RESTRAINED, until=When.SAVE_ENDS, on=victim, ongoing=(10, DamageType.UNTYPED)
+            Condition.RESTRAINED, until=When.SAVE_ENDS, ongoing=(10, DamageType.UNTYPED)
         )
     else:
         c.restore_use(c.ref, on=c.me)
@@ -2826,12 +2827,17 @@ def m5434a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("4d6", 5),
-    dropped=("Target.relation",),
+    dropped=("Target.only_grabbed",),
 )
 def m5434a1(c: Cast) -> None:
     """ "While it has a creature grabbed, it can attack only with bite,
-    which it must use against the grabbed creature" -- enforced on the
-    target the way every other restriction `Target` cannot carry is."""
+    which it must use against the grabbed creature."
+
+    **Conditional, so `relation=` is the wrong field.** That filter is
+    unconditional: it would empty the pool whenever nothing is held, and this
+    row is the bite that *establishes* the grab, so it would be refused in
+    exactly the situation it is printed for. Re-aimed from `Target.relation`,
+    which now resolves and would have reported this finished. #401."""
     held = _holding(c)
     victim = (
         c.target if not held else (c.target if c.target in held else next(iter(sorted(held)), None))
@@ -3488,11 +3494,15 @@ def m5709a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy",
+        count=1,
+        label="creature marked by it",
+        relation=Relation.MARKED_BY,
+    ),
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("2d8", 11, dtype=DamageType.POISON),
-    dropped=("Target.relation",),
 )
 def m5709a1(c: Cast) -> None:
     """Three failed saves, each worse than the last: the first turns the
@@ -3500,10 +3510,10 @@ def m5709a1(c: Cast) -> None:
     from *that* hold's own escalation) is the fall into unconsciousness.
     `escalate` fires on every failure and nothing guards against nesting
     it a second time."""
-    victim = _restricted_to(c, 1, lambda f: c.marked(on=f, by=c.me))
-    if victim is None or not c.strike(on=victim):
+    victim = c.target
+    if not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
 
     def second(_eff: Effect) -> None:
         c.unconscious(until=When.SAVE_ENDS, on=victim)
@@ -3890,18 +3900,23 @@ def m5971a2(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy",
+        count=1,
+        label="it must be flanking the target",
+        flanked=True,
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("3d10", 7, kind=LIMITED),
-    dropped=("Target.flanked_by",),
 )
 def m5971a3(c: Cast) -> None:
-    victim = _restricted_to(c, 2, lambda f: flanked_by(c.world, f, c.me))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """The printed Requirement is the target line: `flanked=` and not
+    `grants_ca=`, because a prone or dazed creature grants combat advantage
+    without being flanked and this card asks for the flank."""
+    victim = c.target
+    if c.strike():
+        c.hit()
         for mate in c.allies():
             if mate != c.me and c.adjacent_to(victim, mate):
                 c.grant_attack(mate, on=victim)
@@ -4384,17 +4399,18 @@ def m6176a1(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        side="enemy",
+        count=1,
+        label="creature granting combat advantage to it",
+        grants_ca=True,
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=FORT, printed=15),
-    dropped=("Target.grants_ca",),
 )
 def m6176a2(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: has_combat_advantage(c.world, c.me, f))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.prone(on=victim)
+    if c.strike():
+        c.prone()
 
 
 @power(
@@ -4687,19 +4703,19 @@ def m6642a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
+    target=Target(
+        side="enemy",
+        count=1,
+        label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("2d12", 10),
-    dropped=("Target.relation",),
 )
 def m6642a2(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.dazed(on=victim)
+    if c.strike():
+        c.hit()
+        c.dazed()
 
 
 # ==========================================================================

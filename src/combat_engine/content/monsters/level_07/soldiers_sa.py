@@ -123,7 +123,7 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.grid import distance as square_distance
 from combat_engine.engine.monster_math import LIMITED
-from combat_engine.engine.query import distance_between, enemies, has_combat_advantage, is_, team
+from combat_engine.engine.query import distance_between, enemies, is_, team
 from combat_engine.engine.triggers import Trigger, about_me, by_melee
 
 # --------------------------------------------------------------------------
@@ -476,14 +476,14 @@ def m1158a1(c: Cast) -> None:
 @power(
     "m1158a2", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="one creature granting it combat advantage"),
+    target=Target(
+        side="enemy", count=1,
+        label="one creature granting it combat advantage",
+        grants_ca=True,
+    ),
     attack=Attack(vs=FORT, printed=13), damage=Damage("1d8", 5, kind=LIMITED),
-    dropped=("Target.grants_ca",),
 )
 def m1158a2(c: Cast) -> None:
-    victim = c.target
-    if victim is None or not has_combat_advantage(c.world, c.me, victim):
-        return
     if c.strike():
         c.hit()
         c.stunned(until=When.SAVE_ENDS)
@@ -772,17 +772,20 @@ def m1981a0(c: Cast) -> None:
 
 @power(
     "m1981a1", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
-    dropped=("Target.relation",),
+    target=Target(
+        side="enemy", count=1, label="creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
+    dropped=("etl.monster.attack_defence()",),
 )
 def m1981a1(c: Cast) -> None:
     """The printed line is two damage fragments the extraction never
     resolved; the clear half of it -- automatic damage, no attack roll --
-    is what is written."""
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is not None:
-        c.flat(c.roll("2d6") + 4, on=victim)
+    is what is written. The other half extracted as "+12 vs" and no defence
+    at all, which is a defence to fix upstream rather than invent here -- the
+    same defect `m3525a2` names. It had no marker of its own while the target
+    line was carrying one."""
+    c.flat(c.roll("2d6") + 4)
 
 
 @power(
@@ -1055,14 +1058,15 @@ def m2233a0(c: Cast) -> None:
 
 @power(
     "m2233a1", level=7, usage=AT_WILL, action=MINOR, reach=Melee(2),
-    target=Target(side="enemy", count=1, label="creature grabbed by it"),
-    attack=Attack(vs=AC, printed=14), damage=Damage("1d6", 5), dropped=("Target.relation",),
+    target=Target(
+        side="enemy", count=1, label="grabbed target only",
+        relation=Relation.GRABBED_BY,
+    ),
+    attack=Attack(vs=AC, printed=14), damage=Damage("1d6", 5),
 )
 def m2233a1(c: Cast) -> None:
-    held = _holding(c)
-    victim = c.target if c.target in held else next(iter(sorted(held)), None)
-    if victim is not None and c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
 
 
 @power(
