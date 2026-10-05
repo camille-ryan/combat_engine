@@ -12,13 +12,22 @@ earlier level is imported rather than copied.
 
 Four things this file had to settle.
 
-**"A creature that cannot see it" has to be asked before the roll.**
-`resolve.attack` breaks the hiding for whoever swung, so by the time
-m4985a0's rider reaches the `Hit` the answer is no on every attack the rider
-exists for -- the arrangement m2920a3 settled on a level down. The question
-is asked in the `AttackDeclared` window, which is the last moment the answer
-is still yes, and kept until the blow and its shove have both landed. It is
-three questions, not one: the creature may be blinded, the m4985 may be
+**"A creature that cannot see it" is asked before the roll, and the reason
+given here used to be wrong.** It said `resolve.attack` breaks the hiding
+early enough that the answer is already no at the `Hit`. It is not:
+`clear_source(HIDDEN_FROM, attacker, "attacked")` sits *below* the loop that
+emits `Hit` and `Miss`, so the hiding is still standing throughout both and
+through their AFTER listeners. Measured -- a `Hit` watch and a `Miss` watch
+each read eight creatures still hidden from, and zero only once the attack is
+over.
+
+So m4985a0 and m2920a3 are not rescued from a broken read; they are simply
+one event earlier than they need to be, which costs nothing and is still the
+clearer place to ask. What the clear *does* break is re-**laying** the hiding
+from a `Hit` or `Miss` watch, which is wiped a moment later (#390) -- a
+different thing, and the one that cost a level-7 row its whole content.
+
+It is three questions, not one: the creature may be blinded, the m4985 may be
 hidden from it, or there may be nothing to see along.
 
 **Forced movement is lengthened on the event, not at the call site.**

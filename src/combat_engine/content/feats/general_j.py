@@ -1118,18 +1118,26 @@ def f1537(c: Cast) -> None:
 
 
 @power("f1541", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("m5139a3",))
+       reach=PERSONAL, target=SELF, todo=("spec.monster_ref()",))
 def f1541(c: Cast) -> None:
     """Mirrors onto adjacent allies "the same resistance that the power
     grants you", while that power is active.
 
-    **Re-aimed at the row rather than at a verb.** The marker named
-    `c.effects_on()`, and reading the amount back is no longer the
-    binding problem: `c.resistances(on=me)` returns what is standing, by
-    type. What the row names is `x_m5139a3`, which the ETL could not
-    resolve and which is declared nowhere in the tree -- the same
-    missing row `f2415` and `f3160` are waiting on. There is no power to
-    ask whether it is active, and nothing to mirror."""
+    Reading the amount back is not the binding problem: `c.resistances(on=me)`
+    returns what is standing, by type. What the row names is `x_m5139a3`,
+    which the ETL could not resolve and which is declared nowhere -- the same
+    missing row `f2415` and `f3160` wait on. There is no power to ask whether
+    it is active, and nothing to mirror.
+
+    **The marker used to be spelled `m5139a3`, and that was a trap that
+    sprang.** A bare monster ref is a real symbol, so `todo.py` watched for
+    that row to arrive -- and a level-13 wave declared an `m5139a3` that is a
+    demon brute's "gains 40 temporary hit points when first bloodied",
+    nothing whatever to do with this feat. The check went red and reported the
+    row finishable. One spelling served two unrelated needs, which is the
+    fault this repo keeps paying for. `spec.monster_ref()` is what this
+    actually waits on: a spec naming a row by a ref the ETL could not
+    resolve, which is the group thirteen other rows already sit in."""
 
 
 @power("f1542", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

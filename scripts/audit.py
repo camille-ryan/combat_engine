@@ -473,6 +473,26 @@ KNOWN_SILENT = {
     # Not a target state: the caster's own.
     "m6192a5": "it stands up, and the board never knocks the caster down. "
                "Driven with prone set: emits ConditionEnded(prone)",
+    # **Round 17's seven, and the last of the monster sweep.** The whole
+    # corpus is declared at this point -- 13,432 of 13,432 -- and these are
+    # the final rows the board cannot stage. Every one needs a target in a
+    # state `_provoke` does not produce, and every one was driven by hand with
+    # that state set before it was admitted.
+    "m2073a1": "its printed target must be prone; nothing here is. Driven "
+               "with one: hits for 13",
+    "m2529a1": "needs a creature it is grabbing. Driven with the grab set: "
+               "hits for 5, slides 3, knocks prone, and releases the grab",
+    "m4484a3": "its printed target must be blinded; nothing here is. Driven "
+               "with one: hits for 20",
+    "m6162a3": "needs a dominated creature adjacent, which the board never "
+               "arranges. Driven with one: shifts, then slides the thrall "
+               "back to adjacent",
+    "m6183a3": "needs a creature it is grabbing. Driven with the grab set: "
+               "it hits",
+    "m6185a7": "affects a creature it is grabbing. Driven with the grab set: "
+               "10 acid to the held creature",
+    "m6516a1": "its printed target is one creature grabbed by it. Driven with "
+               "the relation set: 15 to the held creature",
     # Not a condition: a footprint. `movement.overrun` builds `under` from
     # `grid.occupant` filtered on `who != eid`, and both this harness's board
     # and `show.py`'s place foes *inside* a Gargantuan caster's 4x4 footprint,

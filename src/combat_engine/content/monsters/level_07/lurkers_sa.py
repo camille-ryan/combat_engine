@@ -78,9 +78,23 @@ from combat_engine.engine import (
     power,
     spread,
 )
-from combat_engine.engine.events import Bloodied, Dropped, Hit, Miss, Moved, TurnStart
+from combat_engine.engine.events import (
+    AttackDeclared,
+    Bloodied,
+    Dropped,
+    Hit,
+    Miss,
+    Moved,
+    TurnStart,
+    Window,
+)
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import distance_between, has_combat_advantage, moving_as
+from combat_engine.engine.query import (
+    distance_between,
+    has_combat_advantage,
+    hidden_from,
+    moving_as,
+)
 from combat_engine.engine.triggers import Trigger, about_me
 
 # --------------------------------------------------------------------------
@@ -836,16 +850,51 @@ def m3782a2(c: Cast) -> None:
 
 @power("m3782a3", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
 def m3782a3(c: Cast) -> None:
-    me = c.me
+    """Stays hidden when one of its ranged attacks misses.
 
-    def stay_hidden(ev: Miss) -> None:
+    **This was written as a `Miss` watch calling `c.hide()`, and it was
+    inert.** `resolve.attack` ends with
+    `clear_source(HIDDEN_FROM, attacker, "attacked")`, and that line sits
+    below the loop emitting `Hit` and `Miss` -- so hiding laid from a `Miss`
+    listener is wiped a moment later. Driven on four seeds it read
+    `hidden-from 8 -> 0` every time, including the miss it exists for, and it
+    carried no marker: a row that looked finished and never applied. #390.
+
+    `AttackDeclared`'s AFTER window is the first moment after that clear, so
+    the work goes there. Who it was hidden from has to be taken in the BEFORE
+    window, because by the AFTER window the answer is already none --
+    `m2304a5` at level 13 settled this shape.
+    """
+    me = c.me
+    was: list[int] = []
+    missed = [False]
+
+    def before(ev: AttackDeclared) -> None:
+        if ev.attacker == me:
+            was[:] = list(hidden_from(c.world, me))
+            missed[0] = False
+
+    def failed(ev: Miss) -> None:
         if ev.attacker != me:
             return
         row = get(ev.power or "")
-        if row is not None and row.reach.kind == "ranged":
-            c.hide()
+        missed[0] = row is not None and row.reach.kind == "ranged"
 
-    c.watch(Miss, stay_hidden, until=When.ENCOUNTER, on=me, label=c.ref)
+    def after(ev: AttackDeclared) -> None:
+        if ev.attacker != me or not missed[0]:
+            return
+        for watcher in was:
+            c.hide(from_=watcher, until=When.ENCOUNTER)
+
+    c.watch(
+        AttackDeclared, before, until=When.ENCOUNTER, window=Window.BEFORE,
+        on=me, label=f"{c.ref} sighting",
+    )
+    c.watch(Miss, failed, until=When.ENCOUNTER, on=me, label=f"{c.ref} miss")
+    c.watch(
+        AttackDeclared, after, until=When.ENCOUNTER, window=Window.AFTER,
+        on=me, label=c.ref,
+    )
 
 
 @power(

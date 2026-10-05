@@ -253,7 +253,15 @@ that never applies.
   **Theirs, so they follow `c.target`:** `c.may` (a heal asks whose surge
   is being spent), `c.save` ("*the target* makes a saving throw"),
   `c.bonus`, `c.penalty`, `c.forbid`, `c.condition`, `c.cure`, `c.immune`,
-  `c.no_cover`, `c.grant_action`, `c.initiative`.
+  `c.no_cover`, `c.grant_action`, `c.initiative`, `c.size_of`,
+  `c.bloodied`, `c.height`, `c.fall`.
+
+  **`c.size_of` is the one to watch in that list**, because it does not fail
+  when there is no target: it falls through to `Size.MEDIUM`. On a
+  `NO_TARGET` trait that is silent and wrong — a Large creature asking its
+  own size got Medium and laid a one-square trail where its footprint
+  should have been four. Pass `on=c.me` whenever the sentence is about the
+  creature itself.
 
   For the wrong side of either, name it: `on=c.me`, or `on=<who>`.
 
@@ -377,6 +385,22 @@ that never applies.
   must be a `dropped=`. That is now precisely the clause that works,
   and a row was left marked on the strength of the sentence. The list
   above is the one in `actions.legal`; when it grows, this grows.
+* **`c.end_effect(carrying=Condition.GRABBED)` cannot find a grab.**
+  `carrying=` narrows by a condition *the effect imposes*, and `c.grab` lays
+  a `Relation.GRABBED_BY` and no conditions at all -- `Condition.GRABBED` is
+  only mirrored into the count. So the spelling reads exactly right and
+  matches nothing; driven on a board, the creature stayed grabbed.
+  **`c.cure(Condition.GRABBED, on=…)` is the one that works**, because
+  `Effects.cure` handles the relational conditions explicitly: its own
+  docstring names marked, grabbed and dominated as held by `relations` and
+  only mirrored. The same trap is waiting for any `carrying=` naming a
+  relational condition.
+* **`c.move_zone(zone, 0, …)` is refused, and `to=` is measured from the
+  zone's corner.** A zero distance returns `False` before doing anything, so
+  "the zone moves with the creature" written as a zero-step reposition never
+  moves. And `to=` is taken from `min(zone.squares)` rather than the centre,
+  so handing it the creature's own square slides a burst off by its own
+  radius. Move by the `Moved` delta with the step distance as `squares_`.
 * **A bonus's `kind` is the word the card prints in front of "bonus".**
   Not a guess, not a default, and not the class's name. Two of the same
   kind do not stack and the larger wins, so a wrong one is a number that
@@ -410,6 +434,25 @@ line used to cite a `vocab.txt`, which has never existed.)
   `Miss`, and the same roll with a plain watch setting `natural=20` announces
   `Hit` with `critical=True`. Two level-8 rows use it for a shared mount-and-rider
   miss and for a printed crit rider.
+* **`c.watch` defaults to `Window.AFTER`, which is too late to change the
+  attack it is watching.** `Bus.emit(announced, roll)` runs the BEFORE
+  listeners, then the resolver -- where `situational_attack` sums the
+  modifiers -- then the AFTER listeners. So a bonus laid from an
+  `AttackDeclared` watch at the default window is **silently inert**: the row
+  fires, something happens, and the swing rolls plain.
+
+  Measured on one board and seed, a `+10` to attack and nothing else changed:
+
+  ```
+  no bonus at all       : total 36
+  laid at Window.AFTER  : total 36   <- the default
+  laid at Window.BEFORE : total 46
+  ```
+
+  Pass `window=Window.BEFORE` whenever the watch is meant to affect the thing
+  it answers. This is the opposite end of the lever above: the *result* can be
+  rewritten late, because the outcome is recomputed from it; a *modifier* has
+  to be in place early, because the sum is taken once.
 * **A `todo=`/`dropped=` symbol naming a header field needs the dotted form.**
   `dsl._SYMBOL` reads a bare `reach_alt` as prose and **refuses the import with a
   `ValueError`**, not a lint warning. Write `Power.reach_alt`, the way

@@ -1789,18 +1789,26 @@ def f3159(c: Cast) -> None:
 
 @power("f3160", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       trigger="you use m5139a3",
-       on=Trigger(PowerUsed, _used("m5139a3"), "you use that racial power"),
-       todo=("m5139a3",))
+       trigger="you use the racial power the spec could not resolve",
+       todo=("spec.monster_ref()",))
 def f3160(c: Cast) -> None:
     """The Athletics substitution is a check rather than a fight; the
     Will bonus is the combat half, and it is gated on still holding a
     power point at the moment the racial power goes off.
 
-    Marked, having been written and left unmarked: `m5139a3` is declared
-    nowhere in the tree, so the use this row answers is never announced
-    and the row is as inert as an empty one. The benefit is whole and
-    fires the day that ref lands."""
+    The benefit is whole. What is missing is the power it answers: the spec
+    prints `x_m5139a3`, the ETL's mark for a ref it could not resolve, and no
+    such row exists.
+
+    **The declared trigger has been taken off, and that is the point of this
+    note.** It was `Trigger(PowerUsed, _used("m5139a3"))`, and the marker was
+    the bare ref too -- so when a level-13 wave declared an `m5139a3` that is a
+    demon brute gaining temporary hit points on being bloodied, `todo.py` went
+    red and called this row finishable. It is not: the ref now resolves to
+    something unrelated, and leaving the trigger armed would have had the row
+    waiting on a creature nobody playing it will ever be. One spelling for two
+    unrelated needs. `f1541` carried the same mis-aimed marker and has the
+    same correction."""
     if c.points() >= 1:
         c.bonus(WILL, 2, on=c.me, until=When.EONT)
 
