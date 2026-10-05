@@ -1987,18 +1987,57 @@ class Cast:
             Forced.SLIDE, squares_, anchor=anchor, to=to, power=self.ref,
         )
 
+    def _nearest_first(
+        self, options: list[Square], toward: int | None, away_from: int | None = None
+    ) -> list[Square]:
+        """The same squares, ordered by how near a creature they leave you.
+
+        **Ranking, not overriding.** `World.decide` with no decider attached
+        takes the first option in the list, so an unordered list means the
+        lowest coordinate on the board -- a creature told to step aside walks
+        to a corner (#383), and a row that moves and then swings finds its
+        target out of reach (#381). A real decider still sees every option, in
+        a better order. `movement.overrun` settled this shape for itself; this
+        is the same answer for the verbs that move without naming a square.
+
+        **Both directions, because the printed lines go both ways.** Six of the
+        seven rows that were waiting on `c.shift(toward=)` say "end adjacent to
+        the enemy" or "end closer to you"; the seventh says "you must end the
+        move *farther* from your ally". A parameter that could only close would
+        have let that one report finished while still picking a corner.
+        """
+        if not options or (toward is None and away_from is None):
+            return options
+        from .grid import distance
+        from .query import squares as _squares
+
+        anchor = toward if toward is not None else away_from
+        mine = _squares(self.world, anchor)
+        if not mine:
+            return options
+        near = sorted(options, key=lambda sq: min(distance(sq, t) for t in mine))
+        return near if toward is not None else list(reversed(near))
+
     def shift(
         self,
         squares_: int = 1,
         *,
         who: int | None = None,
         to: Square | None = None,
+        toward: int | None = None,
+        away_from: int | None = None,
         share: bool = False,
     ) -> bool:
         """Shift, choosing the destination through the world's decider.
 
         `to` names the square outright, for the powers that do -- "shift into
         the space the target left" is not a choice, it is an instruction.
+
+        `toward` names a creature to end up near instead of a square to stand
+        on, for "shift and then attack it": the options are offered closest
+        first, so a row that keeps a swing pending does not step out of reach.
+        `away_from` is the mirror, for "you must end the move farther from your
+        ally". See `_nearest_first`.
 
         `share` moves *into* an occupied square, for a creature that melds
         with the one it is on top of.
@@ -2009,6 +2048,7 @@ class Cast:
         options = self.world.reachable_squares(mover, squares_)
         if not options:
             return False
+        options = self._nearest_first(list(options), toward, away_from)
         dest = self.world.decide(mover, "shift", options, f"{self.ref}: shift {squares_}")
         return shift(self.world, mover, dest)
 
@@ -2318,9 +2358,18 @@ class Cast:
         return True
 
     def move(
-        self, squares_: int, *, who: int | None = None, at: str = ""
+        self, squares_: int, *, who: int | None = None, at: str = "",
+        toward: int | None = None, away_from: int | None = None,
     ) -> int:
         """Walk. `at` names a movement mode to travel at instead.
+
+        `toward` names a creature to end up near, which is what "moves up to 6
+        squares and makes a melee basic attack" needs: without it the
+        destinations go to `World.decide` unordered and the first in sorted
+        order wins, so the creature walks away from the thing it is about to
+        swing at. 13 rows were measured attacking from out of reach for exactly
+        this reason (#381). `away_from` is the mirror, for "you must end the
+        move farther from your ally". See `_nearest_first`.
 
         "It flies up to its fly speed" came up short by the difference
         between the two, because the pathfinder measures `query.speed` and
@@ -2345,7 +2394,10 @@ class Cast:
             if not paths:
                 return 0
             dest = self.world.decide(
-                mover, "move", sorted(paths), f"{self.ref}: move {squares_}"
+                mover,
+                "move",
+                self._nearest_first(sorted(paths), toward, away_from),
+                f"{self.ref}: move {squares_}",
             )
             return walk(self.world, mover, paths[dest])
         finally:
