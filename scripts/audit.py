@@ -412,6 +412,26 @@ KNOWN_SILENT = {
                "closer\", and the body appears in the caster's own space, so "
                "returning nothing is the card. Driven after the summon: the "
                "gate is what stops it",
+    # **Round 14's five, over 376 rows at levels 11 and 12.** Four are the
+    # grab-or-condition family again; each was driven with the state set.
+    "m1617a1": "needs an immobilized enemy within 5. Driven with one: hits "
+               "for 13 necrotic and heals 10",
+    "m2082a1": "affects a creature it is grabbing; the board arranges none. "
+               "Driven after its own grab: 10 necrotic to the held creature, "
+               "and aimed elsewhere it redirects to the one it holds",
+    "m5124a4": "affects a creature it is grabbing. Driven with the relation "
+               "set: hits, 10 damage, shares its space, restrained save-ends "
+               "with ongoing 10",
+    "m5492a3": "needs a creature grabbed by the caster. Driven with the grab "
+               "set: +14 vs Fort, 4d10+5 necrotic, releases the grab, heals "
+               "10, and applies unconscious when the blow crosses bloodied",
+    # #375's family, and the clearest case of it yet: the row's whole effect
+    # is two extra initiative slots, and `Encounter.extra_turn` / `_splice`
+    # announce nothing, so there is no event for the audit to count. Driven,
+    # the caster's slot count in `encounter.order` goes 3 -> 5. The row works;
+    # a log-based instrument cannot see state changed by assignment.
+    "m3932a6": "grants itself two extra turns, and extra_turn emits no event "
+               "to see it by (#375). Driven: slot count 3 -> 5",
     # Not a condition: a footprint. `movement.overrun` builds `under` from
     # `grid.occupant` filtered on `who != eid`, and both this harness's board
     # and `show.py`'s place foes *inside* a Gargantuan caster's 4x4 footprint,

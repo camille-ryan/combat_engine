@@ -192,16 +192,27 @@ that never applies.
   strength of it. Read them from `resolve.py`, not from here, if you are
   about to mark a row.
 
-  The **damage** context (`resolve.deal_damage`): `target`, `power`,
-  `opportunity`, `charge`, `granted_by`, `granted_via`, `dtype`,
-  `dtypes`, `crit`, `advantage`, `ranged`.
+  The **damage** context (`resolve.deal_damage`), all thirteen: `target`,
+  `source`, `from_attack`, `power`, `opportunity`, `charge`,
+  `granted_by`, `granted_via`, `dtype`, `crit`, `advantage`, `ranged`,
+  `dtypes`.
 
   The **attack** context (`resolve.attack`) has all of those but the
   damage-only three, plus `attacker`, `action_point` and `branch`.
 
-  Two that still catch people. Neither context carries an `attacker` on
-  the damage side, so "damage against a creature *you* have marked" asks
-  the board rather than the context. And `power` on the damage side is
+  **And one reader is narrower than either.** The gate on
+  `c.resist(when=)` is built separately and carries six keys —
+  `source`, `power`, `dtype`, `dtypes`, `opportunity`, `charge` — so a
+  resist gated on `ranged`, `target`, `crit`, `advantage`, `from_attack`,
+  `granted_by` or `granted_via` is simply False. `c.resist`'s own
+  docstring offers "only when the damage is from ranged or area attacks"
+  as the example, and that is one of the seven it cannot ask. #380.
+
+  Two that still catch people. **`source`, not `attacker`, is who dealt
+  it** — damage comes from ongoing ticks and zone burn as well as swings,
+  and `from_attack` is how a gate tells those apart. (This page said for
+  a while that the damage side had no equivalent at all; it has had one
+  since #302.) And `power` on the damage side is
   the `detail` of whatever rolled the blow -- which is the *row's* ref,
   so a striker's extra damage arrives under `cf:rogue-scoundrel-f4` and
   not under the attack that carried it. That is a feature: it is how a

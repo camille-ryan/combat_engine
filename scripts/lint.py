@@ -97,14 +97,6 @@ def main() -> int:
         print(f"{ref}: {why}")
         faults += 1
 
-    for ref, event, cond in _relation_only_conditions():
-        print(
-            f"{ref}: waits for {event} naming {cond}, which arrives by"
-            f" relation and is never announced as a condition"
-            f" -- watch RelationSet/RelationCleared instead"
-        )
-        faults += 1
-
     for ref, pred, event, has in _dead_triggers():
         print(
             f"{ref}: `{pred}` reads a field {event} does not have"
@@ -730,100 +722,28 @@ def _attack_result_fields() -> frozenset[str]:
     )
 
 
-_CONDITION_EVENTS = ("ConditionApplied", "ConditionEnded")
-_RELATION_EVENTS = ("RelationSet", "RelationCleared")
-
-
-def _relation_imposed() -> dict[str, str]:
-    """Conditions that arrive by relation, mapped to the relation.
-
-    **Derived, not listed.** `Relations.set` writes these straight onto
-    the `Conditions` component through `_apply_condition` and announces
-    only `RelationSet`; `Effects.cure` takes them off through
-    `relations.clear`, which announces only `RelationCleared`. So
-    nothing ever names one in a `ConditionApplied` or a
-    `ConditionEnded`, and a row declared on that pairing is armed,
-    reads correctly, passes every other check and can never fire.
-
-    The set is whatever table `_apply_condition` consults, read off
-    `relations.py` -- add a relation there and this sees it on the next
-    run. Two hand-kept lists in this repo went stale within the hour.
-    """
-    from combat_engine.engine import relations as rel
-
-    tree = ast.parse(Path(rel.__file__).read_text())
-    fn = next(
-        (n for n in ast.walk(tree)
-         if isinstance(n, ast.FunctionDef) and n.name == "_apply_condition"),
-        None,
-    )
-    out: dict[str, str] = {}
-    for node in ast.walk(fn) if fn is not None else ():
-        table = getattr(rel, node.id, None) if isinstance(node, ast.Name) else None
-        if isinstance(table, dict):
-            for kind, cond in table.items():
-                out[getattr(cond, "name", "")] = getattr(kind, "name", "")
-    out.pop("", None)
-    return out
-
-
-def _relation_only_conditions() -> list[tuple[str, str, str]]:
-    """Rows waiting on a condition event that names a relational condition.
-
-    Silenced for a row that also watches the relation, because that is
-    the fix: a clause naming several conditions keeps the condition
-    event for the rest of them and hangs the relational half on
-    `RelationSet`.
-    """
-    conds = _relation_imposed()
-    if not conds:
-        return []
-    out = []
-    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
-        try:
-            tree = ast.parse(path.read_text())
-        except SyntaxError:
-            continue
-        funcs: dict[str, list[ast.AST]] = {}
-        for n in ast.walk(tree):
-            if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef):
-                funcs.setdefault(n.name, []).append(n)
-        bound = {
-            t.id: n.value for n in ast.walk(tree) if isinstance(n, ast.Assign)
-            for t in n.targets if isinstance(t, ast.Name)
-        }
-        rows = _rows(tree)
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not node.args:
-                continue
-            name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
-            if name not in ("Trigger", "watch", "on"):
-                continue
-            event = getattr(node.args[0], "id", "")
-            if event not in _CONDITION_EVENTS:
-                continue
-            handler = node.args[1] if len(node.args) > 1 else next(
-                (k.value for k in node.keywords if k.arg in ("when", "fn")), None
-            )
-            named = _conditions_named(
-                handler, funcs, bound, set(conds), node.lineno
-            )
-            if not named:
-                continue
-            rel_path = path.relative_to(ROOT)
-            row = next(
-                (r for r in rows if r[0] <= node.lineno <= r[1]), None
-            )
-            scope = row[3] if row else tree
-            if any(
-                isinstance(n, ast.Name) and n.id in _RELATION_EVENTS
-                for n in ast.walk(scope)
-            ):
-                continue
-            where = f"{row[2]}" if row else f"{rel_path}:{node.lineno}"
-            for cond in sorted(named):
-                out.append((where, event, f"Condition.{cond}"))
-    return out
+# **A check lived here and was deleted; #382.** It flagged a row waiting on
+# `ConditionApplied`/`ConditionEnded` for a condition a relation mirrors -- a
+# grab, a mark, a domination -- on the grounds that `Relations.set` wrote onto
+# `Conditions` in silence and announced only `RelationSet`, so such a row was
+# armed, read correctly and could never fire.
+#
+# That was true. It was then **fixed in the engine** and this was not updated:
+# `relations._apply_condition` is now titled "Move the condition a relation
+# mirrors, *and say so*", and its docstring is the record of the fix, including
+# that clearing had been silent the same way. Driven on a board, a `c.grab`
+# emits `ConditionApplied: grabbed` beside `RelationSet`, so a row declared the
+# obvious way does fire.
+#
+# It was not dormant when removed -- it fired on a level-11 lurker row and the
+# author re-aimed a working row to satisfy it. So it was spending author
+# attention to move rows off a pattern that works, and teaching a false fact
+# about the engine while it did it. `_context_keys` below is the argument:
+# a checker that cries wolf is worse than no checker. The derivation read the
+# right table; the conclusion drawn from it went stale.
+#
+# Do not re-add it without first checking whether `_apply_condition` still
+# announces. If that ever stops being true, the check is right again.
 
 
 def _rows(tree: ast.Module) -> list[tuple[int, int, str, ast.AST]]:
@@ -843,78 +763,6 @@ def _rows(tree: ast.Module) -> list[tuple[int, int, str, ast.AST]]:
                     (start, node.end_lineno or node.lineno, dec.args[0].value, node)
                 )
     return out
-
-
-def _conditions_named(
-    node: ast.AST | None,
-    funcs: dict[str, list[ast.AST]],
-    bound: dict[str, ast.AST],
-    wanted: set[str],
-    line: int,
-) -> set[str]:
-    """Which of `wanted` a predicate tests the event's condition against.
-
-    Only a comparison against `ev.condition` counts. Anything looser
-    reported handlers that *clear* a domination on their way out -- the
-    condition is spelled there too, and calling those rows dead is how a
-    check gets ignored.
-    """
-    seen: set[str] = set()
-    args: list[ast.AST] = []
-    body: ast.AST | None = None
-    if isinstance(node, ast.Lambda):
-        body = node
-    elif isinstance(node, ast.Name):
-        body = _nearest(funcs.get(node.id), line) or bound.get(node.id)
-    elif isinstance(node, ast.Call):
-        name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
-        body = _nearest(funcs.get(name or ""), line)
-        args = [*node.args, *(k.value for k in node.keywords)]
-    if body is None:
-        return seen
-    tests = [
-        n for n in ast.walk(body)
-        if isinstance(n, ast.Compare) and _reads_condition(n)
-    ]
-    if not tests:
-        return seen
-    # A factory takes the condition as an argument, so the member is at
-    # the call and the comparison is in the body.
-    for where in tests + args:
-        for inner in ast.walk(where):
-            if (isinstance(inner, ast.Attribute)
-                    and getattr(inner.value, "id", "") == "Condition"
-                    and inner.attr in wanted):
-                seen.add(inner.attr)
-            elif isinstance(inner, ast.Name) and inner.id in bound:
-                for deep in ast.walk(bound[inner.id]):
-                    if (isinstance(deep, ast.Attribute)
-                            and getattr(deep.value, "id", "") == "Condition"
-                            and deep.attr in wanted):
-                        seen.add(deep.attr)
-    return seen
-
-
-def _reads_condition(node: ast.Compare) -> bool:
-    """Does this comparison have `ev.condition` on one side?"""
-    for side in [node.left, *node.comparators]:
-        if isinstance(side, ast.Attribute) and side.attr == "condition":
-            return True
-        if (isinstance(side, ast.Call)
-                and getattr(side.func, "id", "") == "getattr"
-                and len(side.args) > 1
-                and getattr(side.args[1], "value", None) == "condition"):
-            return True
-    return False
-
-
-def _nearest(nodes: list[ast.AST] | None, line: int) -> ast.AST | None:
-    """The definition a call at `line` sees -- names repeat in one file."""
-    if not nodes:
-        return None
-    before = [n for n in nodes if getattr(n, "lineno", 0) <= line]
-    return max(before or nodes, key=lambda n: getattr(n, "lineno", 0))
-
 
 def _duplicate_methods() -> list[tuple[str, str, int]]:
     out = []

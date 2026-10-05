@@ -151,12 +151,14 @@ def main() -> int:
         return 1
 
     shown = 0
+    missing = 0
     for ref in refs:
         if not args.all and ref in declared:
             continue
         block = _render(db, ref, declared, args.all)
         if block is None:
             print(f"# {ref}: no such row", file=sys.stderr)
+            missing += 1
             continue
         if not block:
             # A parent whose every child is declared. Distinct from `None`,
@@ -171,8 +173,15 @@ def main() -> int:
             break
 
     if shown <= args.offset:
-        print("# nothing to write -- every row asked for is already declared")
-    return 0
+        # **Two mutually exclusive messages used to come out together.** A ref
+        # that resolved to nothing printed "no such row" and then this line,
+        # which claims the opposite -- that it exists and is finished. An
+        # author cannot tell a typo from a completed row from that pair.
+        if missing:
+            print(f"# nothing to write -- {missing} ref(s) resolved to no row")
+        else:
+            print("# nothing to write -- every row asked for is already declared")
+    return 1 if missing else 0
 
 
 def _features(db, cls: str | None) -> int:  # noqa: ANN001
@@ -372,6 +381,15 @@ def _render(db, ref: str, declared: set[str], include_all: bool) -> str | None: 
         return f"{head}\n{row['spec']}"
 
     if ref.startswith("m"):
+        # **One ability, asked for by ref.** Same argument as `_item`'s block
+        # branch, and the same fix: a bare `m1003a0` used to fall through to
+        # the `monster` lookup below, miss, and come back "no such row" -- so
+        # the only way to read one ability was to ask for its whole creature
+        # and find it by eye. The stat block comes with it, because the
+        # numbers are most of what the row needs.
+        only = ""
+        if re.fullmatch(r"m\d+a\d+", ref):
+            only, ref = ref, ref.split("a")[0]
         row = db.execute("SELECT * FROM monster WHERE ref = ?", (ref,)).fetchone()
         if row is None:
             return None
@@ -379,7 +397,11 @@ def _render(db, ref: str, declared: set[str], include_all: bool) -> str | None: 
         for a in db.execute(
             "SELECT * FROM monster_power WHERE monster_ref = ? ORDER BY idx", (ref,)
         ):
-            if not include_all and a["ref"] in declared:
+            if only and a["ref"] != only:
+                continue
+            # An ability named outright is printed whether or not it is
+            # declared: the caller said which row it wanted.
+            if not only and not include_all and a["ref"] in declared:
                 continue
             kw = json.loads(a["keywords"] or "[]")
             head = (
