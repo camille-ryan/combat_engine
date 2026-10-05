@@ -52,6 +52,7 @@ from __future__ import annotations
 
 from combat_engine.content.monsters.level_01.skirmishers_sa import _moved_far
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
+from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy
 from combat_engine.content.monsters.level_02.skirmishers_sa import _melee_only
 from combat_engine.content.monsters.level_02.soldiers_sa import _missed_me_in_melee
@@ -1757,10 +1758,22 @@ def m3235a3(c: Cast) -> None:
     on=Trigger(Hit, _melee_or_ranged_hit, "it is hit by a melee or ranged attack"),
 )
 def m3235a4(c: Cast) -> None:
+    """The mark comes off whether or not the swing happens -- it is its own
+    printed sentence.
+
+    The trigger admits a **ranged** attack, and the card offers only a basic
+    attack "at any point during this movement": two squares of shift, and
+    nothing that says the shooter has to be close. So the step is aimed at
+    the triggering creature and the swing is asked for afterwards, which is
+    the only order in which the question "is it in reach now" has an answer.
+    An archer across the map simply does not get hit back."""
     c.cure(Condition.MARKED, on=c.me)
     foe = _triggering_enemy(c)
-    c.shift(2)
-    if foe is not None:
+    if foe is None:
+        c.shift(2)
+        return
+    c.shift(2, toward=foe)
+    if c.distance(foe) <= _swing_reach(c, c.me):
         c.basic(on=foe)
 
 
@@ -1967,7 +1980,12 @@ def m3793a3(c: Cast) -> None:
     folded into the header, which has no field for it. The free basic
     attack is the *victim's own*, aimed at its nearest ally -- `who=victim`,
     since the printed line is about whom the target swings at, not whom
-    this creature does."""
+    this creature does.
+
+    "Its nearest ally" is the one creature the card names, so when that ally
+    is further off than the victim's own swing reaches there is no attack --
+    not a swing at the second nearest, and not the free hit across ten
+    squares that an explicit target used to buy."""
     victim = c.target
     if victim is None or c.is_(Condition.DEAFENED, on=victim):
         return
@@ -1978,8 +1996,9 @@ def m3793a3(c: Cast) -> None:
             if e != victim and alive(c.world, e) and team(c.world, e) is team(c.world, victim)
         ]
         if mates:
-            mate = min(mates, key=lambda m: distance_between(c.world, victim, m))
-            c.basic(who=victim, on=mate)
+            mate = min(mates, key=lambda m: (distance_between(c.world, victim, m), m))
+            if distance_between(c.world, victim, mate) <= _swing_reach(c, victim):
+                c.basic(who=victim, on=mate)
 
 
 @power(

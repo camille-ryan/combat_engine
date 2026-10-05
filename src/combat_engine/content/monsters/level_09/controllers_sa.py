@@ -92,6 +92,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
+from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_04.lurkers_sa import _hit_me_since_my_turn
@@ -4149,17 +4150,33 @@ def m6477a2(c: Cast) -> None:
     target=Target(side="ally", count=2),
 )
 def m6477a3(c: Cast) -> None:
+    """"The target shifts up to 5 squares and **can** make a basic attack" --
+    the swing names no victim, so it takes whoever is in reach when it is
+    made.
+
+    The fallback used to rank every enemy by distance *from the caster* and
+    swing at the nearest one, which was wrong twice over: the swinger is the
+    ally, not the m6477, and no reach was asked of either. Now the step is
+    aimed at the enemy nearest the ally and the swing happens only if it
+    arrives in reach."""
     ally = c.target
     if ally is None or not c.may("shift up to 5 squares and make a basic attack", who=ally):
         return
-    c.shift(5, who=ally)
+    span = _swing_reach(c, ally)
+    aim = min(
+        c.enemies(),
+        key=lambda f: (distance_between(c.world, ally, f), f),
+        default=None,
+    )
+    c.shift(5, who=ally, toward=aim)
     # `who=` is the attacker; the victim still defaults to `c.target`,
     # which is the ally itself here. Named explicitly, off where the
     # shift actually landed.
-    foe = next((f for f in c.enemies() if c.adjacent_to(ally, f)), None)
-    if foe is None:
-        ranked = sorted(c.enemies(), key=lambda f: c.distance(to=f))
-        foe = ranked[0] if ranked else None
+    foe = min(
+        (f for f in c.enemies() if distance_between(c.world, ally, f) <= span),
+        key=lambda f: (distance_between(c.world, ally, f), f),
+        default=None,
+    )
     if foe is not None:
         c.basic(who=ally, on=foe)
 

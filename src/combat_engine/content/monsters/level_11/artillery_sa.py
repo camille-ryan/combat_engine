@@ -613,12 +613,25 @@ def m1574a2(c: Cast) -> None:
     Declared with no target: the row picks off the trigger, because the
     dispatcher's aim would point at whoever this reaction's own target line
     found. Either printed row is offered; both carry their own numbers.
-    """
+
+    **Only the ones that reach are offered.** `m1574a0` is Melee 1 and
+    `m1574a1` is Ranged 10, and `c.use_power(on=)` applies no reach check of
+    its own -- so a close attack from five squares away was answered with a
+    melee swing at five. The step is aimed at the attacker, then whichever
+    rows can still touch it are the choice. This is the printed ranged
+    alternative doing its job: out of melee reach the row takes `m1574a1`
+    rather than refusing."""
     foe = _triggering_enemy(c)
-    c.shift(1)
     if foe is None:
+        c.shift(1)
         return
-    pick = c.choose(["m1574a0", "m1574a1"], f"{c.ref}: which attack") or "m1574a0"
+    c.shift(1, toward=foe)
+    offered = [
+        ref for ref in ("m1574a0", "m1574a1") if c.distance(foe) <= c.reach(ref)
+    ]
+    if not offered:
+        return
+    pick = c.choose(offered, f"{c.ref}: which attack") or offered[0]
     c.use_power(pick, on=foe, spend=False)
 
 

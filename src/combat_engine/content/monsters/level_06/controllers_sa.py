@@ -40,7 +40,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
-from combat_engine.content.monsters.level_02.controllers_sa import _let_it_swing
+from combat_engine.content.monsters.level_02.controllers_sa import _let_it_swing, _swing_reach
 from combat_engine.content.monsters.level_02.lurkers_sa import _twice
 from combat_engine.content.monsters.level_02.skirmishers_sa import _melee_only
 from combat_engine.content.monsters.level_03.brutes_sa import (
@@ -936,8 +936,14 @@ def _opportunity_attack_on_me(world: World, me: int, ev: Any) -> bool:
     on=Trigger(AttackDeclared, _opportunity_attack_on_me, "an enemy makes an opportunity attack"),
 )
 def m115860a2(c: Cast) -> None:
+    """The counter is `m115860a0`, which is Melee 1, and an opportunity
+    attack can come from further off than that -- a reach weapon threatens
+    at 2 and a few rows at 3. The borrowed row is aimed by `on=`, which
+    skips the reach check it would have applied to a target of its own, so
+    the reach is asked here. No printed ranged alternative on this block, so
+    out of reach means no counter."""
     foe = getattr(c.trigger, "attacker", None)
-    if foe is not None:
+    if foe is not None and c.distance(foe) <= c.reach("m115860a0"):
         c.use_power("m115860a0", on=foe)
 
 
@@ -2113,15 +2119,30 @@ def m3499a0(c: Cast) -> None:
 def m3499a1(c: Cast) -> None:
     """One roll of two types; the header keeps the first and the second
     rides as a keyword, the same trade `level_05/artillery_sa.py`'s
-    `m5886a1` already makes."""
+    `m5886a1` already makes.
+
+    "Moves its speed and makes a basic attack against a target of the
+    m3499's choice": the quarry is chosen first so `c.run_at` can walk the
+    victim into reach of it -- `c.move` would hand the destinations to the
+    decider unordered -- and the swing is still gated on reach, because the
+    move may not close the gap. The old fallback aimed the swing at the
+    m3499 itself when no other enemy was on the board; a creature does not
+    choose to be hit, so now there is simply no swing."""
     if c.strike():
         c.hit()
         victim = c.target
         if victim is None:
             return
-        c.move(c.speed_of(victim), who=victim)
-        other = next((f for f in c.enemies() if f != victim), c.me)
-        c.basic(who=victim, on=other)
+        quarry = min(
+            (f for f in c.enemies() if f != victim),
+            key=lambda f: (distance_between(c.world, victim, f), f),
+            default=None,
+        )
+        if quarry is None:
+            return
+        c.run_at(quarry, who=victim)
+        if distance_between(c.world, victim, quarry) <= _swing_reach(c, victim):
+            c.basic(who=victim, on=quarry)
 
 
 @power(

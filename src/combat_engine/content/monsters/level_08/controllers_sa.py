@@ -71,6 +71,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
+from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_03.brutes import NO_BIGGER_THAN_MEDIUM
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_07.controllers_sa import _no_sight_past
@@ -171,9 +172,21 @@ def _slowed_enemy_closes_in(world: World, me: int, ev: AdjacencyGained) -> bool:
 def _forced_basic_against_own_side(c: Cast, victim: int, *, times: int = 1) -> None:
     """A charmed or dazed creature compelled to swing at "a creature of
     <the caster>'s choice" -- read as one of its own allies, the printed
-    trick of turning a foe against its own side."""
+    trick of turning a foe against its own side.
+
+    **The pool is narrowed to what the victim can reach.** It was every ally
+    on the board, and `dsl.use` applies no reach check on an explicit target
+    (#381), so a charmed creature swung at a friend across the map. The reach
+    is the *victim's* basic attack, not this row's -- `c.reach` would answer
+    for the charm. Where no ally is in reach there is no swing: the printed
+    line grants the victim no movement.
+    """
     for _ in range(times):
-        pool = [a for a in allies(c.world, victim) if a != victim]
+        span = _swing_reach(c, victim)
+        pool = [
+            a for a in allies(c.world, victim)
+            if a != victim and distance_between(c.world, victim, a) <= span
+        ]
         if not pool:
             return
         foe = c.choose(pool, f"{c.ref}: who does it attack") or pool[0]

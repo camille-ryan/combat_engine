@@ -54,6 +54,7 @@ from combat_engine.engine import (
     FREE,
     INT,
     INTERRUPT,
+    MELEE,
     MINOR,
     MOVE,
     NO_TARGET,
@@ -660,9 +661,20 @@ def i1552p1(c: Cast) -> None:
        trigger="an enemy reduces you to 0 hit points or fewer",
        on=Trigger(Dropped, about_me, "you are dropped"))
 def i1569p1(c: Cast) -> None:
-    """"A bonus", with no type word, so both are untyped."""
+    """"A bonus", with no type word, so both are untyped.
+
+    A **melee** basic attack, and whoever put you down may have done it from
+    anywhere -- an arrow, a spell, a burst. There is no ranged alternative on
+    the card and no movement, so out of reach the row does nothing, bonuses
+    included: they are the swing's bonuses and there is no swing. This is not
+    the departure-reaction shape, which is out of reach by design; the
+    trigger here says nothing about where the enemy is standing.
+    """
     foe = _foe(c)
     if foe is None:
+        return
+    known = c.world.get(c.me, Powers)
+    if c.distance(foe) > c.reach((known.basic if known else MELEE) or MELEE):
         return
     c.bonus("attack", c.enhancement, on=c.me, until=When.EOT)
     c.bonus("damage", c.enhancement, on=c.me, until=When.EOT)

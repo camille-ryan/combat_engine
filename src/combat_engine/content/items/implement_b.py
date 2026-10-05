@@ -1930,15 +1930,32 @@ def i2324p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="an enemy hits you",
     on=Trigger(Hit, hits_me, "an enemy hits you"),
-    dropped=("c.slide(toward=)",),
 )
 def i2335p1(c: Cast) -> None:
-    """The destination clause -- "to a space adjacent to one of your
-    allies" -- is dropped: `to=` names one square outright and nothing
-    narrows the decider to a set of legal ones."""
+    """Finished: `c.slide` takes `toward=` now.
+
+    The destination clause -- "to a space adjacent to one of your allies" --
+    used to be dropped, because `to=` names one square outright and nothing
+    narrowed the decider to a set of legal ones. `toward=` is that: the ally
+    nearest the enemy is chosen and the slide walks the line at it, stopping
+    at the last square it can legally enter, which is beside that ally when
+    three squares reach and as near as they get when they do not.
+
+    The nearest ally rather than a free choice, because the card says "one of
+    your allies" and getting the enemy beside *somebody* is the point; the
+    nearest is the one three squares is most likely to reach.
+    """
+    from combat_engine.engine.query import distance_between
+
     foe = getattr(c.trigger, "attacker", None) or c.target
-    if foe is not None:
-        c.slide(3, on=foe)
+    if foe is None:
+        return
+    mate = min(
+        (a for a in c.allies() if a != c.me),
+        key=lambda a: distance_between(c.world, foe, a),
+        default=None,
+    )
+    c.slide(3, on=foe, toward=mate) if mate is not None else c.slide(3, on=foe)
 
 
 @power(

@@ -894,7 +894,13 @@ def i1350p2(c: Cast) -> None:
     """"An unoccupied square adjacent to that enemy" is named outright --
     `c.teleport(to=)` takes the square, so the destination is not left to
     the decider, which would happily have put the caster out of reach of
-    the creature it is about to hit."""
+    the creature it is about to hit.
+
+    And when there is no such square the whole Effect fails. The swing used
+    to be made outside the guard, so a ring of occupied squares meant no
+    teleport and a melee basic attack landing from wherever the caster
+    already stood -- up to five squares off, since that is how far the enemy
+    was allowed to be from the triggering attack's target."""
     victim = getattr(c.trigger, "target", None)
     pool = (
         [e for e in c.within(5, of=victim, side="enemy") if e != victim]
@@ -905,8 +911,9 @@ def i1350p2(c: Cast) -> None:
     if foe is None:
         return
     square = _beside(c, foe)
-    if square is not None:
-        c.teleport(0, to=square)
+    if square is None:
+        return
+    c.teleport(0, to=square)
     c.deals(DamageType.LIGHTNING, until=When.EOT, on=c.me, implement=True)
     c.basic(on=foe)
 

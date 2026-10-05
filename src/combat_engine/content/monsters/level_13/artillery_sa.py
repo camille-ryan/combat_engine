@@ -77,6 +77,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.monsters.level_01.artillery_sa import _recharge_when_bloodied
+from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_04.lurkers_sa import _hit_me_since_my_turn
 from combat_engine.content.monsters.level_07.brutes import _living
 from combat_engine.content.monsters.level_10.lurkers_sa import _restricted_to
@@ -1248,6 +1249,14 @@ def m5374a5(c: Cast) -> None:
     are easy to conflate -- a grant written without `on=` on a row whose own
     target is None attacks nobody at all. The enemy is the m5374's choice,
     which is what the card says.
+
+    The quarry is chosen before the move, so `c.run_at` can walk the helper
+    into reach of it; `c.move` hands its destinations to the decider
+    unordered and the ally was as likely to walk away from the creature it
+    was about to swing at. The swing is then gated on the helper's own reach,
+    because "moves its speed" may not be enough to close the gap and an
+    explicit target is never reach-checked downstream. The daze is not
+    gated -- it is the price of being driven, printed as its own sentence.
     """
     me = c.me
     mates = sorted(
@@ -1258,11 +1267,12 @@ def m5374a5(c: Cast) -> None:
     helper = c.choose(mates, f"{c.ref}: which ally it drives") if mates else None
     if helper is None:
         return
-    c.move(c.speed_of(helper), who=helper)
     quarry = sorted(foe for foe in c.enemies() if alive(c.world, foe))
     picked = c.choose(quarry, f"{c.ref}: who the ally swings at") if quarry else None
     if picked is not None:
-        c.basic(who=helper, on=picked)
+        c.run_at(picked, who=helper)
+        if distance_between(c.world, helper, picked) <= _swing_reach(c, helper):
+            c.basic(who=helper, on=picked)
     c.dazed(on=helper, until=When.EONT)
     _recharge_when_bloodied(c)
 

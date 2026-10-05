@@ -40,11 +40,13 @@ from combat_engine.engine import (
     FORT,
     FREE,
     INTERRUPT,
+    MELEE,
     MINOR,
     MOVE,
     NO_TARGET,
     ONE_CREATURE,
     PERSONAL,
+    RANGED,
     REF,
     SELF,
     STANDARD,
@@ -60,6 +62,7 @@ from combat_engine.engine import (
     DamageType,
     Keyword,
     Melee,
+    Powers,
     Ranged,
     Target,
     Usage,
@@ -124,6 +127,25 @@ def _kin_within(c: Cast, radius: int, of: int) -> list[int]:
     """
     mine = _ref_of(c, c.me)
     return [w for w in c.within(radius, of=of, side="team") if _ref_of(c, w) == mine]
+
+
+def _swing_reach(c: Cast, swinger: int, *, ranged: bool = False) -> int:
+    """How far the creature being *told* to swing can actually reach.
+
+    `c.reach()` and `c.distance()` both answer for the caster and for the row
+    being cast, which on a forced-attack row is the charm that carries 10 or
+    20 squares -- not the melee basic the victim is about to make. The swing's
+    own row is `Powers.basic`, or the engine's `mba` for a creature that
+    declares none, and `on=` measures the weapon in *that* creature's hands.
+
+    The two lines are picked the same way `c.basic` picks them, deliberately:
+    measuring one row and swinging another is how a reach-1 basic attack came
+    to land at nine squares. `dsl.use`'s explicit-target arm applies no reach
+    check of its own, so this is the only gate there is. #381.
+    """
+    known = c.world.get(swinger, Powers)
+    ref = RANGED if ranged else ((known.basic if known else MELEE) or MELEE)
+    return c.reach(ref, on=swinger)
 
 
 def _let_it_swing(c: Cast, ally: int) -> None:

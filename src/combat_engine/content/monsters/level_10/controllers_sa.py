@@ -54,6 +54,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_07.soldiers import _recharge_on
@@ -2313,8 +2314,15 @@ def m4008a3(c: Cast) -> None:
     on=Trigger(TurnStart, enemy_within(2), "an enemy starts its turn within 2 squares of it"),
 )
 def m4008a4(c: Cast) -> None:
+    """"The triggering enemy must make a basic attack against one ally."
+
+    The ally has to be one the *enemy* can hit. The trigger only says the
+    enemy started its turn within 2 squares of the m4008, which says nothing
+    about where anybody else is standing, so the chooser was free to pick an
+    ally the forced swing could not have reached."""
     foe = c.trigger.actor
-    pool = c.allies()
+    span = _swing_reach(c, foe)
+    pool = [a for a in c.allies() if distance_between(c.world, foe, a) <= span]
     ally = c.choose(pool, f"{c.ref}: {foe}'s target") if pool else None
     if ally is not None:
         c.basic(who=foe, on=ally)
@@ -2479,19 +2487,31 @@ def m5192a2(c: Cast) -> None:
     damage=Damage("3d6", 9, dtype=DamageType.PSYCHIC),
 )
 def m5192a3(c: Cast) -> None:
+    """"The target moves its speed and makes a basic attack against its
+    nearest ally."
+
+    The ally is picked *before* the move, because `c.run_at` is what walks a
+    creature into reach of a named one -- `c.move` hands its destinations to
+    the decider unordered, so the victim was as likely to walk away. And the
+    swing is still gated on reach afterwards: the move is "up to its speed"
+    and may not close the gap at all, and nothing downstream of an explicit
+    target measures it."""
     victim = c.target
     if not c.strike():
         return
     c.hit()
     if victim is None:
         return
-    c.move(c.speed_of(who=victim), who=victim)
-    pool = sorted(
+    mate = min(
         (a for a in allies(c.world, victim) if a != victim),
-        key=lambda a: distance_between(c.world, victim, a),
+        key=lambda a: (distance_between(c.world, victim, a), a),
+        default=None,
     )
-    if pool:
-        c.basic(who=victim, on=pool[0])
+    if mate is None:
+        return
+    c.run_at(mate, who=victim)
+    if distance_between(c.world, victim, mate) <= _swing_reach(c, victim):
+        c.basic(who=victim, on=mate)
 
 
 # ==========================================================================
@@ -2794,7 +2814,15 @@ def m5606a4(c: Cast) -> None:
     c.hit()
     if victim is None:
         return
-    pool = [f for f in c.enemies() if f != victim]
+    # Only creatures the victim's own basic attack can reach are offered:
+    # "a creature m5606 chooses" is a choice among legal targets, and the
+    # chooser was being handed the whole board because an explicit target
+    # skips the reach check.
+    span = _swing_reach(c, victim)
+    pool = [
+        f for f in c.enemies()
+        if f != victim and distance_between(c.world, victim, f) <= span
+    ]
     foe = c.choose(pool, f"{c.ref}: who {victim} attacks") if pool else None
     if foe is None:
         return

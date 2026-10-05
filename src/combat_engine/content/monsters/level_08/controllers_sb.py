@@ -54,6 +54,7 @@ from typing import Any
 
 from combat_engine.content.monsters.level_01.artillery_sa import _cheb
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES, _saves_off_prone
+from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_02.lurkers_sa import _twice
 from combat_engine.content.monsters.level_03.brutes import NO_BIGGER_THAN_MEDIUM
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
@@ -1122,7 +1123,17 @@ def m5583a3(c: Cast) -> None:
     victim = c.target
     if victim is None or not c.strike(on=victim):
         return
-    foe = next((f for f in c.enemies() if f != victim), None)
+    # "A creature of its choice" is still a creature the *victim* can hit: the
+    # swing is a basic attack and nothing downstream of an explicit target
+    # measures its reach, so the first enemy by entity id was swinging a
+    # melee-1 basic at nine squares. Nearest inside the victim's own reach.
+    span = _swing_reach(c, victim)
+    foe = min(
+        (f for f in c.enemies()
+         if f != victim and distance_between(c.world, victim, f) <= span),
+        key=lambda f: (distance_between(c.world, victim, f), f),
+        default=None,
+    )
     if foe is None:
         return
     landed = c.basic(on=foe, who=victim)

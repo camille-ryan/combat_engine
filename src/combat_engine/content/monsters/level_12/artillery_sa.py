@@ -83,6 +83,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_03.controllers_sa import _also
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
@@ -2376,7 +2377,10 @@ def m3120a2(c: Cast) -> None:
         return
     c.hit()
     c.slide(2, on=victim)
-    span = c.reach(on=victim)
+    # `c.reach(on=victim)` measures *this* row in the victim's hands -- an
+    # AreaBurst(2, 20) -- so it answered 20 for a melee-1 basic attack and the
+    # forced swing landed from anywhere in the burst. #381.
+    span = _swing_reach(c, victim)
     mates = sorted(
         (distance_between(c.world, victim, other), other)
         for other in c.enemies()

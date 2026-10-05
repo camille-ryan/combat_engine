@@ -2744,6 +2744,10 @@ def i2968x1(c: Cast) -> None:
        on=Trigger(AttackDeclared, both(targets_me, by_melee),
                   "an adjacent enemy targets you with a melee attack"))
 def i2968p1(c: Cast) -> None:
+    """The slide is what creates the reach, so the swing is asked for only
+    where it ended up. Written outside the guard, a beast that could not be
+    slid -- every square around the enemy occupied, or two squares not far
+    enough -- still bit it from wherever it was standing."""
     beast = c.companion()
     foe = getattr(c.trigger, "attacker", None)
     if beast is None or foe is None or not c.adjacent(beast):
@@ -2751,7 +2755,8 @@ def i2968p1(c: Cast) -> None:
     square = _free_near(c, foe)
     if square is not None:
         c.slide(2, on=beast, to=square)
-    c.basic(who=beast, on=foe)
+    if c.adjacent_to(foe, beast):
+        c.basic(who=beast, on=foe)
 
 
 @power("i3067x1", level=9, cls=ITEM, action=ActionType.NONE,

@@ -43,6 +43,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES, _saves_off_prone
+from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_02.skirmishers_sa import _melee_only
 from combat_engine.content.monsters.level_03.brutes_sa import _enemy_closed_on_me
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
@@ -151,15 +152,56 @@ def _no_sight_past(c: Cast, radius: int, *, until: When = When.SAVE_ENDS) -> Non
 def _runs_and_swings_ally(c: Cast, victim: int) -> None:
     """"The target moves up to its speed and makes a basic attack against
     its nearest ally." `c.run_at` is the move -- it walks `victim` into
-    reach the same way a charge's does -- and `c.basic` is the swing."""
+    reach the same way a charge's does -- and `c.basic` is the swing.
+
+    **The swing is gated on arriving.** `c.run_at` returns whether it got
+    there and this swung regardless, so a victim whose nearest ally was
+    further than its speed attacked anyway from wherever it stopped --
+    `dsl.use` applies no reach check on an explicit target (#381). Nothing
+    in the printed line says the swing happens if the move does not.
+    """
     mate = min(
         (a for a in allies(c.world, victim) if a != victim),
         key=lambda a: distance_between(c.world, victim, a),
         default=None,
     )
-    if mate is not None:
-        c.run_at(mate, who=victim)
+    if mate is None:
+        return
+    c.run_at(mate, who=victim)
+    if _swing_reach(c, victim) >= distance_between(c.world, victim, mate):
         c.basic(who=victim, on=mate)
+
+
+def _slid_at(c: Cast, victim: int, mate: int, squares_: int) -> None:
+    """Slide the victim at the ally it is about to be made to swing at.
+
+    `c.slide` has no `toward=` the way `c.move` and `c.shift` do -- it has
+    `to=`, which walks the line one square at a time and stops at the first
+    square it cannot enter. Naming the ally's own square is therefore "as
+    near to it as this many squares will get you", and it stops beside the
+    ally rather than in it, because `step` refuses an occupied square.
+
+    Unaimed, the destination went to `World.decide` unordered and the lowest
+    coordinate on the board won, so the slide reliably moved the victim
+    *away* from the creature it was being turned against. That was invisible
+    while the swing was made regardless of distance; once the swing is gated
+    on reach it is the difference between the row working and the row never
+    attacking at all. #381.
+    """
+    there = next(iter(squares_of(c.world, mate)), None)
+    if there is not None:
+        c.slide(squares_, on=victim, to=there)
+
+
+def _nearest_mate_of(c: Cast, victim: int) -> int | None:
+    """The victim's own nearest ally, which is the caster's enemy pool minus
+    the victim -- `allies(world, victim)` asks the victim's side, which is
+    what "an ally" on a charm means."""
+    return min(
+        (a for a in allies(c.world, victim) if a != victim),
+        key=lambda a: (distance_between(c.world, victim, a), a),
+        default=None,
+    )
 
 
 def _can_fly(c: Cast, who: int | None) -> bool:
@@ -1901,17 +1943,38 @@ def m3764a0(c: Cast) -> None:
 def m3764a1(c: Cast) -> None:
     """"A target of the m3764's choice" is read as an ally of the
     charmed creature -- the forced swing is the dominator pointing its
-    victim's own attack at a friend, the common shape this charm takes."""
+    victim's own attack at a friend, the common shape this charm takes.
+
+    The card prints "a melee **or ranged** basic attack", so the reach is
+    asked twice rather than once: the nearest ally the melee swing can touch,
+    and failing that the nearest one the ranged swing can. Asked neither way,
+    the first ally by entity id took a melee-1 swing from anywhere on the
+    board. Nothing in range either way means no attack, and then the +4 is
+    not laid -- it belongs to the swing."""
     if not c.strike():
         return
     victim = c.target
     if victim is None:
         return
-    c.slide(3, on=victim)
-    mate = next((a for a in allies(c.world, victim) if a != victim), None)
-    if mate is not None:
-        c.bonus("attack", 4, on=victim, until=When.EOT, once=True, kind="power")
-        c.basic(who=victim, on=mate)
+    mate = _nearest_mate_of(c, victim)
+    if mate is None:
+        return
+    _slid_at(c, victim, mate, 3)
+    gap = distance_between(c.world, victim, mate)
+    if gap <= _swing_reach(c, victim):
+        ranged = False
+    elif gap <= _swing_reach(c, victim, ranged=True):
+        ranged = True
+    else:
+        return
+    # The +4 has to be standing before the roll, and it is a one-shot -- so
+    # when the swing does not happen after all it has to come back off, or
+    # the victim spends it on an opportunity attack of its own later in the
+    # turn. A ranged basic is refused outright for a creature with nothing to
+    # shoot, which is exactly the case this branch is reached in.
+    boost = c.bonus("attack", 4, on=victim, until=When.EOT, once=True, kind="power")
+    if not c.basic(who=victim, on=mate, ranged=ranged) and boost is not None:
+        c.world.effects.end(boost, "no attack was made")
 
 
 @power(
@@ -2022,22 +2085,24 @@ def m3774a0(c: Cast) -> None:
     damage=Damage("1d6", 4, dtype=DamageType.PSYCHIC),
 )
 def m3774a1(c: Cast) -> None:
+    """"An ally within range" is read as within range of the *swing*, not of
+    this row: the 20 squares are what the charm carries, and the basic attack
+    the victim then makes reaches one square. Filtered at 20 it was a reach-1
+    swing landing wherever the ally happened to be standing.
+
+    The ally is picked before the slide, so the slide can be aimed at it --
+    see `_slid_at`. Still no swing where two squares do not close the gap."""
     if not c.strike():
         return
     c.hit()
     victim = c.target
     if victim is None:
         return
-    c.slide(2, on=victim)
-    mate = next(
-        (
-            a
-            for a in allies(c.world, victim)
-            if a != victim and distance_between(c.world, victim, a) <= 20
-        ),
-        None,
-    )
-    if mate is not None:
+    mate = _nearest_mate_of(c, victim)
+    if mate is None:
+        return
+    _slid_at(c, victim, mate, 2)
+    if distance_between(c.world, victim, mate) <= _swing_reach(c, victim):
         c.basic(who=victim, on=mate)
 
 
@@ -2129,7 +2194,11 @@ def m3774a4(c: Cast) -> None:
 def m3774a5(c: Cast) -> None:
     """"Makes an at-will attack against an ally" is read as its own
     basic attack -- there is no verb to pick an arbitrary known at-will
-    row, only the one `c.basic` already resolves."""
+    row, only the one `c.basic` already resolves.
+
+    "An ally within range" is within range of that swing. The 5 squares are
+    this row's blast, and filtering the ally at 5 let a reach-1 basic attack
+    connect at five."""
     if c.first:
         _rearms_when_bloodied(c)
     if not c.strike():
@@ -2139,16 +2208,11 @@ def m3774a5(c: Cast) -> None:
     victim = c.target
     if victim is None:
         return
-    c.slide(2, on=victim)
-    mate = next(
-        (
-            a
-            for a in allies(c.world, victim)
-            if a != victim and distance_between(c.world, victim, a) <= 5
-        ),
-        None,
-    )
-    if mate is not None:
+    mate = _nearest_mate_of(c, victim)
+    if mate is None:
+        return
+    _slid_at(c, victim, mate, 2)
+    if distance_between(c.world, victim, mate) <= _swing_reach(c, victim):
         c.basic(who=victim, on=mate)
 
 

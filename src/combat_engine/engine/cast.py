@@ -1970,6 +1970,7 @@ class Cast:
         on: int | None = None,
         anchor: Square | None = None,
         to: Square | None = None,
+        toward: int | None = None,
         by: int | None = None,
     ) -> int:
         """`to` names the destination outright, for a row that does.
@@ -1980,8 +1981,30 @@ class Cast:
         square adjacent to you" -- that one was duly sliding enemies three
         squares *away*. `push` and `pull` have had `to` all along; this is
         the one that did not.
+
+        `toward` names a **creature** to slide somebody at, which is what
+        "slide the target 3 squares and then it attacks its nearest ally"
+        needs: the line is walked at that creature and `forced` stops where it
+        legally can. It is `to` with the square worked out, so it goes through
+        the same path rather than adding a second one.
+
+        It arrived late. `c.move`, `c.shift`, `c.jump` and `c.teleport` were
+        given a destination bias for #381 and this verb was missed, so three
+        rows that slide a charmed creature at an ally were still sliding it
+        away -- invisible for as long as the swing afterwards went unchecked,
+        and the whole row once it did not.
         """
         who = self._who(on)
+        if to is None and toward is not None and who is not None:
+            from .query import squares as _squares
+
+            mine = _squares(self.world, toward)
+            if mine:
+                here = self.world.get(who, Position)
+                from .grid import distance
+
+                at = here.square if here is not None else None
+                to = min(mine, key=lambda sq: distance(sq, at)) if at else min(mine)
         return 0 if who is None else forced(
             self.world, by if by is not None else self.me, who,
             Forced.SLIDE, squares_, anchor=anchor, to=to, power=self.ref,
