@@ -33,8 +33,8 @@ from combat_engine.content.monsters.level_01 import aquatic_edge
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -598,7 +598,7 @@ def m278a2(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.FORCE],
     attack=Attack(vs=REF, printed=7),
     damage=Damage("2d8", 8, dtype=DamageType.FORCE, kind=LIMITED, half_on_miss=True),

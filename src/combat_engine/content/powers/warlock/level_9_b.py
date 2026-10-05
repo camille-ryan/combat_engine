@@ -26,6 +26,7 @@ from combat_engine.engine import (
     CON,
     DAILY,
     EACH_CREATURE,
+    EACH_OTHER,
     FORT,
     NO_TARGET,
     ONE_CREATURE,
@@ -92,7 +93,7 @@ def p10384(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.POISON],
     attack=Attack(CON, vs=FORT),
 )
@@ -405,7 +406,7 @@ def p6860(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=ARCANE_IMPLEMENT,
     attack=Attack(CON, vs=FORT),
 )

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     AC,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -290,7 +290,7 @@ def p3948(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER],
     attack=Attack(INT, vs=FORT),
 )

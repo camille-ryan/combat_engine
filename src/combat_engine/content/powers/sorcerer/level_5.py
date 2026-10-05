@@ -23,6 +23,7 @@ from combat_engine.engine import (
     CHA,
     DAILY,
     EACH_CREATURE,
+    EACH_OTHER,
     FORT,
     INTERRUPT,
     ONE_CREATURE,
@@ -150,7 +151,7 @@ def p13448(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.COLD],
     attack=Attack(CHA, vs=FORT),
 )
@@ -265,7 +266,7 @@ def p5273(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER],
     attack=Attack(CHA, vs=FORT),
 )

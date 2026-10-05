@@ -43,8 +43,8 @@ from combat_engine.content.monsters.level_09.brutes_sa import _revives_once
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -2901,7 +2901,7 @@ def m6117a4(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.FIRE, Keyword.ACID, Keyword.COLD, Keyword.LIGHTNING],
     attack=Attack(vs=REF, printed=13),
     damage=Damage("2d12", 10, kind=LIMITED, half_on_miss=True),
@@ -2921,7 +2921,7 @@ def m6117a5(c: Cast) -> None:
     usage=AT_WILL,
     action=FREE,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     trigger="a melee attack damages it",
     on=Trigger(DamageApplied, lambda w, m, ev: (
         ev.target == m
@@ -2946,7 +2946,7 @@ _M6117_BLOODIED = "it is first bloodied"
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.FIRE, Keyword.ACID, Keyword.COLD, Keyword.LIGHTNING],
     trigger=_M6117_BLOODIED,
     on=Trigger(Bloodied, about_me, _M6117_BLOODIED),

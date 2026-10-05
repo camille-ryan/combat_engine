@@ -78,8 +78,8 @@ from combat_engine.content.monsters.level_11.soldiers import _charge
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -1073,7 +1073,7 @@ def m3097a2(c: Cast) -> None:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=REF, printed=15),
     damage=Damage("4d6", 7, kind=LIMITED),
     trigger=_M3097_FELLED,

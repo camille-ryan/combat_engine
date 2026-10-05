@@ -35,6 +35,7 @@ from combat_engine.engine import (
     EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -1162,7 +1163,7 @@ def p15952(c: Cast) -> None:
 
 @power(
     "p16061", level=0, cls=X7_944, usage=ENCOUNTER, action=STANDARD,
-    reach=CloseBurst(1), target=EACH_CREATURE,
+    reach=CloseBurst(1), target=EACH_OTHER,
     keywords=[Keyword.ELEMENTAL, Keyword.WEAPON],
     attack=Attack(STR, vs=AC), requires=_on_the_ground,
     requires_text="you must be on the ground",

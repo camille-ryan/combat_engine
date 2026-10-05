@@ -74,8 +74,8 @@ from combat_engine.engine import (
     AT_WILL,
     DAILY,
     EACH_ALLY,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -3063,7 +3063,7 @@ def m6558a4(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("3d6", 6, kind=LIMITED),
 )

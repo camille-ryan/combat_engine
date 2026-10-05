@@ -21,6 +21,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     AC,
     EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     NO_TARGET,
@@ -61,7 +62,7 @@ BEAST_FORM = "you must be in beast form"
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE],
     attack=Attack(WIS, vs=FORT),
 )
@@ -81,7 +82,7 @@ def p14500(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE],
     attack=Attack(WIS, vs=FORT),
 )
@@ -256,7 +257,7 @@ def p4866(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE],
     attack=Attack(WIS, vs=REF),
     requires=in_beast_form,
@@ -371,7 +372,7 @@ def p9637(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE],
     attack=Attack(WIS, vs=FORT),
 )

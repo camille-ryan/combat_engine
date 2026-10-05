@@ -58,8 +58,8 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     EACH_ALLY,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -533,7 +533,7 @@ def m1489a2(c: Cast) -> None:
 
 @power(
     "m1489a3", level=7, usage=ENCOUNTER, action=MINOR, reach=CloseBlast(3),
-    target=EACH_CREATURE, keywords=[Keyword.POISON],
+    target=EACH_OTHER, keywords=[Keyword.POISON],
     attack=Attack(vs=REF, printed=12),
     damage=Damage("2d6", 6, dtype=DamageType.POISON, kind=LIMITED),
 )
@@ -639,7 +639,7 @@ def m1760a2(c: Cast) -> None:
 
 @power(
     "m1760a3", level=7, usage=ENCOUNTER, action=STANDARD, reach=CloseBurst(1),
-    target=EACH_CREATURE, keywords=[Keyword.FEAR, Keyword.PSYCHIC],
+    target=EACH_OTHER, keywords=[Keyword.FEAR, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=11),
     damage=Damage("1d6", 1, dtype=DamageType.PSYCHIC, kind=LIMITED),
 )
@@ -2702,7 +2702,7 @@ def _just_rampaged(world: World, eid: int) -> bool:
 
 @power(
     "m884a2", level=7, usage=AT_WILL, action=FREE, reach=CloseBurst(1),
-    target=EACH_CREATURE, keywords=[Keyword.WEAPON],
+    target=EACH_OTHER, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14), damage=Damage("1d12", 5),
     requires=_just_rampaged, requires_text="it must have just used its rampage",
 )

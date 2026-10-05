@@ -5460,7 +5460,7 @@ def m5557a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=15),
 )
 def m5557a2(c: Cast) -> None:
@@ -5831,7 +5831,7 @@ def m5744a2(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.ACID],
     attack=Attack(vs=REF, printed=15),
     damage=Damage("1d6", 6, dtype=DamageType.ACID, kind=LIMITED),
@@ -6022,7 +6022,7 @@ def m5807a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.IMPLEMENT, Keyword.POISON, Keyword.ZONE],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("3d6", 6, dtype=DamageType.POISON),
@@ -6496,7 +6496,7 @@ def m5933a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("2d10", 4),
 )

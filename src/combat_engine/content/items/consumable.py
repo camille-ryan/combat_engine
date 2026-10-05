@@ -52,8 +52,8 @@ from combat_engine.engine import (
     AC,
     DAILY,
     DEX,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     FORT,
     FREE,
     MINOR,
@@ -1331,7 +1331,7 @@ def i3299p1(c: Cast) -> None:
 
 
 @power("i3300p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=CloseBlast(3), target=EACH_CREATURE,
+       reach=CloseBlast(3), target=EACH_OTHER,
        dropped=("c.effects_on()",))
 def i3300p1(c: Cast) -> None:
     """Barring concealment is `c.no_cover`. Losing what is already up is

@@ -174,7 +174,7 @@ def m141a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("2d6", 5, dtype=DamageType.THUNDER, kind=LIMITED),

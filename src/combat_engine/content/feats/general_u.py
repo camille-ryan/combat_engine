@@ -45,7 +45,7 @@ from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AT_WILL,
     CHA,
-    EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FREE,
     MOVE,
@@ -562,7 +562,7 @@ def f3454(c: Cast) -> None:
 
 @power("f3454b", level=1, cls="", usage=ENCOUNTER,
        action=ActionType.IMMEDIATE_REACTION, reach=CloseBurst(2),
-       target=EACH_CREATURE, group=CHANNEL_DIVINITY,
+       target=EACH_OTHER, group=CHANNEL_DIVINITY,
        keywords=[Keyword.DIVINE, Keyword.FEAR, Keyword.IMPLEMENT],
        attack=Attack(CHA, vs=WILL),
        trigger="an enemy within 2 squares of you damages you with an attack",

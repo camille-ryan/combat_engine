@@ -16,8 +16,8 @@ from combat_engine.engine import (
     AT_WILL,
     DAILY,
     DEX,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     MINOR,
@@ -377,7 +377,7 @@ def p13136(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*IMPLEMENT, Keyword.THUNDER],
     attack=Attack(DEX, vs=FORT),
 )

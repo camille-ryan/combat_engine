@@ -46,7 +46,7 @@ from combat_engine.content.monsters.level_06.brutes import DEFENCES, _same_row
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -1000,7 +1000,7 @@ def m5535a0(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=4),
     damage=Damage("", 10, kind=LIMITED),
 )

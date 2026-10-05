@@ -35,8 +35,8 @@ from combat_engine.content.monsters.level_06.minions_sa import _ref_of
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -610,7 +610,7 @@ def m5873a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=10),
     damage=Damage("", 7, dtype=DamageType.THUNDER, kind=MINION),

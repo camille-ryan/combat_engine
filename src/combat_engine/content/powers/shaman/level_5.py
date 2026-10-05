@@ -6,8 +6,8 @@ from typing import Any
 
 from combat_engine.engine import (
     DAILY,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     FORT,
     ONE_ALLY,
     ONE_CREATURE,
@@ -359,7 +359,7 @@ def p5454(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.FIRE],
     attack=Attack(WIS, vs=FORT),
 )

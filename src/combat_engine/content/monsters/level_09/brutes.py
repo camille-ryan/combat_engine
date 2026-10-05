@@ -58,7 +58,6 @@ from combat_engine.content.monsters.level_08.brutes import (
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
     EACH_OTHER,
     ENCOUNTER,
@@ -506,7 +505,7 @@ def m47a2(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.COLD],
     attack=Attack(vs=REF, printed=10),
     damage=Damage("4d6", 6, dtype=DamageType.COLD, kind=LIMITED),

@@ -13,7 +13,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -123,7 +123,7 @@ def m206a0(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=4),
     damage=Damage("3d6", 1, dtype=DamageType.FIRE, kind=LIMITED),

@@ -49,7 +49,7 @@ def p11075(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.LIGHTNING],
     attack=Attack(STR, vs=AC),
 )
@@ -69,7 +69,7 @@ def p5115(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.POISON],
     attack=Attack(STR, vs=REF),
 )
@@ -120,7 +120,7 @@ def p5117(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.COLD, Keyword.ZONE],
     attack=Attack(STR, vs=FORT),
 )
@@ -171,7 +171,7 @@ def p5577(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.ZONE],
     attack=Attack(STR, vs=AC),
 )
@@ -200,7 +200,7 @@ def p9839(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.ZONE],
     attack=Attack(STR, vs=AC),
 )

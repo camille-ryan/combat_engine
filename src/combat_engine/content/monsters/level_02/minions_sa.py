@@ -25,7 +25,7 @@ from combat_engine.content.monsters.level_01.skirmishers import _ref_of
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     INTERRUPT,
@@ -570,7 +570,7 @@ def m4633a1(c: Cast) -> None:
     usage=AT_WILL,
     action=ActionType.NONE,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=REF, printed=5),
     damage=Damage(bonus=4, kind=MINION),
     trigger="it drops to 0 hit points",

@@ -10,7 +10,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     DAILY,
     DEX,
-    EACH_CREATURE,
+    EACH_OTHER,
     FORT,
     INTERRUPT,
     MINOR,
@@ -342,7 +342,7 @@ def p7461(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=IMPLEMENT,
     attack=Attack(DEX, vs=REF),
 )

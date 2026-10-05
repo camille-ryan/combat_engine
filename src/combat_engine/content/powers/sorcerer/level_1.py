@@ -29,6 +29,7 @@ from combat_engine.engine import (
     DAILY,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     ONE_CREATURE,
@@ -159,7 +160,7 @@ def p12465(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.RADIANT],
     attack=Attack(CHA, vs=REF),
 )
@@ -176,7 +177,7 @@ def p12466(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.RADIANT, Keyword.ACID],
     attack=Attack(CHA, vs=REF),
 )
@@ -418,7 +419,7 @@ def p3171(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER, Keyword.FEAR],
     attack=Attack(CHA, vs=FORT),
 )
@@ -435,7 +436,7 @@ def p3172(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
     attack=Attack(CHA, vs=REF),
 )
@@ -471,7 +472,7 @@ def p3705(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.ACID],
     attack=Attack(CHA, vs=REF),
 )

@@ -6,7 +6,7 @@ from typing import Any
 
 from combat_engine.engine import (
     DAILY,
-    EACH_CREATURE,
+    EACH_OTHER,
     FORT,
     MINOR,
     ONE_ALLY,
@@ -329,7 +329,7 @@ def p13771(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(2, from_="companion"),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=PRIMAL_IMPLEMENT,
     attack=Attack(WIS, vs=REF),
 )
@@ -352,7 +352,7 @@ def p9764(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.PSYCHIC, Keyword.ZONE],
     attack=Attack(WIS, vs=REF),
 )

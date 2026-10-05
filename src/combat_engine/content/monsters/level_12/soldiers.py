@@ -60,8 +60,8 @@ from combat_engine.content.monsters.level_09.brutes import _volley
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     MINOR,
@@ -364,7 +364,7 @@ def m460a2(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=WILL, printed=15),
 )
 def m460a3(c: Cast) -> None:

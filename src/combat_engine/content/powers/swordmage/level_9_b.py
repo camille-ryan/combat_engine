@@ -12,7 +12,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     AC,
     DAILY,
-    EACH_CREATURE,
+    EACH_OTHER,
     FORT,
     INT,
     ONE_CREATURE,
@@ -137,7 +137,7 @@ def p5750(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.FORCE],
     attack=Attack(INT, vs=FORT),
 )

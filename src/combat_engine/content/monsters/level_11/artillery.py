@@ -53,8 +53,8 @@ from combat_engine.content.monsters.level_08.brutes import _aura
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -400,7 +400,7 @@ def m660a2(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("3d8", 8, kind=LIMITED),
 )

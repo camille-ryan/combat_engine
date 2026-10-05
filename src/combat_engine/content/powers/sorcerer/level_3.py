@@ -14,6 +14,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     CHA,
     EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     MINOR,
@@ -129,7 +130,7 @@ def p13427(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.LIGHTNING],
     attack=Attack(CHA, vs=REF),
 )
@@ -175,7 +176,7 @@ def p3010(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER],
     attack=Attack(CHA, vs=FORT),
 )
@@ -228,7 +229,7 @@ def p3163(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=ARCANE_IMPLEMENT,
     attack=Attack(CHA, vs=REF),
 )
@@ -312,7 +313,7 @@ def p5269(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.POISON],
     attack=Attack(CHA, vs=FORT),
 )

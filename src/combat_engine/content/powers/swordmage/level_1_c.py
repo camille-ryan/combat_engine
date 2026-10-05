@@ -12,8 +12,8 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     INT,
@@ -49,7 +49,7 @@ ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.LIGHTNING],
     attack=Attack(INT, vs=REF),
 )

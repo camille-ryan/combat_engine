@@ -98,8 +98,8 @@ from combat_engine.content.monsters.level_10.lurkers_sa import _restricted_to
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -1646,7 +1646,7 @@ def m4036a0(c: Cast) -> None:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.THUNDER],
     trigger=_M4036_FELLED,
     on=Trigger(Dropped, when=about_me, text=_M4036_FELLED),
@@ -2610,7 +2610,7 @@ def m5906a3(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(4),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=REF, printed=14),
     damage=Damage("3d8", 10, half_on_miss=True),
 )
@@ -3090,7 +3090,7 @@ def m6407a3(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("4d8", 9, kind=LIMITED, half_on_miss=True),
 )

@@ -15,8 +15,8 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     INT,
@@ -223,7 +223,7 @@ def p3138(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
     attack=Attack(INT, vs=REF),
 )

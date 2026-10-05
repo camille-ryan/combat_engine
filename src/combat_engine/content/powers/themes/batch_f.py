@@ -26,6 +26,7 @@ from combat_engine.engine import (
     EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -420,7 +421,7 @@ ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.COLD],
     attack=Attack(INT, vs=FORT),
 )

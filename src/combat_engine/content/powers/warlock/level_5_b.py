@@ -26,6 +26,7 @@ from combat_engine.engine import (
     CON,
     DAILY,
     EACH_CREATURE,
+    EACH_OTHER,
     FORT,
     INT,
     MINOR,
@@ -74,7 +75,7 @@ def _melee_hit_by(c: Cast, who: int, ev: Hit) -> bool:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.NECROTIC],
     attack=Attack(CON, vs=FORT),
 )
@@ -248,7 +249,7 @@ def p13644(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.COLD],
     attack=Attack(CHA, vs=FORT),
 )
@@ -426,7 +427,7 @@ def p4282(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.LIGHTNING],
     attack=Attack(CHA, vs=REF),
 )

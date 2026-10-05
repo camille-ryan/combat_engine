@@ -25,6 +25,7 @@ from combat_engine.engine import (
     EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -591,7 +592,7 @@ def p14166(c: Cast) -> None:
 
 
 @power("p14217", level=0, cls="x7_875", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(2), target=EACH_CREATURE,
+       reach=CloseBurst(2), target=EACH_OTHER,
        keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.ZONE])
 def p14217(c: Cast) -> None:
     """No attack roll: the damage is dealt outright. The zone is one thing
@@ -813,7 +814,7 @@ def p16055(c: Cast) -> None:
 
 
 @power("p16109", level=0, cls="x7_951", usage=ENCOUNTER, action=STANDARD,
-       reach=CloseBlast(3), target=EACH_CREATURE,
+       reach=CloseBlast(3), target=EACH_OTHER,
        keywords=[Keyword.ELEMENTAL], attack=Attack(STR, vs=FORT, plus=2))
 def p16109(c: Cast) -> None:
     """The printed +2 is in the header; `plus=` carries only the step from

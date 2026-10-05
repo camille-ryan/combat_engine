@@ -19,7 +19,6 @@ from combat_engine.engine import (
     CHA,
     CON,
     DAILY,
-    EACH_CREATURE,
     EACH_ENEMY,
     EACH_OTHER,
     FORT,
@@ -420,7 +419,7 @@ def p2260(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*DIVINE_IMPLEMENT, Keyword.THUNDER],
     attack=Attack(STR, vs=WILL),
 )

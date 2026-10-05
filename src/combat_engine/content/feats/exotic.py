@@ -26,7 +26,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
-    EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     MINOR,
@@ -173,7 +173,7 @@ _swap("f964", "f964b")
 
 
 @power("f964b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
-       reach=CloseBurst(1), target=EACH_CREATURE, keywords=WEAPON,
+       reach=CloseBurst(1), target=EACH_OTHER, keywords=WEAPON,
        attack=Attack(Ability.STR, vs=FORT),
        requires=_wielding("net"), requires_text="you must be wielding a net")
 def f964b(c: Cast) -> None:

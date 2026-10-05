@@ -28,8 +28,8 @@ from combat_engine.content.monsters.level_03.artillery import _save_ends
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -346,7 +346,7 @@ _M4415_DOWN = "the creature drops to 0 hit points"
     usage=AT_WILL,
     action=FREE,
     reach=CloseBurst(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.HEALING, Keyword.POISON],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("", 5, dtype=DamageType.POISON, kind=MINION),

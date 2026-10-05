@@ -22,6 +22,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     AT_WILL,
     EACH_CREATURE,
+    EACH_OTHER,
     FORT,
     ONE_CREATURE,
     REF,
@@ -276,7 +277,7 @@ def p9634(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE, Keyword.ZONE],
     attack=Attack(WIS, vs=REF),
     requires=in_beast_form,

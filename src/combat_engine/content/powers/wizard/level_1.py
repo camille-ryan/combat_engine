@@ -16,6 +16,7 @@ from combat_engine.engine import (
     DAILY,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     INT,
@@ -120,7 +121,7 @@ def p1164(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER],
     attack=Attack(INT, vs=FORT),
 )

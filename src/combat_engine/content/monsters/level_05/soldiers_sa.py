@@ -77,8 +77,8 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     EACH_ALLY,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -2382,7 +2382,7 @@ def m5407a2(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=REF, printed=8),
     damage=Damage("1d6", 4, kind=LIMITED),
 )

@@ -122,6 +122,15 @@ def main() -> int:
         )
         faults += 1
 
+    for where, ref, how in _close_area_hits_itself():
+        what = "a close area" if how == "power" else "an augment's close area"
+        print(
+            f"{where}: {ref} declares {what} with target=EACH_CREATURE,"
+            f" which is side 'any' and catches the creature using it."
+            f" Use EACH_OTHER unless the card says it includes the user."
+        )
+        faults += 1
+
     for ref, why in _spent_once_a_fight():
         print(f"{ref}: {why}")
         faults += 1
@@ -441,6 +450,72 @@ def _strike_without_line() -> list[tuple[str, str, str, str]]:
                 out.append((where, ref, "c.strike()", "attack="))
             if "hit" in calls and "damage=" not in dec and "damage" not in calls:
                 out.append((where, ref, "c.hit()", "damage="))
+    return out
+
+
+#: Rows whose card really does catch the creature using it, so `EACH_CREATURE`
+#: on a close area is right there. Ten cards in the compendium print "include
+#: you"; this is the only one of them written that way, and the check would
+#: otherwise report it forever.
+CATCHES_ITSELF = {"p9652"}
+
+
+def _close_area_hits_itself() -> list[tuple[str, str, str]]:
+    """A close burst or blast that targets the creature using it.
+
+    `EACH_CREATURE` is `Target("any", ...)` and `"any"` is `creatures(world)` --
+    the actor included. A **close** area emanates from its user and never
+    targets them, so the pairing is wrong unless the card says otherwise.
+    `EACH_OTHER` is the same Target with `side="other"` and prints identically,
+    so this is a pool bug with no visible symptom on the card.
+
+    **Nothing caught this and 356 rows had it.** Four driven on the board each
+    emitted `DamageApplied` against their own caster and two lost hit points,
+    15 and 7. `audit.py` cannot see it -- the row does do something, to itself
+    -- and `cards.py` cannot either, because "each creature in the burst" is
+    exactly what the card prints. #385.
+
+    Ten cards genuinely print "include you"; `CATCHES_ITSELF` holds the one of
+    them that is written this way.
+
+    Augments are checked too: two of the original 355 were `Augment(...)` calls
+    inside `augments=` rather than decorators, and a decorator-only pass missed
+    both.
+
+    **Read off each call's own keywords, not its unparsed text.** The first
+    version tested `"target=EACH_CREATURE" in ast.unparse(node)`, and a
+    `power(...)` whose *augment* carries the pairing contains that substring --
+    so the outer row was reported alongside the augment and the count came out
+    two high. The duplicate pointed at a real fault, which is why it was easy
+    to miss.
+    """
+    out = []
+    for path in _asked_for():
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = getattr(node.func, "id", "")
+            if name not in ("power", "Augment"):
+                continue
+            own = {k.arg: k.value for k in node.keywords if k.arg}
+            reach, target = own.get("reach"), own.get("target")
+            if not isinstance(target, ast.Name) or target.id != "EACH_CREATURE":
+                continue
+            if not (
+                isinstance(reach, ast.Call)
+                and getattr(reach.func, "id", "") in ("CloseBurst", "CloseBlast")
+            ):
+                continue
+            ref = ""
+            if name == "power" and node.args and isinstance(node.args[0], ast.Constant):
+                ref = str(node.args[0].value)
+            if ref and ref in CATCHES_ITSELF:
+                continue
+            out.append((f"{path.relative_to(ROOT)}:{node.lineno}", ref or "augment", name))
     return out
 
 

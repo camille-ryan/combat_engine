@@ -57,6 +57,7 @@ from combat_engine.engine import (
     AC,
     DAILY,
     EACH_CREATURE,
+    EACH_OTHER,
     FORT,
     MINOR,
     NO_TARGET,
@@ -790,7 +791,7 @@ def i1243p1(c: Cast) -> None:
 
 
 @power("i1482p1", level=4, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=CloseBurst(1), target=EACH_CREATURE, keywords=[Keyword.ZONE],
+       reach=CloseBurst(1), target=EACH_OTHER, keywords=[Keyword.ZONE],
        attack=Attack(vs=FORT, printed=10),
        )
 def i1482p1(c: Cast) -> None:
@@ -878,7 +879,7 @@ def i3478p1(c: Cast) -> None:
 
 
 @power("i633p1", level=4, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=CloseBurst(1), target=EACH_CREATURE, keywords=[Keyword.ZONE],
+       reach=CloseBurst(1), target=EACH_OTHER, keywords=[Keyword.ZONE],
        attack=Attack(vs=FORT, printed=10),
        )
 def i633p1(c: Cast) -> None:
@@ -1199,7 +1200,7 @@ def i3321p1(c: Cast) -> None:
 
 
 @power("i1311p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=CloseBurst(1), target=EACH_CREATURE, keywords=[Keyword.ZONE],
+       reach=CloseBurst(1), target=EACH_OTHER, keywords=[Keyword.ZONE],
        attack=Attack(vs=FORT, printed=10),
        dropped=("c.blindsight()",))
 def i1311p1(c: Cast) -> None:
@@ -1277,7 +1278,7 @@ def i3318p1(c: Cast) -> None:
 
 
 @power("i896p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=CloseBlast(3), target=EACH_CREATURE,
+       reach=CloseBlast(3), target=EACH_OTHER,
        keywords=[Keyword.POISON], attack=Attack(vs=REF, printed=11))
 def i896p1(c: Cast) -> None:
     """"Targets plants" is `c.is_kind`.

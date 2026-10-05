@@ -17,7 +17,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     CHA,
     CON,
-    EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     ONE_CREATURE,
@@ -128,7 +128,7 @@ def p1462(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER, Keyword.FEAR],
     attack=Attack(CON, vs=FORT),
 )

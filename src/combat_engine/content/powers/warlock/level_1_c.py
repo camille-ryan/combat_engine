@@ -26,8 +26,8 @@ from combat_engine.engine import (
     CHA,
     CON,
     DAILY,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     MINOR,
@@ -334,7 +334,7 @@ def p4062(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER],
     attack=Attack(CON, vs=FORT),
 )
@@ -424,7 +424,7 @@ def p4279(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=ARCANE_IMPLEMENT,
     attack=Attack(CON, vs=REF),
 )

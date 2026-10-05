@@ -7,6 +7,7 @@ from combat_engine.engine import (
     DAILY,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     FORT,
     INT,
     MINOR,
@@ -160,7 +161,7 @@ def p13324(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[
         Keyword.PSIONIC,
         Keyword.IMPLEMENT,

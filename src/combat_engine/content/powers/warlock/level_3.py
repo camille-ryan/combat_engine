@@ -18,7 +18,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     CHA,
     CON,
-    EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     INTERRUPT,
@@ -140,7 +140,7 @@ def p1401(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.TELEPORTATION],
     attack=Attack(CHA, vs=FORT),
 )
@@ -266,7 +266,7 @@ def p13905(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC, Keyword.ZONE],
     attack=Attack(CHA, vs=WILL),
 )

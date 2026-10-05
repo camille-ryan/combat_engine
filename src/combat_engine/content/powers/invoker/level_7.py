@@ -5,6 +5,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     NO_TARGET,
@@ -40,7 +41,7 @@ DIVINE_IMPLEMENT = [Keyword.DIVINE, Keyword.IMPLEMENT]
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=DIVINE_IMPLEMENT,
     attack=Attack(WIS, vs=FORT),
 )
@@ -256,7 +257,7 @@ def p7182(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*DIVINE_IMPLEMENT, Keyword.THUNDER, Keyword.FEAR],
     attack=Attack(WIS, vs=FORT),
 )
@@ -273,7 +274,7 @@ def p7183(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*DIVINE_IMPLEMENT, Keyword.FIRE, Keyword.RADIANT],
     attack=Attack(WIS, vs=REF),
 )

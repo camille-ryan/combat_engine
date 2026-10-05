@@ -57,7 +57,7 @@ from combat_engine.engine import (
     AT_WILL,
     DAILY,
     EACH_ALLY,
-    EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -2026,7 +2026,7 @@ def i1500x1(c: Cast) -> None:
 
 
 @power("i1500p1", level=6, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=CloseBlast(3), target=EACH_CREATURE, keywords=[Keyword.THUNDER],
+       reach=CloseBlast(3), target=EACH_OTHER, keywords=[Keyword.THUNDER],
        attack=Attack(vs=FORT, printed=8),
        damage=Damage("1d6", 0, dtype=DamageType.THUNDER))
 def i1500p1(c: Cast) -> None:
@@ -2646,7 +2646,7 @@ def i3445p1(c: Cast) -> None:
 
 
 @power("i441p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=CloseBurst(1), target=EACH_CREATURE, keywords=[Keyword.FEAR])
+       reach=CloseBurst(1), target=EACH_OTHER, keywords=[Keyword.FEAR])
 def i441p1(c: Cast) -> None:
     c.penalty("attack", 2, until=When.EOTNT)
 

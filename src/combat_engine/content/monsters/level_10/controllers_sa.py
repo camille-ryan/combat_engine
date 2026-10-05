@@ -67,6 +67,7 @@ from combat_engine.engine import (
     EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     FORT,
     FREE,
     MINOR,
@@ -845,7 +846,7 @@ def m1522a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.TELEPORTATION, Keyword.CLOSE],
     attack=Attack(vs=REF, printed=14),
 )

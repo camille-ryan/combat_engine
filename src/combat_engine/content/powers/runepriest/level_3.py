@@ -6,7 +6,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
-    EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     INTERRUPT,
@@ -175,7 +175,7 @@ def p11385(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*DIVINE_WEAPON, Keyword.FEAR],
     attack=Attack(STR, vs=AC),
 )

@@ -45,8 +45,8 @@ from combat_engine.content.monsters.level_03.skirmishers import (
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -559,7 +559,7 @@ def m2800a2(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=AC, printed=8),
     damage=Damage("3d6", 4, kind=LIMITED),
     requires=_is_bloodied,

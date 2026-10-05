@@ -7,6 +7,7 @@ from combat_engine.engine import (
     DAILY,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     MINOR,
@@ -312,7 +313,7 @@ def p7159(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*DIVINE_IMPLEMENT, Keyword.FIRE, Keyword.COLD, Keyword.ZONE],
     attack=Attack(WIS, vs=REF),
 )
@@ -340,7 +341,7 @@ def p7160(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*DIVINE_IMPLEMENT, Keyword.THUNDER],
     attack=Attack(WIS, vs=FORT),
 )

@@ -11,8 +11,8 @@ from __future__ import annotations
 from combat_engine.content.powers.fighter.grips import two_melee
 from combat_engine.engine import (
     AC,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     ONE_CREATURE,
     STANDARD,
@@ -257,7 +257,7 @@ def p4934(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=PRIMAL_WEAPON,
     attack=Attack(STR, vs=AC),
     requires=two_melee,

@@ -74,7 +74,7 @@ def only_basic_attacks(c: Cast, victim: int, until: When) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*DIVINE_IMPLEMENT, Keyword.RADIANT, Keyword.ZONE],
     attack=Attack(WIS, vs=FORT),
 )

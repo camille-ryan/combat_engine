@@ -18,7 +18,7 @@ from combat_engine.engine import (
     AT_WILL,
     CHA,
     DAILY,
-    EACH_CREATURE,
+    EACH_OTHER,
     FORT,
     MINOR,
     ONE_CREATURE,
@@ -260,7 +260,7 @@ def p10278(c: Cast) -> None:
     attack=Attack(CHA, vs=AC),
     augments=(
         Augment(1),
-        Augment(2, reach=CloseBurst(1), target=EACH_CREATURE),
+        Augment(2, reach=CloseBurst(1), target=EACH_OTHER),
     ),
 )
 def p11061(c: Cast) -> None:
@@ -513,7 +513,7 @@ def p12934(c: Cast) -> None:
     attack=Attack(CHA, vs=AC),
     augments=(
         Augment(1),
-        Augment(2, reach=CloseBurst(1), target=EACH_CREATURE),
+        Augment(2, reach=CloseBurst(1), target=EACH_OTHER),
     ),
 )
 def p12935(c: Cast) -> None:

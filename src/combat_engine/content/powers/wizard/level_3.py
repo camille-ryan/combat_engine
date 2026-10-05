@@ -25,6 +25,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     INT,
@@ -87,7 +88,7 @@ def p1530(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.RADIANT],
     attack=Attack(INT, vs=WILL),
 )
@@ -371,7 +372,7 @@ def p13982(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.CLOSE, Keyword.PSYCHIC],
     attack=Attack(INT, vs=WILL),
 )
@@ -399,7 +400,7 @@ def p13983(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.CLOSE, Keyword.COLD, Keyword.ZONE],
     attack=Attack(INT, vs=FORT),
 )
@@ -436,7 +437,7 @@ def p14549(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.CLOSE, Keyword.NECROTIC, Keyword.FEAR],
     attack=Attack(INT, vs=WILL),
 )

@@ -27,6 +27,7 @@ from combat_engine.engine import (
     DAILY,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     INT,
@@ -627,7 +628,7 @@ def p13973(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.CLOSE, Keyword.PSYCHIC, Keyword.FEAR],
     attack=Attack(INT, vs=WILL),
 )

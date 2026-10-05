@@ -90,8 +90,8 @@ from combat_engine.content.monsters.level_11.skirmishers import (
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -2624,7 +2624,7 @@ def m6202a2(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.COLD],
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("2d8", 9, dtype=DamageType.COLD, kind=LIMITED),

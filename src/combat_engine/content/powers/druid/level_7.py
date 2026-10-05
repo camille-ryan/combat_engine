@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     ONE_CREATURE,
@@ -118,7 +119,7 @@ def p14512(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE, Keyword.ZONE],
     attack=Attack(WIS, vs=REF),
 )
@@ -193,7 +194,7 @@ def p2804(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE, Keyword.POISON],
     attack=Attack(WIS, vs=FORT),
     requires=in_beast_form,

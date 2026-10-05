@@ -32,7 +32,7 @@ from combat_engine.content.monsters.level_01.skirmishers import _ref_of
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -262,7 +262,7 @@ def m1430a3(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBlast(4),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.ACID],
     attack=Attack(vs=REF, printed=6),
     damage=Damage("1d12", 3, dtype=DamageType.ACID, kind=LIMITED),
@@ -357,7 +357,7 @@ def m1432a3(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBlast(4),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("2d8", 2, kind=LIMITED),
 )
@@ -977,7 +977,7 @@ def m4506a3(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(4),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("2d8", 2, kind=LIMITED),
 )

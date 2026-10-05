@@ -40,6 +40,7 @@ from combat_engine.engine import (
     AT_WILL,
     EACH_ALLY,
     EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -671,7 +672,7 @@ def m4178a2(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBlast(4),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=5),
     damage=Damage("3d6", 2, dtype=DamageType.FIRE, kind=LIMITED, half_on_miss=True),
@@ -1278,7 +1279,7 @@ def m5844a3(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=REF, printed=6),
 )
 def m5844a4(c: Cast) -> None:

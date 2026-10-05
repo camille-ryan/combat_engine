@@ -17,8 +17,8 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     DAILY,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -557,7 +557,7 @@ def p4333(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=MARTIAL_WEAPON,
     attack=Attack(STR, vs=AC),
 )

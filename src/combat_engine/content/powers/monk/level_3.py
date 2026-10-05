@@ -9,8 +9,8 @@ from __future__ import annotations
 from combat_engine.engine import (
     AC,
     DEX,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     ONE_CREATURE,
@@ -183,7 +183,7 @@ def p13223(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=IMPLEMENT,
     attack=Attack(DEX, vs=REF),
 )

@@ -713,7 +713,7 @@ def m307a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.ACID, Keyword.CLOSE],
     attack=Attack(vs=FORT, printed=9),
     damage=Damage("1d8", 7, dtype=DamageType.ACID),

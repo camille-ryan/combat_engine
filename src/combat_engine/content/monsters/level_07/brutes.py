@@ -30,8 +30,8 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FREE,
     MINOR,
@@ -581,7 +581,7 @@ def m268a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=10),
     damage=Damage("2d8", 4, dtype=DamageType.FIRE, kind=LIMITED),

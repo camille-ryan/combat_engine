@@ -15,8 +15,8 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     MINOR,
@@ -166,7 +166,7 @@ def p5393(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.POISON],
     attack=Attack(WIS, vs=REF),
 )
@@ -329,7 +329,7 @@ def p12867(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(1, from_="companion"),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.ZONE],
     attack=Attack(WIS, vs=FORT),
 )

@@ -6,7 +6,7 @@ from combat_engine.engine import (
     AC,
     DAILY,
     DEX,
-    EACH_CREATURE,
+    EACH_OTHER,
     FORT,
     MINOR,
     ONE_ALLY,
@@ -245,7 +245,7 @@ def p15989(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*IMPLEMENT, Keyword.LIGHTNING, Keyword.THUNDER],
     attack=Attack(DEX, vs=REF),
 )

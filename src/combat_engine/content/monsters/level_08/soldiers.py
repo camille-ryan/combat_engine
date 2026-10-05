@@ -63,8 +63,8 @@ from combat_engine.content.monsters.level_07.soldiers import _recharge_on
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -974,7 +974,7 @@ def m4918a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("3d6", 5, dtype=DamageType.FIRE, kind=LIMITED),

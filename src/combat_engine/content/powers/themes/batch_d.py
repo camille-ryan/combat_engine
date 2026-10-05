@@ -27,7 +27,7 @@ from combat_engine.engine import (
     ANY_CREATURE,
     AT_WILL,
     DAILY,
-    EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FREE,
     INTERRUPT,
@@ -670,7 +670,7 @@ def p12377(c: Cast) -> None:
     usage=DAILY,
     action=REACTION,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[
         Keyword.PSIONIC,
         Keyword.IMPLEMENT,

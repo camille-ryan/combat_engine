@@ -230,7 +230,7 @@ def p14541(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[
         *ARCANE_IMPLEMENT,
         Keyword.NECROTIC,

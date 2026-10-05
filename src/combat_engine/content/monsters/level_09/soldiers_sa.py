@@ -73,8 +73,8 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     EACH_ALLY,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -323,7 +323,7 @@ def m115867a0(c: Cast) -> None:
 
 @power(
     "m115867a1", level=9, usage=Usage.RECHARGE, recharge=6, action=STANDARD, reach=CloseBurst(2),
-    target=EACH_CREATURE, keywords=[Keyword.THUNDER],
+    target=EACH_OTHER, keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("4d6", 5, dtype=DamageType.THUNDER, kind=LIMITED),
 )
@@ -475,7 +475,7 @@ def m1794a1(c: Cast) -> None:
 
 
 @power(
-    "m1794a2", level=9, usage=AT_WILL, action=FREE, reach=CloseBurst(1), target=EACH_CREATURE,
+    "m1794a2", level=9, usage=AT_WILL, action=FREE, reach=CloseBurst(1), target=EACH_OTHER,
     keywords=[Keyword.ACID], attack=Attack(vs=REF, printed=14),
     damage=Damage("2d6", 4, dtype=DamageType.ACID, half_on_miss=True),
     trigger="it drops to 0 hit points",
@@ -1282,7 +1282,7 @@ def m3448a1(c: Cast) -> None:
 
 @power(
     "m3448a2", level=9, usage=Usage.RECHARGE, recharge=6, action=MINOR, reach=CloseBurst(1),
-    target=EACH_CREATURE, attack=Attack(vs=WILL, printed=12),
+    target=EACH_OTHER, attack=Attack(vs=WILL, printed=12),
 )
 def m3448a2(c: Cast) -> None:
     if c.strike():
@@ -2326,7 +2326,7 @@ def m5654a4(c: Cast) -> None:
 
 @power(
     "m5654a5", level=9, usage=Usage.RECHARGE, recharge=6, action=MINOR, reach=CloseBlast(3),
-    target=EACH_CREATURE, attack=Attack(vs=FORT, printed=12),
+    target=EACH_OTHER, attack=Attack(vs=FORT, printed=12),
 )
 def m5654a5(c: Cast) -> None:
     if c.strike():
@@ -2584,7 +2584,7 @@ def m5894a2(c: Cast) -> None:
 
 
 @power(
-    "m5894a3", level=9, usage=ENCOUNTER, action=FREE, reach=CloseBurst(1), target=EACH_CREATURE,
+    "m5894a3", level=9, usage=ENCOUNTER, action=FREE, reach=CloseBurst(1), target=EACH_OTHER,
     keywords=[Keyword.RADIANT],
     attack=Attack(vs=REF, printed=12), damage=Damage("2d6", 6, dtype=DamageType.RADIANT),
     trigger="it drops to 0 hit points",

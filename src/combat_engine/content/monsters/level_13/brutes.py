@@ -66,8 +66,8 @@ from combat_engine.content.monsters.level_13.soldiers import _burn_and_hold
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -728,7 +728,7 @@ _M5058_FELLED = "the m5058 drops to 0 hit points"
     usage=AT_WILL,
     action=FREE,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.DISEASE, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage(bonus=10, dtype=DamageType.NECROTIC, kind=MINION),

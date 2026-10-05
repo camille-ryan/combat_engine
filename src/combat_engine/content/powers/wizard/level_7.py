@@ -29,6 +29,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     INT,
@@ -244,7 +245,7 @@ def p11036(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[
         *ARCANE_IMPLEMENT,
         Keyword.CLOSE,

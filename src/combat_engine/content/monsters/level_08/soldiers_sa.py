@@ -83,8 +83,8 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     EACH_ALLY,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -547,7 +547,7 @@ def m115847a1(c: Cast) -> None:
 
 @power(
     "m115847a2", level=8, usage=AT_WILL, action=STANDARD, reach=CloseBlast(2),
-    target=EACH_CREATURE, keywords=[Keyword.WEAPON],
+    target=EACH_OTHER, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13), damage=Damage("1d8", 7),
 )
 def m115847a2(c: Cast) -> None:
@@ -873,7 +873,7 @@ def m1779a0(c: Cast) -> None:
 
 @power(
     "m1779a1", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
-    reach=CloseBurst(1), target=EACH_CREATURE, keywords=[Keyword.WEAPON],
+    reach=CloseBurst(1), target=EACH_OTHER, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13), damage=Damage("3d10", 5, kind=LIMITED),
 )
 def m1779a1(c: Cast) -> None:
@@ -2206,7 +2206,7 @@ def m5582a3(c: Cast) -> None:
 
 @power(
     "m5582a4", level=8, usage=ENCOUNTER, action=STANDARD, reach=CloseBurst(2),
-    target=EACH_CREATURE, attack=Attack(vs=AC, printed=13), damage=Damage("3d8", 5),
+    target=EACH_OTHER, attack=Attack(vs=AC, printed=13), damage=Damage("3d8", 5),
 )
 def m5582a4(c: Cast) -> None:
     victim = c.target
@@ -2441,7 +2441,7 @@ def m5628a3(c: Cast) -> None:
 
 @power(
     "m5628a4", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
-    reach=CloseBlast(3), target=EACH_CREATURE, keywords=[Keyword.COLD],
+    reach=CloseBlast(3), target=EACH_OTHER, keywords=[Keyword.COLD],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("2d12", 5, dtype=DamageType.COLD, kind=LIMITED, half_on_miss=True),
 )

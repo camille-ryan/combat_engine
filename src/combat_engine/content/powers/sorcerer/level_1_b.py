@@ -21,6 +21,7 @@ from combat_engine.engine import (
     CHA,
     DAILY,
     EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     ONE_CREATURE,
@@ -257,7 +258,7 @@ def p5265(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.LIGHTNING],
     attack=Attack(CHA, vs=REF),
 )

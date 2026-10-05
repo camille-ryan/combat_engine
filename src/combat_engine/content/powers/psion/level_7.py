@@ -11,6 +11,7 @@ from combat_engine.engine import (
     AT_WILL,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     FORT,
     INT,
     NO_TARGET,
@@ -211,7 +212,7 @@ def p13333(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=PSIONIC_FORCE,
     attack=Attack(INT, vs=FORT),
     augments=(

@@ -5,6 +5,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     DAILY,
     EACH_CREATURE,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     INT,
@@ -32,7 +33,7 @@ ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
     attack=Attack(INT, vs=REF),
 )

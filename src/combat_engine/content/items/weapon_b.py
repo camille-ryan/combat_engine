@@ -40,8 +40,8 @@ from combat_engine.engine import (
     DAILY,
     DEX,
     EACH_ALLY,
-    EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -2603,7 +2603,7 @@ def i2842x1(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.WEAPON],
     attack=Attack(STR, vs=FORT),
 )
@@ -4878,7 +4878,7 @@ def i3488x1(c: Cast) -> None:
     cls=ITEM,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
 )
 def i3488p1(c: Cast) -> None:
     """A flat attack bonus off the item's own level, rolled in the body."""
@@ -4917,7 +4917,7 @@ def i709p1(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.WEAPON],
     attack=Attack(DEX, vs=AC),
 )

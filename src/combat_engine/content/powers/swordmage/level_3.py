@@ -13,6 +13,7 @@ from combat_engine.engine import (
     AC,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -132,7 +133,7 @@ def p1779(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.ACID],
     attack=Attack(INT, vs=FORT),
 )

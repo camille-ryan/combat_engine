@@ -65,6 +65,7 @@ from combat_engine.engine import (
     EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -850,7 +851,7 @@ def m346a2(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.CHARM, Keyword.CLOSE],
     attack=Attack(vs=WILL, printed=11),
 )

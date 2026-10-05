@@ -39,7 +39,7 @@ def _closed_on_my_ally(world: World, me: int, ev: AdjacencyGained) -> bool:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.FIRE],
     attack=Attack(STR, vs=AC),
 )
@@ -58,7 +58,7 @@ def p11077(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.THUNDER],
     attack=Attack(STR, vs=FORT),
 )

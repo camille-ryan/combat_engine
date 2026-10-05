@@ -65,6 +65,7 @@ from combat_engine.engine import (
     AT_WILL,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -481,7 +482,7 @@ def m115846a2(c: Cast) -> None:
     usage=AT_WILL,
     action=MOVE,
     reach=CloseBurst(2),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=10),
 )
 def m115846a3(c: Cast) -> None:

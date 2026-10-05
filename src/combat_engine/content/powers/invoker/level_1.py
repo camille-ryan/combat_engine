@@ -17,6 +17,7 @@ from combat_engine.engine import (
     AT_WILL,
     EACH_CREATURE,
     EACH_ENEMY,
+    EACH_OTHER,
     ENCOUNTER,
     FORT,
     ONE_CREATURE,
@@ -201,7 +202,7 @@ def p7152(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=[*DIVINE_IMPLEMENT, Keyword.PSYCHIC, Keyword.FEAR],
     attack=Attack(WIS, vs=WILL),
 )
@@ -219,7 +220,7 @@ def p7153(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(3),
-    target=EACH_CREATURE,
+    target=EACH_OTHER,
     keywords=DIVINE_IMPLEMENT,
     attack=Attack(WIS, vs=FORT),
 )
