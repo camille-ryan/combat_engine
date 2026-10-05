@@ -2571,6 +2571,17 @@ def _fired(world, ref: str, cursor: int) -> bool:  # noqa: ANN001
 #: is not narrowed at all -- it is wrong.
 WIDE = (
     "src/combat_engine/engine/",
+    # **`etl/` builds the numbers every row reads.** A monster's attack bonus,
+    # damage expression, defences and reach all load from `data/game.db` and are
+    # never hand-written, so a parser change can move thousands of rows -- and
+    # this list did not name it, so an `etl/`-only change selected **zero**.
+    # Observed: `check.py` on a tree whose only change was `etl/feat.py` reported
+    # `ok audit 0.8s`, having fired nothing, and still said "all 13 clean".
+    #
+    # Named here as a backstop. The real dependency is the database itself, which
+    # `_database_moved` checks -- a rebuild moves every number with no `etl/`
+    # edit at all, and no path test can see that. #409.
+    "src/combat_engine/etl/",
     # **`chargen/` is wide and has to be named here now that it is its own
     # package.** The rule below that catches a cross-cutting file works by
     # shape -- under `content/`, declaring no `@power` -- and chargen was
@@ -2697,6 +2708,8 @@ def _changed() -> list[str]:
     files = [line[3:].strip() for line in done.stdout.splitlines() if line[3:].strip()]
     if any(f.startswith(WIDE) and not f.startswith(NARROW) for f in files):
         return sorted(REGISTRY)
+    if _database_moved():
+        return sorted(REGISTRY)
 
     refs: list[str] = []
     for name in files:
@@ -2729,6 +2742,31 @@ def _changed() -> list[str]:
 #: map, since 12,205 hashes churning on every run is a megabyte of diff nobody
 #: reads and Camille is short of disk.
 WATERMARK = ROOT / "scripts" / "fixtures" / "audited.json"
+
+
+def _database_moved() -> bool:
+    """Has `data/game.db` been rebuilt since anything last swept the whole tree?
+
+    **`git status` cannot answer this.** The database is git-ignored, so a
+    rebuild is invisible to `--changed` -- and every monster number is read from
+    it rather than hand-written, so a rebuild can move thousands of rows at once.
+    An `etl/` path test is not enough either: `build.py` run against an unchanged
+    tree, which is what a compendium update looks like, moves every number with
+    no source edit to notice.
+
+    The watermark is the only timestamp available for "when did anybody last look
+    at everything", because only a bare sweep writes it. So if the database is
+    newer than the watermark, nothing has audited the tree since the numbers
+    moved, and the narrow scope would be a lie. #409.
+
+    Conservative on purpose: a missing watermark or database returns False and
+    leaves the existing path tests to decide, rather than forcing ten minutes on
+    a fresh checkout that has nothing to compare against.
+    """
+    db = ROOT / "data" / "game.db"
+    if not db.exists() or not WATERMARK.exists():
+        return False
+    return db.stat().st_mtime > WATERMARK.stat().st_mtime
 
 
 def _mark() -> dict[str, object]:

@@ -1160,9 +1160,6 @@ def _plain(fragment: str) -> str:
     return _text(fragment)
 
 
-def _slug(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-
 def _powers(
     source: sqlite3.Connection,
     out: sqlite3.Connection,

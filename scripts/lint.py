@@ -131,6 +131,25 @@ def main() -> int:
         )
         faults += 1
 
+    for where, name, scope, first in _duplicate_defs():
+        print(
+            f"{where}: `{name}` is defined twice in {scope} (first at line"
+            f" {first}). Python binds the later one, so every call between them"
+            f" silently runs it. ruff's F811 cannot see this when the name is"
+            f" used in between."
+        )
+        faults += 1
+
+    for where, name in _unreferenced_defs():
+        print(
+            f"{where}: `{name}` is referenced nowhere in src/ or scripts/."
+            f" ruff does not flag an unused module-level def, so this is"
+            f" invisible to everything else. Read it before deleting -- a"
+            f" predicate with no caller is sometimes the evidence that a row's"
+            f" clause was quietly dropped."
+        )
+        faults += 1
+
     for where, ref, dice in _flat_damage_as_a_number():
         print(
             f"{where}: {ref} declares Damage({dice!r}, ...) -- a dice string that"
@@ -467,6 +486,116 @@ def _strike_without_line() -> list[tuple[str, str, str, str]]:
 #: you"; this is the only one of them written that way, and the check would
 #: otherwise report it forever.
 CATCHES_ITSELF = {"p9652"}
+
+
+#: Every Python file the project owns. **Uses are counted across all of them**
+#: whatever was asked for on the command line: a helper defined in one content
+#: file is routinely imported by another, so a narrowed scan would report a live
+#: function dead. Only the *definitions* checked are narrowed.
+def _every_py() -> tuple[Path, ...]:
+    out = sorted((ROOT / "src/combat_engine").rglob("*.py"))
+    out += sorted((ROOT / "scripts").rglob("*.py"))
+    return tuple(out)
+
+
+@cache
+def _scan() -> dict[str, object]:
+    """One parse of the whole tree, for the two walks below.
+
+    Collected together because both answer a question about a `def` that no
+    instrument could previously see, and parsing 800-odd files twice to ask them
+    separately is the kind of second pass `--history` exists to discourage.
+    """
+    used: Counter[str] = Counter()
+    # (file, scope) -> name -> [lineno, ...]
+    scopes: dict[tuple[Path, str], dict[str, list[int]]] = {}
+    for path in _every_py():
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                used[node.id] += 1
+            elif isinstance(node, ast.Attribute):
+                used[node.attr] += 1
+            elif isinstance(node, ast.alias):
+                used[node.name.split(".")[-1]] += 1
+        bodies = [("", tree.body)]
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                bodies.append((node.name, node.body))
+        for scope, body in bodies:
+            seen = scopes.setdefault((path, scope), {})
+            for node in body:
+                if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                    seen.setdefault(node.name, []).append(node.lineno)
+    return {"used": used, "scopes": scopes}
+
+
+def _duplicate_defs() -> list[tuple[str, str, str, int]]:
+    """Two `def`s binding one name at one scope.
+
+    **`ruff`'s F811 is blind to this exactly when it matters.** The rule is
+    "redefinition of an *unused* name", so a call sitting between the two
+    definitions marks the first one used and the rule goes quiet -- while Python
+    binds the **last** definition at import, so that call silently runs the
+    other function. Reproduced both ways: with no use between, F811 fires; with
+    one, `ruff` passes clean.
+
+    It bit `scripts/browser.py`, where a second `_settled` was added above three
+    existing callers of a three-argument one. `ruff` passed; the run died with
+    `TypeError: _settled() takes 2 positional arguments but 3 were given`. That
+    was the lucky outcome -- call-compatible signatures would have rebound three
+    callers to different code with nothing saying so.
+
+    `lint.py` already walked `cast.py` for this inside a class, because 7,500
+    lines are edited by many agents at once. This is the same question asked of
+    every scope in every file. #408.
+    """
+    out: list[tuple[str, str, str, int]] = []
+    narrowed = {p.resolve() for p in _ONLY} if _ONLY else None
+    scopes: dict[tuple[Path, str], dict[str, list[int]]] = _scan()["scopes"]  # type: ignore[assignment]
+    for (path, scope), names in sorted(scopes.items()):
+        if narrowed is not None and not any(
+            path.resolve() == q or q in path.resolve().parents for q in narrowed
+        ):
+            continue
+        for name, lines in sorted(names.items()):
+            if len(lines) > 1:
+                rel = path.relative_to(ROOT)
+                out.append((f"{rel}:{lines[-1]}", name, scope or "module", lines[0]))
+    return out
+
+
+def _unreferenced_defs() -> list[tuple[str, str]]:
+    """A module-level private `def` that nothing anywhere references.
+
+    `ruff` flags an unused *import* (F401) and nothing about an unused `def`, so
+    dead code at module scope is invisible to every instrument here. 26 were
+    found the first time this ran, most of them `requires=` gates orphaned when
+    the target filters landed and the content rule rightly forbade an agent from
+    deleting a definition it could not prove unshared.
+
+    **A content module is imported for its decorators' side effects**, so
+    "referenced nowhere" is not in general "never runs" -- but a module-level
+    `def` cannot be reached by a decorator it does not appear in, so for this
+    shape the two coincide. Stated here so the next reader need not re-derive it.
+
+    Private names only. A public one may be part of a surface something outside
+    this scan reads. #410.
+    """
+    used: Counter[str] = _scan()["used"]  # type: ignore[assignment]
+    scopes: dict[tuple[Path, str], dict[str, list[int]]] = _scan()["scopes"]  # type: ignore[assignment]
+    out: list[tuple[str, str]] = []
+    for path in _asked_for():
+        names = scopes.get((path, ""), {})
+        for name, lines in sorted(names.items()):
+            if not name.startswith("_") or name.startswith("__"):
+                continue
+            if used[name] == 0:
+                out.append((f"{path.relative_to(ROOT)}:{lines[0]}", name))
+    return out
 
 
 def _flat_damage_as_a_number() -> list[tuple[str, str, str]]:

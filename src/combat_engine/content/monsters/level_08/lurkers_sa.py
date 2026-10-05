@@ -824,7 +824,24 @@ _M3460_SWING = "it is targeted by a melee or ranged attack"
 
 
 def _targets_me_physically(world: World, me: int, ev: Any) -> bool:
-    return ev.target == me and (by_melee(world, me, ev) or ev.__class__.__name__)
+    """"It is targeted by a melee or ranged attack" -- read off the reach kind
+    of the row behind the swing.
+
+    **This was unreferenced and broken at once.** It read
+    `by_melee(...) or ev.__class__.__name__`, and a class name is a non-empty
+    string, so the second half was always true and the whole test collapsed to
+    `ev.target == me`. It was also wired to nothing: `m3460a2` carried its own
+    `lambda w, m, ev: ev.target == m`, which fires on **any** attack -- a close
+    burst, an area burst, anything -- where the card admits only melee and
+    ranged. So the row interrupted attacks it is not printed to interrupt.
+
+    Same shape as `_melee_or_ranged_hit` in `level_10/skirmishers_sa.py`, which
+    answers the identical printed sentence. #410.
+    """
+    if getattr(ev, "target", None) != me:
+        return False
+    row = get(getattr(ev, "power", "") or "")
+    return row is not None and row.reach.kind in ("melee", "ranged")
 
 
 @power(
@@ -836,7 +853,7 @@ def _targets_me_physically(world: World, me: int, ev: Any) -> bool:
     reach=PERSONAL,
     target=NO_TARGET,
     trigger=_M3460_SWING,
-    on=Trigger(AttackRolled, lambda w, m, ev: ev.target == m, _M3460_SWING),
+    on=Trigger(AttackRolled, _targets_me_physically, _M3460_SWING),
 )
 def m3460a2(c: Cast) -> None:
     held = c.grabbing()

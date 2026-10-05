@@ -145,13 +145,6 @@ def _my_marks(c: Cast) -> list[int]:
     return [foe for foe in c.enemies() if c.marked(on=foe)]
 
 
-def _used(ref: str):  # noqa: ANN202
-    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
-        return ev.actor == me and ev.power == ref
-
-    return when
-
-
 def _hit_with(ref: str):  # noqa: ANN202
     def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
         return ev.attacker == me and ev.power == ref
