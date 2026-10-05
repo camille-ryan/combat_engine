@@ -1858,13 +1858,14 @@ def m4484a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=18),
     damage=Damage("3d8", 13),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m4484a3(c: Cast) -> None:
     """"One blinded creature" is a restriction `Target` cannot express -- it
-    filters on side, count and size and not on what a creature is suffering
-    -- so the row is aimed at whoever qualifies rather than thrown away when
-    the chooser hands it somebody who does not."""
+    filters on side, count and size and not on what a creature is suffering,
+    which is `Target.condition` -- so the row is aimed at whoever qualifies
+    rather than thrown away when the chooser hands it somebody who does
+    not."""
     victim = _restricted_to(c, 1, lambda w: c.is_(Condition.BLINDED, on=w))
     if victim is None:
         return
@@ -2190,7 +2191,7 @@ def m5998a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE, Keyword.POISON, Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage("1d4", 8, half_on_miss=True),
-    dropped=("Target.kind", "c.contract(ref)"),
+    dropped=("Target.relation", "c.contract(ref)"),
 )
 def m5998a2(c: Cast) -> None:
     """Two packets, because the card prints two: an untyped blow in the
@@ -2198,7 +2199,8 @@ def m5998a2(c: Cast) -> None:
     what `dtypes` is for.
 
     "One creature grabbed by the swarm" is a restriction `Target` cannot
-    express, so the row is redirected rather than thrown away. The disease at
+    express -- a relation to the caster, so `Target.relation` -- and the row is
+    redirected rather than thrown away. The disease at
     the end of the encounter is the other dropped clause -- nothing contracts
     one, and forty-five rows wait on the same verb.
     """
@@ -2851,12 +2853,13 @@ def m6183a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=18),
     damage=Damage("3d8", 7),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6183a3(c: Cast) -> None:
     """"One creature grabbed by the m6183" is a restriction `Target` cannot
-    express, so the row is redirected to one that qualifies rather than
-    thrown away when the chooser hands it somebody who does not."""
+    express -- grabbed **by it** is a relation to the caster, so
+    `Target.relation` -- and the row is redirected to one that qualifies rather
+    than thrown away when the chooser hands it somebody who does not."""
     victim = _restricted_to(c, 3, lambda w: c.me in c.grabbed_by(on=w))
     if victim is None:
         return

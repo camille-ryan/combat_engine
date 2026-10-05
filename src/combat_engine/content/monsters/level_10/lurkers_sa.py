@@ -15,8 +15,10 @@ Conventions, inherited from the level 1-9 lurker sweeps:
 * a close burst or blast whose card names no target set takes **enemies**;
 * "Target: a creature grabbed by it" is the target's own state, not the
   chooser's business -- `Target` filters side, count and size and not what
-  a creature is suffering, so `_restricted_to` is reused and every use is
-  marked `dropped=("Target.kind",)`;
+  a creature is suffering, so `_restricted_to` is reused and each use is
+  marked for its own gap -- `dropped=("Target.relation",)` for "grabbed by
+  it", `dropped=("Target.bloodied",)` for a bloodied or nonbloodied target,
+  which is `Health` and not a `Condition`;
 * a printed escape DC that is actually on the card is
   `dropped=("c.grab(dc=)",)`; several blocks here print the grab with no
   DC at all, and those take no marker;
@@ -35,10 +37,9 @@ action pointed at" to survive past one `EONT`.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from combat_engine.content.monsters.level_01.artillery_sa import _recharge_when_bloodied
 from combat_engine.content.monsters.level_02.lurkers_sa import _twice
+from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_08.brutes import _aura
 from combat_engine.engine import (
     AC,
@@ -106,11 +107,6 @@ from combat_engine.engine.triggers import (
 # --------------------------------------------------------------------------
 
 
-def _restricted_to(c: Cast, reach: int, test: Callable[[int], bool]) -> int | None:
-    foe = c.target
-    if foe is not None and test(foe):
-        return foe
-    return next((f for f in c.enemies() if test(f) and c.distance(f) <= reach), None)
 
 
 _M3295_TAG = "m3295a1"
@@ -168,7 +164,7 @@ def m115875a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=13),
     damage=Damage("4d10", 5, half_on_miss=True),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m115875a1(c: Cast) -> None:
     victim = _restricted_to(c, 10, lambda f: f in c.grabbing(of=c.me))
@@ -692,7 +688,7 @@ def m3295a2(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d6", 5, dtype=DamageType.PSYCHIC),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3295a3(c: Cast) -> None:
     victim = c.target
@@ -894,7 +890,7 @@ def m3997a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("3d6", 3),
-    dropped=("Target.kind", "EffectExpired.effect_id"),
+    dropped=("Target.relation", "EffectExpired.effect_id"),
 )
 def m3997a1(c: Cast) -> None:
     """Domination plays; "ignores the dying condition until it saves
@@ -1007,7 +1003,7 @@ def m5188a0(c: Cast) -> None:
     damage=Damage("2d8", 3, dtype=DamageType.PSYCHIC),
     requires=_m5188_lit,
     requires_text="the m5188 must be illuminated",
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied",),
 )
 def m5188a1(c: Cast) -> None:
     victim = _restricted_to(c, 3, lambda f: c.bloodied(f))
@@ -1029,7 +1025,7 @@ def m5188a1(c: Cast) -> None:
     attack=Attack(vs=WILL, printed=13),
     requires=_m5188_lit,
     requires_text="the m5188 must be illuminated",
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied",),
 )
 def m5188a2(c: Cast) -> None:
     victim = _restricted_to(c, 20, lambda f: not c.bloodied(f))

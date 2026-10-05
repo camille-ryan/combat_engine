@@ -984,7 +984,7 @@ def m6516a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     damage=Damage(bonus=15, kind=MINION),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6516a1(c: Cast) -> None:
     """An Effect line with no attack roll: the fifteen simply lands, which is
@@ -992,7 +992,7 @@ def m6516a1(c: Cast) -> None:
 
     The printed target line is "one creature grabbed by it", which `Target`
     cannot say, so the victim is taken from the grab rather than from
-    whoever the chooser offered -- `Target.kind` is the gap, and the AI
+    whoever the chooser offered -- `Target.relation` is the gap, and the AI
     policy reading the header is what it costs.
     """
     held = sorted(c.grabbing())
@@ -1038,7 +1038,7 @@ _M6518_DROPPED = "it drops to 0 hit points"
     damage=Damage(bonus=10, dtype=DamageType.NECROTIC, kind=MINION),
     trigger=_M6518_DROPPED,
     on=Trigger(Dropped, about_me, _M6518_DROPPED),
-    dropped=("Dropped.power", "Target.kind"),
+    dropped=("Dropped.power", "Target.creature_kind"),
 )
 def m6518a1(c: Cast) -> None:
     """A death throe, handed over in the keyword column as a standard

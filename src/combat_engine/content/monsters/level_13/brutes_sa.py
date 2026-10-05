@@ -300,7 +300,7 @@ def m1576a1(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=16),
     damage=Damage("5d6", 12, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied",),
 )
 def m1576a2(c: Cast) -> None:
     """"One bloodied creature" is narrower than any `Target` can say, so the
@@ -554,7 +554,7 @@ def m2073a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("3d8", 6),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m2073a1(c: Cast) -> None:
     """"Prone targets only" is a restriction no `Target` can carry, so the row
@@ -796,7 +796,7 @@ def m2529a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=15),
     damage=Damage(bonus=5, kind=MINION),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m2529a1(c: Cast) -> None:
     """"Targets a creature the m2529 is grabbing" is a restriction no `Target`

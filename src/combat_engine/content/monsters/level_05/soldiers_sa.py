@@ -496,7 +496,7 @@ def m1024a2(c: Cast) -> None:
     damage=Damage("2d8", 7),
     requires=_marked_by_me_in_reach,
     requires_text="targets a creature it has marked",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1024a3(c: Cast) -> None:
     foe = _restricted_to(c, 1, lambda f: c.marked(on=f, by=c.me))
@@ -833,7 +833,7 @@ def m1138a3(c: Cast) -> None:
     action=MINOR,
     reach=Melee(1),
     target=ONE_ALLY,
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind", "Target.ident"),
 )
 def m1138a4(c: Cast) -> None:
     """"One orc or [it]" has no symbol in `Target`, so the kind is checked
@@ -1693,7 +1693,7 @@ def m3500a0(c: Cast) -> None:
     damage=Damage("1d10", 4, dtype=DamageType.NECROTIC),
     requires=_marked_in_reach(3),
     requires_text="targets a creature it has marked",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3500a1(c: Cast) -> None:
     foe = _restricted_to(c, 3, lambda f: c.marked(on=f, by=c.me))
@@ -1717,7 +1717,7 @@ def m3500a1(c: Cast) -> None:
     damage=Damage("2d8", 4, dtype=DamageType.NECROTIC),
     requires=_addled_in_reach(3),
     requires_text="targets a dazed, stunned, or unconscious creature",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m3500a2(c: Cast) -> None:
     foe = _restricted_to(c, 3, lambda f: any(c.is_(cnd, on=f) for cnd in _DAZED_STUNNED_OUT))
@@ -1779,7 +1779,7 @@ def m3638a0(c: Cast) -> None:
     damage=Damage("1d10", 5, dtype=DamageType.NECROTIC),
     requires=_marked_in_reach(1),
     requires_text="targets a creature it has marked",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3638a1(c: Cast) -> None:
     """"2 necrotic damage for each square it moves away each turn (save ends
@@ -1973,7 +1973,7 @@ def m3977a0(c: Cast) -> None:
     damage=Damage("2d6", 4),
     requires=_pinned_enemy_in_reach,
     requires_text="targets an immobilized, stunned, or unconscious creature",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m3977a1(c: Cast) -> None:
     foe = _restricted_to(c, 1, lambda f: any(c.is_(cnd, on=f) for cnd in _IMMOBILE_STUNNED_OUT))
@@ -2103,7 +2103,7 @@ def m4740a0(c: Cast) -> None:
     damage=Damage("1d8", 6, kind=LIMITED),
     requires=_marked_by_me_in_reach,
     requires_text="targets a creature it has marked",
-    dropped=("Target.kind", "c.aftereffect()"),
+    dropped=("Target.relation", "c.aftereffect()"),
 )
 def m4740a1(c: Cast) -> None:
     """The slow and the weaken are one `c.condition` call, so one save ends
@@ -2564,7 +2564,7 @@ def m5681a2(c: Cast) -> None:
     damage=Damage("4d6", 6),
     requires=_helpless_in_reach(1),
     requires_text="targets an immobilized, restrained, stunned, or unconscious creature",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5681a3(c: Cast) -> None:
     foe = _restricted_to(c, 1, lambda f: any(c.is_(cnd, on=f) for cnd in _HELPLESS_FOUR))

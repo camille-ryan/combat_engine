@@ -130,8 +130,10 @@ def _rally(c: Cast, kin: str, word: str = "") -> None:
 
     The restriction is on what the ally *is*, and `Target` filters on side,
     count, size and what is in hand -- so the burst takes every ally and the
-    sort is asked here, with `dropped=("Target.kind",)` on each row saying
-    that the offer itself is not narrowed. The side is `other_ally` and not
+    sort is asked here, with a marker on each row saying that the offer itself
+    is not narrowed -- `Target.ident` where the card names the stat block and
+    `Target.creature_kind` where it names a type word, which are two different
+    gaps. The side is `other_ally` and not
     `ally`: the latter's pool includes the caster, which reads as "you or one
     ally" and is wrong for a card that says only "allies". `word` is the printed creature-type
     word where the card gives one; where the card names the stat block
@@ -405,7 +407,7 @@ def m1222a1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(10),
     target=Target("other_ally", 99, everyone=True, label=_RALLY),
-    dropped=("Target.kind",),
+    dropped=("Target.ident",),
 )
 def m1222a2(c: Cast) -> None:
     """The card names its own stat block, so the sort is the ref."""
@@ -1003,7 +1005,7 @@ def m4513a1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(10),
     target=Target("other_ally", 99, everyone=True, label=_RALLY),
-    dropped=("Target.kind",),
+    dropped=("Target.ident",),
 )
 def m4513a2(c: Cast) -> None:
     _rally(c, "m4513")
@@ -1088,7 +1090,7 @@ def m5063a0(c: Cast) -> None:
     damage=Damage("1d8", 6),
     requires=_any_enemy_suffering(Condition.SLOWED),
     requires_text="only against a slowed creature",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5063a1(c: Cast) -> None:
     """The target line restricts by what the creature is suffering, which
@@ -2212,7 +2214,7 @@ def m906a1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(10),
     target=Target("other_ally", 99, everyone=True, label=_RALLY),
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m906a2(c: Cast) -> None:
     """This card names a creature-type word rather than its own stat block, so
@@ -2314,7 +2316,7 @@ def m913a1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(10),
     target=Target("other_ally", 99, everyone=True, label=_RALLY),
-    dropped=("Target.kind",),
+    dropped=("Target.ident",),
 )
 def m913a2(c: Cast) -> None:
     _rally(c, "m913")

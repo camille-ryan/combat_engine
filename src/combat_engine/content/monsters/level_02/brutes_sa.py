@@ -761,7 +761,7 @@ def m5399a0(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=8),
     requires=_an_enemy_is_bloodied,
     requires_text="an enemy must be bloodied",
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied",),
 )
 def m5399a1(c: Cast) -> None:
     """"One **bloodied** creature" is a restriction `Target` cannot carry, so it

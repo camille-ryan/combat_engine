@@ -376,7 +376,7 @@ def m1107a2(c: Cast) -> None:
     damage=Damage("1d6", 4),
     requires=_prone_enemy_in_reach,
     requires_text="an adjacent enemy must be prone",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m1107a3(c: Cast) -> None:
     """"An adjacent prone target" is a target line `Target` cannot express, so
@@ -772,7 +772,7 @@ def m3537a1(c: Cast) -> None:
     damage=Damage("2d6", 3),
     requires=_pinned_enemy_in_reach,
     requires_text="an adjacent enemy must be immobilized, stunned or unconscious",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m3537a2(c: Cast) -> None:
     """A target line narrowed by what the creature is suffering, which
@@ -1226,13 +1226,14 @@ def m4593a4(c: Cast) -> None:
         side="enemy", count=99, everyone=True, label="Each enemy in the burst on the ground"
     ),
     attack=Attack(vs=FORT, printed=7),
-    dropped=("Target.kind",),
 )
 def m4593a5(c: Cast) -> None:
     """"Enemies in the burst touching the ground" is a target line about where
     the creature is rather than which side it is on, so it is a label and a
-    check in the body. No entry gate: the row is a minor action against
-    everything in reach and is worth taking even if one flier is exempt."""
+    check in the body -- `c.height` answers it in full and the burst takes
+    everyone in it anyway, so nothing is missing and the row carries no
+    marker. No entry gate: the row is a minor action against everything in
+    reach and is worth taking even if one flier is exempt."""
     victim = c.target
     if victim is None or c.height(on=victim) > 0:
         return
@@ -1568,7 +1569,7 @@ def m5307a1(c: Cast) -> None:
     damage=Damage("3d4", 5),
     requires=_holding_somebody,
     requires_text="it must have a creature grabbed",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5307a2(c: Cast) -> None:
     """"One creature grabbed by the m5307" is both halves at once: the gate is

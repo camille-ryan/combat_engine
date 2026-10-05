@@ -800,7 +800,7 @@ def m1950a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("1d10", 4),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m1950a1(c: Cast) -> None:
     foe = _restricted_to(c, 1, lambda f: c.is_(Condition.IMMOBILIZED, on=f))
@@ -951,7 +951,7 @@ def m2786a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d8", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied",),
 )
 def m2786a1(c: Cast) -> None:
     foe = _restricted_to(c, 1, lambda f: c.bloodied(on=f))
@@ -1649,7 +1649,7 @@ def m5825a2(c: Cast) -> None:
     attack=Attack(vs=REF, printed=9),
     damage=Damage("3d6", 8, kind=LIMITED),
     requires_text="targets a Medium or smaller creature designated as its quarry",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5825a3(c: Cast) -> None:
     half = max(1, c.speed_of() // 2)
@@ -1788,7 +1788,7 @@ def m5857a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d8", 3),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5857a2(c: Cast) -> None:
     held = c.grabbing()
@@ -1809,7 +1809,7 @@ def m5857a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5857a3(c: Cast) -> None:
     held = c.grabbing()

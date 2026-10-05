@@ -953,7 +953,7 @@ def m3218a1(c: Cast) -> None:
     damage=Damage("1d8", 3, dtype=DamageType.NECROTIC),
     requires=_any_enemy_suffering(Condition.PRONE),
     requires_text="it targets a prone creature",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m3218a2(c: Cast) -> None:
     """"Targets a prone creature." `Target` filters on side and size and nothing

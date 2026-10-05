@@ -1413,10 +1413,13 @@ def p16657(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_ALLY,
-    dropped=("Target.kind",),
+    dropped=("Scenery.kind",),
 )
 def p16660(c: Cast) -> None:
-    """Targets the wielder, there being no target kind for a piece of gear.
+    """Targets the wielder, there being no target for a piece of gear: an
+    object on the board is `Scenery` and `Scenery.kind` is a free word
+    nothing sets to "armour" or "weapon", with no tie from a carried thing
+    back to whoever carries it.
     The armour bonus ends when an attack against AC hits the wearer, which
     is read off `AttackRolled` -- `Hit` does not say which defence it beat.
     The printed requirement -- that this is used during a rest -- is not a

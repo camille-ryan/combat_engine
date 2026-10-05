@@ -4115,7 +4115,7 @@ def m6675a2(c: Cast) -> None:
     reach=Ranged(5),
     target=Target(side="ally", count=1, label="undead ally"),
     keywords=[Keyword.HEALING, Keyword.IMPLEMENT],
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m6675a3(c: Cast) -> None:
     mate = c.target

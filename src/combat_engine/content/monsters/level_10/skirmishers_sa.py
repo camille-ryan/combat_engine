@@ -14,8 +14,10 @@ Conventions, inherited from the nine levels below and from this level's own
 * a card with no printed range is melee 1; a printed band like "6/12" takes
   the short number;
 * a card naming a creature's kind, size or condition rather than its side
-  or count is read with `_restricted_to`, and the redirect carries
-  `dropped=("Target.kind",)`;
+  or count is read with `_restricted_to`, and the redirect carries the symbol
+  for the gap it has -- `Target.relation` for "grabbed by it",
+  `Target.condition` for a condition, `Target.ongoing` for a target taking
+  ongoing damage;
 * a close burst or blast whose card names no target set takes enemies,
   except where the card says "creatures in the burst" outright.
 
@@ -1433,7 +1435,7 @@ def m2084a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=WILL, printed=14),
     damage=Damage("2d6", 6),
-    dropped=("Target.kind",),
+    dropped=("Target.ongoing",),
 )
 def m2084a1(c: Cast) -> None:
     victim = _restricted_to(c, 2, lambda f: _under_ongoing(c.world, f))
@@ -1622,7 +1624,7 @@ def m2250a0(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     attack=Attack(vs=WILL, printed=13),
-    dropped=("Target.kind",),
+    dropped=("Target.ongoing",),
 )
 def m2250a1(c: Cast) -> None:
     victim = _restricted_to(c, 10, lambda f: _taking_ongoing_poison(c, f))
@@ -3021,7 +3023,7 @@ def m5418a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=FORT, printed=13),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5418a3(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: c.is_(Condition.PRONE, on=f))
@@ -3341,7 +3343,7 @@ def m5813a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d8", 9),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5813a1(c: Cast) -> None:
     victim = _restricted_to(c, 4, lambda f: f not in c.grabbing(of=c.me))
@@ -3360,7 +3362,7 @@ def m5813a1(c: Cast) -> None:
     target=Target(side="enemy", count=1, max_size=Size.LARGE),
     attack=Attack(vs=REF, printed=13),
     damage=Damage("2d8", 4),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5813a2(c: Cast) -> None:
     victim = _restricted_to(c, 4, lambda f: f not in c.grabbing(of=c.me))
@@ -3384,7 +3386,7 @@ def m5813a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d6", 11),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5813a3(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
@@ -3968,7 +3970,7 @@ def m6481a4(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("4d10", 10),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m6481a5(c: Cast) -> None:
     helpless_like = (Condition.DAZED, Condition.DOMINATED, Condition.STUNNED, Condition.UNCONSCIOUS)

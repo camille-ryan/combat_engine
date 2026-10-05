@@ -2586,7 +2586,7 @@ def m6344a3(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=ONE_ALLY,
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m6344a4(c: Cast) -> None:
     """"One nonminion plant ally or two minion plant allies" is approximated

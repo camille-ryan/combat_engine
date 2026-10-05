@@ -370,7 +370,7 @@ def m1177a0(c: Cast) -> None:
     "m1177a1", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
     attack=Attack(vs=FORT, printed=13), damage=Damage("2d6", 12),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1177a1(c: Cast) -> None:
     held = _holding(c)
@@ -653,7 +653,7 @@ def m1915a1(c: Cast) -> None:
 @power(
     "m1915a2", level=9, usage=AT_WILL, action=FREE, once_per_round=True, reach=Melee(1),
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1915a2(c: Cast) -> None:
     held = _holding(c)
@@ -734,7 +734,7 @@ def m1949a0(c: Cast) -> None:
     "m1949a1", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
     attack=Attack(vs=AC, printed=16), damage=Damage("1d10", 7),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1949a1(c: Cast) -> None:
     """The target line names a sibling id for itself -- the same ref-shaped
@@ -868,7 +868,7 @@ def m2003a1(c: Cast) -> None:
     "m2003a2", level=9, usage=AT_WILL, action=MINOR, once_per_round=True, reach=CloseBurst(3),
     target=Target(side="enemy", count=1, label="creature marked by it"),
     attack=Attack(vs=WILL, printed=14),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m2003a2(c: Cast) -> None:
     victim = c.target
@@ -1049,7 +1049,7 @@ def m2078a1(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
     reach=Melee(2), keywords=[Keyword.POISON],
     attack=Attack(vs=AC, printed=14), damage=Damage("1d8", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m2078a2(c: Cast) -> None:
     held = _holding(c)
@@ -1496,7 +1496,7 @@ def m3988a2(c: Cast) -> None:
     "m3988a3", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(2),
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
     attack=Attack(vs=AC, printed=15), damage=Damage("2d10", 6),
-    dropped=("Target.kind", "Condition.DISEASED"),
+    dropped=("Target.relation", "Condition.DISEASED"),
 )
 def m3988a3(c: Cast) -> None:
     held = _holding(c)
@@ -1564,7 +1564,7 @@ def m3998a1(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="creature marked by it"),
     keywords=[Keyword.POISON, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=16), damage=Damage("1d12", 6),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3998a2(c: Cast) -> None:
     victim = c.target
@@ -1677,7 +1677,7 @@ def m4005a0(c: Cast) -> None:
     "m4005a1", level=9, usage=AT_WILL, action=MINOR, reach=Melee(1),
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
     attack=Attack(vs=FORT, printed=10), damage=Damage("0", 0),
-    dropped=("Target.kind", "c.cannot_attack(opportunity=)", "c.sight_range(only=)"),
+    dropped=("Target.relation", "c.cannot_attack(opportunity=)", "c.sight_range(only=)"),
 )
 def m4005a1(c: Cast) -> None:
     """Pulled into its own square, restrained, and burning until the hold
@@ -2291,7 +2291,7 @@ def m5654a2(c: Cast) -> None:
     "m5654a3", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=Target(side="enemy", count=1, label="creature it is grabbing"),
     attack=Attack(vs=REF, printed=12), damage=Damage("4d10", 12),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5654a3(c: Cast) -> None:
     held = _holding(c)
@@ -2754,7 +2754,7 @@ def m5962a2(c: Cast) -> None:
     "m5962a3", level=9, usage=AT_WILL, action=MINOR, once_per_round=True, reach=Ranged(5),
     target=Target(side="enemy", count=1, label="creature marked by it"),
     attack=Attack(vs=WILL, printed=12),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5962a3(c: Cast) -> None:
     victim = c.target
@@ -2906,7 +2906,7 @@ def m6113a2(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="creature it is grabbing"),
     keywords=[Keyword.ACID], attack=Attack(vs=FORT, printed=12),
     damage=Damage("4d8", 12, kind=LIMITED),
-    dropped=("Target.kind", "c.grab(dc=)"),
+    dropped=("Target.relation", "c.grab(dc=)"),
 )
 def m6113a3(c: Cast) -> None:
     """Recharges when the swallow ends -- the exact moment it releases

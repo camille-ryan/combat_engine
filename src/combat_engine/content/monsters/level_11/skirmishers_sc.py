@@ -862,7 +862,7 @@ def m1600a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("1d8", 6),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m1600a2(c: Cast) -> None:
     """"Immobilized targets only" is the target's own state, which the
@@ -889,7 +889,7 @@ def m1600a2(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("1d6", 6),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m1600a3(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda who: _held_fast(c, who))
@@ -967,7 +967,7 @@ def m1687a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d8", 4, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied",),
 )
 def m1687a3(c: Cast) -> None:
     """Two swings at one bloodied creature. The restriction is the target's
@@ -1459,14 +1459,17 @@ def m3749a3(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC],
-    dropped=("Target.kind",),
 )
 def m3749a4(c: Cast) -> None:
     """"Targets closest enemy" and "automatically hits": no attack is rolled,
     and the nearest creature is picked here because `Target` does not sort.
     The rider is a modifier on the caster gated on the victim and on which
     row is swinging, not a hold on the victim -- the printed extra is this
-    creature's damage and nobody else's."""
+    creature's damage and nobody else's.
+
+    No marker: the printed line asks nothing of the target that the engine
+    cannot answer. A sort is not a filter, and picking the nearest enemy in
+    the body plays the card exactly as written."""
     victim = min(c.enemies(), key=c.distance, default=None)
     if victim is None:
         return

@@ -18,7 +18,11 @@ ones that decide most rows here:
 * "Target: a creature it has grabbed", "a dazed enemy", "a creature granting
   combat advantage" is the target's own state and not the chooser's
   business -- `Target` filters side, count and size and nothing else, so
-  `_restricted_to` redirects and every use is `dropped=("Target.kind",)`;
+  `_restricted_to` redirects and the marker names which narrowing it is:
+  `dropped=("Target.relation",)` where the line is about the attacker
+  ("grabbed by it", "granting it combat advantage"),
+  `dropped=("Target.condition",)` where it is a condition the creature
+  carries;
 * a two-type damage line has nowhere to live in the header, since `Damage`
   holds one `dtype`, so it is rolled in the body as one blow of two types
   and marked `dropped=("Damage(dtypes=)",)`;
@@ -1230,7 +1234,7 @@ def m1427a4(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="stunned or dazed"),
     keywords=[Keyword.CHARM, Keyword.GAZE],
     attack=Attack(vs=WILL, printed=17),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m1427a5(c: Cast) -> None:
     """Only on something already reeling, and only one at a time.
@@ -2665,7 +2669,7 @@ def m2335a0(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=AC, printed=20),
     damage=Damage("1d6", 6),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m2335a1(c: Cast) -> None:
     """"A creature it has grabbed" is the target's own state, which `Target`
@@ -2688,7 +2692,7 @@ def m2335a1(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="grabbed by it"),
     attack=Attack(vs=FORT, printed=18),
     damage=Damage("5d6", 6, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m2335a2(c: Cast) -> None:
     """It throws what it was holding. The grab is ended by hand, before the
@@ -4280,7 +4284,7 @@ def m5332a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("3d10", 6, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5332a2(c: Cast) -> None:
     """The card prints its damage on the **miss** line, which is the only
@@ -4494,7 +4498,7 @@ def m5369a0(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=17),
     damage=Damage("1d8", 6, dtype=DamageType.POISON),
     once_per_round=True,
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5369a1(c: Cast) -> None:
     """"One creature granting combat advantage to it" is the target's own
@@ -4942,8 +4946,11 @@ def m6088a1(c: Cast) -> None:
     action=MOVE,
     reach=Ranged(5),
     target=Target(side="enemy", count=1, label="dominated by it"),
+    # Re-aimed from `Target.condition`: the card says dominated **by it**, and
+    # that asymmetry is what `Target.relation` names. The body asks only
+    # `Condition.DOMINATED`, which is the bug this marker now points at.
     keywords=[Keyword.CHARM],
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6088a2(c: Cast) -> None:
     """No attack roll is printed: the slide is the whole Effect line. Being

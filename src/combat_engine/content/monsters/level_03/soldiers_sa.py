@@ -1365,13 +1365,14 @@ def m115927a0(c: Cast) -> None:
     damage=Damage("2d8", 3),
     requires=_grabbed_by_me_in_reach,
     requires_text="it must have hold of a creature",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m115927a1(c: Cast) -> None:
     """No attack line: the printed Effect simply deals the damage, which
     `c.hit` applies from the header whether or not anything was rolled.
-    "One creature grabbed by it" is a target line `Target` cannot say, so the
-    offer is gated by `requires=` and the victim chosen here. #361."""
+    "One creature grabbed by it" is a target line `Target` cannot say -- it is
+    a relation to the caster, so the gap is `Target.relation` -- and the offer
+    is gated by `requires=` with the victim chosen here. #361."""
     victim = _restricted_to(c, 1, lambda foe: foe in c.grabbing(of=c.me))
     if victim is not None:
         c.hit(on=victim)
@@ -1646,11 +1647,13 @@ def m3188a0(c: Cast) -> None:
     damage=Damage("2d8", 4),
     requires=_pinned_enemy_in_reach,
     requires_text="immobilized, stunned, or unconscious targets only",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m3188a1(c: Cast) -> None:
     """"Immobilized, stunned, or unconscious targets only" is a target line
-    `Target` cannot say, so the offer is gated and the victim chosen here --
+    `Target` cannot say -- three conditions, so the gap is `Target.condition`
+    and `query.is_` is the whole of it -- so the offer is gated and the victim
+    chosen here --
     and where another creature in reach qualifies the row is aimed there
     rather than thrown away, which a bare return would have done. #361."""
     victim = _restricted_to(
@@ -1924,7 +1927,7 @@ def m3437a1(c: Cast) -> None:
     target=ONE_CREATURE,
     requires=_senseless_in_reach,
     requires_text="targets a helpless or unconscious creature",
-    dropped=("Defences.insubstantial", "c.lose_mode()", "Target.kind"),
+    dropped=("Defences.insubstantial", "c.lose_mode()", "Target.condition"),
 )
 def m3437a2(c: Cast) -> None:
     """The finisher works; the price it pays for it does not.
@@ -1984,7 +1987,7 @@ def m3525a0(c: Cast) -> None:
     damage=Damage("1d10", 9),
     requires=_grabbed_by_me_in_reach,
     requires_text="usable only against a target it has grabbed",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3525a1(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda foe: foe in c.grabbing(of=c.me))
@@ -2422,7 +2425,7 @@ def m4678a1(c: Cast) -> None:
     damage=Damage("1d10", 8),
     requires=_held_in_reach,
     requires_text="grabbed, restrained, or immobilized targets only",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m4678a2(c: Cast) -> None:
     """A blanket `skill` modifier applies to every check, which is what "a -2
@@ -2884,7 +2887,7 @@ def m5321a3(c: Cast) -> None:
     damage=Damage("2d8", 4),
     requires=_slowed_in_reach,
     requires_text="one slowed creature",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5321a4(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda foe: c.is_(Condition.SLOWED, foe))
@@ -2957,7 +2960,7 @@ def m5427a1(c: Cast) -> None:
     damage=Damage("3d4", 7, kind=LIMITED),
     requires=_grabbed_by_me_in_reach,
     requires_text="one creature grabbed by it",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5427a2(c: Cast) -> None:
     """"Cannot stand up until the grab ends" is `Condition.PINNED` laid beside
@@ -3155,13 +3158,14 @@ def m5534a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m5749a0(c: Cast) -> None:
     """The aura's grants go to the whole of its side: `c.grants_in` filters on
-    `side` and on nothing a creature *is*, so "drake allies" is the dropped
-    half and every ally inside gets the resistance and the bonus. `kind=` is
-    the word the card prints, which here is "power"."""
+    `side` and on nothing a creature *is*, so the card's narrowing to allies
+    of one type word is the dropped half -- `Target.creature_kind`, read off
+    the compendium row -- and every ally inside gets the resistance and the
+    bonus. `kind=` is the word the card prints, which here is "power"."""
     ring = c.aura(1, label=f"{c.ref} aura", until=When.ENCOUNTER, on=c.me)
     c.resist_in(ring, 5, DamageType.FIRE, side="team")
     c.grants_in(ring, AC, 2, side="team", kind="power")
@@ -3831,7 +3835,7 @@ def m854a0(c: Cast) -> None:
     damage=Damage("1d8", 2),
     requires=_marked_by_me_in_reach,
     requires_text="marked target only",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m854a1(c: Cast) -> None:
     """"And is marked" on a row that may only be used against something it has

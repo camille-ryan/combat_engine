@@ -42,7 +42,11 @@ what this asks and is why it can be asked at all.
 **A printed target restriction is not a `Target`.** `Target` filters on
 side, count and size and never on what a creature is suffering, so eleven
 rows here pick their own victim through `_restricted_to` rather than throw
-the use away when the chooser aims them elsewhere, and name `Target.kind`.
+the use away when the chooser aims them elsewhere, and each names the gap it
+has: `Target.relation` where the line is about the caster -- "grabbed by it",
+"granting it combat advantage", "affected by its own earlier row" --
+`Target.condition` where the creature carries one, and `Target.creature_kind`
+where the line is a type word.
 
 **"Each round that it sustains the grab" is a sustain, not a save.**
 `c.effect(until=When.SUSTAIN, sustain=MINOR)` plus `c.on_sustain` is the
@@ -675,13 +679,13 @@ def m115912a2(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("4d10", 10),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m115912a3(c: Cast) -> None:
     """Four states and one printed target line. The row picks a creature in
     one of them rather than being thrown away when the chooser aims it
     elsewhere -- `Target` filters on side, count and size and never on what
-    a creature is suffering."""
+    a creature is suffering, so `Target.condition` is the gap."""
     victim = _restricted_to(
         c, 1, lambda f: any(is_(c.world, f, cond) for cond in _HELPLESS_ENOUGH)
     )
@@ -837,12 +841,13 @@ def m1763a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d6", 5),
     requires_text="requires combat advantage against the target",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1763a1(c: Cast) -> None:
     """The Requirement is about a *pair* and `requires=` is handed a creature
     and no target, so the row picks a victim it does have combat advantage
-    against instead of being thrown away.
+    against instead of being thrown away. A pair is what `Target.relation`
+    names.
 
     The card's second sentence calls this a melee basic attack and the
     header's own line is that attack's line, so the swing is rolled here
@@ -1201,7 +1206,7 @@ def m1999a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d8", 12, kind=LIMITED),
     requires_text="requires combat advantage against the target",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1999a1(c: Cast) -> None:
     """"Each round that the m1999 sustains the grab" is a sustain and not a
@@ -1363,7 +1368,7 @@ def m2011a1(c: Cast) -> None:
     damage=Damage("2d12", 8, kind=LIMITED),
     requires=_wearing_a_body,
     requires_text="the m2011 must be in a possessed body and have combat advantage",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m2011a2(c: Cast) -> None:
     """Half the Requirement is about the creature and half about a pair, so
@@ -2202,11 +2207,12 @@ def m3275a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=17),
     damage=Damage("4d6", 7),
     requires_text="requires a sickle",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3275a1(c: Cast) -> None:
     """"Targets a creature affected by m3275a2" is a restriction `Target`
-    cannot express, so the row picks a bonded creature rather than being
+    cannot express -- a relation to the caster's own earlier row, so
+    `Target.relation` -- and the row picks a bonded creature rather than being
     thrown away when the chooser aims it elsewhere."""
     bonded = set(c.suffering("m3275a2"))
     victim = _restricted_to(c, 1, lambda f: f in bonded)
@@ -2348,7 +2354,7 @@ def m3822a3(c: Cast) -> None:
     damage=Damage("3d6", 5),
     requires=_grabbing_something,
     requires_text="the m3822 must have a creature grabbed",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3822a4(c: Cast) -> None:
     """Half the sentence is about the creature and half about a pair, so the
@@ -2594,11 +2600,12 @@ def m4727a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=17),
     damage=Damage("4d6", 7),
     requires_text="requires a sickle",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m4727a1(c: Cast) -> None:
     """"Targets a creature affected by m4727a2" is a restriction `Target`
-    cannot express, so the row picks a bonded creature."""
+    cannot express -- a relation to the caster's own earlier row, so
+    `Target.relation` -- and the row picks a bonded creature."""
     bonded = set(c.suffering("m4727a2"))
     victim = _restricted_to(c, 1, lambda f: f in bonded)
     if victim is None or not c.strike(on=victim):
@@ -2687,7 +2694,7 @@ def m5235a0(c: Cast) -> None:
     attack=Attack(vs=WILL, printed=15),
     requires=_not_dominating,
     requires_text="the m5235 must not be dominating a creature with this power",
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m5235a1(c: Cast) -> None:
     """It climbs inside, and the two clocks are one printed sentence.
@@ -2768,11 +2775,12 @@ def m5335a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("2d6", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5335a2(c: Cast) -> None:
-    """"One blinded creature" is a restriction `Target` cannot express, so
-    the row picks a blinded one rather than being thrown away.
+    """"One blinded creature" is a restriction `Target` cannot express -- a
+    condition the creature carries, so `Target.condition` -- and the row picks
+    a blinded one rather than being thrown away.
 
     The Sustain line pays out per sustain, which only `c.on_sustain` does,
     and it is asked of the relation each time: a grab can be broken between
@@ -2932,7 +2940,7 @@ def m5480a1(c: Cast) -> None:
     target=UpTo(2),
     attack=Attack(vs=AC, printed=17),
     damage=Damage("4d12", 8, kind=LIMITED, half_on_miss=True),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5480a2(c: Cast) -> None:
     """"Grabbed by a tentacle" is read off its own side's grabs: the limbs
@@ -3441,7 +3449,7 @@ def m6096a2(c: Cast) -> None:
     keywords=[Keyword.CHARM, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=15),
     damage=Damage("4d6", 4, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6096a3(c: Cast) -> None:
     """The caster's absence is tied to the victim's hold, not given a clock

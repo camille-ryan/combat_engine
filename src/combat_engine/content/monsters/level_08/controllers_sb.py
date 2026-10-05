@@ -528,12 +528,20 @@ def m5326a1(c: Cast) -> None:
     damage=Damage("2d6", 5, dtype=DamageType.PSYCHIC, kind=LIMITED),
     requires=_has_bell,
     requires_text="the m5326 must be holding a bell",
+    dropped=("Target.condition",),
 )
 def m5326a2(c: Cast) -> None:
     """"One creature able to take actions" is asked of the board, not the
     header; `_restricted_to` aims at one that qualifies in reach rather than
-    throwing the row away. `Target.kind` is the gap, as it is for the other
-    112 rows of this shape."""
+    throwing the row away. `Target.condition` is the gap: being able to act is
+    the absence of the conditions that take a turn away.
+
+    **The marker was missing and only the docstring carried the claim.** A gap
+    argued in prose and declared nowhere is invisible to `blocked.py` and
+    `todo.py` both -- it cannot be counted, ranked, or go red the day the
+    symbol lands. Found when `Target.kind` was split and this row turned up
+    naming a symbol it did not hold.
+    """
     victim = _restricted_to(c, 10, lambda f: can_act(c.world, f))
     if victim is None or not c.strike(on=victim):
         return
@@ -686,7 +694,7 @@ def m5372a3(c: Cast) -> None:
     damage=Damage("1d10", 5, dtype=DamageType.PSYCHIC),
     requires=lambda world, eid: bool(world.relations.targets(Relation.GRABBED_BY, eid)),
     requires_text="the m5372 must have a creature grabbed",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5372a4(c: Cast) -> None:
     grabbed = c.grabbing(of=c.me)
@@ -989,7 +997,7 @@ def _adjacent_and_down(world: World, eid: int) -> bool:
     damage=Damage("3d8", 5),
     requires=_adjacent_and_down,
     requires_text="targets an adjacent immobilized, stunned or unconscious creature",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5575a2(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: any(c.is_(cond, on=f) for cond in _M5575A2_DOWN))
@@ -1627,7 +1635,7 @@ def m5960a0(c: Cast) -> None:
     damage=Damage("3d10", 4),
     requires=lambda world, eid: bool(world.relations.targets(Relation.GRABBED_BY, eid)),
     requires_text="the m5960 must have a creature grabbed",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5960a1(c: Cast) -> None:
     """The thrall clause is caught inside the `Dropped` window
@@ -1906,7 +1914,7 @@ def m5985a1(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("2d12", 10),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5985a2(c: Cast) -> None:
     if c.first:
@@ -2061,7 +2069,7 @@ def m5988a0(c: Cast) -> None:
         is_(world, f, Condition.UNCONSCIOUS) for f in enemies(world, eid) if adjacent(world, eid, f)
     ),
     requires_text="targets an adjacent unconscious creature",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5988a1(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: c.is_(Condition.UNCONSCIOUS, on=f))
@@ -2771,7 +2779,7 @@ def m822a1(c: Cast) -> None:
         has_combat_advantage(world, eid, f) for f in enemies(world, eid)
     ),
     requires_text="the m822 must have combat advantage against the target",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m822a2(c: Cast) -> None:
     victim = _restricted_to(c, 10, lambda f: has_combat_advantage(c.world, c.me, f))
@@ -2799,7 +2807,7 @@ def _has_ongoing_necrotic(world: World, eid: int) -> bool:
     attack=Attack(vs=FORT, printed=12),
     requires=_has_ongoing_necrotic,
     requires_text="the m822 must see a creature taking ongoing necrotic damage within 5 squares",
-    dropped=("Target.kind",),
+    dropped=("Target.ongoing",),
 )
 def m822a3(c: Cast) -> None:
     victim = _restricted_to(c, 5, lambda f: _has_ongoing_necrotic(c.world, f))

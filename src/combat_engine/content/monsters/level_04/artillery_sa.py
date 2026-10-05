@@ -740,11 +740,12 @@ def m1495a4(c: Cast) -> None:
     damage=Damage("2d10", 3, kind=LIMITED),
     requires=_has_a_quarry,
     requires_text="it must have named a quarry",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1495a5(c: Cast) -> None:
     """The printed target is the quarry and `Target` cannot narrow to a
-    relation, so the offer is not narrowed -- but the shot is **redirected**
+    relation to the caster -- `Target.relation` is the gap -- so the offer is
+    not narrowed either: but the shot is **redirected**
     to the quarry rather than refused, because a row that looks written and
     returns having done nothing is worse than one that aims itself."""
     prey = next((foe for foe in c.enemies() if c.is_quarry(on=foe)), None) or c.target
@@ -1355,12 +1356,13 @@ def m3565a1(c: Cast) -> None:
     damage=Damage("2d8", 5, dtype=DamageType.NECROTIC, kind=LIMITED),
     requires=_has_cursed_somebody,
     requires_text="it must have cursed an enemy",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3565a2(c: Cast) -> None:
     """The burst takes every enemy and the curse is asked in the body, because
     `Target` filters on side, count and size and has nothing to say about a
-    relation. The Requirement is the other half: without it the row is offered
+    relation to the caster, which is `Target.relation` -- cursed **by it** is
+    not cursed. The Requirement is the other half: without it the row is offered
     every turn and comes back having done nothing."""
     victim = c.target
     if victim is None or not c.cursed(on=victim):
@@ -3186,12 +3188,13 @@ def m6561a1(c: Cast) -> None:
     attack=Attack(vs=WILL, printed=9),
     requires=_any_enemy_suffering(Condition.SURPRISED),
     requires_text="an enemy must be surprised",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m6561a2(c: Cast) -> None:
     """The burst takes every enemy and the surprise is asked in the body;
     `Target` filters on side, count and size and has nothing to say about what
-    a creature is suffering. The Requirement is the other half -- without it
+    a creature is suffering, which is `Target.condition`. The Requirement is
+    the other half -- without it
     the row is offered on a quiet board and comes back having done nothing."""
     victim = c.target
     if victim is None or not c.is_(Condition.SURPRISED, on=victim):

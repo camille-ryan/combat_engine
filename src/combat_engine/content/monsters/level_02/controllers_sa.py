@@ -15,8 +15,9 @@ settled:
   `Attack(printed=)` does with the first one;
 * a printed target restriction about what a creature is *suffering* or about
   what the attacker is holding is asked in the body, because `Target` filters
-  on side and size and nothing else. `label=` records it for the card and
-  `Target.kind` is the gap;
+  on side and size and nothing else. `label=` records it for the card and the
+  marker is whichever symbol names what the line asks -- `Target.relation` for
+  a creature the attacker has hold of, `Target.ident` for one of its own kind;
 * a row that recharges on a printed condition rather than on a die keeps the
   die in the header, because that is what `actions.recharge` rolls and what the
   card shows, and arms the condition on top of it.
@@ -240,7 +241,7 @@ def m4455a0(c: Cast) -> None:
     damage=Damage("1d8", 3),
     requires=_holds_somebody,
     requires_text="must have a creature grabbed",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m4455a1(c: Cast) -> None:
     """"Sustains the grab" is the grab not ending, and a grab does not lapse on
@@ -806,7 +807,7 @@ def m5285a2(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBlast(5),
     target=Target(side="ally", everyone=True, label="each ally of its own kind"),
-    dropped=("Target.kind",),
+    dropped=("Target.ident",),
 )
 def m5285a3(c: Cast) -> None:
     """"Each <this creature> in the blast" is a target line about what a

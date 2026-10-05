@@ -352,7 +352,7 @@ _M4415_DOWN = "the creature drops to 0 hit points"
     damage=Damage("", 5, dtype=DamageType.POISON, kind=MINION),
     trigger=_M4415_DOWN,
     on=Trigger(Dropped, about_me, _M4415_DOWN),
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m4415a1(c: Cast) -> None:
     """The attack half spares its own sort and the Effect half heals them, so

@@ -643,7 +643,7 @@ def m1828a0(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="prone"),
     attack=Attack(vs=FORT, printed=10),
     damage=Damage("1d8", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m1828a1(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: c.is_(Condition.PRONE, on=f))
@@ -2771,7 +2771,7 @@ def m6174a0(c: Cast) -> None:
     reach=Melee(1),
     target=Target(side="enemy", count=1, label="grabbed by it"),
     attack=Attack(vs=FORT, printed=12),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6174a1(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: f in c.grabbing())
@@ -3236,7 +3236,7 @@ def m6663a1(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="grabbed by it"),
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("2d10", 15),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6663a2(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: f in c.grabbing())

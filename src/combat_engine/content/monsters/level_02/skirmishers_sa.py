@@ -25,10 +25,12 @@ One attack line here arrives with no defence and no damage at all -- the
 extraction lost both -- so that half is named rather than guessed (#360) and
 the movement the same row prints is written out in full.
 
-**A target line that narrows by a condition has nowhere to live.** "One
-creature grabbed by it" and "every creature suffering from this curse" are
-`Target.kind` (#361): `Target` filters on side, count, size and what is in
-hand, and on nothing a creature is undergoing. Where the narrowing is really
+**A target line that narrows by a relation to the attacker has nowhere to
+live.** "One creature grabbed by it" and "every creature suffering from this
+curse" are both `Target.relation` (#361) -- the hold and the curse are the
+attacker's own, which is the asymmetry a plain condition filter cannot carry:
+`Target` filters on side, count, size and what is in hand, and on nothing a
+creature is undergoing. Where the narrowing is really
 about the *caster's* own state -- it must be holding somebody, it must have
 cursed somebody -- a `requires=` is declared too, which turns "used and did
 nothing" into "correctly not offered".
@@ -440,7 +442,7 @@ def m1139a1(c: Cast) -> None:
             c.hit()
 
 
-_M1139_CURSED = "Target.kind"
+_M1139_CURSED = "Target.relation"
 
 
 @power(
@@ -2800,7 +2802,7 @@ def m6511a0(c: Cast) -> None:
     damage=Damage("2d10", 4, kind=LIMITED),
     requires=_grabbing_something,
     requires_text="it must be holding a creature",
-    dropped=("Target.kind", "c.restrict_action()"),
+    dropped=("Target.relation", "c.restrict_action()"),
 )
 def m6511a1(c: Cast) -> None:
     """Two absences, and they are different absences.

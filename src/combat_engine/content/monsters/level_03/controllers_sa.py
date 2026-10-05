@@ -16,8 +16,10 @@ conventions are the ones the earlier sweeps settled and they are kept here:
 * a printed target restriction about what a creature is *suffering* has
   nowhere to live -- `Target` filters on side, count and size -- so `label=`
   records it for the card, the body gates on it, a `requires=` keeps the row
-  from being offered when nothing in reach qualifies, and `Target.kind` is the
-  gap (#361);
+  from being offered when nothing in reach qualifies, and `Target.condition`
+  is the gap (#361). A line asking something else of the target wants its own
+  symbol: `Target.creature_kind` for a type word, `Target.relation` for a
+  creature the attacker has hold of, `Target.ident` for its own kind;
 * a row that recharges on a printed condition rather than on a die keeps the
   die in the header, because that is what `actions.recharge` rolls and what
   the card shows, and arms the condition on top of it;
@@ -531,7 +533,7 @@ def m1021a0(c: Cast) -> None:
     target=Target(side="enemy", everyone=True, label="not blinded"),
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=7),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m1021a1(c: Cast) -> None:
     """"Blind creatures are immune" narrows the target list by a condition,
@@ -1060,7 +1062,7 @@ def m115785a2(c: Cast) -> None:
     target=Target(side="ally", label="beast or magical beast"),
     requires=_beast_ally_adjacent,
     requires_text="a beast ally must be adjacent",
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m115785a3(c: Cast) -> None:
     """"One beast or magical beast ally" narrows by what a creature *is*, and
@@ -1475,7 +1477,7 @@ def m4181a2(c: Cast) -> None:
     damage=Damage("3d6", 3, kind=LIMITED),
     requires=_suffering_in_reach(1, Condition.SLOWED, Condition.RESTRAINED),
     requires_text="a slowed or restrained creature must be adjacent",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m4181a3(c: Cast) -> None:
     """"This forced movement can affect a creature restrained by its own
@@ -1699,7 +1701,7 @@ def m4458a1(c: Cast) -> None:
     damage=Damage("1d6", 3, dtype=DamageType.NECROTIC, kind=LIMITED, half_on_miss=False),
     requires=_suffering_in_reach(2, Condition.IMMOBILIZED),
     requires_text="an immobilized enemy must be within 2 squares",
-    dropped=("Target.kind", "Damage(dtypes=)"),
+    dropped=("Target.condition", "Damage(dtypes=)"),
 )
 def m4458a2(c: Cast) -> None:
     """The miss line is not half damage -- it is the same dice and one summon
@@ -1924,7 +1926,7 @@ def m4596a1(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=6),
     requires=_grabbing,
     requires_text="it must be grabbing a creature",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m4596a2(c: Cast) -> None:
     """"Targets the grabbed creature" is not a filter `Target` has, so the
@@ -3152,7 +3154,7 @@ def m6269a6(c: Cast) -> None:
     damage=Damage("1d10", 3),
     requires=_suffering_in_reach(1, *_HELPLESS_ENOUGH),
     requires_text="a dazed, dominated, stunned or unconscious enemy must be adjacent",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m6269a7(c: Cast) -> None:
     """The victim is found rather than refused: the row is offered against
@@ -3788,7 +3790,7 @@ def m858a1(c: Cast) -> None:
     target=Target(side="ally", count=4, label="of its own kind"),
     requires=_kin_in_reach(_M858_KIN, 10),
     requires_text="one of its own kind must be within 10 squares",
-    dropped=("Target.kind",),
+    dropped=("Target.ident",),
 )
 def m858a2(c: Cast) -> None:
     """"Up to four of them" counts a kind, which `Target` cannot filter on, so

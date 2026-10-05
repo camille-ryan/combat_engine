@@ -701,7 +701,7 @@ def m1101a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=15),
     damage=Damage("3d6", 6),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m1101a1(c: Cast) -> None:
     """ "Target must be immobilized, stunned, or unconscious" -- `Target`
@@ -805,7 +805,7 @@ def m115863a3(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("0", 10, dtype=DamageType.NECROTIC),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m115863a4(c: Cast) -> None:
     held = _holding(c)
@@ -1557,7 +1557,7 @@ def m2092a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d12", 6),
-    dropped=("Target.kind", *_NO_DISEASE),
+    dropped=("Target.condition", *_NO_DISEASE),
 )
 def m2092a2(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: any(c.is_(cond, on=f) for cond in _HELPLESS))
@@ -1776,7 +1776,7 @@ def m3273a1(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="creature marked by it"),
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=FORT, printed=13),
-    dropped=("Target.kind", *_NO_DISEASE),
+    dropped=("Target.relation", *_NO_DISEASE),
 )
 def m3273a2(c: Cast) -> None:
     victim = _restricted_to(c, 3, lambda f: c.marked(on=f, by=c.me))
@@ -1903,7 +1903,7 @@ def m3795a0(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d8", 4),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3795a1(c: Cast) -> None:
     held = _holding(c)
@@ -2249,7 +2249,7 @@ def m4007a1(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("1d8", 4, dtype=DamageType.POISON),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m4007a2(c: Cast) -> None:
     held = _holding(c)
@@ -2657,7 +2657,7 @@ def m5160a2(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
     attack=Attack(vs=REF, printed=13),
     damage=Damage("2d10", 7),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5160a3(c: Cast) -> None:
     """ "Cannot escape the grab until it saves against this effect" is not
@@ -2826,7 +2826,7 @@ def m5434a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("4d6", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5434a1(c: Cast) -> None:
     """ "While it has a creature grabbed, it can attack only with bite,
@@ -3087,7 +3087,7 @@ def m5541a1(c: Cast) -> None:
     keywords=[Keyword.FEAR, Keyword.PSYCHIC],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("1d8", 9),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5541a2(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: c.is_(Condition.DAZED, on=f))
@@ -3492,7 +3492,7 @@ def m5709a0(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("2d8", 11, dtype=DamageType.POISON),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5709a1(c: Cast) -> None:
     """Three failed saves, each worse than the last: the first turns the
@@ -3894,7 +3894,7 @@ def m5971a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("3d10", 7, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5971a3(c: Cast) -> None:
     victim = _restricted_to(c, 2, lambda f: flanked_by(c.world, f, c.me))
@@ -4387,7 +4387,7 @@ def m6176a1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=FORT, printed=15),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6176a2(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: has_combat_advantage(c.world, c.me, f))
@@ -4690,7 +4690,7 @@ def m6642a1(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("2d12", 10),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6642a2(c: Cast) -> None:
     held = _holding(c)
@@ -4730,7 +4730,7 @@ def m6686a0(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=EACH_ENEMY,
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6686a1(c: Cast) -> None:
     victim = c.target
@@ -4788,7 +4788,7 @@ def m939a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("0", 4),
-    dropped=("Target.kind",),
+    dropped=("Target.condition", "Target.creature_kind"),
 )
 def m939a1(c: Cast) -> None:
     victim = _restricted_to(

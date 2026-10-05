@@ -18,8 +18,10 @@ and the conventions are that file's and the level-1 to level-3 sweeps':
 * a printed target line that narrows by a *condition* has nowhere to live --
   `Target` filters side, count and size -- so `label=` records it for the card,
   the body redirects to a creature in reach that qualifies, a `requires=` keeps
-  the row from being offered when nothing does, and `Target.kind` is the gap
-  (#361);
+  the row from being offered when nothing does, and the gap is the `Target.`
+  symbol naming that particular narrowing: `Target.condition`,
+  `Target.relation`, `Target.bloodied`, `Target.creature_kind`,
+  `Target.ongoing` or `Target.ident` (#361);
 * a row that recharges on a printed condition keeps the die in the header,
   because that is what `actions.recharge` rolls and what the card shows, and
   arms the condition on top of it.
@@ -302,12 +304,12 @@ def m1401a0(c: Cast) -> None:
     reach=AreaBurst(1, 5),
     target=Target("any", everyone=True, label="creatures in contact with the ground"),
     attack=Attack(vs=REF, printed=7),
-    dropped=("Target.kind",),
 )
 def m1401a1(c: Cast) -> None:
     """"Affects only creatures in contact with the ground" is height off the
-    floor, which `c.height` answers; what it cannot do is narrow the offer, so
-    a flier in the burst is targeted and then left alone."""
+    floor, which `c.height` answers in full. The burst takes everyone in it
+    and a flier is targeted and then left alone, which is what the printed
+    line says -- so nothing is missing and the row carries no marker."""
     if c.height(on=c.target):
         return
     if c.strike():
@@ -456,7 +458,7 @@ def _dazed_or_stunned_within(radius: int) -> Callable[[World, int], bool]:
     attack=Attack(vs=WILL, printed=8),
     requires=_dazed_or_stunned_within(10),
     requires_text="a stunned or dazed enemy within 10 squares",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m1435a4(c: Cast) -> None:
     """"Only one creature at a time" costs nothing here: the row is an
@@ -958,7 +960,7 @@ def _nobody_is_burning(c: Cast) -> None:
         world, eid, 10, lambda foe: _burning(world, foe)
     ),
     requires_text="an enemy within 10 squares taking ongoing damage",
-    dropped=("Target.kind",),
+    dropped=("Target.ongoing",),
 )
 def m3540a2(c: Cast) -> None:
     """The printed penalty is one sentence covering four numbers, so it is
@@ -1997,7 +1999,7 @@ def m4644a3(c: Cast) -> None:
     reach=CloseBurst(5),
     target=Target("other_ally", 99, everyone=True, label="bloodied allies in the burst"),
     keywords=[Keyword.HEALING],
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied",),
 )
 def m4644a4(c: Cast) -> None:
     """The restriction is on the ally's state, which `Target` cannot narrow,
@@ -2058,7 +2060,7 @@ def m4687a1(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(10),
     target=Target("other_ally", 4, label="up to four allies of one lesser kind"),
-    dropped=("Target.kind",),
+    dropped=("Target.ident",),
 )
 def m4687a2(c: Cast) -> None:
     """The printed line names a particular lesser block, and the only handle
@@ -2199,7 +2201,7 @@ def _dull_beast(c: Cast, who: int) -> bool:
     action=MINOR,
     reach=Melee(1),
     target=Target("other_ally", 1, label="one adjacent dull beast or spider ally"),
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m4766a3(c: Cast) -> None:
     """Three printed benefits and the chooser picks one, which is what the
@@ -2954,7 +2956,7 @@ def m6116a3(c: Cast) -> None:
     damage=Damage("1d6", 3, dtype=DamageType.POISON),
     requires=_holds_somebody,
     requires_text="must be grabbing a creature",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6116a4(c: Cast) -> None:
     """Two escalations on one hold, and `escalate=` fires on every failure --
@@ -2993,7 +2995,7 @@ def m6116a4(c: Cast) -> None:
     damage=Damage("2d8", 6, kind=LIMITED),
     requires=_holds_somebody,
     requires_text="must be grabbing a creature",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6116a5(c: Cast) -> None:
     """The printed recharge is a condition rather than a die, so the die stays
@@ -3256,7 +3258,7 @@ def m6397a2(c: Cast) -> None:
         ),
     ),
     requires_text="an enemy within 5 squares taking ongoing poison damage",
-    dropped=("Target.kind",),
+    dropped=("Target.ongoing",),
 )
 def m6397a3(c: Cast) -> None:
     """"The ongoing poison damage increases by 5" has exactly one hold to find,
@@ -3314,7 +3316,7 @@ def m6397a4(c: Cast) -> None:
     reach=Ranged(5),
     target=Target("other_ally", 1, label="one spider ally or drow ally"),
     keywords=[Keyword.HEALING],
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m6397a5(c: Cast) -> None:
     """A printed Effect with no attack line, so there is no roll: the ally

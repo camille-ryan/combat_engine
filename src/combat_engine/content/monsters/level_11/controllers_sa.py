@@ -605,14 +605,16 @@ def m115868a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=Target(side="enemy", count=1, label="stunned by it"),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m115868a3(c: Cast) -> None:
     """No attack roll at all: the damage is the whole of it.
 
-    `Target` filters on side, count and size and not on what a creature is
-    suffering, so the restriction is enforced here and the row is aimed at
-    somebody who qualifies rather than thrown away.
+    `Target` filters on side, count and size and not on how a creature stands
+    to the caster, so the restriction is enforced here and the row is aimed at
+    somebody who qualifies rather than thrown away. The printed line is
+    "stunned **by it**", which is `Target.relation` and not
+    `Target.condition`; the filter below asks only the condition.
     """
     victim = _restricted_to(c, 1, lambda who: c.is_(Condition.STUNNED, on=who))
     if victim is not None:
@@ -1117,7 +1119,7 @@ def m1978a1(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("1d8", 4, dtype=DamageType.NECROTIC),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m1978a2(c: Cast) -> None:
     """"Loses a healing surge" is `c.spend_surge`, which spends one and gives
@@ -2234,7 +2236,7 @@ def m4460a0(c: Cast) -> None:
     ],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("3d6", 6, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied",),
 )
 def m4460a1(c: Cast) -> None:
     """It pours itself over somebody and the two of them share a square.
@@ -3512,11 +3514,12 @@ def m6181a2(c: Cast) -> None:
     reach=CloseBurst(2),
     target=Target(side="enemy", count=1, everyone=True, label="dazed"),
     keywords=[Keyword.CHARM],
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m6181a3(c: Cast) -> None:
     """No attack roll: the slide is the whole of it. `Target` cannot filter on
-    what a creature is suffering, so the burst is narrowed here."""
+    what a creature is suffering -- `Target.condition` is the gap -- so the
+    burst is narrowed here."""
     for who in sorted(c.within(2)):
         if who != c.me and c.is_(Condition.DAZED, on=who):
             c.slide(3, on=who)

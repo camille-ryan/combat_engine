@@ -363,7 +363,7 @@ def m115817a0(c: Cast) -> None:
     damage=Damage("3d6", 7, half_on_miss=True),
     requires=_holding_somebody,
     requires_text="it must have hold of a creature",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m115817a1(c: Cast) -> None:
     """"One creature grabbed by it" is a target line `Target` cannot express --
@@ -390,11 +390,13 @@ def m115817a1(c: Cast) -> None:
     attack=Attack(vs=REF, printed=6),
     requires=_holding_nobody,
     requires_text="it must not be grabbing a creature",
-    dropped=("Target.kind", "c.grab(dc=)"),
+    dropped=("Target.condition", "c.grab(dc=)"),
 )
 def m115817a2(c: Cast) -> None:
-    """"One creature that isn't grabbed" is the other half of the same gap. The
-    printed escape DC is a fixed number the grab does not carry."""
+    """"One creature that isn't grabbed" asks a plain condition of the target
+    and not a hold this creature has, so it is `Target.condition` where
+    m115817a1's "grabbed by it" is `Target.relation`. The printed escape DC is
+    a fixed number the grab does not carry."""
     if c.is_(Condition.GRABBED):
         return
     if c.strike():
@@ -1984,7 +1986,7 @@ def m6508a0(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=6),
     requires=_holding_somebody,
     requires_text="it must have hold of a creature",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6508a1(c: Cast) -> None:
     """"Creatures grabbed by it" is a target line `Target` cannot say, so the

@@ -1086,12 +1086,14 @@ def m5445a2(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=Target(side="ally", count=1, label="kobold ally"),
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m5445a3(c: Cast) -> None:
-    """"One **kobold** ally within 10 squares." `Target` filters on side and
-    size and nothing else, so the kind is asked here and the row redirects to
-    somebody who qualifies rather than returning -- the printed line is about
+    """The printed line narrows to an ally of one type word within 10 squares.
+    `Target` filters on side and size and nothing else, so the kind is asked
+    here -- against the compendium row, which is why the gap is
+    `Target.creature_kind` and not a condition -- and the row redirects to
+    somebody who qualifies rather than returning: the printed line is about
     which ally, not about whether the row happens."""
     mate = c.target
     if mate is not None and not c.is_kind("kobold", on=mate):

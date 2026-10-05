@@ -767,7 +767,7 @@ def m1986a1(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("2d10", 6, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1986a2(c: Cast) -> None:
     from combat_engine.engine.query import has_combat_advantage
@@ -1299,7 +1299,7 @@ def m4241a0(c: Cast) -> None:
     damage=Damage("2d6", 4),
     requires=_cannot_see_me_in_reach,
     requires_text="a creature that cannot see it must be within reach",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m4241a1(c: Cast) -> None:
     victim = _blind_to_me(c, 1)
@@ -1494,7 +1494,7 @@ def m5302a2(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d6", 6, dtype=DamageType.POISON),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5302a3(c: Cast) -> None:
     victim = c.target
@@ -1521,7 +1521,7 @@ def m5302a3(c: Cast) -> None:
     ),
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("2d8", 6),
-    dropped=("Target.kind",),
+    dropped=("Target.condition", "Target.relation"),
 )
 def m5302a4(c: Cast) -> None:
     victim = c.target
@@ -1845,7 +1845,7 @@ def m5838a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d10", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5838a2(c: Cast) -> None:
     victim = c.target
@@ -1907,7 +1907,7 @@ def m6445a0(c: Cast) -> None:
     keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("", 3, dtype=DamageType.THUNDER, kind=MINION),
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m6445a1(c: Cast) -> None:
     if c.first:
@@ -2038,9 +2038,13 @@ def m6530a4(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="one creature carrying equipment"),
     attack=Attack(vs=REF, printed=8),
     damage=Damage("2d10", 4, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Gear.carried",),
 )
 def m6530a5(c: Cast) -> None:
+    """"One creature carrying equipment" is not a target line `Target` can
+    narrow: `Gear` records weapons, a shield, armour, worn magic and
+    ammunition and nothing for ordinary kit, so `Gear.carried` is the gap and
+    the row is offered against anybody."""
     if c.strike():
         c.hit()
         held = c.slowed(until=When.SAVE_ENDS)

@@ -615,7 +615,7 @@ def m3557a0(c: Cast) -> None:
     reach=Ranged(10),
     target=Target(side="enemy", count=1, label="a living humanoid"),
     attack=Attack(vs=WILL, printed=10),
-    dropped=("Target.kind", "c.leaves_the_grid()"),
+    dropped=("Target.creature_kind", "c.leaves_the_grid()"),
 )
 def m3557a1(c: Cast) -> None:
     """"Enters the target's space and is removed from the map, reappearing

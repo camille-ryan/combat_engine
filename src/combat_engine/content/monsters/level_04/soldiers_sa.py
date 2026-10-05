@@ -600,7 +600,7 @@ def m1948a0(c: Cast) -> None:
     damage=Damage("1d10", 6),
     requires=_grabbed_by_me_in_reach,
     requires_text="targets a creature it has grabbed",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1948a1(c: Cast) -> None:
     """Where the chooser handed it somebody it is not holding and it *is* holding
@@ -932,12 +932,14 @@ def m3543a0(c: Cast) -> None:
     damage=Damage("2d10", 5),
     requires=_marked_in_reach(2),
     requires_text="targets a creature it has marked",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3543a1(c: Cast) -> None:
     """The printed weapon Requirement is not a gate (#366). The mark is, and it
-    has nowhere in `Target` to live, so it is asked twice -- once as an entry
-    gate and once here, redirecting to another marked creature in reach."""
+    has nowhere in `Target` to live -- marked **by it** is a relation to the
+    caster, so the gap is `Target.relation` -- so it is asked twice: once as an
+    entry gate and once here, redirecting to another marked creature in
+    reach."""
     foe = _restricted_to(c, 2, lambda f: c.marked(on=f, by=c.me))
     if foe is None:
         return
@@ -1202,7 +1204,7 @@ def m3770a1(c: Cast) -> None:
     damage=Damage("2d4", 5),
     requires=_marked_in_reach(2),
     requires_text="targets an enemy it has marked",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3770a2(c: Cast) -> None:
     foe = _restricted_to(c, 2, lambda f: c.marked(on=f, by=c.me))
@@ -1221,12 +1223,13 @@ def m3770a2(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(3),
     target=EACH_ALLY,
-    dropped=("Target.kind",),
+    dropped=("Target.ident",),
 )
 def m3770a3(c: Cast) -> None:
     """The target line narrows to allies off this very stat block, counted by
-    `Ident.ref` -- every creature in a fight may share a type word and the
-    printed sentence is about this block. `EACH_ALLY` counts the caster in
+    `Ident.ref` and marked `Target.ident` -- every creature in a fight may
+    share a type word and the printed sentence is about this block, which is
+    why this is not `Target.creature_kind`. `EACH_ALLY` counts the caster in
     though `c.allies` does not (#364), and a close burst does not catch its
     own user."""
     mate = c.target
@@ -1892,14 +1895,15 @@ def m5429a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d4", 0),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5429a1(c: Cast) -> None:
     """Both of the card's second numbers are the same question asked twice --
     +11 instead of +9 and 2d4+10 instead of 2d4 -- so the attack takes a `plus`
     and the damage takes a flat rider, and the base stays in the header. "While
     it has a creature grabbed it can bite only that one" is a target
-    restriction with nowhere to live, so the swing is redirected."""
+    restriction with nowhere to live -- a relation to the caster, so
+    `Target.relation` -- and the swing is redirected instead."""
     held = _grabbing(c)
     foe = c.target
     if held and foe not in held:
@@ -1926,7 +1930,7 @@ def m5429a1(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=9),
     requires=_grabbed_by_me_in_reach,
     requires_text="targets a creature it has grabbed",
-    dropped=("Target.kind", "c.aftereffect()"),
+    dropped=("Target.relation", "c.aftereffect()"),
 )
 def m5429a2(c: Cast) -> None:
     """"Save ends both" is one effect carrying the slow and the burn, so the
@@ -2490,12 +2494,13 @@ def m6346a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d6", 5),
-    dropped=("Target.kind", "c.grab(dc=)"),
+    dropped=("Target.relation", "c.grab(dc=)"),
 )
 def m6346a2(c: Cast) -> None:
     """"While it has a target grabbed it can bite only that target" is a target
-    restriction with nowhere in `Target` to live, so the swing is redirected to
-    the creature it is holding rather than refused."""
+    restriction with nowhere in `Target` to live -- a relation to the caster,
+    so `Target.relation` -- and the swing is redirected to the creature it is
+    holding rather than refused."""
     held = _grabbing(c)
     foe = c.target
     if held and foe not in held:
@@ -2519,7 +2524,7 @@ def m6346a2(c: Cast) -> None:
     damage=Damage("2d8", 4, kind=LIMITED, half_on_miss=True),
     requires=_grabbed_by_me_in_reach,
     requires_text="targets a creature it has grabbed",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6346a3(c: Cast) -> None:
     """The captive is dragged to a named square rather than a distance, and the

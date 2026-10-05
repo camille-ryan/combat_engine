@@ -928,7 +928,7 @@ def m1937a0(c: Cast) -> None:
     "m1937a1", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(2),
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
     attack=Attack(vs=AC, printed=15), damage=Damage("2d6", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1937a1(c: Cast) -> None:
     held = _holding(c)
@@ -1300,7 +1300,7 @@ def m4012a0(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
     once_per_round=True, keywords=[Keyword.FIRE],
     attack=Attack(vs=FORT, printed=13), damage=Damage("1d6", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m4012a1(c: Cast) -> None:
     held = _holding(c)
@@ -1449,15 +1449,14 @@ def m4296a0(c: Cast) -> None:
 @power(
     "m4296a1", level=8, usage=ENCOUNTER, action=STANDARD, reach=CloseBurst(3),
     target=Target(side="enemy", count=99, everyone=True, label="slowed or immobilized creature"),
-    attack=Attack(vs=FORT, printed=11), dropped=("Target.kind",),
+    attack=Attack(vs=FORT, printed=11), dropped=("Target.condition",),
 )
 def m4296a1(c: Cast) -> None:
     """Buries a creature already slowed or pinned down.
 
     Aimed rather than abandoned: `Target` cannot filter on a condition, so the
     chooser hands this row whoever is nearest, and returning threw it away while
-    somebody else in the burst qualified. `Target.kind` is the gap, as it is for
-    the 112 other rows of this shape.
+    somebody else in the burst qualified. `Target.condition` is the gap.
     """
     victim = _restricted_to(
         c, 3, lambda f: c.is_(Condition.SLOWED, f) or c.is_(Condition.IMMOBILIZED, f)
@@ -1565,7 +1564,7 @@ def m4370a1(c: Cast) -> None:
     "m4370a2", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=Target(side="enemy", count=1, label="enemy marked by it"),
     keywords=[Keyword.WEAPON], attack=Attack(vs=AC, printed=13), damage=Damage("3d10", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m4370a2(c: Cast) -> None:
     victim = c.target
@@ -1838,7 +1837,7 @@ def m4755a1(c: Cast) -> None:
 @power(
     "m4755a2", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
-    damage=Damage("2d8", 4), dropped=("Target.kind",),
+    damage=Damage("2d8", 4), dropped=("Target.relation",),
 )
 def m4755a2(c: Cast) -> None:
     held = _holding(c)
@@ -2050,7 +2049,7 @@ def m5325a1(c: Cast) -> None:
     "m5325a2", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=Target(side="enemy", count=1, label="creature marked by it"),
     keywords=[Keyword.WEAPON], attack=Attack(vs=AC, printed=15), damage=Damage("2d8", 7),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5325a2(c: Cast) -> None:
     victim = c.target
@@ -2185,7 +2184,7 @@ def m5582a1(c: Cast) -> None:
     keywords=[Keyword.HEALING], attack=Attack(vs=AC, printed=13), damage=Damage("3d8", 5),
     requires=_pinned_enemy_in_reach,
     requires_text="an adjacent enemy must be immobilized, stunned, or unconscious",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5582a2(c: Cast) -> None:
     victim = c.target
@@ -2589,7 +2588,7 @@ def m5646a2(c: Cast) -> None:
     "m5646a3", level=8, usage=Usage.RECHARGE, recharge=6, action=MINOR,
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
     reach=Melee(1), attack=Attack(vs=FORT, printed=11), damage=Damage("1d6", 3, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5646a3(c: Cast) -> None:
     if c.first:
@@ -2790,7 +2789,7 @@ def _adjacent_enemy_fell(world: World, me: int, ev: Any) -> bool:
     reach=Melee(1), target=Target(side="enemy", count=1, label="prone creature"),
     attack=Attack(vs=AC, printed=13), damage=Damage("3d6", 9, kind=LIMITED),
     requires=_prone_enemy_in_reach, requires_text="an adjacent enemy must be prone",
-    dropped=("Target.kind", "c.cannot_stand()"),
+    dropped=("Target.condition", "c.cannot_stand()"),
 )
 def m5701a2(c: Cast) -> None:
     """"Cannot stand until the end of its next turn" has no verb -- there

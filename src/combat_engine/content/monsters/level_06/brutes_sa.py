@@ -2278,7 +2278,7 @@ def m5405a3(c: Cast) -> None:
     damage=Damage("3d6", 6, kind=LIMITED),
     requires=_bloodied_enemy,
     requires_text="the target must be bloodied",
-    dropped=("Target.kind()", "c.in_form()"),
+    dropped=("Target.bloodied", "c.in_form()"),
 )
 def m5405a4(c: Cast) -> None:
     victim = c.target if c.target is not None and c.bloodied(c.target) else None
@@ -2564,7 +2564,7 @@ def m5633a1(c: Cast) -> None:
     damage=Damage("3d10", 5),
     requires=_bloodied_enemy,
     requires_text="the target must be bloodied",
-    dropped=("Target.kind()",),
+    dropped=("Target.bloodied",),
 )
 def m5633a2(c: Cast) -> None:
     victim = c.target if c.target is not None and c.bloodied(c.target) else None
@@ -3278,7 +3278,7 @@ def m6343a2(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(2),
     target=Target(side="ally", count=1, label="minion plant ally"),
-    dropped=("Target.kind()",),
+    dropped=("Target.creature_kind",),
 )
 def m6343a3(c: Cast) -> None:
     mate = c.target

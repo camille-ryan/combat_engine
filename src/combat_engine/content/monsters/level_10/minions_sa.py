@@ -14,10 +14,10 @@ Conventions, inherited from the level-1 to level-9 minion sweeps:
   except where it says "creatures in the burst" outright;
 * a **trait** costs no action, has no target, and arms whatever holds it,
   whatever the compendium's action column claims;
-* "Target: a creature grabbed by it" is the target's own state, not the
-  chooser's business -- `Target` filters side, count and size and not what
-  a creature is suffering, so `_restricted_to` (level_03) is reused here
-  and every use is marked `dropped=("Target.kind",)`;
+* "Target: a creature grabbed by it" is how the creature stands to the
+  attacker, not the chooser's business -- `Target` filters side, count and
+  size and nothing else, so `_restricted_to` (level_03) is reused here
+  and every use is marked `dropped=("Target.relation",)`;
 * a printed escape DC has nowhere to go -- `c.grab` sets the hold and takes
   no number -- so every grab here is `dropped=("c.grab(dc=)",)`;
 * self-destruction ("turns to ash and is destroyed") is a flat, unresisted
@@ -212,7 +212,7 @@ def m115910a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=15),
     damage=Damage("", 10, kind=MINION),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m115910a2(c: Cast) -> None:
     """Restricted to the creature it is already holding; dazed "until the

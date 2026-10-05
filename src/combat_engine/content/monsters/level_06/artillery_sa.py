@@ -2152,7 +2152,7 @@ def m5878a4(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(10),
     target=Target(side="ally", count=1, everyone=True, label="kobold allies in the burst"),
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m5878a5(c: Cast) -> None:
     """The species restriction cannot be read **off this block**, so it is

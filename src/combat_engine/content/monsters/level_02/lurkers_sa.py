@@ -16,7 +16,8 @@ their keep repeatedly here:
   have to find the triggering enemy;
 * a printed target restriction about what a creature is *suffering*, or about
   what the attacker is holding, is asked in the body: `Target` filters on side
-  and size and nothing else. `label=` records it and `Target.kind` is the gap.
+  and size and nothing else. `label=` records it and the marker names the gap
+  the line has -- `Target.relation` for "a creature it is grabbing".
 """
 
 from __future__ import annotations
@@ -878,7 +879,7 @@ def m4388a1(c: Cast) -> None:
     damage=Damage("2d6", 3),
     requires=_holds_somebody,
     requires_text="must have a creature grabbed",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m4388a2(c: Cast) -> None:
     if c.target not in c.grabbing():

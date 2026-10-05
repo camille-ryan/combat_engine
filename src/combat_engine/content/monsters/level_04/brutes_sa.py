@@ -298,7 +298,7 @@ def m1023a0(c: Cast) -> None:
     damage=Damage("2d6", 4),
     requires=_has_hold,
     requires_text="it must have hold of a creature",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1023a1(c: Cast) -> None:
     """"Grabbed target only" is a target line `Target` cannot express, so the
@@ -1123,7 +1123,7 @@ def m3438a1(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     requires=_helpless_in_reach,
     requires_text="a helpless creature must be in reach",
-    dropped=("Target.kind", "c.coup_de_grace(ref=)"),
+    dropped=("Target.condition", "c.coup_de_grace(ref=)"),
 )
 def m3438a2(c: Cast) -> None:
     """The two costs it pays are exact and so is the reward; the finisher is
@@ -1433,7 +1433,7 @@ def m4622a1(c: Cast) -> None:
     once_per_round=True,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("Target.kind", "c.hit_this_turn()", "query.shield_bonus()"),
+    dropped=("c.hit_this_turn()", "query.shield_bonus()"),
 )
 def m4622a2(c: Cast) -> None:
     """The shove and the step into the vacated square are exact. "One creature
@@ -2742,7 +2742,7 @@ def m6627a3(c: Cast) -> None:
     once_per_round=True,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("Target.kind",),
+    dropped=("Target.ongoing",),
 )
 def m6627a4(c: Cast) -> None:
     """"A creature taking ongoing fire damage" is a target line `Target` cannot

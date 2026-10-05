@@ -1203,7 +1203,7 @@ def m5374a3(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=18),
     damage=Damage("1d10", 6, dtype=DamageType.PSYCHIC),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5374a4(c: Cast) -> None:
     """"One dazed creature" is narrower than any `Target` can say, so the

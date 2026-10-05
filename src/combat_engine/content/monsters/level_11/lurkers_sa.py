@@ -1601,7 +1601,7 @@ def m5492a2(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("4d10", 5, dtype=DamageType.NECROTIC),
-    dropped=("Target.kind",),
+    dropped=("Target.relation", "Target.creature_kind"),
 )
 def m5492a3(c: Cast) -> None:
     """"One living creature grabbed by the m5492" is narrower than `Target`
@@ -1640,7 +1640,7 @@ def m5492a3(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d10", 7, dtype=DamageType.NECROTIC),
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m5492a4(c: Cast) -> None:
     """"One living creature" is narrower than `Target` can say, so the aim is

@@ -709,7 +709,7 @@ _granted("f3015", "f3015b")
 
 
 @power("f3015b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=Ranged(10), target=Target("object", 1), dropped=("Target.kind",))
+       reach=Ranged(10), target=Target("object", 1), dropped=("Scenery.kind",))
 def f3015b(c: Cast) -> None:
     """Re-aimed. `Target("object")` is a real target line -- the pool is
     `query.scenery` and `query.targetable` lets a thing with no hit

@@ -390,7 +390,7 @@ def m4457a0(c: Cast) -> None:
     damage=Damage("2d6", 3),
     requires=_any_enemy_suffering(Condition.IMMOBILIZED),
     requires_text="must have an immobilized creature to aim at",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m4457a1(c: Cast) -> None:
     """The restriction is asked in the body, since `Target` filters on side and

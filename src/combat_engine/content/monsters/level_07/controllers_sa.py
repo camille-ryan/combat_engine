@@ -1154,7 +1154,7 @@ def m2777a3(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.PSYCHIC, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=13),
     damage=Damage("1d8", 9, dtype=DamageType.PSYCHIC, kind=LIMITED, half_on_miss=True),
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied", "Target.creature_kind"),
 )
 def m2777a4(c: Cast) -> None:
     """"Bloodied arcane targets only" is a gate `Target` cannot carry --

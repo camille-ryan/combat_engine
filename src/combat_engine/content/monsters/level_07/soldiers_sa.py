@@ -478,7 +478,7 @@ def m1158a1(c: Cast) -> None:
     reach=Melee(1),
     target=Target(side="enemy", count=1, label="one creature granting it combat advantage"),
     attack=Attack(vs=FORT, printed=13), damage=Damage("1d8", 5, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1158a2(c: Cast) -> None:
     victim = c.target
@@ -625,7 +625,7 @@ def m1760a1(c: Cast) -> None:
 @power(
     "m1760a2", level=7, usage=AT_WILL, action=MINOR, reach=Melee(4),
     target=Target(side="enemy", count=1, label="dazed, stunned, unconscious, or helpless creature"),
-    attack=Attack(vs=FORT, printed=12), dropped=("Target.kind",),
+    attack=Attack(vs=FORT, printed=12), dropped=("Target.condition",),
 )
 def m1760a2(c: Cast) -> None:
     victim = c.target
@@ -773,7 +773,7 @@ def m1981a0(c: Cast) -> None:
 @power(
     "m1981a1", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1981a1(c: Cast) -> None:
     """The printed line is two damage fragments the extraction never
@@ -1056,7 +1056,7 @@ def m2233a0(c: Cast) -> None:
 @power(
     "m2233a1", level=7, usage=AT_WILL, action=MINOR, reach=Melee(2),
     target=Target(side="enemy", count=1, label="creature grabbed by it"),
-    attack=Attack(vs=AC, printed=14), damage=Damage("1d6", 5), dropped=("Target.kind",),
+    attack=Attack(vs=AC, printed=14), damage=Damage("1d6", 5), dropped=("Target.relation",),
 )
 def m2233a1(c: Cast) -> None:
     held = _holding(c)
@@ -1615,7 +1615,7 @@ def m5504a0(c: Cast) -> None:
     "m5504a1", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=Target(side="enemy", count=1, label="prone creature"),
     keywords=[Keyword.WEAPON], attack=Attack(vs=AC, printed=12), damage=Damage("2d8", 6),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5504a1(c: Cast) -> None:
     victim = c.target
@@ -1674,7 +1674,7 @@ def m5576a0(c: Cast) -> None:
 @power(
     "m5576a1", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=Target(side="enemy", count=1, label="immobilized, stunned, or unconscious creature"),
-    attack=Attack(vs=AC, printed=12), damage=Damage("3d6", 3), dropped=("Target.kind",),
+    attack=Attack(vs=AC, printed=12), damage=Damage("3d6", 3), dropped=("Target.condition",),
 )
 def m5576a1(c: Cast) -> None:
     victim = c.target
@@ -1743,7 +1743,7 @@ def m5577a1(c: Cast) -> None:
 @power(
     "m5577a2", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=Target(side="enemy", count=1, label="immobilized, stunned, or unconscious creature"),
-    attack=Attack(vs=AC, printed=12), damage=Damage("4d6", 5), dropped=("Target.kind",),
+    attack=Attack(vs=AC, printed=12), damage=Damage("4d6", 5), dropped=("Target.condition",),
 )
 def m5577a2(c: Cast) -> None:
     victim = c.target

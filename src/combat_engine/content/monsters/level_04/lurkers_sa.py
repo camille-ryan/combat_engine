@@ -22,7 +22,8 @@ to the conventions the level-1 to level-3 sweeps settled:
   to live -- `Target` filters on side, count and size -- so `label=` records
   it for the card, the body redirects to a creature in reach that qualifies
   rather than returning, a `requires=` keeps the row from being offered when
-  none does, and `Target.kind` is the gap (#361).
+  none does, and the gap is `Target.creature_kind` for the type word and
+  `Target.relation` for what the creature can see of the attacker (#361).
 
 This role is mostly one printed sentence in six variants -- "becomes invisible
 until it attacks" -- and the variants are not interchangeable: three say *until
@@ -989,7 +990,7 @@ def m5485a1(c: Cast) -> None:
     damage=Damage("2d6", 1, dtype=DamageType.POISON),
     requires=_cannot_see_me_in_reach,
     requires_text="a creature that cannot see it must be within reach",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5485a2(c: Cast) -> None:
     """`Target` narrows by side, count and size and not by what a creature can
@@ -1338,7 +1339,7 @@ def m6345a0(c: Cast) -> None:
     keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("2d6", 2, dtype=DamageType.THUNDER),
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m6345a1(c: Cast) -> None:
     """"Special: this is a basic attack" is filed with `c.as_basic`, so a row
@@ -1444,7 +1445,7 @@ def m6395a2(c: Cast) -> None:
     damage=Damage("2d8", 3),
     requires=_opening_in_reach,
     requires_text="a creature granting it combat advantage must be within reach",
-    dropped=("Target.kind", "c.grab(dc=)"),
+    dropped=("Target.relation", "c.grab(dc=)"),
 )
 def m6395a3(c: Cast) -> None:
     """"Sustain Standard" has a payout as well as a clock, and the clock alone

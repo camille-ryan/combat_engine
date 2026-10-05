@@ -861,7 +861,7 @@ def m4502a4(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     requires=_an_ally_is_down,
     requires_text="an ally must be dead",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m4502a5(c: Cast) -> None:
     """"One **dead** ally" is a restriction `Target` cannot carry, so it is

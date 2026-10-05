@@ -1416,12 +1416,13 @@ def m3502a0(c: Cast) -> None:
     damage=Damage("1d6", 2, dtype=DamageType.NECROTIC),
     requires=_has_the_drop,
     requires_text="must have combat advantage against the target",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3502a1(c: Cast) -> None:
-    """The target line restricts by a condition and `Target` has no field for
-    it, so the gate is a `requires=` -- the row is simply not offered when
-    nothing in reach qualifies, which is what the printed line means.
+    """The target line restricts by how the creature stands to the attacker --
+    `Target.relation`, which `Target` has no field for -- so the gate is a
+    `requires=`: the row is simply not offered when nothing in reach
+    qualifies, which is what the printed line means.
     `c.spend_surge` is the whole of "the target loses a healing surge"."""
     if c.strike():
         c.hit()
@@ -2705,7 +2706,7 @@ def m5652a2(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="a creature it flanks"),
     requires=_flanked_creature_in_reach,
     requires_text="must flank the target",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5652a3(c: Cast) -> None:
     """No attack roll: the whole row is a trap laid on the target's own next
@@ -2879,7 +2880,7 @@ def m5824a4(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     requires=_dying_in_reach,
     requires_text="must have a dying humanoid in reach",
-    dropped=("c.kill()", "Target.kind"),
+    dropped=("c.kill()", "Target.creature_kind"),
 )
 def m5824a5(c: Cast) -> None:
     """The heal is exact and it works. "The target dies" is the other half and
@@ -3287,7 +3288,7 @@ def m6398a2(c: Cast) -> None:
     damage=Damage("2d12", 5),
     requires=_has_the_drop,
     requires_text="must have combat advantage against the target",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6398a3(c: Cast) -> None:
     if c.strike():

@@ -20,8 +20,10 @@ them do most of the work here:
   at the creature the trigger names. `ONE_CREATURE` would let the engine pick
   somebody the card never mentions;
 * **a printed target restriction about what a creature is suffering** is
-  asked in the body, recorded in `label=`, and marked `Target.kind` --
-  `Target` filters on side and size and nothing else.
+  asked in the body, recorded in `label=`, and marked for the gap it actually
+  has -- `Target.relation` for "grabbed by it" or "cannot see it",
+  `Target.condition` for a condition, `Target.ongoing` for ongoing damage --
+  because `Target` filters on side and size and nothing else.
 """
 
 from __future__ import annotations
@@ -211,7 +213,10 @@ def _restricted_to(c: Cast, reach: int, test: Callable[[int], bool]) -> int | No
     suffering, so the chooser may hand a row somebody its own target line
     forbids. The restriction is enforced here -- and where another creature in
     reach *does* qualify the row is aimed there rather than thrown away, which
-    is what the filter would have done. `Target.kind` is the gap in every case.
+    is what the filter would have done. The gap is named per row -- it is
+    `Target.relation`, `Target.condition`, `Target.bloodied`,
+    `Target.creature_kind`, `Target.ongoing` or `Target.ident` -- because one
+    symbol standing for all six could not go green correctly for any of them.
     """
     foe = c.target
     if foe is not None and test(foe):
@@ -927,12 +932,13 @@ def m4685a1(c: Cast) -> None:
     damage=Damage("2d8", 5),
     requires=_grabbing,
     requires_text="must have a creature grabbed",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m4685a2(c: Cast) -> None:
-    """`Target` filters on side and size and not on what a creature is
-    suffering, so the restriction is asked here and `requires=` keeps the row
-    from being offered when there is nobody held at all."""
+    """"A creature it is grabbing" is a relation to the caster and not a thing
+    the creature carries, which is why the gap is `Target.relation`: `Target`
+    filters on side and size, so the restriction is asked here and `requires=`
+    keeps the row from being offered when there is nobody held at all."""
     foe = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
     if foe is None:
         return
@@ -1168,7 +1174,7 @@ def m5286a1(c: Cast) -> None:
     damage=Damage("1d6", 3),
     requires=_an_enemy_is_poisoned,
     requires_text="an enemy must be taking ongoing poison damage",
-    dropped=("Target.kind",),
+    dropped=("Target.ongoing",),
 )
 def m5286a2(c: Cast) -> None:
     foe = _restricted_to(c, 1, lambda f: _poisoned(c, f))
@@ -1188,7 +1194,7 @@ def m5286a2(c: Cast) -> None:
     target=Target(label="one creature that cannot see it"),
     attack=Attack(vs=AC, printed=8),
     damage=Damage("2d6", 3),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5286a3(c: Cast) -> None:
     """"Cannot see the creature" is two states and both are asked: hidden from
@@ -1334,7 +1340,7 @@ def m5648a1(c: Cast) -> None:
     damage=Damage("4d6", 8, half_on_miss=True),
     requires=_grabbing,
     requires_text="must have a creature grabbed",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5648a2(c: Cast) -> None:
     """`half_on_miss` on the header is data for the card; the miss line is

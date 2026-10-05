@@ -1558,12 +1558,15 @@ def f3276(c: Cast) -> None:
 
 @power("f3292", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.recast(usage=)", "Target.kind"))
+       todo=("c.recast(usage=)", "Target.square"))
 def f3292(c: Cast) -> None:
     """Turns an encounter cantrip into an at-will -- `c.recast` changes
     what a row costs, not how often it may be used -- and then hangs
     combat advantage off an enemy standing beside the *object or square*
-    the cantrip was aimed at, which is not a target the engine has."""
+    the cantrip was aimed at. `Target` has sides for creatures and for an
+    object and none for a square, so there is no aim point to stand beside:
+    `Target.square` is the gap, and p1217 declares `NO_TARGET` because of
+    it."""
 
 
 @power("f3295", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

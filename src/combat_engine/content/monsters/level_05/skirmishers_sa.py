@@ -22,8 +22,10 @@ level's `artillery_sa.py`, `brutes_sa.py`, `minions_sa.py` and `misc_sa.py`:
   creature", "a creature marked by it", "an immobilized creature") cannot
   live in `Target`, which filters on side and size only -- it is a
   Requirement that decides whether the row is offered at all, and a body
-  redirect for when the chosen target does not qualify
-  (`dropped=("Target.kind",)`);
+  redirect for when the chosen target does not qualify. The marker names
+  which narrowing it is: `Target.condition` for a condition the creature
+  carries, `Target.relation` for one that is about the attacker ("marked by
+  it"), `Target.bloodied` for bloodied;
 * a printed Requirement naming a weapon ("requires a scimitar") is not asked:
   a monster carries no `Gear`, and the blow is the block's own basic attack.
 
@@ -629,7 +631,7 @@ def m2002a0(c: Cast) -> None:
     damage=Damage("1d8", 4, dtype=DamageType.NECROTIC),
     requires=_any_enemy_bloodied,
     requires_text="it targets a bloodied enemy",
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied",),
 )
 def m2002a1(c: Cast) -> None:
     victim = c.target
@@ -758,7 +760,7 @@ def m3245a0(c: Cast) -> None:
     damage=Damage("2d6", 4),
     requires=_any_enemy_marked_by_me,
     requires_text="it targets a creature marked by it",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m3245a1(c: Cast) -> None:
     victim = c.target
@@ -1289,7 +1291,7 @@ def m4305a0(c: Cast) -> None:
     damage=Damage("2d8", 4),
     requires=_any_enemy_suffering(Condition.PRONE),
     requires_text="it targets a prone creature",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m4305a1(c: Cast) -> None:
     victim = c.target
@@ -1686,7 +1688,7 @@ def m5337a1(c: Cast) -> None:
     damage=Damage("2d6", 4),
     requires=_has_an_opening,
     requires_text="it targets a creature granting it combat advantage",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5337a2(c: Cast) -> None:
     victim = c.target
@@ -2968,7 +2970,7 @@ def m6476a1(c: Cast) -> None:
         Condition.IMMOBILIZED, Condition.RESTRAINED, Condition.STUNNED, Condition.UNCONSCIOUS
     ),
     requires_text="it targets an immobilized, restrained, stunned or unconscious creature",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m6476a2(c: Cast) -> None:
     states = (Condition.IMMOBILIZED, Condition.RESTRAINED, Condition.STUNNED, Condition.UNCONSCIOUS)

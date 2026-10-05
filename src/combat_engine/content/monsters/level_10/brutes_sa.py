@@ -1025,7 +1025,7 @@ def m2596a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("3d10", 6),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m2596a1(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: c.is_(Condition.SLOWED, on=f))
@@ -1289,7 +1289,7 @@ def m4014a0(c: Cast) -> None:
     reach=Melee(2),
     target=Target(side="enemy", count=1, label="immobilized by it"),
     attack=Attack(vs=FORT, printed=11),
-    dropped=("Target.kind", "c.sight_range(shared_only=)"),
+    dropped=("Target.relation", "c.sight_range(shared_only=)"),
 )
 def m4014a1(c: Cast) -> None:
     """The restrained hold and the recurring damage both play.
@@ -1322,7 +1322,7 @@ def m4014a1(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="grabbed by it"),
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("2d8", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m4014a2(c: Cast) -> None:
     victim = next(iter(c.grabbing()), None)
@@ -2035,7 +2035,7 @@ def m5578a0(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="helpless or restrained"),
     attack=Attack(vs=AC, printed=13),
     damage=Damage("5d6", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5578a1(c: Cast) -> None:
     victim = _restricted_to(
@@ -3071,7 +3071,7 @@ def m6284a1(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="flanked by it"),
     attack=Attack(vs=AC, printed=15),
     damage=Damage("1d8", 0),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m6284a2(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: flanked_by(c.world, f, c.me))

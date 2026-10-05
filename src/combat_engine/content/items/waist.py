@@ -924,7 +924,7 @@ def i3475x1(c: Cast) -> None:
 @power("i3475p1", level=5, cls=ITEM, usage=ENCOUNTER, action=STANDARD,
        reach=Ranged(10), target=ONE_CREATURE,
        attack=Attack(vs=WILL, printed=8),
-       dropped=("Target.kind", "spec.monster_ref()"))
+       dropped=("Target.creature_kind", "spec.monster_ref()"))
 def i3475p1(c: Cast) -> None:
     """`Target` has no creature-kind field, so "one construct" is any
     creature; and the longer domination is printed for a creature the spec

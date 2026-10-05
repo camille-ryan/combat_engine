@@ -15,8 +15,9 @@ Conventions, inherited from the level 1-8 lurker sweeps:
   except where it says "creatures in the burst" outright;
 * "Target: a creature grabbed by it" is the target's own state, not the
   chooser's business -- `Target` filters side, count and size and not what
-  a creature is suffering, so `_restricted_to` (level_03) is reused and
-  every use is marked `dropped=("Target.kind",)`;
+  a creature is suffering, so `_restricted_to` (level_03) is reused and the
+  use is marked `dropped=("Target.relation",)` -- "grabbed **by it**" is a
+  relation to the caster and not a condition anybody carries;
 * a printed escape DC has nowhere to go -- every grab here is
   `dropped=("c.grab(dc=)",)`;
 * a blow of two damage types rolled once keeps the first in the header and
@@ -32,9 +33,8 @@ condition wires up on its own, and `_kin_adjacent_count` is `_kin_count`
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from combat_engine.content.monsters.level_02.lurkers_sa import _recharge_when_using
+from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -90,11 +90,6 @@ from combat_engine.engine.triggers import Trigger, by_me, targets_me
 # --------------------------------------------------------------------------
 
 
-def _restricted_to(c: Cast, reach: int, test: Callable[[int], bool]) -> int | None:
-    foe = c.target
-    if foe is not None and test(foe):
-        return foe
-    return next((f for f in c.enemies() if test(f) and c.distance(f) <= reach), None)
 
 
 def _dominated_by_me(c: Cast, victim: int) -> bool:
@@ -522,11 +517,17 @@ def m2619a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=12),
-    dropped=("Target.kind",),
+    dropped=("When.ESCAPE",),
 )
 def m2619a1(c: Cast) -> None:
     """No printed damage number at all -- the Effect is the grab, the pull
-    and the ongoing burn, and the attack roll only gates whether they land."""
+    and the ongoing burn, and the attack roll only gates whether they land.
+
+    "Medium or smaller" is **not** a gap: `Target(max_size=)` says it, so the
+    marker was re-aimed off the target line entirely. What is missing is the
+    clock: the daze and the burn run "until it escapes the grab" and `When`
+    has no escape-tied member, so both are hung on `When.ENCOUNTER` instead
+    and `When.ESCAPE` is the named gap."""
     victim = _restricted_to(c, 1, lambda f: _medium_or_smaller(c, f))
     if victim is None:
         return
@@ -963,7 +964,7 @@ def m5132a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=14),
     damage=Damage("3d6", 8),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5132a2(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))

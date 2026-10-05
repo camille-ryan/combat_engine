@@ -1265,7 +1265,7 @@ def m3320a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("6d6", 5, dtype=DamageType.NECROTIC),
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied", "Target.creature_kind"),
 )
 def m3320a2(c: Cast) -> None:
     def qualifies(f: int) -> bool:
@@ -1933,7 +1933,7 @@ def m5494a4(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="bloodied, hit this turn by claw"),
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=11),
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied", "c.hit_this_turn()"),
 )
 def m5494a5(c: Cast) -> None:
     bucket = getattr(c.world, "_m5494_claws", {})

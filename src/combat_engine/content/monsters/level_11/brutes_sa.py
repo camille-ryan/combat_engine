@@ -2733,13 +2733,14 @@ def m6055a0(c: Cast) -> None:
     keywords=[Keyword.FEAR, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("3d12", 10),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m6055a1(c: Cast) -> None:
     """"One prone enemy" is narrower than any `Target` can say, so the row is
     re-aimed rather than thrown away: somebody else in reach may be down
     while the chooser handed over whoever was nearest. The header still
-    cannot *say* it, which is the named gap.
+    cannot *say* it, which is the named gap: prone is a condition, so
+    `Target.condition`.
 
     "+2 bonus to all defences" prints no type word, so the bonus is untyped
     and `kind=` is left off.

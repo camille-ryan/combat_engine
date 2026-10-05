@@ -1646,7 +1646,7 @@ def i3454p1(c: Cast) -> None:
 @power("i3518p1", level=4, cls=ITEM, usage=ENCOUNTER, action=MINOR,
        reach=Ranged(5), target=ONE_CREATURE, keywords=[Keyword.CHARM],
        attack=Attack(vs=WILL, printed=7),
-       dropped=("Target.kind",))
+       dropped=("Target.creature_kind",))
 def i3518p1(c: Cast) -> None:
     """"One beast" is asked in the body, since `Target` filters on side
     and size and not on what a creature is; the loss is that the menu

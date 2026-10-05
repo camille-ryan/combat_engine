@@ -334,7 +334,7 @@ def m2006a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d4", 5, kind=MINION),
     requires_text="requires combat advantage against the target",
-    dropped=("Target.kind", "c.contract(ref)"),
+    dropped=("Target.relation", "c.contract(ref)"),
 )
 def m2006a1(c: Cast) -> None:
     """The Requirement is about a *pair* and `requires=` is handed a creature
@@ -395,7 +395,7 @@ def m2082a0(c: Cast) -> None:
     target=Target("enemy", 1, label="grabbed by it"),
     keywords=[Keyword.NECROTIC],
     damage=Damage(bonus=10, dtype=DamageType.NECROTIC, kind=MINION),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m2082a1(c: Cast) -> None:
     """No attack roll is printed -- the damage simply lands on whoever it is
@@ -887,7 +887,7 @@ def m4037a0(c: Cast) -> None:
     damage=Damage(bonus=8, dtype=DamageType.LIGHTNING, kind=MINION),
     trigger=_REDUCED_TO_0,
     on=Trigger(Dropped, about_me, _REDUCED_TO_0),
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m4037a1(c: Cast) -> None:
     """No attack roll: the burst simply takes whoever is standing in it. The
@@ -930,7 +930,7 @@ def m4039a0(c: Cast) -> None:
     damage=Damage(bonus=8, dtype=DamageType.FIRE, kind=MINION),
     trigger=_REDUCED_TO_0,
     on=Trigger(Dropped, about_me, _REDUCED_TO_0),
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m4039a1(c: Cast) -> None:
     if _nonelemental(c, c.target):
@@ -972,7 +972,7 @@ def m4040a0(c: Cast) -> None:
     damage=Damage(bonus=8, dtype=DamageType.COLD, kind=MINION),
     trigger=_REDUCED_TO_0,
     on=Trigger(Dropped, about_me, _REDUCED_TO_0),
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
 )
 def m4040a1(c: Cast) -> None:
     if _nonelemental(c, c.target):

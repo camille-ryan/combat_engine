@@ -802,7 +802,7 @@ def m1586a2(c: Cast) -> None:
     damage=Damage("1d8", 5),
     requires=_m1586_has_an_edge,
     requires_text="the m1586 must have combat advantage against the target",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m1586a3(c: Cast) -> None:
     """Aimed at a creature it actually has an edge on rather than thrown away:
@@ -1552,7 +1552,7 @@ def m2516a1(c: Cast) -> None:
     reach=Melee(4),
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=16),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m2516a2(c: Cast) -> None:
     """No damage line: dragging the creature in is the whole of the hit.
@@ -1641,7 +1641,7 @@ def m2549a0(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage("2d8", 5, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m2549a1(c: Cast) -> None:
     """"Affects an immobilized target only" is narrower than any `Target` can
@@ -2927,7 +2927,7 @@ def m5740a1(c: Cast) -> None:
     target=ONE_CREATURE,
     once_per_round=True,
     attack=Attack(vs=AC, printed=16),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5740a2(c: Cast) -> None:
     """No damage line: the daze is the whole of the hit.
@@ -2935,8 +2935,14 @@ def m5740a2(c: Cast) -> None:
     "One creature marked by the m5740" is narrower than any `Target` can say,
     so the row is aimed at one of its own marks rather than discarded when
     the chooser hands it somebody else.
+
+    **`by=c.me` was missing and the docstring already claimed it.** `c.marked`
+    defaults `by` to nobody in particular, so this accepted a creature marked
+    by *anyone* -- a mark laid by a character made this creature's row legal.
+    Four rows at level 5 print the same line and all four pass `by=c.me`.
+    Found when `Target.kind` was split and the card was read against the body.
     """
-    victim = _restricted_to(c, 1, lambda f: c.marked(on=f))
+    victim = _restricted_to(c, 1, lambda f: c.marked(on=f, by=c.me))
     if victim is None:
         return
     if c.strike(on=victim, plus=2 if c.bloodied(on=c.me) else 0):

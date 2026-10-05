@@ -127,7 +127,7 @@ def m3436a1(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     requires=_any_enemy_suffering(Condition.HELPLESS, Condition.UNCONSCIOUS),
     requires_text="must have a helpless or unconscious creature to feed on",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m3436a2(c: Cast) -> None:
     """No attack line at all -- the damage is automatic against something that
@@ -305,16 +305,17 @@ def m5752a0(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="creature granting combat advantage"),
     attack=Attack(vs=AC, printed=6),
     damage=Damage("4d4"),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5752a1(c: Cast) -> None:
     """The ongoing damage runs "until the grab ends", which is not one of the
     durations -- so it is laid for the encounter and ended off the grab's own
     `on_end`, which is the only moment that can be seen.
 
-    `label=` records the target restriction for the card and `Target.kind` is
-    the gap: the header filters on side and size, so the row is offered
-    against a creature that is not granting combat advantage.
+    `label=` records the target restriction for the card and
+    `Target.relation` is the gap: the header filters on side and size, so the
+    row is offered against a creature that is not granting it combat
+    advantage.
     """
     if not c.strike():
         return

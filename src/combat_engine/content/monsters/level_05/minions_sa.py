@@ -681,7 +681,7 @@ def m5609a0(c: Cast) -> None:
     damage=Damage("", 8, kind=MINION),
     requires=_grabbed_by_me_in_reach,
     requires_text="targets a creature it has grabbed",
-    dropped=("Target.kind", "c.contract(ref)"),
+    dropped=("Target.relation", "c.contract(ref)"),
 )
 def m5609a1(c: Cast) -> None:
     """Where the chooser handed it somebody it is not holding and it *is* holding

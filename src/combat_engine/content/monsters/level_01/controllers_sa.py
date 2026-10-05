@@ -13,7 +13,10 @@ creatures are, and the conventions are the ones that file settled:
 * a printed target restriction that is about what a creature is *suffering*
   -- "an immobilized creature", "a dazed creature", "an enemy grabbed by it"
   -- is asked in the body, because `Target` filters on side and size and
-  nothing else. `label=` records it for the card and `Target.kind` is the gap;
+  nothing else. `label=` records it for the card, and the gap is named for what
+  the line actually asks: `Target.condition` for "an immobilized creature",
+  `Target.relation` for "an enemy grabbed by it", `Target.ident` where the line
+  narrows to a stat block;
 * a row that recharges on a printed condition rather than on a die keeps the
   die in the header, because that is what `actions.recharge` rolls and what
   the card shows, and arms the condition on top of it.
@@ -171,7 +174,7 @@ def m4452a0(c: Cast) -> None:
     damage=Damage(bonus=2, kind=MINION),
     requires=_has_a_hold,
     requires_text="must have an enemy grabbed",
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m4452a1(c: Cast) -> None:
     """The shift comes before the slide, because the square the target is slid
@@ -264,13 +267,14 @@ def m4760a0(c: Cast) -> None:
     once_per_round=True,
     reach=Melee(10),
     target=Target(side="other_ally", count=1, label=f"{_SPAWN} ally"),
-    dropped=("Target.kind",),
+    dropped=("Target.ident",),
 )
 def m4760a1(c: Cast) -> None:
     """`c.grant_attack` rather than `c.basic`, because the +2 and the swing are
     one printed clause and a bonus laid afterwards is read by the next attack
     instead of by this one. Which stat block the ally has to be off is recorded
-    in `label=` and is the gap."""
+    in `label=` and is the gap: it is counted by `Ident.ref` and `Target` has
+    nowhere to ask it, so the symbol is `Target.ident`."""
     friend = c.target
     if friend is None:
         return
@@ -520,7 +524,7 @@ def m5423a3(c: Cast) -> None:
     damage=Damage("1d6", 5, dtype=DamageType.PSYCHIC),
     requires=_any_enemy_suffering(Condition.DAZED),
     requires_text="must have a dazed creature to aim at",
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5423a4(c: Cast) -> None:
     """The restriction is asked in the body, since `Target` filters on side and

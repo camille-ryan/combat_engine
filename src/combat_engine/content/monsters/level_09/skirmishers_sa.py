@@ -22,11 +22,14 @@ Conventions, inherited from the eight levels below and from this level's own
   1d6+17)" that is just the maximised total needs no body code;
 * a card printing two damage types rolled once keeps the first in the
   header and carries the rest as a keyword (`dropped=("Damage(dtypes=)",)`);
-* a card naming a creature's *kind* rather than its side or size
-  (bloodied, taking ongoing poison, a specific size cap on a condition
-  only) is read with `_restricted_to` or in the body directly, and the
-  redirect carries `dropped=("Target.kind",)` only when `_restricted_to`
-  itself stands in for the filter.
+* a card asking something of the target that is not its side or size is
+  read with `_restricted_to` or in the body directly, and the redirect
+  carries a marker only when `_restricted_to` itself stands in for the
+  filter. Which marker is whichever names the thing asked:
+  `Target.bloodied`, `Target.ongoing` for a creature taking ongoing damage
+  of a named type, `Target.creature_kind` for a type word,
+  `Target.condition` for a state, `Target.relation` for a position held
+  against the attacker. They are five gaps and not one.
 
 Nine helpers are imported rather than written again, from six levels below
 and from this level's own `skirmishers.py`. Ten more are written here
@@ -998,7 +1001,7 @@ def m1832a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=14),
     damage=Damage("2d6", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.bloodied",),
 )
 def m1832a1(c: Cast) -> None:
     """"The target must be bloodied." `Target` filters on side and size and
@@ -1396,7 +1399,7 @@ def m3790a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=11),
-    dropped=("Target.kind",),
+    dropped=("Target.ongoing",),
 )
 def m3790a1(c: Cast) -> None:
     """"Only affects creatures taking ongoing poison damage." `Target`
@@ -2969,7 +2972,7 @@ def m6078a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("1d6", 8, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Target.kind", "Damage(dtypes=)"),
+    dropped=("Target.creature_kind", "Damage(dtypes=)"),
 )
 def m6078a2(c: Cast) -> None:
     """Two type filters `Target` cannot make -- "living creatures" and
@@ -3014,7 +3017,7 @@ def m6078a3(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("1d6", 2, dtype=DamageType.NECROTIC),
-    dropped=("Target.kind",),
+    dropped=("Target.creature_kind",),
     on=Trigger(Dropped, about_me, "it drops to 0 hit points"),
 )
 def m6078a4(c: Cast) -> None:
@@ -3278,7 +3281,7 @@ def m6172a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14),
     damage=Damage("3d6", 5, kind=LIMITED),
-    dropped=("Target.kind",),
+    dropped=("Target.relation", "Target.condition"),
 )
 def m6172a2(c: Cast) -> None:
     """"One creature it is flanking, or one prone creature." `Target`

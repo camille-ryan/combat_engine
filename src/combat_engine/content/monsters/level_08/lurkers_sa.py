@@ -19,8 +19,10 @@ Conventions, inherited from the level 1-7 lurker sweeps:
   stunned, or unconscious" is the target's own state, not the chooser's
   business** -- `Target` filters side, count and size and not what a
   creature is suffering, so `_restricted_to` (level_03) is reused across
-  this file the same way it was settled two levels down, and every use is
-  marked `dropped=("Target.kind",)`.
+  this file the same way it was settled two levels down. Each use is marked for
+  the gap it has: `dropped=("Target.relation",)` where the line is about the
+  caster -- "cannot see it" -- and `dropped=("Target.condition",)` where it is
+  about a condition the creature carries.
 
 Lurkers lean on concealment, invisibility and combat-advantage riders, and
 this file leans on `_triggering_enemy`, `_secondary`, `_vanish_until_it_
@@ -1057,7 +1059,7 @@ def m5173a2(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("4d6", 6),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5173a3(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: unseen_by(c.world, f, c.me))
@@ -1327,7 +1329,7 @@ def m5574a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=11),
     damage=Damage("3d8", 5),
-    dropped=("Target.kind",),
+    dropped=("Target.condition",),
 )
 def m5574a2(c: Cast) -> None:
     victim = _restricted_to(
@@ -1765,7 +1767,7 @@ def _recharge_on_other_melee_hit(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=11),
-    dropped=("Target.kind",),
+    dropped=("Target.relation",),
 )
 def m5736a4(c: Cast) -> None:
     _recharge_on_other_melee_hit(c)
