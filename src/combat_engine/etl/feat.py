@@ -278,18 +278,27 @@ def feats(
         books = json.dumps(
             [b.strip() for b in (row["Source"] or "").split(",") if b.strip()]
         )
+        # **The names of this feat's own cards, so the benefit can be scrubbed
+        # of them.** Collected here rather than looked up afterwards because
+        # the card loop is the only place the pairing is known. #404.
+        granted: dict[str, str] = {}
         for n, start in enumerate(cards, start=1):
             stop = next((h.start() for h in _HEAD.finditer(body, start + 1)), len(body))
-            _card(
-                body[start:stop], f"{ref}{chr(ord('a') + n)}", row, tier, books, out, names
+            card_ref = f"{ref}{chr(ord('a') + n)}"
+            card_name = _card(
+                body[start:stop], card_ref, row, tier, books, out, names
             )
+            if card_name:
+                granted[card_name] = card_ref
             report.feat_cards += 1
         out.execute(
             "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?)",
             (
                 ref, row["ID"], tier, _min_level(tree),
                 json.dumps(tree) if tree else None, opaque,
-                books, _trimmed(source, row, _benefit(head, ref, row["Name"] or "")),
+                books,
+                _trimmed(source, row,
+                         _benefit(head, ref, row["Name"] or "", granted)),
             ),
         )
         # **No description, and that is the answer rather than a gap.** A feat
@@ -320,8 +329,12 @@ def _card(
     books: str,
     out: sqlite3.Connection,
     names: dict[str, dict[str, str]],
-) -> None:
+) -> str:
     """One power card printed inside a feat, as a row of its own.
+
+    Returns the card's printed name, which the **parent** has to be scrubbed
+    of: a feat's benefit routinely names the power it grants, and the feat and
+    its card are a pair with two different names. #404.
 
     Suffixed off the parent exactly as `power.parse_extra` suffixes a second
     card off a power, and for the same reason: the compendium files it under
@@ -350,6 +363,7 @@ def _card(
     # `power_rules` -- the same lines `power_spec` scrubs two lines up. #349.
     names[ref] = {"name": name, "description": description(fragment),
                   "rules_text": power_rules(fragment)}
+    return name
 
 
 def _rules_text(head: str) -> str:
@@ -391,14 +405,27 @@ def _rules_text(head: str) -> str:
     return "\n".join(lines)
 
 
-def _benefit(head: str, ref: str, name: str) -> str:
+def _benefit(head: str, ref: str, name: str,
+             granted: dict[str, str] | None = None) -> str:
     """The feat's rules text, scrubbed -- what an author is shown.
 
     `_rules_text` is the same lines with the name left in. One reader and two
     returns, for the reason `sanitise.power_spec` gives: the printed rules and
     the author-facing spec must not be two extractions. #349.
+
+    **`granted` is the feat's own cards, by name.** The mapping used to hold
+    only the feat's own name, so a benefit reading "you can swap one encounter
+    attack power for the <name> power" handed an author the granted power's
+    printed name -- and `content/CLAUDE.md` records that a power-granting feat
+    *is* a pair, so the two names are routinely different words. `_card`
+    already scrubs the card of the *feat's* name; this is the same swap in the
+    other direction, which was never made. #404.
+
+    This closes the half where the named row is the feat's own card. A benefit
+    naming an **unrelated** row is still open: that needs an index of every
+    name in the corpus, and #379 proved widening one of those wrecks cards.
     """
-    return scrub(_rules_text(head), {name: ref})
+    return scrub(_rules_text(head), {name: ref, **(granted or {})})
 
 
 def _prerequisite(document: str) -> str:
