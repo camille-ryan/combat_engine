@@ -147,7 +147,14 @@ def _swing_reach(c: Cast, swinger: int, *, ranged: bool = False) -> int:
     check of its own, so this is the only gate there is. #381.
     """
     known = c.world.get(swinger, Powers)
-    ref = RANGED if ranged else ((known.basic if known else MELEE) or MELEE)
+    if ranged:
+        # `Powers.ranged` before the engine's generic bow, which is what
+        # `Cast.basic` now picks too. Measuring `rba` while the swing used the
+        # creature's own printed row is the mismatch the paragraph above warns
+        # about, pointed at the ranged half. #397, #398.
+        ref = (known.ranged if known else "") or RANGED
+    else:
+        ref = (known.basic if known else MELEE) or MELEE
     return c.reach(ref, on=swinger)
 
 

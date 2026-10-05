@@ -1762,20 +1762,26 @@ def m3235a4(c: Cast) -> None:
     """The mark comes off whether or not the swing happens -- it is its own
     printed sentence.
 
-    The trigger admits a **ranged** attack, and the card offers only a basic
-    attack "at any point during this movement": two squares of shift, and
-    nothing that says the shooter has to be close. So the step is aimed at
-    the triggering creature and the swing is asked for afterwards, which is
-    the only order in which the question "is it in reach now" has an answer.
-    An archer across the map simply does not get hit back."""
+    The trigger admits a **ranged** attack, and this stat block prints both a
+    melee and a ranged at-will -- which is to say both a melee and a ranged
+    basic attack. So an archer across the map *does* get shot back, and the row
+    used to refuse instead: `c.basic()` asks `Powers.basic`, which is the melee
+    row, and nothing recorded that the creature had a ranged basic at all.
+    #397 and #398 are what made the second branch possible.
+
+    The step is still aimed first and the swing asked for afterwards, which is
+    the only order in which "is it in reach now" has an answer."""
     c.cure(Condition.MARKED, on=c.me)
     foe = _triggering_enemy(c)
     if foe is None:
         c.shift(2)
         return
     c.shift(2, toward=foe)
-    if c.distance(foe) <= _swing_reach(c, c.me):
+    gap = c.distance(foe)
+    if gap <= _swing_reach(c, c.me):
         c.basic(on=foe)
+    elif gap <= _swing_reach(c, c.me, ranged=True):
+        c.basic(on=foe, ranged=True)
 
 
 @power(

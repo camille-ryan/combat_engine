@@ -1625,15 +1625,19 @@ class Cast:
         known = self.world.get(attacker, Powers)
         ref = (known.basic if known else MELEE) or MELEE
         if ranged:
-            # The engine's ranged basic, unless the creature has one of its
-            # own. `known.known` is non-empty for every character, so the
-            # old test handed a PC its *melee* basic and every "an ally
-            # makes a ranged basic attack" row was inert -- an archer with a
-            # bow three squares off simply did nothing.
-            own = next(
-                (r for r in (known.known if known else ()) if r == RANGED), ""
-            )
-            ref = own or RANGED
+            # **`Powers.ranged` is the field that answers this**, and it was not
+            # being asked. The old test searched `known.known` for the engine's
+            # generic `rba`, which is right for a character -- `chargen` sets
+            # both -- and wrong for a monster, whose ranged attack is one of its
+            # own printed rows. So "it makes a ranged basic attack" swung a
+            # notional bow off Dexterity instead of the attack bonus and damage
+            # its page prints: the swing happened, a `Hit` was emitted, and the
+            # numbers were somebody else's.
+            #
+            # `dsl.basic_options` already read the field correctly and could
+            # never be reached, because this passes a non-empty `own` that
+            # shadows it. #398.
+            ref = (known.ranged if known else "") or RANGED
         offered = basic_options(
             self.world, attacker, "ranged" if ranged else window, ref
         )

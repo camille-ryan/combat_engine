@@ -152,7 +152,7 @@ def spawn(world: World, ref: str, square: tuple[int, int], *, team: Team = Team.
         Conditions(),
         Mods(),
         Budget(),
-        Powers(known=known, basic=_basic(stock)),
+        Powers(known=known, basic=_basic(stock), ranged=_ranged_basic(stock)),
         Gear(),
     )
     place(world, eid, square)
@@ -186,6 +186,37 @@ def _basic(stock: Stock) -> str:
             ):
                 return a["ref"]
     return MELEE
+
+
+def _ranged_basic(stock: Stock) -> str:
+    """Which of a monster's abilities is its *ranged* basic attack.
+
+    `Powers.ranged` existed and its docstring said "Empty for a monster, whose
+    ranged attacks are its own printed rows" -- which is true of where the rows
+    live and wrong as a conclusion. In the stat-block convention a monster's
+    at-will attacks **are** its basic attacks: the melee at-will is its melee
+    basic and the ranged at-will its ranged basic. So the information was always
+    there and only the read was missing, and every row saying "it makes a ranged
+    basic attack" swung the engine's generic bow instead. #397.
+
+    Empty where the creature prints no ranged at-will, which leaves
+    `Cast.basic`'s existing fallback in place -- the same "better wrong than
+    silent" trade `_basic` makes above, and for a far rarer case: a creature
+    with no ranged attack is not often told to make one.
+
+    First in `stock.abilities` order where there are two, matching `_basic`
+    exactly rather than inventing a second rule.
+    """
+    for a in stock.abilities:
+        if a["ref"] in REGISTRY and a["section"] == "standard":
+            declared = REGISTRY[a["ref"]]
+            if (
+                declared.action is ActionType.STANDARD
+                and declared.reach.kind == "ranged"
+                and declared.attack is not None
+            ):
+                return a["ref"]
+    return ""
 
 
 # -- a beast companion, whose numbers are a formula rather than a total ------
