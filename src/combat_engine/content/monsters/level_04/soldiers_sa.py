@@ -2517,9 +2517,15 @@ def m6346a2(c: Cast) -> None:
 )
 def m6346a3(c: Cast) -> None:
     """The captive is dragged to a named square rather than a distance, and the
-    trip gives it no opening -- which is the printed "does not provoke". On a
-    miss the grab ends, and ending it names the condition because the hold was
-    laid by another row."""
+    trip gives it no opening -- which is the printed "does not provoke".
+
+    **"The grab ends" is `c.cure`, not `end_effect(carrying=)`.** `carrying=`
+    narrows to effects that *impose* the named condition, and `c.grab` lays a
+    `Relation.GRABBED_BY` with no condition attached to the effect -- so the
+    old spelling matched nothing, emitted nothing, and the printed Miss line
+    did its half damage and never let go. Driven: `carrying=` changes neither
+    the relation nor the condition and emits 0 events; `c.cure` clears both and
+    emits 2. #407."""
     foe = c.target
     if c.strike():
         c.hit()
@@ -2527,7 +2533,7 @@ def m6346a3(c: Cast) -> None:
         _hauls_the_grabbed(c, foe)
     else:
         c.hit(half=True)
-        c.end_effect(carrying=Condition.GRABBED, why="the grab ends")
+        c.cure(Condition.GRABBED)
     if c.first:
         _recharge_when_bloodied(c)
 
