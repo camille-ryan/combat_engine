@@ -41,10 +41,12 @@ the zone on an `Effect` carrying the sustain cost, and that effect is what
 move the zone 3 squares" is written where the sustain actually happens
 rather than being lost.
 
-**There is no falling and no height.** m2936a3 lifts its target twenty feet
-and drops it on a successful save; the restraint is written and the altitude
-is noted. `c.fall` is what the printed line wants and blocked.json has been
-carrying the same sentence for three other rows.
+**Falling and height both exist, and this file said they did not.** m2936a3
+lifts its target twenty feet, twenty more on each failed save, and drops it
+when the hold goes -- all three are written now through `c.rise` and
+`c.fall`, which are on `Cast` beside `c.height` and `c.hover`. The claim was
+true once and went stale; `blocked.json` had already stopped carrying it,
+which is the half that should have given it away.
 
 Each stat block in ref order.
 """
@@ -1013,15 +1015,45 @@ def m2936a2(c: Cast) -> None:
 def m2936a3(c: Cast) -> None:
     """No damage line at all: the hold is the whole of the hit.
 
-    There is no falling and no vertical position, so the twenty feet, the
-    twenty more on each failed save and the drop on a successful one are
-    noted rather than invented -- what is left, and what the printed line
-    also says, is that the target is held until it saves. `c.fall` is what
-    would finish it; see the report.
+    **Finished, and it was noted as unwritable against verbs that exist.**
+    This row and the file's own docstring both said "there is no falling
+    and no vertical position"; `c.height`, `c.rise`, `c.hover` and `c.fall`
+    are all on `Cast`, and `blocked.json` no longer carries the sentence
+    either. So all three printed clauses are written: four squares up on
+    the hit, four more on each failed save through `escalate=`, and the
+    drop when the hold ends.
+
+    The drop hangs on `on_end` rather than on the save itself, which means
+    it also fires if the hold is cured or the encounter ends. That is the
+    right reading -- nothing is holding the target up any more -- and it is
+    the only hook that sees the hold go, since neither `c.condition` nor
+    `c.effect` takes one.
     """
-    if c.strike():
-        c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS)
-        c.note("m2936a3: the target is lifted 20 feet, and falls when it saves")
+    victim = c.target
+    if victim is None or not c.strike():
+        return
+    c.rise(4, on=victim)
+
+    def higher(_eff: Any) -> None:
+        # **`c.rise` sets the altitude, it does not add to it.**
+        # `falling.lift` assigns `floor + squares`, so calling it again with 4
+        # leaves the target exactly where it already was -- which is how the
+        # first version of this escalation read correct and did nothing.
+        # `c.height` is measured from the same floor, so the two compose.
+        c.rise(c.height(on=victim) + 4, on=victim)
+
+    def drop() -> None:
+        c.fall(on=victim)
+
+    c.world.effects.apply(
+        victim,
+        c.me,
+        When.SAVE_ENDS,
+        label=f"{c.ref} aloft",
+        conditions=(Condition.RESTRAINED,),
+        escalate=higher,
+        on_end=[drop],
+    )
 
 
 # ==========================================================================

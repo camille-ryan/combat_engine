@@ -35,9 +35,38 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+#: Paths named on the command line, or empty for the whole tree. Held here
+#: rather than in `argv` because `_dead_triggers` clears `argv` before importing
+#: `combat_engine.content`, so an argument left there would not survive.
+_ONLY: tuple[Path, ...] = ()
+
+
+def _asked_for() -> tuple[Path, ...]:
+    """Content files to walk: the ones named, or all of them.
+
+    **`content/CLAUDE.md` tells a parallel agent it "lints only its own file"
+    and this took no paths**, so the one command the rule named did the one
+    thing the rule forbids. Four waves in a round each had to read other
+    agents' faults out of their own output and decide which were theirs; they
+    all got it right, and the failure mode if one had not is editing another
+    agent's in-flight file. It is worse mid-round, where a tree-wide walk also
+    picks up whatever half-written state somebody else is in -- one wave
+    reported a tree-wide blocker that the owning agent had already fixed by
+    the time anyone looked. #388.
+    """
+    if not _ONLY:
+        return tuple(sorted((ROOT / "src/combat_engine/content").rglob("*.py")))
+    out: list[Path] = []
+    for p in _ONLY:
+        out.extend(sorted(p.rglob("*.py")) if p.is_dir() else [p])
+    return tuple(out)
+
 
 def main() -> int:
-    done = subprocess.run(["uv", "run", "ruff", "check", "."], cwd=ROOT)
+    global _ONLY
+    _ONLY = tuple(Path(a).resolve() for a in sys.argv[1:] if not a.startswith("-"))
+    targets = [str(p) for p in _ONLY] or ["."]
+    done = subprocess.run(["uv", "run", "ruff", "check", *targets], cwd=ROOT)
     faults = 0
 
     dupes = _duplicate_methods()
@@ -214,7 +243,7 @@ def _unknown_context_keys() -> list[tuple[str, str, str]]:
     wide = _context_keys()
     narrow = {k: _context_keys(v) for k, v in _CONTEXT_OF.items()}
     out = []
-    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+    for path in _asked_for():
         try:
             tree = ast.parse(path.read_text())
         except SyntaxError:
@@ -276,7 +305,7 @@ UNREAD_MODIFIER_KEYS = {"initiative": "c.initiative(amount, on=)"}
 def _unread_modifiers() -> list[tuple[str, str]]:
     """`c.bonus` calls whose key no part of the engine reads."""
     out = []
-    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+    for path in _asked_for():
         try:
             tree = ast.parse(path.read_text())
         except SyntaxError:
@@ -309,7 +338,7 @@ def _unhandled_half_on_miss() -> list[tuple[str, str]]:
     129 declarations already carry the branch and would double-apply.
     """
     out = []
-    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+    for path in _asked_for():
         try:
             tree = ast.parse(path.read_text())
         except SyntaxError:
@@ -352,7 +381,7 @@ def _dropped_but_empty() -> list[tuple[str, str]]:
     it surfaced the contradiction.
     """
     out = []
-    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+    for path in _asked_for():
         try:
             tree = ast.parse(path.read_text())
         except SyntaxError:
@@ -393,7 +422,7 @@ def _strike_without_line() -> list[tuple[str, str, str, str]]:
     call -- and so is `obsolete=`.
     """
     out = []
-    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+    for path in _asked_for():
         try:
             tree = ast.parse(path.read_text())
         except SyntaxError:
@@ -654,7 +683,7 @@ def _effect_attrs() -> list[tuple[str, str]]:
     """
     fields = _effect_fields()
     out = []
-    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+    for path in _asked_for():
         try:
             tree = ast.parse(path.read_text())
         except SyntaxError:

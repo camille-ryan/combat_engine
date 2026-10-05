@@ -704,11 +704,25 @@ KNOWN_SILENT = {
 
 DID_SOMETHING = {
     "DamageApplied", "ConditionApplied", "Healed", "TempHP", "Moved",
-    "ForcedMove", "RelationSet", "ZoneCreated", "EffectExpired",
-    "EffectApplied", "ConditionEnded",
+    "ForcedMove", "RelationSet", "RelationCleared", "ZoneCreated",
+    "EffectExpired", "EffectApplied", "ConditionEnded",
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted",
 }  # fmt: skip
+# `RelationCleared` for the same reason `ConditionEnded` is here and
+# `RelationSet` already was: **taking a relation off is as much a thing as
+# putting one on.** `RelationSet` was admitted and its mirror was not, so a row
+# whose whole printed effect is *un*doing one was invisible. A level-13 row
+# reads "mounts **or dismounts** its adjacent mount", and the board spawns that
+# creature already mounted -- so every firing took the dismount branch, emitted
+# `RelationCleared` alone, and reported SILENT. Driven both ways: dismounting
+# emits `RelationCleared` and the relation really goes; cleared first, the same
+# row emits `RelationSet` and mounts.
+#
+# This is the fourth class of correct row admitted here one at a time, which
+# `docs/AUTHORING.md` predicted would keep happening. The shape to watch for is
+# a card whose verb is a negation -- dismount, unbind, release a guard, break a
+# hold -- because the engine says those by clearing.
 # **`Note` is deliberately not here**, and used to be. Its own docstring says
 # "engine commentary, carries no rules meaning", and it holds `text` and
 # nothing else -- no actor, no source, no target -- so `_after_its_own_use`
@@ -1622,7 +1636,31 @@ LOADED = (None, 20, 1)
 PROVOKE_NOISE = {
     "AttackDeclared", "AttackRolled", "Hit", "Miss", "DamageRolled",
     "DamageApplied", "OpportunityWindow", "TurnStart", "TurnEnd",
+    # **`RelationCleared` is here because swinging emits one.**
+    # `resolve.attack` ends the attacker's `HIDDEN_FROM` on every attack
+    # (`why="attacked"`), so admitting the bare event name credited any row
+    # that merely attacked while hidden. Three `KNOWN_SILENT` rows reported
+    # OUTGROWN the moment the name was added, and all three were credited on
+    # `RelationCleared kind=hidden_from why='attacked'` and nothing else --
+    # borrowed evidence, the same shape as the 173 rows that once passed on
+    # the harness's own provocation. `_own_unbinding` admits the real ones.
+    "RelationCleared",
 }
+
+
+#: A relation this row took off, as against the one every attack takes off.
+#:
+#: Needed for the reason `_own_movement` is needed: clearing a relation is the
+#: *whole content* of several rows -- "it dismounts", "the grab ends", "the
+#: guard is released" -- so suppressing the name outright makes those rows
+#: unprovable, and admitting it outright credits every hidden attacker. The
+#: engine's own housekeeping is the one that says `why="attacked"`; anything
+#: else was asked for by a row.
+def _own_unbinding(world, cursor: int) -> set[str]:  # noqa: ANN001
+    for e in world.bus.log[cursor:]:
+        if e.kind == "RelationCleared" and getattr(e, "why", "") != "attacked":
+            return {"RelationCleared"}
+    return set()
 
 #: Movement is the *whole content* of several triggered rows -- "it shifts 1
 #: square" is what four of them do. Subtracting movement as provocation
@@ -2936,7 +2974,9 @@ def audit(ref: str) -> Result:
                 )
                 out.events |= (mine_now - PROVOKE_NOISE - BY_NAME) | (
                     {"DamageApplied"} if dealt_now else set()
-                ) | _claimed(world, ref, world.fight_cursor)
+                ) | _claimed(world, ref, world.fight_cursor) | _own_unbinding(
+                    world, world.fight_cursor
+                )
                 # A trait's effect was installed by arming, so it is measured
                 # against the board before that.
                 #
@@ -3001,13 +3041,22 @@ def audit(ref: str) -> Result:
                     {"DamageApplied"} if dealt else set()
                 ) | _claimed(world, ref, cursor)
                 out.events |= _own_movement(world, ref, cursor, caster)
+                out.events |= _own_unbinding(world, cursor)
                 if set(world.effects.live) - had:
                     out.events.add("ConditionApplied")
                 continue
             if not _use_with_any_grip(world, caster, ref):
                 continue
             out.fired += 1
-            out.events |= {e.kind for e in world.bus.log[cursor:]}
+            # This last-resort path credits every event name in the window
+            # wholesale, which is deliberate and much looser than the two
+            # above. Only `RelationCleared` is held back, and only because
+            # every attack emits one: see `PROVOKE_NOISE`. Subtracting the
+            # whole of `PROVOKE_NOISE` here would re-judge a great many rows
+            # that have nothing to do with this change.
+            out.events |= (
+                {e.kind for e in world.bus.log[cursor:]} - {"RelationCleared"}
+            ) | _own_unbinding(world, cursor)
             if set(world.effects.live) - had:
                 out.events.add("ConditionApplied")
         except Exception:  # the traceback is the finding

@@ -115,7 +115,18 @@ BORROWED = {
 #: judgement. Four rows of one card shape is the point at which it is worth saying
 #: that this is a *recurring* printed form rather than four oddities -- a typed
 #: bonus to the roll and an untyped rider on the damage, in two sentences.
-ELSEWHERE = {"f1766b", "f2913", "m915a4", "m970a3", "m2079a5"}
+#:
+#: `m2354a4` is the **fifth**, from level 12: "+1 **power** bonus to its next
+#: attack roll ... If the attack hits and deals damage, it deals extra 5 damage".
+#: Identical split. Five instances is enough to say the by-ref list is the wrong
+#: shape for this: the card names the type in the sentence about the *roll*, and
+#: the rider is a separate sentence with no type word in it. Read per sentence
+#: rather than per row and all five pass without being named -- and the cost of
+#: naming them, recorded above, is that each waived row's *correct* typed call
+#: stops being checked too. Filed rather than changed here, because narrowing a
+#: natural-language reader is how this file grew its false positives in the first
+#: place and it wants its own measurement.
+ELSEWHERE = {"f1766b", "f2913", "m915a4", "m970a3", "m2079a5", "m2354a4"}
 
 #: A type word is printed as "a **power** bonus" or "+2 **item** bonus".
 #: The same word after "the" or "equal to the" is an *amount* being

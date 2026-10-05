@@ -111,7 +111,7 @@ to write — see above.
 Your own refs, by name:
 
 ```
-uv run scripts/lint.py
+uv run scripts/lint.py <your file>
 uv run scripts/audit.py <your refs>
 uv run scripts/show.py <ref>       printed text beside emitted events
 ```
@@ -121,6 +121,17 @@ Not `--monsters`, not `--class`, not `check.py`.
 **Who you are changes two rules.** A parallel content agent lints **only its
 own file** — a tree-wide `ruff --fix` has destroyed another agent's work —
 and never touches git. The main session lints the tree and commits.
+
+`lint.py` takes paths for exactly that reason, and **it did not until #388**:
+this file said "only its own file" and named a command that walked all 776 of
+them, so the one tool the rule offered did the one thing the rule forbids. Four
+waves in a single round each had to pick their own faults out of a tree-wide
+report. With no argument it still lints everything, which is what `check.py`
+wants.
+
+Running it tree-wide while other agents are writing is its own trap: the walk
+sees whatever half-finished state they are in. One wave reported a tree-wide
+blocker that the owning agent had already fixed by the time anyone looked.
 
 `audit` reporting `ok` is weaker than it looks for a row hanging clauses on
 a `Hit`: it once credited the harness's own provocation to the row. Fixed,
