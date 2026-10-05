@@ -593,11 +593,16 @@ def m1815a3(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
+    attack=Attack(vs=FORT, printed=13),
 )
 def m1815a4(c: Cast) -> None:
     """"May choose one of the targets hit by its area attack" is a rider
     on each `Hit` its own area rows land, capped to once a round by the
-    header field."""
+    header field.
+
+    The printed `+13 vs Fortitude` belongs in the header and was missing,
+    so the `c.strike()` below raised whenever an area row of this
+    creature's actually landed -- which the audit board never arranged."""
     me = c.me
 
     def rider(ev: Hit) -> None:

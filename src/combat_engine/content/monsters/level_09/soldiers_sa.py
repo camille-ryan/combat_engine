@@ -2117,7 +2117,10 @@ def m5604a4(c: Cast) -> None:
     victim = c.choose(held, "m5604a4: which immobilized creature") if held else None
     if victim is None or not c.strike(on=victim):
         return
-    c.hit(on=victim)
+    # The printed Hit line is the condition and no damage at all, so there is
+    # nothing to declare and `c.hit()` -- which raises without a damage line --
+    # was never the right call. `m1815a4` is the same shape: strike, then the
+    # consequence.
     me = c.me
     insane = c.effect(f"{c.ref} insane", until=When.SAVE_ENDS, on=victim)
 

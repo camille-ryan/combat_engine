@@ -84,6 +84,15 @@ def main() -> int:
         print(f"{where}: `{read}` -- {hint}")
         faults += 1
 
+    for where, ref, call, field in _strike_without_line():
+        print(
+            f"{where}: {ref} calls {call} and its header declares no {field}"
+            f" -- that raises the moment the row is provoked. Two sat latent"
+            f" through a sweep reporting 0 raise because the board never"
+            f" provoked them."
+        )
+        faults += 1
+
     for ref, why in _spent_once_a_fight():
         print(f"{ref}: {why}")
         faults += 1
@@ -367,6 +376,50 @@ def _dropped_but_empty() -> list[tuple[str, str]]:
             ]
             if not real or all(isinstance(n, ast.Pass) for n in real):
                 out.append((f"{path.relative_to(ROOT)}:{start}", ref))
+    return out
+
+
+def _strike_without_line() -> list[tuple[str, str, str, str]]:
+    """Rows whose body swings or lands a blow the header never declared.
+
+    `c.strike()` raises without an `attack=` and `c.hit()` raises without a
+    `damage=`, and both say so plainly -- but only *when the row is provoked*.
+    That is what makes this worth a static walk instead of leaving it to the
+    sweep: two of these sat in the tree through a full `audit.py` run reporting
+    **0 raise**, because each needs a trigger the audit board does not arrange.
+    `m5407a4` wants a marked adjacent enemy walking away while its own burst is
+    unexpended; `m4014a1` likewise. `scorecard.py` plays whole fights, reached
+    them, and died -- which is the right instrument finding it far too late and
+    one row at a time.
+
+    So the rule is read off the two `raise` sites in `cast.py` rather than
+    invented here, including their own escape hatch: the message says *call
+    `c.damage(...)`*, so a row that declares the line in its body is fine and
+    is not reported. Six rows when this was written.
+
+    A `todo=` row is skipped -- it is refused in play and never reaches either
+    call -- and so is `obsolete=`.
+    """
+    out = []
+    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for start, _end, ref, node in _rows(tree):
+            dec = " ".join(ast.unparse(d) for d in node.decorator_list)
+            if "todo=" in dec or "obsolete=" in dec:
+                continue
+            calls = {
+                n.func.attr for n in ast.walk(node)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and getattr(n.func.value, "id", "") == "c"
+            }
+            where = f"{path.relative_to(ROOT)}:{start}"
+            if "strike" in calls and "attack=" not in dec and "attack" not in calls:
+                out.append((where, ref, "c.strike()", "attack="))
+            if "hit" in calls and "damage=" not in dec and "damage" not in calls:
+                out.append((where, ref, "c.hit()", "damage="))
     return out
 
 

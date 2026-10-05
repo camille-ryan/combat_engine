@@ -1300,7 +1300,9 @@ def m4014a1(c: Cast) -> None:
     victim = next((f for f in c.grabbing() if c.is_(Condition.IMMOBILIZED, on=f)), None)
     if victim is None or not c.strike(on=victim):
         return
-    c.hit(on=victim)
+    # No damage on the hit itself: the printed 3d8 + 5 lands at the start of
+    # this creature's turn while the hold lasts, which is the `tick` below.
+    # `c.hit()` raises without a damage line and was the wrong call here.
     c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS, on=victim)
     me = c.me
 

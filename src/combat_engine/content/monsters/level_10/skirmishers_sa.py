@@ -778,9 +778,11 @@ def m1405a3(c: Cast) -> None:
     c.shift(10)
     c.world.effects.end(watcher, "the flight is over")
     if bitten:
-        foe = bitten[0]
-        if c.strike(on=foe):
-            c.hit(on=foe)
+        # "Makes a bite attack" is the bite row, so it is run rather than
+        # re-rolled here: this header carries no attack or damage line of its
+        # own -- the card gives none -- and `c.strike()` raises without one.
+        # `m1405a2` runs a row twice the same way.
+        c.use_power("m1405a0", on=bitten[0], spend=False, again=True)
 
 
 @power(
@@ -2804,8 +2806,13 @@ def m4664a1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.FIRE],
+    attack=Attack(vs=REF, printed=13),
+    damage=Damage("3d6", 8, dtype=DamageType.FIRE),
 )
 def m4664a2(c: Cast) -> None:
+    """Moves 6 and attacks once along the way. The printed `+13 vs Reflex`
+    and `3d6+8 fire` were missing from this header, so the strike below
+    raised the moment the move brought it next to an enemy."""
     me = c.me
     met: list[int] = []
 

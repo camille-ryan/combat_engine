@@ -385,6 +385,42 @@ KNOWN_SILENT = {
     # A target state `_provoke` does not produce.
     "m5779a4": "targets a slowed creature; nothing here is slowed",
     "m5926a2": "targets a prone creature; nothing here is prone",
+    # **Round 13's ten, over 507 rows at level 11.** Nine of the ten are the
+    # same shape this section already records -- the printed target carries a
+    # condition `_provoke` never applies -- and every one was driven by hand
+    # with the state set before it was admitted here, so each is a row proven
+    # to work rather than a row assumed to.
+    "m1600a2": "immobilized targets only; nothing here is immobilized. Driven "
+               "with the target immobilized: emits DamageApplied and "
+               "EffectApplied",
+    "m1600a3": "immobilized targets only; nothing here is immobilized. Driven "
+               "with the target immobilized: emits DamageApplied and "
+               "EffectApplied",
+    "m1978a2": "needs an immobilized enemy. Driven with one: hits, damages, "
+               "spends the victim's surge and heals 5",
+    "m2549a1": "affects an immobilized target only, so `_restricted_to` "
+               "correctly finds nobody on this board",
+    "m6055a1": "its printed target is one prone enemy; the board holds three "
+               "foes and none is prone",
+    "m115868a3": "needs a stunned enemy. Driven with one: 31 damage",
+    "m1565a2": "restrains whoever stands in its own roots; the board grows "
+               "none. Driven with them: restrains two creatures",
+    "m1565a4": "blinks into one of its own root squares, and on the audit seed "
+               "both are occupied -- a Large creature cannot fit. Genuinely "
+               "board-blocked rather than target-blocked",
+    "m4322a5": "its printed gate is \"if the summoned body is not adjacent or "
+               "closer\", and the body appears in the caster's own space, so "
+               "returning nothing is the card. Driven after the summon: the "
+               "gate is what stops it",
+    # Not a condition: a footprint. `movement.overrun` builds `under` from
+    # `grid.occupant` filtered on `who != eid`, and both this harness's board
+    # and `show.py`'s place foes *inside* a Gargantuan caster's 4x4 footprint,
+    # so the grid answers with the caster at those squares and the trample
+    # finds nobody to tread on. Walked four squares through two enemies and
+    # ended standing on a third. The row moves, which is the half that can be
+    # seen; it cannot be exercised here.
+    "m5906a5": "a Gargantuan caster's overrun finds nobody under it, because "
+               "the board puts foes inside its own footprint",
     "m1828a1": "its target must be prone; nothing here is",
     "m5336a5": "pulls a creature its own sibling immobilized; nothing is",
     # #366's family: the target must be wearing or wielding an item, and

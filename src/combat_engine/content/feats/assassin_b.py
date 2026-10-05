@@ -592,22 +592,23 @@ def f2226(c: Cast) -> None:
 # -- named by ref, and refused for some other reason ------------------------
 
 
-@power("f1793", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("m4421a6",),
+@power("f1793", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you use m4421a6 to improve an attack roll",
        on=Trigger(PowerUsed, _used("m4421a6"), "you use that racial power"))
 def f1793(c: Cast) -> None:
     """Damage to whoever a named racial power's roll was aimed at.
 
-    Re-aimed. `c.triggering_of()` has arrived: `PowerUsed.trigger` is
-    the event the power was used in answer to, and the racial power
-    answers an attack roll, which carries its own `target`. So the body
-    is writable and is written.
+    Finished. Two things had to arrive and both have.
+    `c.triggering_of()` came first: `PowerUsed.trigger` is the event the
+    power was used in answer to, and the racial power answers an attack
+    roll, which carries its own `target`.
 
-    What is left is the racial power itself -- the spec names it
+    `m4421a6` was the second and was the last hold -- the spec named it
     `x_m4421a6`, the ETL's mark for a ref it could not resolve, and
-    nothing in the tree declares it. Until it does, this trigger can
-    never fire, so the row is `todo` rather than finished.
+    nothing declared it, so this trigger could never fire. A level-11
+    monster wave declared it as the free action it is, so the trigger
+    now has something to answer and the marker is gone.
     """
     rolled = getattr(c.trigger, "trigger", None)
     victim = getattr(rolled, "target", None)

@@ -789,14 +789,16 @@ def f2438(c: Cast) -> None:
 
 @power("f2448", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_miss_all()", "m4421a6"))
+       todo=("c.on_miss_all()",))
 def f2448(c: Cast) -> None:
     """Spends the racial power to reroll every attack roll of a power
-    that missed everything. Re-aimed on both halves: `c.expend_row`
-    charges a row from outside it now, so the price is not the hold --
-    but `m4421a6` is not declared anywhere in the tree, so there is
-    nothing to charge, and `Miss` is still announced per target and
-    says nothing about the others."""
+    that missed everything. Two of the three holds have gone:
+    `c.expend_row` charges a row from outside it, and a level-11 monster
+    wave declared `m4421a6`, so there is now something to charge.
+
+    What is left is the condition itself. `Miss` is announced per target
+    and says nothing about the others, so "missed every target" cannot
+    be asked -- which is the one symbol this row still waits on."""
 
 
 @power("f2456", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

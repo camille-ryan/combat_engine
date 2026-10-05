@@ -674,10 +674,12 @@ def f2435(c: Cast) -> None:
 
 @power("f2463", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.boost_roll()", "m4421a6"))
+       todo=("c.boost_roll()",))
 def f2463(c: Cast) -> None:
-    """Re-aimed twice over. `c.expend_row` spends a row from outside it
-    now, so that half is no longer the hold -- but `x_m4421a6` is not
-    declared anywhere in the tree, so there is nothing to spend, and
-    `c.boost_check` still reaches a skill check and neither an attack
-    roll nor a saving throw."""
+    """Re-aimed three times over. `c.expend_row` spends a row from
+    outside it, and a level-11 monster wave declared `m4421a6`, so there
+    is now something to spend.
+
+    The remaining hold is the boost itself: `c.boost_check` reaches a
+    skill check and neither an attack roll nor a saving throw, which are
+    the two this row is printed to improve."""

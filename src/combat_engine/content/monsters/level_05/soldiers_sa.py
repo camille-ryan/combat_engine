@@ -2398,6 +2398,7 @@ def m5407a3(c: Cast) -> None:
     action=FREE,
     reach=Melee(1),
     target=NO_TARGET,
+    attack=Attack(vs=REF, printed=8),
     trigger="an adjacent enemy it has marked would move or shift",
     on=Trigger(
         MoveStart, _marked_adjacent_departs, "an adjacent enemy it has marked would move or shift"
@@ -2407,7 +2408,15 @@ def m5407a4(c: Cast) -> None:
     """Requirement: its own close-burst row must be unexpended -- checked in
     the body rather than as `requires=`, since the question is about a
     *different* row's charges and not a fact `dsl.usable` can ask of this one
-    at arming time."""
+    at arming time.
+
+    The printed attack line was missing from this header and the body still
+    called `c.strike()`, which raises without one. Two instruments disagreed
+    about it for a reason worth keeping: this trigger wants a marked adjacent
+    enemy leaving *and* the burst unexpended, which `audit.py`'s board never
+    arranges, so the row reported unusable and the raise sat latent until
+    `scorecard` played a whole fight and reached it. A row that cannot be
+    provoked is not a row that is known to work."""
     if "m5407a3" in c.expended():
         return
     foe = _triggering_enemy(c)

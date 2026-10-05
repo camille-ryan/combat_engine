@@ -1184,26 +1184,54 @@ def f3111(c: Cast) -> None:
 @power("f3112", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use m4421a6",
-       on=Trigger(PowerUsed, _used("m4421a6"), "you use that racial power"),
-       todo=("m4421a6",))
+       on=Trigger(PowerUsed, _used("m4421a6"), "you use that racial power"))
 def f3112(c: Cast) -> None:
-    """Both halves are written now. `PowerUsed.trigger` is the event the
-    racial power was used in answer to, so "if the triggering attack
-    roll misses or the saving throw or check fails" is a real question
-    -- the old note that a use carries only the actor, the ref and the
-    targets was written before that field existed.
+    """Finished, and the second clause had to be re-aimed to make it so.
 
-    Re-aimed at what is genuinely missing: `m4421a6` is declared nowhere
-    in the tree, so nothing ever emits the use this row answers. Two
-    other files name the same ref for the same reason."""
+    `m4421a6` being declared nowhere was the long hold, so nothing ever
+    emitted the use this row answers. A level-11 monster wave declared
+    it. Driven by hand after that, the shift landed and the temporary hit
+    points never did, which is the reason worth recording:
+
+    **"if the triggering attack roll misses" cannot be asked of the
+    triggering event.** That racial power answers `AttackRolled`, and
+    `PowerUsed` is announced before the attack resolves -- the log order
+    is `AttackRolled`, the use, this row, *then* `Miss`. So reading
+    `isinstance(ev, Miss)` off `c.trigger.trigger` tested an
+    `AttackRolled` and was false every time: a clause that read as
+    written and never ran once.
+
+    So the outcome is waited for instead, matched on the power and target
+    the roll named. A saving throw and a skill check carry their result
+    at emission, so those two are still read directly -- the racial power
+    only ever answers an attack roll today, which is why they are the
+    branch that cannot be exercised rather than the branch that is
+    wrong.
+    """
     c.shift(1)
     ev = getattr(c.trigger, "trigger", None)
-    if (
-        isinstance(ev, Miss)
-        or (isinstance(ev, SavingThrow) and not ev.saved)
-        or (isinstance(ev, SkillCheck) and not ev.success)
+    boon = max(c.int_mod, c.wis_mod)
+    if (isinstance(ev, SavingThrow) and not ev.saved) or (
+        isinstance(ev, SkillCheck) and not ev.success
     ):
-        c.temp_hp(max(c.int_mod, c.wis_mod), on=c.me)
+        c.temp_hp(boon, on=c.me)
+        return
+    if not isinstance(ev, AttackRolled):
+        return
+
+    me = c.me
+    power, victim = ev.power, ev.target
+    done: list[bool] = []
+
+    def missed(outcome: Any) -> None:
+        if done or outcome.attacker != me:
+            return
+        if outcome.power != power or outcome.target != victim:
+            return
+        done.append(True)
+        c.temp_hp(boon, on=me)
+
+    c.watch(Miss, missed, until=When.EOT, on=me)
 
 
 @power("f3113", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
