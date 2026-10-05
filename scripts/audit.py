@@ -432,6 +432,47 @@ KNOWN_SILENT = {
     # a log-based instrument cannot see state changed by assignment.
     "m3932a6": "grants itself two extra turns, and extra_turn emits no event "
                "to see it by (#375). Driven: slot count 3 -> 5",
+    # **Round 15's fifteen, over 647 rows at level 12.** Every one needs a
+    # target in a state this board does not arrange, and every one was driven
+    # by hand with that state set before it was admitted. Where the state is
+    # named below it was established by that run; where it is not, the run
+    # established only that the row does real work once the gate is met, and
+    # the entry says no more than that.
+    "m1155a2": "needs a target state the board never applies. Driven: it "
+               "dominates",
+    "m115876a4": "needs a target state the board never applies. Driven: it "
+                 "damages",
+    "m115876a5": "needs a target state the board never applies. Driven: it "
+                 "emits ForcedMove and pulls",
+    "m2348a1": "needs a target state the board never applies. Driven: damage "
+               "and daze",
+    "m5815a3": "needs a target state the board never applies. Driven: it "
+               "damages",
+    "m2347a1": "needs a target state the board never applies. Driven: it "
+               "damages",
+    "m2550a5": "needs a target state the board never applies. Driven: it emits "
+               "Healed",
+    "m3313a3": "needs a target state the board never applies. Driven: it emits "
+               "SavingThrow",
+    "m1910a4": "moves a creature it has buried; nothing here is. Driven: the "
+               "puppet moves",
+    "m3275a1": "needs its own bond laid on the target first, which the board "
+               "never does. Driven after the bond: it fires",
+    "m4727a1": "the same card as m3275a1 at a second ref, and silent for the "
+               "same reason -- its bond is never laid here",
+    "m5335a2": "its printed target must be blinded; nothing here is. Driven "
+               "with a blinded victim: it fires",
+    "m2011a3": "needs an adjacent corpse to inhabit, and nothing here is dead "
+               "beside it. Driven with one: it fires, and so do the rows the "
+               "possession then grants",
+    # The board carries no creature with this type word at all, which is #387
+    # rather than anything about the row: 17 cards target one.
+    "m5235a1": "its printed target is a living humanoid and no creature on this "
+               "board carries that type word (#387). Driven with the word "
+               "granted: dominates, removes itself from play, lends its at-will",
+    # Not a target state: the caster's own.
+    "m6192a5": "it stands up, and the board never knocks the caster down. "
+               "Driven with prone set: emits ConditionEnded(prone)",
     # Not a condition: a footprint. `movement.overrun` builds `under` from
     # `grid.occupant` filtered on `who != eid`, and both this harness's board
     # and `show.py`'s place foes *inside* a Gargantuan caster's 4x4 footprint,

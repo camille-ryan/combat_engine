@@ -151,6 +151,32 @@ that never applies.
   `c.condition(Condition.X, ..., escalate=fn)` carries the "first failed save
   makes it worse" callback. Passing it to a shortcut raises when the row **runs**,
   not when it imports, so the audit is what finds it rather than the import.
+* **Rewriting `eff.conditions` only works before the effect hands them
+  over.** The field is public and mutable and reads like the obvious way to
+  say "dazed instead of stunned", but `Effects.apply` reads it exactly once —
+  to count each condition into the `Conditions` component — and `Effects.end`
+  reads it again to count them back out. **Nothing re-reads it in between.**
+  So a rewrite after the fact does three wrong things at once: the milder
+  condition never lands, the original stays counted, and when the hold ends
+  the original is never counted out either. Driven on a board: `stunned=1,
+  dazed=0` on a row whose card says dazed instead.
+
+  The timing is the whole distinction, and both halves of it are in the tree:
+
+  * `p4913` declares on **`EffectApplied`**, which is emitted a few lines
+    *before* the handover, and rewrites the tuple. That is correct, and it is
+    why the row keeps the printed duration — "you are dazed instead" is the
+    same effect wearing a lighter condition.
+  * `m5997a2` answered **`ConditionApplied`**, which is emitted from *inside*
+    the handover, so it was always too late. It goes through `c.cure` and
+    `c.dazed` now. An `escalate=` callback is later still: it runs on a failed
+    save, so the rewrite is never the lever there.
+
+  Where a row genuinely must edit a live effect's conditions, the component
+  has to move too — `level_03/controllers_sa.py` and `level_12/brutes.py` both
+  hold a helper that does it, and `durations.remove` is the engine's own
+  version: mutate the tuple, `conds.add`/`conds.remove`, emit the event, and
+  end the effect if nothing is left on it.
 * **`kind=` is the word the card prints before "bonus", and nothing else.**
   Not a default, not a guess, and **not "power" because most bonuses are**.
   A card that says "+2 bonus to AC" means untyped, and writing `kind="power"`

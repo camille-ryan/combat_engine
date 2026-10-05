@@ -2586,20 +2586,35 @@ def m5997a1(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m5997a2(c: Cast) -> None:
-    """Stunned is a plain condition and swapped for dazed after the
-    fact. Dominated is not -- `lint.py` caught it -- it arrives through
-    `Relation.DOMINATED_BY` and is never announced as a `ConditionApplied`,
-    so it is cleared from the relation side instead."""
+    """Both halves swap a condition for a milder one, and neither can do it
+    by rewriting the effect.
+
+    **The stun half used to, and was inert.** It rewrote
+    `eff.conditions`, which `Effects.apply` reads *once* -- to count the
+    condition into `Conditions` -- and `Effects.end` reads again to count
+    it back out. Nothing re-reads it in between. So after a stun landed,
+    this left the creature stunned (the count was already incremented) and
+    not dazed (nothing ever incremented that), and at the end of the hold
+    the stun would never have been counted out either. Driven: stunned=1,
+    dazed=0, against a card that says dazed instead.
+
+    The timing is the whole of it, and `p4913` is the row that gets it
+    right: it declares on `EffectApplied`, which is emitted a few lines
+    *before* the conditions are handed over, so there the rewrite is the
+    correct lever. This row answers `ConditionApplied`, which is emitted
+    from inside that handover and therefore always too late.
+
+    So both halves now go through the component. Dominated arrives through
+    `Relation.DOMINATED_BY` and was already done this way -- the stun half
+    simply joins it.
+    """
     me = c.me
 
     def swap_stun(ev: ConditionApplied) -> None:
         if ev.target != me or ev.condition is not Condition.STUNNED:
             return
-        for eff in list(c.world.effects.of(me)):
-            if Condition.STUNNED in eff.conditions:
-                eff.conditions = tuple(
-                    Condition.DAZED if cnd is Condition.STUNNED else cnd for cnd in eff.conditions
-                )
+        c.cure(Condition.STUNNED, on=me)
+        c.dazed(on=me, until=When.SAVE_ENDS)
 
     def swap_dominate(ev: Any) -> None:
         if ev.kind_ is not Relation.DOMINATED_BY or ev.target != me:
