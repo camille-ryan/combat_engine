@@ -493,6 +493,15 @@ KNOWN_SILENT = {
                "10 acid to the held creature",
     "m6516a1": "its printed target is one creature grabbed by it. Driven with "
                "the relation set: 15 to the held creature",
+    # **The reach guard's one casualty, and it is the board.** #381 closed the
+    # explicit-target arm of `dsl.use`, which used to let a granted swing
+    # connect at any distance. This row nominates an enemy within 10 squares of
+    # the *warlord* and has an *ally* swing at it, so it needs the ally in
+    # reach -- and `board()` does not put it there. Driven both ways: with the
+    # ally six squares off nothing is announced, with the ally beside the enemy
+    # it announces AttackDeclared, AttackRolled and Hit.
+    "p10888": "an ally swings at an enemy the warlord nominates, and the board "
+              "never stands that ally in reach of one",
     # Not a condition: a footprint. `movement.overrun` builds `under` from
     # `grid.occupant` filtered on `who != eid`, and both this harness's board
     # and `show.py`'s place foes *inside* a Gargantuan caster's 4x4 footprint,

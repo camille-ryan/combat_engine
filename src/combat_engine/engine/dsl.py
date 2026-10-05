@@ -1667,6 +1667,76 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0, augment: int 
     return bool(candidates(world, actor, p, None, branch, augment))
 
 
+#: Events whose whole point is that the creature is leaving, or has left.
+#: A row answering one of these is *meant* to swing at something no longer in
+#: reach -- "when an enemy leaves an adjacent square, make a melee basic attack
+#: against it, **even if the enemy is shifting**" -- so the reach test is waived
+#: when the target is the creature that event is about. 18 of the occurrences
+#: measured for #381 are this, and this is why they are not faults.
+_DEPARTING = ("AdjacencyLost", "MoveStart", "MoveEnd", "Moved")
+
+
+def _within_reach(
+    world: World,
+    actor: int,
+    p: Power,
+    target: int,
+    branch: int = 0,
+    augment: int = 0,
+    *,
+    trigger: Any = None,
+    charge: bool = False,
+    reached: bool = False,
+) -> bool:
+    """May this creature attack that one from where it stands?
+
+    **The explicit-target arm of `use` had no reach test at all**, so
+    `c.basic(on=x)` and `c.use_power(ref, on=x)` connected at any distance while
+    `candidates()` -- which every offered action goes through -- refused the same
+    target. The two disagreed outright: at ten squares `candidates()` offered a
+    target zero times and `use` rolled the attack, hit, and dealt damage. 100
+    out-of-reach melee swings were measured across the tree, 65 of them faults.
+    #381.
+
+    **Reach only, never `candidates()` membership.** Membership also filters by
+    side, and two of the first three violations found were at distance 1 --
+    legal, and excluded for a side reason. A guard built on membership refuses
+    legal attacks.
+
+    Measured from `origins()` rather than from `actor`, because a shaman's
+    "Melee spirit 1" is measured from the spirit; and with `_reach_of` rather
+    than `Range.size`, because that resolves `by_weapon` to the wielded weapon's
+    long range. Getting either wrong breaks 39 rows.
+
+    Three exemptions, and the shape of each matters:
+
+    * **`charge`** is exempt because its legality is reach **plus speed** --
+      `_can_land` says so, and the explicit-target arm never reaches
+      `_can_land`, so it has to be restated here or every `c.charge_at` breaks.
+    * **A departing trigger** is exempt when the target is the creature the
+      event is about. Trigger-aware rather than a flag, so a row cannot claim
+      the exemption by declaring itself special.
+    * **`reached`** is for a mover that has already crossed the target's square
+      -- trample, overrun. It carries *proof*: `c.overrun` returns the creatures
+      whose squares were entered, and a caller passes this only for one of them.
+      A bare opt-out is what the next author copies by habit.
+    """
+    r = p.reach_of(branch, augment)
+    if r.kind not in ("melee", "ranged") or charge or reached:
+        return True
+    if trigger is not None and type(trigger).__name__ in _DEPARTING:
+        for field in ("mover", "actor", "who", "target"):
+            if getattr(trigger, field, None) == target:
+                return True
+    from .query import distance_between
+
+    far = _reach_of(world, actor, r, p.ref)
+    return any(
+        distance_between(world, eye, target) <= far
+        for eye in origins(world, actor, r)
+    )
+
+
 def _group_spent(world: World, actor: int, p: Power) -> bool:
     """Has a sibling of this row already been used this fight?"""
     from .components import Powers
@@ -1744,6 +1814,7 @@ def use(
     branch: int = 0,
     augment: int = 0,
     reentrant: bool = False,
+    reached: bool = False,
 ) -> bool:
     """Use a power. Returns False if it could not be used.
 
@@ -1813,7 +1884,14 @@ def use(
         return False
 
     if targets is not None:
-        chosen = list(targets)
+        chosen = [
+            t
+            for t in targets
+            if _within_reach(world, actor, p, t, branch, augment,
+                             trigger=trigger, charge=charge, reached=reached)
+        ]
+        if targets and not chosen:
+            return False
     else:
         chosen, origin = _auto_targets(world, actor, p, origin, branch, augment)
         chosen = list(chosen)

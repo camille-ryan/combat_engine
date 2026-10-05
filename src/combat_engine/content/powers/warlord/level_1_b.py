@@ -27,6 +27,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -190,11 +191,30 @@ def p10888(c: Cast) -> None:
     `c.grant_attack` with no `ref` rolls whatever that creature's own basic
     attack is, which is the printed "a basic attack" and not always a melee
     one.
+
+    **"Within 10 squares of you" is the warlord's constraint, not the ally's.**
+    The card narrows which enemies the warlord may nominate and says nothing
+    about where the ally is standing -- but the ally still has to be able to
+    make the swing, and `dsl.use` used to let it connect at any distance
+    (#381). With that closed, nominating an enemy the ally cannot reach means
+    no attack at all, so the pool is narrowed to what the ally can actually
+    hit: its melee reach, or its ranged basic's range if it has one.
+
+    The warlord's own 10-square limit still applies on top -- both are real,
+    and this row was only ever enforcing one of them.
     """
-    foes = sorted(f for f in c.within(10, side="enemy") if c.can_see(f))
+    # The ally's own basic attack, melee or ranged -- `c.reach` would answer
+    # for *this* row, a Ranged 5, in the ally's hands.
+    ally = c.target
+    span = max(_swing_reach(c, ally), _swing_reach(c, ally, ranged=True))
+    foes = sorted(
+        f
+        for f in c.within(10, side="enemy")
+        if c.can_see(f) and distance_between(c.world, ally, f) <= span
+    )
     victim = c.choose(foes, "who that ally attacks")
     if victim is not None:
-        c.grant_attack(c.target, on=victim)
+        c.grant_attack(ally, on=victim)
 
 
 @power(

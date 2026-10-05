@@ -970,6 +970,24 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
 
     if action.kind == "end":
         return True
+    # **Asked before the action is spent, not after.** `candidates()` filtered
+    # these targets when the action was offered, but the board can move in
+    # between -- an interrupt repositions somebody, and the aim goes stale. If
+    # the swing is then refused for reach (#381), spending first would charge
+    # the creature a standard action for an attack that never happened, and
+    # `Encounter.spend` has no inverse to refund it with. So the legality is
+    # re-asked here and a stale aim costs nothing.
+    if action.kind == "power" and action.targets:
+        from .dsl import _within_reach
+
+        p = get(action.ref)
+        if p is not None and not any(
+            # No charge exemption needed: a charge is `kind == "charge"`, so it
+            # never reaches this branch.
+            _within_reach(world, actor, p, t, action.branch, action.augment)
+            for t in action.targets
+        ):
+            return False
     if not encounter.spend(actor, action.cost):
         return False
 
