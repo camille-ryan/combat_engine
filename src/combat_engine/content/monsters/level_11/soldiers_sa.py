@@ -73,7 +73,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_07.soldiers import _recharge_on
 from combat_engine.content.monsters.level_09.brutes import _put_beside
 from combat_engine.content.monsters.level_11.soldiers import (
@@ -1545,33 +1544,22 @@ def m2516a1(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(4),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="a dazed, stunned, unconscious, or helpless creature",
+        conditions=frozenset({
+            Condition.DAZED,
+            Condition.STUNNED,
+            Condition.UNCONSCIOUS,
+            Condition.HELPLESS,
+        }),
+    ),
     attack=Attack(vs=FORT, printed=16),
-    dropped=("Target.condition",),
 )
 def m2516a2(c: Cast) -> None:
-    """No damage line: dragging the creature in is the whole of the hit.
-
-    Aimed at somebody the printed target line allows rather than thrown away
-    -- `Target` filters on side, count and size and not on what a creature is
-    suffering.
-    """
-    victim = _restricted_to(
-        c,
-        4,
-        lambda f: any(
-            c.is_(cond, on=f)
-            for cond in (
-                Condition.DAZED,
-                Condition.STUNNED,
-                Condition.UNCONSCIOUS,
-                Condition.HELPLESS,
-            )
-        ),
-    )
-    if victim is None:
-        return
-    if c.strike(on=victim):
+    """No damage line: dragging the creature in is the whole of the hit."""
+    victim = c.target
+    if victim is not None and c.strike():
         _put_beside(c, victim, c.me)
 
 
@@ -1632,25 +1620,20 @@ def m2549a0(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Ranged(5),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="affects an immobilized target only",
+        conditions=frozenset({Condition.IMMOBILIZED}),
+    ),
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage("2d8", 5, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Target.condition",),
 )
 def m2549a1(c: Cast) -> None:
-    """"Affects an immobilized target only" is narrower than any `Target` can
-    say, so the row is aimed at an immobilised creature in range rather than
-    discarded when the chooser hands it somebody else.
-
-    The printed healing names a ref belonging to no stat block in the tree
-    and is read as this creature.
-    """
-    victim = _restricted_to(c, 5, lambda f: c.is_(Condition.IMMOBILIZED, on=f))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """The printed healing names a ref belonging to no stat block in the tree
+    and is read as this creature."""
+    if c.strike():
+        c.hit()
         c.heal(10, on=c.me)
 
 

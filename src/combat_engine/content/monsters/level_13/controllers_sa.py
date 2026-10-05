@@ -1230,30 +1230,27 @@ def m1427a4(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Ranged(10),
-    target=Target(side="enemy", count=1, label="stunned or dazed"),
+    target=Target(
+        "enemy", 1,
+        label="stunned or dazed",
+        conditions=frozenset({Condition.STUNNED, Condition.DAZED}),
+    ),
     keywords=[Keyword.CHARM, Keyword.GAZE],
     attack=Attack(vs=WILL, printed=17),
-    dropped=("Target.condition",),
 )
 def m1427a5(c: Cast) -> None:
     """Only on something already reeling, and only one at a time.
 
-    The target restriction is the creature's own state, which `Target`
-    cannot filter on, so the chooser's answer is redirected rather than
-    thrown away. "On only one creature at a time" is the previous hold being
-    ended before the new one lands -- two would be two dominations.
+    The two conditions are the target line now. "On only one creature at a
+    time" is the previous hold being ended before the new one lands -- two
+    would be two dominations.
     """
-    victim = _restricted_to(
-        c,
-        10,
-        lambda f: c.is_(Condition.STUNNED, on=f) or c.is_(Condition.DAZED, on=f),
-    )
-    if victim is None or not c.strike(on=victim):
+    if not c.strike():
         return
     for eff in list(c.world.effects.live.values()):
         if eff.label.startswith(c.ref) and Condition.DOMINATED in eff.conditions:
             c.world.effects.end(eff, "it looked elsewhere")
-    c.condition(Condition.DOMINATED, until=When.EONT, on=victim)
+    c.condition(Condition.DOMINATED, until=When.EONT)
 
 
 @power(
@@ -4280,25 +4277,26 @@ def m5332a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBurst(3),
-    target=Target(side="enemy", count=99, everyone=True, label="dazed"),
+    target=Target(
+        "enemy", 99,
+        everyone=True,
+        label="dazed",
+        conditions=frozenset({Condition.DAZED}),
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("3d10", 6, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Target.condition",),
 )
 def m5332a2(c: Cast) -> None:
     """The card prints its damage on the **miss** line, which is the only
     place `c.hit()` belongs here: a hit lays the fall and the weakness and
     nothing else.
 
-    "Dazed enemies in the burst" is each target's own state, which `Target`
-    cannot filter on, so an undazed one is passed over rather than the whole
-    row being thrown away. The temporary hit points count the creatures hit
-    across the burst, so they are paid once, on the last target.
+    "Dazed enemies in the burst" is the target line now -- the filter runs over
+    the pool before the area, so an undazed creature standing in the burst is
+    never a target. The temporary hit points count the creatures hit across the
+    burst, so they are paid once, on the last target.
     """
-    victim = c.target
-    if victim is None or not c.is_(Condition.DAZED, on=victim):
-        return
     if c.strike():
         c.prone()
         c.weakened(until=When.SAVE_ENDS)

@@ -57,7 +57,6 @@ from combat_engine.content.monsters.level_05.brutes_sa import _against_the_state
 from combat_engine.content.monsters.level_06.brutes import (
     DEFENCES,
     _aura,
-    _bloodied_enemy,
     _felled_by_me,
     _is_bloodied,
     _living,
@@ -2272,21 +2271,19 @@ def m5405a3(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="bloodied creature"),
+    target=Target(side="enemy", count=1, label="one bloodied creature", bloodied=True),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("3d6", 6, kind=LIMITED),
-    requires=_bloodied_enemy,
-    requires_text="the target must be bloodied",
-    dropped=("Target.bloodied", "c.in_form()"),
+    dropped=("c.in_form()",),
 )
 def m5405a4(c: Cast) -> None:
-    victim = c.target if c.target is not None and c.bloodied(c.target) else None
-    if victim is None:
-        victim = next((f for f in sorted(c.within(1, side="enemy")) if c.bloodied(f)), None)
-    if victim is not None and c.strike(on=victim):
-        c.hit(on=victim)
-        c.prone(on=victim)
+    """`Target.bloodied` is the target line, so the gate and the re-pick both
+    came out; the printed Requirement about the shape is the one still
+    unsaid."""
+    if c.strike():
+        c.hit()
+        c.prone()
 
 
 @power(
@@ -2559,20 +2556,16 @@ def m5633a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="bloodied creature"),
+    target=Target(side="enemy", count=1, label="one bloodied creature", bloodied=True),
     attack=Attack(vs=FORT, printed=9),
     damage=Damage("3d10", 5),
-    requires=_bloodied_enemy,
-    requires_text="the target must be bloodied",
-    dropped=("Target.bloodied",),
 )
 def m5633a2(c: Cast) -> None:
-    victim = c.target if c.target is not None and c.bloodied(c.target) else None
-    if victim is None:
-        victim = next((f for f in sorted(c.within(1, side="enemy")) if c.bloodied(f)), None)
-    if victim is not None and c.strike(on=victim):
-        c.hit(on=victim)
-        c.prone(on=victim)
+    """"One bloodied creature" is `Target.bloodied`, so an unbloodied creature
+    is never in the pool and the Requirement is that emptiness."""
+    if c.strike():
+        c.hit()
+        c.prone()
 
 
 # ==========================================================================

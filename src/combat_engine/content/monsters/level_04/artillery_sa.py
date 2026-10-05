@@ -40,7 +40,6 @@ from collections.abc import Callable
 from typing import Any
 
 from combat_engine.content.monsters.level_01.artillery_sa import (
-    _any_enemy_suffering,
     _recharge_when_bloodied,
     _sure_footed_shift,
     _uncovered,
@@ -3173,21 +3172,18 @@ def m6561a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=AreaBurst(1, 20),
-    target=Target(side="enemy", count=99, everyone=True, label="surprised"),
+    target=Target(
+        "enemy", 99,
+        everyone=True,
+        label="surprised",
+        conditions=frozenset({Condition.SURPRISED}),
+    ),
     attack=Attack(vs=WILL, printed=9),
-    requires=_any_enemy_suffering(Condition.SURPRISED),
-    requires_text="an enemy must be surprised",
-    dropped=("Target.condition",),
 )
 def m6561a2(c: Cast) -> None:
-    """The burst takes every enemy and the surprise is asked in the body;
-    `Target` filters on side, count and size and has nothing to say about what
-    a creature is suffering, which is `Target.condition`. The Requirement is
-    the other half -- without it
-    the row is offered on a quiet board and comes back having done nothing."""
-    victim = c.target
-    if victim is None or not c.is_(Condition.SURPRISED, on=victim):
-        return
+    """"Surprised enemies in the burst" is the target line now. The gate came
+    out with the body's check: the pool is filtered before the area, so a quiet
+    board leaves nothing to aim at and the row is not offered."""
     if c.strike():
         c.unconscious(until=When.SAVE_ENDS)
 

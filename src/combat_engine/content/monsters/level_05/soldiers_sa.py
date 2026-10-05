@@ -56,14 +56,12 @@ from combat_engine.content.monsters.level_02.soldiers_sa import (
     _free_square_beside,
     _is_attack,
     _missed_me_in_melee,
-    _pinned_enemy_in_reach,
     _recharge_when_bloodied,
     _ref_of,
     _save_ends_on_me,
     _square_of,
 )
 from combat_engine.content.monsters.level_03.brutes_sa import _recharge_and_fire
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers_sa import _reachable
 from combat_engine.content.monsters.level_03.soldiers_sa import (
     _adjacent_foe_looks_away,
@@ -1708,21 +1706,22 @@ def m3500a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(3),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets a dazed, stunned, or unconscious creature",
+        conditions=frozenset(_DAZED_STUNNED_OUT),
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("2d8", 4, dtype=DamageType.NECROTIC),
-    requires=_addled_in_reach(3),
-    requires_text="targets a dazed, stunned, or unconscious creature",
-    dropped=("Target.condition",),
 )
 def m3500a2(c: Cast) -> None:
-    foe = _restricted_to(c, 3, lambda f: any(c.is_(cnd, on=f) for cnd in _DAZED_STUNNED_OUT))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        c.ongoing(5, DamageType.NECROTIC, on=foe)
+    """The three conditions are the target line itself now. The `requires=`
+    gate and the body's re-pick both came out: an empty pool already makes the
+    row unusable, which is the refusal the gate was spelling by hand. #401."""
+    if c.strike():
+        c.hit()
+        c.ongoing(5, DamageType.NECROTIC)
 
 
 @power(
@@ -1964,20 +1963,18 @@ def m3977a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets an immobilized, stunned, or unconscious creature",
+        conditions=frozenset(_IMMOBILE_STUNNED_OUT),
+    ),
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d6", 4),
-    requires=_pinned_enemy_in_reach,
-    requires_text="targets an immobilized, stunned, or unconscious creature",
-    dropped=("Target.condition",),
 )
 def m3977a1(c: Cast) -> None:
-    foe = _restricted_to(c, 1, lambda f: any(c.is_(cnd, on=f) for cnd in _IMMOBILE_STUNNED_OUT))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        c.condition(Condition.DAZED, until=When.SAVE_ENDS, on=foe, ongoing=(5, DamageType.UNTYPED))
+    if c.strike():
+        c.hit()
+        c.condition(Condition.DAZED, until=When.SAVE_ENDS, ongoing=(5, DamageType.UNTYPED))
 
 
 @power(
@@ -2554,20 +2551,18 @@ def m5681a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one immobilized, restrained, stunned, or unconscious creature",
+        conditions=frozenset(_HELPLESS_FOUR),
+    ),
     attack=Attack(vs=AC, printed=10),
     damage=Damage("4d6", 6),
-    requires=_helpless_in_reach(1),
-    requires_text="targets an immobilized, restrained, stunned, or unconscious creature",
-    dropped=("Target.condition",),
 )
 def m5681a3(c: Cast) -> None:
-    foe = _restricted_to(c, 1, lambda f: any(c.is_(cnd, on=f) for cnd in _HELPLESS_FOUR))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        c.condition(Condition.STUNNED, until=When.SAVE_ENDS, on=foe)
+    if c.strike():
+        c.hit()
+        c.condition(Condition.STUNNED, until=When.SAVE_ENDS)
 
 
 @power(

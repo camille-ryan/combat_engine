@@ -861,12 +861,18 @@ def m4502a4(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     requires=_an_ally_is_down,
     requires_text="an ally must be dead",
-    dropped=("Target.condition",),
+    dropped=("Condition.DEAD",),
 )
 def m4502a5(c: Cast) -> None:
-    """"One **dead** ally" is a restriction `Target` cannot carry, so it is
-    recorded in `label=`, asked again here, and gated by `requires=` -- which
-    turns "offered and did nothing" into "correctly not offered"."""
+    """"One **dead** ally" is a restriction `Target` cannot carry **yet**.
+
+    Re-aimed from `Target.condition`, which now resolves -- the field landed, so
+    this row would otherwise have reported itself finished. Dead is not a
+    `Condition` at all today: it is `Health`, and `Condition.DYING` is a
+    different state. So `conditions=frozenset({Condition.DEAD})` is the spelling
+    this wants and the member does not exist. Camille asked for it on #399,
+    which is what the marker now names. Until then the restriction stays in
+    `label=`, asked again here, and gated by `requires=`."""
     friend = c.target
     if friend is None or alive(c.world, friend):
         return

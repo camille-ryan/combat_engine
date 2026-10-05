@@ -22,14 +22,15 @@ Conventions, inherited from the eight levels below and from this level's own
   1d6+17)" that is just the maximised total needs no body code;
 * a card printing two damage types rolled once keeps the first in the
   header and carries the rest as a keyword (`dropped=("Damage(dtypes=)",)`);
-* a card asking something of the target that is not its side or size is
-  read with `_restricted_to` or in the body directly, and the redirect
-  carries a marker only when `_restricted_to` itself stands in for the
-  filter. Which marker is whichever names the thing asked:
-  `Target.bloodied`, `Target.ongoing` for a creature taking ongoing damage
-  of a named type, `Target.creature_kind` for a type word,
-  `Target.condition` for a state, `Target.relation` for a position held
-  against the attacker. They are five gaps and not one.
+* a card asking something of the target that is not its side or size goes on
+  the target line where `Target` has a field for it -- `relation=` for a
+  position held against the attacker, `conditions=` for a state, `bloodied=`
+  for the wound -- and those rows need no `_restricted_to`, no `requires=`
+  and no marker. What has no field is still read in the body, and the
+  redirect carries the symbol naming what is asked: `Target.ongoing` for a
+  creature taking ongoing damage of a named type, `Target.creature_kind` for
+  a type word, `Target.any_of` where the card prints two alternatives and
+  every field narrows. They are separate gaps and not one.
 
 Nine helpers are imported rather than written again, from six levels below
 and from this level's own `skirmishers.py`. Ten more are written here
@@ -99,6 +100,7 @@ from combat_engine.engine import (
     Powers,
     Ranged,
     Square,
+    Target,
     UpTo,
     Usage,
     When,
@@ -998,20 +1000,15 @@ def m1832a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target("enemy", 1, label="the target must be bloodied", bloodied=True),
     attack=Attack(vs=AC, printed=14),
     damage=Damage("2d6", 5),
-    dropped=("Target.bloodied",),
 )
 def m1832a1(c: Cast) -> None:
-    """"The target must be bloodied." `Target` filters on side and size and
-    not on what a creature is suffering, so a bloodied enemy in reach is
-    found rather than the row being thrown away."""
-    victim = _restricted_to(c, 1, lambda f: c.bloodied(on=f))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """The defence bonus is the caster's, so it is laid `on=c.me` -- `c.bonus`
+    follows the target otherwise."""
+    if c.strike():
+        c.hit()
         for d in ALL_DEFENCES:
             c.bonus(d, 2, kind="power", on=c.me, until=When.EONT)
 
@@ -3303,19 +3300,19 @@ def m6172a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14),
     damage=Damage("3d6", 5, kind=LIMITED),
-    dropped=("Target.any_of", "Target.condition"),
+    dropped=("Target.any_of",),
 )
 def m6172a2(c: Cast) -> None:
     """"One creature it is flanking, **or** one prone creature" is a
-    disjunction, and that is the gap -- not the flanking half, which
-    `Target.flanked` now says. A target line can carry one restriction, so
-    narrowing to the flank alone would refuse every prone target the card
-    allows; the prone half needs `Target.condition` and the "or" needs
-    `Target.any_of`. Until both land the pick stays in the body, where a
-    qualifying creature in reach is found rather than the row thrown away.
-    The marker was `Target.flanked_by`, which named a symbol that can never
-    arrive -- the field is `Target.flanked` -- and would also have gone red
-    for a half this row cannot use on its own."""
+    disjunction, and the disjunction is now the whole gap: `Target.flanked`
+    says the first half and `Target.conditions` says the second, but every
+    field on a target line **narrows**, so declaring both would demand a
+    prone creature it is also flanking -- refusing most of what the card
+    allows. Until `Target.any_of` can hold two alternatives the pick stays in
+    the body, where a qualifying creature in reach is found rather than the
+    row thrown away. The marker named `Target.condition` as well until that
+    field landed; the earlier spelling was `Target.flanked_by`, a symbol that
+    could never arrive."""
     from combat_engine.engine.query import flanked_by as _flanked_by
 
     def qualifies(f: int) -> bool:

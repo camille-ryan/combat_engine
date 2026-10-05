@@ -1192,22 +1192,22 @@ def m2777a3(c: Cast) -> None:
     recharge=6,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="bloodied arcane targets only",
+        bloodied=True,
+    ),
     keywords=[Keyword.HEALING, Keyword.PSYCHIC, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=13),
     damage=Damage("1d8", 9, dtype=DamageType.PSYCHIC, kind=LIMITED, half_on_miss=True),
-    dropped=("Target.bloodied", "Target.creature_kind"),
+    dropped=("Target.creature_kind",),
 )
 def m2777a4(c: Cast) -> None:
-    """"Bloodied arcane targets only" is a gate `Target` cannot carry --
-    it has no notion of a creature's power source. Bloodied is asked here;
-    the arcane half is the dropped clause. "Requires chromatic disk" is
-    this creature's own permanent gear and not a fight-state fact, the
+    """Bloodied is the target line now; the arcane half stays dropped, because
+    `Target` has no notion of a creature's power source. "Requires chromatic
+    disk" is this creature's own permanent gear and not a fight-state fact, the
     same reasoning `chargen.meets` gets for a feat's prerequisite."""
-    victim = c.target
-    if victim is None or not c.bloodied(on=victim):
-        return
-    if c.strike(on=victim):
+    if c.strike():
         c.hit()
         c.dazed(until=When.SAVE_ENDS)
     else:

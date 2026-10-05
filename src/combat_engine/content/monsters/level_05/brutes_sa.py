@@ -39,10 +39,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat_engine.content.monsters.level_01.artillery_sa import (
-    _any_enemy_suffering,
-    _recharge_when_bloodied,
-)
+from combat_engine.content.monsters.level_01.artillery_sa import _recharge_when_bloodied
 from combat_engine.content.monsters.level_01.brutes_sa import (
     _crit_line,
     _felled_by_a_crit,
@@ -947,34 +944,21 @@ def m3218a1(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="prone creature"),
+    target=Target(
+        side="enemy", count=1,
+        label="a prone creature",
+        conditions=frozenset({Condition.PRONE}),
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d8", 3, dtype=DamageType.NECROTIC),
-    requires=_any_enemy_suffering(Condition.PRONE),
-    requires_text="it targets a prone creature",
-    dropped=("Target.condition",),
 )
 def m3218a2(c: Cast) -> None:
-    """"Targets a prone creature." `Target` filters on side and size and nothing
-    else, so the state is asked here and the row redirects to somebody who
-    qualifies rather than returning -- the printed line is about which creature,
-    not about whether the row happens. The Requirement decides whether it is
-    offered at all, which a header gate on a chooseable row really is read for."""
-    victim = c.target
-    if victim is not None and not c.is_(Condition.PRONE, on=victim):
-        victim = next(
-            (
-                foe
-                for foe in _press(c, 1)
-                if c.is_(Condition.PRONE, on=foe)
-            ),
-            None,
-        )
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """"Targets a prone creature" is `Target.conditions`, so the chooser is
+    only ever handed a prone creature and the row is not offered when there is
+    none in reach."""
+    if c.strike():
+        c.hit()
 
 
 # ==========================================================================

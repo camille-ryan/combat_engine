@@ -25,10 +25,7 @@ creatures are, and the conventions are the ones that file settled:
 
 from __future__ import annotations
 
-from combat_engine.content.monsters.level_01.artillery_sa import (
-    _any_enemy_suffering,
-    _cheb,
-)
+from combat_engine.content.monsters.level_01.artillery_sa import _cheb
 from combat_engine.content.monsters.level_01.skirmishers import _ref_of
 from combat_engine.content.monsters.level_02.skirmishers import _hides_with_cover
 from combat_engine.engine import (
@@ -518,20 +515,18 @@ def m5423a3(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Ranged(10),
-    target=Target(side="enemy", count=2, label="dazed creature"),
+    target=Target(
+        side="enemy", count=2,
+        label="one or two dazed creatures",
+        conditions=frozenset({Condition.DAZED}),
+    ),
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=4),
     damage=Damage("1d6", 5, dtype=DamageType.PSYCHIC),
-    requires=_any_enemy_suffering(Condition.DAZED),
-    requires_text="must have a dazed creature to aim at",
-    dropped=("Target.condition",),
 )
 def m5423a4(c: Cast) -> None:
-    """The restriction is asked in the body, since `Target` filters on side and
-    size and not on what a creature is suffering; the loss is that the action
-    menu offers the row against anybody."""
-    if not c.is_(Condition.DAZED):
-        return
+    """The restriction is `Target.conditions` now, so the action menu offers
+    the row only where a dazed creature is in range."""
     if c.strike():
         c.hit()
         c.immobilized(until=When.EONT)

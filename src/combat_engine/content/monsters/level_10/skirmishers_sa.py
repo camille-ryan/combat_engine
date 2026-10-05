@@ -3056,17 +3056,19 @@ def m5418a2(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one prone creature",
+        conditions=frozenset({Condition.PRONE}),
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=FORT, printed=13),
-    dropped=("Target.condition",),
 )
 def m5418a3(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: c.is_(Condition.PRONE, on=f))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.ongoing(10, on=victim)
+    """"One prone creature" is the target line now, so the redirect came out --
+    an empty pool is the same refusal from one place."""
+    if c.strike():
+        c.ongoing(10)
 
 
 # ==========================================================================
@@ -4015,19 +4017,26 @@ def m6481a4(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one dazed, dominated, stunned, or unconscious creature",
+        conditions=frozenset(
+            {
+                Condition.DAZED,
+                Condition.DOMINATED,
+                Condition.STUNNED,
+                Condition.UNCONSCIOUS,
+            }
+        ),
+    ),
     keywords=[Keyword.HEALING],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("4d10", 10),
-    dropped=("Target.condition",),
 )
 def m6481a5(c: Cast) -> None:
-    helpless_like = (Condition.DAZED, Condition.DOMINATED, Condition.STUNNED, Condition.UNCONSCIOUS)
-    victim = _restricted_to(c, 1, lambda f: any(c.is_(cond, on=f) for cond in helpless_like))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """Four conditions, any of them, and the target line carries them now."""
+    if c.strike():
+        c.hit()
         c.heal(20, on=c.me)
 
 

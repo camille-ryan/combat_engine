@@ -53,14 +53,11 @@ from combat_engine.content.monsters.level_02.soldiers_sa import (
     _armed,
     _free_square_beside,
     _is_attack,
-    _pinned_enemy_in_reach,
-    _prone_enemy_in_reach,
     _recharge_when_bloodied,
     _ref_of,
     _square_of,
     _step_into_vacated,
 )
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import (
     _adjacent_enemy_shifts,
     _adjacent_foe_looks_away,
@@ -1453,19 +1450,16 @@ def m4296a0(c: Cast) -> None:
 
 @power(
     "m4296a1", level=8, usage=ENCOUNTER, action=STANDARD, reach=CloseBurst(3),
-    target=Target(side="enemy", count=99, everyone=True, label="slowed or immobilized creature"),
-    attack=Attack(vs=FORT, printed=11), dropped=("Target.condition",),
+    target=Target(
+        side="enemy", count=99, everyone=True,
+        label="slowed or immobilized creature",
+        conditions=frozenset({Condition.SLOWED, Condition.IMMOBILIZED}),
+    ),
+    attack=Attack(vs=FORT, printed=11),
 )
 def m4296a1(c: Cast) -> None:
-    """Buries a creature already slowed or pinned down.
-
-    Aimed rather than abandoned: `Target` cannot filter on a condition, so the
-    chooser hands this row whoever is nearest, and returning threw it away while
-    somebody else in the burst qualified. `Target.condition` is the gap.
-    """
-    victim = _restricted_to(
-        c, 3, lambda f: c.is_(Condition.SLOWED, f) or c.is_(Condition.IMMOBILIZED, f)
-    )
+    """Buries a creature already slowed or pinned down."""
+    victim = c.target
     if victim is None:
         return
     hold = c.effect(f"{c.ref} buried", until=When.SAVE_ENDS, on=victim)
@@ -2187,20 +2181,26 @@ def m5582a1(c: Cast) -> None:
 
 @power(
     "m5582a2", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="immobilized, stunned, or unconscious creature"),
+    target=Target(
+        side="enemy", count=1,
+        label="immobilized, stunned, or unconscious creature",
+        conditions=frozenset(_HELPLESS),
+    ),
     keywords=[Keyword.HEALING], attack=Attack(vs=AC, printed=13), damage=Damage("3d8", 5),
-    requires=_pinned_enemy_in_reach,
-    requires_text="an adjacent enemy must be immobilized, stunned, or unconscious",
-    dropped=("Target.condition",),
 )
 def m5582a2(c: Cast) -> None:
-    victim = c.target
-    if victim is None or not any(c.is_(held, victim) for held in _HELPLESS):
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.dazed(until=When.SAVE_ENDS, on=victim)
-        c.heal(10)
+    """The printed Requirement is the target line restated, so it is the target
+    line alone now: an empty pool already refuses the row. m5582a4 borrows this
+    one and prints "even if the target is not immobilized, stunned, or
+    unconscious", which the filter still refuses -- that row rolls the swing
+    itself and does not lean on the borrow."""
+    if c.strike():
+        c.hit()
+        c.dazed(until=When.SAVE_ENDS)
+        # `c.heal` defaults to `c.target` like almost every `Cast` method, and
+        # the card heals the **monster**. It was healing the creature it had
+        # just hit. The three sibling rows all pass `on=c.me` explicitly.
+        c.heal(10, on=c.me)
 
 
 @power("m5582a3", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1), target=EACH_ENEMY)
@@ -2802,10 +2802,13 @@ def _adjacent_enemy_fell(world: World, me: int, ev: Any) -> bool:
 
 @power(
     "m5701a2", level=8, usage=Usage.RECHARGE, recharge=0, action=STANDARD,
-    reach=Melee(1), target=Target(side="enemy", count=1, label="prone creature"),
+    reach=Melee(1),
+    target=Target(
+        side="enemy", count=1, label="one prone creature",
+        conditions=frozenset({Condition.PRONE}),
+    ),
     attack=Attack(vs=AC, printed=13), damage=Damage("3d6", 9, kind=LIMITED),
-    requires=_prone_enemy_in_reach, requires_text="an adjacent enemy must be prone",
-    dropped=("Target.condition", "c.cannot_stand()"),
+    dropped=("c.cannot_stand()",),
 )
 def m5701a2(c: Cast) -> None:
     """"Cannot stand until the end of its next turn" has no verb -- there
@@ -2818,11 +2821,8 @@ def m5701a2(c: Cast) -> None:
             c, _events.ConditionApplied,
             lambda ev: _adjacent_enemy_fell(c.world, c.me, ev),
         )
-    victim = c.target
-    if victim is None or not c.is_(Condition.PRONE, victim):
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
 
 
 @power(

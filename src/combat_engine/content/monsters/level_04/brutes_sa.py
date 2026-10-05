@@ -32,7 +32,6 @@ from combat_engine.content.monsters.level_01.artillery_sa import (
     _recharge_when_bloodied,
 )
 from combat_engine.content.monsters.level_01.brutes_sa import _felled_by_a_crit
-from combat_engine.content.monsters.level_01.skirmishers_sa import _helpless_in_reach
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy
 from combat_engine.content.monsters.level_02.misc_sa import (
     _shrug_off_prone,
@@ -1113,11 +1112,13 @@ def m3438a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="a helpless or unconscious creature",
+        conditions=frozenset({Condition.HELPLESS, Condition.UNCONSCIOUS}),
+    ),
     keywords=[Keyword.HEALING],
-    requires=_helpless_in_reach,
-    requires_text="a helpless creature must be in reach",
-    dropped=("Target.condition", "c.coup_de_grace(ref=)"),
+    dropped=("c.coup_de_grace(ref=)",),
 )
 def m3438a2(c: Cast) -> None:
     """The two costs it pays are exact and so is the reward; the finisher is
@@ -1126,9 +1127,7 @@ def m3438a2(c: Cast) -> None:
     swing is the ordinary granted one and the automatic critical is the clause
     waiting on a ref-taking form."""
     foe = c.target
-    if foe is None or not (
-        c.is_(Condition.HELPLESS, on=foe) or c.is_(Condition.UNCONSCIOUS, on=foe)
-    ):
+    if foe is None:
         return
     c.cure(Condition.INSUBSTANTIAL, on=c.me)
     c.mode("fly", 0, until=When.EONT, on=c.me)

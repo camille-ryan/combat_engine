@@ -131,6 +131,15 @@ def main() -> int:
         )
         faults += 1
 
+    for where, ref, dice in _flat_damage_as_a_number():
+        print(
+            f"{where}: {ref} declares Damage({dice!r}, ...) -- a dice string that"
+            f" is a bare number. `Cast.hit` tests `if dice`, so {dice!r} is truthy"
+            f" and reaches `rng.roll`, which raises `not a dice expression`."
+            f" Flat damage is an empty string: Damage(\"\", n)."
+        )
+        faults += 1
+
     for ref, why in _spent_once_a_fight():
         print(f"{ref}: {why}")
         faults += 1
@@ -458,6 +467,51 @@ def _strike_without_line() -> list[tuple[str, str, str, str]]:
 #: you"; this is the only one of them written that way, and the check would
 #: otherwise report it forever.
 CATCHES_ITSELF = {"p9652"}
+
+
+def _flat_damage_as_a_number() -> list[tuple[str, str, str]]:
+    """`Damage("0", n)` and friends -- a dice string holding a bare number.
+
+    `Cast.hit` does `self._roll_damage(dice) if dice else bonus`, so a dice
+    string of `"0"` is **truthy** and goes to `rng.roll`, which raises
+    `not a dice expression: '0'`. Flat damage is spelled `Damage("", n)`.
+
+    Three rows carried this and two of them raised in play. The audit could not
+    see any of them: every one is restricted to a grabbed creature, and the
+    board never grabs, so all three reported `UNUSED` through sweep after sweep
+    reporting 0 raise. They were found by driving a row by hand, which is the
+    argument for a static walk -- a board cannot be relied on to reach them.
+    """
+    out: list[tuple[str, str, str]] = []
+    for path in _asked_for():
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            ref = node.name
+            for dec in node.decorator_list:
+                if not isinstance(dec, ast.Call):
+                    continue
+                for kw in dec.keywords:
+                    if kw.arg != "damage":
+                        continue
+                    for call in ast.walk(kw.value):
+                        if not isinstance(call, ast.Call):
+                            continue
+                        if not call.args:
+                            continue
+                        first = call.args[0]
+                        if (
+                            isinstance(first, ast.Constant)
+                            and isinstance(first.value, str)
+                            and first.value.strip().isdigit()
+                        ):
+                            rel = path.relative_to(ROOT)
+                            out.append((f"{rel}:{call.lineno}", ref, first.value))
+    return out
 
 
 def _close_area_hits_itself() -> list[tuple[str, str, str]]:

@@ -267,16 +267,12 @@ KNOWN_SILENT = {
     #
     # A target state `_provoke` does not produce. It makes an attack; it does not
     # daze, immobilise, knock prone or bring anybody to dying.
-    "m1760a2": "targets a dazed, stunned, unconscious or helpless creature; "
-               "the board produces none of the four",
     "m1950a1": "targets an immobilized creature; nothing here is",
     "m1192a2": "targets an immobilized creature; nothing here is",
     "m5504a1": "targets a prone creature; nothing here is",
     "m5576a1": "its Requirement is an immobilized, stunned or unconscious target",
     "m5577a2": "its Requirement is an immobilized, stunned or unconscious target",
     "m5825a4": "finishes a dying humanoid; nobody here is dying",
-    "m2777a4": "targets a bloodied ally of one origin; the board bloodies the "
-               "caster, not its one full-health ally",
     # A sibling's grab. The harness fires each row once on a fresh board, so the
     # row that does the grabbing never ran -- `m467a2`'s family again.
     "m1981a1": "attacks a creature grabbed by it; the grab is m1981's own",
@@ -622,21 +618,12 @@ KNOWN_SILENT = {
     # radiant, pushes 4 and immobilises; the other two likewise.
     "p12601": "affects only undead; the auto-targeter never picks the board's one undead",
     "p5330": "affects only undead; the auto-targeter never picks the board's one undead",
-    # **The same shape as the two above, and the first of a large family.** The
-    # card targets a dazed creature. `Target` cannot say that -- it filters on
-    # side, count, size and what is in hand -- so the row gates in its body, and
-    # `_auto_targets` picks the nearest enemy rather than a dazed one. The board
-    # does daze somebody, so the condition is here; it is on the wrong body for
-    # a targeter that aims by distance.
-    #
-    # Unlike the three siblings this round converted, a `requires=` cannot help:
-    # the restriction is on **somebody else's** state, not the caster's.
-    #
-    # **2,863 monster abilities print a condition-restricted target line**, 21%
-    # of the corpus, so this entry is the first of many unless #361 lands first.
-    # That is the argument for fixing #361 rather than excusing them one at a
-    # time, and it is why this excuse names the issue.
-    "m5423a4": "targets a dazed creature; the auto-targeter aims by distance -- #361",
+    # m5423a4 used to sit here -- "targets a dazed creature; the auto-targeter
+    # aims by distance -- #361". It was the first of a family of 2,863 monster
+    # abilities printing a condition-restricted target line, and the argument
+    # for landing #361 rather than excusing them one at a time. `Target.conditions`
+    # landed, so the filter is in the pool and `_auto_targets` can only pick a
+    # creature the card accepts. The excuse is gone rather than re-aimed.
     # The trigger is **this creature's own** earlier bite burning somebody: the
     # row answers the ongoing poison its sibling laid. The harness fires each row
     # once on a fresh board, so that bite has never landed -- the same reason

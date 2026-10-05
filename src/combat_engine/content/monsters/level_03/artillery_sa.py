@@ -32,7 +32,6 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.monsters.level_01.artillery_sa import (
-    _any_enemy_suffering,
     _is_bloodied,
     _recharge_when_bloodied,
 )
@@ -1084,21 +1083,20 @@ def m5063a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Ranged(10),
-    target=Target("enemy", 1, label="a slowed creature"),
+    target=Target(
+        "enemy", 1,
+        label="a slowed creature",
+        conditions=frozenset({Condition.SLOWED}),
+    ),
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("1d8", 6),
-    requires=_any_enemy_suffering(Condition.SLOWED),
-    requires_text="only against a slowed creature",
-    dropped=("Target.condition",),
 )
 def m5063a1(c: Cast) -> None:
-    """The target line restricts by what the creature is suffering, which
-    `Target` cannot filter on -- so the `requires=` decides whether the row is
-    offered at all and the body checks the one it was aimed at. The printed
-    damage line names no type; the keyword is the card's."""
-    if not c.is_(Condition.SLOWED):
-        return
+    """The target line restricts by what the creature is suffering, which is
+    `Target.conditions` -- so an unslowed creature is never in the pool and the
+    row is not offered when none is. The printed damage line names no type; the
+    keyword is the card's."""
     if c.strike():
         c.hit()
         c.dazed(until=When.EOTNT)

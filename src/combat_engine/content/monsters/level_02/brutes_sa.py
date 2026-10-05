@@ -756,34 +756,18 @@ def m5399a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="one bloodied creature"),
+    target=Target(
+        side="enemy", count=1,
+        label="one bloodied creature",
+        bloodied=True,
+    ),
     once_per_round=True,
     attack=Attack(vs=FORT, printed=8),
-    requires=_an_enemy_is_bloodied,
-    requires_text="an enemy must be bloodied",
-    dropped=("Target.bloodied",),
 )
 def m5399a1(c: Cast) -> None:
-    """"One **bloodied** creature" is a restriction `Target` cannot carry, so it
-    is recorded in `label=`, gated by `requires=` so the row is not offered when
-    nobody qualifies, and chosen again here -- the engine's chooser knows
-    nothing of the narrowing, so a row that merely *refused* a wrong target
-    fired twenty-four times and did nothing.
-    """
-    victim = c.target
-    if victim is None or not _is_bloodied(c.world, victim):
-        victim = next(
-            (
-                foe
-                for foe in c.within(1, side="enemy")
-                if _is_bloodied(c.world, foe)
-            ),
-            None,
-        )
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.prone(on=victim)
+    """No damage line: knocking the creature down is the whole of the hit."""
+    if c.strike():
+        c.prone()
 
 
 @power(

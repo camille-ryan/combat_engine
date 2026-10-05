@@ -1855,23 +1855,18 @@ def m4484a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one blinded creature",
+        conditions=frozenset({Condition.BLINDED}),
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=18),
     damage=Damage("3d8", 13),
-    dropped=("Target.condition",),
 )
 def m4484a3(c: Cast) -> None:
-    """"One blinded creature" is a restriction `Target` cannot express -- it
-    filters on side, count and size and not on what a creature is suffering,
-    which is `Target.condition` -- so the row is aimed at whoever qualifies
-    rather than thrown away when the chooser hands it somebody who does
-    not."""
-    victim = _restricted_to(c, 1, lambda w: c.is_(Condition.BLINDED, on=w))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
 
 
 @power(

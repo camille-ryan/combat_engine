@@ -23,7 +23,6 @@ roles share word for word.
 from __future__ import annotations
 
 from combat_engine.content.monsters.level_01.artillery_sa import (
-    _any_enemy_suffering,
     _cheb,
     _is_bloodied,
     _recharge_when_bloodied,
@@ -385,20 +384,17 @@ def m4457a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="immobilized creature"),
+    target=Target(
+        side="enemy", count=1,
+        label="immobilized creature",
+        conditions=frozenset({Condition.IMMOBILIZED}),
+    ),
     attack=Attack(vs=AC, printed=4),
     damage=Damage("2d6", 3),
-    requires=_any_enemy_suffering(Condition.IMMOBILIZED),
-    requires_text="must have an immobilized creature to aim at",
-    dropped=("Target.condition",),
 )
 def m4457a1(c: Cast) -> None:
-    """The restriction is asked in the body, since `Target` filters on side and
-    size and not on what a creature is suffering; the loss is that the action
-    menu offers the row against anybody. The hold is lifted whatever laid it,
-    which is what the card says -- it does not name its own."""
-    if not c.is_(Condition.IMMOBILIZED):
-        return
+    """The hold is lifted whatever laid it, which is what the card says -- it
+    does not name its own."""
     if c.strike():
         c.hit()
         c.cure(Condition.IMMOBILIZED)

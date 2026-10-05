@@ -1516,14 +1516,15 @@ def m5302a3(c: Cast) -> None:
     ),
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("2d8", 6),
-    dropped=("Target.condition", "Target.any_of"),
+    dropped=("Target.any_of",),
 )
 def m5302a4(c: Cast) -> None:
-    """**Deliberately not moved onto `Target.relation`.** The printed line is a
-    *disjunction* -- immobilized **or** grabbed by it -- and every target field
-    narrows the pool, so setting `relation=GRABBED_BY` would throw away the
-    immobilized half that is the other branch of the same sentence. Two gaps:
-    a condition filter, and some way to say "either of these". #401.
+    """**Deliberately not moved onto `Target.conditions` either.** The printed
+    line is a *disjunction across two kinds* -- immobilized (a condition) or
+    grabbed by it (a relation) -- and every target field narrows the pool, so
+    setting one of them throws away the other branch of the same sentence. The
+    condition filter now exists; the one remaining gap is a way to say "either
+    of these", so the re-pick stays in the body. #401.
     """
     victim = c.target
     held_already = victim is not None and (

@@ -381,19 +381,23 @@ def m115817a1(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature that is not grabbed",
+        conditions_without=frozenset({Condition.GRABBED}),
+    ),
     attack=Attack(vs=REF, printed=6),
+    # Stays: this is about the **caster** not already holding somebody, which
+    # is a different sentence from the target restriction above.
     requires=_holding_nobody,
     requires_text="it must not be grabbing a creature",
-    dropped=("Target.condition", "c.grab(dc=)"),
+    dropped=("c.grab(dc=)",),
 )
 def m115817a2(c: Cast) -> None:
-    """"One creature that isn't grabbed" asks a plain condition of the target
-    and not a hold this creature has, so it is `Target.condition` where
-    m115817a1's "grabbed by it" is `Target.relation`. The printed escape DC is
-    a fixed number the grab does not carry."""
-    if c.is_(Condition.GRABBED):
-        return
+    """"One creature that isn't grabbed" is `conditions_without`, and
+    deliberately **not** `relation=GRABBED_BY, without=True`: that spells "not
+    grabbed *by it*", which a creature held by somebody else passes. The
+    printed escape DC is a fixed number the grab does not carry."""
     if c.strike():
         c.grab()
 

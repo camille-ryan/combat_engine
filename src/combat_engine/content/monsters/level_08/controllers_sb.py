@@ -131,7 +131,6 @@ from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import (
     adjacent,
     allies,
-    can_act,
     distance_between,
     enemies,
     is_,
@@ -523,31 +522,32 @@ def m5326a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Ranged(10),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature able to take actions",
+        can_act=True,
+    ),
     keywords=[Keyword.CHARM, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=12),
     damage=Damage("2d6", 5, dtype=DamageType.PSYCHIC, kind=LIMITED),
+    # Stays: the bell is about the **caster**, not the target.
     requires=_has_bell,
-    requires_text="the m5326 must be holding a bell",
-    dropped=("Target.condition",),
+    requires_text="it must be holding a bell",
 )
 def m5326a2(c: Cast) -> None:
-    """"One creature able to take actions" is asked of the board, not the
-    header; `_restricted_to` aims at one that qualifies in reach rather than
-    throwing the row away. `Target.condition` is the gap: being able to act is
-    the absence of the conditions that take a turn away.
+    """"One creature able to take actions" is the target line now, through
+    `can_act=`.
 
-    **The marker was missing and only the docstring carried the claim.** A gap
-    argued in prose and declared nowhere is invisible to `blocked.py` and
-    `todo.py` both -- it cannot be counted, ranked, or go red the day the
-    symbol lands. Found when `Target.kind` was split and this row turned up
-    naming a symbol it did not hold.
-    """
-    victim = _restricted_to(c, 10, lambda f: can_act(c.world, f))
-    if victim is None or not c.strike(on=victim):
+    It is not `conditions_without`: being able to act is not the absence of a
+    fixed list, and naming one here would have been a guess at something
+    `query.can_act` already answers -- consciousness, every condition whose
+    rules say `cannot_act`, and the exemption that lets a trap act at all.
+    #401."""
+    victim = c.target
+    if not c.strike():
         return
-    c.hit(on=victim)
-    c.slide(3, on=victim)
+    c.hit()
+    c.slide(3)
     rows = c.borrowed_rows(victim, at_will=True, melee=True) or c.borrowed_rows(
         victim, at_will=True, melee=False
     )
@@ -994,19 +994,21 @@ def _adjacent_and_down(world: World, eid: int) -> bool:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="the target must be immobilized, stunned, or unconscious",
+        conditions=frozenset(_M5575A2_DOWN),
+    ),
     attack=Attack(vs=AC, printed=13),
     damage=Damage("3d8", 5),
-    requires=_adjacent_and_down,
-    requires_text="targets an adjacent immobilized, stunned or unconscious creature",
-    dropped=("Target.condition",),
 )
 def m5575a2(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: any(c.is_(cond, on=f) for cond in _M5575A2_DOWN))
-    if victim is None or not c.strike(on=victim):
-        return
-    c.hit(on=victim)
-    c.dazed(until=When.SAVE_ENDS, on=victim)
+    """The printed Requirement is the target line itself now. The `requires=`
+    gate and the redirect both came out: an empty pool already refuses the row
+    when nobody adjacent is down, which is what the gate spelled by hand."""
+    if c.strike():
+        c.hit()
+        c.dazed(until=When.SAVE_ENDS)
 
 
 @power(
@@ -2075,22 +2077,22 @@ def m5988a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one unconscious creature",
+        conditions=frozenset({Condition.UNCONSCIOUS}),
+    ),
     keywords=[Keyword.HEALING, Keyword.PSYCHIC],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("3d10", 6, dtype=DamageType.PSYCHIC),
-    requires=lambda world, eid: any(
-        is_(world, f, Condition.UNCONSCIOUS) for f in enemies(world, eid) if adjacent(world, eid, f)
-    ),
-    requires_text="targets an adjacent unconscious creature",
-    dropped=("Target.condition",),
 )
 def m5988a1(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: c.is_(Condition.UNCONSCIOUS, on=f))
-    if victim is None or not c.strike(on=victim):
-        return
-    c.hit(on=victim)
-    c.heal(10, on=c.me)
+    """"This attack does not wake the unconscious target" is already true --
+    nothing here cures the condition. The target line carries the restriction
+    now, so the gate and the redirect both came out."""
+    if c.strike():
+        c.hit()
+        c.heal(10, on=c.me)
 
 
 @power(

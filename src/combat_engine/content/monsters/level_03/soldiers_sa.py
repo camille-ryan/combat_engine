@@ -57,7 +57,6 @@ from combat_engine.content.monsters.level_02.soldiers_sa import (
     _holding_nobody,
     _is_attack,
     _marked_foe_looks_away,
-    _pinned_enemy_in_reach,
     _ref_of,
     _save_ends_on_me,
     _square_of,
@@ -65,7 +64,6 @@ from combat_engine.content.monsters.level_02.soldiers_sa import (
 )
 from combat_engine.content.monsters.level_03.artillery_sa import _death_throe
 from combat_engine.content.monsters.level_03.brutes_sa import _both_hit, _press
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers_sa import (
     _enemy_stepped_beside,
     _has_the_drop,
@@ -1644,33 +1642,24 @@ def m3188a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="immobilized, stunned, or unconscious targets only",
+        conditions=frozenset(
+            {Condition.IMMOBILIZED, Condition.STUNNED, Condition.UNCONSCIOUS}
+        ),
+    ),
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d8", 4),
-    requires=_pinned_enemy_in_reach,
-    requires_text="immobilized, stunned, or unconscious targets only",
-    dropped=("Target.condition",),
 )
 def m3188a1(c: Cast) -> None:
-    """"Immobilized, stunned, or unconscious targets only" is a target line
-    `Target` cannot say -- three conditions, so the gap is `Target.condition`
-    and `query.is_` is the whole of it -- so the offer is gated and the victim
-    chosen here --
-    and where another creature in reach qualifies the row is aimed there
-    rather than thrown away, which a bare return would have done. #361."""
-    victim = _restricted_to(
-        c,
-        1,
-        lambda foe: any(
-            c.is_(held, foe)
-            for held in (Condition.IMMOBILIZED, Condition.STUNNED, Condition.UNCONSCIOUS)
-        ),
-    )
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.ongoing(5, on=victim)
+    """Three conditions on one target line, which is the ordinary case rather
+    than the awkward one: `conditions=` is a set and tests **any** of them.
+    The `requires=` gate and the body's re-pick both came out -- an empty pool
+    refuses the row already. #401."""
+    if c.strike():
+        c.hit()
+        c.ongoing(5)
 
 
 @power(
@@ -1926,10 +1915,12 @@ def m3437a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
-    requires=_senseless_in_reach,
-    requires_text="targets a helpless or unconscious creature",
-    dropped=("Defences.insubstantial", "c.lose_mode()", "Target.condition"),
+    target=Target(
+        "enemy", 1,
+        label="targets a helpless or unconscious creature",
+        conditions=frozenset(_SENSELESS),
+    ),
+    dropped=("Defences.insubstantial", "c.lose_mode()"),
 )
 def m3437a2(c: Cast) -> None:
     """The finisher works; the price it pays for it does not.
@@ -1944,12 +1935,8 @@ def m3437a2(c: Cast) -> None:
     `c.coup_de_grace` is the auto-critical rule itself and checks the
     helplessness again, which is why the kill is read off the body afterwards
     rather than from the method's answer."""
-    victim = _restricted_to(
-        c, 1, lambda foe: any(c.is_(out, foe) for out in _SENSELESS)
-    )
-    if victim is None:
-        return
-    c.coup_de_grace(on=victim)
+    victim = c.target
+    c.coup_de_grace()
     theirs = c.world.get(victim, Health)
     if theirs is None or theirs.hp <= 0:
         mine = c.world.get(c.me, Health)
@@ -2419,25 +2406,26 @@ def m4678a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="grabbed, restrained, or immobilized targets only",
+        # The card says *grabbed*, not "grabbed by it", so this is the
+        # condition and not `Relation.GRABBED_BY` -- a creature held by
+        # somebody else qualifies.
+        conditions=frozenset(_HELD),
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("1d10", 8),
-    requires=_held_in_reach,
-    requires_text="grabbed, restrained, or immobilized targets only",
-    dropped=("Target.condition",),
 )
 def m4678a2(c: Cast) -> None:
     """A blanket `skill` modifier applies to every check, which is what "a -2
     penalty to skill checks" is -- `skills.py` reads the bare key alongside
     the `skill:<name>` ones."""
-    victim = _restricted_to(c, 2, lambda foe: any(c.is_(held, foe) for held in _HELD))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.penalty("skill", 2, on=victim, until=When.EONT)
-        c.penalty("save", 2, on=victim, until=When.EONT)
+    if c.strike():
+        c.hit()
+        c.penalty("skill", 2, until=When.EONT)
+        c.penalty("save", 2, until=When.EONT)
 
 
 _M4678_BLED = "it is first bloodied"
@@ -2882,20 +2870,18 @@ def m5321a3(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one slowed creature",
+        conditions=frozenset({Condition.SLOWED}),
+    ),
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("2d8", 4),
-    requires=_slowed_in_reach,
-    requires_text="one slowed creature",
-    dropped=("Target.condition",),
 )
 def m5321a4(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda foe: c.is_(Condition.SLOWED, foe))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.prone(on=victim)
+    if c.strike():
+        c.hit()
+        c.prone()
 
 
 # --------------------------------------------------------------------------

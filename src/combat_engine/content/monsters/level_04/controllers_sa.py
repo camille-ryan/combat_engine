@@ -15,15 +15,13 @@ and the conventions are that file's and the level-1 to level-3 sweeps':
   on its own allies;
 * "Aftereffect" is the hold's `on_end` and "Each Failed Saving Throw" is
   `escalate=`; "First Failed" is `escalate=` plus `_also`, which is idempotent;
-* a printed target line that narrows by a *condition* has nowhere to live --
-  `Target` filters side, count and size -- so `label=` records it for the card,
-  the body redirects to a creature in reach that qualifies, a `requires=` keeps
-  the row from being offered when nothing does, and the gap is the `Target.`
-  symbol naming that particular narrowing: `Target.condition`,
-  `Target.bloodied`, `Target.creature_kind`, `Target.ongoing` or
-  `Target.ident` (#361). **`Target.relation` is no longer one of them** -- it
-  is a real field, so "a creature it is grabbing" is the target line itself,
-  with no `requires=`, no re-pick and no marker (#401);
+* a printed target line that narrows by something other than side or size is
+  the target line itself wherever `Target` has a field for it -- `relation=`,
+  `conditions=` and `bloodied=` are all real now, so those rows carry no
+  `requires=`, no body re-pick and no marker (#401). What is left without a
+  field still records the wording in `label=`, redirects in the body, and
+  names its own gap: `Target.creature_kind`, `Target.ongoing` or
+  `Target.ident` (#361);
 * a row that recharges on a printed condition keeps the die in the header,
   because that is what `actions.recharge` rolls and what the card shows, and
   arms the condition on top of it.
@@ -66,7 +64,6 @@ from combat_engine.content.monsters.level_03.controllers_sa import (
     _ally_used,
     _also,
     _hold_while_inside,
-    _in_reach_suffering,
     _let_it_swing,
 )
 from combat_engine.content.monsters.level_03.skirmishers import _free_square_beside
@@ -456,22 +453,20 @@ def _dazed_or_stunned_within(radius: int) -> Callable[[World, int], bool]:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(10),
-    target=Target("enemy", 1, label="one stunned or dazed creature"),
+    target=Target(
+        "enemy", 1,
+        label="one stunned or dazed creature",
+        conditions=frozenset({Condition.STUNNED, Condition.DAZED}),
+    ),
     keywords=[Keyword.CHARM, Keyword.GAZE],
     attack=Attack(vs=WILL, printed=8),
-    requires=_dazed_or_stunned_within(10),
-    requires_text="a stunned or dazed enemy within 10 squares",
-    dropped=("Target.condition",),
 )
 def m1435a4(c: Cast) -> None:
     """"Only one creature at a time" costs nothing here: the row is an
     encounter power and the hold runs out on its own turn, so a second
     victim is unreachable by construction."""
-    victim = _in_reach_suffering(c, 10, Condition.STUNNED, Condition.DAZED)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.condition(Condition.DOMINATED, until=When.EONT, on=victim)
+    if c.strike():
+        c.condition(Condition.DOMINATED, until=When.EONT)
 
 
 @power(
@@ -2000,16 +1995,17 @@ def m4644a3(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=Target("other_ally", 99, everyone=True, label="bloodied allies in the burst"),
+    target=Target(
+        "other_ally", 99, everyone=True,
+        label="bloodied allies in the burst",
+        bloodied=True,
+    ),
     keywords=[Keyword.HEALING],
-    dropped=("Target.bloodied",),
 )
 def m4644a4(c: Cast) -> None:
-    """The restriction is on the ally's state, which `Target` cannot narrow,
-    so the burst takes every ally and the wound is asked here."""
-    mate = c.target
-    if mate is not None and c.bloodied(on=mate):
-        c.heal(15, on=mate)
+    """`other_ally` for the same reason as m4644a3: the caster is not one of
+    the allies the card heals."""
+    c.heal(15)
 
 
 # --------------------------------------------------------------------------

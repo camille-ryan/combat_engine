@@ -17,17 +17,14 @@ Conventions, inherited from the level 1-7 lurker sweeps:
   `else: c.hit(half=True)`;
 * **"Target: a creature that cannot see it" or "...that is immobilized,
   stunned, or unconscious" is the target's own state, not the chooser's
-  business** -- `Target` filters side, count and size and not what a
-  creature is suffering, so `_restricted_to` (level_03) is reused across
-  this file the same way it was settled two levels down. Each use is marked for
-  the gap it has: `dropped=("Target.relation",)` where the line is about the
-  caster -- "cannot see it" -- and `dropped=("Target.condition",)` where it is
-  about a condition the creature carries.
+  business** -- and `Target` says both now: `conditions=` for what the
+  creature is suffering, `relation=Relation.HIDDEN_FROM` for the half that is
+  about the caster. Neither needs a body re-pick or a marker any more.
 
 Lurkers lean on concealment, invisibility and combat-advantage riders, and
 this file leans on `_triggering_enemy`, `_secondary`, `_vanish_until_it_
-swings`, `_recharge_when_using`, `_twice`, `_aura_holds` and `_restricted_
-to`, all imported rather than written again.
+swings`, `_recharge_when_using`, `_twice` and `_aura_holds`, all imported
+rather than written again.
 
 Three helpers are new here, each because a run of rows genuinely shares the
 shape: `_bonus_vs_advantage` is "extra damage against a target it has (or
@@ -51,7 +48,6 @@ from combat_engine.content.monsters.level_02.lurkers_sa import (
     _triggering_enemy,
     _twice,
 )
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers import _vanish_until_it_swings
 from combat_engine.engine import (
     AC,
@@ -1333,24 +1329,23 @@ def m5574a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="the target must be immobilized, stunned, or unconscious",
+        conditions=frozenset(
+            {Condition.IMMOBILIZED, Condition.STUNNED, Condition.UNCONSCIOUS}
+        ),
+    ),
     attack=Attack(vs=AC, printed=11),
     damage=Damage("3d8", 5),
-    dropped=("Target.condition",),
 )
 def m5574a2(c: Cast) -> None:
-    victim = _restricted_to(
-        c, 1,
-        lambda f: (
-            c.is_(Condition.IMMOBILIZED, on=f)
-            or c.is_(Condition.STUNNED, on=f)
-            or c.is_(Condition.UNCONSCIOUS, on=f)
-        ),
-    )
-    if victim is None or not c.strike(on=victim):
+    """The printed Requirement is the target line restated, so the target line
+    carries all of it: an empty pool already refuses the row."""
+    if not c.strike():
         return
-    c.hit(on=victim)
-    c.dazed(on=victim, until=When.SAVE_ENDS)
+    c.hit()
+    c.dazed(until=When.SAVE_ENDS)
     c.temp_hp(10, on=c.me)
 
 

@@ -13,16 +13,16 @@ conventions are the ones the earlier sweeps settled and they are kept here:
   files as standard actions are plainly traits and are written as such;
 * a printed range of "15/30" takes the **normal** range, so the creature
   shoots inside the band where it has no penalty;
-* a printed target restriction about what a creature is *suffering* has
-  nowhere to live -- `Target` filters on side, count and size -- so `label=`
-  records it for the card, the body gates on it, a `requires=` keeps the row
-  from being offered when nothing in reach qualifies, and `Target.condition`
-  is the gap (#361). A line asking something else of the target wants its own
-  symbol: `Target.creature_kind` for a type word, `Target.ident` for its own
-  kind. **"A creature the attacker has hold of" wants no symbol at all** --
-  `Target.relation` is a real field now, so that line is the target line
-  itself and the printed Requirement is the empty pool refusing the row
-  (#401);
+* a printed target restriction about what a creature is *suffering* **is** the
+  target line now: `Target.conditions` is a real field, the printed wording
+  stays in `label=`, and the empty pool refuses the row where a `requires=`
+  used to spell the same refusal by hand (#361, #401). The set tests **any** of
+  its members, so it cannot say "blind creatures are immune" -- a *negative*
+  condition is still missing, and m1021a1 is the one row here still marked for
+  it. A line asking something else of the target wants its own symbol:
+  `Target.creature_kind` for a type word, `Target.ident` for its own kind. The
+  same went for "a creature the attacker has hold of", which `Target.relation`
+  took;
 * a row that recharges on a printed condition rather than on a die keeps the
   die in the header, because that is what `actions.recharge` rolls and what
   the card shows, and arms the condition on top of it;
@@ -533,16 +533,20 @@ def m1021a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=Target(side="enemy", everyone=True, label="not blinded"),
+    target=Target(
+        side="enemy", everyone=True,
+        label="not blinded",
+        conditions_without=frozenset({Condition.BLINDED}),
+    ),
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=7),
-    dropped=("Target.condition",),
 )
 def m1021a1(c: Cast) -> None:
-    """"Blind creatures are immune" narrows the target list by a condition,
-    which `Target` cannot say, so it is gated here and recorded in `label=`."""
-    if c.is_(Condition.BLINDED):
-        return
+    """"Blind creatures are immune" is the negative of a condition, which is
+    `conditions_without` and not `conditions` -- and not `without=` either,
+    which inverts `relation` alone. The blast narrows before the area is
+    applied, so an immune creature is never a target rather than being made one
+    and then skipped. #401."""
     if c.strike():
         c.dazed()
 
@@ -1475,20 +1479,22 @@ def m4181a2(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=Target(side="enemy", everyone=True, label="slowed or restrained"),
+    target=Target(
+        side="enemy", everyone=True,
+        label="slowed or restrained creatures",
+        conditions=frozenset({Condition.SLOWED, Condition.RESTRAINED}),
+    ),
     attack=Attack(vs=AC, printed=9),
     damage=Damage("3d6", 3, kind=LIMITED),
-    requires=_suffering_in_reach(1, Condition.SLOWED, Condition.RESTRAINED),
-    requires_text="a slowed or restrained creature must be adjacent",
-    dropped=("Target.condition",),
 )
 def m4181a3(c: Cast) -> None:
     """"This forced movement can affect a creature restrained by its own
     m4181a4" is not a clause the engine has to be told: `c.push` moves a
     restrained creature already, because restraint stops its own walking and
-    not somebody else's shove."""
-    if not (c.is_(Condition.SLOWED) or c.is_(Condition.RESTRAINED)):
-        return
+    not somebody else's shove.
+
+    The target line is `Target.conditions` now, so the burst never contains an
+    unqualified creature and the Requirement is the empty pool."""
     if c.strike():
         c.hit()
         c.push(3)
@@ -1698,13 +1704,15 @@ def m4458a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=Target(side="enemy", everyone=True, label="immobilized"),
+    target=Target(
+        side="enemy", everyone=True,
+        label="immobilized enemies",
+        conditions=frozenset({Condition.IMMOBILIZED}),
+    ),
     keywords=[Keyword.COLD, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("1d6", 3, dtype=DamageType.NECROTIC, kind=LIMITED, half_on_miss=False),
-    requires=_suffering_in_reach(2, Condition.IMMOBILIZED),
-    requires_text="an immobilized enemy must be within 2 squares",
-    dropped=("Target.condition", "Damage(dtypes=)"),
+    dropped=("Damage(dtypes=)",),
 )
 def m4458a2(c: Cast) -> None:
     """The miss line is not half damage -- it is the same dice and one summon
@@ -1712,7 +1720,7 @@ def m4458a2(c: Cast) -> None:
     header for itself. `c.summon` puts the newcomer in the initiative order as
     well as on the board, which is the half `loader.spawn` alone misses."""
     victim = c.target
-    if victim is None or not c.is_(Condition.IMMOBILIZED, on=victim):
+    if victim is None:
         return
     landed = c.strike()
     c.hit()
@@ -3149,22 +3157,19 @@ def m6269a6(c: Cast) -> None:
     once_per_round=True,
     action=MINOR,
     reach=Melee(1),
-    target=Target(side="enemy", label="dazed, dominated, stunned or unconscious"),
+    target=Target(
+        side="enemy",
+        label="one dazed, dominated, stunned, or unconscious creature",
+        conditions=frozenset(_HELPLESS_ENOUGH),
+    ),
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d10", 3),
-    requires=_suffering_in_reach(1, *_HELPLESS_ENOUGH),
-    requires_text="a dazed, dominated, stunned or unconscious enemy must be adjacent",
-    dropped=("Target.condition",),
 )
 def m6269a7(c: Cast) -> None:
-    """The victim is found rather than refused: the row is offered against
-    whoever is nearest, and spending the minor action on nothing because the
-    nearest creature is the wrong one is not what the card says."""
-    victim = _in_reach_suffering(c, 1, *_HELPLESS_ENOUGH)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """The four states are the target line, so the chooser is never handed a
+    creature the card refuses and the body has nothing left to re-pick."""
+    if c.strike():
+        c.hit()
         c.heal(5, on=c.me)
 
 

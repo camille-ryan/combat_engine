@@ -370,22 +370,20 @@ def m1107a2(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="One adjacent prone creature"),
+    target=Target(
+        "enemy", 1,
+        label="One adjacent prone creature",
+        conditions=frozenset({Condition.PRONE}),
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=6),
     damage=Damage("1d6", 4),
-    requires=_prone_enemy_in_reach,
-    requires_text="an adjacent enemy must be prone",
-    dropped=("Target.condition",),
 )
 def m1107a3(c: Cast) -> None:
-    """"An adjacent prone target" is a target line `Target` cannot express, so
-    it is a label, an entry gate and a check in the body -- the gate keeps the
-    row off the menu when nobody is down, the check keeps a chosen target
-    honest."""
-    victim = c.target
-    if victim is None or not c.is_(Condition.PRONE, victim):
-        return
+    """"An adjacent prone target" is the target line itself now. The entry gate
+    and the body's check both came out: an empty pool keeps the row off the
+    menu, from one place rather than three. The reach line is what makes it
+    adjacent."""
     if c.strike():
         c.hit()
 
@@ -766,22 +764,17 @@ def m3537a1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=Target(
-        side="enemy", count=1, label="One immobilized, stunned or unconscious creature"
+        "enemy", 1,
+        label="One immobilized, stunned or unconscious creature",
+        conditions=frozenset(_HELPLESS),
     ),
     attack=Attack(vs=AC, printed=8),
     damage=Damage("2d6", 3),
-    requires=_pinned_enemy_in_reach,
-    requires_text="an adjacent enemy must be immobilized, stunned or unconscious",
-    dropped=("Target.condition",),
 )
 def m3537a2(c: Cast) -> None:
-    """A target line narrowed by what the creature is suffering, which
-    `Target` has no field for: a label for the card, an entry gate so the
-    policy is not offered a standard action that does nothing, and the check
-    again here because a chosen target may have shaken it off in between."""
-    victim = c.target
-    if victim is None or not any(c.is_(held, victim) for held in _HELPLESS):
-        return
+    """A target line narrowed by what the creature is suffering, which is now a
+    field: the entry gate and the body's re-check both came out, because an
+    empty pool is the same refusal from one place instead of three."""
     if c.strike():
         c.hit()
         c.dazed(until=When.SAVE_ENDS)

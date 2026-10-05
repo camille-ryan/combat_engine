@@ -37,7 +37,6 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_07.brutes_sa import _ridden_by_seventh_level
 from combat_engine.content.monsters.level_09.brutes_sa import _revives_once
 from combat_engine.engine import (
@@ -1021,16 +1020,20 @@ def m2596a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="slowed"),
+    target=Target(
+        side="enemy", count=1,
+        label="slowed creatures only",
+        conditions=frozenset({Condition.SLOWED}),
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("3d10", 6),
-    dropped=("Target.condition",),
 )
 def m2596a1(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: c.is_(Condition.SLOWED, on=f))
-    if victim is not None and c.strike(on=victim):
-        c.hit(on=victim)
+    """"Slowed creatures only" is the target line, so an unslowed creature is
+    never offered and the body has no re-pick left."""
+    if c.strike():
+        c.hit()
 
 
 @power(
@@ -2042,18 +2045,21 @@ def m5578a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="helpless or restrained"),
+    target=Target(
+        side="enemy", count=1,
+        label="the target must be immobilized, stunned, or unconscious",
+        conditions=frozenset({
+            Condition.IMMOBILIZED, Condition.STUNNED, Condition.UNCONSCIOUS,
+        }),
+    ),
     attack=Attack(vs=AC, printed=13),
     damage=Damage("5d6", 5),
-    dropped=("Target.condition",),
 )
 def m5578a1(c: Cast) -> None:
-    victim = _restricted_to(
-        c, 1,
-        lambda f: c.is_(Condition.IMMOBILIZED, on=f)
-        or c.is_(Condition.STUNNED, on=f)
-        or c.is_(Condition.UNCONSCIOUS, on=f),
-    )
+    """The printed Requirement is three alternative states, which is one
+    `Target.conditions` set -- so it narrows the pool rather than gating the
+    row, and the refusal is the pool being empty."""
+    victim = c.target
     if victim is not None:
         _m5578_grapple(c, victim)
 

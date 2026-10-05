@@ -82,7 +82,6 @@ from combat_engine.content.monsters.level_07.soldiers import (
 )
 from combat_engine.content.monsters.level_08.brutes import _melee_ctx
 from combat_engine.content.monsters.level_08.skirmishers import _adjacent_foe
-from combat_engine.content.monsters.level_10.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_11.skirmishers import (
     _has_the_drop,
     _release_earlier,
@@ -138,6 +137,7 @@ from combat_engine.engine import (
     Relation,
     Size,
     Stats,
+    Target,
     TurnEnd,
     TurnStart,
     UpTo,
@@ -859,23 +859,21 @@ def m1600a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Ranged(5),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="immobilized targets only",
+        conditions=frozenset({Condition.IMMOBILIZED}),
+    ),
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("1d8", 6),
-    dropped=("Target.condition",),
 )
 def m1600a2(c: Cast) -> None:
-    """"Immobilized targets only" is the target's own state, which the
-    chooser does not filter on, so the row is redirected rather than
-    returned. The minor-action half is `c.recast`: the row is already known
-    and what the card grants is a cheaper action for the rest of this turn."""
-    victim = _restricted_to(c, 5, lambda who: _held_fast(c, who))
-    if victim is None:
+    """The minor-action half is `c.recast`: the row is already known and what
+    the card grants is a cheaper action for the rest of this turn."""
+    if not c.strike():
         return
-    if not c.strike(on=victim):
-        return
-    c.hit(on=victim)
-    c.pull(4, on=victim)
+    c.hit()
+    c.pull(4)
     c.recast("m1600a3", action=MINOR, per_turn=1, until=When.EOT, on=c.me)
 
 
@@ -885,18 +883,20 @@ def m1600a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="immobilized targets only",
+        conditions=frozenset({Condition.IMMOBILIZED}),
+    ),
     keywords=[Keyword.POISON],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("1d6", 6),
-    dropped=("Target.condition",),
 )
 def m1600a3(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda who: _held_fast(c, who))
-    if victim is None or not c.strike(on=victim):
+    if not c.strike():
         return
-    c.hit(on=victim)
-    c.ongoing(10, DamageType.POISON, on=victim)
+    c.hit()
+    c.ongoing(10, DamageType.POISON)
 
 
 # ==========================================================================
@@ -963,27 +963,21 @@ def m1687a2(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target("enemy", 1, label="bloodied target only", bloodied=True),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d8", 4, kind=LIMITED),
-    dropped=("Target.bloodied",),
 )
 def m1687a3(c: Cast) -> None:
-    """Two swings at one bloodied creature. The restriction is the target's
-    own state, so the row is redirected rather than thrown away; the burn is
-    laid once however many of the two land, because ongoing damage of one
-    type does not stack."""
-    victim = _restricted_to(c, 1, c.bloodied)
-    if victim is None:
-        return
+    """Two swings at one bloodied creature; the burn is laid once however many
+    of the two land, because ongoing damage of one type does not stack."""
     for _ in range(2):
-        if not c.strike(on=victim):
+        if not c.strike():
             continue
-        c.hit(on=victim)
+        c.hit()
         if c.crit:
-            c.flat(c.roll("1d8"), on=victim)
-        c.ongoing(5, on=victim)
+            c.flat(c.roll("1d8"))
+        c.ongoing(5)
 
 
 @power(

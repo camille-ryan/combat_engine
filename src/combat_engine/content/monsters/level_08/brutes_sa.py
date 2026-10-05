@@ -1261,21 +1261,34 @@ def m3320a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="bloodied, living enemy"),
+    target=Target(
+        "enemy", 1,
+        label="bloodied, living enemy",
+        bloodied=True,
+    ),
     keywords=[Keyword.NECROTIC, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("6d6", 5, dtype=DamageType.NECROTIC),
-    dropped=("Target.bloodied", "Target.creature_kind"),
+    dropped=("Target.creature_kind",),
 )
 def m3320a2(c: Cast) -> None:
-    def qualifies(f: int) -> bool:
-        return c.bloodied(on=f) and not any(
-            c.is_kind(word, on=f) for word in ("undead", "construct")
-        )
+    """Bloodied is the target line now; "living" is still the dropped half, so
+    the redirect stays for that and has to ask bloodied of the creatures it
+    scans -- `c.enemies()` is the raw pool and not the filtered one."""
+
+    def living(f: int) -> bool:
+        return not any(c.is_kind(word, on=f) for word in ("undead", "construct"))
 
     victim = c.target
-    if victim is None or not qualifies(victim):
-        victim = next((f for f in c.enemies() if qualifies(f) and c.distance(f) <= 1), None)
+    if victim is None or not living(victim):
+        victim = next(
+            (
+                f
+                for f in c.enemies()
+                if living(f) and c.bloodied(on=f) and c.distance(f) <= 1
+            ),
+            None,
+        )
     if victim is None:
         return
     if c.strike(on=victim):
@@ -1932,16 +1945,23 @@ def m5494a4(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="bloodied, hit this turn by claw"),
+    target=Target(
+        "enemy", 1,
+        label="bloodied, hit this turn by claw",
+        bloodied=True,
+    ),
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=11),
-    dropped=("Target.bloodied", "c.hit_this_turn()"),
+    dropped=("c.hit_this_turn()",),
 )
 def m5494a5(c: Cast) -> None:
+    """Bloodied is the target line now. The claw half is still the dropped
+    clause, so the redirect stays -- and it keeps asking bloodied of what it
+    scans, because `c.enemies()` is the unfiltered pool."""
     bucket = getattr(c.world, "_m5494_claws", {})
     clawed = bucket.get(c.me, set())
     victim = c.target
-    if victim is None or not (c.bloodied(on=victim) and victim in clawed):
+    if victim is None or victim not in clawed:
         victim = next(
             (f for f in c.enemies() if c.bloodied(on=f) and f in clawed and c.distance(f) <= 1),
             None,

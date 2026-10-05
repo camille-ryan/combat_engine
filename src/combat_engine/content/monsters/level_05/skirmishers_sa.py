@@ -43,10 +43,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat_engine.content.monsters.level_01.artillery_sa import (
-    _any_enemy_suffering,
-    _recharge_when_bloodied,
-)
+from combat_engine.content.monsters.level_01.artillery_sa import _recharge_when_bloodied
 from combat_engine.content.monsters.level_01.brutes_sa import _crit_line
 from combat_engine.content.monsters.level_01.skirmishers_sa import _moved_far
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
@@ -628,23 +625,17 @@ def m2002a0(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Ranged(10),
-    target=ONE_CREATURE,
+    target=Target("enemy", 1, label="a bloodied enemy", bloodied=True),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=8),
     damage=Damage("1d8", 4, dtype=DamageType.NECROTIC),
-    requires=_any_enemy_bloodied,
-    requires_text="it targets a bloodied enemy",
-    dropped=("Target.bloodied",),
 )
 def m2002a1(c: Cast) -> None:
-    victim = c.target
-    if victim is not None and not c.bloodied(on=victim):
-        victim = next((f for f in c.enemies() if c.bloodied(on=f)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.ongoing(5, DamageType.NECROTIC, on=victim)
+    """"Targets a bloodied enemy" is `Target.bloodied` now, so the pool is
+    already the right one and the Requirement is its emptiness."""
+    if c.strike():
+        c.hit()
+        c.ongoing(5, DamageType.NECROTIC)
 
 
 @power(
@@ -1330,21 +1321,19 @@ def m4305a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one prone creature",
+        conditions=frozenset({Condition.PRONE}),
+    ),
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d8", 4),
-    requires=_any_enemy_suffering(Condition.PRONE),
-    requires_text="it targets a prone creature",
-    dropped=("Target.condition",),
 )
 def m4305a1(c: Cast) -> None:
-    victim = c.target
-    if victim is not None and not c.is_(Condition.PRONE, on=victim):
-        victim = next((f for f in c.enemies() if c.is_(Condition.PRONE, on=f)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """"One prone creature" is the target line, so nothing else qualifies and
+    the body has no re-pick left to do."""
+    if c.strike():
+        c.hit()
 
 
 @power(
@@ -3001,26 +2990,26 @@ def m6476a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one immobilized, restrained, stunned, or unconscious creature",
+        conditions=frozenset({
+            Condition.IMMOBILIZED,
+            Condition.RESTRAINED,
+            Condition.STUNNED,
+            Condition.UNCONSCIOUS,
+        }),
+    ),
     attack=Attack(vs=AC, printed=10),
     damage=Damage("4d6", 6),
-    requires=_any_enemy_suffering(
-        Condition.IMMOBILIZED, Condition.RESTRAINED, Condition.STUNNED, Condition.UNCONSCIOUS
-    ),
-    requires_text="it targets an immobilized, restrained, stunned or unconscious creature",
-    dropped=("Target.condition",),
 )
 def m6476a2(c: Cast) -> None:
-    states = (Condition.IMMOBILIZED, Condition.RESTRAINED, Condition.STUNNED, Condition.UNCONSCIOUS)
-    victim = c.target
-    if victim is not None and not any(c.is_(s, on=victim) for s in states):
-        victim = next((f for f in c.enemies() if any(c.is_(s, on=f) for s in states)), None)
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.stunned(on=victim, until=When.SAVE_ENDS)
-        c.no_healing(on=victim, until=When.SAVE_ENDS)
+    """Four states, one set: `Target.conditions` tests any of them, which is
+    what the printed list of alternatives means."""
+    if c.strike():
+        c.hit()
+        c.stunned(until=When.SAVE_ENDS)
+        c.no_healing(until=When.SAVE_ENDS)
 
 
 @power(

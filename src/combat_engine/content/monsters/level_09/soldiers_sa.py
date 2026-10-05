@@ -398,7 +398,12 @@ def m1177a2(c: Cast) -> None:
 
 @power(
     "m1177a3", level=9, usage=Usage.RECHARGE, recharge=6, action=STANDARD, reach=Ranged(10),
-    target=ONE_CREATURE, attack=Attack(vs=WILL, printed=11), damage=Damage("0", 0, kind=LIMITED),
+    target=ONE_CREATURE, attack=Attack(vs=WILL, printed=11),
+    # The card prints no Hit damage -- the clause is a pull and a daze --
+    # so this is flat zero, and flat is an empty dice string. "0" is
+    # truthy, so it would reach `rng.roll` and raise the moment anything
+    # called `c.hit()`.
+    damage=Damage("", 0, kind=LIMITED),
 )
 def m1177a3(c: Cast) -> None:
     if c.strike():
@@ -1672,7 +1677,10 @@ def m4005a0(c: Cast) -> None:
         side="enemy", count=1, label="creature grabbed by it",
         relation=Relation.GRABBED_BY,
     ),
-    attack=Attack(vs=FORT, printed=10), damage=Damage("0", 0),
+    attack=Attack(vs=FORT, printed=10),
+    # Flat zero, and flat is an empty dice string. This one *did* call
+    # `c.hit()` and raised in play.
+    damage=Damage("", 0),
     dropped=("c.cannot_attack(opportunity=)", "c.sight_range(only=)"),
 )
 def m4005a1(c: Cast) -> None:

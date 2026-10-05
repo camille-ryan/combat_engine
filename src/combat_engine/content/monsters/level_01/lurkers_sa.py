@@ -18,7 +18,6 @@ and the conventions are the ones those files settled:
 
 from __future__ import annotations
 
-from combat_engine.content.monsters.level_01.artillery_sa import _any_enemy_suffering
 from combat_engine.content.monsters.level_02.skirmishers import _advantage_rider
 from combat_engine.engine import (
     AC,
@@ -123,19 +122,17 @@ def m3436a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="helpless or unconscious creature"),
+    target=Target(
+        side="enemy", count=1,
+        label="helpless or unconscious creature",
+        conditions=frozenset({Condition.HELPLESS, Condition.UNCONSCIOUS}),
+    ),
     keywords=[Keyword.PSYCHIC],
-    requires=_any_enemy_suffering(Condition.HELPLESS, Condition.UNCONSCIOUS),
-    requires_text="must have a helpless or unconscious creature to feed on",
-    dropped=("Target.condition",),
 )
 def m3436a2(c: Cast) -> None:
     """No attack line at all -- the damage is automatic against something that
-    cannot stop it -- so the restriction is the whole of the row's gate and is
-    asked in the body: `Target` filters on side and size and not on what a
-    creature is suffering."""
-    if not (c.is_(Condition.HELPLESS) or c.is_(Condition.UNCONSCIOUS)):
-        return
+    cannot stop it -- so the target line is the whole of the row's gate. The
+    `requires=` restated it, and an empty pool already refuses the row."""
     c.flat(5, dtype=DamageType.PSYCHIC)
     c.temp_hp(10, on=c.me)
 

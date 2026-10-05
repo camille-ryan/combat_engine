@@ -676,24 +676,23 @@ def m115912a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one dazed, dominated, stunned, or unconscious creature",
+        conditions=frozenset(_HELPLESS_ENOUGH),
+    ),
     keywords=[Keyword.HEALING],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("4d10", 10),
-    dropped=("Target.condition",),
 )
 def m115912a3(c: Cast) -> None:
-    """Four states and one printed target line. The row picks a creature in
-    one of them rather than being thrown away when the chooser aims it
-    elsewhere -- `Target` filters on side, count and size and never on what
-    a creature is suffering, so `Target.condition` is the gap."""
-    victim = _restricted_to(
-        c, 1, lambda f: any(is_(c.world, f, cond) for cond in _HELPLESS_ENOUGH)
-    )
-    if victim is None or not c.strike(on=victim):
-        return
-    c.hit(on=victim)
-    c.heal(20, on=c.me)
+    """Four states and one printed target line, which is one
+    `Target.conditions` set -- any of them, which is what the list of
+    alternatives means. The chooser can no longer aim the row elsewhere, so
+    the body has nothing to re-pick."""
+    if c.strike():
+        c.hit()
+        c.heal(20, on=c.me)
 
 
 @power(
@@ -2780,26 +2779,27 @@ def m5335a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one blinded creature",
+        conditions=frozenset({Condition.BLINDED}),
+    ),
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("2d6", 5),
-    dropped=("Target.condition",),
 )
 def m5335a2(c: Cast) -> None:
-    """"One blinded creature" is a restriction `Target` cannot express -- a
-    condition the creature carries, so `Target.condition` -- and the row picks
-    a blinded one rather than being thrown away.
+    """"One blinded creature" is `Target.conditions`, so the pool holds only
+    blinded creatures and the row is simply not offered otherwise.
 
     The Sustain line pays out per sustain, which only `c.on_sustain` does,
     and it is asked of the relation each time: a grab can be broken between
     one sustain and the next, and the card sustains *each* of them.
     """
-    victim = _restricted_to(c, 1, lambda f: is_(c.world, f, Condition.BLINDED))
-    if victim is None or not c.strike(on=victim):
+    if not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
     if len(c.grabbing(of=c.me)) < 2:
-        c.grab(on=victim)
+        c.grab()
     grip = c.effect(f"{c.ref} grip", until=When.SUSTAIN, sustain=MINOR, on=c.me)
 
     def each_sustain() -> None:

@@ -71,7 +71,6 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.monsters.level_03.brutes import _squeezes_freely
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_04.brutes import _change_shape
 from combat_engine.content.monsters.level_07.brutes import _aura
@@ -296,18 +295,13 @@ def m1576a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target("enemy", 1, label="one bloodied creature", bloodied=True),
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=16),
     damage=Damage("5d6", 12, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Target.bloodied",),
 )
 def m1576a2(c: Cast) -> None:
-    """"One bloodied creature" is narrower than any `Target` can say, so the
-    row is re-aimed in the body rather than thrown away when the chooser hands
-    over somebody untouched.
-
-    The first failed save ends the slow and applies the heavier hold; it does
+    """The first failed save ends the slow and applies the heavier hold; it does
     **not** edit the live effect's conditions, which are read once on the way
     in and once on the way out and never between, so a rewrite there would
     strand the slow and never land the rest. "If the target takes damage, the
@@ -315,10 +309,10 @@ def m1576a2(c: Cast) -> None:
     """
     me, ref = c.me, c.ref
     _recharge_on(c, Miss, lambda ev: ev.attacker == me and ev.power == ref)
-    victim = _restricted_to(c, 2, lambda foe: c.bloodied(on=foe))
-    if victim is None or not c.strike(on=victim):
+    victim = c.target
+    if victim is None or not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
 
     def out(eff: Effect) -> None:
         c.world.effects.end(eff, "the first save failed")
@@ -551,18 +545,18 @@ def m2073a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="prone targets only",
+        conditions=frozenset({Condition.PRONE}),
+    ),
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("3d8", 6),
-    dropped=("Target.condition",),
 )
 def m2073a1(c: Cast) -> None:
-    """"Prone targets only" is a restriction no `Target` can carry, so the row
-    is re-aimed at whoever in reach qualifies rather than thrown away."""
-    victim = _restricted_to(c, 2, lambda foe: c.is_(Condition.PRONE, on=foe))
-    if victim is None or not c.strike(on=victim):
+    if not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
 
 
 @power(

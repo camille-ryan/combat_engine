@@ -697,21 +697,18 @@ def m1101a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="target must be immobilized, stunned, or unconscious",
+        conditions=frozenset(_HELPLESS),
+    ),
     attack=Attack(vs=AC, printed=15),
     damage=Damage("3d6", 6),
-    dropped=("Target.condition",),
 )
 def m1101a1(c: Cast) -> None:
-    """ "Target must be immobilized, stunned, or unconscious" -- `Target`
-    filters on side, count and size and not on what a creature is
-    suffering, so the restriction is enforced here instead."""
-    victim = _restricted_to(c, 1, lambda f: any(c.is_(cond, on=f) for cond in _HELPLESS))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.stunned(until=When.SAVE_ENDS, on=victim)
+    if c.strike():
+        c.hit()
+        c.stunned(until=When.SAVE_ENDS)
 
 
 # ==========================================================================
@@ -808,7 +805,10 @@ def m115863a3(c: Cast) -> None:
     ),
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=13),
-    damage=Damage("0", 10, dtype=DamageType.NECROTIC),
+    # Flat damage is an empty dice string, not "0": `Cast.hit` tests
+    # `if dice` and "0" is truthy, so it reached `rng.roll` and raised
+    # `not a dice expression: '0'`. The card prints a flat 10.
+    damage=Damage("", 10, dtype=DamageType.NECROTIC),
 )
 def m115863a4(c: Cast) -> None:
     if c.strike():
@@ -1552,19 +1552,20 @@ def m2092a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="target must be immobilized, stunned, or unconscious",
+        conditions=frozenset(_HELPLESS),
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d12", 6),
-    dropped=("Target.condition", *_NO_DISEASE),
+    dropped=_NO_DISEASE,
 )
 def m2092a2(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: any(c.is_(cond, on=f) for cond in _HELPLESS))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.ongoing(10, DamageType.NECROTIC, on=victim)
+    if c.strike():
+        c.hit()
+        c.ongoing(10, DamageType.NECROTIC)
 
 
 @power("m2092a3", level=10, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
@@ -3089,20 +3090,20 @@ def m5541a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one dazed creature",
+        conditions=frozenset({Condition.DAZED}),
+    ),
     keywords=[Keyword.FEAR, Keyword.PSYCHIC],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("1d8", 9),
-    dropped=("Target.condition",),
 )
 def m5541a2(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: c.is_(Condition.DAZED, on=f))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.damage("3d8", 0, dtype=DamageType.PSYCHIC, on=victim)
-        c.mark(until=When.SAVE_ENDS, on=victim)
+    if c.strike():
+        c.hit()
+        c.damage("3d8", 0, dtype=DamageType.PSYCHIC)
+        c.mark(until=When.SAVE_ENDS)
 
 
 @power(
@@ -4801,12 +4802,22 @@ def m939a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="immobilized living creature only",
+        conditions=frozenset({Condition.IMMOBILIZED}),
+    ),
     attack=Attack(vs=FORT, printed=15),
-    damage=Damage("0", 4),
-    dropped=("Target.condition", "Target.creature_kind"),
+    #: Flat 4, no dice: the empty string is how `Damage` says that. `"0"`
+    #: reaches `rng.roll` and raises -- found by driving this row.
+    damage=Damage("", 4),
+    dropped=("Target.creature_kind",),
 )
 def m939a1(c: Cast) -> None:
+    """Half of this target line is now the header's: `Target.conditions` says
+    immobilized, and "living" has no field, so the undead are still refused in
+    the body -- which keeps the redirect for the condition half too, because
+    `_restricted_to`'s fallback scans every enemy and not the narrowed pool."""
     victim = _restricted_to(
         c, 1, lambda f: c.is_(Condition.IMMOBILIZED, on=f) and not c.is_kind("undead", on=f)
     )

@@ -38,6 +38,7 @@ from .triggers import Trigger
 from .types import (
     Ability,
     ActionType,
+    Condition,
     DamageType,
     Defense,
     Keyword,
@@ -344,6 +345,42 @@ class Target:
     #: flanking and filters on combat advantage accepts targets its card
     #: refuses.
     flanked: bool = False
+    #: A printed target line narrowed by what the creature is **suffering**:
+    #: "one dazed creature", "any creature that is immobilized, stunned or
+    #: unconscious".
+    #:
+    #: **Any of them, not all of them.** The printed line is a list of
+    #: alternatives, and this is a set rather than a single `Condition` because
+    #: 33 of the 62 rows that wanted it name two or more -- nine name four. A
+    #: one-condition field would have been wrong for over half of them, and
+    #: wrong in the direction that refuses legal targets.
+    conditions: frozenset[Condition] = frozenset()
+    #: "One bloodied creature", and the two rows printing the opposite.
+    #:
+    #: Tri-state on purpose: the field has to tell "must be bloodied" from
+    #: "must not be" from "the card does not say". A bool can hold two of
+    #: those, and the rows printing *nonbloodied* would have been unwritable --
+    #: or worse, written as the thing they are not.
+    bloodied: bool | None = None
+    #: The negative of `conditions`: a creature carrying **any** of these is
+    #: refused. "One creature that is not grabbed", "blinded creatures are
+    #: immune".
+    #:
+    #: Its own field rather than `without` reused, because `without` inverts
+    #: `relation` and the two are different sentences. "Not grabbed *by it*" is
+    #: the relation inverted and a creature held by somebody else passes it;
+    #: "not grabbed" is this, and that creature does not. Three rows print the
+    #: negative of a condition and one of them was nearly written as the other.
+    conditions_without: frozenset[Condition] = frozenset()
+    #: "One creature able to take actions", and its negative.
+    #:
+    #: Not expressible as `conditions_without`, which is why it is its own
+    #: field: being able to act is not the absence of a fixed list. `query.
+    #: can_act` folds in consciousness, every condition whose rules say
+    #: `cannot_act`, and the exemption that lets a trap or a conjuration act at
+    #: all -- so naming a set here would be guessing at something the engine
+    #: already answers.
+    can_act: bool | None = None
 
     def __str__(self) -> str:
         if self.label:
@@ -1522,7 +1559,15 @@ def candidates(
     if aim.max_size is not None:
         cap = aim.max_size.order
         pool = [c for c in pool if _size_of(world, c).order <= cap]
-    if aim.relation is not None or aim.grants_ca or aim.flanked:
+    if (
+        aim.relation is not None
+        or aim.grants_ca
+        or aim.flanked
+        or aim.conditions
+        or aim.conditions_without
+        or aim.can_act is not None
+        or aim.bloodied is not None
+    ):
         pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
 
     reach = p.reach_of(branch, augment)
@@ -1754,6 +1799,28 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
 
         if not flanked_by(world, target, actor):
             return False
+    if aim.conditions or aim.conditions_without:
+        from .query import is_
+
+        # Any, not all. See the field.
+        if aim.conditions and not any(is_(world, target, c) for c in aim.conditions):
+            return False
+        if any(is_(world, target, c) for c in aim.conditions_without):
+            return False
+    if aim.can_act is not None:
+        from .query import can_act
+
+        if can_act(world, target) is not aim.can_act:
+            return False
+    if aim.bloodied is not None:
+        from .components import Health
+
+        hp = world.get(target, Health)
+        # A creature with no `Health` is scenery, and scenery is neither
+        # bloodied nor unbloodied -- so it fails either way round rather than
+        # defaulting into one of them.
+        if hp is None or hp.bloodied is not aim.bloodied:
+            return False
     return True
 
 
@@ -1846,15 +1913,40 @@ def _group_spent(world: World, actor: int, p: Power) -> bool:
 def _no_targets(world: World, actor: int, p: Power) -> str:
     """Say how far short the power fell, not merely that it did.
 
-    "3 squares away" is actionable; "no targets" is not.
-    """
-    from .query import distance_between
+    "3 squares away" is actionable; "no targets" is not. **And this string is
+    shown to the player** -- `actions.legal(include_blocked=True)` puts it on
+    the greyed card -- so a wrong reason is a wrong sentence on screen.
 
-    pool = enemies(world, actor) if p.target.side == "enemy" else creatures(world)
+    It used to measure the **unfiltered** side pool, so a row refused because
+    nothing *qualifies* blamed geometry: a reach-1 row with two enemies standing
+    adjacent reported "nearest is 0 squares away", which is both untrue as an
+    explanation and absurd on its face. That was always wrong for `holding` and
+    `max_size`; it became wrong on roughly 190 rows at once when the relational
+    and condition filters landed, because those rows previously carried a
+    `requires_text` and the card said something true. #403.
+
+    So the pool is narrowed by every clause `candidates` narrows it by, and the
+    clause that emptied it is named rather than guessed at.
+    """
+    from .query import distance_between, holding
+
+    aim = p.target
+    pool = enemies(world, actor) if aim.side == "enemy" else creatures(world)
     live = [c for c in pool if alive(world, c)]
     if not live:
         return "no targets"
-    nearest = min(distance_between(world, actor, c) for c in live)
+    fits = [c for c in live if _stands_right(world, actor, aim, c, p.ref)]
+    if aim.holding:
+        fits = [c for c in fits if holding(world, c, aim.holding)]
+    if aim.max_size is not None:
+        cap = aim.max_size.order
+        fits = [c for c in fits if _size_of(world, c).order <= cap]
+    if not fits:
+        # The printed wording, which is what `Target.__str__` returns when the
+        # row carries a label -- so the card says the restriction the card
+        # states, rather than a distance that has nothing to do with it.
+        return f'nothing here is "{aim}"'
+    nearest = min(distance_between(world, actor, c) for c in fits)
     furthest = max(p.reach_of(b).size for b in p.branches)
     if p.reach.kind in ("melee", "close_burst", "close_blast") and not p.reach.alt:
         return f"nearest is {nearest} squares away"

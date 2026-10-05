@@ -80,7 +80,6 @@ from combat_engine.content.monsters.level_01.artillery_sa import _recharge_when_
 from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_04.lurkers_sa import _hit_me_since_my_turn
 from combat_engine.content.monsters.level_07.brutes import _living
-from combat_engine.content.monsters.level_10.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_11.lurkers import _extra_against_the_unready
 from combat_engine.content.monsters.level_13.artillery import EVERY_DEFENCE
 from combat_engine.content.monsters.level_13.soldiers import _burn_and_hold
@@ -125,6 +124,7 @@ from combat_engine.engine import (
     Moved,
     Powers,
     Ranged,
+    Target,
     TurnEnd,
     TurnStart,
     UpTo,
@@ -1200,25 +1200,27 @@ def m5374a3(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Ranged(20),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one dazed creature",
+        conditions=frozenset({Condition.DAZED}),
+    ),
     keywords=[Keyword.PSYCHIC, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=18),
     damage=Damage("1d10", 6, dtype=DamageType.PSYCHIC),
-    dropped=("Target.condition",),
 )
 def m5374a4(c: Cast) -> None:
-    """"One dazed creature" is narrower than any `Target` can say, so the
-    chooser's answer is redirected rather than thrown away.
+    """"One dazed creature" is the target line now, so the redirect came out.
 
     Ongoing psychic does not stack -- the highest applies -- so "if the
     target is already taking ongoing psychic damage, the ongoing damage
     increases by 5" is one hold to find and one number to raise, not a
     second burn beside the first.
     """
-    victim = _restricted_to(c, 20, lambda foe: c.is_(Condition.DAZED, on=foe))
-    if victim is None or not c.strike(on=victim):
+    victim = c.target
+    if not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
     standing = max(
         (
             eff.ongoing[0]

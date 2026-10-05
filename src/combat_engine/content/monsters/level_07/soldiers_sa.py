@@ -131,12 +131,17 @@ from combat_engine.engine.triggers import Trigger, about_me, by_melee
 # --------------------------------------------------------------------------
 
 #: "Immobilized, stunned, or unconscious" -- the common three-condition
-#: target narrowing this role reaches for more than once.
-_PINNED_THREE = (Condition.IMMOBILIZED, Condition.STUNNED, Condition.UNCONSCIOUS)
+#: target narrowing this role reaches for more than once. A `frozenset`
+#: because that is what `Target.conditions` takes, and any of them qualifies.
+_PINNED_THREE = frozenset(
+    {Condition.IMMOBILIZED, Condition.STUNNED, Condition.UNCONSCIOUS}
+)
 
-#: One more than the tuple above -- "dazed, stunned, unconscious, or
+#: One more than the set above -- "dazed, stunned, unconscious, or
 #: helpless", m1760a2's own four.
-_HELPLESS_FOUR = (Condition.DAZED, Condition.STUNNED, Condition.UNCONSCIOUS, Condition.HELPLESS)
+_HELPLESS_FOUR = frozenset(
+    {Condition.DAZED, Condition.STUNNED, Condition.UNCONSCIOUS, Condition.HELPLESS}
+)
 
 
 def _own_edge(c: Cast) -> int:
@@ -624,17 +629,21 @@ def m1760a1(c: Cast) -> None:
 
 @power(
     "m1760a2", level=7, usage=AT_WILL, action=MINOR, reach=Melee(4),
-    target=Target(side="enemy", count=1, label="dazed, stunned, unconscious, or helpless creature"),
-    attack=Attack(vs=FORT, printed=12), dropped=("Target.condition",),
+    target=Target(
+        "enemy", 1,
+        label="dazed, stunned, unconscious, or helpless creature",
+        conditions=_HELPLESS_FOUR,
+    ),
+    attack=Attack(vs=FORT, printed=12),
 )
 def m1760a2(c: Cast) -> None:
-    victim = c.target
-    if victim is None or not any(c.is_(cnd, victim) for cnd in _HELPLESS_FOUR):
-        return
+    """The four conditions are the target line itself now, so the body's
+    re-pick came out: an empty pool refuses the row from one place instead of
+    two. #401."""
     if c.strike():
         spot = _free_square_beside(c, c.me)
         if spot is not None:
-            c.pull(c.distance(victim), on=victim, to=spot)
+            c.pull(c.distance(), to=spot)
 
 
 @power(
@@ -1622,14 +1631,18 @@ def m5504a0(c: Cast) -> None:
 
 @power(
     "m5504a1", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="prone creature"),
+    target=Target(
+        "enemy", 1,
+        label="prone creature",
+        conditions=frozenset({Condition.PRONE}),
+    ),
     keywords=[Keyword.WEAPON], attack=Attack(vs=AC, printed=12), damage=Damage("2d8", 6),
-    dropped=("Target.condition",),
 )
 def m5504a1(c: Cast) -> None:
+    """"If the target stands up" is the printed clause, so the watch is still
+    for `ConditionEnded` on the prone -- the target line only guarantees the
+    creature is down when the row is used."""
     victim = c.target
-    if victim is None or not c.is_(Condition.PRONE, victim):
-        return
     if not c.strike():
         return
     c.hit()
@@ -1682,13 +1695,14 @@ def m5576a0(c: Cast) -> None:
 
 @power(
     "m5576a1", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="immobilized, stunned, or unconscious creature"),
-    attack=Attack(vs=AC, printed=12), damage=Damage("3d6", 3), dropped=("Target.condition",),
+    target=Target(
+        "enemy", 1,
+        label="immobilized, stunned, or unconscious creature",
+        conditions=_PINNED_THREE,
+    ),
+    attack=Attack(vs=AC, printed=12), damage=Damage("3d6", 3),
 )
 def m5576a1(c: Cast) -> None:
-    victim = c.target
-    if victim is None or not any(c.is_(cnd, victim) for cnd in _PINNED_THREE):
-        return
     if c.strike():
         c.hit()
         c.dazed(until=When.SAVE_ENDS)
@@ -1751,13 +1765,14 @@ def m5577a1(c: Cast) -> None:
 
 @power(
     "m5577a2", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
-    target=Target(side="enemy", count=1, label="immobilized, stunned, or unconscious creature"),
-    attack=Attack(vs=AC, printed=12), damage=Damage("4d6", 5), dropped=("Target.condition",),
+    target=Target(
+        "enemy", 1,
+        label="immobilized, stunned, or unconscious creature",
+        conditions=_PINNED_THREE,
+    ),
+    attack=Attack(vs=AC, printed=12), damage=Damage("4d6", 5),
 )
 def m5577a2(c: Cast) -> None:
-    victim = c.target
-    if victim is None or not any(c.is_(cnd, victim) for cnd in _PINNED_THREE):
-        return
     if c.strike():
         c.hit()
         c.dazed(until=When.SAVE_ENDS)

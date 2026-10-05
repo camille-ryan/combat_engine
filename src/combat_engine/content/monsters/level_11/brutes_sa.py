@@ -94,7 +94,6 @@ from combat_engine.content.monsters.level_09.skirmishers import (
     _holding_label,
 )
 from combat_engine.content.monsters.level_10.brutes import _same_stock
-from combat_engine.content.monsters.level_10.lurkers_sa import _restricted_to
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -139,6 +138,7 @@ from combat_engine.engine import (
     Ranged,
     Stats,
     SurgeSpent,
+    Target,
     TurnEnd,
     TurnStart,
     UpTo,
@@ -2729,26 +2729,21 @@ def m6055a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one prone enemy",
+        conditions=frozenset({Condition.PRONE}),
+    ),
     keywords=[Keyword.FEAR, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("3d12", 10),
-    dropped=("Target.condition",),
 )
 def m6055a1(c: Cast) -> None:
-    """"One prone enemy" is narrower than any `Target` can say, so the row is
-    re-aimed rather than thrown away: somebody else in reach may be down
-    while the chooser handed over whoever was nearest. The header still
-    cannot *say* it, which is the named gap: prone is a condition, so
-    `Target.condition`.
-
-    "+2 bonus to all defences" prints no type word, so the bonus is untyped
-    and `kind=` is left off.
-    """
-    victim = _restricted_to(c, 1, _is_prone(c))
-    if victim is None or not c.strike(on=victim):
+    """"+2 bonus to all defences" prints no type word, so the bonus is untyped
+    and `kind=` is left off."""
+    if not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
     for shield in ("ac", "fort", "ref", "will"):
         c.bonus(shield, 2, until=When.EONT, on=c.me)
 
@@ -2764,8 +2759,8 @@ def m6055a1(c: Cast) -> None:
     on=Trigger(ConditionApplied, when=_i_knocked_one_down, text=_M6055_FLOORED),
 )
 def m6055a2(c: Cast) -> None:
-    """Declared with no target: m6055a1 re-aims itself at whoever is down,
-    which is the creature this trigger just put there.
+    """Declared with no target: m6055a1's own target line admits only a prone
+    enemy, which is the creature this trigger just put there.
 
     The five it costs comes off first, because the printed Effect spends the
     blood before the swing.

@@ -13,12 +13,11 @@ Conventions, inherited from the level 1-9 lurker sweeps:
 * a printed range band like "5/10" takes the short number; a card with no
   printed range at all is melee 1;
 * a close burst or blast whose card names no target set takes **enemies**;
-* "Target: a creature grabbed by it" is the target's own state, not the
-  chooser's business -- `Target` filters side, count and size and not what
-  a creature is suffering, so `_restricted_to` is reused and each use is
-  marked for its own gap -- `dropped=("Target.relation",)` for "grabbed by
-  it", `dropped=("Target.bloodied",)` for a bloodied or nonbloodied target,
-  which is `Health` and not a `Condition`;
+* "Target: a creature grabbed by it" is the target line's own business:
+  `Target` carries `relation`, `conditions` and `bloodied`, so the
+  restriction goes in the header and the body takes `c.target`. Nothing
+  here calls `_restricted_to` any more, but five later files import it
+  *from here* rather than from level 3, so the line stays with a `noqa`;
 * a printed escape DC that is actually on the card is
   `dropped=("c.grab(dc=)",)`; several blocks here print the grab with no
   DC at all, and those take no marker;
@@ -39,7 +38,7 @@ from __future__ import annotations
 
 from combat_engine.content.monsters.level_01.artillery_sa import _recharge_when_bloodied
 from combat_engine.content.monsters.level_02.lurkers_sa import _twice
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
+from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to  # noqa: F401
 from combat_engine.content.monsters.level_08.brutes import _aura
 from combat_engine.engine import (
     AC,
@@ -1003,21 +1002,19 @@ def m5188a0(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(3),
-    target=Target(side="enemy", label="one bloodied creature"),
+    target=Target(side="enemy", label="one bloodied creature", bloodied=True),
     keywords=[Keyword.HEALING, Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("2d8", 3, dtype=DamageType.PSYCHIC),
     requires=_m5188_lit,
     requires_text="the m5188 must be illuminated",
-    dropped=("Target.bloodied",),
 )
 def m5188a1(c: Cast) -> None:
-    victim = _restricted_to(c, 3, lambda f: c.bloodied(f))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.weakened(on=victim, until=When.SAVE_ENDS)
+    """The illumination Requirement is about the creature itself and stays; it
+    is the bloodied half of the gate that the target line now carries."""
+    if c.strike():
+        c.hit()
+        c.weakened(until=When.SAVE_ENDS)
         c.heal(14, on=c.me)
 
 
@@ -1027,19 +1024,19 @@ def m5188a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(20),
-    target=Target(side="enemy", label="one nonbloodied creature in the burst"),
+    target=Target(
+        side="enemy", label="one nonbloodied creature in the burst", bloodied=False,
+    ),
     attack=Attack(vs=WILL, printed=13),
     requires=_m5188_lit,
     requires_text="the m5188 must be illuminated",
-    dropped=("Target.bloodied",),
 )
 def m5188a2(c: Cast) -> None:
-    victim = _restricted_to(c, 20, lambda f: not c.bloodied(f))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.pull(3, on=victim)
-        c.dazed(on=victim, until=When.SAVE_ENDS)
+    """"Nonbloodied" is `bloodied=False` and not the absence of the field --
+    the tri-state is what keeps this row from becoming its own opposite."""
+    if c.strike():
+        c.pull(3)
+        c.dazed(until=When.SAVE_ENDS)
 
 
 @power(

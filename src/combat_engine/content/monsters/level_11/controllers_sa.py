@@ -1115,20 +1115,23 @@ def m1978a1(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="immobilized"),
+    target=Target(
+        side="enemy", count=1,
+        label="an immobilized creature",
+        conditions=frozenset({Condition.IMMOBILIZED}),
+    ),
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("1d8", 4, dtype=DamageType.NECROTIC),
-    dropped=("Target.condition",),
 )
 def m1978a2(c: Cast) -> None:
     """"Loses a healing surge" is `c.spend_surge`, which spends one and gives
-    nothing back for it -- the same door the printed line goes through."""
-    victim = _restricted_to(c, 1, lambda who: c.is_(Condition.IMMOBILIZED, on=who))
-    if victim is None or not c.strike(on=victim):
+    nothing back for it -- the same door the printed line goes through. The
+    immobilisation is `Target.conditions`, so there is nothing to re-pick."""
+    if not c.strike():
         return
-    c.hit(on=victim)
-    c.spend_surge(on=victim)
+    c.hit()
+    c.spend_surge()
     c.heal(5, on=c.me)
 
 
@@ -2227,7 +2230,7 @@ def m4460a0(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Melee(2),
-    target=Target(side="enemy", count=1, label="bloodied"),
+    target=Target(side="enemy", count=1, label="a bloodied creature", bloodied=True),
     keywords=[
         Keyword.CHARM,
         Keyword.NECROTIC,
@@ -2236,7 +2239,6 @@ def m4460a0(c: Cast) -> None:
     ],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("3d6", 6, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Target.bloodied",),
 )
 def m4460a1(c: Cast) -> None:
     """It pours itself over somebody and the two of them share a square.
@@ -2251,10 +2253,10 @@ def m4460a1(c: Cast) -> None:
     the m4460 back out, which is the printed order.
     """
     me = c.me
-    victim = _restricted_to(c, 2, lambda who: c.bloodied(who))
-    if victim is None or not c.strike(on=victim):
+    victim = c.target
+    if victim is None or not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
     here = c.world.get(victim, Position)
     inside = c.world.effects.apply(
         victim,
@@ -3512,17 +3514,17 @@ def m6181a2(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=CloseBurst(2),
-    target=Target(side="enemy", count=1, everyone=True, label="dazed"),
+    target=Target(
+        side="enemy", count=1, everyone=True,
+        label="dazed enemies in the burst",
+        conditions=frozenset({Condition.DAZED}),
+    ),
     keywords=[Keyword.CHARM],
-    dropped=("Target.condition",),
 )
 def m6181a3(c: Cast) -> None:
-    """No attack roll: the slide is the whole of it. `Target` cannot filter on
-    what a creature is suffering -- `Target.condition` is the gap -- so the
-    burst is narrowed here."""
-    for who in sorted(c.within(2)):
-        if who != c.me and c.is_(Condition.DAZED, on=who):
-            c.slide(3, on=who)
+    """No attack roll: the slide is the whole of it, and `Target.conditions`
+    narrows the burst so the body runs once per creature that qualifies."""
+    c.slide(3)
 
 
 @power(

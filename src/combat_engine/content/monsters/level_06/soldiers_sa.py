@@ -41,7 +41,6 @@ from combat_engine.content.monsters.level_01.brutes_sa import _crit_line
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES, _saves_off_prone
 from combat_engine.content.monsters.level_02.lurkers_sa import _twice
 from combat_engine.content.monsters.level_02.soldiers_sa import _armed, _recharge_when_bloodied
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers import _is_bloodied
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.engine import (
@@ -797,18 +796,18 @@ def m1950a0(c: Cast) -> None:
     once_per_round=True,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets an immobilized creature",
+        conditions=frozenset({Condition.IMMOBILIZED}),
+    ),
     attack=Attack(vs=AC, printed=13),
     damage=Damage("1d10", 4),
-    dropped=("Target.condition",),
 )
 def m1950a1(c: Cast) -> None:
-    foe = _restricted_to(c, 1, lambda f: c.is_(Condition.IMMOBILIZED, on=f))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        c.condition(Condition.DAZED, on=foe, until=When.SAVE_ENDS)
+    if c.strike():
+        c.hit()
+        c.condition(Condition.DAZED, until=When.SAVE_ENDS)
 
 
 # ==========================================================================
@@ -948,17 +947,13 @@ def m2786a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target("enemy", 1, label="targets bloodied enemies", bloodied=True),
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d8", 5),
-    dropped=("Target.bloodied",),
 )
 def m2786a1(c: Cast) -> None:
-    foe = _restricted_to(c, 1, lambda f: c.bloodied(on=f))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
+    if c.strike():
+        c.hit()
 
 
 # ==========================================================================

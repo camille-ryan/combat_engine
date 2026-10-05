@@ -45,7 +45,6 @@ from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES, _
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy
 from combat_engine.content.monsters.level_02.skirmishers_sa import _aura_holds, _melee_only
 from combat_engine.content.monsters.level_02.soldiers_sa import _missed_me_in_melee, _ref_of
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_05.artillery_sa import (
     _one_save_for_both,
@@ -640,18 +639,21 @@ def m1828a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="prone"),
+    target=Target(
+        side="enemy", count=1,
+        label="the target must be prone",
+        conditions=frozenset({Condition.PRONE}),
+    ),
     attack=Attack(vs=FORT, printed=10),
     damage=Damage("1d8", 5),
-    dropped=("Target.condition",),
 )
 def m1828a1(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: c.is_(Condition.PRONE, on=f))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.condition(Condition.PINNED, until=When.EONT, on=victim)
+    """"Cannot stand until the end of its next turn" is `Condition.PINNED` laid
+    beside the prone it already has. The printed restriction is the target line,
+    so nothing but a prone creature is ever offered."""
+    if c.strike():
+        c.hit()
+        c.condition(Condition.PINNED, until=When.EONT)
 
 
 _M1828_BLOODIED_NEARBY = "an enemy within 6 squares is bloodied"
