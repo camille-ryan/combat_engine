@@ -767,7 +767,7 @@ def m1986a1(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("2d10", 6, kind=LIMITED),
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m1986a2(c: Cast) -> None:
     from combat_engine.engine.query import has_combat_advantage

@@ -1925,7 +1925,7 @@ def m5985a1(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("2d12", 10),
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m5985a2(c: Cast) -> None:
     if c.first:
@@ -2790,7 +2790,7 @@ def m822a1(c: Cast) -> None:
         has_combat_advantage(world, eid, f) for f in enemies(world, eid)
     ),
     requires_text="the m822 must have combat advantage against the target",
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m822a2(c: Cast) -> None:
     victim = _restricted_to(c, 10, lambda f: has_combat_advantage(c.world, c.me, f))

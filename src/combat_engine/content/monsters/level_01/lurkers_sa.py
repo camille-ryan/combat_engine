@@ -305,7 +305,7 @@ def m5752a0(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="creature granting combat advantage"),
     attack=Attack(vs=AC, printed=6),
     damage=Damage("4d4"),
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m5752a1(c: Cast) -> None:
     """The ongoing damage runs "until the grab ends", which is not one of the

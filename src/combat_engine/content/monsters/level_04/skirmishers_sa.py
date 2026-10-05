@@ -1416,7 +1416,7 @@ def m3502a0(c: Cast) -> None:
     damage=Damage("1d6", 2, dtype=DamageType.NECROTIC),
     requires=_has_the_drop,
     requires_text="must have combat advantage against the target",
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m3502a1(c: Cast) -> None:
     """The target line restricts by how the creature stands to the attacker --
@@ -2706,7 +2706,7 @@ def m5652a2(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="a creature it flanks"),
     requires=_flanked_creature_in_reach,
     requires_text="must flank the target",
-    dropped=("Target.relation",),
+    dropped=("Target.flanked_by",),
 )
 def m5652a3(c: Cast) -> None:
     """No attack roll: the whole row is a trap laid on the target's own next
@@ -3288,7 +3288,7 @@ def m6398a2(c: Cast) -> None:
     damage=Damage("2d12", 5),
     requires=_has_the_drop,
     requires_text="must have combat advantage against the target",
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m6398a3(c: Cast) -> None:
     if c.strike():

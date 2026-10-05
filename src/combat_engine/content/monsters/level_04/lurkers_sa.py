@@ -1445,7 +1445,7 @@ def m6395a2(c: Cast) -> None:
     damage=Damage("2d8", 3),
     requires=_opening_in_reach,
     requires_text="a creature granting it combat advantage must be within reach",
-    dropped=("Target.relation", "c.grab(dc=)"),
+    dropped=("Target.grants_ca", "c.grab(dc=)"),
 )
 def m6395a3(c: Cast) -> None:
     """"Sustain Standard" has a payout as well as a clock, and the clock alone

@@ -478,7 +478,7 @@ def m1158a1(c: Cast) -> None:
     reach=Melee(1),
     target=Target(side="enemy", count=1, label="one creature granting it combat advantage"),
     attack=Attack(vs=FORT, printed=13), damage=Damage("1d8", 5, kind=LIMITED),
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m1158a2(c: Cast) -> None:
     victim = c.target

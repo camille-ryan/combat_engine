@@ -4498,7 +4498,7 @@ def m5369a0(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=17),
     damage=Damage("1d8", 6, dtype=DamageType.POISON),
     once_per_round=True,
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m5369a1(c: Cast) -> None:
     """"One creature granting combat advantage to it" is the target's own

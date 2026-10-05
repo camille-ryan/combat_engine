@@ -841,7 +841,7 @@ def m1763a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d6", 5),
     requires_text="requires combat advantage against the target",
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m1763a1(c: Cast) -> None:
     """The Requirement is about a *pair* and `requires=` is handed a creature
@@ -1206,7 +1206,7 @@ def m1999a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d8", 12, kind=LIMITED),
     requires_text="requires combat advantage against the target",
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m1999a1(c: Cast) -> None:
     """"Each round that the m1999 sustains the grab" is a sustain and not a
@@ -1368,7 +1368,7 @@ def m2011a1(c: Cast) -> None:
     damage=Damage("2d12", 8, kind=LIMITED),
     requires=_wearing_a_body,
     requires_text="the m2011 must be in a possessed body and have combat advantage",
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m2011a2(c: Cast) -> None:
     """Half the Requirement is about the creature and half about a pair, so
@@ -2207,7 +2207,7 @@ def m3275a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=17),
     damage=Damage("4d6", 7),
     requires_text="requires a sickle",
-    dropped=("Target.relation",),
+    dropped=("Target.affected_by",),
 )
 def m3275a1(c: Cast) -> None:
     """"Targets a creature affected by m3275a2" is a restriction `Target`
@@ -2600,7 +2600,7 @@ def m4727a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=17),
     damage=Damage("4d6", 7),
     requires_text="requires a sickle",
-    dropped=("Target.relation",),
+    dropped=("Target.affected_by",),
 )
 def m4727a1(c: Cast) -> None:
     """"Targets a creature affected by m4727a2" is a restriction `Target`
@@ -3449,7 +3449,7 @@ def m6096a2(c: Cast) -> None:
     keywords=[Keyword.CHARM, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=15),
     damage=Damage("4d6", 4, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Target.relation",),
+    dropped=("Target.affected_by",),
 )
 def m6096a3(c: Cast) -> None:
     """The caster's absence is tied to the victim's hold, not given a clock

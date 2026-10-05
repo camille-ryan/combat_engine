@@ -1733,7 +1733,7 @@ def m5337a1(c: Cast) -> None:
     damage=Damage("2d6", 4),
     requires=_has_an_opening,
     requires_text="it targets a creature granting it combat advantage",
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m5337a2(c: Cast) -> None:
     victim = c.target

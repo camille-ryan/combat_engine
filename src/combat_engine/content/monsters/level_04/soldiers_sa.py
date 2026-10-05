@@ -2494,7 +2494,7 @@ def m6346a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d6", 5),
-    dropped=("Target.relation", "c.grab(dc=)"),
+    dropped=("Target.only_grabbed", "c.grab(dc=)"),
 )
 def m6346a2(c: Cast) -> None:
     """"While it has a target grabbed it can bite only that target" is a target

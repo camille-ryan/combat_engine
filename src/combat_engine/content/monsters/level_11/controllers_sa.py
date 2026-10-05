@@ -605,7 +605,7 @@ def m115868a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=Target(side="enemy", count=1, label="stunned by it"),
-    dropped=("Target.relation",),
+    dropped=("Target.condition_by",),
 )
 def m115868a3(c: Cast) -> None:
     """No attack roll at all: the damage is the whole of it.

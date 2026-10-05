@@ -334,7 +334,7 @@ def m2006a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d4", 5, kind=MINION),
     requires_text="requires combat advantage against the target",
-    dropped=("Target.relation", "c.contract(ref)"),
+    dropped=("Target.grants_ca", "c.contract(ref)"),
 )
 def m2006a1(c: Cast) -> None:
     """The Requirement is about a *pair* and `requires=` is handed a creature

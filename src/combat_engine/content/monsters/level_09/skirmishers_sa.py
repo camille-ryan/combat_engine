@@ -3303,7 +3303,7 @@ def m6172a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14),
     damage=Damage("3d6", 5, kind=LIMITED),
-    dropped=("Target.relation", "Target.condition"),
+    dropped=("Target.flanked_by", "Target.condition"),
 )
 def m6172a2(c: Cast) -> None:
     """"One creature it is flanking, or one prone creature." `Target`

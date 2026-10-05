@@ -3532,7 +3532,7 @@ def m5355a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=17),
     damage=Damage("1d10", 5),
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m5355a2(c: Cast) -> None:
     """`Target` filters on side, count and size and not on what a creature is

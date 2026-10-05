@@ -772,7 +772,7 @@ _granted("f2106", "f2106b", swap=Swap(3, Usage.ENCOUNTER))
        target=Target(side="enemy", count=1,
                      label="granting you combat advantage"),
        keywords=WEAPON, attack=Attack(FORT, vs=FORT),
-       dropped=("Target.relation",))
+       dropped=("Target.grants_ca",))
 def f2106b(c: Cast) -> None:
     """The restriction on which creature may be picked is printed on the
     target line and the header has nowhere to enforce it; `label=`
@@ -829,7 +829,7 @@ _granted("f2108", "f2108b", swap=Swap(9, Usage.DAILY))
        target=Target(side="enemy", count=1,
                      label="granting you combat advantage"),
        keywords=WEAPON, attack=Attack(FORT, vs=FORT),
-       dropped=("Target.relation",))
+       dropped=("Target.grants_ca",))
 def f2108b(c: Cast) -> None:
     """The Effect lands whether the attack does, which is what "Effect"
     means, so both watches are armed outside the hit branch.

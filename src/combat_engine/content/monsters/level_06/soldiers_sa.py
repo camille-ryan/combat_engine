@@ -1649,7 +1649,7 @@ def m5825a2(c: Cast) -> None:
     attack=Attack(vs=REF, printed=9),
     damage=Damage("3d6", 8, kind=LIMITED),
     requires_text="targets a Medium or smaller creature designated as its quarry",
-    dropped=("Target.relation",),
+    dropped=("Target.affected_by",),
 )
 def m5825a3(c: Cast) -> None:
     half = max(1, c.speed_of() // 2)
@@ -1788,7 +1788,7 @@ def m5857a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d8", 3),
-    dropped=("Target.relation",),
+    dropped=("Target.only_grabbed",),
 )
 def m5857a2(c: Cast) -> None:
     held = c.grabbing()

@@ -688,7 +688,7 @@ def m3295a2(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d6", 5, dtype=DamageType.PSYCHIC),
-    dropped=("Target.relation",),
+    dropped=("Target.affected_by",),
 )
 def m3295a3(c: Cast) -> None:
     victim = c.target

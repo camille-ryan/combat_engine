@@ -3894,7 +3894,7 @@ def m5971a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("3d10", 7, kind=LIMITED),
-    dropped=("Target.relation",),
+    dropped=("Target.flanked_by",),
 )
 def m5971a3(c: Cast) -> None:
     victim = _restricted_to(c, 2, lambda f: flanked_by(c.world, f, c.me))
@@ -4387,7 +4387,7 @@ def m6176a1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=FORT, printed=15),
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m6176a2(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: has_combat_advantage(c.world, c.me, f))
@@ -4730,7 +4730,7 @@ def m6686a0(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=EACH_ENEMY,
-    dropped=("Target.relation",),
+    dropped=("Target.affected_by",),
 )
 def m6686a1(c: Cast) -> None:
     victim = c.target

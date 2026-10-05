@@ -802,7 +802,7 @@ def m1586a2(c: Cast) -> None:
     damage=Damage("1d8", 5),
     requires=_m1586_has_an_edge,
     requires_text="the m1586 must have combat advantage against the target",
-    dropped=("Target.relation",),
+    dropped=("Target.grants_ca",),
 )
 def m1586a3(c: Cast) -> None:
     """Aimed at a creature it actually has an edge on rather than thrown away:

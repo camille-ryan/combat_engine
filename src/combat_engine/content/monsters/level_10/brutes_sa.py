@@ -3071,7 +3071,7 @@ def m6284a1(c: Cast) -> None:
     target=Target(side="enemy", count=1, label="flanked by it"),
     attack=Attack(vs=AC, printed=15),
     damage=Damage("1d8", 0),
-    dropped=("Target.relation",),
+    dropped=("Target.flanked_by",),
 )
 def m6284a2(c: Cast) -> None:
     victim = _restricted_to(c, 1, lambda f: flanked_by(c.world, f, c.me))
