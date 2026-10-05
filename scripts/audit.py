@@ -1653,6 +1653,62 @@ LOADED = (None, 20, 1)
 
 #: What the provocation itself emits. Subtracted so a triggered row is
 #: credited only with what *it* did, not with being attacked.
+def _swing_from_reach(
+    world, attacker: int, target: int, ref: str, **kw: object  # noqa: ANN001
+) -> None:
+    """A basic attack made from somewhere it could legally be made.
+
+    **This used to swing from wherever the creature stood.** `dsl.use`'s
+    explicit-target arm applies no reach check -- that is #381 -- so
+    `use(..., targets=[target])` here was delivering a *melee-1* basic attack
+    at six squares. Two things were wrong with that, and the second is the
+    serious one:
+
+    * the harness was contributing its own occurrences to the very bug being
+      measured, which is how #381's first count came out low;
+    * a row answering "when an enemy hits you with a melee attack" was being
+      provoked by an attack that could not have happened, so its verdict rested
+      on an illegal event. A row is supposed to be proven by a legal swing.
+
+    So the attacker is stepped beside the target when it cannot reach, and
+    **put back afterwards** -- every later probe in `_provoke` measures from
+    where the board was left, and this function already records once that an
+    ally three squares out of place took "grant an ally a basic attack" from
+    working to impossible.
+
+    A ranged basic is left alone: it reaches across the board by design.
+    """
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import _reach_of, origins
+    from combat_engine.engine.grid import spread
+    from combat_engine.engine.query import distance_between, squares
+
+    p = get(ref)
+    here = world.get(attacker, Position)
+    if p is None or here is None or p.reach.kind != "melee":
+        use(world, attacker, ref, targets=[target], spend=False, **kw)
+        return
+
+    far = _reach_of(world, attacker, p.reach, ref)
+    if any(distance_between(world, o, target) <= far for o in origins(world, attacker, p.reach)):
+        use(world, attacker, ref, targets=[target], spend=False, **kw)
+        return
+
+    was = here.square
+    beside = sorted(
+        sq
+        for sq in spread(squares(world, target), far)
+        if world.grid.inside(sq) and world.grid.occupant(sq) in (None, attacker)
+    )
+    if not beside:
+        return
+    place(world, attacker, beside[0])
+    try:
+        use(world, attacker, ref, targets=[target], spend=False, **kw)
+    finally:
+        place(world, attacker, was)
+
+
 PROVOKE_NOISE = {
     "AttackDeclared", "AttackRolled", "Hit", "Miss", "DamageRolled",
     "DamageApplied", "OpportunityWindow", "TurnStart", "TurnEnd",
@@ -1912,7 +1968,7 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     for attacker, target in pairs:
         if not alive(world, target):
             continue
-        use(world, attacker, basic(attacker), targets=[target], spend=False)
+        _swing_from_reach(world, attacker, target, basic(attacker))
         if probe():
             return True
 
@@ -1971,7 +2027,7 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
                 lent = known is not None and other not in known.all
                 if lent:
                     known.known.append(other)
-                use(world, who, other, targets=[at], spend=False)
+                _swing_from_reach(world, who, at, other)
                 hit = probe()
                 if lent:
                     with contextlib.suppress(ValueError):
@@ -2009,9 +2065,8 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     for attacker, target in ((caster, foes[0]), (foes[0], caster)):
         if not alive(world, target):
             continue
-        use(
-            world, attacker, basic(attacker), targets=[target],
-            spend=False, opportunity=True,
+        _swing_from_reach(
+            world, attacker, target, basic(attacker), opportunity=True,
         )
         if probe():
             return True
@@ -2477,7 +2532,10 @@ def _use_rows(world, caster: int, refs: list[str], foe: int | None, skip: str = 
         if p.is_attack and foe is None:
             continue
         with contextlib.suppress(Exception):
-            use(world, caster, other, targets=[foe] if p.is_attack else None, spend=False)
+            if p.is_attack and foe is not None:
+                _swing_from_reach(world, caster, foe, other)
+            else:
+                use(world, caster, other, spend=False)
         # **And undo it if it took the caster off the board.** `p10046`
         # is a level-0 minor action that removes its owner until the
         # start of its next turn; fired during setup it left a character
