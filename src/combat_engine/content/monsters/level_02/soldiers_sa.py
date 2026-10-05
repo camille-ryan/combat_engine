@@ -280,15 +280,6 @@ def _prone_enemy_in_reach(world: World, eid: int) -> bool:
 _HELPLESS = (Condition.IMMOBILIZED, Condition.STUNNED, Condition.UNCONSCIOUS)
 
 
-def _pinned_enemy_in_reach(world: World, eid: int) -> bool:
-    """"An immobilized, stunned, or unconscious creature", as an entry gate."""
-    return any(
-        distance_between(world, eid, foe) <= 1
-        and any(is_(world, foe, held) for held in _HELPLESS)
-        for foe in enemies(world, eid)
-    )
-
-
 def _holding_nobody(world: World, eid: int) -> bool:
     return not world.relations.targets(Relation.GRABBED_BY, eid)
 

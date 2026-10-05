@@ -1085,26 +1085,18 @@ def m5445a2(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(10),
-    target=Target(side="ally", count=1, label="kobold ally"),
-    dropped=("Target.creature_kind",),
+    target=Target(
+        side="ally", count=1, label="kobold ally",
+        kinds=frozenset({"kobold"}),
+    ),
 )
 def m5445a3(c: Cast) -> None:
-    """The printed line narrows to an ally of one type word within 10 squares.
-    `Target` filters on side and size and nothing else, so the kind is asked
-    here -- against the compendium row, which is why the gap is
-    `Target.creature_kind` and not a condition -- and the row redirects to
-    somebody who qualifies rather than returning: the printed line is about
-    which ally, not about whether the row happens."""
+    """The type word is the target line now, so the chooser is handed only
+    allies that carry it and the body's redirect came out. This block does
+    carry the word in both its `keywords` and its `kind` column, which is why
+    the positive form is safe here -- two other blocks of the same sort carry
+    only the parenthetical, and that is an ETL gap and not this row's. #401."""
     mate = c.target
-    if mate is not None and not c.is_kind("kobold", on=mate):
-        mate = next(
-            (
-                a
-                for a in c.allies()
-                if c.is_kind("kobold", on=a) and distance_between(c.world, c.me, a) <= 10
-            ),
-            None,
-        )
     if mate is None:
         return
     c.temp_hp(5, on=mate)

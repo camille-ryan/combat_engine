@@ -61,7 +61,6 @@ from combat_engine.content.monsters.level_03.skirmishers import (
     _vanish_until_it_swings,
 )
 from combat_engine.content.monsters.level_03.skirmishers_sa import (
-    _reachable,
     _while_bloodied,
 )
 from combat_engine.content.monsters.level_04.brutes import _has_hold, _holding
@@ -175,10 +174,6 @@ def _blind_to_me(c: Cast, reach: int) -> int | None:
     )
 
 
-def _cannot_see_me_in_reach(world: World, eid: int) -> bool:
-    return _reachable(world, eid, 1, lambda foe: foe in hidden_from(world, eid))
-
-
 def _exposed(c: Cast, reach: int) -> int | None:
     """The target if it is granting this creature combat advantage, else the
     nearest creature in reach that is."""
@@ -192,10 +187,6 @@ def _exposed(c: Cast, reach: int) -> int | None:
         ),
         None,
     )
-
-
-def _opening_in_reach(world: World, eid: int) -> bool:
-    return _reachable(world, eid, 1, lambda foe: has_combat_advantage(world, eid, foe))
 
 
 def _ridden_by(least: int):  # noqa: ANN202
@@ -1333,25 +1324,25 @@ def m6345a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=Target("any", 1, everyone=True, label="nonplant creatures in the burst"),
+    target=Target(
+        "any", 1, everyone=True,
+        label="nonplant creatures in the burst",
+        kinds_without=frozenset({"plant"}),
+    ),
     keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("2d6", 2, dtype=DamageType.THUNDER),
-    dropped=("Target.creature_kind",),
 )
 def m6345a1(c: Cast) -> None:
     """"Special: this is a basic attack" is filed with `c.as_basic`, so a row
     elsewhere granting this creature a basic swing offers this one.
 
-    The exclusion is by creature type, which `Target` cannot say: it is
-    recorded in the label and enforced here. A creature of the excluded kind
-    is skipped rather than redirected -- this is a burst and every other
-    target is still hit, so there is nothing to redirect to.
+    The printed exclusion is `kinds_without=` now, so the excluded kind is
+    never in the burst's target list -- which includes this creature itself,
+    since the side is "any" and it is of that kind.
     """
     if c.first:
         c.as_basic(c.ref, on=c.me, until=When.ENCOUNTER)
-    if c.target is not None and c.is_kind("plant", on=c.target):
-        return
     if c.strike():
         c.hit()
 

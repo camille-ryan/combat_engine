@@ -86,6 +86,7 @@ from combat_engine.engine import (
     SavingThrow,
     SkillCheck,
     Square,
+    Target,
     Trigger,
     TurnEnd,
     TurnStart,
@@ -922,14 +923,15 @@ def i3475x1(c: Cast) -> None:
 
 
 @power("i3475p1", level=5, cls=ITEM, usage=ENCOUNTER, action=STANDARD,
-       reach=Ranged(10), target=ONE_CREATURE,
+       reach=Ranged(10),
+       target=Target("enemy", 1, label="one construct",
+                     kinds=frozenset({"construct"})),
        attack=Attack(vs=WILL, printed=8),
-       dropped=("Target.creature_kind", "spec.monster_ref()"))
+       dropped=("spec.monster_ref()",))
 def i3475p1(c: Cast) -> None:
-    """`Target` has no creature-kind field, so "one construct" is any
-    creature; and the longer domination is printed for a creature the spec
-    names with an opaque `x_` token, which is a name withheld rather than a
-    ref to point at."""
+    """"One construct" is the target line now. The longer domination is
+    printed for a creature the spec names with an opaque `x_` token, which is
+    a name withheld rather than a ref to point at."""
     if c.strike():
         c.condition(Condition.DOMINATED, until=When.EONT)
 

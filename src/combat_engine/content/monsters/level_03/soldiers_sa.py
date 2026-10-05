@@ -67,7 +67,6 @@ from combat_engine.content.monsters.level_03.brutes_sa import _both_hit, _press
 from combat_engine.content.monsters.level_03.skirmishers_sa import (
     _enemy_stepped_beside,
     _has_the_drop,
-    _reachable,
     _recharge_when_bloodied,
     _shift_up_to,
     _shoved_by_hand,
@@ -132,7 +131,6 @@ from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     distance_between,
     has_combat_advantage,
-    is_,
     team,
 )
 from combat_engine.engine.triggers import Trigger, about_me, both, by_me, by_melee, targets_me
@@ -384,44 +382,6 @@ def _hit_me_from_within(radius: int) -> Any:
         return distance_between(world, me, who) <= radius
 
     return struck
-
-
-def _marked_by_me_in_reach(world: World, eid: int) -> bool:
-    """The printed target line "marked target only", as an entry gate.
-
-    `Target` filters on side, count, size and what is in hand and on nothing a
-    creature is *suffering*, so the narrowing cannot live there. `dsl.usable`
-    is handed `(world, eid)` and the caster is all it knows, so the question
-    has to be asked from this end as well as in the body. #361.
-    """
-    return _reachable(
-        world, eid, 1, lambda foe: world.relations.holds(Relation.MARKED_BY, eid, foe)
-    )
-
-
-def _held_in_reach(world: World, eid: int) -> bool:
-    """"Grabbed, restrained, or immobilized targets only", as an entry gate."""
-    return _reachable(
-        world, eid, 2, lambda foe: any(is_(world, foe, held) for held in _HELD)
-    )
-
-
-def _senseless_in_reach(world: World, eid: int) -> bool:
-    """"Targets a helpless or unconscious creature", as an entry gate."""
-    return _reachable(
-        world, eid, 1, lambda foe: any(is_(world, foe, out) for out in _SENSELESS)
-    )
-
-
-def _slowed_in_reach(world: World, eid: int) -> bool:
-    """"One slowed creature", as an entry gate."""
-    return _reachable(world, eid, 1, lambda foe: is_(world, foe, Condition.SLOWED))
-
-
-def _grabbed_by_me_in_reach(world: World, eid: int) -> bool:
-    """"One creature grabbed by it", as an entry gate."""
-    targets = world.relations.targets(Relation.GRABBED_BY, eid)
-    return any(distance_between(world, eid, foe) <= 1 for foe in targets)
 
 
 def _in_the_water_empty_handed(world: World, eid: int) -> bool:

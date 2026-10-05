@@ -41,7 +41,6 @@ from combat_engine.content.monsters.level_02.lurkers_sa import (
 )
 from combat_engine.content.monsters.level_02.skirmishers import _conceal, _had_advantage
 from combat_engine.content.monsters.level_03.skirmishers import (
-    _an_enemy_is_poisoned,
     _free_square_beside,
     _is_bloodied,
     _not_grabbing,
@@ -1179,20 +1178,20 @@ def m5286a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(label="one creature taking ongoing poison damage"),
+    target=Target(
+        label="one creature taking ongoing poison damage",
+        ongoing_types=frozenset({DamageType.POISON}),
+    ),
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("1d6", 3),
-    requires=_an_enemy_is_poisoned,
-    requires_text="an enemy must be taking ongoing poison damage",
-    dropped=("Target.ongoing",),
 )
 def m5286a2(c: Cast) -> None:
-    foe = _restricted_to(c, 1, lambda f: _poisoned(c, f))
-    if foe is None:
-        return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        c.blinded(on=foe, until=When.SAVE_ENDS)
+    """The `requires=` gate said the same thing the target line now says, so
+    it came out with the body's re-pick: an empty pool refuses the row by
+    itself. #401."""
+    if c.strike():
+        c.hit()
+        c.blinded(until=When.SAVE_ENDS)
 
 
 @power(

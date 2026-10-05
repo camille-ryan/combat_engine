@@ -107,12 +107,6 @@ from combat_engine.engine.monster_math import MINION
 
 _REDUCED_TO_0 = "it is reduced to 0 hit points"
 
-
-def _nonelemental(c: Cast, who: int | None) -> bool:
-    """"Each non-elemental creature in the burst", asked of one creature."""
-    return who is not None and not c.is_kind("elemental", on=who)
-
-
 # ==========================================================================
 # m1404
 # ==========================================================================
@@ -877,19 +871,21 @@ def m4037a0(c: Cast) -> None:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(1),
-    target=Target("any", 99, everyone=True, label="not elemental"),
+    target=Target(
+        "any", 99, everyone=True,
+        label="not elemental",
+        kinds_without=frozenset({"elemental"}),
+    ),
     keywords=[Keyword.LIGHTNING],
     damage=Damage(bonus=8, dtype=DamageType.LIGHTNING, kind=MINION),
     trigger=_REDUCED_TO_0,
     on=Trigger(Dropped, about_me, _REDUCED_TO_0),
-    dropped=("Target.creature_kind",),
 )
 def m4037a1(c: Cast) -> None:
-    """No attack roll: the burst simply takes whoever is standing in it. The
-    origin word is a type and `Target` filters on side and count, so the
-    narrowing is gated here and recorded in `label=`."""
-    if _nonelemental(c, c.target):
-        c.hit()
+    """No attack roll: the burst simply takes whoever is standing in it, and
+    the printed exclusion is a type word the target line now says -- so a
+    creature of that origin is never handed to the body at all."""
+    c.hit()
 
 
 # ==========================================================================
@@ -920,16 +916,18 @@ def m4039a0(c: Cast) -> None:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(1),
-    target=Target("any", 99, everyone=True, label="not elemental"),
+    target=Target(
+        "any", 99, everyone=True,
+        label="not elemental",
+        kinds_without=frozenset({"elemental"}),
+    ),
     keywords=[Keyword.FIRE],
     damage=Damage(bonus=8, dtype=DamageType.FIRE, kind=MINION),
     trigger=_REDUCED_TO_0,
     on=Trigger(Dropped, about_me, _REDUCED_TO_0),
-    dropped=("Target.creature_kind",),
 )
 def m4039a1(c: Cast) -> None:
-    if _nonelemental(c, c.target):
-        c.hit()
+    c.hit()
 
 
 # ==========================================================================
@@ -962,16 +960,18 @@ def m4040a0(c: Cast) -> None:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(1),
-    target=Target("any", 99, everyone=True, label="not elemental"),
+    target=Target(
+        "any", 99, everyone=True,
+        label="not elemental",
+        kinds_without=frozenset({"elemental"}),
+    ),
     keywords=[Keyword.COLD],
     damage=Damage(bonus=8, dtype=DamageType.COLD, kind=MINION),
     trigger=_REDUCED_TO_0,
     on=Trigger(Dropped, about_me, _REDUCED_TO_0),
-    dropped=("Target.creature_kind",),
 )
 def m4040a1(c: Cast) -> None:
-    if _nonelemental(c, c.target):
-        c.hit()
+    c.hit()
 
 
 # ==========================================================================

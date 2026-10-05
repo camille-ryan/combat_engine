@@ -613,15 +613,31 @@ def m3557a0(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Ranged(10),
-    target=Target(side="enemy", count=1, label="a living humanoid"),
+    target=Target(
+        side="enemy", count=1,
+        label="a living humanoid",
+        kinds=frozenset({"humanoid"}),
+        # "Living" is not a negative set. Excluding `construct` as well
+        # refuses the 25 blocks that carry *both* `living` and `construct`,
+        # which the card calls living; excluding only `undead` admits a
+        # non-living construct. The exact test is "not undead, and not
+        # construct unless it carries living", which no any-of negative can
+        # say. This is the faithful half -- what the body asked before the
+        # conversion -- and the exception is marked. #411.
+        kinds_without=frozenset({"undead"}),
+    ),
     attack=Attack(vs=WILL, printed=10),
-    dropped=("Target.creature_kind", "c.leaves_the_grid()"),
+    dropped=('c.leaves_the_grid()', "Target.living"),
 )
 def m3557a1(c: Cast) -> None:
     """"Enters the target's space and is removed from the map, reappearing
     adjacent when the domination ends" has no verb -- there is nothing to
     take a creature off the grid while it stays alive. The domination and
-    the periodic burn are exact."""
+    the periodic burn are exact.
+
+    The target line is two fields, not one: the type word is required and
+    "living" is the absence of the two that deny it, so a humanoid of either
+    is refused."""
     victim = c.target
     if victim is None or not c.strike(on=victim):
         return

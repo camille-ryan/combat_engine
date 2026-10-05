@@ -301,16 +301,6 @@ def _grabbing_something(world: World, eid: int) -> bool:
     return bool(world.relations.targets(Relation.GRABBED_BY, eid))
 
 
-def _has_cursed_somebody(world: World, eid: int) -> bool:
-    """"Every creature suffering its curse", asked from the caster's end.
-
-    The curse is relational -- `c.curse` hangs `CURSED_BY` on the victim and
-    names the curser -- so this is the one question `dsl.usable` can ask with
-    only `(world, eid)` to work from.
-    """
-    return bool(world.relations.targets(Relation.CURSED_BY, eid))
-
-
 def _ridden_by_second_level(world: World, eid: int) -> bool:
     """"While mounted by a friendly rider of 2nd level or higher".
 

@@ -378,24 +378,6 @@ def _implement(ref: str) -> bool:
     return row is not None and Keyword.IMPLEMENT in row.keywords
 
 
-def _has_a_quarry(world: World, eid: int) -> bool:
-    """A Requirement that there is a quarry to shoot at.
-
-    `Target` filters on side, count and size and says nothing about a
-    relation, so the restriction is asked here as well as in the body:
-    without it the row is offered every turn, aimed at whoever is nearest,
-    and comes back having done nothing.
-    """
-    me = Cast(world=world, me=eid, ref="")
-    return any(me.is_quarry(on=foe) for foe in enemies(world, eid))
-
-
-def _has_cursed_somebody(world: World, eid: int) -> bool:
-    """The same gate for a curse rather than a quarry."""
-    me = Cast(world=world, me=eid, ref="")
-    return any(me.cursed(on=foe) for foe in enemies(world, eid))
-
-
 def _burning_nearby(world: World, eid: int) -> bool:
     """A Requirement that somebody within 10 squares is alight, which is the
     only creature the printed teleport has to swap with."""

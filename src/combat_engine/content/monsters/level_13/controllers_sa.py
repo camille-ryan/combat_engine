@@ -88,7 +88,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers import (
     _grabbing as _holding_someone,
 )
@@ -4934,7 +4933,12 @@ def m6088a1(c: Cast) -> None:
     else:
         c.grant_attack(victim, on=aimed)
     if c.landed:
-        c.condition(Condition.DOMINATED, until=When.SAVE_ENDS, on=victim)
+        # `c.dominate`, not `c.condition(DOMINATED)`: the verb files
+        # `Relation.DOMINATED_BY` as well, and `IMPLIES` supplies the condition.
+        # Without the relation, m6088a2's target line -- "one creature dominated
+        # by it" -- has nothing to read and this creature's own two-row combo
+        # could not work. #405.
+        c.dominate(until=When.SAVE_ENDS, on=victim)
 
 
 @power(
@@ -4943,26 +4947,21 @@ def m6088a1(c: Cast) -> None:
     usage=AT_WILL,
     action=MOVE,
     reach=Ranged(5),
-    target=Target(side="enemy", count=1, label="dominated by it"),
+    target=Target(
+        side="enemy", count=1,
+        label="dominated by it",
+        relation=Relation.DOMINATED_BY,
+    ),
     keywords=[Keyword.CHARM],
-    dropped=("c.dominate()",),
 )
 def m6088a2(c: Cast) -> None:
     """No attack roll is printed: the slide is the whole Effect line.
 
-    **Not moved onto `Target.relation`, and the marker is re-aimed rather than
-    deleted.** The field exists now and `Relation.DOMINATED_BY` is the right
-    member for "dominated by it" -- but nothing lays that relation. There is no
-    `c.dominate` beside `c.grab`, `c.mark`, `c.curse` and `c.quarry`: every
-    domination in the tree is a plain `Condition.DOMINATED`, which `relations`
-    only ever mirrors *outward*, so one site in 12,197 rows files the triple.
-    m6088a1 is one of the plain ones, so a relational filter here would empty
-    the pool against this creature's own setup and take the row out of play.
-    Asked as a condition instead, which is looser than the card -- it accepts a
-    creature somebody else is controlling -- and plays. #401."""
-    victim = _restricted_to(c, 5, lambda f: c.is_(Condition.DOMINATED, on=f))
-    if victim is not None:
-        c.slide(3, on=victim)
+    **"Dominated by it" is the relation, and it can be asked now.** `c.dominate`
+    landed with #405, so m6088a1 one entry up files `Relation.DOMINATED_BY` and
+    this row filters on it -- which is stricter than the condition test it
+    replaces, and correctly so: the card says *its* thrall, not anybody's."""
+    c.slide(3)
 
 
 @power(

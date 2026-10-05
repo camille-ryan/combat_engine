@@ -149,9 +149,7 @@ from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     alive,
     distance_between,
-    enemies,
     flanked_by,
-    has_combat_advantage,
     squares,
     team,
 )
@@ -724,19 +722,6 @@ def m1454a6(c: Cast) -> None:
 # ==========================================================================
 # m1586
 # ==========================================================================
-
-
-def _m1586_has_an_edge(world: World, eid: int) -> bool:
-    """Somebody in reach this creature has combat advantage against.
-
-    The printed Requirement is about a target and a `requires=` gate is
-    handed `(world, eid)` and no target, so it asks whether *any* enemy in
-    reach qualifies and the body picks which.
-    """
-    return any(
-        distance_between(world, eid, foe) <= 1 and has_combat_advantage(world, eid, foe)
-        for foe in enemies(world, eid)
-    )
 
 
 @power(

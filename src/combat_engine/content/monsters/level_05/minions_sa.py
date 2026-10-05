@@ -90,15 +90,6 @@ def _holding_nobody(world: World, eid: int) -> bool:
     return not world.relations.targets(Relation.GRABBED_BY, eid)
 
 
-def _grabbed_by_me_in_reach(world: World, eid: int) -> bool:
-    """"One creature grabbed by it", as an entry gate. `Target` filters on side,
-    count, size and what is in hand and on nothing a creature is *suffering*, so
-    the narrowing cannot live there, and `dsl.usable` is handed `(world, eid)`
-    and the caster is all it knows. #361."""
-    targets = world.relations.targets(Relation.GRABBED_BY, eid)
-    return any(distance_between(world, eid, foe) <= 1 for foe in targets)
-
-
 def _edge_on_me(c: Cast) -> bool:
     """"If the target is granting combat advantage to it."
 

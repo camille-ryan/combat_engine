@@ -130,6 +130,12 @@ class Condition(StrEnum):
 
     BLINDED = "blinded"
     DAZED = "dazed"
+    #: **Carries no `Rules` entry, deliberately.** Death is decided by `Health`
+    #: and nothing about that changes: `query.alive` and `query.can_act` answer
+    #: exactly what they answered before. This exists so a *target line* can
+    #: say "one dead ally", which `Health` cannot be asked from a `Target`, and
+    #: so a row acting on a corpse has something to read. Camille's call, #399.
+    DEAD = "dead"
     DEAFENED = "deafened"
     DOMINATED = "dominated"
     DYING = "dying"

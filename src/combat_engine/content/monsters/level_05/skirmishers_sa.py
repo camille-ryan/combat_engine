@@ -121,7 +121,6 @@ from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     allies,
     distance_between,
-    enemies,
     has_combat_advantage,
     team,
 )
@@ -182,21 +181,9 @@ def _target_unsupported(c: Cast) -> Any:
     return gate
 
 
-def _any_enemy_marked_by_me(world: World, eid: int) -> bool:
-    """"Targets a creature marked by it," as a Requirement deciding whether
-    the row is offered at all."""
-    return any(
-        world.relations.holds(Relation.MARKED_BY, eid, foe) for foe in enemies(world, eid)
-    )
-
-
 def _took_damage(world: World, me: int, ev: Any) -> bool:
     """"It takes damage." `DamageApplied` names its subject `target`."""
     return getattr(ev, "target", None) == me
-
-
-def _any_enemy_bloodied(world: World, eid: int) -> bool:
-    return any(_is_bloodied(world, foe) for foe in enemies(world, eid))
 
 
 def _brother_about_to_be_hit(world: World, me: int, ev: Any) -> bool:

@@ -128,18 +128,6 @@ def _not_grabbing(world: object, eid: int) -> bool:
     return not holds_somebody(world, eid)  # type: ignore[arg-type]
 
 
-def _has_a_hold(world: object, eid: int) -> bool:
-    """The other half of the same question, for the follow-up that needs one.
-
-    Asked as a Requirement as well as in the body: without it the row is
-    offered every turn, resolves against whoever happens to be nearest and does
-    nothing at all, which is indistinguishable from a wrong row.
-    """
-    from combat_engine.content.powers.fighter.holds import holds_somebody
-
-    return bool(holds_somebody(world, eid))  # type: ignore[arg-type]
-
-
 @power(
     "m4452a0",
     level=1,

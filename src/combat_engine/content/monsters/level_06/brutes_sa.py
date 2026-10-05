@@ -3276,12 +3276,20 @@ def m6343a2(c: Cast) -> None:
     recharge=6,
     action=MINOR,
     reach=CloseBurst(2),
-    target=Target(side="ally", count=1, label="minion plant ally"),
-    dropped=("Target.creature_kind",),
+    target=Target(
+        side="ally", count=1,
+        label="minion plant ally",
+        kinds=frozenset({"plant"}),
+    ),
+    dropped=("Target.minion",),
 )
 def m6343a3(c: Cast) -> None:
+    """The type word is the target line now. "Minion" has no field, so the
+    redirect stays for that half -- and it still asks the kind of the
+    creatures it scans, because `c.allies()` is the raw pool and not the
+    narrowed one."""
     mate = c.target
-    if mate is None or not (c.is_minion(on=mate) and c.is_kind("plant", on=mate)):
+    if mate is None or not c.is_minion(on=mate):
         mate = next(
             (
                 a

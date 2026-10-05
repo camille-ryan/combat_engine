@@ -64,13 +64,6 @@ def _two_melee(world: World, eid: int) -> bool:
     return len([w for w in gear.weapons if w.ranged is None]) >= 2
 
 
-def _two_melee_or_ranged(world: World, eid: int) -> bool:
-    gear = world.get(eid, Gear)
-    if gear is None:
-        return False
-    return gear.ranged is not None or _two_melee(world, eid)
-
-
 def _has_ranged(world: World, eid: int) -> bool:
     """The ranged half of "two melee weapons or a ranged weapon".
 

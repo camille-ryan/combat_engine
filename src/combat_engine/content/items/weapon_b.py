@@ -210,11 +210,6 @@ def _crit_on_me(world: World, me: int, ev: Any) -> bool:
     return getattr(ev, "target", None) == me and getattr(ev, "critical", False)
 
 
-def _fumble_by_me(world: World, me: int, ev: Any) -> bool:
-    """A natural 1, read off the roll rather than guessed at from a miss."""
-    return getattr(ev, "attacker", None) == me and getattr(ev, "natural", 0) == 1
-
-
 def _miss_coming(world: World, me: int, ev: Any) -> bool:
     """My attack is rolled and, as things stand, misses.
 

@@ -1644,17 +1644,20 @@ def i3454p1(c: Cast) -> None:
 
 
 @power("i3518p1", level=4, cls=ITEM, usage=ENCOUNTER, action=MINOR,
-       reach=Ranged(5), target=ONE_CREATURE, keywords=[Keyword.CHARM],
-       attack=Attack(vs=WILL, printed=7),
-       dropped=("Target.creature_kind",))
+       reach=Ranged(5),
+       target=Target("enemy", 1, label="one beast",
+                     kinds=frozenset({"beast"})),
+       keywords=[Keyword.CHARM],
+       attack=Attack(vs=WILL, printed=7))
 def i3518p1(c: Cast) -> None:
-    """"One beast" is asked in the body, since `Target` filters on side
-    and size and not on what a creature is; the loss is that the menu
-    still offers the row against anything. "Ends if the target is
-    attacked" is `AttackDeclared` aimed at it and `c.end_effect`, which
-    is a hook after all."""
+    """"One beast" is the target line now, so the menu stops offering the row
+    against anything that is not one. The positive form is right here where it
+    is wrong for "living": a beast always carries the word, and a creature with
+    no type line is never one. "Ends if the target is attacked" is
+    `AttackDeclared` aimed at it and `c.end_effect`, which is a hook after
+    all. #401."""
     foe = c.target
-    if foe is None or not c.is_kind("beast", on=foe):
+    if foe is None:
         return
     if not c.strike():
         return

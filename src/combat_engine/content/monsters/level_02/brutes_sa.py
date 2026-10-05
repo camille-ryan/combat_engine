@@ -66,7 +66,6 @@ from combat_engine.engine import (
     UpTo,
     Usage,
     When,
-    World,
     power,
 )
 from combat_engine.engine.events import (
@@ -80,7 +79,7 @@ from combat_engine.engine.events import (
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import alive, enemies, team
+from combat_engine.engine.query import alive, team
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
@@ -94,18 +93,6 @@ from combat_engine.engine.triggers import (
 #: The two holds m4225a3 reads. Written out because the printed line names
 #: them as a pair and both have to be asked of the attack context.
 STUCK = (Condition.SLOWED, Condition.IMMOBILIZED)
-
-
-def _an_enemy_is_bloodied(world: World, eid: int) -> bool:
-    """A Requirement that there is a bloodied creature to aim a row at.
-
-    `Target` filters on side, count and size, and says nothing about what a
-    creature is *suffering* -- and being bloodied is not even a condition, so
-    `_any_enemy_suffering` cannot ask it either. Without the gate the row is
-    offered every turn, aimed at whoever is nearest, and comes back having
-    done nothing.
-    """
-    return any(_is_bloodied(world, foe) for foe in enemies(world, eid))
 
 
 def _clings_on(c: Cast, then: Any = None) -> None:

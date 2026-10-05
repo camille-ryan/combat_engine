@@ -44,7 +44,6 @@ from combat_engine.content.monsters.level_01.brutes_sa import _crit_line
 from combat_engine.content.monsters.level_01.misc_sa import _WILLING
 from combat_engine.content.monsters.level_01.skirmishers import _ref_of
 from combat_engine.content.monsters.level_01.skirmishers_sa import (
-    _adjacent_foes,
     _crowd_around,
     _damaged_me,
 )
@@ -69,7 +68,6 @@ from combat_engine.content.monsters.level_03.controllers_sa import (
 from combat_engine.content.monsters.level_03.skirmishers import _free_square_beside
 from combat_engine.content.monsters.level_03.skirmishers_sa import (
     _ongoing_of,
-    _reachable,
     _while_bloodied,
 )
 from combat_engine.content.monsters.level_04.controllers import DEFENCES
@@ -430,21 +428,6 @@ def m1435a3(c: Cast) -> None:
         ongoing=(5, DamageType.PSYCHIC),
         escalate=failed,
     )
-
-
-def _dazed_or_stunned_within(radius: int) -> Callable[[World, int], bool]:
-    """"Targets a stunned or dazed creature", as a gate on the offer."""
-
-    def ok(world: World, eid: int) -> bool:
-        from combat_engine.engine.query import is_
-
-        return _reachable(
-            world, eid, radius,
-            lambda foe: is_(world, foe, Condition.STUNNED)
-            or is_(world, foe, Condition.DAZED),
-        )
-
-    return ok
 
 
 @power(
@@ -950,36 +933,33 @@ def _nobody_is_burning(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Ranged(10),
-    target=Target("enemy", 1, label="one creature taking ongoing damage"),
+    target=Target(
+        "enemy", 1,
+        label="one creature taking ongoing damage",
+        ongoing=True,
+    ),
     keywords=[Keyword.IMPLEMENT],
     attack=Attack(vs=WILL, printed=8),
     damage=Damage("2d6", 4, kind=LIMITED),
-    requires=lambda world, eid: _reachable(
-        world, eid, 10, lambda foe: _burning(world, foe)
-    ),
-    requires_text="an enemy within 10 squares taking ongoing damage",
-    dropped=("Target.ongoing",),
 )
 def m3540a2(c: Cast) -> None:
     """The printed penalty is one sentence covering four numbers, so it is
     four holds with one clock; "checks" is the skill key, which is what every
-    check the board rolls goes through."""
+    check the board rolls goes through.
+
+    The target line names no damage type, so it is the bare `ongoing=True`
+    rather than `ongoing_types=` -- the rare half of that pair. The gate and
+    the body's re-pick both came out: an empty pool already refuses the row,
+    which is what the gate was spelling by hand from a second place."""
     _nobody_is_burning(c)
-    victim = c.target
-    if victim is not None and not _burning(c.world, victim):
-        victim = next(
-            (foe for foe in sorted(_adjacent_foes(c, 10), key=c.distance)
-             if _burning(c.world, foe)),
-            None,
-        )
-    if victim is None or not c.strike(on=victim):
+    if not c.strike():
         return
-    c.hit(on=victim)
-    c.prone(on=victim)
-    c.penalty("attack", 2, on=victim, until=When.EONT)
-    c.penalty("skill", 2, on=victim, until=When.EONT)
+    c.hit()
+    c.prone()
+    c.penalty("attack", 2, until=When.EONT)
+    c.penalty("skill", 2, until=When.EONT)
     for defence in DEFENCES:
-        c.penalty(defence, 2, on=victim, until=When.EONT)
+        c.penalty(defence, 2, until=When.EONT)
 
 
 _M3540_IMPLEMENT_HIT = "the creature hits with an implement attack"
@@ -2199,15 +2179,24 @@ def _dull_beast(c: Cast, who: int) -> bool:
     recharge=6,
     action=MINOR,
     reach=Melee(1),
-    target=Target("other_ally", 1, label="one adjacent dull beast or spider ally"),
-    dropped=("Target.creature_kind",),
+    target=Target(
+        "other_ally", 1,
+        label="one adjacent dull beast or spider ally",
+        kinds=frozenset({"beast", "spider"}),
+    ),
+    dropped=("Target.any_of",),
 )
 def m4766a3(c: Cast) -> None:
     """Three printed benefits and the chooser picks one, which is what the
     card says and not an author's preference. The middle one needs *which* of
     the creature's rows recharges, so its `Powers.known` is read and the
     recharge rows are the candidates -- `c.restore_use` then `c.use_power` is
-    "recharges and the target uses it immediately"."""
+    "recharges and the target uses it immediately".
+
+    `kinds=` narrows the pool to the two type words and refuses nothing the
+    card allows. What is left is a disjunction and not a narrowing: the first
+    branch wants an ability score as well, so the two printed handles are two
+    target specs and `_dull_beast` still asks which one applies."""
     mate = c.target
     if mate is None or not _dull_beast(c, mate):
         return
@@ -3243,47 +3232,30 @@ def m6397a2(c: Cast) -> None:
     recharge=6,
     action=MINOR,
     reach=Ranged(5),
-    target=Target("enemy", 1, label="one creature taking ongoing poison damage"),
+    target=Target(
+        "enemy", 1,
+        label="one creature taking ongoing poison damage",
+        ongoing_types=frozenset({DamageType.POISON}),
+    ),
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=7),
-    requires=lambda world, eid: _reachable(
-        world, eid, 5,
-        lambda foe: any(
-            eff.ongoing and eff.ongoing[1] is DamageType.POISON
-            for eff in world.effects.of(foe)
-        ),
-    ),
-    requires_text="an enemy within 5 squares taking ongoing poison damage",
-    dropped=("Target.ongoing",),
 )
 def m6397a3(c: Cast) -> None:
     """"The ongoing poison damage increases by 5" has exactly one hold to find,
     because a burn of one type does not stack and `c.ongoing` refuses a weaker
     one: the standing amount is read off the effect and a stronger burn
-    supersedes it. The weakness joins that hold, so one save ends both."""
+    supersedes it. The weakness joins that hold, so one save ends both.
+
+    The type is named, so it is `ongoing_types=` and not the bare flag: a
+    creature alight from something else is not a legal target here."""
     _recharge_on_miss(c)
-    victim = _burning_with_poison(c)
+    victim = c.target
     if victim is None or not c.strike(on=victim):
         return
     standing = _ongoing_of(c, victim, DamageType.POISON)
     worse = c.ongoing(standing + 5, DamageType.POISON, on=victim)
     if worse is not None:
         _also(c, worse, Condition.WEAKENED)
-
-
-def _burning_with_poison(c: Cast) -> int | None:
-    """The target if it qualifies, else the nearest enemy in reach that does."""
-
-    def ok(foe: int) -> bool:
-        return _ongoing_of(c, foe, DamageType.POISON) > 0
-
-    if c.target is not None and ok(c.target):
-        return c.target
-    return next(
-        (foe for foe in sorted(_adjacent_foes(c, 5), key=c.distance) if ok(foe)),
-        None,
-    )
-
 
 @power(
     "m6397a4",
@@ -3310,18 +3282,19 @@ def m6397a4(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(5),
-    target=Target("other_ally", 1, label="one spider ally or drow ally"),
+    target=Target(
+        "other_ally", 1,
+        label="one spider ally or drow ally",
+        kinds=frozenset({"spider", "drow"}),
+    ),
     keywords=[Keyword.HEALING],
-    dropped=("Target.creature_kind",),
 )
 def m6397a5(c: Cast) -> None:
     """A printed Effect with no attack line, so there is no roll: the ally
-    pays and the caster is paid. The kind is asked here, since `Target` cannot
-    filter on what a creature is."""
+    pays and the caster is paid. Both printed type words are one any-of set in
+    the target line now, so the body's re-ask came out."""
     mate = c.target
     if mate is None:
-        return
-    if not (c.is_kind("spider", on=mate) or c.is_kind("drow", on=mate)):
         return
     c.flat(10, on=mate)
     c.heal(10, on=c.me)

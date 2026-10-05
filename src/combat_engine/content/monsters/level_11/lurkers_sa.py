@@ -74,7 +74,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_04.skirmishers import _has_advantage
 from combat_engine.content.monsters.level_07.soldiers import _recharge_on
 from combat_engine.content.monsters.level_09.lurkers_sa import _dominated_by_me
@@ -1609,17 +1608,24 @@ def m5492a2(c: Cast) -> None:
         "enemy", 1,
         label="one living creature grabbed by it",
         relation=Relation.GRABBED_BY,
+        # "Living" is not a negative set. Excluding `construct` as well
+        # refuses the 25 blocks that carry *both* `living` and `construct`,
+        # which the card calls living; excluding only `undead` admits a
+        # non-living construct. The exact test is "not undead, and not
+        # construct unless it carries living", which no any-of negative can
+        # say. This is the faithful half -- what the body asked before the
+        # conversion -- and the exception is marked. #411.
+        kinds_without=frozenset({"undead"}),
     ),
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("4d10", 5, dtype=DamageType.NECROTIC),
-    dropped=("Target.creature_kind",),
+    dropped=("Target.living",),
 )
 def m5492a3(c: Cast) -> None:
-    """"Grabbed by it" is the target line now; "living" is still narrower than
-    any field, so the redirect stays -- and it keeps asking the relation too,
-    because a redirect that only tested the kind could walk out of the pool the
-    header just built and hit something the card forbids.
+    """The whole target line is the header's now: `relation=` for the grab and
+    `kinds_without=` for "living", which is the absence of the two type words
+    and not a word of its own. The redirect that asked both by hand came out.
 
     "If this attack bloodies the target" is the line read on both sides of the
     blow: a creature already bloodied is not bloodied again by it. "The grab
@@ -1629,11 +1635,7 @@ def m5492a3(c: Cast) -> None:
     `c.escape` would announce a struggle that never happened.
     """
     me = c.me
-    victim = _restricted_to(
-        c,
-        1,
-        lambda foe: foe in c.grabbing(of=me) and not c.is_kind("undead", on=foe),
-    )
+    victim = c.target
     if victim is None or not c.strike(on=victim):
         return
     was = c.bloodied(on=victim)
@@ -1650,18 +1652,29 @@ def m5492a3(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one living creature",
+        # "Living" is not a negative set. Excluding `construct` as well
+        # refuses the 25 blocks that carry *both* `living` and `construct`,
+        # which the card calls living; excluding only `undead` admits a
+        # non-living construct. The exact test is "not undead, and not
+        # construct unless it carries living", which no any-of negative can
+        # say. This is the faithful half -- what the body asked before the
+        # conversion -- and the exception is marked. #411.
+        kinds_without=frozenset({"undead"}),
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d10", 7, dtype=DamageType.NECROTIC),
-    dropped=("Target.creature_kind",),
+    dropped=("Target.living",),
 )
 def m5492a4(c: Cast) -> None:
-    """"One living creature" is narrower than `Target` can say, so the aim is
-    corrected here. "Save ends both" is one effect carrying the daze and the
-    slow together: applied separately the victim rolls twice and can shake off
-    half of a thing the card prints as one."""
-    victim = _restricted_to(c, 1, lambda foe: not c.is_kind("undead", on=foe))
+    """"One living creature" is the target line now. "Save ends both" is one
+    effect carrying the daze and the slow together: applied separately the
+    victim rolls twice and can shake off half of a thing the card prints as
+    one."""
+    victim = c.target
     if victim is None or not c.strike(on=victim):
         return
     c.hit(on=victim)

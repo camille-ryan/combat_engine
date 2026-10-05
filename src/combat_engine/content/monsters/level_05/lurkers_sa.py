@@ -1909,17 +1909,20 @@ def m6445a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=Target(side="any", count=1, everyone=True, label="nonplant creatures in the burst"),
+    target=Target(
+        side="any", count=1, everyone=True,
+        label="nonplant creatures in the burst",
+        kinds_without=frozenset({"plant"}),
+    ),
     keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("", 3, dtype=DamageType.THUNDER, kind=MINION),
-    dropped=("Target.creature_kind",),
 )
 def m6445a1(c: Cast) -> None:
+    """"Nonplant" is the negative field, so the caster -- which is one -- drops
+    out of its own burst and the body's guard came out. #401."""
     if c.first:
         c.as_basic(c.ref, on=c.me, until=When.ENCOUNTER)
-    if c.target is not None and c.is_kind("plant", on=c.target):
-        return
     if c.strike():
         c.hit()
 

@@ -58,7 +58,6 @@ from combat_engine.content.monsters.level_02.soldiers_sa import (
     _recharge_when_bloodied,
     _ref_of,
 )
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import (
     _adjacent_enemy_shifts,
     _adjacent_foe_looks_away,
@@ -3016,12 +3015,6 @@ def m5495a6(c: Cast) -> None:
     c.jump(7)
 
 
-def _marked_adjacent_attacks_or_moves(world: World, me: int, ev: object) -> bool:
-    if isinstance(ev, MoveStart):
-        return _marked_adjacent_shifts(world, me, ev)
-    return _marked_within_looks_away(1)(world, me, ev)
-
-
 @power(
     "m5495a7",
     level=10,
@@ -4806,25 +4799,27 @@ def m939a0(c: Cast) -> None:
         "enemy", 1,
         label="immobilized living creature only",
         conditions=frozenset({Condition.IMMOBILIZED}),
+        # "Living" is not a negative set. Excluding `construct` as well
+        # refuses the 25 blocks that carry *both* `living` and `construct`,
+        # which the card calls living; excluding only `undead` admits a
+        # non-living construct. The exact test is "not undead, and not
+        # construct unless it carries living", which no any-of negative can
+        # say. This is the faithful half -- what the body asked before the
+        # conversion -- and the exception is marked. #411.
+        kinds_without=frozenset({"undead"}),
     ),
     attack=Attack(vs=FORT, printed=15),
     #: Flat 4, no dice: the empty string is how `Damage` says that. `"0"`
     #: reaches `rng.roll` and raises -- found by driving this row.
     damage=Damage("", 4),
-    dropped=("Target.creature_kind",),
+    dropped=("Target.living",),
 )
 def m939a1(c: Cast) -> None:
-    """Half of this target line is now the header's: `Target.conditions` says
-    immobilized, and "living" has no field, so the undead are still refused in
-    the body -- which keeps the redirect for the condition half too, because
-    `_restricted_to`'s fallback scans every enemy and not the narrowed pool."""
-    victim = _restricted_to(
-        c, 1, lambda f: c.is_(Condition.IMMOBILIZED, on=f) and not c.is_kind("undead", on=f)
-    )
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """The whole target line is the header's now: `conditions=` for the
+    immobilisation and `kinds_without=` for "living", so the redirect that
+    asked both by hand came out."""
+    if c.strike():
+        c.hit()
         c.heal(4, on=c.me)
 
 

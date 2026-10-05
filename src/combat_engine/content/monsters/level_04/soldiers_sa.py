@@ -71,7 +71,6 @@ from combat_engine.content.monsters.level_03.artillery_sa import _death_throe
 from combat_engine.content.monsters.level_03.brutes_sa import _both_hit
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers_sa import (
-    _reachable,
     _step_beside,
 )
 from combat_engine.content.monsters.level_03.soldiers_sa import (
@@ -145,28 +144,6 @@ from combat_engine.engine.triggers import Trigger, about_me
 # --------------------------------------------------------------------------
 # Shared shapes
 # --------------------------------------------------------------------------
-
-
-def _marked_in_reach(radius: int) -> Any:
-    """"Targets a creature marked by it", as an entry gate, at any reach.
-
-    `Target` filters on side, count, size and what is in hand and on nothing a
-    creature is *suffering*, so the narrowing cannot live there; and a body that
-    looks and returns is a standard action the policy spends on nothing.
-    `dsl.usable` is handed `(world, eid)` and the caster is all it knows, so the
-    question is asked from this end as well as in the body. #361.
-
-    `_marked_by_me_in_reach` next door is this at reach 1 only, and two of the
-    blocks here print reach 2.
-    """
-
-    def gate(world: World, eid: int) -> bool:
-        return _reachable(
-            world, eid, radius,
-            lambda foe: world.relations.holds(Relation.MARKED_BY, eid, foe),
-        )
-
-    return gate
 
 
 def _marked_adjacent_looks_away(world: World, me: int, ev: Any) -> bool:

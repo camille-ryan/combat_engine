@@ -45,7 +45,7 @@ from combat_engine.content.monsters.level_02.controllers_sa import (
     _kin_within,
     _recharge_on_miss,
 )
-from combat_engine.content.monsters.level_03.brutes import _is_kind, _squeezes_freely
+from combat_engine.content.monsters.level_03.brutes import _squeezes_freely
 from combat_engine.content.monsters.level_03.controllers import (
     _SAVE_ENDS_ON_ME,
     _save_ends_on_me,
@@ -57,7 +57,6 @@ from combat_engine.content.monsters.level_03.skirmishers import (
 )
 from combat_engine.content.monsters.level_03.skirmishers_sa import (
     _adjacent_foes,
-    _reachable,
     _recharge_when_bloodied,
     _while_bloodied,
 )
@@ -123,7 +122,7 @@ from combat_engine.engine.events import (
     ZoneExited,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import adjacent, allies, distance_between, is_, team
+from combat_engine.engine.query import adjacent, allies, distance_between, team
 from combat_engine.engine.query import holding as held_by
 from combat_engine.engine.query import squares as squares_of
 from combat_engine.engine.triggers import (
@@ -159,21 +158,6 @@ def _kin(c: Cast, ref: str, radius: int, *, of: int | None = None) -> list[int]:
     """
     return [w for w in c.within(radius, of=of, side="ally") if _ref_of(c, w) == ref]
 
-
-def _beast_ally_adjacent(world: World, eid: int) -> bool:
-    """"One beast or magical beast ally" as the Requirement it also is.
-
-    `Cast.kinds_of` is the only thing that reads a type line and a `requires=`
-    gets `(world, eid)` and no `Cast`, so the brute file's bridge is reused
-    rather than the question being narrowed to "any ally".
-    """
-    return any(
-        adjacent(world, eid, mate)
-        and (_is_kind(world, mate, "beast") or _is_kind(world, mate, "magical beast"))
-        for mate in allies(world, eid)
-    )
-
-
 def _kin_in_reach(ref: str, radius: int) -> Callable[[World, int], bool]:
     """"Up to four <that block> within N squares" as a Requirement.
 
@@ -196,26 +180,6 @@ def _block_of(world: World, who: int) -> str:
     """Which stat block a creature is, asked without a `Cast`."""
     ident = world.get(who, Ident)
     return ident.ref if ident else ""
-
-
-def _in_reach_suffering(c: Cast, reach: int, *conditions: Condition) -> int | None:
-    """The target if it qualifies, else the nearest creature in reach that does.
-
-    `Target` cannot narrow by a condition, so the row is offered against
-    whoever is nearest and the body has to find the creature the printed
-    target line is actually about. Returning early instead would spend the
-    action on nothing, which is what a wrong row looks like.
-    """
-
-    def ok(foe: int) -> bool:
-        return any(c.is_(cond, on=foe) for cond in conditions)
-
-    if c.target is not None and ok(c.target):
-        return c.target
-    return next(
-        (foe for foe in sorted(_adjacent_foes(c, reach), key=c.distance) if ok(foe)),
-        None,
-    )
 
 
 def _wielding(word: str) -> Callable[[World, int], bool]:
@@ -482,29 +446,6 @@ def _necrotic_while_warded(c: Cast, mate: int) -> None:
         dtype=DamageType.NECROTIC,
         when=still_warded,
     )
-
-
-def _suffering_in_reach(
-    reach: int, *conditions: Condition
-) -> Callable[[World, int], bool]:
-    """"Targets <condition> creatures", as the Requirement it really is.
-
-    `Target` filters on side, count and size and says nothing about what a
-    creature is *suffering*, and a body that checks and returns has already
-    spent the action. `dsl.usable` gets `(world, eid)`, so the question it can
-    answer is "is such a creature within reach of me" -- which is what the
-    printed target line means.
-    """
-
-    def check(world: World, eid: int) -> bool:
-        return _reachable(
-            world,
-            eid,
-            reach,
-            lambda foe: any(is_(world, foe, cond) for cond in conditions),
-        )
-
-    return check
 
 
 # --------------------------------------------------------------------------
@@ -1066,20 +1007,19 @@ def m115785a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="ally", label="beast or magical beast"),
-    requires=_beast_ally_adjacent,
-    requires_text="a beast ally must be adjacent",
-    dropped=("Target.creature_kind",),
+    target=Target(
+        side="ally",
+        label="beast or magical beast",
+        kinds=frozenset({"beast"}),
+    ),
 )
 def m115785a3(c: Cast) -> None:
-    """"One beast or magical beast ally" narrows by what a creature *is*, and
-    `Target` has no field for it. The gate asks only the geometric half --
-    `kinds_of` lives on `Cast` and a `requires=` gets `(world, eid)` and no
-    `Cast` -- so the kind is asked in the body."""
+    """Both printed type lines are the one word: a magical beast's type words
+    carry "beast" as well, so the any-of set of one refuses nothing the card
+    allows and accepts nothing it does not. The gate restated the target
+    restriction and came out -- an empty pool is the same refusal."""
     mate = c.target
     if mate is None:
-        return
-    if not (c.is_kind("beast", on=mate) or c.is_kind("magical beast", on=mate)):
         return
     _let_it_swing(c, mate)
 

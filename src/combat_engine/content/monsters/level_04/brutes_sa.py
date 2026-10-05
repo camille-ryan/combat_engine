@@ -54,10 +54,7 @@ from combat_engine.content.monsters.level_03.brutes_sa import (
     _press,
     _while_bloodied,
 )
-from combat_engine.content.monsters.level_03.skirmishers_sa import (
-    _ongoing_of,
-    _two_basics,
-)
+from combat_engine.content.monsters.level_03.skirmishers_sa import _two_basics
 from combat_engine.content.monsters.level_04.brutes import (
     _change_shape,
     _crit_line,
@@ -2629,10 +2626,6 @@ def m6613a4(c: Cast) -> None:
 # --------------------------------------------------------------------------
 
 
-def _scorched(world: World, me: int, ev: DamageApplied) -> bool:
-    return ev.target == me and ev.dtype is DamageType.RADIANT
-
-
 @power(
     "m6627a0",
     level=4,
@@ -2734,21 +2727,19 @@ def m6627a3(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Melee(1),
-    target=ONE_CREATURE,
-    dropped=("Target.ongoing",),
+    target=Target(
+        "enemy", 1,
+        label="a creature taking ongoing fire damage",
+        ongoing_types=frozenset({DamageType.FIRE}),
+    ),
 )
 def m6627a4(c: Cast) -> None:
-    """"A creature taking ongoing fire damage" is a target line `Target` cannot
-    express. Where the creature chosen does not qualify the row looks for one in
-    reach that does rather than returning, which would be a minor action spent
-    on a row that appears to have acted."""
-    victim = c.target
-    if victim is None or _ongoing_of(c, victim, DamageType.FIRE) == 0:
-        victim = next(
-            (f for f in _press(c) if _ongoing_of(c, f, DamageType.FIRE) > 0), None
-        )
-    if victim is not None:
-        c.slide(1, on=victim)
+    """"A creature taking ongoing fire damage" is the target line now, so the
+    chooser is handed only creatures that qualify and the body's search for one
+    came out -- a minor action can no longer be spent on a row that appears to
+    have acted, because an empty pool refuses it. #401."""
+    if c.target is not None:
+        c.slide(1)
 
 
 # --------------------------------------------------------------------------

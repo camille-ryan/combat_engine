@@ -58,11 +58,9 @@ from typing import Any
 from combat_engine.content.monsters.level_02.minions_sa import _kin_within
 from combat_engine.content.monsters.level_02.soldiers_sa import _ref_of
 from combat_engine.content.monsters.level_03.skirmishers import _not_grabbing
-from combat_engine.content.monsters.level_06.controllers import _living
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
@@ -1028,30 +1026,40 @@ _M6518_DROPPED = "it drops to 0 hit points"
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(2),
-    target=EACH_OTHER,
+    target=Target(
+        "other", 99, everyone=True,
+        label="living creatures in the burst",
+        # "Living" is not a negative set. Excluding `construct` as well
+        # refuses the 25 blocks that carry *both* `living` and `construct`,
+        # which the card calls living; excluding only `undead` admits a
+        # non-living construct. The exact test is "not undead, and not
+        # construct unless it carries living", which no any-of negative can
+        # say. This is the faithful half -- what the body asked before the
+        # conversion -- and the exception is marked. #411.
+        kinds_without=frozenset({"undead"}),
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage(bonus=10, dtype=DamageType.NECROTIC, kind=MINION),
     trigger=_M6518_DROPPED,
     on=Trigger(Dropped, about_me, _M6518_DROPPED),
-    dropped=("Dropped.power", "Target.creature_kind"),
+    dropped=('Dropped.power', "Target.living"),
 )
 def m6518a1(c: Cast) -> None:
     """A death throe, handed over in the keyword column as a standard
     at-will and written as the free action its trigger makes it.
 
-    `EACH_OTHER` and not `EACH_CREATURE`: the burst catches friend and foe
-    alike, which is what "living creatures in the burst" says, and the side
-    "any" would also catch the creature setting it off.
+    Side "other" and not "any": the burst catches friend and foe alike, which
+    is what "living creatures in the burst" says, and "any" would also catch
+    the creature setting it off.
 
-    Two clauses the engine cannot reach. "As a result of a weapon attack"
-    asks what the killing blow was made with, and `Dropped` carries who
-    struck it and nothing about the blow. "Living creatures" is a target
-    line `Target` cannot say, so it is asked of each target in the body
-    instead.
+    "Living" is `kinds_without=` -- the absence of the two type words that
+    deny it -- so it is the target line now. What is still out of reach is
+    "as a result of a weapon attack": that asks what the killing blow was
+    made with, and `Dropped` carries who struck it and nothing about the blow.
     """
     victim = c.target
-    if victim is None or not _living(c, victim) or not c.strike():
+    if victim is None or not c.strike():
         return
     c.hit()
     if c.size_of(victim) not in (Size.SMALL, Size.MEDIUM):

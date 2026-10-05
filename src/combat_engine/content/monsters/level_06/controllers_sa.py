@@ -4134,22 +4134,18 @@ def m6675a2(c: Cast) -> None:
     recharge=6,
     action=MINOR,
     reach=Ranged(5),
-    target=Target(side="ally", count=1, label="undead ally"),
+    target=Target(
+        side="ally", count=1, label="undead ally",
+        kinds=frozenset({"undead"}),
+    ),
     keywords=[Keyword.HEALING, Keyword.IMPLEMENT],
-    dropped=("Target.creature_kind",),
 )
 def m6675a3(c: Cast) -> None:
-    mate = c.target
-    if mate is not None and not c.is_kind("undead", on=mate):
-        mate = next(
-            (
-                a for a in c.allies()
-                if c.is_kind("undead", on=a) and distance_between(c.world, c.me, a) <= 5
-            ),
-            None,
-        )
-    if mate is not None:
-        c.heal(10, on=mate)
+    """The type word is the target line now and the body's redirect came out.
+    Positive rather than negative because an undead block always carries the
+    word -- 756 of them do -- so nothing qualifying is refused. #401."""
+    if c.target is not None:
+        c.heal(10)
 
 
 # ==========================================================================

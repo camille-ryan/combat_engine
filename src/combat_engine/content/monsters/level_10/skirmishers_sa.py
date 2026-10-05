@@ -57,7 +57,6 @@ from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy
 from combat_engine.content.monsters.level_02.skirmishers_sa import _melee_only
 from combat_engine.content.monsters.level_02.soldiers_sa import _missed_me_in_melee
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers import (
     _free_square_beside,
     _recharge_on,
@@ -1434,13 +1433,19 @@ def m2084a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets an enemy taking ongoing damage",
+        ongoing=True,
+    ),
     attack=Attack(vs=WILL, printed=14),
     damage=Damage("2d6", 6),
-    dropped=("Target.ongoing",),
 )
 def m2084a1(c: Cast) -> None:
-    victim = _restricted_to(c, 2, lambda f: _under_ongoing(c.world, f))
+    """The card names no damage type, so this is the rare bare `ongoing=True`
+    rather than `ongoing_types=`. The secondary burst is unrestricted -- it
+    prints "targets enemies" and nothing more -- so it stays a body loop. #401."""
+    victim = c.target
     if victim is None:
         return
     if c.strike(on=victim):
@@ -1592,15 +1597,6 @@ def m2089a4(c: Cast) -> None:
 # ==========================================================================
 
 
-def _taking_ongoing_poison(c: Cast, who: int) -> bool:
-    for e in c.world.effects.of(who):
-        if e.ongoing is None:
-            continue
-        if DamageType.POISON in (e.ongoing_types or (e.ongoing[1],)):
-            return True
-    return False
-
-
 @power(
     "m2250a0",
     level=10,
@@ -1624,16 +1620,18 @@ def m2250a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Ranged(10),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="targets creature taking ongoing poison damage",
+        ongoing_types=frozenset({DamageType.POISON}),
+    ),
     attack=Attack(vs=WILL, printed=13),
-    dropped=("Target.ongoing",),
 )
 def m2250a1(c: Cast) -> None:
-    victim = _restricted_to(c, 10, lambda f: _taking_ongoing_poison(c, f))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.condition(Condition.BLINDED, Condition.SLOWED, until=When.SAVE_ENDS, on=victim)
+    """The type is named, so a creature alight from something other than
+    poison is refused -- which bare `ongoing=True` would have accepted. #401."""
+    if c.strike():
+        c.condition(Condition.BLINDED, Condition.SLOWED, until=When.SAVE_ENDS)
 
 
 @power(

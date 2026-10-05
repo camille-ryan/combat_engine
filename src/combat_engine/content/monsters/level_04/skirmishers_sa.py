@@ -291,11 +291,6 @@ def _dying_in_reach(world: World, eid: int) -> bool:
     return _reachable(world, eid, 1, lambda foe: is_(world, foe, Condition.DYING))
 
 
-def _flanked_creature_in_reach(world: World, eid: int) -> bool:
-    """"Melee 1 (one creature flanked by it)", asked from the caster's end."""
-    return _reachable(world, eid, 1, lambda foe: flanked_by(world, foe, eid))
-
-
 def _enemy_flanked_me(world: World, me: int, ev: Any) -> bool:
     """"An enemy ends its movement in a square where it flanks it."""
     actor = getattr(ev, "actor", None)
@@ -2872,20 +2867,25 @@ def m5824a4(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="a dying humanoid"),
+    target=Target(
+        side="enemy", count=1,
+        label="a dying humanoid",
+        kinds=frozenset({"humanoid"}),
+    ),
     keywords=[Keyword.HEALING],
     requires=_dying_in_reach,
     requires_text="must have a dying humanoid in reach",
-    dropped=("c.kill()", "Target.creature_kind"),
+    dropped=("c.kill()",),
 )
 def m5824a5(c: Cast) -> None:
     """The heal is exact and it works. "The target dies" is the other half and
     nothing says it: a creature is put down by damage, and a blow large enough
     to be sure of it is a different sentence that resistance and temporary hit
-    points would both read. The type word is asked here because no `Target`
-    field holds it and the `requires=` gate has no `Cast` to ask with."""
-    if not c.is_kind("humanoid"):
-        return
+    points would both read.
+
+    The type word is the target line now. The gate stays because it asks the
+    *dying* half, which is a different clause and not a restatement of this
+    one."""
     c.heal(15, on=c.me)
 
 

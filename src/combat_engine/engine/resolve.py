@@ -1131,9 +1131,15 @@ def _check_down(world: World, eid: int, health: Health, source: int | None = Non
 
 
 def _revive(world: World, eid: int) -> None:
-    """Healing a dying creature clears what dropping it imposed."""
+    """Healing a dying creature clears what dropping it imposed.
+
+    `"dead"` is cleared here too, so the two are symmetrical -- but note that
+    nothing in this engine *raises* the dead, so in practice this only matters
+    for a creature healed in the same breath as being killed. Resurrection is
+    not modelled and this is not it. #399.
+    """
     for eff in world.effects.of(eid):
-        if eff.label == "dropped":
+        if eff.label in ("dropped", "dead"):
             world.effects.end(eff, "healed")
     health = world.get(eid, Health)
     if health is not None:
@@ -1149,6 +1155,15 @@ def _die(world: World, eid: int) -> None:
     """
     world.bus.emit(Died(actor=eid))
     world.effects.bereave(eid, "died")
+    # **Applied through the ordinary door, after `bereave`.** Through
+    # `effects.apply` so a `ConditionApplied` is emitted and anything watching
+    # for one can see it -- `Relations.set` imposing a grab without that event
+    # left thirteen rows armed and unable to fire, and this is the same trap.
+    # After `bereave`, or the hold this creature has just been given would be
+    # among the ones torn down. #399.
+    world.effects.apply(
+        eid, eid, When.ENCOUNTER, label="dead", conditions=(Condition.DEAD,)
+    )
     for kind, source, target in list(world.relations._live):
         # Relations carried by a live effect expire with it. A bare one --
         # a grab, most often -- ends now, because a corpse holds nobody.

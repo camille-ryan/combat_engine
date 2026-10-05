@@ -381,6 +381,36 @@ class Target:
     #: all -- so naming a set here would be guessing at something the engine
     #: already answers.
     can_act: bool | None = None
+    #: A printed target line narrowed by the creature's **type words**: "each
+    #: undead creature in the burst", "one living humanoid", "a beast or magical
+    #: beast ally". Any of them, like `conditions`.
+    #:
+    #: Read through `query.kinds_of`, which was lifted off `Cast` for this --
+    #: while it lived there the only place to ask was the body, so the row was
+    #: offered against creatures it would then decline.
+    #:
+    #: **Any-of, so it cannot say "living humanoid".** That is a conjunction and
+    #: this set accepts either word, which would take an undead humanoid and a
+    #: living beast -- both of which such a card refuses. Those rows stay marked.
+    #:
+    #: **And a positive word matches no player character.** `kinds_of` is empty
+    #: for one: a character has no stat block, and its race is not on the board
+    #: at all -- `chargen` reads `race.speed` and `race.size` and stores neither
+    #: the race nor its words. So `kinds={"humanoid"}` aimed at a party yields an
+    #: empty pool and the row is never offered. Measured on a live board: every
+    #: character answers `[]` where every monster answers four or more words.
+    #: Safe aimed at monsters, which is what the ally rows do; for a row a
+    #: monster aims at the party, only `kinds_without` behaves.
+    kinds: frozenset[str] = frozenset()
+    #: The negative: "nonplant creatures in the burst", "not elemental". Five of
+    #: the thirty rows print it, so it is not an afterthought.
+    kinds_without: frozenset[str] = frozenset()
+    #: "One creature taking ongoing damage", with no type named. One row.
+    ongoing: bool = False
+    #: "One creature taking ongoing **poison** damage". Seven of the eight rows
+    #: name a type, so the untyped form above is the rare one -- and filtering
+    #: without the type would accept a creature alight from the wrong source.
+    ongoing_types: frozenset[DamageType] = frozenset()
 
     def __str__(self) -> str:
         if self.label:
@@ -1566,6 +1596,10 @@ def candidates(
         or aim.conditions
         or aim.conditions_without
         or aim.can_act is not None
+        or aim.kinds
+        or aim.kinds_without
+        or aim.ongoing
+        or aim.ongoing_types
         or aim.bloodied is not None
     ):
         pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
@@ -1576,11 +1610,26 @@ def candidates(
         return []
 
     area = area_of(world, actor, p, origin, branch, augment)
+    # **A row asking for a corpse must have the corpse in its pool.**
+    # `targetable` is "alive, or scenery" -- it already carves out scenery so
+    # that "one Medium or smaller object" can be aimed at, and a target line
+    # naming `Condition.DEAD` needs the same exception for the same reason.
+    # Without it `Condition.DEAD` is a condition nothing can ever be filtered
+    # on: `_die` applies it correctly and the pool drops the body first. #399.
+    if Condition.DEAD in aim.conditions:
+        from .query import is_
+
+        def can_aim(c: int) -> bool:
+            return targetable(world, c) or is_(world, c, Condition.DEAD)
+    else:
+
+        def can_aim(c: int) -> bool:
+            return targetable(world, c)
     if reach.kind == "area_burst" and origin is not None:
         return [
             c
             for c in pool
-            if targetable(world, c)
+            if can_aim(c)
             and squares(world, c) & area
             and any(world.grid.line_of_effect(origin, sq) for sq in squares(world, c))
         ]
@@ -1591,7 +1640,7 @@ def candidates(
     return [
         c
         for c in pool
-        if targetable(world, c)
+        if can_aim(c)
         and squares(world, c) & area
         and any(line_of_effect(world, eye, c) for eye in eyes)
     ]
@@ -1811,6 +1860,19 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         from .query import can_act
 
         if can_act(world, target) is not aim.can_act:
+            return False
+    if aim.kinds or aim.kinds_without:
+        from .query import kinds_of
+
+        words = kinds_of(world, target)
+        if aim.kinds and not (words & aim.kinds):
+            return False
+        if words & aim.kinds_without:
+            return False
+    if aim.ongoing or aim.ongoing_types:
+        from .query import taking_ongoing
+
+        if not taking_ongoing(world, target, aim.ongoing_types):
             return False
     if aim.bloodied is not None:
         from .components import Health

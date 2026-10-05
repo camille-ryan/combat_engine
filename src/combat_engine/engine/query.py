@@ -24,7 +24,7 @@ from .components import (
 )
 from .conditions import rules
 from .grid import Square, between, linked_spread, spread
-from .types import Condition, Cover, Defense, Relation, Team
+from .types import Condition, Cover, DamageType, Defense, Relation, Team
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -373,22 +373,98 @@ def prefers_range(world: World, eid: int) -> bool:
     that happens to throw something is the role it was written for, which
     the stat block already records.
     """
-    from .components import Ident
-
     profile = range_profile(world, eid)
     if profile in ("melee", "none"):
         return False
     if profile == "ranged":
         return True
+    return (stat_block(world, eid).get("role") or "") in _STANDOFF
+
+
+def stat_block(world: World, eid: int) -> dict[str, Any]:
+    """The compendium row behind a creature, or `{}` if it has none.
+
+    **The one place `query` reaches into `content`.** `engine/CLAUDE.md` counts
+    those sites and asks that no sixth be added; this is written so there is one
+    fewer. It was two reads of the identical shape -- `standoff` here and
+    `Cast._stat_block` -- and `Cast` now delegates, so the seam goes from five
+    sites to four.
+
+    A character, a companion and a summon are all typeless: only an `Ident`
+    naming an `m` ref has a block to read.
+    """
+    from .components import Ident
+
     ident = world.get(eid, Ident)
     if ident is None or not ident.ref.startswith("m"):
-        return False
+        return {}
     from combat_engine.content.loader import load
 
     try:
-        return (load(ident.ref).row.get("role") or "") in _STANDOFF
-    except Exception:
-        return False
+        return load(ident.ref).row
+    except Exception:          # a ref with no row is simply typeless
+        return {}
+
+
+def kinds_of(world: World, eid: int) -> frozenset[str]:
+    """A creature's type words: undead, goblin, beast, natural, and so on.
+
+    Lifted out of `Cast` so `dsl.candidates` can ask it. A target line reading
+    "each undead creature in the burst" is a restriction on the pool, and while
+    this lived on `Cast` the only place to ask it was the body -- which means the
+    row was offered against creatures it would then decline.
+
+    Off the stat block's own type line, plus anything `c.set_origin` has written
+    on and minus anything that took one away. A character has no type line, and
+    nineteen races print a sentence that gives one a word anyway.
+    """
+    words: set[str] = set()
+    gone: set[str] = set()
+    for eff in world.effects.of(eid):
+        if eff.label.startswith("origin:"):
+            words.add(eff.label.split(":", 1)[1])
+        elif eff.label.startswith("unorigin:"):
+            gone.add(eff.label.split(":", 1)[1])
+    row = stat_block(world, eid)
+    if row:
+        import json
+
+        words |= set(json.loads(row.get("keywords") or "[]"))
+        for column in ("kind", "origin"):
+            if row.get(column):
+                words.add(row[column])
+    # The type line parenthesises its subtypes -- "(undead)" -- and a power
+    # asking whether something is undead should not have to know.
+    return frozenset(
+        w.strip("() ,.").lower()
+        for w in words
+        if w.strip("() ,.") and w.strip("() ,.").lower() not in gone
+    )
+
+
+def taking_ongoing(
+    world: World, eid: int, types: frozenset[DamageType] = frozenset()
+) -> bool:
+    """Is this creature burning? Of any of `types`, or of any type at all.
+
+    `Effect.ongoing` is an `(amount, dtype)` pair, so the question was already
+    answerable and had no reader -- which meant a target line reading "one
+    creature taking ongoing poison damage" had to be asked in the body, after
+    the row had been offered against creatures it would decline.
+
+    **The type is not optional for most of them.** Seven of the eight rows that
+    wanted this name a damage type and one does not, so a bare "is it burning"
+    would accept a creature alight from the wrong source in seven cases out of
+    eight.
+    """
+    for eff in world.effects.of(eid):
+        burn = getattr(eff, "ongoing", None)
+        if not burn:
+            continue
+        amount, dtype = burn
+        if amount and (not types or dtype in types):
+            return True
+    return False
 
 
 def is_trap(world: World, eid: int) -> bool:

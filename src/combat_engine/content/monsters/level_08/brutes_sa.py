@@ -1265,34 +1265,26 @@ def m3320a1(c: Cast) -> None:
         "enemy", 1,
         label="bloodied, living enemy",
         bloodied=True,
+        # "Living" is not a negative set. Excluding `construct` as well
+        # refuses the 25 blocks that carry *both* `living` and `construct`,
+        # which the card calls living; excluding only `undead` admits a
+        # non-living construct. The exact test is "not undead, and not
+        # construct unless it carries living", which no any-of negative can
+        # say. This is the faithful half -- what the body asked before the
+        # conversion -- and the exception is marked. #411.
+        kinds_without=frozenset({"undead"}),
     ),
     keywords=[Keyword.NECROTIC, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("6d6", 5, dtype=DamageType.NECROTIC),
-    dropped=("Target.creature_kind",),
+    dropped=("Target.living",),
 )
 def m3320a2(c: Cast) -> None:
-    """Bloodied is the target line now; "living" is still the dropped half, so
-    the redirect stays for that and has to ask bloodied of the creatures it
-    scans -- `c.enemies()` is the raw pool and not the filtered one."""
-
-    def living(f: int) -> bool:
-        return not any(c.is_kind(word, on=f) for word in ("undead", "construct"))
-
-    victim = c.target
-    if victim is None or not living(victim):
-        victim = next(
-            (
-                f
-                for f in c.enemies()
-                if living(f) and c.bloodied(on=f) and c.distance(f) <= 1
-            ),
-            None,
-        )
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """Both halves of the target line are the header's now -- `bloodied=` and
+    `kinds_without=`, "living" being the absence of the two type words that
+    deny it -- so the redirect that asked them by hand came out."""
+    if c.strike():
+        c.hit()
 
 
 @power(

@@ -57,7 +57,6 @@ from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES, _
 from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_02.lurkers_sa import _twice
 from combat_engine.content.monsters.level_03.brutes import NO_BIGGER_THAN_MEDIUM
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_07.controllers import _rearms_when_bloodied
 from combat_engine.content.monsters.level_07.controllers_sa import (
     _forbid_everything,
@@ -129,11 +128,8 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import (
-    adjacent,
     allies,
     distance_between,
-    enemies,
-    is_,
     squares,
     team,
 )
@@ -979,13 +975,6 @@ def m5575a1(c: Cast) -> None:
 
 
 _M5575A2_DOWN = (Condition.IMMOBILIZED, Condition.STUNNED, Condition.UNCONSCIOUS)
-
-
-def _adjacent_and_down(world: World, eid: int) -> bool:
-    return any(
-        is_(world, f, cond) for f in enemies(world, eid) if adjacent(world, eid, f)
-        for cond in _M5575A2_DOWN
-    )
 
 
 @power(
@@ -2801,13 +2790,6 @@ def m822a2(c: Cast) -> None:
         c.half_healing(until=When.EONT)
 
 
-def _has_ongoing_necrotic(world: World, eid: int) -> bool:
-    return any(
-        e.ongoing and DamageType.NECROTIC in (tuple(e.ongoing_types) or (e.ongoing[1],))
-        for e in world.effects.of(eid)
-    )
-
-
 @power(
     "m822a3",
     level=8,
@@ -2815,18 +2797,22 @@ def _has_ongoing_necrotic(world: World, eid: int) -> bool:
     recharge=6,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="affects creatures with ongoing necrotic damage only",
+        ongoing_types=frozenset({DamageType.NECROTIC}),
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=12),
-    requires=_has_ongoing_necrotic,
-    requires_text="the m822 must see a creature taking ongoing necrotic damage within 5 squares",
-    dropped=("Target.ongoing",),
 )
 def m822a3(c: Cast) -> None:
-    victim = _restricted_to(c, 5, lambda f: _has_ongoing_necrotic(c.world, f))
-    if victim is None or not c.strike(on=victim):
-        return
-    c.condition(Condition.IMMOBILIZED, until=When.EONT, on=victim)
+    """The target line is the whole restriction now. The `requires=` gate it
+    replaces was also asking the wrong creature: `requires` is handed
+    `(world, actor)`, so `_has_ongoing_necrotic` was reading the caster's own
+    effects rather than looking 5 squares out, and the row was refused in every
+    fight where the caster was not itself burning. #401."""
+    if c.strike():
+        c.condition(Condition.IMMOBILIZED, until=When.EONT)
 
 
 @power(

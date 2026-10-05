@@ -362,10 +362,6 @@ def _damage_on_me(world: World, me: int, ev: Any) -> bool:
     ) not in (None, me)
 
 
-def _my_save(world: World, me: int, ev: Any) -> bool:
-    return getattr(ev, "actor", None) == me
-
-
 def _enemy_saved(world: World, me: int, ev: Any) -> bool:
     return getattr(ev, "saved", False) and _enemy(
         world, me, getattr(ev, "actor", None)

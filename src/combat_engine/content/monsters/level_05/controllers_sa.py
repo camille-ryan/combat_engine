@@ -99,6 +99,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    Target,
     UpTo,
     Usage,
     When,
@@ -2585,12 +2586,18 @@ def m6344a3(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(10),
-    target=ONE_ALLY,
-    dropped=("Target.creature_kind",),
+    target=Target(
+        "ally", 1,
+        label="one nonminion plant ally or two minion plant allies",
+        kinds=frozenset({"plant"}),
+    ),
+    dropped=("Target.any_of",),
 )
 def m6344a4(c: Cast) -> None:
-    """"One nonminion plant ally or two minion plant allies" is approximated
-    as one ally; `Target` has no plant-and-minion-count filter."""
+    """The type word is common to both printed lines, so `kinds=` refuses
+    nothing the card allows. What is left is not a narrowing: the two lines
+    differ in *count* -- one nonminion or two minions -- which is one target
+    spec or the other."""
     mate = c.target
     if mate is None:
         return

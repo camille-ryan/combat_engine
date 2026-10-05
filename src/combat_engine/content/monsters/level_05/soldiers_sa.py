@@ -155,15 +155,6 @@ _HELPLESS_FOUR = (
 )
 
 
-def _addled_in_reach(radius: int) -> Any:
-    def gate(world: World, eid: int) -> bool:
-        return _reachable(
-            world, eid, radius, lambda foe: any(is_(world, foe, c_) for c_ in _DAZED_STUNNED_OUT)
-        )
-
-    return gate
-
-
 def _helpless_in_reach(radius: int) -> Any:
     def gate(world: World, eid: int) -> bool:
         return _reachable(

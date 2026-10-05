@@ -85,7 +85,7 @@ from combat_engine.engine.events import (
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import alive, creatures, distance_between, team
+from combat_engine.engine.query import alive, distance_between, team
 from combat_engine.engine.triggers import (
     Trigger,
     both,
@@ -188,23 +188,6 @@ def _marked_me(world: World, me: int, ev: Any) -> bool:
     """A mark arrives as a `RelationSet` and is never announced as a condition,
     so a row of this shape declared on `ConditionApplied` never fires."""
     return getattr(ev, "kind_", None) is Relation.MARKED_BY and ev.target == me
-
-
-def _an_ally_is_down(world: World, eid: int) -> bool:
-    """A Requirement that there is a body on the floor to pick up.
-
-    `Target` filters on side and size and says nothing about whether a
-    creature is alive, so the restriction is asked here as well as in the
-    body: without it the row is offered every turn, aimed at whoever is
-    nearest, and comes back having done nothing -- which from the outside is
-    indistinguishable from a row written wrong.
-    """
-    return any(
-        not alive(world, other)
-        and other != eid
-        and team(world, other) is team(world, eid)
-        for other in creatures(world)
-    )
 
 
 # --------------------------------------------------------------------------
@@ -857,27 +840,22 @@ def m4502a4(c: Cast) -> None:
     recharge=6,
     action=MINOR,
     reach=Ranged(5),
-    target=Target(side="ally", count=1, label="one dead ally"),
+    target=Target(
+        side="ally", count=1,
+        label="one dead ally",
+        conditions=frozenset({Condition.DEAD}),
+    ),
     keywords=[Keyword.HEALING],
-    requires=_an_ally_is_down,
-    requires_text="an ally must be dead",
-    dropped=("Condition.DEAD",),
 )
 def m4502a5(c: Cast) -> None:
-    """"One **dead** ally" is a restriction `Target` cannot carry **yet**.
+    """"One dead ally" is the target line now.
 
-    Re-aimed from `Target.condition`, which now resolves -- the field landed, so
-    this row would otherwise have reported itself finished. Dead is not a
-    `Condition` at all today: it is `Health`, and `Condition.DYING` is a
-    different state. So `conditions=frozenset({Condition.DEAD})` is the spelling
-    this wants and the member does not exist. Camille asked for it on #399,
-    which is what the marker now names. Until then the restriction stays in
-    `label=`, asked again here, and gated by `requires=`."""
-    friend = c.target
-    if friend is None or alive(c.world, friend):
-        return
-    if c.reanimate(on=friend, hp=1):
-        c.grant_action("stand", FREE, on=friend)
+    `Condition.DEAD` landed with #399, so the restriction moved out of the
+    `requires=` gate and the body's `alive` re-check and into the header. The
+    condition is applied in `resolve._die` through the ordinary door, so it
+    carries a `ConditionApplied` and anything filtering on it can see it."""
+    if c.reanimate(hp=1):
+        c.grant_action("stand", FREE)
 
 
 # --------------------------------------------------------------------------

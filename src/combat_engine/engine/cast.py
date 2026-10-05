@@ -413,48 +413,28 @@ class Cast:
         who = self._who(on)
         if who is None:
             return frozenset()
-        words = set()
-        gone = set()
-        for eff in self.world.effects.of(who):
-            if eff.label.startswith("origin:"):
-                words.add(eff.label.split(":", 1)[1])
-            elif eff.label.startswith("unorigin:"):
-                gone.add(eff.label.split(":", 1)[1])
-        row = self._stat_block(who)
-        if row:
-            import json
+        # **Lifted into `query` so `dsl.candidates` can ask it too**, and
+        # delegated rather than duplicated: a target line narrowing to "each
+        # undead creature" is a filter on the pool, and two copies of this would
+        # be the `candidates`/`use` disagreement of #381 in a third place. #401.
+        from .query import kinds_of
 
-            words |= set(json.loads(row.get("keywords") or "[]"))
-            for column in ("kind", "origin"):
-                if row.get(column):
-                    words.add(row[column])
-        # The type line parenthesises its subtypes -- "(undead)" -- and a
-        # power asking whether something is undead should not have to know.
-        return frozenset(
-            w.strip("() ,.").lower()
-            for w in words
-            if w.strip("() ,.") and w.strip("() ,.").lower() not in gone
-        )
+        return kinds_of(self.world, who)
 
     def _stat_block(self, who: int | None) -> dict[str, Any]:
         """The compendium row behind a creature, or `{}` if it has none.
 
-        A character, a companion and a summon are all typeless here -- only
-        an `Ident` naming an `m` ref has a block to read.
+        **One of the engine's reaches into `content`, and now it is not.** This
+        read the loader directly and `query.standoff` had a byte-identical copy,
+        so the seam `engine/CLAUDE.md` counts had two sites doing one thing.
+        Both go through `query.stat_block`, which takes the count from five to
+        four.
         """
-        from .components import Ident
-
         if who is None:
             return {}
-        ident = self.world.get(who, Ident)
-        if ident is None or not ident.ref.startswith("m"):
-            return {}
-        from combat_engine.content.loader import load
+        from .query import stat_block
 
-        try:
-            return load(ident.ref).row
-        except Exception:  # a ref with no row is simply typeless
-            return {}
+        return stat_block(self.world, who)
 
     def is_kind(self, word: str, on: int | None = None) -> bool:
         """Is this creature of that type? `c.is_kind("undead")`."""
@@ -3467,6 +3447,37 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, When.ENCOUNTER, label=f"{self.ref} grab",
             relations=[(Relation.GRABBED_BY, holder, who)],
+        )
+
+    def dominate(
+        self,
+        *,
+        on: int | None = None,
+        by: int | None = None,
+        until: When = When.SAVE_ENDS,
+    ) -> Effect | None:
+        """Dominate a creature, relation and condition together.
+
+        **`Relation.DOMINATED_BY` had 15 readers and one writer.** Everything
+        else that dominated went through `c.condition(Condition.DOMINATED, ...)`,
+        and `relations.IMPLIES` maps relation to condition one way only -- so the
+        condition was imposed and the triple was never filed, leaving every
+        reader of the relation silently false. That included any target line
+        narrowing to "a creature dominated by it", which could not be written at
+        all: the pool was empty for a creature dominated by any ordinary means.
+
+        Shaped exactly like `c.grab`, which has the same two halves, and `by=`
+        names the dominator when it is not the caster for the same reason.
+        `IMPLIES` supplies `Condition.DOMINATED`, so this lays one thing and
+        gets both. #405.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        master = self.me if by is None else by
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} dominate",
+            relations=[(Relation.DOMINATED_BY, master, who)],
         )
 
     def grabbing(self, *, of: int | None = None) -> list[int]:

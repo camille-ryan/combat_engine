@@ -221,15 +221,6 @@ def _under_ongoing(world: World, who: int | None) -> bool:
     return who is not None and any(e.ongoing for e in world.effects.of(who))
 
 
-def _taking_ongoing_poison(c: Cast, who: int) -> bool:
-    for e in c.world.effects.of(who):
-        if e.ongoing is None:
-            continue
-        if DamageType.POISON in (e.ongoing_types or (e.ongoing[1],)):
-            return True
-    return False
-
-
 def _step_away_from(c: Cast, squares_: int, anchor: int) -> int:
     """`c.flee` is anchored on the caster's own square, which is no use
     when the caster is the one fleeing; this is the same farthest-reachable
@@ -1393,20 +1384,22 @@ def m3790a0(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Ranged(10),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="only affects creatures taking ongoing poison damage",
+        ongoing_types=frozenset({DamageType.POISON}),
+    ),
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=11),
-    dropped=("Target.ongoing",),
 )
 def m3790a1(c: Cast) -> None:
-    """"Only affects creatures taking ongoing poison damage." `Target`
-    cannot filter on that, so a qualifying creature in range is found
-    rather than the row being thrown away."""
-    victim = _restricted_to(c, 10, lambda f: _taking_ongoing_poison(c, f))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.condition(Condition.DAZED, Condition.SLOWED, until=When.SAVE_ENDS, on=victim)
+    """"Only affects creatures taking ongoing poison damage" is the target
+    line itself now, so the body's re-pick came out: an empty pool already
+    refuses the row, from one place instead of two. The type is named rather
+    than `ongoing=True`, which would accept a creature burning from
+    somewhere else. `m3790a2` is the twin with the restriction lifted. #401."""
+    if c.strike():
+        c.condition(Condition.DAZED, Condition.SLOWED, until=When.SAVE_ENDS)
 
 
 @power(
@@ -3032,17 +3025,30 @@ def m6078a3(c: Cast) -> None:
     usage=AT_WILL,
     action=FREE,
     reach=CloseBurst(2),
-    target=EACH_OTHER,
+    target=Target(
+        "other", 99, everyone=True,
+        label="living creatures in the burst",
+        # "Living" is not a negative set. Excluding `construct` as well
+        # refuses the 25 blocks that carry *both* `living` and `construct`,
+        # which the card calls living; excluding only `undead` admits a
+        # non-living construct. The exact test is "not undead, and not
+        # construct unless it carries living", which no any-of negative can
+        # say. This is the faithful half -- what the body asked before the
+        # conversion -- and the exception is marked. #411.
+        kinds_without=frozenset({"undead"}),
+    ),
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("1d6", 2, dtype=DamageType.NECROTIC),
-    dropped=("Target.creature_kind",),
     on=Trigger(Dropped, about_me, "it drops to 0 hit points"),
+    dropped=("Target.living",),
 )
 def m6078a4(c: Cast) -> None:
-    victim = c.target
-    if victim is not None and (c.is_kind("undead", on=victim) or c.is_kind("construct", on=victim)):
-        return
+    """"Living creatures" is the **negative** of two type words and not a
+    positive `kinds={"living"}`: only 25 blocks in the corpus print that word
+    and a character has no type line at all, so the positive form would refuse
+    nearly every creature the card catches. `kinds_without` is what the body
+    was already asking, and it is what `_living` means next door. #401."""
     if c.strike():
         c.hit()
         c.weakened(until=When.EONT)
