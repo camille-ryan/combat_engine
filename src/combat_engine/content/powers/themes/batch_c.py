@@ -341,12 +341,14 @@ def p12362(c: Cast) -> None:
        reach=MeleeOrRanged(1, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.PRIMAL, Keyword.WEAPON],
        attack=Attack(Pick.PRIMARY, vs=AC),
-       dropped=("c.shift(toward=)", "c.ignores_difficult(when=)"))
+       dropped=("c.ignores_difficult(when=)",))
 def p12363(c: Cast) -> None:
-    """The free shift is laid as a watch on the caster's own turn start.
-    Two clauses of it have nowhere to go: the shift must end closer to the
-    target, and it alone ignores difficult terrain -- laying
-    `c.ignores_difficult` for the turn would exempt the whole of it."""
+    """The free shift is laid as a watch on the caster's own turn start, and
+    "you must end this shift closer to the target" is `toward=` that target.
+
+    One clause still has nowhere to go: the shift *alone* ignores difficult
+    terrain, and laying `c.ignores_difficult` for the turn would exempt the
+    whole of it."""
     foe = c.target
     if c.strike(plus=_best(c) - c.attack_mod):
         c.damage(c.w(2), _best(c))
@@ -356,7 +358,7 @@ def p12363(c: Cast) -> None:
     def prowl(ev: Any) -> None:
         if ev.actor != c.me or c.adjacent(foe) or not _lonely(c):
             return
-        c.shift(c.primary_mod, who=c.me)
+        c.shift(c.primary_mod, who=c.me, toward=foe)
 
     c.watch(TurnStart, prowl, until=When.ENCOUNTER, on=c.me)
 
@@ -709,13 +711,18 @@ def p15940(c: Cast) -> None:
        reach=PERSONAL, target=SELF, keywords=[Keyword.MARTIAL],
        trigger="an ally within 5 squares of you falls unconscious",
        on=Trigger(Dropped, ally_within(5),
-                  "an ally within 5 squares falls unconscious"),
-       dropped=("c.shift(toward=)",))
+                  "an ally within 5 squares falls unconscious"))
 def p15941(c: Cast) -> None:
-    """"You must end the move farther from your ally" is a direction on a
-    move and nothing takes one."""
-    c.shift(1, who=c.me)
-    c.move(c.speed_of(c.me) + 2, who=c.me)
+    """"You must end the move farther from your ally" is `away_from=`, and
+    the ally it names is the trigger's own subject -- `Dropped.actor` is the
+    one that fell, not whatever struck it.
+
+    Both halves carry it. The printed leash is on the move alone, but the
+    shift is a square taken on the way out of the same retreat, and ranking
+    is not a veto: a decider that wants the other square still sees it."""
+    fallen = getattr(c.trigger, "actor", None)
+    c.shift(1, who=c.me, away_from=fallen)
+    c.move(c.speed_of(c.me) + 2, who=c.me, away_from=fallen)
 
 
 @power("p15942", level=6, cls="x7_924", usage=ENCOUNTER, action=INTERRUPT,

@@ -2050,8 +2050,22 @@ def m3774a1(c: Cast) -> None:
     target=ONE_CREATURE,
 )
 def m3774a2(c: Cast) -> None:
+    """Three basic attacks, each aimed when it is made rather than all three
+    at the creature the chooser handed over.
+
+    The basic attack here is m3774a0, whose own rider pushes what it hits 2
+    squares -- so swings two and three were being made at something no longer
+    in reach, and `toward=` cannot help because it is the target that moved.
+    A basic attack picks its own target, so each one takes whoever is in
+    reach; if the push has cleared the squares around it, the swing is not
+    made."""
     for _ in range(3):
-        c.basic(on=c.target)
+        victim = c.target if c.adjacent(c.target) else None
+        if victim is None:
+            victim = next((f for f in c.enemies() if c.adjacent(f)), None)
+        if victim is None:
+            return
+        c.basic(on=victim)
 
 
 def _hit_me_adjacent(world: World, me: int, ev: Any) -> bool:
@@ -2316,8 +2330,16 @@ def m3987a0(c: Cast) -> None:
     requires_text="usable only while bloodied",
 )
 def m3987a1(c: Cast) -> None:
-    for _ in range(2):
-        c.use_power("m3987a0", on=c.target)
+    """Two swings of m3987a0, whose own rider pushes what it hits 2 squares --
+    so the second was being made from out of reach. The card does not say both
+    swings are at the same creature, so the second is re-aimed at whoever is
+    in reach once the push has landed; with nobody adjacent it is not made."""
+    c.use_power("m3987a0", on=c.target)
+    victim = c.target if c.adjacent(c.target) else None
+    if victim is None:
+        victim = next((f for f in c.enemies() if c.adjacent(f)), None)
+    if victim is not None:
+        c.use_power("m3987a0", on=victim)
 
 
 def _hit_me_from_afar(world: World, me: int, ev: Any) -> bool:
@@ -2472,8 +2494,11 @@ def m3989a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
 )
 def m3989a3(c: Cast) -> None:
+    """The shift comes first and two swings follow it, so it is ranked
+    `toward=` the creature both swings are for -- unranked it could step out
+    of reach of the thing it is about to attack."""
     if c.first:
-        c.shift(1)
+        c.shift(1, toward=c.target)
     c.basic(on=c.target)
     if c.last:
         c.basic(on=c.target)
@@ -2553,8 +2578,11 @@ def m3990a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
 )
 def m3990a3(c: Cast) -> None:
+    """The shift comes first and two swings follow it, so it is ranked
+    `toward=` the creature both swings are for -- unranked it could step out
+    of reach of the thing it is about to attack."""
     if c.first:
-        c.shift(1)
+        c.shift(1, toward=c.target)
     c.basic(on=c.target)
     if c.last:
         c.basic(on=c.target)

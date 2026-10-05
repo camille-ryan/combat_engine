@@ -634,10 +634,15 @@ def m2252a2(c: Cast) -> None:
     here it is the thing that brings the target into reach. The +2 is a
     one-shot modifier rather than an argument, which is how `c.basic` can be
     given one at all, and it is spent by the roll it is for.
+
+    So the step is aimed, too: unbiased it was as likely to walk out of reach
+    as into it, and the swing landed anyway because the explicit-target arm
+    applies no reach check.
     """
-    c.move(2)
+    victim = c.target
+    c.move(2, toward=victim)
     c.bonus("attack", 2, until=When.EOT, on=c.me, once=True)
-    c.basic(on=c.target)
+    c.basic(on=victim)
 
 
 @power(
@@ -1147,6 +1152,9 @@ def m4124a1(c: Cast) -> None:
     an opportunity attack from the target" is narrower than the header's
     `no_provoke`, which is about using the power rather than about the flight,
     so it is `c.no_provoke(from_=)` aimed at the one creature named.
+
+    The flight itself is aimed as well: "at any point during the move" has no
+    finer unit than fly-then-swing, so the flight is what must close.
     """
     me = c.me
     _recharge_on(c, PowerUsed, lambda ev: ev.actor == me and ev.power == "m4124a2")
@@ -1154,7 +1162,7 @@ def m4124a1(c: Cast) -> None:
     if victim is None:
         return
     c.no_provoke(from_=victim, on=me, until=When.EOT)
-    c.move(8, at="fly")
+    c.move(8, at="fly", toward=victim)
     if c.basic(on=victim):
         c.prone(on=victim)
 

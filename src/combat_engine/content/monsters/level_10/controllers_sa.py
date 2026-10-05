@@ -1492,10 +1492,13 @@ def m2546a2(c: Cast) -> None:
     target=ONE_CREATURE,
 )
 def m2546a3(c: Cast) -> None:
+    """The flight is aimed at the creature the bite is for: "at any point
+    during the move" has no finer unit than move-then-bite, so the move has
+    to be the half that closes."""
     victim = c.target
     if victim is not None:
         c.no_provoke(from_=victim, on=c.me, until=When.EOT)
-    c.move(12, who=c.me)
+    c.move(12, who=c.me, toward=victim)
     if victim is not None:
         c.use_power("m2546a0", on=victim)
 

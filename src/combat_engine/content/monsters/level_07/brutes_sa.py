@@ -1918,14 +1918,24 @@ def m5373a3(c: Cast) -> None:
     whoever is nearest -- and returning when that one does not qualify threw the
     row away while somebody else in reach did. `_restricted_to` is the settled
     answer to that across the tree, and `Target.kind` is the gap in every case.
+
+    **Aimed twice, not once.** m5373a2 pushes what it hits 2 squares, so the
+    second claw was being swung at something no longer in reach -- and
+    `toward=` is no help, because it is the target that moved and not the
+    claw. So the second swing asks again: whoever still qualifies *and* is
+    still in reach, which is often the same creature when the first claw
+    missed. With nobody in reach the second claw is not swung.
     """
-    victim = _restricted_to(
-        c, 1, lambda f: c.bloodied(on=f) or c.is_(Condition.PRONE, on=f)
-    )
+    def qualifies(f: int) -> bool:
+        return (c.bloodied(on=f) or c.is_(Condition.PRONE, on=f)) and c.distance(f) <= 1
+
+    victim = _restricted_to(c, 1, qualifies)
     if victim is None:
         return
     c.use_power("m5373a2", on=victim)
-    c.use_power("m5373a2", on=victim)
+    again = _restricted_to(c, 1, qualifies)
+    if again is not None:
+        c.use_power("m5373a2", on=again)
 
 
 @power(
@@ -2468,9 +2478,13 @@ def m5956a3(c: Cast) -> None:
     """"Makes a melee basic attack" is `c.basic()`, which rolls whichever
     row that creature's basic actually is and returns only hit-or-miss --
     there is no door to read back the roll it made, so the printed
-    half-damage-on-a-miss has nowhere to read a number from."""
-    c.move(c.speed_of() * 2)
-    foe = next(iter(c.enemies()), None)
+    half-damage-on-a-miss has nowhere to read a number from.
+
+    The row declares no target, so the creature it is about to swing at is
+    picked *before* the move rather than after it -- the move is what brings
+    it into reach, and it cannot be aimed at a choice not yet made."""
+    foe = c.choose(c.enemies(), f"{c.ref}: who to run down")
+    c.move(c.speed_of() * 2, toward=foe)
     if foe is None:
         return
     c.bonus("damage", 8, kind="power", on=c.me, until=When.EOT, once=True)

@@ -2465,6 +2465,8 @@ class Cast:
         *,
         who: int | None = None,
         to: Square | None = None,
+        toward: int | None = None,
+        away_from: int | None = None,
         share: bool = False,
     ) -> bool:
         """Blink somewhere. `to` names the square, as `c.shift` already allowed.
@@ -2473,6 +2475,12 @@ class Cast:
         decider installed takes the lowest-sorted square -- fine for a player
         being asked, useless for a row whose printed line says exactly where
         it arrives.
+
+        `toward` names a creature to arrive near instead of the square to
+        arrive in, for "it teleports 5 squares before each attack": a row that
+        blinks and then swings has a square to pick and no way to say which,
+        so it blinked out of its own reach. `away_from` is the mirror. See
+        `_nearest_first`.
         """
         mover = self.me if who is None else who
         origin = squares(self.world, mover)
@@ -2506,7 +2514,12 @@ class Cast:
             )
         if not options:
             return False
-        dest = self.world.decide(mover, "teleport", sorted(options), f"{self.ref}: teleport")
+        dest = self.world.decide(
+            mover,
+            "teleport",
+            self._nearest_first(sorted(options), toward, away_from),
+            f"{self.ref}: teleport",
+        )
         return teleport(self.world, mover, dest, share=share)
 
     # -- conditions and modifiers -------------------------------------------
@@ -6966,7 +6979,14 @@ class Cast:
         self.note(f"{self.ref}: zone {zone} moves to {min(z.squares)}")
         return True
 
-    def jump(self, squares_: int, *, on: int | None = None) -> int:
+    def jump(
+        self,
+        squares_: int,
+        *,
+        on: int | None = None,
+        toward: int | None = None,
+        away_from: int | None = None,
+    ) -> int:
         """A jump: ground crossed rather than walked over.
 
         "You can jump a number of squares equal to your Wisdom modifier, and
@@ -6976,18 +6996,41 @@ class Cast:
         paid for by the power rather than out of the turn.
 
         Defaults to the caster, like the movement methods beside it.
+
+        `toward` and `away_from` are `c.move`'s, handed straight on, because a
+        jump is a move and "it jumps 6 squares and then uses claw twice" needs
+        the same bias: unranked, the leap landed at the lowest coordinate on
+        the board and the two claws swung from out of reach.
+
+        **It comes down somewhere legal.** The phasing that lets the leap
+        clear a body also lets `movement.reachable` *offer* that body's square
+        as the place to land -- `_clear` reads `phasing` itself, and only a
+        flyer's destinations are filtered -- which `settle` would not undo
+        until the end of the turn. Aimed, that square is the nearest one and
+        so the first one taken, so the jumper landed inside the creature it
+        was about to claw. `settle` after the phasing is given back puts it in
+        the nearest square it fits in, which is beside its target.
         """
+        from .movement import _clear, settle
+
         who = self.me if on is None else on
         if squares_ <= 0 or self.world.get(who, Position) is None:
             return 0
         over = self.phasing(until=When.EOT, on=who)
         rough = self.ignores_difficult(on=who, until=When.EOT)
         try:
-            return self.move(squares_, who=who)
+            return self.move(squares_, who=who, toward=toward, away_from=away_from)
         finally:
             for held in (over, rough):
                 if held is not None:
                     self.world.effects.end(held, "the jump ended")
+            # Asked with the phasing already given back, so `_clear` answers
+            # for a creature standing still rather than one passing through.
+            # Only when the landing is illegal, because `settle` also brings a
+            # flyer down and a legal leap must not do that.
+            spot = self.world.get(who, Position)
+            if spot is not None and not _clear(self.world, who, spot.squares):
+                settle(self.world, who)
 
     # -- a blow that lands twice ---------------------------------------------
 

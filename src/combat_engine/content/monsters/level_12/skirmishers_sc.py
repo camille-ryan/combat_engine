@@ -2083,12 +2083,14 @@ def m2608a2(c: Cast) -> None:
     """Two swings of the printed weapon row, with a step between them, and the
     rider owed only if both land -- so the whole thing runs once for the use
     and `c.landed` is read after each borrowed swing. A printed "shift" with
-    no number is one square."""
+    no number is one square. The step is `toward=` the creature about to be
+    swung at: unranked it was free to walk out of reach between the two
+    swings, and the explicit-target arm would have landed the hit anyway."""
     if not c.first:
         return
     landed: list[int] = []
     for victim in c.targets[:2]:
-        c.shift(1)
+        c.shift(1, toward=victim)
         c.use_power("m2608a0", on=victim)
         if c.landed:
             landed.append(victim)

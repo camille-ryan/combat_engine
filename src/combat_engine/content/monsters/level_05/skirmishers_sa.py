@@ -979,8 +979,28 @@ def m3532a0(c: Cast) -> None:
 def m3532a1(c: Cast) -> None:
     """"Two different targets" is what `UpTo(2)` already enforces. The
     printed attack line did not survive extraction, so each swing rolls
-    through the named basic attack instead of a number invented here."""
-    c.use_power("m3532a0", on=c.target)
+    through the named basic attack instead of a number invented here.
+
+    m3532a0's own rider steps it 2 squares, and that step lands *between* the
+    two swings -- so the second target was being hit from out of reach. The
+    fix is here and not in m3532a0: one `toward=` cannot serve two different
+    creatures, and the row that moves cannot know who is still owed a swing.
+    So each swing is aimed when it is made, at someone in reach who has not
+    been swung at yet, and the whole use runs on `c.first`.
+    """
+    if not c.first:
+        return
+    swung: list[int] = []
+    for chosen in c.targets[:2]:
+        victim = chosen if c.adjacent(chosen) else None
+        if victim is None:
+            victim = next(
+                (f for f in c.enemies() if f not in swung and c.adjacent(f)), None
+            )
+        if victim is None:
+            continue
+        swung.append(victim)
+        c.use_power("m3532a0", on=victim)
 
 
 @power(
@@ -1072,7 +1092,29 @@ def m3544a1(c: Cast) -> None:
     target=UpTo(2),
 )
 def m3544a2(c: Cast) -> None:
-    c.use_power("m3544a0", on=c.target)
+    """One swing of the printed basic attack per target.
+
+    What broke the second swing is not in this row at all: m3544a4 is a free
+    action on any melee hit of its own and it steps 1 square, so it fires
+    between the two swings here. The fix is in this row rather than in
+    m3544a4 -- that row is a card in its own right, it cannot know a swing is
+    pending, and one `toward=` cannot serve two different creatures. So each
+    swing is aimed when it is made, at someone in reach who has not been
+    swung at yet, and the whole use runs on `c.first`.
+    """
+    if not c.first:
+        return
+    swung: list[int] = []
+    for chosen in c.targets[:2]:
+        victim = chosen if c.adjacent(chosen) else None
+        if victim is None:
+            victim = next(
+                (f for f in c.enemies() if f not in swung and c.adjacent(f)), None
+            )
+        if victim is None:
+            continue
+        swung.append(victim)
+        c.use_power("m3544a0", on=victim)
 
 
 @power(
@@ -1166,7 +1208,10 @@ def m4000a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
 )
 def m4000a2(c: Cast) -> None:
-    c.shift(3)
+    """"Before, between, or after" is taken before, and ranked `toward=` the
+    creature both swings are for: three unranked squares were enough to walk
+    out of reach of the thing it was about to bite."""
+    c.shift(3, toward=c.target)
     c.use_power("m4000a0", on=c.target)
     c.use_power("m4000a1", on=c.target)
 

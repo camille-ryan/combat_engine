@@ -1902,7 +1902,9 @@ def m5494a3(c: Cast) -> None:
     _recharge_when_bloodied(c)
     victim = c.target
     c.no_provoke(on=c.me, until=When.EOT)
-    c.jump(6)
+    # The leap is what brings the two claws into reach, so it is aimed at the
+    # creature they are for; unaimed it landed at the board's low corner.
+    c.jump(6, toward=victim)
     if victim is None:
         return
     c.bonus("attack", 1, on=c.me, until=When.EOT)

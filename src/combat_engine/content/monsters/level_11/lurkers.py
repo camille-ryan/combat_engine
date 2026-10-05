@@ -388,10 +388,15 @@ def m290a2(c: Cast) -> None:
     here it is the thing that brings the target into reach. The +2 is a
     one-shot modifier rather than an argument, which is how `c.basic` can be
     given one at all, and it is spent by the roll it is for.
+
+    So the step is aimed, too: unbiased it was as likely to walk out of reach
+    as into it, and the swing landed anyway because the explicit-target arm
+    applies no reach check.
     """
-    c.move(2)
+    victim = c.target
+    c.move(2, toward=victim)
     c.bonus("attack", 2, until=When.EOT, on=c.me, once=True)
-    c.basic(on=c.target)
+    c.basic(on=victim)
 
 
 @power(

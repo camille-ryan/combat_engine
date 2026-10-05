@@ -2909,15 +2909,21 @@ def m5839a0(c: Cast) -> None:
     damage=Damage("2d10", 6),
 )
 def m5839a1(c: Cast) -> None:
+    """"Then shift 1 square to a square the target vacated" is the *target's*
+    square, `c.there`, read before the push -- `c.here` is the attacker's own,
+    so the step was into the square it was already standing in and did
+    nothing. It is what keeps the pair adjacent, and that is what m5839a2's
+    second swing needs: without it the push left the target 2 squares away and
+    the second swing landed from out of reach."""
     if not c.strike():
         return
     c.hit()
     victim = c.target
     if victim is None:
         return
-    was = c.here
+    vacated = c.there
     c.push(1, on=victim)
-    c.shift(1, to=was)
+    c.shift(1, to=vacated)
 
 
 @power(

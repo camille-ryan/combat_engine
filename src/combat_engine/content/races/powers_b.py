@@ -408,14 +408,15 @@ def p13689(c: Cast) -> None:
     action=MOVE,
     reach=CloseBurst(1),
     target=ONE_ALLY,
-    dropped=("c.shift(toward=)",),
 )
 def p14389(c: Cast) -> None:
-    """"Must end adjacent to each other" is a constraint on the destination
-    the decider picks, and there is no way to hand it one."""
-    c.shift(6, who=c.target)
-    if c.target != c.me:
-        c.shift(6, who=c.me)
+    """"Must end adjacent to each other" is each of the two stepping
+    `toward=` the other, so both lists of squares are offered with the ones
+    that close the gap first."""
+    friend = c.target
+    c.shift(6, who=friend, toward=c.me)
+    if friend != c.me:
+        c.shift(6, who=c.me, toward=friend)
 
 
 # -- r7 ---------------------------------------------------------------------
@@ -1022,13 +1023,12 @@ def p16641(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(3),
     target=EACH_ALLY,
-    dropped=("c.shift(toward=)",),
 )
 def p16543(c: Cast) -> None:
-    """"Must end closer to you" is a constraint on the square the decider
-    picks and there is no way to hand it one."""
+    """"Must end closer to you" is `toward=c.me`: each ally's reachable
+    squares are offered nearest-the-caster first."""
     if c.target != c.me:
-        c.shift(2, who=c.target)
+        c.shift(2, who=c.target, toward=c.me)
 
 
 @power(

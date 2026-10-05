@@ -1240,13 +1240,18 @@ def m3783a0(c: Cast) -> None:
 def m3783a1(c: Cast) -> None:
     """"Recharges when first bloodied" is `_recharge_when_bloodied`, armed
     once. The numbers are the scimitar's own line, m3783a0, used rather than
-    copied."""
+    copied.
+
+    "And can **then** shift 1 square" is one step after the swinging, so it
+    is owed on `c.last` and not on `c.first`: taken first it stepped away
+    between the two targets' swings and the second landed from out of
+    reach."""
     if c.first:
         _recharge_when_bloodied(c)
     victim = c.target
     if victim is not None:
         use(c.world, c.me, "m3783a0", targets=[victim], spend=False)
-    if c.first:
+    if c.last:
         c.shift(1)
 
 

@@ -1745,9 +1745,12 @@ def m4749a1(c: Cast) -> None:
     attack=Attack(vs=AC, printed=13), damage=Damage("1d12", 8),
 )
 def m4749a2(c: Cast) -> None:
+    """One swing, a step, another swing. The step is ranked `toward=` the
+    creature the second swing is for: two unranked squares were enough to end
+    out of reach, and the second swing landed from there anyway."""
     if c.strike():
         c.hit()
-    c.shift(2)
+    c.shift(2, toward=c.target)
     c.use_power("m4749a0", on=c.target, spend=False)
 
 

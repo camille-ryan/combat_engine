@@ -295,11 +295,12 @@ def m6641a0(c: Cast) -> None:
 def m6641a1(c: Cast) -> None:
     """"Uses bite at any point during that movement" has no finer unit than
     move-then-strike; the attack and damage are `m6641a0`'s own, so this row
-    carries none of its own."""
+    carries none of its own. So the flight is aimed at the creature the bite
+    is for -- it is the half that has to close."""
     me = c.me
     victim = c.target
     c.no_provoke(on=me, until=When.EOT)
-    c.move(c.speed_of(), at="fly")
+    c.move(c.speed_of(), at="fly", toward=victim)
     if victim is not None:
         c.use_power("m6641a0", on=victim)
 

@@ -858,7 +858,6 @@ def f2056(c: Cast) -> None:
 
 @power("f2053", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.shift(away_from=)",),
        trigger="an enemy provokes an opportunity attack from you")
 def f2053(c: Cast) -> None:
     """An ally shifts when an enemy provokes from you.
@@ -870,10 +869,12 @@ def f2053(c: Cast) -> None:
     ranged power used in a threatened square, and by `c.provoke`, which
     is every way a provocation happens.
 
-    Dropped: "to a square not adjacent to the provoking enemy". `c.shift`
-    takes a destination or leaves it to the decider, and there is no way
-    to hand it a square to stay away from -- so the ally shifts, and
-    where it lands is the decider's.
+    "To a square not adjacent to the provoking enemy" is `away_from=` that
+    enemy: the ally's squares are offered farthest-from-it first, so the
+    step leaves the enemy's reach whenever any square it can reach does.
+    Ranking and not a veto -- a decider that wants a nearer square still
+    sees it, which is the same bargain `toward=` strikes on the rows that
+    must close.
     """
     me = c.me
 
@@ -882,7 +883,7 @@ def f2053(c: Cast) -> None:
             return
         near = [a for a in allies(c.world, me) if a != me and c.adjacent(to=a)]
         if near and c.int_mod > 0:
-            c.shift(c.int_mod, who=near[0])
+            c.shift(c.int_mod, who=near[0], away_from=ev.provoker)
 
     c.watch(OpportunityWindow, provoked, on=me, until=When.ENCOUNTER,
             label=f"{c.ref} provoked")

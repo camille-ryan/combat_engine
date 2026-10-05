@@ -816,13 +816,13 @@ _swap("f3206", "f3206b", Swap(6, utility=True))
        requires=_wielding("gouge"),
        requires_text="wielding the weapon this chain names",
        trigger="you hit an enemy with a gouge",
-       on=Trigger(Hit, _i_hit, "you hit an enemy"),
-       dropped=("c.shift(toward=)",))
+       on=Trigger(Hit, _i_hit, "you hit an enemy"))
 def f3206b(c: Cast) -> None:
-    """The distance is right and the destination is not: `c.shift` picks
-    a square through the world's decider and takes no creature to close
-    on, so "to a square adjacent to the enemy" is the dropped half."""
-    c.shift(3)
+    """"To a square adjacent to the enemy" is `toward=` the creature the
+    trigger is about: the squares are offered closest-first, so the step
+    closes on the one just hit instead of going wherever the decider's
+    first option happened to be."""
+    c.shift(3, toward=c.trigger.target)
 
 
 _swap("f3207", "f3207b", Swap(3, Usage.ENCOUNTER))
@@ -1504,7 +1504,7 @@ _F3249 = ("p2104", "p4369", "p620")
 
 
 @power("f3249", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.shift(toward=)",))
+       reach=PERSONAL, target=SELF, dropped=("c.grant_action(toward=)",))
 def f3249(c: Cast) -> None:
     """**The spec carries the Associated Powers line now**, same as
     `f3218` and `f3230`, so the shift has something to ride on.
@@ -1514,9 +1514,12 @@ def f3249(c: Cast) -> None:
     them apart. `c.grant_action` follows `c.target`, so the offer is
     aimed at `c.me` by hand.
 
-    Dropped, as on `f3206b`: the shift's *destination* -- "to a square
-    adjacent to the enemy" -- which `c.shift` picks through the world's
-    decider with no creature to close on."""
+    Dropped, and **not** the same gap `f3206b` had: that row calls
+    `c.shift` itself and now names the creature to close on. Here the
+    shift is taken later, by whoever the minor action was granted to, and
+    `c.grant_action` carries a cost and a count and nothing about where
+    the step may end -- so "to a square adjacent to the enemy" has no
+    channel to travel down, whatever `c.shift` learns to take."""
     c.bonus("skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER,
             kind="feat")
 

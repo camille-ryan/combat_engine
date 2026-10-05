@@ -217,9 +217,17 @@ def _restricted_to(c: Cast, reach: int, test: Callable[[int], bool]) -> int | No
     `Target.relation`, `Target.condition`, `Target.bloodied`,
     `Target.creature_kind`, `Target.ongoing` or `Target.ident` -- because one
     symbol standing for all six could not go green correctly for any of them.
+
+    **The first branch used to skip the reach test.** It returned the chooser's
+    pick on the strength of `test` alone, while the fallback below checks
+    `c.distance(f) <= reach` -- so a target handed in from outside
+    `candidates()` was accepted at any distance, which is #381's path exactly.
+    `candidates()` normally guarantees reach, so this only bit a row fired with
+    an explicit target or one where something moved between the offer and the
+    body. One line, and about 160 rows call this.
     """
     foe = c.target
-    if foe is not None and test(foe):
+    if foe is not None and test(foe) and c.distance(foe) <= reach:
         return foe
     return next((f for f in c.enemies() if test(f) and c.distance(f) <= reach), None)
 

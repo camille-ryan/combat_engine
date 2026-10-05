@@ -1501,8 +1501,30 @@ def m3821a1(c: Cast) -> None:
     target=UpTo(2),
 )
 def m3821a2(c: Cast) -> None:
-    ranged = c.choose([False, True], f"{c.ref}: melee or ranged")
-    c.basic(on=c.target, ranged=bool(ranged))
+    """Two basic attacks, each melee or ranged, aimed when it is made.
+
+    m3821a0's own rider steps it 2 squares on a hit and that is not optional,
+    so it lands between the two swings and the second was being made from out
+    of reach. The fix is here rather than in m3821a0: one `toward=` cannot
+    serve two different targets, and the row that moves cannot know who is
+    still owed a swing. A melee swing therefore takes whoever is in reach and
+    has not been swung at yet; a ranged one keeps its printed target. The
+    whole use runs on `c.first`.
+    """
+    if not c.first:
+        return
+    swung: list[int] = []
+    for chosen in c.targets[:2]:
+        ranged = bool(c.choose([False, True], f"{c.ref}: melee or ranged"))
+        victim: int | None = chosen
+        if not ranged and not c.adjacent(chosen):
+            victim = next(
+                (f for f in c.enemies() if f not in swung and c.adjacent(f)), None
+            )
+        if victim is None:
+            continue
+        swung.append(victim)
+        c.basic(on=victim, ranged=ranged)
 
 
 @power(

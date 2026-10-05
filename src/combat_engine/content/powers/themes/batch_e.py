@@ -1313,12 +1313,16 @@ def p16374(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.STANCE],
-    dropped=("c.shift(toward=)",),
 )
 def p16375(c: Cast) -> None:
     """The free shift is printed with a leash -- it must not take you further
-    from your quarry -- and `c.shift` takes a count or a square, not a
-    creature to stay near."""
+    from the quarry -- which is `toward=` that creature: nearest-first is
+    exactly "closer to or the same distance from".
+
+    Who the quarry is has to be looked up each time rather than closed over,
+    because the stance can be assumed before `p16374` has named one and the
+    naming can change hands during the encounter. With nobody named there is
+    nothing to stay near and the step is unled, as printed."""
     c.stance()
     c.bonus("speed", 2, kind="power", on=c.me, until=When.STANCE)
     for defence in DEFENCES:
@@ -1328,8 +1332,10 @@ def p16375(c: Cast) -> None:
         )
 
     def edge(ev: TurnEnd) -> None:
-        if ev.actor == c.me:
-            c.shift(1)
+        if ev.actor != c.me:
+            return
+        hunted = next((foe for foe in c.enemies() if c.is_quarry(on=foe)), None)
+        c.shift(1, toward=hunted)
 
     c.watch(TurnEnd, edge, until=When.STANCE, on=c.me)
 

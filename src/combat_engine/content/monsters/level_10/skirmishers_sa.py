@@ -1936,13 +1936,17 @@ def m3793a1(c: Cast) -> None:
     target=ONE_CREATURE,
 )
 def m3793a2(c: Cast) -> None:
+    """The step between the two swings is ranked `toward=` the creature the
+    second one is for -- unranked it walked out of reach and the second swing
+    landed anyway. The step after the last swing has nothing pending, so it
+    stays the free choice the card prints."""
     victim = c.target
     if victim is None:
         return
     combo = c.choose(["both melee", "melee and ranged"], f"{c.ref}: combo")
     second = "m3793a0" if combo == "both melee" else "m3793a1"
     c.use_power("m3793a0", on=victim, spend=False, again=True)
-    c.shift(1)
+    c.shift(1, toward=victim)
     c.use_power(second, on=victim, spend=False, again=True)
     c.shift(1)
 
@@ -2653,9 +2657,15 @@ def m4471a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
 )
 def m4471a2(c: Cast) -> None:
-    for _ in range(2):
-        if c.basic(on=c.target):
-            c.shift(1)
+    """Two swings, each with a free step after a hit. The first step is ranked
+    `toward=` the creature still to be hit -- unranked it stepped out of reach
+    and the second swing landed from there anyway. Nothing is pending after
+    the second, so that step keeps the free choice the card prints, which is
+    why this is written out rather than looped."""
+    if c.basic(on=c.target):
+        c.shift(1, toward=c.target)
+    if c.basic(on=c.target):
+        c.shift(1)
 
 
 @power(
@@ -3474,7 +3484,11 @@ def m5950a3(c: Cast) -> None:
     """Declared `target=SELF`: the attack is `m5950a2`'s own line, aimed
     after each teleport rather than picked by this row's own header, the
     `m4186a2` shape one level down. `reach=PERSONAL` with `ONE_CREATURE`
-    cannot resolve a target at all, which left this row unusable."""
+    cannot resolve a target at all, which left this row unusable.
+
+    The blink is aimed: "before each attack" means the square it arrives in
+    has to be one it can swing from, and an unbiased `c.teleport` picked the
+    lowest coordinate on the board and then swung from across it."""
     foes = c.enemies()
     victim = c.choose(foes, f"{c.ref}: who to chase") if foes else None
     if victim is None:
@@ -3482,7 +3496,7 @@ def m5950a3(c: Cast) -> None:
     times = 3 if c.bloodied() else 2
     hits = 0
     for _ in range(times):
-        c.teleport(5)
+        c.teleport(5, toward=victim)
         c.use_power("m5950a2", on=victim, spend=False, again=True)
         if c.landed:
             hits += 1
@@ -3918,11 +3932,16 @@ def m6481a1(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m6481a2(c: Cast) -> None:
+    """The step is ranked `toward=` the creature just attacked. The card gives
+    it no direction, and this trait fires *between* the two swings of m6481a4
+    and m6481a8 -- unranked it took the second swing out of reach, which the
+    explicit-target arm then hit from anyway. Ranking only: `World.decide`
+    still sees every square."""
     me = c.me
 
     def after(ev: Hit | Miss) -> None:
         if getattr(ev, "attacker", None) == me:
-            c.shift(2)
+            c.shift(2, toward=getattr(ev, "target", None))
 
     c.watch(Hit, after, until=When.ENCOUNTER, on=me, label=f"{c.ref} glide-hit")
     c.watch(Miss, after, until=When.ENCOUNTER, on=me, label=f"{c.ref} glide-miss")

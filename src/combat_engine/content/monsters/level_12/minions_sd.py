@@ -1303,10 +1303,11 @@ def m6128a2(c: Cast) -> None:
     an attack nor damage. The step is taken first: "during the movement" is a
     choice the engine has no way to interleave, and arriving before swinging
     is the half of it that matters, because the shift is what brings the
-    target into reach.
+    target into reach -- which is why it is aimed at that creature rather
+    than left to pick any square it can reach.
     """
     victim = c.target
-    c.shift(c.speed_of())
+    c.shift(c.speed_of(), toward=victim)
     if victim is not None:
         c.use_power("m6128a1", on=victim, spend=False)
 

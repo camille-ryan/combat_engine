@@ -837,9 +837,14 @@ def m6544a0(c: Cast) -> None:
     damage=Damage("1d8", 7),
 )
 def m6544a1(c: Cast) -> None:
+    """The step is ranked `toward=` its own target. The card gives it no
+    direction, and m6544a3 is this row followed by m6544a2 at the same
+    creature -- so this step lands between the two swings, and unranked it put
+    the second out of reach. Ranking only: `World.decide` still sees every
+    square."""
     if c.strike():
         c.hit()
-    c.shift(1)
+    c.shift(1, toward=c.target)
 
 
 @power(
