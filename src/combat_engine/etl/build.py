@@ -1861,6 +1861,24 @@ def _cross_reference_rest(
         words = re.findall(r"[A-Za-z']+", low)
         if words:
             by_word.setdefault(words[0], []).append((name, ref))
+            # **And under the first word cut at an apostrophe**, because the
+            # two sides cut differently. The spec side builds its word set with
+            # `[a-z']+` over text that may set a *curly* apostrophe, which that
+            # class treats as a boundary -- so a possessive name set with the
+            # curly form yields only the fragment before it, while this bucket
+            # is keyed on the whole possessive from the straight-apostrophe
+            # name. The two never meet.
+            #
+            # The ranked `by_name` lookup further down normalises both
+            # spellings, and the note there explains why it must -- but it only
+            # runs once a bucket has *already* matched, so it cannot rescue a
+            # name whose bucket was never reached. One trap spec printed a
+            # neighbour's name for exactly this reason after the table list was
+            # fixed, and the normalising-the-name fix did nothing because the
+            # name was already straight: it is the **spec** that is curly.
+            bare = re.findall(r"[A-Za-z]+", low)
+            if bare and bare[0] != words[0]:
+                by_word.setdefault(bare[0], []).append((name, ref))
             # **And under its plural**, because a card naming *another*
             # creature very often names several of them: "two <name>s appear".
             # The bucket is keyed on the singular first word and the spec's own
@@ -1951,8 +1969,16 @@ def _cross_reference_rest(
             speaker[ref] = found[0]
 
     changed = 0
+    # **`trap` and `racial_trait` were missing from here and from
+    # `leaks.py --specs`'s identical list**, so the scrubber and the checker
+    # agreed only by both being blind. 36 trap specs printed a neighbour's
+    # printed name -- another trap's, a monster's, an item's -- and the check
+    # said "no printed names in any spec". This docstring's claim that the
+    # shared `identifies` test "keeps the two halves of this arrangement from
+    # drifting apart" holds only once both halves cover the same tables.
     for table in ("power", "monster_power", "class_feature",
-                  "companion", "item", "item_block", "feat", "race"):
+                  "companion", "item", "item_block", "feat", "race",
+                  "trap", "racial_trait"):
         rows = out.execute(f"SELECT ref, spec FROM {table}").fetchall()
         for ref, spec in rows:
             if not spec:

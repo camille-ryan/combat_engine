@@ -333,8 +333,19 @@ def specs() -> int:
 
     db = game()
     found: list[tuple[str, str, str, list[str]]] = []
+    # **Every table with a `spec` column, which this list was not.** `trap`
+    # (631 specs) and `racial_trait` (151) were absent, so this walk printed
+    # "no printed names in any spec" over 782 specs it had never read -- a
+    # check that cannot fail, which `scripts/CLAUDE.md` names as the same fault
+    # as a check that is too generous.
+    #
+    # Both are dormant rather than harmless: `spec.py:_render` has no `t:` or
+    # `rt:` branch, so no author is handed either brief today. Adding those
+    # branches before this walk was watching would have shipped names on the
+    # first day. #415, #419.
     for table in ("power", "monster_power", "class_feature", "companion",
-                  "item", "item_block", "feat", "race"):
+                  "item", "item_block", "feat", "race",
+                  "trap", "racial_trait"):
         for ref, spec in db.execute(f"SELECT ref, spec FROM {table}"):
             for line in (spec or "").splitlines():
                 for name, refs in _hits(line, index):
