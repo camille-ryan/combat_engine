@@ -747,6 +747,21 @@ def sight_capped(world: World, watcher: int, who: int) -> bool:
     return cap > 0 and distance_between(world, watcher, who) > cap
 
 
+def blinded(world: World, eid: int) -> bool:
+    """Can this creature see at all?
+
+    **The reader `Rules.blind` never had.** `conditions.py` declares the flag and
+    sets it for `Condition.BLINDED`, and nothing in the engine consulted it -- so
+    a blinded creature granted combat advantage and took its -2, because those
+    two have readers, and could still see perfectly well. Every sight question in
+    the tree answered as though it were not blind.
+
+    Read off the flag rather than testing `Condition.BLINDED` directly, so that a
+    second condition meaning "cannot see" only has to say so in `RULES`. #406.
+    """
+    return any(rules(c).blind for c in active(world, eid))
+
+
 def unseen_by(world: World, watcher: int, who: int) -> bool:
     """Is `who` invisible to `watcher`?
 
@@ -755,7 +770,15 @@ def unseen_by(world: World, watcher: int, who: int) -> bool:
     monster trait -- had nothing to switch off. Asked here rather than at
     each of the two places that read `HIDDEN_FROM`, so the sight and the
     combat advantage can never disagree.
+
+    **Blindness is asked first and answers everything.** A creature that cannot
+    see does not see anybody, hidden or not, and `sight_capped`'s docstring said
+    as much while pointing elsewhere: "a cap on sight rather than the loss of it,
+    so `Condition.BLINDED` says something else". That something else was nowhere
+    until #406.
     """
+    if blinded(world, watcher):
+        return True
     if sight_capped(world, watcher, who):
         return True
     return world.relations.holds(Relation.HIDDEN_FROM, who, watcher) and not sees_through(

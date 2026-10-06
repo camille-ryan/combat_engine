@@ -1206,20 +1206,15 @@ def m5286a2(c: Cast) -> None:
     ),
     attack=Attack(vs=AC, printed=8),
     damage=Damage("2d6", 3),
-    dropped=("Rules.blind",),
 )
 def m5286a3(c: Cast) -> None:
-    """"Cannot see the creature" is two states and only one of them is
-    buildable.
+    """"Cannot see the creature" is two states and both are asked now.
 
-    The hiding half is the target line, routed through `query.unseen_by`. **The
-    blindness half cannot be written at all:** `Rules.blind` is set for
-    `Condition.BLINDED` and read by nothing, so no part of the engine thinks a
-    blinded creature cannot see -- and this stat block blinds enemies two rows
-    up expressly to set this one up. So the combination the page is built around
-    is refused, and the marker names that rather than the target field, which
-    now works. #406.
-    """
+    The target line routes through `query.unseen_by`, which since #406 reads
+    `Rules.blind` -- so the hiding half and the blindness half are one question.
+    That matters here more than anywhere: this stat block blinds enemies two rows
+    up expressly to set this row up, and until the flag had a reader the
+    combination its page is built around was refused."""
     if c.strike():
         c.hit()
 
