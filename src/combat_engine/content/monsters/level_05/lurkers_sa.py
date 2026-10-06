@@ -209,7 +209,7 @@ def m1137a1(c: Cast) -> None:
     usage=AT_WILL,
     action=FREE,
     reach=CloseBurst(1),
-    target=Target(side="enemy", count=1, everyone=True, label="enemies in the burst"),
+    target=Target(side="enemy", everyone=True, label="enemies in the burst"),
     trigger="it drops to 0 hit points",
     on=Trigger(Dropped, about_me, "it drops"),
 )
@@ -664,7 +664,7 @@ def m1480a0(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=CloseBurst(6),
-    target=Target(side="enemy", count=1, everyone=True, label="enemies in the burst"),
+    target=Target(side="enemy", everyone=True, label="enemies in the burst"),
     keywords=[Keyword.ACID],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("1d6", 4, dtype=DamageType.ACID, kind=LIMITED),
@@ -971,7 +971,7 @@ def m3528a0(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(3),
-    target=Target(side="enemy", count=1, everyone=True, label="enemies in the burst"),
+    target=Target(side="enemy", everyone=True, label="enemies in the burst"),
     keywords=[Keyword.FEAR, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=8),
     damage=Damage("1d8", 2, dtype=DamageType.PSYCHIC, kind=LIMITED),
@@ -1078,7 +1078,7 @@ def m3976a1(c: Cast) -> None:
     recharge=6,
     action=MINOR,
     reach=CloseBurst(1),
-    target=Target(side="enemy", count=1, everyone=True, label="enemies in the burst"),
+    target=Target(side="enemy", everyone=True, label="enemies in the burst"),
     keywords=[Keyword.ILLUSION, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=7),
     damage=Damage("", 5, dtype=DamageType.PSYCHIC, kind=LIMITED),
@@ -1706,7 +1706,7 @@ def m5317a2(c: Cast) -> None:
     recharge=6,
     action=MINOR,
     reach=CloseBurst(3),
-    target=Target(side="enemy", count=1, everyone=True, label="enemies in the burst"),
+    target=Target(side="enemy", everyone=True, label="enemies in the burst"),
     attack=Attack(vs=WILL, printed=6),
 )
 def m5317a3(c: Cast) -> None:
@@ -1911,7 +1911,7 @@ def m6445a0(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(2),
     target=Target(
-        side="any", count=1, everyone=True,
+        side="any", everyone=True,
         label="nonplant creatures in the burst",
         kinds_without=frozenset({"plant"}),
     ),

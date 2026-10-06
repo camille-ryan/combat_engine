@@ -207,7 +207,7 @@ def m1504a2(c: Cast) -> None:
     usage=AT_WILL,
     action=FREE,
     reach=CloseBurst(1),
-    target=Target(side="enemy", count=1, everyone=True, label="enemies in the burst"),
+    target=Target(side="enemy", everyone=True, label="enemies in the burst"),
     trigger="it is reduced to 0 hit points",
     on=Trigger(Dropped, about_me, "it is reduced to 0 hit points"),
 )

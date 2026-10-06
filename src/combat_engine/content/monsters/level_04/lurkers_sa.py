@@ -1325,7 +1325,7 @@ def m6345a0(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(2),
     target=Target(
-        "any", 1, everyone=True,
+        "any", everyone=True,
         label="nonplant creatures in the burst",
         kinds_without=frozenset({"plant"}),
     ),

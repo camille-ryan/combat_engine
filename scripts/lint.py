@@ -159,6 +159,14 @@ def main() -> int:
         )
         faults += 1
 
+    for where, ref, said in _count_the_area_decides():
+        print(
+            f"{where}: {ref} declares Target(count={said}, everyone=True) --"
+            f" `everyone=` means the area decides, so the count is never read."
+            f" Drop it, or drop `everyone=` if the card really prints a cap."
+        )
+        faults += 1
+
     for ref, why in _spent_once_a_fight():
         print(f"{ref}: {why}")
         faults += 1
@@ -640,6 +648,57 @@ def _flat_damage_as_a_number() -> list[tuple[str, str, str]]:
                         ):
                             rel = path.relative_to(ROOT)
                             out.append((f"{rel}:{call.lineno}", ref, first.value))
+    return out
+
+
+def _count_the_area_decides() -> list[tuple[str, str, int]]:
+    """`Target(count=N, everyone=True)` -- two contradictory claims, one discarded.
+
+    `everyone=True` means the area decides who is in it, so `count` is never
+    read. A header carrying both says "everybody" and "N of them" at once and
+    nothing reports which won: a reader cannot tell a cap that is broken from a
+    number that was never a cap.
+
+    Ten rows carry it and **all ten cards print no cap** -- every one is a burst
+    hitting "each target" or "<kind> in the burst", so the `1` on them is a
+    default nobody read rather than a restriction being overridden. Which is
+    why this is a lint rule and not an engine change: honouring `count` would
+    have silently narrowed ten correct rows.
+
+    Read those ten cards before loosening this. The printed shape that *would*
+    need a cap -- "up to three creatures in the burst" -- is real in the books
+    and simply does not appear among the rows written against `everyone=`.
+    """
+    out: list[tuple[str, str, int]] = []
+    for path in _asked_for():
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for dec in node.decorator_list:
+                if not isinstance(dec, ast.Call):
+                    continue
+                for kw in dec.keywords:
+                    if kw.arg != "target" or not isinstance(kw.value, ast.Call):
+                        continue
+                    aim = kw.value
+                    if not any(k.arg == "everyone" for k in aim.keywords):
+                        continue
+                    # `count` is the second positional as well as a keyword.
+                    said = None
+                    if len(aim.args) >= 2 and isinstance(aim.args[1], ast.Constant):
+                        said = aim.args[1].value
+                    for k in aim.keywords:
+                        if k.arg == "count" and isinstance(k.value, ast.Constant):
+                            said = k.value.value
+                    # 99 and up is the tree's spelling of "no cap", which is
+                    # what `everyone=` already means -- agreement, not conflict.
+                    if isinstance(said, int) and said < 99:
+                        rel = path.relative_to(ROOT)
+                        out.append((f"{rel}:{aim.lineno}", node.name, said))
     return out
 
 

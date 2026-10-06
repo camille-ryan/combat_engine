@@ -3515,7 +3515,7 @@ def m6181a2(c: Cast) -> None:
     once_per_round=True,
     reach=CloseBurst(2),
     target=Target(
-        side="enemy", count=1, everyone=True,
+        side="enemy", everyone=True,
         label="dazed enemies in the burst",
         conditions=frozenset({Condition.DAZED}),
     ),

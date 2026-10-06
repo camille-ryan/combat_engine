@@ -2151,7 +2151,7 @@ def m5878a4(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target(side="ally", count=1, everyone=True, label="kobold allies in the burst"),
+    target=Target(side="ally", everyone=True, label="kobold allies in the burst"),
     dropped=("Target.creature_kind",),
 )
 def m5878a5(c: Cast) -> None:
