@@ -41,7 +41,15 @@ The rest of the policy:
 Three orthogonal axes. Pick one from each that applies.
 
 * **Component** — `etl`, `engine`, `content`, `wire`, `ui`, `policy`,
-  `chargen`, `story`. Exactly one.
+  `chargen`, `story`. Exactly one. `policy` is the **AI policy** —
+  `src/combat_engine/policy/`, what the AI chooses — and nothing else.
+* **`instruments`** for `scripts/`, which belongs to no component and so has
+  no entry above. The label existed and this list did not mention it, so
+  eight issues about an instrument were filed against a component instead —
+  five of them on `policy`, which made "show me the AI policy work" return
+  the audit board and a browser check. If the fix is in `scripts/`, it is
+  `instruments`; if the deliverable is a row or a marker, it is the
+  component that owns the row.
 * **Kind** — `bug`, `balance`, `documentation`, `enhancement`.
 * **Content type**, when it is content work — `monsters`, `powers`,
   `items`, `feats`, `features`.
