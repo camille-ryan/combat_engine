@@ -185,3 +185,73 @@ Coverage moves 20,507 → ~20,681 written and 910 → 736 undeclared.
 * **D**: `coverage.py --kind all --book ""`.
 * Drive rows rather than trusting a verdict. Five defects this round were found
   only by driving, each reading as correct in source.
+
+---
+
+# Outcome
+
+All four sections attempted. **A, B and C landed; D was mostly impossible and the
+plan was wrong about why.**
+
+```
+cacf366  A1 A2   two defs nobody could see, and an etl change that audited nothing
+bdd9134  B       dead is a condition, domination is a relation, a type line can be asked
+10ba73a  B       re-record replay for Condition.DEAD: insertions only
+7e3bb9f  C       a blinded creature stops seeing
+632bd8e  D       coverage.py reads duplicate_of, so 72 aliases stop looking like work
+6874f93  D       two rows out of 78 refs, because 74 of them already existed
+```
+
+A3's bare sweep ran inside `check.py --all`, which refreshed the watermark —
+the first comparable figure in eight commits.
+
+## What the plan got wrong
+
+**Section D's premise.** It called the 174 undeclared features, traits and powers
+"ordinary content, no engine gap named, the cheapest rows left". Of those 174:
+
+* **72 features are aliases** — second printings of a card already declared under
+  its `pNNNN` ref. `class_feature.duplicate_of` has recorded this since #218 and
+  **nothing read it**. `coverage.py` does now, and the honest undeclared feature
+  count is 39, not 112.
+* **57 racial traits cannot be briefed at all.** `spec.py` answers "no such row"
+  for every `rt:` ref, declared or not (#415). There is no legitimate input for
+  them.
+* **36 features and 3 powers have a printed name in their brief** (#356), so they
+  cannot be handed to an author either.
+* A further 6 are legs a parent feature already pays inline, recorded only in four
+  module docstrings and so invisible to every instrument (#416).
+
+**Two rows were genuinely writable** out of the 78 that cleared the name check, and
+both were written. Three waves spent a full context each to establish that — twice
+over, because the first two had no way to know.
+
+**`p4807` first" was wrong too.** The database says `cf:barbarian-f2c0` is the
+duplicate *of* `p4807`, so `p4807` is canonical and the tree declared the reprint.
+Writing it would deal a barbarian the same daily twice.
+
+## What the plan got right
+
+The ordering. Instruments first was correct and paid immediately: the duplicate-def
+walk found two real duplicates on its first run, and `coverage.py` reading
+`duplicate_of` is what makes the remaining content work measurable at all. Had D
+been attempted first, three waves would have written duplicate rows instead of
+refusing them.
+
+Keeping **#406 out of the batch** was right for the stated reason and wrong about
+the outcome: `replay` did not move, because only 6 blinded-related events exist
+across all seven fixtures. The net does not exercise blindness in either direction.
+
+## Filed along the way
+
+#411 (a character's race is discarded, so every row asking what a PC is answers
+False), #412, #413, #414, #415, #416, #417, #418, #419. Closed: #381, #395,
+#397-#399, #401, #403-#407, #410, and #408/#409 by the instruments commit.
+
+## For the next pass
+
+The cheap-content tail is gone as a category. What is left is either engine work
+with rows behind it — `Damage(dtypes=)` 89, `c.grab(dc=)` 64, `c.in_form()` 43 —
+or the blocked-brief issues above, of which **#419 is the best value**: one
+extraction fix that both reveals more aliases and closes a name leak into an
+author's brief.
