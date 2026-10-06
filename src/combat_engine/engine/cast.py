@@ -1995,7 +1995,11 @@ class Cast:
         )
 
     def _nearest_first(
-        self, options: list[Square], toward: int | None, away_from: int | None = None
+        self,
+        options: list[Square],
+        toward: int | None,
+        away_from: int | None = None,
+        mover: int | None = None,
     ) -> list[Square]:
         """The same squares, ordered by how near a creature they leave you.
 
@@ -2012,17 +2016,42 @@ class Cast:
         the enemy" or "end closer to you"; the seventh says "you must end the
         move *farther* from your ally". A parameter that could only close would
         have let that one report finished while still picking a corner.
+
+        **With neither named, the mover anchors on itself.** That is #383: the
+        ranking only engaged for `toward=`/`away_from=`, so every row that
+        moves without a stated preference still took `options[0]` -- the lowest
+        coordinate on the board. A level-12 row surfaced from a burrow and its
+        close burst 2 caught nobody, because the caster had teleported to the
+        far corner. Least displacement is the neutral answer and it is the only
+        one available here: which square is *tactically* best is the policy
+        layer's judgement, not the kernel's, and a kernel that guessed would be
+        deciding something `World.decide` exists to delegate. What it must not
+        do is prefer a corner, which is what sorted order means.
         """
-        if not options or (toward is None and away_from is None):
+        if not options:
             return options
         from .grid import distance
         from .query import squares as _squares
 
         anchor = toward if toward is not None else away_from
+        anchored_on_self = anchor is None
+        if anchored_on_self:
+            anchor, toward = mover, mover
+        if anchor is None:
+            return options
         mine = _squares(self.world, anchor)
         if not mine:
             return options
         near = sorted(options, key=lambda sq: min(distance(sq, t) for t in mine))
+        if anchored_on_self:
+            # **Least displacement, but still a move.** `c.teleport`'s options
+            # include the square the creature is already on, so ranking by pure
+            # distance made an unnamed teleport a no-op -- which is a different
+            # wrong answer from the corner, and one the audit would read as a
+            # silent row. A row that genuinely wants to stay put does not call
+            # a move verb.
+            moved = [sq for sq in near if sq not in mine]
+            return moved or near
         return near if toward is not None else list(reversed(near))
 
     def shift(
@@ -2055,7 +2084,7 @@ class Cast:
         options = self.world.reachable_squares(mover, squares_)
         if not options:
             return False
-        options = self._nearest_first(list(options), toward, away_from)
+        options = self._nearest_first(list(options), toward, away_from, mover)
         dest = self.world.decide(mover, "shift", options, f"{self.ref}: shift {squares_}")
         return shift(self.world, mover, dest)
 
@@ -2403,7 +2432,7 @@ class Cast:
             dest = self.world.decide(
                 mover,
                 "move",
-                self._nearest_first(sorted(paths), toward, away_from),
+                self._nearest_first(sorted(paths), toward, away_from, mover),
                 f"{self.ref}: move {squares_}",
             )
             return walk(self.world, mover, paths[dest])
@@ -2524,7 +2553,7 @@ class Cast:
         dest = self.world.decide(
             mover,
             "teleport",
-            self._nearest_first(sorted(options), toward, away_from),
+            self._nearest_first(sorted(options), toward, away_from, mover),
             f"{self.ref}: teleport",
         )
         return teleport(self.world, mover, dest, share=share)
