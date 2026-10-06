@@ -214,14 +214,22 @@ class AdjacencyLost(Event):
     it was not: a reader who took this docstring at its word and `AdjacencyGained`'s
     at its word would conclude the two differ, and filter one of them wrong.
 
-    It has **no `mover`**, which `AdjacencyGained` grew for a real reason: without
-    it, "when an enemy moves away from it" also fires when the creature itself
-    walks off, which is not the printed sentence and is true half the time. The
-    same hole is open on this side and no row has it to read.
+    `mover` is the one that actually moved, the same field and the same
+    reason as `AdjacencyGained`: without it "when an enemy moves away from
+    it" also fires when the creature itself walks off, which is not the
+    printed sentence and is true about half the time.
+
+    **It arrived late, and the asymmetry was the point of #368.** For as long
+    as one of the pair carried `mover` and the other did not, "enters or
+    leaves my reach" could not be written once -- a row had to watch two
+    events and filter only one of them, and `closed_on_me` had no partner to
+    pair with. Defaulting to `0` keeps every existing watcher reading the
+    same, since `0` is no creature.
     """
 
     actor: int
     other: int
+    mover: int = 0
 
 
 @dataclass

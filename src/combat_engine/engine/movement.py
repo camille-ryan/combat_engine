@@ -206,8 +206,13 @@ def step(
         world.bus.emit(AdjacencyGained(actor=eid, other=other, mover=eid))
         world.bus.emit(AdjacencyGained(actor=other, other=eid, mover=eid))
     for other in sorted(before - after):
-        world.bus.emit(AdjacencyLost(actor=eid, other=other))
-        world.bus.emit(AdjacencyLost(actor=other, other=eid))
+        # `mover=eid` on both, exactly as the gained pair above: whoever
+        # moved is the same creature whichever end is reading. Without it
+        # "when an enemy moves away from it" also fired on the creature's
+        # own retreat, and "enters or leaves my reach" could not be written
+        # as one rule. #368.
+        world.bus.emit(AdjacencyLost(actor=eid, other=other, mover=eid))
+        world.bus.emit(AdjacencyLost(actor=other, other=eid, mover=eid))
     return pos.square != from_
 
 

@@ -660,12 +660,15 @@ def _left_my_side(world: World, me: int, ev: AdjacencyLost) -> bool:
     squares away -- so the event is the one the engine emits as the
     adjacency itself breaks.
 
-    It is emitted mirrored and carries no `mover`, unlike `AdjacencyGained`,
-    so whose turn it is tells the creature that left from the creature it
-    left. That also keeps a shove by somebody else out, which "moves or
-    shifts" wants anyway.
+    It is emitted mirrored and carries `mover` (#368), which names the
+    creature that moved. The turn test stays: it is what keeps a shove by
+    somebody else out, which "moves or shifts" wants anyway. The pair also
+    catches what the turn test alone could not -- the enemy, on its own
+    turn, pushing the m2921 away instead of walking off itself.
     """
     if ev.other != me or ev.actor == me:
+        return False
+    if getattr(ev, "mover", 0) != ev.actor:
         return False
     if world.turn != ev.actor:
         return False

@@ -2106,16 +2106,18 @@ _M3920_WALKED_OFF = "an enemy moves or shifts out of a square beside it"
 def _left_my_side(world: World, me: int, ev: AdjacencyLost) -> bool:
     """An enemy stopped being adjacent to me, and it was the one moving.
 
-    `AdjacencyLost` is emitted mirrored, so `actor` is either creature --
-    and it carries no `mover`, which `AdjacencyGained` grew for exactly this
-    reason. Whose turn it is tells the mover from the creature it left, and
-    requiring the enemy's own turn also keeps a shove by somebody else out,
-    which "moves or shifts" already does.
+    `AdjacencyLost` is emitted mirrored, so `actor` is either creature, and
+    `mover` says which one moved (#368). The turn test stays beside it and
+    is not redundant: it is what keeps a *shove* out, which "moves or
+    shifts" wants anyway. Together they also catch the case the turn test
+    alone could not -- the enemy, on its own turn, pushing the m3920 away.
     """
     if me not in (ev.actor, ev.other):
         return False
     foe = ev.other if ev.actor == me else ev.actor
     if foe == me or team(world, foe) is team(world, me):
+        return False
+    if getattr(ev, "mover", 0) != foe:
         return False
     return world.turn == foe
 

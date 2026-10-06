@@ -1194,11 +1194,13 @@ def _enemy_stepped_in(world: Any, me: int, ev: Any) -> bool:
 
 
 def _enemy_stepped_out(world: Any, me: int, ev: Any) -> bool:
-    """The exit half. `AdjacencyLost` has no `mover` to read, so this fires
-    whichever of the two walked off -- the narrower sentence is unsayable
-    until the field exists on both events."""
+    """The exit half. `AdjacencyLost` carries `mover` now (#368), so this
+    fires only when the *enemy* walked off and not when the creature did --
+    which is the printed sentence and was the hole recorded here before."""
     other = getattr(ev, "other", None)
     if getattr(ev, "actor", None) != me or other is None:
+        return False
+    if getattr(ev, "mover", 0) != other:
         return False
     return team(world, other) is not team(world, me)
 

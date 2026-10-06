@@ -60,9 +60,16 @@ def stepped_away_from_spirit(world: World, me: int, ev: Any) -> bool:
     and nothing records where a creature was when its turn began, so that
     half is dropped: this fires when the adjacency is lost, however it was
     gained.
+
+    **"*Ends its movement* no longer adjacent" is the enemy moving**, which
+    `mover` now says (#368). Before the field existed this also fired when
+    the spirit was the one that moved away, which is the opposite reading of
+    the same sentence.
     """
     who, other = getattr(ev, "actor", None), getattr(ev, "other", None)
     if who is None or other is None:
+        return False
+    if getattr(ev, "mover", 0) != who:
         return False
     held = world.get(other, Companion)
     if held is None or held.owner != me:

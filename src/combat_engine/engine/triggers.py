@@ -461,6 +461,23 @@ def closed_on_me(world: World, me: int, ev: Event) -> bool:
     return mover != 0 and mover != me and getattr(ev, "other", None) in (me, mover)
 
 
+def left_me(world: World, me: int, ev: Event) -> bool:
+    """Somebody *else* moved out of reach of me. `closed_on_me`'s partner.
+
+    "When an enemy moves away from it" -- the creature's own retreat does not
+    count, and `AdjacencyLost` is emitted mirrored so both ends see it.
+
+    **This could not be written until `AdjacencyLost` carried `mover`** (#368),
+    which is why six rows printing the clause fired on their own withdrawal as
+    readily as on the enemy's. Same body as `closed_on_me` because the two
+    events are now the same shape, which is the whole point of giving the lost
+    half the field the gained half already had: "enters or leaves my reach" is
+    one rule and wants one filter.
+    """
+    mover = getattr(ev, "mover", 0)
+    return mover != 0 and mover != me and getattr(ev, "other", None) in (me, mover)
+
+
 def by_charge(world: World, me: int, ev: Event) -> bool:
     """Was this a charge? "When the m200 charges, ..." """
     return bool(getattr(ev, "charge", False))

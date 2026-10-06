@@ -355,12 +355,17 @@ def _foe_finished_beside_me(world: World, me: int, ev: MoveEnd) -> bool:
 
 
 def _foe_left_my_side(world: World, me: int, ev: AdjacencyLost) -> bool:
-    """"An enemy leaves a square adjacent to it." Half the printed sentence --
-    see the row's `dropped`: `AdjacencyLost` carries no `mover`."""
+    """"An enemy leaves a square adjacent to it." Whole sentence now:
+    `AdjacencyLost` carries `mover` (#368), so the creature's own retreat no
+    longer reads as the enemy withdrawing."""
     if getattr(ev, "actor", None) != me:
         return False
     other = getattr(ev, "other", None)
-    return other is not None and other in enemies(world, me)
+    return (
+        other is not None
+        and getattr(ev, "mover", 0) == other
+        and other in enemies(world, me)
+    )
 
 
 def _ally_went_down(world: World, me: int, ev: Dropped) -> bool:
@@ -1664,15 +1669,14 @@ _M4142_MOVED = "an enemy enters or leaves a square adjacent to it"
         Trigger(AdjacencyGained, _enemy_closed_on_me, _M4142_MOVED),
         Trigger(AdjacencyLost, _foe_left_my_side, _M4142_MOVED),
     ),
-    dropped=("AdjacencyLost.mover",),
 )
 def m4142a3(c: Cast) -> None:
     """"Enters **or** leaves" is two events, so both are declared -- half of
     it declared looks finished and fires on one of the two.
 
-    The dropped half is which creature moved. `AdjacencyGained` carries
-    `mover` and `AdjacencyLost` does not, so the "leaves" branch also fires
-    when the dragon itself walked away, which is not the printed sentence.
+    **Both halves filter on who moved now.** `AdjacencyLost` grew `mover` to
+    match `AdjacencyGained` (#368), so the "leaves" branch no longer fires
+    when the creature itself walked away. That was this row's `dropped=`.
     """
     who = getattr(c.trigger, "other", None) or getattr(c.trigger, "mover", None)
     if who is None or who == c.me:

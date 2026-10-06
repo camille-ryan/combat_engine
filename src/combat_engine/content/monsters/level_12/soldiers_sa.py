@@ -499,13 +499,15 @@ def _neighbour_left(world: World, me: int, ev: AdjacencyLost) -> bool:
     """An enemy stopped being adjacent.
 
     `AdjacencyLost` is emitted twice, mirrored, so either field may be the
-    caster. It carries no `mover` the way `AdjacencyGained` does, so a
-    parting the m1100 caused itself by walking off reads the same as one the
-    enemy made -- which is the one hole in this trigger.
+    caster. It carries `mover` now (#368), so a parting the m1100 caused
+    itself by walking off no longer reads the same as one the enemy made --
+    which was the one hole in this trigger.
     """
     if me not in (ev.actor, ev.other):
         return False
     foe = ev.other if ev.actor == me else ev.actor
+    if getattr(ev, "mover", 0) != foe:
+        return False
     return foe != me and team(world, foe) is not team(world, me)
 
 
@@ -2480,9 +2482,14 @@ _M2541_SLIPPED = "a target marked by m2541 leaves a square adjacent to him"
 
 
 def _marked_neighbour_left(world: World, me: int, ev: AdjacencyLost) -> bool:
+    """`mover` is the creature that actually walked off (#368). Without it
+    the m2541 stepping away from its own quarry read as the quarry
+    slipping, which is the opposite of the printed sentence."""
     if me not in (ev.actor, ev.other):
         return False
     foe = ev.other if ev.actor == me else ev.actor
+    if getattr(ev, "mover", 0) != foe:
+        return False
     return foe != me and world.relations.holds(Relation.MARKED_BY, me, foe)
 
 
