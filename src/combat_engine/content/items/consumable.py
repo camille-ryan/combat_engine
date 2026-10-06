@@ -610,11 +610,18 @@ def i2753p1(c: Cast) -> None:
 @power("i930p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
        trigger="you miss all targets with an augmented psionic power",
-       todo=("Miss.all_targets", "c.regain_points()"))
+       todo=("c.regain_points()",))
 def i930p1(c: Cast) -> None:
-    """Neither half is sayable: a `Miss` names one target and does not
-    know whether the others were missed too, and nothing hands a power
-    point back."""
+    """**One half is sayable after all.** "Miss all targets" is a question
+    about the whole set of rolls and `PowerResolved` carries them, so
+    `Miss.all_targets` named a field that does not exist while the answer
+    sat on another event -- see `items/misc.py:_missed_everything`.
+
+    What is still missing is the payout: nothing hands a power point back,
+    so the row is `todo` rather than `dropped` and the trigger is left
+    undeclared. Declaring a trigger whose body can do nothing would make
+    this read as a row that fires and is silent, which is worse than one
+    that refuses."""
 
 
 # -- level 5 ----------------------------------------------------------------

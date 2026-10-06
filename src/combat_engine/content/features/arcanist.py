@@ -233,7 +233,6 @@ def rogue_tactic_bludgeon(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
     trigger="you miss an enemy with a wizard illusion power",
     on=Trigger(Miss, by_me, "you miss an enemy with a wizard illusion power"),
-    dropped=("Miss.all_targets",),
 )
 def wizard_orb_deception(c: Cast) -> None:
     """The missed spell is thrown again at somebody standing nearby.
@@ -243,10 +242,13 @@ def wizard_orb_deception(c: Cast) -> None:
     so the in-flight guard and the usage limit both have to stand aside for
     it, and that is exactly what the flag is for.
 
-    **"The chosen enemy cannot also be a target of the original attack" is
-    dropped.** `Miss` is announced once per target and carries only this
-    one, so a burst that missed three creatures offers the other two back
-    as fresh targets. Only the creature this miss is about is excluded.
+    **"The chosen enemy cannot also be a target of the original attack"
+    plays now.** It was marked `Miss.all_targets`, which names no field --
+    and the answer was already on the event: `among` carries the whole
+    target list of the one power use, set on every attack event by
+    `resolve`, and `triggers.leaves_me_out` had been reading it for the
+    same reason. Excluding only `ev.target` offered the other two creatures
+    of a three-target burst straight back as fresh ones.
     """
     ev = c.trigger
     if ev is None:
@@ -254,7 +256,8 @@ def wizard_orb_deception(c: Cast) -> None:
     spell = get(ev.power)
     if spell is None or spell.cls != "wizard" or Keyword.ILLUSION not in spell.keywords:
         return
-    nearby = sorted(e for e in c.within(3, of=ev.target, side="enemy") if e != ev.target)
+    struck = set(getattr(ev, "among", ()) or (ev.target,))
+    nearby = sorted(e for e in c.within(3, of=ev.target, side="enemy") if e not in struck)
     if not nearby:
         return
     who = c.choose(nearby, "cf:wizard-arcanist-f0c0: who the spell finds instead")

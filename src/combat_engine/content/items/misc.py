@@ -2488,16 +2488,39 @@ def i1695p1(c: Cast) -> None:
     c.bonus(FORT, 2, on=c.me, until=When.EONT, kind="power")
 
 
-@power("i1908p1", level=8, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=("Miss.all_targets",),
-       trigger="you use an encounter or daily power and miss all targets",
-       on=Trigger(Miss, by_me, "you miss with an attack"))
-def i1908p1(c: Cast) -> None:
-    """A `Miss` is announced per target, so "miss *all* targets" cannot be
-    told from missing one of several."""
-    row = get(getattr(c.trigger, "power", "") or "")
+def _missed_everything(world: World, me: int, ev: PowerResolved) -> bool:
+    """"You use an encounter or daily power and miss all targets."
+
+    Asked of `PowerResolved` because that is the only event carrying every
+    roll a use made -- `Miss` is announced once per target and knows nothing
+    about the others, which is why this row read as "missed one of several"
+    and was marked `Miss.all_targets` for a field that does not exist. The
+    same shape `powers/wizard/level_10.py` uses for "miss with at least two".
+
+    An empty `rolls` is **not** missing everything: a power that rolled
+    nothing did not miss, it did not attack.
+    """
+    if ev.actor != me or not ev.rolls:
+        return False
+    row = get(ev.power)
     if row is None or row.usage is Usage.AT_WILL:
-        return
+        return False
+    return all(not getattr(roll, "hit", False) for roll in ev.rolls)
+
+
+@power("i1908p1", level=8, cls=ITEM, usage=ENCOUNTER, action=FREE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use an encounter or daily power and miss all targets",
+       on=Trigger(PowerResolved, _missed_everything,
+                  "you miss every target of one encounter or daily power"))
+def i1908p1(c: Cast) -> None:
+    """The trigger is exact now; the payout was always writable.
+
+    `PowerResolved` carries every `AttackResult` the use produced, so "all
+    targets" is a question about the set rather than about one `Miss`. The
+    bonus lands after resolution, which is where the card puts it -- unlike
+    a reroll, which `p10354` records as unwritable from here.
+    """
     c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EONT, once=True)
 
 
@@ -2918,13 +2941,24 @@ def i1675x1(c: Cast) -> None:
 
 
 @power("i1675p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=("Miss.all_targets",),
+       reach=PERSONAL, target=SELF, dropped=("c.reroll_attack(rolls=)",),
        trigger="you use an arcane attack power and miss all targets",
        on=Trigger(Miss, _hit_by_me_with(Keyword.ARCANE),
                   "you miss with an arcane attack power"))
 def i1675p1(c: Cast) -> None:
-    """A `Miss` is announced per target, so missing *all* of them cannot
-    be told from missing one."""
+    """**Re-aimed off `Miss.all_targets`, which names no field.** The
+    trigger half *is* writable: `PowerResolved` carries every
+    `AttackResult`, so "miss all targets" is `all(not roll.hit for roll in
+    ev.rolls)` -- `_missed_everything` above does exactly that.
+
+    It is the **effect** that cannot move there. A reroll has to happen
+    before the attack resolves to buy anything; from `PowerResolved` every
+    miss is already resolved, so a roll turned into a hit lands no damage
+    and no rider. `p10354` carries the same marker for the same reason and
+    is the row to fix this alongside.
+
+    So it stays on `Miss` and rerolls the one it is about, which is a
+    narrower rule than the card's and the only one available."""
     c.reroll_attack(keep="new")
 
 
