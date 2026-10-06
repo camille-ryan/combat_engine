@@ -350,6 +350,26 @@ def _render(db, ref: str, declared: set[str], include_all: bool) -> str | None: 
         if row is None:
             return None
         return f"### {row['ref']}   race   {row['size']}\n{row['spec']}"
+    if ref.startswith("rt:"):
+        # **Before the `r\d+` test is not enough -- it has to be before `r`
+        # alone would do.** `rt:` is excluded from the race branch above by
+        # its `fullmatch`, and then nothing claimed it, so every one of the
+        # 151 traits fell off the end of this function and came back "no such
+        # row" -- including the declared ones, which is what made #415 look
+        # like a coverage problem rather than a dispatch one.
+        row = db.execute(
+            "SELECT * FROM racial_trait WHERE ref = ?", (ref,)
+        ).fetchone()
+        if row is None:
+            return None
+        # **The `slug` column is deliberately not printed.** It holds the
+        # trait's own printed label for 147 of the 151 rows, so putting it in
+        # a brief would hand an author the name this tool exists to withhold.
+        # The race ref and the position are the identity; see #433.
+        return (
+            f"### {row['ref']}   racial trait of {row['race']}"
+            f"   (trait {row['ord']})\n{row['spec']}"
+        )
     if ref.startswith("i"):
         return _item(db, ref, declared, include_all)
     if ref.startswith("f"):

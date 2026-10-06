@@ -17,6 +17,7 @@ description of it would.
 from __future__ import annotations
 
 import argparse
+import re
 
 from combat_engine import chargen
 from combat_engine.content import loader
@@ -131,7 +132,36 @@ def _board(
         caster = loader.spawn(world, owner, (4, 6), team=Team.ENEMY)
         foe_team = Team.PC
     else:
-        cls = declared.cls or "fighter"
+        # **`declared.cls` is not always a class**, and `or "fighter"` only
+        # covered the empty case -- so `chargen.CLASSES[...]` raised on 3,163
+        # of the 23,009 declared rows: 2,491 items, 507 themes, 155 races and
+        # 10 `wild talent`. One declared row in seven could not be driven by
+        # the read-it-yourself check that `scripts/CLAUDE.md` points at over
+        # trusting a verdict. #413.
+        #
+        # Ported from `audit.py:1177-1225`, which has fielded all four kinds
+        # for a while, rather than re-derived -- and three of its distinctions
+        # are the reason it works:
+        #
+        # * **a magic item is not a class.** Its rows belong to whoever holds
+        #   it, so the character underneath is free.
+        # * **a race is a `race=` on the character**, not a class, and the
+        #   class beneath it takes the classless fallback.
+        # * **a theme has nothing to put on the character at all**, because
+        #   nothing selects one yet, so it takes the fallback too.
+        #
+        # The race is matched **by the shape of the ref**, not by membership
+        # in `chargen.RACES`: that set is the 46 a character may be, and `r67`
+        # is a race with rows written for it that nobody can play. Fielded as
+        # a class it raised; fielded as a race that does not exist it is a
+        # raceless character, which is the honest answer.
+        carried = declared.cls == "item"
+        racial = bool(re.fullmatch(r"r\d+", declared.cls or ""))
+        themed = bool(re.fullmatch(r"x\d+_\d+", declared.cls or "")) \
+            or declared.cls == "wild talent"
+        cls = (not carried and not racial and not themed and declared.cls) or (
+            "ranger" if declared.reach.kind in ("ranged", "area_burst") else "fighter"
+        )
         # And the build whose gear can hold the row, the way `audit.py`
         # picks one -- a ranged ranger row fielded on a two-blade ranger is
         # refused for a reason that says nothing about the row.
@@ -140,6 +170,7 @@ def _board(
             chargen.Character(
                 cls, max(1, declared.level), [ref],
                 build=chargen.build_for(cls, ref),
+                race=declared.cls if racial else "",
             ),
             (4, 6),
         )
