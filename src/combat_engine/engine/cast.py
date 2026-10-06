@@ -402,6 +402,25 @@ class Cast:
         health = self.world.get(who, Health) if who else None
         return health is not None and health.hp < health.max_hp
 
+    def race_of(self, on: int | None = None) -> str:
+        """A character's race, by ref -- `c.race_of(on=ally) == "r4"`.
+
+        The question `c.is_kind("<a race word>")` was being asked instead, and
+        a character has no type line, so those gates were False for every PC
+        in the game (#411). A monster of that race *does* carry the word, so a
+        row that means either asks both.
+
+        A ref, never a word: `kinds_of` answers *origin* -- fey, shadow,
+        immortal -- which 21 races share with each other and with every fey
+        creature on the board, so it cannot tell r3 from r4. Delegates to
+        `query.race_of`, which reads the `race:<ref>` that `Build.choices` has
+        carried all along.
+        """
+        from .query import race_of
+
+        who = self._who(on)
+        return "" if who is None else race_of(self.world, who)
+
     def kinds_of(self, on: int | None = None) -> frozenset[str]:
         """A creature's type words: undead, goblin, beast, natural, and so on.
 

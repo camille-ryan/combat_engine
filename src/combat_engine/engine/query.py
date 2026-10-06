@@ -406,6 +406,40 @@ def stat_block(world: World, eid: int) -> dict[str, Any]:
         return {}
 
 
+def race_of(world: World, eid: int) -> str:
+    """A character's race, by ref -- `r4` -- or `""` for anything without one.
+
+    **The race was on the board all along.** #411 reports it "discarded at
+    creation and cannot be recovered", and two content files say the same in
+    their docstrings ("nothing carries a creature's race"). It is in
+    `Build.choices` as `race:<ref>`, put there deliberately and documented on
+    `chargen.Character.race` -- the same way the warlock's pact element rides
+    there. What was missing was a reader, which is why three separate rows
+    worked around it: a local `_has_race` in `items/head.py` scanned `Powers.known` for an
+    `rt:<race>-` trait, and two more rows carry `dropped=("c.race_of()",)`
+    having named this verb exactly.
+
+    **A ref, never a word.** `kinds_of` answers a creature's *type* words and a
+    race is not one of them -- a character has no type line, and the origin
+    sentence 21 races print gives a shared word (`fey` is r3's and r4's and
+    every other fey creature's), so matching on it answers the wrong question.
+    The ref is also the only spelling allowed in a tracked file: `cls` holds
+    `r33` for a racial power for precisely this reason.
+
+    Empty for a monster, which carries its race in its own type line and should
+    be asked with `is_kind` instead.
+    """
+    from .components import Build
+
+    held = world.get(eid, Build)
+    if held is None:
+        return ""
+    for choice in held.choices:
+        if choice.startswith("race:"):
+            return choice.split(":", 1)[1]
+    return ""
+
+
 def kinds_of(world: World, eid: int) -> frozenset[str]:
     """A creature's type words: undead, goblin, beast, natural, and so on.
 

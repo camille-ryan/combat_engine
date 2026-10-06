@@ -249,20 +249,6 @@ def _undead_foe(c: Cast) -> Callable[[dict[str, Any]], bool]:
     return gate
 
 
-def _has_race(c: Cast, race: str, who: int) -> bool:
-    """Is that creature of this race, named by ref?
-
-    `c.kinds_of` answers a race's *origin* -- fey, shadow, immortal -- and
-    a character has no type line otherwise, so "an r3 ally" had nothing to
-    match on. A race's traits are `rt:<race>-<what>` and go into
-    `Powers.known` when the character is built, which is the one place the
-    race's own ref survives onto the board."""
-    known = c.world.get(who, Powers)
-    return known is not None and any(
-        r.startswith(f"rt:{race}-") for r in known.known
-    )
-
-
 def _channelled(world: World, me: int, ev: PowerUsed) -> bool:
     """A channelled row being used. The four class features the card names
     are the *permission* to channel; what is used is one of the 115 rows
@@ -552,16 +538,20 @@ def _fear_on_ally(world: World, me: int, ev: EffectApplied) -> bool:
        trigger="an ally is hit by a fear effect that a save can end",
        on=Trigger(EffectApplied, _fear_on_ally,
                   "an ally takes a save-ends fear effect"),
-       dropped=("c.race_of()",))
+       )
 def i938p1(c: Cast) -> None:
     """The fear half of the trigger now plays, and the save is rolled
     against the triggering hold by its label rather than against whichever
     save-ends effect the ally happens to be carrying first.
 
-    "A **living construct** ally" is dropped: nothing reads another
-    creature's race, so any ally answers."""
+    **The race clause plays now.** It was dropped because "nothing reads
+    another creature's race" -- which was never true: the ref is on
+    `Build.choices` and `c.race_of()` reads it (#411). The ally must be of
+    r28, whose racial trait the card names, so an ally of any other race
+    gets no save.
+    """
     who = getattr(c.trigger, "target", None)
-    if who is not None:
+    if who is not None and c.race_of(on=who) == "r28":
         c.save(on=who, against=getattr(c.trigger, "label", "") or "")
 
 
@@ -1139,7 +1129,7 @@ def i831x1(c: Cast) -> None:
 
 @power("i887x1", level=10, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.race_of()", "c.darkvision()"))
+       dropped=("c.darkvision()",))
 def i887x1(c: Cast) -> None:
     """Three clauses, each gated on a nearby ally's race.
 
@@ -1147,19 +1137,20 @@ def i887x1(c: Cast) -> None:
     and land in the character's known rows, which is the only place a
     race ref survives onto the board, so "an r3 ally" is exact.
 
-    The other two name a race in words. `c.is_kind` reads a *stat
-    block's* type line, so those answer for a monster ally and never for
-    a character -- a character's race is not one of its kinds, and only
-    the nineteen races that print an origin sentence give it a word at
-    all. They are left standing because a monster ally does satisfy them,
-    and `c.race_of()` is what would make them true of a character. The
-    third clause was also being read off the second's gate, which gave
+    **The race clauses play now.** They asked `c.is_kind`, which reads a
+    *stat block's* type line -- so they answered for a monster ally and
+    never for a character, which is every ally a character usually has.
+    `c.race_of()` is the reader they were waiting on and it existed as a
+    marker on this row (#411). Both are asked: a monster of that race does
+    satisfy the card, and it carries the word rather than a race ref.
+
+    The third clause was also being read off the second's gate, which gave
     the wrong ally's race the Perception bonus."""
     near = c.within(10, side="ally")
-    if any(_has_race(c, "r3", a) for a in near):
+    if any(c.race_of(on=a) == "r3" for a in near):
         c.bonus("save", 5, on=c.me, until=When.ENCOUNTER, kind="item",
                 when=_save_keywords(Keyword.CHARM))
-    if any(c.is_kind("elf", on=a) for a in near):
+    if any(c.race_of(on=a) == "r4" or c.is_kind("elf", on=a) for a in near):
         for who in [c.me, *c.within(5, side="ally")]:
             c.bonus("skill:perception", 1, on=who, until=When.ENCOUNTER,
                     kind="item")

@@ -750,5 +750,8 @@ def p7386(c: Cast) -> None:
     who = c.target
     if who is None or (who != c.me and not c.bloodied(who)):
         return
-    c.bonus("attack", 3 if c.is_kind("dragonborn", c.me) else 2, on=who, until=When.EONT,
-        kind="power")
+    # `c.race_of()`, not `c.is_kind()`: the caster is a character and a
+    # character has no type line, so this read 2 for every dragonborn
+    # warlord who ever used it. #411.
+    step = 3 if c.race_of() == "r1" else 2
+    c.bonus("attack", step, on=who, until=When.EONT, kind="power")

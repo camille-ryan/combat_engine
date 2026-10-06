@@ -975,7 +975,8 @@ def i1010x1(c: Cast) -> None:
         if ev.attacker != c.me or ev.power != "p1831":
             return
         for ally in c.allies():
-            if c.feat(R3, on=ally) or c.is_kind("elf", on=ally):
+            if (c.race_of(on=ally) in ("r3", "r4")
+                    or c.feat(R3, on=ally) or c.is_kind("elf", on=ally)):
                 c.bonus("damage", 2, on=ally, until=When.EONT,
                         when=lambda ctx, foe=ev.target: ctx.get("target") == foe)
 
@@ -993,7 +994,11 @@ def i1010p1(c: Cast) -> None:
 
     The ally must be of the named kind and is not the bearer, so
     `side="ally"` rather than `"team"`."""
-    if not any(c.is_kind("drow", on=a) for a in c.within(10, side="ally")):
+    # Both, because either kind of ally satisfies the card: a character
+    # answers `c.race_of()` and a monster of that race its own type line.
+    # `c.is_kind` alone was False for every character ally. #411.
+    if not any(c.race_of(on=a) == "r16" or c.is_kind("drow", on=a)
+               for a in c.within(10, side="ally")):
         return
     for cost in ("p1450", "p1449"):
         if c.expend_row(cost):
