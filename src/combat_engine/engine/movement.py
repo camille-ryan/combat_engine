@@ -754,13 +754,45 @@ def reachable(
             frontier.append(nxt)
 
     paths = {sq: _straightest(start, sq, came) for sq in came if sq != start}
-    if overhead:
+    # **Moving through a body is not standing in one.** A flyer's destinations
+    # were already filtered this way; a phasing creature's were not, and
+    # `_clear` waives occupancy for a ghost as readily as for a flyer -- so the
+    # occupied square was offered as somewhere to stop.
+    #
+    # It was invisible while the destination list went to `World.decide`
+    # unranked, because the occupied square was rarely first. `toward=` made it
+    # the default: aimed at a creature, that square is the nearest one and so
+    # the first taken, and a row that leaps at a victim landed on top of it.
+    # 79 content rows call `c.phasing`. #392.
+    if overhead or phasing(world, eid):
         paths = {
             sq: path
             for sq, path in paths.items()
-            if _clear(world, eid, footprint(sq, pos.size))
+            if _can_stop(world, eid, footprint(sq, pos.size))
         }
     return paths
+
+
+def _can_stop(world: World, eid: int, target: frozenset[Square]) -> bool:
+    """May `eid` *end* a move in these squares?
+
+    `_clear` answers the neighbouring question -- may it be here on the way
+    past -- and for a flyer or a phasing creature the two part company: both
+    cross what neither may stand in. So this asks occupancy and terrain with
+    **no** waiver for either, which is what the flyer filter was already doing
+    by calling `_clear` without `overhead=`.
+
+    `shares_space` is still honoured: a flyer directly above somebody and a
+    creature melded with its target are the two things that legitimately end a
+    move in an occupied square.
+    """
+    for sq in target:
+        if not world.grid.passable(sq):
+            return False
+        who = world.grid.occupant(sq)
+        if who is not None and who != eid and not shares_space(world, who):
+            return False
+    return True
 
 
 def _threatened_from(world: World, eid: int) -> dict[int, frozenset[Square]]:
