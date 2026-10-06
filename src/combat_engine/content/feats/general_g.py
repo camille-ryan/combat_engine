@@ -246,30 +246,33 @@ def f920(c: Cast) -> None:
 
 
 @power("f924", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("query.immune_to(power=)",))
+       reach=PERSONAL, target=SELF)
 def f924(c: Cast) -> None:
-    """The resistance half plays. The immunity is dropped rather than written
-    wide, because slow and immobilize immunity with "caused by cold powers"
-    thrown away is strictly stronger than the card.
+    """Both halves now. The immunity was dropped while the context could not
+    name the row laying the condition; `immune_to` takes a `power` and #309
+    threads it from `durations.Effects.apply`, so the narrowing is askable.
 
-    **Re-aimed off `c.immune(when=)`, which arrived and is not the hold.** The
-    gate exists; what it cannot read is the power. `query.immune_to` builds its
-    context as `{"cond", "target", "source"}` -- the creature that laid the
-    condition, not the row it laid it with -- so "caused by a cold power" is a
-    question about a keyword nothing passes. See #309.
+    **The gate reads the keyword off the row, not off the context.** The ref is
+    what travels -- the same arrangement `no_provoke` uses for `ctx["why"]` --
+    so the keyword list stays on the row where it lives. A monster ability
+    answers it as readily as a spell does: a stat block's ability is an
+    ordinary declared row with its own keywords, which is what the printed
+    "cold power" means.
 
-    **Named in the parameter form, and the two dotted spellings I tried first both
-    lied.** `query.immune_to.power` resolves because `immune_to` exists;
-    `query.immune_ctx.power` resolves too, because `blocked._one` falls back to
-    looking for the bare last name anywhere on the surface and `power` is the row
-    decorator. Both reported ARRIVED while the capability was missing -- the exact
-    failure `todo.py` exists to prevent. `query.immune_to(power=)` is the
-    convention `c.grants_in(when=)` uses: the function is there, the parameter is
-    not, and `_params_ok` is what says so."""
+    Empty `power` is the condition that came from no row -- a failed save, a
+    trap, a zone's own clause -- and the gate is correctly False there rather
+    than immune to everything.
+    """
     held = c.world.get(c.me, Defences)
     if held is not None and held.resist.get(DamageType.COLD, 0) > 0:
         c.resist(3, DamageType.COLD, on=c.me)
+
+    def chilled(ctx: dict[str, Any]) -> bool:
+        row = get(ctx.get("power") or "")
+        return row is not None and Keyword.COLD in row.keywords
+
+    c.immune(Condition.SLOWED, Condition.IMMOBILIZED, on=c.me,
+             until=When.ENCOUNTER, when=chilled)
 
 
 @power("f1073", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -593,7 +593,37 @@ def flanked_by(world: World, target: int, attacker: int) -> bool:
     return False
 
 
+#: Pairs whose combat advantage is being resolved right now.
+#:
+#: `has_combat_advantage` reads a `gains_ca_when` modifier, so a row printing
+#: "gains combat advantage while an ally has it" asks this function again from
+#: inside its own gate -- and two creatures each carrying that clause is a
+#: cycle, not deep recursion. Reproduced with two copies of one level-10
+#: creature and a single call: `RecursionError`.
+#:
+#: **False for a pair already in flight is the right answer, not merely the
+#: safe one.** "An ally has combat advantage" means independently of me; a
+#: cycle has no independent answer, so there is nothing truthful to return.
+#:
+#: Lived in `content/monsters/level_10/soldiers_sa.py` as a local
+#: `_RESOLVING_CA` -- the right call for a content wave, but it guarded two
+#: rows and the next row of the shape would crash again. #376.
+_IN_FLIGHT: set[tuple[int, int]] = set()
+
+
 def has_combat_advantage(
+    world: World, attacker: int, target: int, power: str = ""
+) -> bool:
+    if (attacker, target) in _IN_FLIGHT:
+        return False
+    _IN_FLIGHT.add((attacker, target))
+    try:
+        return _has_combat_advantage(world, attacker, target, power)
+    finally:
+        _IN_FLIGHT.discard((attacker, target))
+
+
+def _has_combat_advantage(
     world: World, attacker: int, target: int, power: str = ""
 ) -> bool:
     # "You do not grant combat advantage to any of your enemies" suppresses
@@ -685,7 +715,13 @@ def granted_actions(world: World, eid: int) -> dict[tuple[str, str], int]:
     return out
 
 
-def immune_to(world: World, eid: int, cond: Condition, source: int | None = None) -> bool:
+def immune_to(
+    world: World,
+    eid: int,
+    cond: Condition,
+    source: int | None = None,
+    power: str = "",
+) -> bool:
     """Can this condition not be laid on this creature at all?
 
     Distinct from curing one: "you cannot be marked or slowed until the end
@@ -700,7 +736,23 @@ def immune_to(world: World, eid: int, cond: Condition, source: int | None = None
     # gate through `applies(ctx)`, so an empty dict let a gated immunity be written
     # and then asked a question it could not answer. Keys follow the convention in
     # `escape` and `skills`: the participants by name, plus what is being resisted.
-    ctx = {"cond": cond.value, "target": eid, "source": source}
+    #
+    # **`power` is the row doing the laying**, which the context carried the
+    # creature instead of -- so "immune to slow and immobilize caused by cold
+    # powers" could not be written while `c.immune(when=)` happily accepted it.
+    # The ref rather than the keywords, the way `no_provoke` passes `ctx["why"]`:
+    # a gate asks `Keyword.COLD in get(ctx["power"]).keywords` and the keyword
+    # list stays where it lives. **A monster ability answers that too** -- a
+    # stat block's ability is an ordinary declared row with its own keywords, so
+    # "caused by a cold power" covers a monster's cold breath and a wizard's
+    # spell alike, which is what the printed word means.
+    #
+    # Empty, not None, for a condition arriving from no row -- a failed save, a
+    # trap, a zone's own clause -- matching how the damage context settled on
+    # `source` plus `from_attack` rather than a nullable attacker (#302). A
+    # keyword gate is then correctly False: nothing can claim a power's
+    # narrowing when no power has been named.
+    ctx = {"cond": cond.value, "target": eid, "source": source, "power": power}
     return mods.total(f"immune to {cond.value}", ctx) > 0
 
 

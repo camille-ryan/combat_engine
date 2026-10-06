@@ -203,6 +203,16 @@ _CONTEXT_OF = {
     "save": "save",
 }
 
+#: Verbs whose context is named by the **call** rather than by a `what`
+#: string in the first argument.
+#:
+#: `c.resist(10, DamageType.FIRE, when=...)` leads with an amount, so the
+#: `what`-keyed lookup above reads `""` and falls back to the wide union --
+#: where `ranged` is present, so a resist gate reading it passed. It was
+#: *not* present in the context the gate actually got (#380), which is the
+#: exact miss this check exists to prevent, happening to the check itself.
+_GATE_CONTEXT = {"resist": "damage"}
+
 
 def _context_keys(which: str = "") -> frozenset[str]:
     """Every key a modifier context carries, read off the engine.
@@ -296,14 +306,18 @@ def _unknown_context_keys() -> list[tuple[str, str, str]]:
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
-            if getattr(node.func, "attr", None) not in ("bonus", "penalty"):
+            called = getattr(node.func, "attr", None)
+            if called not in ("bonus", "penalty", *_GATE_CONTEXT):
                 continue
             what = (
                 node.args[0].value
                 if node.args and isinstance(node.args[0], ast.Constant)
                 else ""
             )
-            known = narrow.get(what) or wide
+            if called in _GATE_CONTEXT:
+                known = _context_keys(_GATE_CONTEXT[called])
+            else:
+                known = narrow.get(what) or wide
             for inner in ast.walk(node):
                 key = None
                 if (isinstance(inner, ast.Call)

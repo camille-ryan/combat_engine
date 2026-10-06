@@ -430,6 +430,25 @@ def by_opportunity(world: World, me: int, ev: Event) -> bool:
     return bool(getattr(ev, "opportunity", False))
 
 
+def by_somebody_adjacent(world: World, me: int, ev: Event) -> bool:
+    """Is whoever swung standing next to me? "A creature *adjacent* to it ..."
+
+    An opportunity attack is usually made from an adjacent square, which is
+    why a card printing the word reads as saying nothing -- and why
+    `m5583a4` dropped the clause and looked finished. **A reach weapon makes
+    one from 2 or 3**, and 12 of 117 printed weapons have reach above 1, so
+    against one of those the clause is the whole difference.
+
+    Separate from `closed_on_me`, which asks who *moved*. This asks where
+    the attacker stands at the moment of the swing, and it is the attacker
+    rather than the target because `targets_me` already pins that end.
+    """
+    from .query import adjacent
+
+    foe = getattr(ev, "attacker", getattr(ev, "source", None))
+    return foe is not None and foe != me and adjacent(world, me, foe)
+
+
 def closed_on_me(world: World, me: int, ev: Event) -> bool:
     """Somebody *else* moved into reach of me.
 

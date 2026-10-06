@@ -207,15 +207,6 @@ def _double_turn(c: Cast) -> None:
     c.note(f"{c.ref}: it may take two immediate actions a round, one between turns")
 
 
-#: Two creatures that each "gain combat advantage if an ally has it" and
-#: have no other source of it ask each other, forever -- `has_combat_
-#: advantage` reads a `gains_ca_when` modifier, which calls this closure
-#: again for the asking creature's own ally. Shared across every row using
-#: this shape so the second asker, not just the first, sees the pair already
-#: in flight and answers False instead of recursing.
-_RESOLVING_CA: set[tuple[int, int]] = set()
-
-
 def _ca_synergy(c: Cast) -> None:
     """ "Gains combat advantage against an enemy if any of its allies has
     it too." `c.gains_advantage` asks the question every time the context
@@ -223,20 +214,13 @@ def _ca_synergy(c: Cast) -> None:
     me = c.me
 
     def shared(ctx: dict) -> bool:
+        # The re-entrancy guard this used to carry locally now lives on
+        # `query.has_combat_advantage` itself, so every row of this shape is
+        # covered rather than only the two here. #376.
         victim = ctx.get("target")
         if victim is None:
             return False
-        for a in c.allies():
-            key = (a, victim)
-            if key in _RESOLVING_CA:
-                continue
-            _RESOLVING_CA.add(key)
-            try:
-                if has_combat_advantage(c.world, a, victim):
-                    return True
-            finally:
-                _RESOLVING_CA.discard(key)
-        return False
+        return any(has_combat_advantage(c.world, a, victim) for a in c.allies())
 
     c.gains_advantage(shared, until=When.ENCOUNTER, on=me)
 

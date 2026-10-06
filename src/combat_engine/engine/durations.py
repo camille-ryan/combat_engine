@@ -222,7 +222,15 @@ class Effects:
         # effect still lands: a hold that slows *and* burns is only immune
         # to half of itself.
         conditions = list(conditions)
-        refused = [c for c in conditions if immune_to(self.world, owner, c, source)]
+        # `label` is the laying row's ref for every content call that passes
+        # one, which is what a keyword-narrowed immunity needs (#309). A few
+        # engine sites label with a plain word -- "dead", "dropped", "fall",
+        # "surprised" -- and those resolve to no row, so a gate asking for a
+        # keyword is correctly False rather than wrongly true.
+        refused = [
+            c for c in conditions
+            if immune_to(self.world, owner, c, source, label)
+        ]
         if refused:
             conditions = [c for c in conditions if c not in refused]
             self.world.bus.emit(

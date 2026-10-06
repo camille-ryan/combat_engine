@@ -151,7 +151,10 @@ def m115875a0(c: Cast) -> None:
         return
     c.hit()
     c.grab()
-    c.resist(20, on=c.me, until=When.EONT, when=lambda ctx: ctx.get("attacker") == victim)
+    # `source` is the damage context's name for who dealt it; `attacker`
+    # is the *attack* context's and was never in this one, so the resist
+    # applied to nobody. #380.
+    c.resist(20, on=c.me, until=When.EONT, when=lambda ctx: ctx.get("source") == victim)
 
 
 @power(

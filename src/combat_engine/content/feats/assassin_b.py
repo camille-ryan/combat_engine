@@ -228,9 +228,14 @@ def f2232(c: Cast) -> None:
     for count in (1, 2, 3, 4):
         c.resist(
             count, on=me, until=When.ENCOUNTER,
+            # **`source`, not `attacker`.** The damage context has never
+            # carried an `attacker` key -- it is `source` plus `from_attack`,
+            # so the two can be told apart without a nullable -- and all four
+            # rungs read as False forever. Found by `lint.py` once it knew
+            # which context a `c.resist` gate gets (#380).
             when=lambda ctx, n=count: (
-                ctx.get("attacker") is not None
-                and c.shrouds(ctx["attacker"]) >= n
+                ctx.get("source") is not None
+                and c.shrouds(ctx["source"]) >= n
             ),
         )
 

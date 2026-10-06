@@ -987,32 +987,32 @@ def deal_damage(
         t in getattr(world.get(target, Defences), "immune", ()) for t in types
     )
     if amount and not immune_to_all:
-        gated = _mods(
-            world, target, "resist",
-            {
-                "source": source,
-                "power": detail,
-                "dtype": dtype.value,
-                "dtypes": types,
-                "opportunity": opportunity,
-                "charge": charge,
-            },
-        ) + min(
+        # **The whole damage context, not a hand-picked six.** This built its
+        # own dict and dropped seven of `dmg_ctx`'s keys -- `target`,
+        # `from_attack`, `granted_by`, `granted_via`, `crit`, `advantage` and
+        # `ranged` -- so a gate on any of them was False forever, with `.get`'s
+        # default hiding it. `ranged` is the one that matters: `c.resist`'s own
+        # docstring gives "but only when the damage is from ranged or area
+        # attacks" as the motivating example, which is to say the one sentence
+        # the feature was built for could not be written. Measured across the 33
+        # `c.resist(when=)` sites, four inline gates read a dropped key.
+        #
+        # `dtype` stays a **string** and `dtypes` is still added here: that is
+        # the contract these 33 gates were written against, and swapping in
+        # `dmg_ctx`'s enum would trade seven silently-false keys for one. Purely
+        # additive is the whole point -- no gate that works today changes.
+        resist_ctx = {**dmg_ctx, "dtype": dtype.value, "dtypes": types}
+        gated = _mods(world, target, "resist", resist_ctx) + min(
             # **The smallest of the per-type resistances, not their sum.**
             # A blow that is lightning *and* thunder is shrugged off only
             # as far as the target resists both, so a gated "resist 10
             # lightning" and nothing against thunder stops none of it.
             # One type in `types` is every blow in the tree that is not a
             # pair, and `min` over one is that number.
-            _mods(
-                world, target, f"resist {t.value}",
-                {
-                    "source": source,
-                    "power": detail,
-                    "opportunity": opportunity,
-                    "charge": charge,
-                },
-            )
+            # The per-type read gets the same widened context, with its own
+            # type named: a gate on "resist 10 cold from ranged attacks" is
+            # asking about this `t`, not about the blow's whole type set.
+            _mods(world, target, f"resist {t.value}", {**resist_ctx, "dtype": t.value})
             for t in types
         )
         left = max(

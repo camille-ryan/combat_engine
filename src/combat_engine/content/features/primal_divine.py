@@ -283,11 +283,18 @@ def druid_balance(c: Cast) -> None:
 def druid_aspect_thick(c: Cast) -> None:
     """Melee and ranged attacks land softer while this druid is a beast.
 
-    One of the two arms `cf:druid-f1` leaves out. **No leg, and none
-    available**: the two arms that parent can tell apart are told apart by
-    the ability each reads, and this one reads Constitution just as one of
-    those does, so no derived leg separates them. Ungated it arms for every
-    druid. See the report.
+    One of the two arms `cf:druid-f1` leaves out, and **the leg exists after
+    all**. This row went in ungated, arming for every druid, on the reading
+    that the two arms are told apart only by the ability each reads -- and
+    this one reads Constitution just as one of those does, so no *derived*
+    leg separates them. True, and beside the point: `BUILDS["druid"]`
+    carries four real sub-option legs, `f1s0`-`f1s3`, and `Build.choices`
+    puts `leg.name` on the character verbatim. So `c.build("f1s2")` names
+    this aspect exactly, whatever ability pair it shares with a sibling.
+
+    The idiom was already in the tree when this was written --
+    `powers/bard/level_7_b.py:231` is `c.build("f1s2") and c.con_mod > 0`,
+    which is this row's gate to the letter.
 
     Reduction rather than a condition, so `c.resist` with no damage type:
     the printed line takes a number off the damage whatever the damage is.
@@ -307,7 +314,7 @@ def druid_aspect_thick(c: Cast) -> None:
     wrong shape.
     """
     me, world = c.me, c.world
-    if c.con_mod <= 0:
+    if not c.build("f1s2") or c.con_mod <= 0:
         return
 
     def softened(ctx: dict[str, Any]) -> bool:
@@ -338,8 +345,12 @@ def druid_aspect_storm(c: Cast) -> None:
     """A square of accuracy with the elemental half of the class's list.
 
     The other arm `cf:druid-f1` leaves out, and the one that reads no
-    ability at all -- so nothing in `chargen.BUILDS["druid"]` distinguishes
-    it either. See the report.
+    ability at all. That was taken to mean nothing in
+    `chargen.BUILDS["druid"]` distinguishes it, and it is the same mistake
+    `cf:druid-f1s2` made: an aspect is a **named** sub-option leg, not an
+    ability pair, and `c.build("f1s3")` asks for it directly. Reading no
+    ability is exactly why the derived fork cannot see it and exactly why
+    the leg name has to be the gate.
 
     "Druid attack powers and druid paragon path attack powers" is `cls` and
     `is_attack` on the row that is rolling; the project stops at 10, so the
@@ -355,7 +366,7 @@ def druid_aspect_storm(c: Cast) -> None:
             return False
         return any(word in p.keywords for word in _ELEMENTS)
 
-    if out_of_heavy_armour(c):
+    if c.build("f1s3") and out_of_heavy_armour(c):
         c.bonus("attack", 1, until=When.ENCOUNTER, on=me, when=elemental)
 
 

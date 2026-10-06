@@ -139,6 +139,7 @@ from combat_engine.engine.triggers import (
     both,
     by_melee,
     by_opportunity,
+    by_somebody_adjacent,
     targets_me,
 )
 
@@ -1142,11 +1143,19 @@ def m5583a3(c: Cast) -> None:
     target=NO_TARGET,
     trigger="a creature adjacent to it makes an opportunity attack against it",
     on=Trigger(
-        AttackDeclared, when=both(targets_me, by_opportunity),
+        AttackDeclared,
+        when=both(targets_me, by_opportunity, by_somebody_adjacent),
         text="a creature adjacent to it makes an opportunity attack against it",
     ),
 )
 def m5583a4(c: Cast) -> None:
+    """The adjacency is a third clause, not decoration.
+
+    An opportunity attack is normally made from an adjacent square, so the
+    printed word reads as free -- which is why this row went in without it.
+    A reach weapon swings from 2 or 3, and against one of those this
+    interrupt fired where the card forbids it.
+    """
     foe = getattr(c.trigger, "attacker", None)
     if foe is not None:
         c.use_power("m5583a0", on=foe, spend=False)
