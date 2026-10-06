@@ -1,9 +1,9 @@
 {
-  "sha": "cacf366c7c04d7f0562206e5d3bd20ab00c881b2",
-  "refs": 21268,
-  "fired": 19691,
-  "silent": 228,
-  "never": 1176,
+  "sha": "797a427d22bc00c669b61c17ad83410cd2af29eb",
+  "refs": 21270,
+  "fired": 19698,
+  "silent": 227,
+  "never": 1172,
   "silent_refs": [
     "cf:ardent-f0s2",
     "cf:assassin-f0",
@@ -123,7 +123,6 @@
     "f804",
     "f824",
     "f910",
-    "f924",
     "i1010p1",
     "i1077p1",
     "i1082p1",
