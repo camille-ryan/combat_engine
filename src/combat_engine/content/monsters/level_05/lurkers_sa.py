@@ -1465,9 +1465,10 @@ def m5302a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d8", 4),
-    dropped=("c.grab(dc=)",),
 )
 def m5302a2(c: Cast) -> None:
+    """A plain grab and nothing else printed, so there was no dropped clause --
+    the `c.grab(dc=)` marker named a number this card does not carry."""
     victim = c.target
     if c.strike():
         c.hit()

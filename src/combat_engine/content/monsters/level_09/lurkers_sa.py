@@ -119,9 +119,13 @@ def _kin_adjacent_count(c: Cast, victim: int, ref: str) -> int:
     keywords=[Keyword.WEAPON, Keyword.POISON],
     attack=Attack(vs=AC, printed=14),
     damage=Damage("1d8", 6),
-    dropped=("Damage(dtypes=)",),
 )
 def m1083a0(c: Cast) -> None:
+    """Two damage packets, not one blow of two types -- the card prints the
+    weapon damage and then "plus 2 poison damage" separately, which is what the
+    body does. `Damage(dtypes=)` is for a single roll that *is* several types at
+    once, so this row was never waiting on it. `level_04/artillery_sa.py` says
+    the same arrangement "needs no marker"."""
     if c.strike():
         c.hit()
         c.flat(2, dtype=DamageType.POISON)
@@ -362,9 +366,11 @@ def m2103a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=12),
     damage=Damage("2d12", 6),
-    dropped=("c.grab(dc=)",),
 )
 def m2103a1(c: Cast) -> None:
+    """Every printed clause is played: the burn until escape, the grab ending
+    when it attacks, and the +4 to defences while it holds somebody. No escape
+    DC is printed, so the `c.grab(dc=)` marker named nothing."""
     me = c.me
     victim = c.target
     if not c.strike() or victim is None:

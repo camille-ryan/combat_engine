@@ -1969,15 +1969,19 @@ def m5128a2(c: Cast) -> None:
     "m5128a3", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(2),
     target=ONE_CREATURE, attack=Attack(vs=AC, printed=13), damage=Damage("2d8", 7),
     requires=_hands_free, requires_text="it must not have a creature grabbed",
-    dropped=("c.grab(dc=)",),
 )
 def m5128a3(c: Cast) -> None:
+    """The grab is conditional on where the pull leaves the target, and the
+    printed "-4 penalty to attempts to escape" is a **penalty, not a DC** --
+    marked `c.grab(dc=)` for a verb that would not have said it. `escape.py`'s
+    `escape` modifier key is what it wanted."""
     victim = c.target
     if c.strike():
         c.hit()
         c.pull(1)
         if victim is not None and c.adjacent(victim):
             c.grab()
+            c.penalty("escape", 4, on=victim)
 
 
 @power(

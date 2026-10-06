@@ -1801,9 +1801,11 @@ def m4724a3(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d8", 4),
-    dropped=("c.grab(dc=)",),
 )
 def m4741a0(c: Cast) -> None:
+    """The card prints no escape clause at all -- only a cap of two held
+    creatures, which the body enforces. It was marked `c.grab(dc=)` for a
+    number its page does not give."""
     if c.strike():
         c.hit()
         if len(c.grabbing()) < 2:

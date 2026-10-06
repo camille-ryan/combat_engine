@@ -1686,13 +1686,16 @@ def m3188a3(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d10", 4),
-    dropped=("c.grab(dc=)",),
 )
 def m3215a0(c: Cast) -> None:
     """Three clauses after the damage, and two of them share one lifetime.
     "Until the grab ends" is not a `When`, so the burn and the ban on
     attacking are both hung on the encounter clock and lifted by the escape.
-    The printed -2 to escape is the dropped half: `c.grab` takes no number."""
+
+    **The printed "-2 to escape" is a penalty, not a DC**, and it was marked
+    `c.grab(dc=)` for a verb that would not have said it. `escape.py` documents
+    an `escape` modifier key on the struggling creature and `m1877a1` already
+    writes one, so the clause was a line away the whole time."""
     if not c.strike():
         return
     c.hit()
@@ -1700,6 +1703,7 @@ def m3215a0(c: Cast) -> None:
     if victim is None:
         return
     c.grab()
+    c.penalty("escape", 2, on=victim)
     _until_escape(c, victim, c.ongoing(10, until=When.ENCOUNTER))
     _until_escape(c, victim, c.cannot_attack(on=c.me, until=When.ENCOUNTER))
 

@@ -140,11 +140,17 @@ def m5452a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     damage=Damage("", 3),
-    dropped=("c.grab(dc=)",),
+    dropped=("c.grab(dc_from=)",),
 )
 def m5452a1(c: Cast) -> None:
     """As m5452a0, and the grab's escape DC is the master's Will rather than
-    the holder's own defence -- which `c.grab` cannot be told."""
+    the holder's own defence -- which `c.grab` cannot be told.
+
+    **Re-aimed off `c.grab(dc=)`**, which is the 58-row group wanting a flat
+    printed number. This wants a *defence read off a named creature*, and a
+    `dc=int` would never satisfy it: `escape.py` offers REF or FORT with
+    `grab_vs_fort` the only override, and neither is somebody else's Will. One
+    symbol, one gap."""
     bonus = _master_mod(c, Ability.INT)
     if bonus is None:
         return
