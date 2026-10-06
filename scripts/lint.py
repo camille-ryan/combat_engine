@@ -159,6 +159,25 @@ def main() -> int:
         )
         faults += 1
 
+    for where, ref in _minor_with_a_declared_trigger():
+        print(
+            f"{where}: {ref} is a MINOR action with a declared Trigger."
+            f" `triggers.WINDOW_OF` has no window for a minor action, so the"
+            f" trigger is never subscribed and the body never runs. A printed"
+            f" Trigger on an action you choose to take is a `requires=`."
+        )
+        faults += 1
+
+    for where, ref in _personal_reach_at_an_enemy():
+        print(
+            f"{where}: {ref} has reach=PERSONAL and an enemy-side target."
+            f" A personal reach narrows the pool to whoever is adjacent --"
+            f" sometimes to nobody -- so the row is offered against one"
+            f" creature whatever its card allows. Give it the reach the card"
+            f" prints, or target SELF."
+        )
+        faults += 1
+
     for where, ref, said in _count_the_area_decides():
         print(
             f"{where}: {ref} declares Target(count={said}, everyone=True) --"
@@ -662,6 +681,105 @@ def _flat_damage_as_a_number() -> list[tuple[str, str, str]]:
                         ):
                             rel = path.relative_to(ROOT)
                             out.append((f"{rel}:{call.lineno}", ref, first.value))
+    return out
+
+
+def _minor_with_a_declared_trigger() -> list[tuple[str, str]]:
+    """`action=MINOR` with a declared `Trigger`, which is never subscribed.
+
+    `triggers.WINDOW_OF` maps the three immediate actions, `FREE` and `NONE`
+    to a bus window and has **no entry for `MINOR`**. So the trigger is never
+    registered, the body never runs, and the row reads as finished: the
+    decorator accepts it, this file passed it, and `audit.py` reports UNUSED
+    -- which is indistinguishable from a Requirement the board cannot meet.
+    #426.
+
+    **Refused rather than given a window**, because a minor action with a
+    trigger window would behave as both and no printed rule asks for that.
+    The cards that look like they do are printing a *condition on acting*:
+    `f723` prints "Minor Action" and "Trigger: When you become bloodied"
+    together, and the honest reading is a `requires=`, which is what both
+    rows this caught now use.
+
+    So a prose `trigger="..."` beside a `requires=` is **correct** and is not
+    flagged -- only a declared `on=Trigger(...)`, which is the half that
+    silently does nothing.
+    """
+    out: list[tuple[str, str]] = []
+    for path in _asked_for():
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for dec in node.decorator_list:
+                if not isinstance(dec, ast.Call):
+                    continue
+                kw = {k.arg: k.value for k in dec.keywords}
+                if "action" not in kw or "on" not in kw:
+                    continue
+                if "MINOR" not in ast.unparse(kw["action"]):
+                    continue
+                if "Trigger(" not in ast.unparse(kw["on"]):
+                    continue
+                rel = path.relative_to(ROOT)
+                out.append((f"{rel}:{dec.lineno}", node.name))
+    return out
+
+
+def _personal_reach_at_an_enemy() -> list[tuple[str, str]]:
+    """`reach=PERSONAL` with an enemy-side target, which collapses the pool.
+
+    **Measured rather than assumed, and it is not what #427 says.** That issue
+    expects an empty pool and an UNUSED verdict. On a board holding three
+    enemies, `candidates` returns:
+
+        reach=PERSONAL   1 candidate -- the adjacent enemy -- for four rows
+                         0 for the fifth
+        once fixed       3, which is what each card allows
+
+    So the usual failure is **silent narrowing**, not refusal: the row is
+    offered against whichever creature happens to be adjacent and against
+    nothing else, whatever its card says. `m115806a5` repeats a bite with
+    reach 2 and could only ever reach 1; `m5337a3` may choose "one creature
+    it can see" and could only choose an adjacent one. Only `m5843a5` was
+    refused outright, and that is the one shape the issue describes.
+
+    That is worse than an empty pool, because an empty pool reports UNUSED
+    and a narrowed one reports `ok`.
+
+    A clean rule rather than a judgement: there is no card for which the
+    combination is the right reading.
+
+    **`ONE_CREATURE` is `Target("enemy", 1)`**, which is why this resolves the
+    constants instead of matching a literal `"enemy"` -- all five rows it
+    found use the constant, and a check written the obvious way finds none of
+    them.
+    """
+    enemy_side = {"ONE_CREATURE", "EACH_ENEMY"}
+    out: list[tuple[str, str]] = []
+    for path in _asked_for():
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for dec in node.decorator_list:
+                if not isinstance(dec, ast.Call):
+                    continue
+                kw = {k.arg: k.value for k in dec.keywords}
+                if "reach" not in kw or "target" not in kw:
+                    continue
+                if "PERSONAL" not in ast.unparse(kw["reach"]):
+                    continue
+                aim = ast.unparse(kw["target"])
+                if aim in enemy_side or '"enemy"' in aim or "'enemy'" in aim:
+                    rel = path.relative_to(ROOT)
+                    out.append((f"{rel}:{dec.lineno}", node.name))
     return out
 
 

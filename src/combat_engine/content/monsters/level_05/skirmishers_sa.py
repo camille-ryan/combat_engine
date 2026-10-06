@@ -1722,7 +1722,10 @@ def m5337a2(c: Cast) -> None:
     level=5,
     usage=ENCOUNTER,
     action=MINOR,
-    reach=PERSONAL,
+    # "Choose one creature that it can see" is a sight-based selection, so a
+    # *personal* reach found nobody and the row was never offered (#427).
+    # `Ranged(20)` is the spelling #363's level-2 row of this shape took.
+    reach=Ranged(20),
     target=ONE_CREATURE,
     dropped=("c.forbid(relation=)",),
 )
@@ -2342,7 +2345,12 @@ def m5843a4(c: Cast) -> None:
     level=5,
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=PERSONAL,
+    # The card says "makes a basic attack" and this creature has two --
+    # m5843a2 at melee 1 and m5843a3 at ranged 10 -- so the header takes the
+    # wider and `c.basic` enforces the real one: `_within_reach` refuses a
+    # melee swing at distance since #381. A personal reach found nobody at
+    # all (#427).
+    reach=Ranged(10),
     target=ONE_CREATURE,
     requires=_is_bloodied,
     requires_text="it must be bloodied",

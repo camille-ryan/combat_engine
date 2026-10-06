@@ -769,7 +769,9 @@ def m115807a5(c: Cast) -> None:
     level=12,
     usage=AT_WILL,
     action=STANDARD,
-    reach=PERSONAL,
+    # The reach of the attacks it repeats: m115807a4 is melee 2. A personal
+    # reach found nobody, so this never ran at all (#427).
+    reach=Melee(2),
     target=ONE_CREATURE,
 )
 def m115807a6(c: Cast) -> None:

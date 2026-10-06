@@ -143,7 +143,7 @@ from combat_engine.engine.query import (
     is_,
     team,
 )
-from combat_engine.engine.triggers import Trigger, about_me, both, by_me, by_melee, targets_me
+from combat_engine.engine.triggers import Trigger, about_me, by_me, targets_me
 
 # --------------------------------------------------------------------------
 # Shared shapes
@@ -375,9 +375,18 @@ def m1097a2(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     trigger="it hits with a melee attack",
-    on=Trigger(Hit, both(by_me, by_melee), "it hits with a melee attack"),
+    dropped=("c.hit_this_turn()",),
 )
 def m1097a3(c: Cast) -> None:
+    """"Minor, after hitting with a melee attack" is a condition on taking
+    the action, not a trigger window -- and `triggers.WINDOW_OF` has no entry
+    for a minor action, so the declared `Trigger(Hit, ...)` this carried was
+    never subscribed and the shift never happened (#426).
+
+    The shift plays now, as the minor action the card prints. What is dropped
+    is the "after hitting" half: `c.hit_this_turn()` is the reader it wants
+    and it does not exist, which is a group of six rows.
+    """
     c.shift(1)
 
 

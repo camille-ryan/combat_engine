@@ -2119,7 +2119,10 @@ def m5338a2(c: Cast) -> None:
         c.dazed(until=When.EONT)
 
 
-@power("m5338a3", level=7, usage=ENCOUNTER, action=MINOR, reach=PERSONAL, target=ONE_CREATURE)
+@power("m5338a3", level=7, usage=ENCOUNTER, action=MINOR,
+       # "Choose one creature that it can see": a sight-based selection, where
+       # a personal reach narrows the pool to whoever is adjacent (#427).
+       reach=Ranged(20), target=ONE_CREATURE)
 def m5338a3(c: Cast) -> None:
     victim = c.target
     if victim is None:

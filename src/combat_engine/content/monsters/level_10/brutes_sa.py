@@ -311,7 +311,9 @@ def m115806a4(c: Cast) -> None:
     level=10,
     usage=AT_WILL,
     action=STANDARD,
-    reach=PERSONAL,
+    # The reach of the row it repeats: m115806a4 is melee 2. A personal reach
+    # found nobody, so this never ran at all (#427).
+    reach=Melee(2),
     target=ONE_CREATURE,
 )
 def m115806a5(c: Cast) -> None:

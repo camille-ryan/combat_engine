@@ -50,7 +50,6 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.events import (
-    Bloodied,
     DamageRolled,
     Healed,
 )
@@ -100,10 +99,6 @@ def _ally_healed(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     )
 
 
-def _i_am_bloodied(world, me: int, ev: Any) -> bool:  # noqa: ANN001
-    return ev.actor == me
-
-
 # -- the last of the channelled cards ---------------------------------------
 
 _granted("f598", "f598b")
@@ -134,12 +129,35 @@ def f617b(c: Cast) -> None:
 _granted("f723", "f723b")
 
 
+def _bloodied_now(world, eid: int) -> bool:  # noqa: ANN001
+    """"Trigger: when you become bloodied" on a **minor action** row.
+
+    A `requires=` and not a `Trigger`: the card prints both a Minor Action
+    and a Trigger, and `triggers.WINDOW_OF` has no window for a minor action
+    -- so the declared trigger was never subscribed and the row could not
+    fire at all (#426). Taken as a condition on acting, which is what a
+    printed Trigger on an action you choose to take means.
+    """
+    from combat_engine.engine import Health
+
+    health = world.get(eid, Health)
+    return health is not None and health.bloodied
+
+
 @power("f723b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY,
        trigger="when you become bloodied",
-       on=Trigger(Bloodied, _i_am_bloodied, "you become bloodied"))
+       requires=_bloodied_now)
 def f723b(c: Cast) -> None:
-    """A plain "+1 bonus" on the card, so untyped."""
+    """A plain "+1 bonus" on the card, so untyped.
+
+    **Was a declared `Trigger(Bloodied, ...)` on a minor action, which never
+    fires.** The printed card really does carry both -- "Minor Action" and
+    "Trigger: When you become bloodied" -- and a minor action has no trigger
+    window, so the row was inert and audited as UNUSED. The trigger line
+    stays as prose because it is what the card says; `requires=` is what
+    enforces it.
+    """
     c.bonus("attack", 1, on=c.me, until=When.EONT)
     c.bonus("save", 1, on=c.me, until=When.EONT)
 
