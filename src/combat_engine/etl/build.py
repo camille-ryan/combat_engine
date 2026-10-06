@@ -918,6 +918,38 @@ _TRAILING_ESSAY = re.compile(
     r"<br\s*/?>\s*<br\s*/?>\s*[A-Z][A-Z0-9 \u2019'&/-]{6,}\s*<br"
 )
 
+#: The *other* shape the post-features essay starts in, which
+#: `_TRAILING_ESSAY` cannot see: a title-case section heading rather than a
+#: bare uppercase run. Six class pages begin the essay this way and so handed
+#: their last feature the whole of it (#419).
+#:
+#: **A whitelist of headings, not a pattern for "a heading".** The page's
+#: post-features sections are a closed set -- ability scores, characteristics,
+#: religion, races, alignment -- and `Unaugmented:` is a *rules* line in the
+#: same title-case shape on three pages, so anything looser cuts a power's own
+#: text in half.
+#:
+#: **Applied per body, never to the whole section**, and that is load-bearing.
+#: Cutting the section once before the headings are found reads as the tidier
+#: arrangement and deletes a real feature: `_TRAILING_ESSAY` has a false
+#: positive on the wizard's page that sits *before* `CANTRIPS`, so a
+#: section-level cut takes the arcanist from four features to three. Measured
+#: both ways -- per body, 99 headings before and after.
+#: `OVERVIEW` is in the list because `_TRAILING_ESSAY` requires a `<br` to
+#: *follow* the uppercase run and one page does not provide it, which left the
+#: heading itself behind: `cf:battlemind-f2c3` came out byte-identical to
+#: `p12418` for all 292 characters and then carried a 21-character
+#: `"\n\nBATTLEMIND OVERVIEW"`, so `duplicate_of` still missed. Safe to name
+#: rather than to relax the other pattern for: **no feature heading on any of
+#: the 45 class pages contains the word**, where relaxing `_TRAILING_ESSAY`
+#: is what eats `CANTRIPS`.
+_TRAILING_SECTION = re.compile(
+    r"(?:<br\s*/?>|</p>)\s*(?:<b>\s*)?"
+    r"(?:Ability Scores|Characteristics|Religion|Races|Alignment"
+    r"|[A-Z][A-Z0-9 \\u2019'&/-]*OVERVIEW)"
+    r"\s*(?:</b>)?\s*(?::|<br|</p>|$)"
+)
+
 _FEATURE_HEAD = re.compile(r"<b>\s*([A-Z][A-Z0-9 \u2019'&/-]{3,60}?)\s*</b>")
 
 #: A **sub-option** of the feature above it, set in title case: the
@@ -998,6 +1030,13 @@ def _features(source: sqlite3.Connection, out: sqlite3.Connection,
             # so the last feature of every class swallowed the essay about
             # deities and party role that follows it.
             body = _TRAILING_ESSAY.split(body, 1)[0]
+            # The same essay, arriving under a title-case heading instead of
+            # an uppercase one. Six classes end their feature list this way,
+            # and the tail cost two things at once: it broke `duplicate_of`
+            # by byte-identity for the last *card* of the section, and it
+            # carried deity and race names into a brief that the scrubber
+            # never saw, because the names are in text belonging to no row.
+            body = _TRAILING_SECTION.split(body, 1)[0]
             # A feature that *is* a power is already a `Feature` row in
             # `power`, embedded here as its own card. Keep the prose that
             # introduces it and drop the card from the *parent's* spec, so
