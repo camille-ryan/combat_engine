@@ -648,7 +648,6 @@ def m5608a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=10),
     damage=Damage("", 5, kind=MINION),
-    dropped=("c.grab(dc=)",),
 )
 def m5609a0(c: Cast) -> None:
     """"If it has no creature grabbed" is a condition on the grab and not on the
@@ -657,7 +656,7 @@ def m5609a0(c: Cast) -> None:
     if c.strike():
         c.hit()
         if _holding_nobody(c.world, c.me):
-            c.grab()
+            c.grab(dc=15)
 
 
 @power(

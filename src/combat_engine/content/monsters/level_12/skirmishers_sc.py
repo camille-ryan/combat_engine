@@ -3076,14 +3076,13 @@ def m5097a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d8", 11),
-    dropped=("c.grab(dc=)",),
 )
 def m5097a2(c: Cast) -> None:
     """The grab is real; the printed escape DC is the dropped clause, because
     `c.escape` rolls against the engine's own number."""
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=20)
 
 
 @power(

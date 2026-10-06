@@ -426,7 +426,6 @@ def m115864a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=16),
     damage=Damage("3d6", 9),
-    dropped=("c.grab(dc=)",),
 )
 def m115864a2(c: Cast) -> None:
     """The grab lands; its printed escape DC does not. `c.escape` rolls
@@ -434,7 +433,7 @@ def m115864a2(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.pull(3)
-        c.grab()
+        c.grab(dc=19)
 
 
 @power(

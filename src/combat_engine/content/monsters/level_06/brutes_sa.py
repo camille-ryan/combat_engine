@@ -3444,12 +3444,11 @@ def m6451a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d10", 7, kind=LIMITED),
-    dropped=("c.grab(dc=)",),
 )
 def m6451a3(c: Cast) -> None:
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=23)
 
 
 _M6451_SURVIVED = "the m6451 is reduced to 0 hit points, but not by a critical hit"
@@ -3767,13 +3766,12 @@ def m6550a5(c: Cast) -> None:
     damage=Damage("2d8", 8),
     requires=lambda world, eid: _grabbing_count(world, eid) < 2,
     requires_text="the m6637 must be grabbing fewer than two creatures",
-    dropped=("c.grab(dc=)",),
 )
 def m6637a0(c: Cast) -> None:
     if not c.strike():
         return
     c.hit()
-    c.grab()
+    c.grab(dc=23)
     victim = c.target
     me = c.me
     if victim is None:

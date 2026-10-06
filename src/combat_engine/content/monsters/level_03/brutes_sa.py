@@ -391,7 +391,6 @@ def m115817a1(c: Cast) -> None:
     # is a different sentence from the target restriction above.
     requires=_holding_nobody,
     requires_text="it must not be grabbing a creature",
-    dropped=("c.grab(dc=)",),
 )
 def m115817a2(c: Cast) -> None:
     """"One creature that isn't grabbed" is `conditions_without`, and
@@ -399,7 +398,7 @@ def m115817a2(c: Cast) -> None:
     grabbed *by it*", which a creature held by somebody else passes. The
     printed escape DC is a fixed number the grab does not carry."""
     if c.strike():
-        c.grab()
+        c.grab(dc=13)
 
 
 # --------------------------------------------------------------------------
@@ -1954,7 +1953,6 @@ _SPARE_LIMB = "m6508a2"
     keywords=[Keyword.ACID],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("2d6", 7),
-    dropped=("c.grab(dc=)",),
 )
 def m6508a0(c: Cast) -> None:
     """How many it may hold at once is two, or three once the block's last row
@@ -1970,7 +1968,7 @@ def m6508a0(c: Cast) -> None:
     limit = 3 if any(e.label == _SPARE_LIMB for e in c.world.effects.of(c.me)) else 2
     if len(_holding(c.world, c.me)) >= limit:
         return
-    c.grab()
+    c.grab(dc=13)
     burn = c.ongoing(5, DamageType.ACID, until=When.ENCOUNTER)
     _until_escape(c, victim, burn)
 

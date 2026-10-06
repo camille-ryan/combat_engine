@@ -2892,7 +2892,6 @@ def _grabs_and_burns(c: Cast, victim: int) -> None:
     damage=Damage("", 8, kind=MINION),
     requires=lambda world, eid: _grabbing_count(world, eid) == 0,
     requires_text="the m6482 must have no creature grabbed",
-    dropped=("c.grab(dc=)",),
 )
 def m6482a0(c: Cast) -> None:
     """The grab and the burn both play; the escape DC the card prints (16)
@@ -2943,7 +2942,6 @@ def m6482a1(c: Cast) -> None:
     damage=Damage("", 8, kind=MINION),
     requires=lambda world, eid: _grabbing_count(world, eid) == 0,
     requires_text="it must have no creature grabbed",
-    dropped=("c.grab(dc=)",),
 )
 def m6483a0(c: Cast) -> None:
     if not c.strike():
@@ -3237,7 +3235,6 @@ def m6660a1(c: Cast) -> None:
     damage=Damage("2d10", 7),
     requires=lambda world, eid: _grabbing_count(world, eid) == 0,
     requires_text="the m6660 must have no creature grabbed",
-    dropped=("c.grab(dc=)",),
 )
 def m6660a2(c: Cast) -> None:
     """"Can use `m6660a1` only on that creature" needs nothing further: a
@@ -3248,4 +3245,4 @@ def m6660a2(c: Cast) -> None:
     c.hit()
     victim = c.target
     if victim is not None:
-        c.grab(on=victim)
+        c.grab(on=victim, dc=16)

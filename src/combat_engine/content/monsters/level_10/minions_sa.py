@@ -194,13 +194,12 @@ def m115910a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=15),
     damage=Damage("", 8, kind=MINION),
-    dropped=("c.grab(dc=)",),
 )
 def m115910a1(c: Cast) -> None:
     if c.strike():
         c.hit()
         if not c.grabbing(of=c.me):
-            c.grab()
+            c.grab(dc=18)
 
 
 @power(
@@ -910,7 +909,7 @@ def m6638a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=15),
     damage=Damage("", 9, kind=MINION),
-    dropped=("c.grab(dc=)", "c.restrict(only=)"),
+    dropped=("c.restrict(only=)",),
 )
 def m6638a1(c: Cast) -> None:
     """Keeping it to pincers against only the creature it holds is a
@@ -920,7 +919,7 @@ def m6638a1(c: Cast) -> None:
     if c.strike():
         c.hit()
         if not c.grabbing(of=c.me):
-            c.grab()
+            c.grab(dc=16)
     if victim is not None:
         c.gains_advantage(
             lambda ctx: ctx.get("target") in c.grabbing(of=c.me), until=When.ENCOUNTER

@@ -2844,7 +2844,6 @@ def m5824a3(c: Cast) -> None:
     ),
     attack=Attack(vs=REF, printed=7),
     damage=Damage("2d8", 6, kind=LIMITED),
-    dropped=("c.grab(dc=)",),
 )
 def m5824a4(c: Cast) -> None:
     """`max_size` is a real `Target` field, so the size half of the target line
@@ -2857,7 +2856,7 @@ def m5824a4(c: Cast) -> None:
     c.move(half)
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=14)
     c.move(half)
 
 
@@ -3112,7 +3111,6 @@ def m5938a1(c: Cast) -> None:
     damage=Damage("1d6", 4, kind=LIMITED),
     requires=_not_grabbing,
     requires_text="must have no creature grabbed",
-    dropped=("c.grab(dc=)",),
 )
 def m5938a2(c: Cast) -> None:
     """"Until the grab ends" is measured by nothing in `When`: a grab ends
@@ -3127,7 +3125,7 @@ def m5938a2(c: Cast) -> None:
     victim = c.target
     if victim is None:
         return
-    c.grab()
+    c.grab(dc=16)
     c.shift(1)
     c.pull(2)
     burn = c.ongoing(5, on=victim, until=When.ENCOUNTER)

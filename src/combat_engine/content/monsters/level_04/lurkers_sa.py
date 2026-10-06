@@ -1434,7 +1434,6 @@ def m6395a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=REF, printed=7),
     damage=Damage("2d8", 3),
-    dropped=("c.grab(dc=)",),
 )
 def m6395a3(c: Cast) -> None:
     """"Sustain Standard" has a payout as well as a clock, and the clock alone
@@ -1452,12 +1451,12 @@ def m6395a3(c: Cast) -> None:
     if not c.strike():
         return
     c.hit()
-    c.grab(by=c.me)
+    c.grab(by=c.me, dc=14)
     held = c.effect(c.ref, until=When.SUSTAIN, on=c.me, sustain=STANDARD)
 
     def again() -> None:
         c.damage("2d8", 3, on=victim)
-        c.grab(on=victim, by=c.me)
+        c.grab(on=victim, by=c.me, dc=14)
 
     c.on_sustain(held, again)
 

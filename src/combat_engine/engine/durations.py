@@ -88,6 +88,21 @@ class Effect:
     #: that is of one type. Kept beside `ongoing` rather than inside it so
     #: that the readers asking `eff.ongoing[1]` go on answering.
     ongoing_types: tuple[DamageType, ...] = ()
+    #: The printed DC to escape this grab, when the card states a flat number
+    #: instead of leaving it to the grabber's defence.
+    #:
+    #: **It replaces the defence, it does not add to it.** 53 of the 58 rows
+    #: printing one print a number matching neither the grabber's Fortitude nor
+    #: its Reflex, and almost always lower -- so held creatures were 3 to 7
+    #: points harder to free than their cards say. `grab_defence` stays
+    #: additive and is a different sentence ("a bonus to your defences when
+    #: preventing an escape"). #421.
+    #:
+    #: `0` is "no printed DC", which is the common case and keeps the computed
+    #: defence. Lives on the `Effect` rather than on the relation because a
+    #: relation carries no numbers, and one creature can be held by two
+    #: grabbers with different printed DCs.
+    escape_dc: int = 0
     save_mod: int = 0
     #: Runs on a failed save. This is how "and worsens" powers are written.
     escalate: Callable[[Effect], None] | None = None
@@ -179,6 +194,7 @@ class Effects:
         relations: Iterable[tuple[Relation, int, int]] = (),
         ongoing: tuple[int, DamageType] | None = None,
         ongoing_types: tuple[DamageType, ...] = (),
+        escape_dc: int = 0,
         save_mod: int = 0,
         escalate: Callable[[Effect], None] | None = None,
         subs: Iterable[Sub] = (),
@@ -253,6 +269,7 @@ class Effects:
             relations=list(relations),
             ongoing=ongoing,
             ongoing_types=tuple(ongoing_types) if ongoing else (),
+            escape_dc=escape_dc,
             save_mod=save_mod,
             escalate=escalate,
             subs=list(subs),

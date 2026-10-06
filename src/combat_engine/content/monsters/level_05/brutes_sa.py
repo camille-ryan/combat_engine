@@ -599,7 +599,6 @@ def m115925a1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("c.grab(dc=)",),
 )
 def m115925a2(c: Cast) -> None:
     """"Uses claw twice against the same target", so `ONE_CREATURE` and two
@@ -618,7 +617,7 @@ def m115925a2(c: Cast) -> None:
     if landed:
         c.prone(on=victim)
         if len(c.grabbing()) < 2:
-            c.grab(on=victim)
+            c.grab(on=victim, dc=15)
 
 
 # ==========================================================================
@@ -2374,7 +2373,6 @@ def m5937a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d8", 7),
-    dropped=("c.grab(dc=)",),
 )
 def m5951a0(c: Cast) -> None:
     """"If it has no creature grabbed" is asked of the board rather than
@@ -2383,7 +2381,7 @@ def m5951a0(c: Cast) -> None:
     if c.strike():
         c.hit()
         if not c.grabbing():
-            c.grab()
+            c.grab(dc=15)
 
 
 @power(

@@ -2342,7 +2342,6 @@ def m6185a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=18),
     damage=Damage("2d12", 12),
-    dropped=("c.grab(dc=)",),
 )
 def m6185a3(c: Cast) -> None:
     """The grab lands; the printed escape DC does not. `c.grab` takes no DC and
@@ -2350,7 +2349,7 @@ def m6185a3(c: Cast) -> None:
     number has nowhere to put it."""
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=20)
 
 
 @power(
@@ -2513,7 +2512,7 @@ def m6665a1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=UpTo(2),
-    dropped=("c.grab(dc=)", "c.cannot_stand()"),
+    dropped=("c.cannot_stand()",),
 )
 def m6665a2(c: Cast) -> None:
     """Two of the row above, and the follow-up needs to know whether both
@@ -2545,7 +2544,7 @@ def m6665a2(c: Cast) -> None:
         return
     if not c.may("take hold of the target"):
         return
-    c.grab(on=victim)
+    c.grab(on=victim, dc=20)
     burn = c.ongoing(25, on=victim, until=When.ENCOUNTER)
     barred = c.forbid("m6665a3", on=me, until=When.ENCOUNTER)
     rooted = c.no_walk(on=me, until=When.ENCOUNTER)

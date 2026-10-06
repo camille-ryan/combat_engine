@@ -827,7 +827,6 @@ def m3771a1(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     attack=Attack(vs=FORT, printed=5),
     damage=Damage("2d4", 4, kind=LIMITED),
-    dropped=("c.grab(dc=)",),
 )
 def m3771a2(c: Cast) -> None:
     """The printed recharge is a condition, not a die, and it is exact: the
@@ -845,7 +844,7 @@ def m3771a2(c: Cast) -> None:
     if not c.strike():
         return
     c.hit()
-    c.grab()
+    c.grab(dc=13)
     if victim is None:
         return
     squeeze = c.effect(f"{ref} squeeze", until=When.SUSTAIN, on=victim, sustain=STANDARD)
@@ -1530,7 +1529,6 @@ def m5307a0(c: Cast) -> None:
     damage=Damage("1d8", 5),
     requires=_holding_nobody,
     requires_text="it must not have a creature grabbed",
-    dropped=("c.grab(dc=)",),
 )
 def m5307a1(c: Cast) -> None:
     """A printed Requirement about the creature's *own* state is a `requires=`
@@ -1538,7 +1536,7 @@ def m5307a1(c: Cast) -> None:
     offered, which is where a Requirement belongs."""
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=13)
 
 
 @power(

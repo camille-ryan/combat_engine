@@ -2921,14 +2921,13 @@ def m6116a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d4", 6),
-    dropped=("c.grab(dc=)",),
 )
 def m6116a3(c: Cast) -> None:
     """The pull is an Effect line and lands either way. The printed escape DC
     is the dropped half -- `c.grab` takes no number."""
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=14)
     c.pull(1)
 
 
@@ -3362,7 +3361,6 @@ def m6563a1(c: Cast) -> None:
     damage=Damage("2d4", 6),
     requires=_not_grabbing,
     requires_text="can grab only one creature at a time",
-    dropped=("c.grab(dc=)",),
 )
 def m6563a2(c: Cast) -> None:
     """"Only one creature at a time" is the Requirement, asked again here
@@ -3372,7 +3370,7 @@ def m6563a2(c: Cast) -> None:
         return
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=14)
 
 
 @power(

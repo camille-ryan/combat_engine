@@ -1303,14 +1303,13 @@ def m115855a3(c: Cast) -> None:
     damage=Damage("1d10", 6),
     requires=_holding_nobody,
     requires_text="it must not have a creature grabbed",
-    dropped=("c.grab(dc=)",),
 )
 def m115927a0(c: Cast) -> None:
     """The printed escape DC is the dropped half: `c.grab` sets the hold and
     takes no number, so getting out of this one is as easy as any other."""
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=13)
 
 
 @power(
@@ -3325,7 +3324,6 @@ def m5866a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=6),
     once_per_round=True,
-    dropped=("c.grab(dc=)",),
 )
 def m5866a2(c: Cast) -> None:
     """No damage line: the Hit is the haul and the hold. The printed escape
@@ -3340,7 +3338,7 @@ def m5866a2(c: Cast) -> None:
         c.pull(2, on=victim, to=sq)
     else:
         c.pull(2, on=victim)
-    c.grab(on=victim)
+    c.grab(on=victim, dc=13)
 
 
 _M5866_CAPTIVE_LOOKED_AWAY = "an enemy it is grabbing attacks without including it"
@@ -3394,7 +3392,6 @@ def m5884a0(c: Cast) -> None:
     damage=Damage("2d6", 4),
     requires=_in_the_water_empty_handed,
     requires_text="it must be in water and must not have a creature grabbed",
-    dropped=("c.grab(dc=)",),
 )
 def m5884a1(c: Cast) -> None:
     """The drowning check is a real roll and not narrative -- `c.check` makes
@@ -3407,7 +3404,7 @@ def m5884a1(c: Cast) -> None:
     victim = c.target
     if victim is None:
         return
-    c.grab()
+    c.grab(dc=13)
 
     def gasping(ev: TurnStart) -> None:
         if ev.actor != victim or ev.ghost:

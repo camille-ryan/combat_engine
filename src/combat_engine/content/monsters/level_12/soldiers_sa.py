@@ -4847,7 +4847,6 @@ def m6523a0(c: Cast) -> None:
     requires_text="the m6523 must be in one of the two forms the card names",
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d8", 11),
-    dropped=("c.grab(dc=)",),
 )
 def m6523a1(c: Cast) -> None:
     """The grab and its burn play. The printed escape DC has nowhere to go: a

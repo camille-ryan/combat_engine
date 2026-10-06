@@ -2017,7 +2017,6 @@ def m5715a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=18),
     damage=Damage("5d8", 10, kind=LIMITED, half_on_miss=True),
-    dropped=("c.grab(dc=)",),
 )
 def m5715a3(c: Cast) -> None:
     """"At the end of the target's next turn, if it is still grabbed" is a
@@ -2039,7 +2038,7 @@ def m5715a3(c: Cast) -> None:
         c.hit(half=True)
         return
     c.hit()
-    if c.grab(on=victim) is None:
+    if c.grab(on=victim, dc=20) is None:
         return
 
     def still_held(ev: TurnEnd) -> None:
@@ -2149,7 +2148,6 @@ def m5998a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=18),
-    dropped=("c.grab(dc=)",),
 )
 def m5998a1(c: Cast) -> None:
     """The hit line prints no damage, so there is no `c.hit` here at all --
@@ -2163,7 +2161,7 @@ def m5998a1(c: Cast) -> None:
     victim = c.target
     if victim is None or not c.strike():
         return
-    hold = c.grab(on=victim)
+    hold = c.grab(on=victim, dc=20)
     if hold is None:
         return
     burn = c.ongoing(10, on=victim, until=When.ENCOUNTER)
@@ -2794,7 +2792,6 @@ def m6183a1(c: Cast) -> None:
     keywords=[Keyword.ACID],
     attack=Attack(vs=AC, printed=18),
     damage=Damage("3d8", 7),
-    dropped=("c.grab(dc=)",),
 )
 def m6183a2(c: Cast) -> None:
     """How many targets depends on what it is already holding, which has to
@@ -2819,7 +2816,7 @@ def m6183a2(c: Cast) -> None:
         if not c.strike(on=victim):
             continue
         c.hit(on=victim)
-        if c.grab(on=victim) is not None:
+        if c.grab(on=victim, dc=25) is not None:
             taken.append(victim)
     if not taken:
         return

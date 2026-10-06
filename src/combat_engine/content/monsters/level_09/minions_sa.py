@@ -319,7 +319,7 @@ def m6641a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("", 8, kind=MINION),
-    dropped=("c.grab(dc=)", "c.grab(until=)"),
+    dropped=("c.grab(until=)",),
 )
 def m6684a0(c: Cast) -> None:
     """Capping the grab at "until the start of its next turn, unless
@@ -330,7 +330,7 @@ def m6684a0(c: Cast) -> None:
     if c.strike():
         c.hit()
         if not c.grabbing(of=c.me):
-            c.grab()
+            c.grab(dc=17)
     if victim is None or victim not in c.grabbing(of=c.me):
         return
 

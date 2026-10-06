@@ -398,7 +398,6 @@ def m115827a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=14),
     damage=Damage("2d8", 6),
-    dropped=("c.grab(dc=)",),
 )
 def m115827a2(c: Cast) -> None:
     """"Until the grab ends, the target takes ongoing 5 damage" is one hold
@@ -415,7 +414,7 @@ def m115827a2(c: Cast) -> None:
     c.hit()
     if _holding(c.world, c.me):
         return
-    hold = c.grab(on=victim)
+    hold = c.grab(on=victim, dc=19)
     burn = c.ongoing(5, on=victim, until=When.ENCOUNTER)
     if hold is not None and burn is not None:
         hold.on_end.append(lambda: c.world.effects.end(burn, "the grab ends"))
@@ -2328,7 +2327,6 @@ def _shot_at_me(world: World, me: int, ev: Hit) -> bool:
     target=UpTo(2),
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d6", 5),
-    dropped=("c.grab(dc=)",),
 )
 def m5556a0(c: Cast) -> None:
     """One creature or two, and against a single one the declared line is
@@ -2349,7 +2347,7 @@ def m5556a0(c: Cast) -> None:
         if c.strike(on=victim):
             c.hit(on=victim)
             if len(_holding(c.world, c.me)) < 2:
-                c.grab(on=victim)
+                c.grab(on=victim, dc=19)
 
 
 @power(

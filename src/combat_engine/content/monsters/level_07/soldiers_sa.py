@@ -1685,12 +1685,11 @@ def m5504a2(c: Cast) -> None:
 @power(
     "m5576a0", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, attack=Attack(vs=AC, printed=12), damage=Damage("2d8", 3),
-    dropped=("c.grab(dc=)",),
 )
 def m5576a0(c: Cast) -> None:
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=16)
 
 
 @power(
@@ -1755,12 +1754,11 @@ def m5577a0(c: Cast) -> None:
 @power(
     "m5577a1", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, attack=Attack(vs=AC, printed=12), damage=Damage("2d8", 3),
-    dropped=("c.grab(dc=)",),
 )
 def m5577a1(c: Cast) -> None:
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=16)
 
 
 @power(
@@ -1864,7 +1862,6 @@ def m5598a2(c: Cast) -> None:
     damage=Damage("1d8", 6, half_on_miss=True),
     requires=_m5598_free_to_grab,
     requires_text="it must be in its snake or hybrid form and not grabbing a creature",
-    dropped=("c.grab(dc=)",),
 )
 def m5598a3(c: Cast) -> None:
     victim = c.target
@@ -1874,7 +1871,7 @@ def m5598a3(c: Cast) -> None:
     c.hit()
     if victim is None:
         return
-    c.grab(on=victim)
+    c.grab(on=victim, dc=16)
     squeeze = c.effect(c.ref, on=victim, until=When.SUSTAIN, sustain=MINOR)
 
     def crush() -> None:

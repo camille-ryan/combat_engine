@@ -2401,7 +2401,6 @@ def m6505a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d6", 8),
-    dropped=("c.grab(dc=)",),
 )
 def m6505a1(c: Cast) -> None:
     """"Until the grab ends" is a lifetime no `When` measures. The printed escape
@@ -2409,7 +2408,7 @@ def m6505a1(c: Cast) -> None:
     if c.strike():
         c.hit()
         victim = c.target
-        c.grab()
+        c.grab(dc=14)
         burn = c.ongoing(5, until=When.ENCOUNTER)
         if victim is not None:
             _until_escape(c, victim, burn)

@@ -2267,7 +2267,6 @@ def m5654a0(c: Cast) -> None:
     target=ONE_CREATURE, attack=Attack(vs=AC, printed=14), damage=Damage("2d10", 6),
     requires=lambda world, eid: len(world.relations.targets(Relation.GRABBED_BY, eid)) < 4,
     requires_text="it cannot already be grabbing its full capacity",
-    dropped=("c.grab(dc=)",),
 )
 def m5654a1(c: Cast) -> None:
     """The cap by size -- one Large or four Medium-or-smaller -- is
@@ -2277,7 +2276,7 @@ def m5654a1(c: Cast) -> None:
     plus = 2 if victim is not None and c.is_(Condition.IMMOBILIZED, on=victim) else 0
     if c.strike(plus=plus):
         c.hit()
-        c.grab()
+        c.grab(dc=20)
 
 
 @power("m5654a2", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(2), target=UpTo(2))
@@ -2874,7 +2873,6 @@ def m6113a0(c: Cast) -> None:
 @power(
     "m6113a1", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(3),
     target=ONE_CREATURE, attack=Attack(vs=REF, printed=12), damage=Damage("2d8", 3),
-    dropped=("c.grab(dc=)",),
 )
 def m6113a1(c: Cast) -> None:
     """The ongoing damage lasts "until the grab ends," not a save -- ended
@@ -2884,7 +2882,7 @@ def m6113a1(c: Cast) -> None:
     if victim is None or not c.strike():
         return
     c.hit()
-    c.grab()
+    c.grab(dc=17)
     me = c.me
     held = c.world.effects.apply(
         victim, me, When.ENCOUNTER, label=f"{c.ref} grip", ongoing=(5, DamageType.UNTYPED)
@@ -2913,11 +2911,24 @@ def m6113a2(c: Cast) -> None:
     ),
     keywords=[Keyword.ACID], attack=Attack(vs=FORT, printed=12),
     damage=Damage("4d8", 12, kind=LIMITED),
-    dropped=("c.grab(dc=)",),
+    dropped=("c.swallow(dc=)",),
 )
 def m6113a3(c: Cast) -> None:
     """Recharges when the swallow ends -- the exact moment it releases
-    whoever it is holding -- rather than on a die."""
+    whoever it is holding -- rather than on a die.
+
+    **Re-aimed off `c.grab(dc=)`, which this row does not do.** The card reads
+    "the grab ends, and the target is swallowed (escape DC 17)", so the printed
+    DC is the swallow's, not a grab's -- and this body *clears* `GRABBED_BY`
+    before laying the swallow as a `Condition.REMOVED` on a `SAVE_ENDS` clock.
+    When `c.grab(dc=)` landed, the other 57 rows in that group took their
+    printed number and this one would have gone green on a verb it never calls.
+
+    A swallow ends on a saving throw here, not on an escape check, so there is
+    no contest for 17 to be the DC of. The missing piece is an escape *action*
+    against a removed-from-play effect, which is a different mechanism from a
+    grab and wants its own symbol.
+    """
     victim = c.target
     if not c.strike():
         return

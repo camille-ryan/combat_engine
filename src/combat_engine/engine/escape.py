@@ -54,6 +54,31 @@ def grabbed(world: World, eid: int) -> bool:
     return bool(holders(world, eid))
 
 
+def _printed_dc(world: World, eid: int, holder: int) -> int:
+    """The DC this particular hold prints, or 0 for "read it off the grabber".
+
+    Found through the effect rather than the relation, because a relation
+    carries no numbers -- `c.grab` stamps `escape_dc` on the `Effect` whose
+    `relations` names the pair. **Per hold, not per creature**: two grabbers
+    on one victim can print different numbers, and `attempt` has already
+    chosen which of them this struggle is against.
+
+    The largest wins if one holder somehow laid two, which is the same way
+    `grab_defence` resolves and is the conservative direction -- a hold is
+    never made easier by an extra effect nobody asked about.
+    """
+    found = 0
+    for eff in world.effects.live.values():
+        if not eff.escape_dc:
+            continue
+        if any(
+            kind is Relation.GRABBED_BY and s == holder and t == eid
+            for kind, s, t in eff.relations
+        ):
+            found = max(found, eff.escape_dc)
+    return found
+
+
 def _best(world: World, eid: int) -> str:
     """Which skill the creature would rather roll.
 
@@ -89,8 +114,18 @@ def attempt(
 
     won = True
     if not auto:
+        # **A printed DC replaces the defence; it does not add to it.** The
+        # card states the number to beat outright on 58 rows, and 53 of them
+        # print one that is neither the grabber's Fortitude nor its Reflex --
+        # almost always lower -- so computing it from the grabber made those
+        # holds 3 to 7 points too hard to escape. `grab_defence` stays
+        # additive on top of whichever number we started from, because "a
+        # bonus to your defences when preventing an escape" is a rider on the
+        # hold either way. #421.
+        printed = _printed_dc(world, eid, who)
         vs = Defense.FORT if _mods(world, who, "grab_vs_fort", ctx) > 0 else SKILLS[picked]
-        dc = defence(world, who, vs, ctx) + _mods(world, who, "grab_defence", ctx)
+        base = printed if printed else defence(world, who, vs, ctx)
+        dc = base + _mods(world, who, "grab_defence", ctx)
         won = bool(check(
             world, eid, picked, dc=dc, bonus=bonus + _mods(world, eid, "escape", ctx)
         ))

@@ -1426,14 +1426,13 @@ def m4739a4(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d8", 7),
-    dropped=("c.grab(dc=)",),
 )
 def m5082a0(c: Cast) -> None:
     """The grab is laid; the printed escape DC has nowhere to go -- `c.escape`
     rolls against a number the grabber's own stats decide."""
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=14)
 
 
 @power(
@@ -2388,12 +2387,11 @@ def m6273a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d6", 4),
-    dropped=("c.grab(dc=)",),
 )
 def m6273a2(c: Cast) -> None:
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=14)
 
 
 @power(
@@ -2463,7 +2461,7 @@ def m6346a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d6", 5),
-    dropped=("Target.only_grabbed", "c.grab(dc=)"),
+    dropped=("Target.only_grabbed",),
 )
 def m6346a2(c: Cast) -> None:
     """"While it has a target grabbed it can bite only that target" is a target
@@ -2478,7 +2476,7 @@ def m6346a2(c: Cast) -> None:
         return
     if c.strike(on=foe):
         c.hit(on=foe)
-        c.grab(on=foe)
+        c.grab(on=foe, dc=14)
 
 
 @power(
@@ -2616,7 +2614,6 @@ def m6600a1(c: Cast) -> None:
     damage=Damage("1d8", 8),
     requires=_holding_fewer_than_two,
     requires_text="must not already have two creatures grabbed",
-    dropped=("c.grab(dc=)",),
 )
 def m6600a2(c: Cast) -> None:
     """The Special is a Requirement in everything but name, so it is asked as an
@@ -2626,7 +2623,7 @@ def m6600a2(c: Cast) -> None:
         return
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=14)
 
 
 @power(

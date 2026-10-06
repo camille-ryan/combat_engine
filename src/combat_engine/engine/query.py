@@ -756,6 +756,36 @@ def immune_to(
     return mods.total(f"immune to {cond.value}", ctx) > 0
 
 
+def holds_somebody(world: World, eid: int) -> bool:
+    """Is this creature holding anyone in a grab? "Requirement: you must
+    have a creature grabbed."
+
+    **A `requires=` gate is called as `(world, actor)`**, before there is a
+    `Cast` at all -- `dsl.can_branch` invokes it straight from `usable` -- so
+    the three readers on `Cast` were all unreachable from a Requirement. The
+    only `(world, eid)` form in the tree lived in
+    `content/powers/fighter/holds.py`, which meant monster files imported from
+    a fighter power file to ask this. #362.
+
+    Two agents and I guessed three different wrong modules for it in one
+    afternoon (`engine.query`, `components.Relation`, `engine.types`), which is
+    the argument for it living in the module whose whole job is
+    `(world, ...)` questions.
+    """
+    return bool(world.relations.targets(Relation.GRABBED_BY, eid))
+
+
+def held_by(world: World, eid: int) -> list[int]:
+    """Everyone holding this creature in a grab. `holds_somebody`'s mirror.
+
+    `Cast.grabbed_by` delegates here so there is one implementation, and a
+    `requires=` gate can ask the question without a `Cast`.
+    """
+    from .escape import holders
+
+    return holders(world, eid)
+
+
 def sees_invisible(world: World, eid: int) -> bool:
     """Does this creature see what is hidden from everybody else?
 

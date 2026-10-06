@@ -1371,7 +1371,7 @@ def m5648a2(c: Cast) -> None:
     attack=Attack(vs=REF, printed=6),
     requires=_not_grabbing,
     requires_text="must have no creature grabbed",
-    dropped=("c.grab(dc=)", "c.grab_reach()"),
+    dropped=("c.grab_reach()",),
 )
 def m5648a3(c: Cast) -> None:
     """The blind is tied to the hold rather than given a duration of its own:
@@ -1387,7 +1387,7 @@ def m5648a3(c: Cast) -> None:
     where = _free_square_beside(c, c.me)
     if where is not None:
         c.teleport(2, who=foe, to=where)
-    hold = c.grab(on=foe)
+    hold = c.grab(on=foe, dc=13)
     blind = c.blinded(on=foe, until=When.ENCOUNTER)
     if hold is not None and blind is not None:
         hold.on_end.append(lambda: c.world.effects.end(blind, "the grab ended"))

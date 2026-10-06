@@ -651,7 +651,6 @@ def m5488a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("", 6, kind=MINION),
-    dropped=("c.grab(dc=)",),
 )
 def m6362a0(c: Cast) -> None:
     """Three clauses with one lifetime -- the hold on the victim, the burn it
@@ -668,7 +667,7 @@ def m6362a0(c: Cast) -> None:
     victim = c.target
     if victim is None:
         return
-    c.grab()
+    c.grab(dc=14)
     _while_gripped(
         c,
         victim,

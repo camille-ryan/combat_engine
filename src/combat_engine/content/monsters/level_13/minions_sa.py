@@ -960,7 +960,6 @@ def m6188a0(c: Cast) -> None:
     damage=Damage(bonus=10, kind=MINION),
     requires=_not_grabbing,
     requires_text="must have no creature grabbed",
-    dropped=("c.grab(dc=)",),
 )
 def m6516a0(c: Cast) -> None:
     """The Requirement is a fact about this creature at the moment it acts
@@ -973,7 +972,7 @@ def m6516a0(c: Cast) -> None:
     """
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=20)
 
 
 @power(

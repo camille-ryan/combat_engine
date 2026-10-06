@@ -1384,7 +1384,6 @@ def m5081a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=10),
     damage=Damage("", 5, kind=MINION),
-    dropped=("c.grab(dc=)",),
 )
 def m5081a1(c: Cast) -> None:
     victim = c.target
@@ -1394,7 +1393,7 @@ def m5081a1(c: Cast) -> None:
         c.hit()
     else:
         return
-    c.grab(on=victim)
+    c.grab(on=victim, dc=15)
     me = c.me
     label = f"{c.ref} suck"
     if not any(eff.label == label for eff in c.world.effects.of(me)):
@@ -1767,7 +1766,6 @@ def _burrowing_and_free(world: World, eid: int) -> bool:
     damage=Damage("2d6", 4),
     requires=_burrowing_and_free,
     requires_text="it must be burrowing and have no creature grabbed",
-    dropped=("c.grab(dc=)",),
 )
 def m5635a2(c: Cast) -> None:
     """"Ignoring cover and concealment" is passed as far as `c.strike` goes --
@@ -1783,7 +1781,7 @@ def m5635a2(c: Cast) -> None:
             c.hit(on=victim)
             hits += 1
     if hits == 2:
-        c.grab(on=victim)
+        c.grab(on=victim, dc=15)
         c.condition(
             Condition.RESTRAINED, on=victim, until=When.SAVE_ENDS,
             ongoing=(5, DamageType.UNTYPED),
@@ -1822,13 +1820,13 @@ def m5838a0(c: Cast) -> None:
     attack=Attack(vs=REF, printed=8),
     requires=_not_grabbing,
     requires_text="it must not be grabbing a creature",
-    dropped=("c.grab(dc=)", "c.cover_from()"),
+    dropped=("c.cover_from()",),
 )
 def m5838a1(c: Cast) -> None:
     victim = c.target
     if victim is None or not c.strike():
         return
-    held = c.grab(on=victim)
+    held = c.grab(on=victim, dc=22)
     if held is None:
         return
     c.immovable(on=c.me, until=When.EONT)

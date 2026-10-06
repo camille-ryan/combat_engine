@@ -139,7 +139,7 @@ def _m3295_shield(c: Cast, who: int) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=13),
     damage=Damage("1d8", 5),
-    dropped=("c.grab(dc=)", "c.host(decoy=)"),
+    dropped=("c.host(decoy=)",),
 )
 def m115875a0(c: Cast) -> None:
     """The decoy tentacle -- a second, attackable body standing in for the
@@ -150,7 +150,7 @@ def m115875a0(c: Cast) -> None:
     if not c.strike() or victim is None:
         return
     c.hit()
-    c.grab()
+    c.grab(dc=26)
     # `source` is the damage context's name for who dealt it; `attacker`
     # is the *attack* context's and was never in this one, so the resist
     # applied to nobody. #380.
@@ -1215,7 +1215,7 @@ def m5817a3(c: Cast) -> None:
     damage=Damage("3d12", 8, dtype=DamageType.NECROTIC, kind=LIMITED),
     requires=_m5817_in_head_form,
     requires_text="the m5817 must be in head form",
-    dropped=("c.grab(dc=)", "c.contract(disease=)"),
+    dropped=("c.contract(disease=)",),
 )
 def m5817a4(c: Cast) -> None:
     """The grab and the combat advantage it carries play; contracting the
@@ -1223,7 +1223,7 @@ def m5817a4(c: Cast) -> None:
     in `Cast` tracks a disease's stages."""
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=22)
         c.gains_advantage(
             lambda ctx: ctx.get("target") in c.grabbing(of=c.me), until=When.ENCOUNTER,
         )

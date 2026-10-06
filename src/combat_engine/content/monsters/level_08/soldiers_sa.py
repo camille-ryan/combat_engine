@@ -2175,12 +2175,11 @@ def m5582a0(c: Cast) -> None:
 @power(
     "m5582a1", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, attack=Attack(vs=AC, printed=15), damage=Damage("2d6", 5),
-    dropped=("c.grab(dc=)",),
 )
 def m5582a1(c: Cast) -> None:
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=16)
 
 
 @power(
@@ -2596,12 +2595,11 @@ def m5646a1(c: Cast) -> None:
     "m5646a2", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(2),
     target=ONE_CREATURE, attack=Attack(vs=REF, printed=11), damage=Damage("1d12", 8),
     requires=_hands_free, requires_text="it must have no creature grabbed",
-    dropped=("c.grab(dc=)",),
 )
 def m5646a2(c: Cast) -> None:
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=16)
 
 
 @power(
@@ -2673,13 +2671,12 @@ def m5666a1(c: Cast) -> None:
 @power(
     "m5666a2", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, attack=Attack(vs=AC, printed=13), damage=Damage("2d6", 9),
-    dropped=("c.grab(dc=)",),
 )
 def m5666a2(c: Cast) -> None:
     if c.strike():
         c.hit()
         if len(_holding(c)) < 2:
-            c.grab()
+            c.grab(dc=16)
 
 
 @power(
@@ -3107,7 +3104,6 @@ def m5858a3(c: Cast) -> None:
     "m5858a4", level=8, usage=Usage.RECHARGE, recharge=0, action=MINOR,
     reach=Melee(1), target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=13), damage=Damage("1d10", 5),
-    dropped=("c.grab(dc=)",),
 )
 def m5858a4(c: Cast) -> None:
     """Recharges on a condition, not a die -- 0 in the header, and the
@@ -3126,7 +3122,7 @@ def m5858a4(c: Cast) -> None:
     if not c.strike():
         return
     c.hit()
-    c.grab()
+    c.grab(dc=20)
     victim = c.target
     if victim is not None:
         c.ongoing(10, on=victim, until=When.SAVE_ENDS)
@@ -3535,12 +3531,11 @@ def _grabbing_at_most_one(world: World, eid: int) -> bool:
     "m6435a0", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(2),
     target=ONE_CREATURE, attack=Attack(vs=AC, printed=13), damage=Damage("2d6", 9),
     requires=_grabbing_at_most_one, requires_text="it must not be grabbing more than one creature",
-    dropped=("c.grab(dc=)",),
 )
 def m6435a0(c: Cast) -> None:
     if c.strike():
         c.hit()
-        c.grab()
+        c.grab(dc=16)
 
 
 @power(

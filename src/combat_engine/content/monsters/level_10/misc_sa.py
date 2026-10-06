@@ -446,7 +446,6 @@ def m6280a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=16),
     damage=Damage("1d10", 10, kind=LIMITED),
-    dropped=("c.grab(dc=)",),
 )
 def m6280a1(c: Cast) -> None:
     victim = c.target
@@ -456,7 +455,7 @@ def m6280a1(c: Cast) -> None:
             c.hit(on=victim)
             hits += 1
     if hits == 2 and victim is not None and not c.grabbing(of=c.me):
-        c.grab(on=victim)
+        c.grab(on=victim, dc=18)
 
 
 @power(

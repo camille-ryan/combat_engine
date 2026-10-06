@@ -3435,10 +3435,26 @@ class Cast:
             Relation.CURSED_BY, self.me, who
         )
 
-    def grab(self, *, on: int | None = None, by: int | None = None) -> Effect | None:
+    def grab(
+        self, *, on: int | None = None, by: int | None = None, dc: int = 0
+    ) -> Effect | None:
         """`by=` names the grabber when it is not the caster, as `c.mark`
         does: a summoned creature grabs on its own account, and hanging the
         relation on its summoner means nothing can read back what it holds.
+
+        **`dc=` is the printed escape DC, and it replaces the grabber's
+        defence rather than adding to it.** 58 rows print a flat number and
+        53 of those print one matching neither the grabber's Fortitude nor
+        its Reflex -- almost always lower -- so every one of those holds was
+        3 to 7 points harder to escape than its card says. `grab_defence` is
+        the additive key and a different sentence: "a bonus to your defences
+        when preventing an escape from your grab".
+
+        `0` means no printed DC, which is the common case and leaves
+        `escape.attempt` computing the defence as before. A DC that is
+        *another creature's defence* is not this -- that is
+        `c.grab(dc_from=)`, its own one-row symbol, because `dc=int` could
+        never satisfy it. #421.
         """
         who = self._who(on)
         if who is None:
@@ -3447,6 +3463,7 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, When.ENCOUNTER, label=f"{self.ref} grab",
             relations=[(Relation.GRABBED_BY, holder, who)],
+            escape_dc=dc,
         )
 
     def dominate(
@@ -3481,17 +3498,25 @@ class Cast:
         )
 
     def grabbing(self, *, of: int | None = None) -> list[int]:
-        """Everything this creature is holding in a grab."""
+        """Everything this creature is holding in a grab.
+
+        The boolean form a `requires=` gate needs is `query.holds_somebody`,
+        which takes `(world, eid)` -- a gate runs before there is a `Cast`.
+        """
         return self.world.relations.targets(
             Relation.GRABBED_BY, self.me if of is None else of
         )
 
     def grabbed_by(self, *, on: int | None = None) -> list[int]:
-        """Everyone holding that creature in a grab."""
-        from .escape import holders
+        """Everyone holding that creature in a grab.
+
+        Delegates to `query.held_by` so a `requires=` gate and a body read the
+        same implementation. #362.
+        """
+        from .query import held_by
 
         who = self._who(on)
-        return [] if who is None else holders(self.world, who)
+        return [] if who is None else held_by(self.world, who)
 
     def escape(
         self,
