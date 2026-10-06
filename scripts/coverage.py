@@ -238,17 +238,39 @@ def _features(db, args: argparse.Namespace) -> list:  # noqa: ANN001
     """Every class feature and sub-option, bucketed by class and build.
 
     Had no mode at all until #357, so 290 rows sat outside the only
-    instrument that asks whether a row is written -- and 148 of them are not.
+    instrument that asks whether a row is written.
+
+    **An alias is not work, and this counted 72 of them as work.** A class page
+    prints a card that also has its own `pNNNN` entry, and the importer mints a
+    `cf:` ref for the second printing -- then records the pairing in
+    `class_feature.duplicate_of`. That column has been populated since #218,
+    whose own "Left" section says "the 74 aliases are recorded and nothing reads
+    them yet", and **nothing did**: not this walk, not `blocked.py`, not
+    `todo.py`. So every pass reported 111 features outstanding when 72 of them
+    were cards the tree already carries under the `p` ref, and declaring one
+    would put the same card in a character's menu twice.
+
+    It cost three agent waves a full context each to re-derive that, and the
+    three module docstrings in `features/` that record the decision in prose
+    could not stop it happening again. Skipping them here is what stops it.
+
+    Dropped only when the twin is **actually declared** -- an alias pointing at
+    a ref nobody has written is still work, just filed under the other name.
     """
-    sql = "SELECT ref, class, build FROM class_feature"
+    sql = "SELECT ref, class, build, duplicate_of FROM class_feature"
     params: list = []
     if args.cls:
         sql += " WHERE lower(class) IN (" + ",".join("?" * len(args.cls)) + ")"
         params.extend(c.lower() for c in args.cls)
-    return [
-        {"ref": r["ref"], "class": r["class"], "build": r["build"] or "-"}
-        for r in db.execute(sql + " ORDER BY class, build, ref", params)
-    ]
+    rows = list(db.execute(sql + " ORDER BY class, build, ref", params))
+    written = declared()
+    out = []
+    for r in rows:
+        twin = r["duplicate_of"]
+        if twin and twin in written:
+            continue
+        out.append({"ref": r["ref"], "class": r["class"], "build": r["build"] or "-"})
+    return out
 
 
 def _traits(db, args: argparse.Namespace) -> list:  # noqa: ANN001
