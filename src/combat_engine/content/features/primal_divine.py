@@ -6,7 +6,7 @@ became extractable only now, which is why four classes that already have
 `cf:` rows in `defenders.py`, `strikers_sb.py` and `controllers_sd.py` get a
 second file rather than an edit.
 
-**Eleven of the batch's twenty-six refs are not here, on purpose.** The
+**Ten of the batch's twenty-six refs are not here, on purpose.** The
 extraction over-reached: some `-fNcM` refs are verbatim a card the tree
 already declares under its own `p` ref, and some `-fNsM` refs restate a
 branch their parent feature already lays. Declaring either would put the
@@ -19,9 +19,17 @@ stubbed, so that the count still says they are absent:
 * `cf:druid-f1s0`, `cf:druid-f1s1` -- `cf:druid-f1`
 * `cf:druid-f3c0` -- `p5032`
 * `cf:fighter-weaponmaster-f0c0` -- `p10469`
-* `cf:fighter-weaponmaster-f3s1`, `-f3s3`, `-f3s5` --
-  `cf:fighter-weaponmaster-f3`
+* `cf:fighter-weaponmaster-f3s3`, `-f3s5` -- `cf:fighter-weaponmaster-f3`
 * `cf:invoker-f1s1` -- `cf:invoker-f1`
+
+**`cf:fighter-weaponmaster-f3s1` was on that list and has come off it.** It
+is not a restatement: it has three clauses and the parent lays the first
+only. The other two -- the damage bonus the parent names as unwritten, and
+the temporary hit points a missed invigorating power pays -- are nowhere in
+the tree, so the row is here and the first clause is written out with it.
+Repeating that one clause is free, which is measured rather than assumed:
+`resolve.temp_hp` keeps the larger pool, so two handlers offering the same
+number leave one pool of that size. The parent's copy is redundant now.
 
 What is left is what is genuinely new: the arms of each fork that the parent
 reads no leg for and leaves out, and the two covenant cards, which are not
@@ -57,6 +65,7 @@ from combat_engine.engine import (
     CloseBurst,
     DamageType,
     Gear,
+    Health,
     Keyword,
     Trigger,
     Usage,
@@ -424,6 +433,102 @@ def fighter_talent_arena(c: Cast) -> None:
     """
     if out_of_heavy_armour(c):
         c.bonus(AC, 1 + _tier(c.level), until=When.ENCOUNTER, on=c.me)
+
+
+#: "An axe, a hammer, a mace, or a pick", as `Weapon.group` spells them.
+_BATTLERAGER_GROUPS = ("axe", "hammer", "mace", "pick")
+
+
+@power(
+    "cf:fighter-weaponmaster-f3s1",
+    level=0,
+    cls="fighter",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.MARTIAL],
+    requires=on_leg("battlerager"),
+    requires_text=_NOT_MY_OPTION,
+    dropped=("Keyword.INVIGORATING", "c.temp_hp(add=)"),
+)
+def fighter_talent_battlerager(c: Cast) -> None:
+    """The talent that feeds on landing a blow.
+
+    Three clauses. `cf:fighter-weaponmaster-f3` lays the first of them on
+    this same leg and names the third as unwritten, so this row is not a
+    restatement of it -- see the note at the top of the file for why
+    repeating the first one is free.
+
+    **The pool is laid after the blow, which is the printed "only after the
+    attack is resolved".** A `Hit` watch at the default window is already
+    past the swing it answers.
+
+    **The damage half is two mutually exclusive bonuses, not a +1 and a
+    gated +1.** Written as two that can both be true they would come to +1
+    forever, because the larger of two same-kind bonuses wins; written as a
+    +1 and a gated +2 the engine would have to be trusted to prefer the
+    second. Gating one on the four weapon groups and the other on *not*
+    them makes the question moot, and "wielding" is read off either hand
+    because that is the word the card uses rather than "attacking with".
+
+    "Whenever you have temporary hit points" is asked inside the gate, when
+    the damage is rolled, rather than latched when the trait arms -- the
+    pool comes and goes several times in a fight. A fighter's chassis wears
+    scale, so `_light_or_chain` is false for every fighter in the tree today
+    and this half lays nothing; it is asked anyway, the way
+    `cf:fighter-weaponmaster-f3s0`'s armour gate is, because another row can
+    change what is worn.
+
+    Two clauses are dropped. The invigorating keyword does not exist, so
+    "you use an invigorating attack power and miss every target" has no
+    first half to test -- `Keyword.INVIGORATING` is the symbol five feats
+    already wait on. And "plus any temporary hit points normally granted by
+    the power" needs two pools to **add**, which is a printed exception to
+    the rule `resolve.temp_hp` keeps: it takes the larger and returns, so a
+    power granting 5 beside a Constitution modifier of 3 leaves 5 where the
+    card says 8. `c.temp_hp(add=)` is what that wants.
+    """
+    me, world = c.me, c.world
+
+    def on_hit(ev: Hit) -> None:
+        if ev.attacker != me:
+            return
+        dealt = get(ev.power)
+        if dealt is not None and dealt.reach.kind in _MELEE_OR_CLOSE:
+            c.temp_hp(c.con_mod, on=me)
+
+    c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label=c.ref)
+
+    if not _light_or_chain(c):
+        return
+
+    def fed_and_in_close(ctx: dict[str, Any]) -> bool:
+        p = _row(ctx)
+        if p is None or Keyword.WEAPON not in p.keywords:
+            return False
+        if p.reach.kind not in _MELEE_OR_CLOSE:
+            return False
+        health = world.get(me, Health)
+        return health is not None and health.temp > 0
+
+    def heavy_grip() -> bool:
+        gear = world.get(me, Gear)
+        if gear is None:
+            return False
+        return any(
+            held is not None and held.group in _BATTLERAGER_GROUPS
+            for held in (gear.main, gear.off)
+        )
+
+    c.bonus(
+        "damage", 2, until=When.ENCOUNTER, on=me,
+        when=lambda ctx: fed_and_in_close(ctx) and heavy_grip(),
+    )
+    c.bonus(
+        "damage", 1, until=When.ENCOUNTER, on=me,
+        when=lambda ctx: fed_and_in_close(ctx) and not heavy_grip(),
+    )
 
 
 @power(

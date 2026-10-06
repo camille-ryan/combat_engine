@@ -25,6 +25,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     CHA,
     DAILY,
     EACH_ALLY,
@@ -99,7 +100,7 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
-from combat_engine.engine.grid import spread
+from combat_engine.engine.grid import Square, spread
 from combat_engine.engine.skills import SKILLS
 
 #: The unnamed attack ability. See the module docstring.
@@ -1839,6 +1840,70 @@ def p16586(c: Cast) -> None:
 # ==========================================================================
 
 
+def _x1015_zone(world: World, eid: int) -> int | None:
+    """The zone `p16649` leaves standing, by the label `c.zone` stamps on it.
+
+    `c.zone` falls back to `label or self.ref`, so the zone is already
+    findable without the parent having asked for a name.
+    """
+    from combat_engine.engine.zones import Zone
+
+    for who, zone in world.each(Zone):
+        if zone.owner == eid and zone.label == "p16649":
+            return who
+    return None
+
+
+def _x1015_zoned(world: World, eid: int) -> bool:
+    """"The p16649 power must be active", as a `requires=` gate."""
+    return _x1015_zone(world, eid) is not None
+
+
+def _x1015_origin(world: World, zone: int) -> Square | None:
+    """"The zone's origin square" -- read back off the squares it covers.
+
+    `Zone` records no origin, and the parent's own `c.origin` is gone by the
+    time this fires. A close burst 2 from a Medium creature is a 5x5 block
+    whose centre is exactly the square it was cast from, so the midpoint of
+    the extents is that square and not an approximation of it.
+    """
+    from combat_engine.engine.zones import Zone
+
+    held = world.get(zone, Zone)
+    if held is None or not held.squares:
+        return None
+    xs = [square[0] for square in held.squares]
+    ys = [square[1] for square in held.squares]
+    return ((min(xs) + max(xs)) // 2, (min(ys) + max(ys)) // 2)
+
+
+def _x1015_foe(world: World, me: int, who: int | None) -> bool:
+    from combat_engine.engine.query import team
+
+    return who is not None and who != me and team(world, who) is not team(world, me)
+
+
+def _x1015_entered(world: World, me: int, ev: Any) -> bool:
+    zone = _x1015_zone(world, me)
+    return (
+        zone is not None
+        and getattr(ev, "zone", None) == zone
+        and _x1015_foe(world, me, getattr(ev, "actor", None))
+    )
+
+
+def _x1015_starts_there(world: World, me: int, ev: Any) -> bool:
+    from combat_engine.engine.query import squares as squares_of
+    from combat_engine.engine.zones import Zone
+
+    zone = _x1015_zone(world, me)
+    who = getattr(ev, "actor", None)
+    if zone is None or getattr(ev, "ghost", False) or not _x1015_foe(world, me, who):
+        return False
+    held = world.get(zone, Zone)
+    return held is not None and bool(squares_of(world, who) & held.squares)
+
+
 @power(
     "p16649",
     level=0,
@@ -1850,35 +1915,62 @@ def p16586(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.ZONE],
 )
 def p16649(c: Cast) -> None:
-    """The secondary block is an opportunity action, so it is armed with
-    `c.arm_trigger` rather than `c.watch`: the printed cost is the whole
-    difference between a zone that punishes once a round and one that
-    punishes every creature that walks through it."""
+    """Only the zone. The secondary block is `p16649b` now.
+
+    It was armed here by hand, twice, while that stanza had no ref of its
+    own; declaring it as well would have fired the attack twice for one
+    enemy walking in. "Until the effect ends, you can use the secondary
+    power" is the grant, and `requires=_x1015_zoned` on the other row is the
+    Requirement it prints back.
+    """
     area = c.area()
-    zone = c.zone(area, until=When.EONT)
-    anchor = c.origin
+    c.zone(area, until=When.EONT)
+    c.grant_row("p16649b", on=c.me, until=When.EONT)
 
-    def zap(ev: object) -> None:
-        foe = getattr(ev, "actor", None)
-        if foe is None or foe not in c.enemies():
-            return
-        c.attack(_best(c), vs=WILL, on=foe)
-        if c.landed:
-            c.damage(0, _best_mod(c), on=foe)
-            c.push(3, on=foe, anchor=anchor)
 
-    c.arm_trigger(
-        ZoneEntered, zap,
-        when=lambda ev: ev.zone == zone,
-        cost=OPPORTUNITY,
-        until=When.EONT,
-    )
-    c.arm_trigger(
-        TurnStart, zap,
-        when=lambda ev: ev.actor in c.in_squares(area),
-        cost=OPPORTUNITY,
-        until=When.EONT,
-    )
+@power(
+    "p16649b",
+    level=0,
+    cls="x7_1015",
+    usage=AT_WILL,
+    action=OPPORTUNITY,
+    reach=CloseBurst(2),
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    requires=_x1015_zoned,
+    requires_text="the p16649 power must be active",
+    trigger="an enemy enters the zone or starts its turn there",
+    on=(
+        Trigger(ZoneEntered, _x1015_entered, "an enemy enters the zone"),
+        Trigger(TurnStart, _x1015_starts_there, "an enemy starts its turn in the zone"),
+    ),
+)
+def p16649b(c: Cast) -> None:
+    """The stanza `p16649` leaves standing, as an opportunity action.
+
+    **At-will, against the block's own type line.** The extractor copies the
+    parent's usage onto a second stanza, so this one reads "Encounter"; the
+    parent's Effect says the secondary power can be used *at will* while the
+    zone lasts, and that is the sentence that decides a cadence. Declared
+    `ENCOUNTER` the zone would punish one creature per fight, which is
+    neither reading of the card.
+
+    The target is read off the trigger rather than declared: an opportunity
+    action is handed its victim by the thing that set it off, and the reach
+    is printed from the caster while the push is measured from the zone.
+
+    No `attack=` -- "highest ability modifier" is rolled in the body for the
+    reason the module docstring gives.
+    """
+    foe = getattr(c.trigger, "actor", None)
+    if foe is None:
+        return
+    zone = _x1015_zone(c.world, c.me)
+    origin = None if zone is None else _x1015_origin(c.world, zone)
+    if c.attack(_best(c), vs=WILL, on=foe):
+        c.damage(0, _best_mod(c), on=foe)
+        if origin is not None:
+            c.push(3, on=foe, anchor=origin)
 
 
 @power(

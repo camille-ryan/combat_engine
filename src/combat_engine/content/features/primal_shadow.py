@@ -16,6 +16,19 @@ counter each. The extraction is being fixed at the source; the pairs are in
 the report. `cf:barbarian-f2c0` is the one that stayed, because `p4807` is
 blocked and has never been declared.
 
+**`cf:barbarian-f1s0` is not here either, and `docs/blocked.json` asks for
+it.** It is the first of the four options and the only one whose text was on
+the page from the start, so `cf:barbarian-f1` in `strikers_sb.py` wrote it
+inline on the `rageblood` leg -- the grant of `p4809` and the temporary hit
+points off `Dropped` -- and the ref never got a row of its own. Declaring one
+beside it would be a second handler paying the same pool, which costs nothing
+in play (`resolve.temp_hp` keeps the larger and returns) and still says the
+same thing twice. It would also resolve `f1009`'s `todo=("cf:barbarian-f1s0",)`
+and so report that feat finished, when what `f1009` actually waits on is
+`TempHP.power` -- the symbol `i640x1` already names for the same clause. The
+honest order is: re-aim `f1009`, move the option's body out of
+`cf:barbarian-f1` and into a row here, then close the `blocked.json` entry.
+
 Two things are worth saying once about what did get written.
 
 * **A leg per option is what the riders want and `chargen.BUILDS` has
