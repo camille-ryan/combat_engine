@@ -76,6 +76,13 @@ CHECKS = (
     # run -- an AST walk over `content/` plus one query. #235.
     Instrument("legs", ("uv", "run", "scripts/legs.py"),
                "every gated leg exists, and agrees with the page it came off"),
+    # **Beside `replay` because it is the half `replay` cannot do.** Seven
+    # recorded fights cover what seven drawn parties happen to do, and two
+    # engine mechanics had no cover at all -- 0 phasing events and 6 blindness
+    # events of 10,665 -- so both bugs shipped with `replay` 7 of 7 green.
+    # Camille's call on #422: targeted drivers, not an eighth fixture.
+    Instrument("drivers", ("uv", "run", "scripts/drivers.py", "--quiet"),
+               "the printed rule for a mechanic no fixture reaches"),
     Instrument("replay", ("uv", "run", "scripts/replay.py", "verify"),
                "the engine still plays the recorded fights"),
     Instrument("fight", ("uv", "run", "scripts/fight.py", "--quiet"),

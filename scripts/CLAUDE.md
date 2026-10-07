@@ -114,6 +114,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `coverage.py` | written / not written / half-written on purpose |
 | `localise.py` | does every heroic row carry the localisation fields it needs; `--freeze`, `--drift`, `--snapshot`, `--rules` |
 | `cards.py` | does a monster ability's header say the numbers its stat block prints — attack, defence, damage, range, usage |
+| `drivers.py` | one mechanic's printed rule on a board built for it; positive and negative controls |
 | `replay.py` | the regression net over `fixtures/`; `record`, `verify` |
 | `api_smoke.py` | play an encounter over HTTP |
 | `browser.py` | drive the real page in headless Chromium |
