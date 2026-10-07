@@ -12,10 +12,10 @@ contains every class feature, in a clean structure:
 
 ```
 <b>Class features:</b>        the names, as a list
-<h3>CENTERED BREATH MONK</h3> one per build: Class Feature, Suggested
-<h3>IRON SOUL MONK</h3>       Skills, At-Will / Encounter / Daily powers
-<h3>STONE FIST MONK</h3>
-<h3>MONK CLASS FEATURES</h3>  the definitions themselves
+<h3>&lt;BUILD 1&gt;</h3>          one per build: Class Feature, Suggested
+<h3>&lt;BUILD 2&gt;</h3>          Skills, At-Will / Encounter / Daily powers
+<h3>&lt;BUILD 3&gt;</h3>
+<h3>&lt;CLASS&gt; CLASS FEATURES</h3>  the definitions themselves
 <h3>IMPLEMENTS</h3>
 ```
 

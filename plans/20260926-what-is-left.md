@@ -60,7 +60,7 @@ Heroes of the Feywild page the importer never sees.
   makes the warding written today **0 on every swordmage the tree
   deals**.
 * `chargen.Gear` takes `shield` from the `ClassLine`, not the `Build`,
-  so the new great-weapon fighter wields a greataxe **and** keeps a
+  so the new great-weapon leg wields a greataxe **and** keeps a
   heavy shield's +2 AC.
 
 **Silently wrong, nothing catches it:**

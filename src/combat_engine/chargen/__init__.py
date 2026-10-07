@@ -618,8 +618,9 @@ class Build:
     name: str
     primary: Ability
     secondary: Ability
-    #: What it fights with, when the fork changes that. A two-blade ranger
-    #: and an archer are not carrying the same things.
+    #: What it fights with, when the fork changes that. A ranger on the
+    #: two-blade leg and one on the archer leg are not carrying the same
+    #: things.
     weapons: tuple[Weapon, ...] = ()
     #: The damage type a leg is sworn to, for the one fork that is a
     #: choice of element rather than of ability. `c.element()` reads it.
@@ -641,7 +642,7 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # feature that leg is handed actually reads.
     # The first leg carries a two-handed weapon because its talent is about
     # holding one; without it the great-weapon half of `cf:fighter-weaponmaster-f3`
-    # was unreachable and the leg was a great-weapon fighter with a
+    # was unreachable and the leg was a great-weapon build holding a
     # longsword.
     "fighter": (
         Build("great-weapon", STR, CON, (GREATAXE,)),
@@ -2078,8 +2079,8 @@ def launcher_for(kind: str) -> Weapon | None:
 def build_for(cls: str, ref: str) -> str:
     """The build whose gear can actually hold this row.
 
-    A class's builds carry different weapons -- a two-blade ranger owns no
-    bow at all -- so a ranged row fielded on the wrong one is refused for a
+    A class's builds carry different weapons -- a ranger on the two-blade leg
+    owns no bow at all -- so a ranged row fielded on the wrong one is refused for a
     reason that has nothing to do with the row. Lives here rather than in a
     script because choosing a build is character creation, and two scripts
     were about to want it.

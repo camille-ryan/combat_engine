@@ -1767,7 +1767,7 @@ def usable(
         # card shows. Callers that need to know *which* refusal this is
         # should ask `unmet_requirement`, not read these words -- a custom
         # `requires_text` hid the failure from `chargen.build_for`, which
-        # then handed a bow-only row to a two-blade ranger.
+        # then handed a bow-only row to a ranger holding two blades.
         return False, p.requires_text or "requirement not met"
     if p.is_attack_at(augment) and not any(
         _can_land(world, actor, p, b, augment) for b in open_branches

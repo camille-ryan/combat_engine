@@ -7,9 +7,9 @@ line twice. One target takes both; two targets take one each, the first the
 heavier.
 
 `p920` prints "Ranged weapon" as its whole range line, which is a bow in
-hand, so it is declared with a requirement of one: a two-blade ranger owns
-none and would otherwise be offered the row and roll a short sword at twenty
-squares.
+hand, so it is declared with a requirement of one: a ranger on the two-blade
+leg owns none and would otherwise be offered the row and roll a short sword at
+twenty squares.
 
 The later books add the thrown rows, which are the opposite case: they reach
 at range off the weapon already in the hand, so they carry
@@ -177,7 +177,7 @@ def p920(c: Cast) -> None:
     """No `requires_text`, deliberately: `chargen.build_for` picks the build
     that can hold a row by looking for the word "requirement" in the refusal,
     and a custom message hides it -- so spelling this one out handed the row
-    to the two-blade ranger, who owns no bow."""
+    to a ranger holding two blades, who owns no bow."""
     _two_swings(c, hands=False)
 
 

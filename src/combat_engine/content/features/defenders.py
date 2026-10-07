@@ -228,13 +228,13 @@ def fighter_grip(c: Cast) -> None:
     """Which of the six printed talents this fighter took.
 
     Every leg of `chargen.BUILDS["fighter"]` is one of them now, so the row
-    asks the leg rather than assuming that a fighter which is not a
-    great-weapon fighter fights one-handed -- four of the six do not.
+    asks the leg rather than assuming that any fighter not on the
+    great-weapon leg fights one-handed -- four of the six do not.
 
     Three are written. The two weapon talents check what is actually in
     hand, which is the printed Requirement and not a restatement of the
-    build: a great-weapon fighter who has swapped to one hand is not
-    getting this. The third is the temporary hit points a hit buys.
+    build: a fighter on the great-weapon leg who has swapped to one hand
+    is not getting this. The third is the temporary hit points a hit buys.
 
     The other three are in `docs/blocked.json`: they turn on an empty off
     hand, on improvised weapons, and on wearing something lighter than

@@ -163,7 +163,7 @@ def _board(
             "ranger" if declared.reach.kind in ("ranged", "area_burst") else "fighter"
         )
         # And the build whose gear can hold the row, the way `audit.py`
-        # picks one -- a ranged ranger row fielded on a two-blade ranger is
+        # picks one -- a ranged ranger row fielded on the two-blade leg is
         # refused for a reason that says nothing about the row.
         caster = chargen.spawn(
             world,

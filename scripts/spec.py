@@ -5,6 +5,7 @@
     uv run scripts/spec.py m145              a monster: its numbers, then each ability
     uv run scripts/spec.py i601              an item: its columns, then each block
     uv run scripts/spec.py f3                a feat: its gate, then the benefit
+    uv run scripts/spec.py b:c134-0          a build leg: its fork and its set
     uv run scripts/spec.py --class fighter --level 1
     uv run scripts/spec.py --monsters 1 --role brute
     uv run scripts/spec.py --items --slot weapon --level 3 --limit 20
@@ -345,6 +346,28 @@ def _render(db, ref: str, declared: set[str], include_all: bool) -> str | None: 
     # read as a power that does not exist.
     if ref.startswith("q"):
         return _term(db, ref)
+    if ref.startswith("b:"):
+        row = db.execute(
+            "SELECT * FROM build_option WHERE ref = ?", (ref,)
+        ).fetchone()
+        if row is None:
+            return None
+        # **The fork is in the header, not the body**, because it is the one
+        # thing on a leg that is a number rather than a reference, and a leg
+        # states neither ability almost a third of the time -- 8 sections say
+        # nothing about one at all and 15 more say something the two readers
+        # in `etl/build.py` disagree about. A blank here means *the page did
+        # not say*, which is why it is shown as a blank and not guessed. #235.
+        fork = ", then ".join(
+            filter(None, (row["ability"], row["second"]))
+        ) or "fork unstated"
+        count = db.execute(
+            "SELECT count(*) FROM build_option WHERE class = ?", (row["class"],)
+        ).fetchone()[0]
+        return (
+            f"### {row['ref']}   build option {row['ord'] + 1} of {count}"
+            f" of {row['class'].lower()}   ({fork})\n{row['spec']}"
+        )
     if ref.startswith("r") and re.fullmatch(r"r\d+", ref):
         row = db.execute("SELECT * FROM race WHERE ref = ?", (ref,)).fetchone()
         if row is None:

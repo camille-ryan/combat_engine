@@ -144,6 +144,33 @@ CREATE TABLE build_power (
   class TEXT, build TEXT, ref TEXT, PRIMARY KEY (class, build, ref)
 );
 
+-- One leg of a class's fork, as the class's own page lists it.
+--
+-- **The printed list is the authority on what the legs are**, which is what
+-- #235 settled and what `chargen.BUILDS` has been guessing at since it was
+-- written. Every class page carries a `Build Options:` line -- an enumerated,
+-- comma-separated list closed by a period -- and every entry on it has its own
+-- section further down the page. **90 legs across 25 of 25 classes, and 90 of
+-- 90 sections found**, so the model needs no fallback for the case it was built
+-- for and there is nothing here left to tune.
+--
+-- Keyed by **page order**, like `class_feature` and for the same reason: the
+-- entry's name is the printed one and lives in `localization/names.json`, so a
+-- leg can be written into tracked source and `leaks.py` stays honest.
+--
+-- `ability` and `second` are the fork the leg's own section states, and they
+-- are blank far more often than you would expect: 55 of the 90 state both, 24
+-- state one, and **11 state neither**, because the class line above them
+-- already did ("All wardens rely on Strength"). **Parse, or store nothing**:
+-- two independent readers run over the section and a disagreement is recorded
+-- as blank rather than resolved, which voided exactly the legs a spot-check
+-- had found wrong.
+CREATE TABLE build_option (
+  ref TEXT PRIMARY KEY, class TEXT, ord INTEGER,
+  ability TEXT, second TEXT, spec TEXT
+);
+CREATE INDEX build_option_class ON build_option(class, ord);
+
 CREATE TABLE class_feature (
   ref TEXT PRIMARY KEY, class TEXT, ord INTEGER, build TEXT, spec TEXT,
   -- The `power` row this card **reprints**, where it reprints one.
@@ -345,6 +372,9 @@ class Report:
         """The blank stat lines nobody has recorded yet. See `KNOWN_BLANK`."""
         return [r for r in self.blank_stats if r not in KNOWN_BLANK]
     build_powers: int = 0
+    #: Legs their own class page lists, and how many state a full fork. #235.
+    build_options: int = 0
+    build_forks: int = 0
     items: int = 0
     item_blocks: int = 0
     item_steps: int = 0
@@ -392,6 +422,8 @@ class Report:
             + ("   <-- A MISS. The name resolver has regressed."
                if self.links_found != self.links_total else ""),
             f"build powers  {self.build_powers:6d}  (which build lists which row)",
+            f"build options {self.build_options:6d}  (legs their own class page lists)",
+            f"  with a fork {self.build_forks:6d}  (both abilities read, and agreed on)",
             f"items         {self.items:6d}  (heroic magic items)",
             f"  blocks      {self.item_blocks:6d}  (a Property or a Power: the work unit)",
             f"  ladder rungs{self.item_steps:6d}  (level, plus and price)",
@@ -483,6 +515,11 @@ def build() -> Report:
     # After both, because a feat's Special line names items and
     # a set's benefit names feats. Neither index exists earlier.
     report.crossed += _cross_reference_rest(out, names)
+    # **After `feat.feats` and not beside `_build_powers`.** A leg's section
+    # names the feature it takes, the feat it wants and the powers it opens
+    # with, and all three have to be resolvable before any of them can be
+    # written down as a ref instead of as a printed name. #235.
+    report.build_options, report.build_forks = _build_options(source, out, names)
     report.crossed += _swap_sub_options(out, names)
     report.links_found, report.links_total = _links_resolve(source, out)
     # **Last, and it has to be.** The vocabulary is the `weapon` table and the
@@ -1577,6 +1614,330 @@ def _build_powers(source: sqlite3.Connection, out: sqlite3.Connection,
                 )
                 written += 1
     return written
+
+
+#: The class page's own list of its legs: an enumerated, comma-separated run
+#: closed by a period and then `Class features:`. All 20 bare class pages
+#: carry it, and so do the five pages the compendium files an original printing
+#: under a build name -- `Fighter (Weaponmaster)`, `Cleric (Templar)`. **25 of
+#: 25 classes, 90 legs, and every one of the 90 has its own section**; the 16
+#: pages with no options line are later-book variants, which **are** a leg
+#: rather than offering any. #235.
+_BUILD_OPTIONS = re.compile(r"Build Options?\s*:\s*([^.]+)\.", re.I)
+
+#: An entry's own section heading, further down the page: the printed name in
+#: capitals on a line of its own. Matched by **exact uppercase of the listed
+#: entry**, not by a pattern -- 90 of 90 legs are found that way, so there is
+#: no guessing left to do and nothing to tune.
+_RUN_OF_CAPS = re.compile(r"\n[A-Z][A-Z0-9 \u2019'/-]{3,}\n")
+
+#: The one mechanical thing a leg's section says: which three abilities to put
+#: where, which feature it takes, and the opening set it is built around.
+#:
+#: **Two label dialects**, as everywhere else in this compendium: the earlier
+#: pages write `Suggested Daily Power :` and the psionic ones write `Daily
+#: Power :`. Reading only the first form dropped 10 of the 76 lines and read
+#: another class's heading as a power name.
+_LEG_LABELS = (
+    r"Class Feature|Suggested At-Will Powers?|Suggested Encounter Powers?"
+    r"|Suggested Daily Powers?|Suggested Feats?|Suggested Skills?"
+    r"|At-Will Powers?|Encounter Powers?|Daily Powers?"
+    r"|Feature|Feats?|Skills?"
+)
+_LEG_LINE = re.compile(
+    rf"\b({_LEG_LABELS})\s*:\s*(.*?)(?=\b(?:{_LEG_LABELS})\s*:|\n\n|$)", re.S
+)
+
+#: Both dialects' labels, folded onto the one word the spec says. Written out
+#: rather than derived from the label so that an unexpected label raises here
+#: instead of inventing a heading nobody has read.
+_LEG_HEADING = {
+    "Class Feature": "Feature", "Feature": "Feature",
+    "Feat": "Feat", "Skill": "Skills",
+    "At-Will Power": "At-Will", "Encounter Power": "Encounter",
+    "Daily Power": "Daily",
+}
+
+_ABILITY_WORD = r"(Strength|Constitution|Dexterity|Intelligence|Wisdom|Charisma)"
+#: Rank words, as the pages say them. `best` is in the first set and
+#: `second-best` in the second, which is why both readers below have to be
+#: anchored on the **ability** rather than on the phrase: a pattern for
+#: "best" matches inside "second-best" and read the secondary as the primary
+#: on 6 legs.
+_SAYS_FIRST = r"(?:highest|primary|most important|best)"
+_SAYS_SECOND = r"(?:second|secondary|next)"
+_TEMPLATED_FIRST = (
+    rf"\b{_SAYS_FIRST}\s+(?:ability\s+)?score\s+(?:should\s+be|to|is)\s+{_ABILITY_WORD}",
+    rf"{_ABILITY_WORD}\b[^.;]{{0,60}}?\b(?:your|the|their|an?)\s+(?:\w+\s+){{0,2}}{_SAYS_FIRST}",
+)
+_TEMPLATED_SECOND = (
+    rf"followed\s+(?:closely\s+)?by\s+(?:a\s+high\s+)?{_ABILITY_WORD}",
+    rf"\bthen\s+{_ABILITY_WORD}",
+    rf"\b{_SAYS_SECOND}[\w-]*\s+(?:ability\s+)?score[^.;]{{0,40}}?"
+    rf"\b(?:to|is|should\s+be)\s+{_ABILITY_WORD}",
+    rf"{_ABILITY_WORD}\b[^.;]{{0,60}}?\b(?:your|the|their|an?)\s+(?:\w+\s+){{0,2}}{_SAYS_SECOND}",
+    rf"also\s+(?:have|consider\s+investing\s+in)\s+(?:a\s+high\s+)?{_ABILITY_WORD}",
+)
+_ANY_RANK = re.compile(
+    r"\b(highest|primary|most important|best|second[\w-]*|secondary|next)\b", re.I
+)
+_ANY_ABILITY = re.compile(rf"\b{_ABILITY_WORD}\b", re.I)
+
+
+def _printed_key(text: str) -> str:
+    """A printed name, flattened to what it can be looked up by.
+
+    The curly apostrophe is the whole reason this exists: a build page writes it
+    one way and the index the other -- the same power, 17 of them failing to
+    resolve on that one character. `leaks.py` learned the same lesson
+    separately (#371).
+    """
+    straightened = text.replace("\u2019", "'").replace("\u2018", "'")
+    return re.sub(r"\s+", " ", straightened).strip().lower()
+
+
+def _by_templates(body: str) -> dict[str, int]:
+    """Which ability each rank *phrase* in the section names."""
+    found: dict[tuple[int, str], int] = {}
+    for rank, patterns in ((1, _TEMPLATED_FIRST), (2, _TEMPLATED_SECOND)):
+        for pattern in patterns:
+            for m in re.finditer(pattern, body, re.I):
+                word = next((g for g in m.groups() if g), "")
+                if not word:
+                    continue
+                # Anchored on the ability token so that two patterns claiming
+                # the same mention are compared at the same position.
+                at = m.start() + m.group(0).lower().find(word.lower())
+                found.setdefault((at, word.capitalize()), rank)
+    ranked: dict[str, int] = {}
+    for (_, ability), rank in sorted(found.items()):
+        ranked.setdefault(ability, rank)
+    return ranked
+
+
+def _by_nearest(body: str) -> dict[str, int]:
+    """Which rank word sits closest to each ability, in its own sentence."""
+    closest: dict[str, tuple[int, int]] = {}
+    for sentence in re.split(r"(?<=[.;])\s+", body):
+        ranks = [
+            (m.start(), m.end(),
+             2 if m.group(1).lower().startswith(("second", "next")) else 1)
+            for m in _ANY_RANK.finditer(sentence)
+        ]
+        if not ranks:
+            continue
+        for m in _ANY_ABILITY.finditer(sentence):
+            ability = m.group(1).capitalize()
+            gap, rank = min(
+                (0 if start <= m.start() <= end
+                 else min(abs(m.start() - end), abs(start - m.end())), which)
+                for start, end, which in ranks
+            )
+            if gap > 40:
+                continue
+            if ability not in closest or gap < closest[ability][0]:
+                closest[ability] = (gap, rank)
+    return {ability: rank for ability, (_, rank) in closest.items()}
+
+
+def _leg_fork(body: str, allowed: set[str], only: set[str]) -> tuple[str, str]:
+    """The leg's primary and secondary, where **both readers agree**.
+
+    The ability line is prose and says the same thing twenty ways -- "Make
+    Strength your highest", "Wisdom is your most important ability", "Assign
+    your highest ability score to Intelligence", "make Constitution a close
+    second". Neither reader gets all of it, and the two fail differently, so a
+    disagreement is the signal that the sentence is not being read: it is
+    recorded as blank and shows in the build report.
+
+    That gate is load-bearing rather than tidy. Taking either reader's answer
+    alone put Constitution first on a leg whose section opens "need a high
+    Wisdom score", and Wisdom first on a leg that never mentions an ability --
+    a wrong ability pair is wrong scores on every character that takes the leg,
+    silently.
+
+    `allowed` is the abilities the class line names, so a mention of some other
+    class's ability cannot win. `only` is the primaries it offers, used as the
+    answer when the leg's own section states none and the class offers one.
+    """
+    def pick(ranked: dict[str, int]) -> tuple[str, str]:
+        first = second = ""
+        for ability, rank in ranked.items():
+            if allowed and ability not in allowed:
+                continue
+            if rank == 1 and not first:
+                first = ability
+            elif rank == 2 and not second:
+                second = ability
+        return first, second
+
+    templated, nearest = pick(_by_templates(body)), pick(_by_nearest(body))
+    both = [
+        a if a == b else ("" if a and b else a or b)
+        for a, b in zip(templated, nearest, strict=True)
+    ]
+    first, second = both[0], both[1]
+    if not first and len(only) == 1:
+        first = next(iter(only))
+    return first, ("" if second == first else second)
+
+
+def _build_options(
+    source: sqlite3.Connection, out: sqlite3.Connection,
+    names: dict[str, dict[str, str]],
+) -> tuple[int, int]:
+    """Every leg a class page lists, with the fork and the set it names.
+
+    `chargen.BUILDS` holds 97 legs that nobody read off a page: 29 are a
+    class-feature sub-option's positional ref, 64 were hand-written from a
+    paraphrase, and 4 are a fork this project invented. **Eleven of the 25
+    classes hold a different number of legs than their own page prints**, and of
+    the 14 classes whose count does line up, only 5 hold them in the printed
+    order -- so a leg cannot be matched to its entry by position. This is what
+    makes the printed list the authority, so that disagreement becomes a diff
+    rather than an argument. #235.
+
+    **Runs late.** Every value on a leg's section is a printed cross-reference
+    -- the feature it takes, the feat and the opening powers it is built around
+    -- and `power`, `class_feature` and `feat` all have to be finished before
+    any of them can resolve to a ref. Resolve, or store nothing: an unresolved
+    value is dropped rather than written down as prose, because prose here is a
+    printed name and a printed name in a column is the leak this whole
+    arrangement exists to prevent.
+
+    Returns the legs written and how many of them state a full fork.
+    """
+    powers: dict[str, dict[str, str]] = {}
+    for ref, cls in out.execute("SELECT ref, class FROM power"):
+        name = (names.get(ref) or {}).get("name", "")
+        if name:
+            powers.setdefault(cls.lower(), {}).setdefault(_printed_key(name), ref)
+    features: dict[str, dict[str, str]] = {}
+    for ref, cls in out.execute("SELECT ref, class FROM class_feature"):
+        name = (names.get(ref) or {}).get("name", "")
+        if name:
+            features.setdefault(cls.lower(), {}).setdefault(_printed_key(name), ref)
+    feats: dict[str, str] = {}
+    for (ref,) in out.execute("SELECT ref FROM feat"):
+        name = (names.get(ref) or {}).get("name", "")
+        if name:
+            feats.setdefault(_printed_key(name), ref)
+
+    # **The page `_classes` chose, by id -- not "the page with no
+    # parentheses".** Five classes have no bare page at all: the compendium
+    # files their original printing under a build name, so the fighter's own
+    # page is `Fighter (Weaponmaster)` and the cleric's is `Cleric (Templar)`.
+    # All five carry the options line, and reading only unparenthesised names
+    # found 20 of the 25 classes while silently dropping the five best
+    # exercised in the tree -- the fighter among them, which is #285's and
+    # #339's own worked example.
+    #
+    # Fetched into a list first: the loop inserts into `out`, and iterating one
+    # of its cursors while writing to it is the "read the table the build is in
+    # the middle of writing" trap `set_common` is annotated about.
+    written = forks = 0
+    for name, abilities, class_ref, ident in out.execute(
+        "SELECT name, abilities, ref, id FROM class ORDER BY name"
+    ).fetchall():
+        page = source.execute(
+            "SELECT PlainTxt FROM Class WHERE ID = ?", (ident,)
+        ).fetchone()
+        printed, text = abilities or "", (page["PlainTxt"] if page else "") or ""
+        listed = _BUILD_OPTIONS.search(text)
+        if listed is None:
+            continue
+        allowed = {a.capitalize() for a in _ANY_ABILITY.findall(printed)}
+        # The class line forks on the primary where it prints a semicolon --
+        # "Strength or Wisdom; Charisma" -- so only the part before it can be a
+        # primary, and a class offering exactly one needs no section to say so.
+        only = {a.capitalize() for a in _ANY_ABILITY.findall(printed.split(";")[0])}
+        rest = text[listed.end():]
+        for ord_, entry in enumerate(
+            e.strip() for e in listed.group(1).split(",") if e.strip()
+        ):
+            heading = f"\n{entry.upper()}\n"
+            at = rest.find(heading)
+            if at < 0:
+                continue
+            start = at + len(heading)
+            stop = _RUN_OF_CAPS.search(rest[start:])
+            body = rest[start: start + (stop.start() if stop else len(rest))]
+            ability, second = _leg_fork(body, allowed, only)
+            if ability and second:
+                forks += 1
+            ref = f"b:{class_ref}-{ord_}"
+            out.execute(
+                "INSERT OR REPLACE INTO build_option VALUES (?,?,?,?,?,?)",
+                (ref, name, ord_, ability, second,
+                 _leg_spec(body, name.lower(), powers, features, feats)),
+            )
+            # The entry's name and the section's prose, where printed names
+            # live. The prose is the only thing on the page that says what the
+            # leg *is*, and the chargen screen has nothing else to show.
+            names[ref] = {"name": entry, "description": " ".join(body.split())}
+            written += 1
+    return written, forks
+
+
+def _leg_spec(
+    body: str, cls: str, powers: dict[str, dict[str, str]],
+    features: dict[str, dict[str, str]], feats: dict[str, str],
+) -> str:
+    """A leg's mechanical lines, every printed name swapped for its ref.
+
+    Six labels, and what each value resolves against differs: a feature name
+    against `class_feature` **and then `power`**, because 2 of the 64 features
+    a leg names are the power the feature grants rather than the feature.
+    Skills are rules terms and stay as words.
+
+    A value that resolves to nothing is dropped. 10 of 79 feats go that way and
+    all ten are the same shape -- a parenthetical that runs across the commas
+    this splits on, "Weapon Proficiency (choose a two-handed superior melee
+    weapon, such as ...)". Dropping them costs a suggestion; keeping them would
+    put a printed name in a column.
+    """
+    out: list[str] = []
+    for m in _LEG_LINE.finditer(body):
+        bare = re.sub(r"s$", "", re.sub(r"^Suggested\s+", "", m.group(1)))
+        label = _LEG_HEADING[bare]
+        refs: list[str] = []
+        for value in m.group(2).split(","):
+            value = re.sub(r"\(.*?\)", "", value)
+            value = re.sub(r"^\s*Feature\s*:\s*", "", value).strip(" .\n")
+            if not value:
+                continue
+            key = _printed_key(value)
+            if label == "Feature":
+                hit = features.get(cls, {}).get(key) or powers.get(cls, {}).get(key)
+            elif label == "Feat":
+                hit = feats.get(key)
+            elif label == "Skills":
+                hit = value if key in _skill_words() else ""
+            else:
+                hit = powers.get(cls, {}).get(key)
+            if hit and hit not in refs:
+                refs.append(hit)
+        if refs:
+            out.append(f"{label}: {', '.join(refs)}")
+    return "\n".join(out)
+
+
+@lru_cache(maxsize=1)
+def _skill_words() -> frozenset[str]:
+    """The skill names, lowered, so a `Suggested Skills` line can stay words.
+
+    They are rules vocabulary -- a game system cannot be trademarked -- and
+    read off the engine rather than copied, as `feat._vocabulary` does and for
+    the same reason: a skill added to the engine is allowed here the moment it
+    exists. Function-local import, also as `feat` does: `engine.skills` pulls
+    in the whole rules kernel and the ETL wants one frozenset from it.
+
+    An **allow-list**, not "anything the power index does not claim", for the
+    reason `_slot`'s was one -- writing the deny list would itself be the leak.
+    """
+    from combat_engine.engine.skills import SKILLS
+
+    return frozenset(s.lower() for s in SKILLS)
 
 
 #: `href="power.php?id=NNNN"` inside a feat's Associated Powers block. The id

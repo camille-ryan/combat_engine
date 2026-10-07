@@ -69,7 +69,7 @@ def _has_ranged(world: World, eid: int) -> bool:
 
     The printed Requirement is the two branches' requirements joined by
     "or", so checking it whole said yes to both branches when only one was
-    true -- a two-blade ranger carrying no bow was offered the ranged
+    true -- a ranger on the two-blade leg, carrying no bow, was offered the ranged
     branch, and an archer holding one blade was offered the melee one.
     """
     gear = world.get(eid, Gear)

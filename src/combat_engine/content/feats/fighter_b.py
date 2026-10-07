@@ -1178,7 +1178,8 @@ def f1970(c: Cast) -> None:
     one of the six printed talents, and `cf:fighter-weaponmaster-f3`
     reads two of them as a grip. This is the same gate on the damage
     side, and it checks what is in hand rather than restating the leg --
-    a great-weapon fighter who has swapped to one hand is not getting it.
+    a fighter on the great-weapon leg who has swapped to one hand is not
+    getting it.
 
     The other four legs are the ones `cf:fighter-talent-rest` is blocked
     on and the symbols are its: an empty or occupied off hand, an armour

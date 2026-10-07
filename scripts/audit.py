@@ -89,7 +89,8 @@ from combat_engine.engine.types import ActionType, Usage
 # them the ranger's, and the cause was `chargen.build_for`: it picks a leg by
 # *spawning a character on each* and taking the first the row is usable on, so
 # a scored race draw inside that probe made the archer leg fail and the row was
-# then fielded on a two-blade ranger that could never use it. never-usable
+# then fielded on a ranger on the two-blade leg, which could never use it.
+# never-usable
 # 808 -> 860 and silent 219 -> 247 with it.
 chargen.SCORED_CHOICES = False
 
@@ -1291,7 +1292,7 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
             )
             equip(world, caster, magic)
             # **And something to loose it with.** A quiver of magic arrows
-            # on a two-blade ranger is never drawn -- `ammunition.nock`
+            # on a ranger holding two blades is never drawn -- `ammunition.nock`
             # asks what is in hand -- so every ammunition property
             # reported UNUSED for the board's reason rather than its own.
             # Exactly the `rba` case above: the build owns no bow.
