@@ -2418,7 +2418,7 @@ def m6650a4(c: Cast) -> None:
     What is still dropped is the *special recharge* -- "when it starts its turn
     and its aura is smaller than aura 5" is a condition where `recharge=` holds a
     die, which is #335's family. The plain die in the header fires meanwhile."""
-    _resize_aura(c, "m6650a0", plus=2)
+    c.resize_aura("m6650a0", plus=2, cap=5)
 
 
 @power(
@@ -2439,7 +2439,7 @@ def m6650a5(c: Cast) -> None:
     mid-move to catch each square as it is crossed. The printed conditional
     recharge is the dropped half, as it is on `m6650a4`."""
     me = c.me
-    _resize_aura(c, "m6650a0", to=1)
+    c.resize_aura("m6650a0", to=1)
     c.cure(Condition.IMMOBILIZED, Condition.RESTRAINED, Condition.SLOWED, on=me)
     c.insubstantial(on=me, until=When.EOT)
     c.move(c.speed_of())
@@ -2447,26 +2447,6 @@ def m6650a5(c: Cast) -> None:
         if c.adjacent(foe) and c.use_power("m6650a1", on=foe):
             c.slide(2, on=foe)
             c.prone(on=foe)
-
-
-def _resize_aura(c: Cast, label: str, to: int | None = None, plus: int = 0,
-                 cap: int = 5) -> bool:
-    """Set a standing aura's radius, which is the only lever that reaches one
-    already spawned.
-
-    `Zones.refresh` re-cuts `zone.squares` from `zone.aura` every tick, so the
-    field is live rather than a record of what it was created at --
-    `level_06/skirmishers_sa.py`'s `m6655a5` settled this. There is no `c.` verb
-    for it; `c.my_aura` finds the zone and the radius is a plain field.
-    """
-    zid = c.my_aura(label=label)
-    if not zid:
-        return False
-    zone = dict(c.world.zones.all()).get(zid)
-    if zone is None or zone.aura is None:
-        return False
-    zone.aura = to if to is not None else min(cap, zone.aura + plus)
-    return True
 
 
 _M6650_TYPES = (DamageType.LIGHTNING, DamageType.THUNDER)

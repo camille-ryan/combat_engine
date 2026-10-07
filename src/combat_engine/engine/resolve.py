@@ -1049,7 +1049,7 @@ def deal_damage(
     )
     if not was_bloodied and health.bloodied and health.hp > 0:
         world.bus.emit(Bloodied(actor=target, source=source))
-    _check_down(world, target, health, source)
+    _check_down(world, target, health, source, crit)
     return landed
 
 
@@ -1085,6 +1085,7 @@ def spend_surge(world: World, eid: int) -> bool:
     health = world.get(eid, Health)
     if health is None or health.surges <= 0:
         return False
+
     health.surges -= 1
     world.bus.emit(SurgeSpent(actor=eid, left=health.surges))
     return True
@@ -1102,7 +1103,8 @@ def temp_hp(world: World, source: int, target: int, amount: int) -> None:
 # -- going down -------------------------------------------------------------
 
 
-def _check_down(world: World, eid: int, health: Health, source: int | None = None) -> None:
+def _check_down(world: World, eid: int, health: Health,
+                source: int | None = None, crit: bool = False) -> None:
     from .query import is_
 
     if health.hp > 0:
@@ -1112,7 +1114,13 @@ def _check_down(world: World, eid: int, health: Health, source: int | None = Non
     # nor for any blow that overshot, which in play is most kills. The
     # printed sentence every row using it carries is "drops to 0 hit points
     # **or fewer**", and those rows were missing almost every death.
-    world.bus.emit(Dropped(actor=eid, dead=health.hp <= health.dying_at, source=source))
+    world.bus.emit(Dropped(
+        actor=eid, dead=health.hp <= health.dying_at, source=source,
+        # Whether the blow that did it was a critical. `crit` is already
+        # in scope at the one site that calls this, so "but not by a
+        # critical hit" costs a parameter rather than a new fact. #428.
+        critical=crit,
+    ))
     # Read hit points again. A row that answers its own `Dropped` by healing
     # itself -- the shape the `dying` flag exists for -- was healed inside
     # the emit and then knocked unconscious, prone and dying regardless,

@@ -3150,15 +3150,13 @@ def m6655a4(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m6655a5(c: Cast) -> None:
-    """Widens the standing aura in place, which `Zones.refresh` re-cuts
-    from `zone.aura` every tick -- the only lever that reaches a radius
-    already spawned."""
-    zid = c.my_aura(label="m6655a0")
-    if not zid:
-        return
-    zone = dict(c.world.zones.all()).get(zid)
-    if zone is not None and zone.aura is not None:
-        zone.aura = min(5, zone.aura + 2)
+    """Widens the standing aura in place, to the printed ceiling of 5.
+
+    `c.resize_aura` since #375 -- it mutates *and* emits `ZoneResized`, so the
+    row is credited for what it does. Written by hand here before the verb
+    existed, which is why this row sat in `audit.KNOWN_SILENT`: correct, and
+    invisible."""
+    c.resize_aura("m6655a0", plus=2, cap=5)
 
 
 @power(

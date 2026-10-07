@@ -430,6 +430,20 @@ def by_opportunity(world: World, me: int, ev: Event) -> bool:
     return bool(getattr(ev, "opportunity", False))
 
 
+def not_critical(world: World, me: int, ev: Event) -> bool:
+    """The blow was **not** a critical hit. "...but not by a critical hit."
+
+    Reads `Dropped.critical`, which could not be asked at all until #428 gave
+    the event the field. Two level-2 rows print the clause and both fired on
+    any drop.
+
+    Defaults to `False` for the event rather than raising, so a drop that no
+    attack caused -- ongoing damage, a failed death save -- reads as "not a
+    critical", which is both true and the printed reading.
+    """
+    return not getattr(ev, "critical", False)
+
+
 def by_somebody_adjacent(world: World, me: int, ev: Event) -> bool:
     """Is whoever swung standing next to me? "A creature *adjacent* to it ..."
 

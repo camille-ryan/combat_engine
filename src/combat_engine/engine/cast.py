@@ -506,13 +506,24 @@ class Cast:
         """
         who = on if on is not None else self.me
         held: Effect | None = None
+        # **The ref leads the label**, because that is the convention
+        # `audit._claimed` credits by: an `EffectApplied` counts for a row only
+        # if its label *starts with* that row's ref. `origin:fey` does not, so
+        # a row whose whole content is this verb laid a real effect and still
+        # reported SILENT -- 17 of them in the recorded baseline. #374.
+        #
+        # `query.kinds_of` reads the word back by searching for the marker
+        # rather than anchoring at the start, and checks `unorigin:` first
+        # because `origin:` is a substring of it.
         if instead_of:
             held = self.world.effects.apply(
-                who, self.me, until, label=f"unorigin:{instead_of.strip().lower()}"
+                who, self.me, until,
+                label=f"{self.ref} unorigin:{instead_of.strip().lower()}",
             )
         for word in words:
             held = self.world.effects.apply(
-                who, self.me, until, label=f"origin:{word.strip().lower()}"
+                who, self.me, until,
+                label=f"{self.ref} origin:{word.strip().lower()}",
             )
         return held
 
@@ -2935,6 +2946,30 @@ class Cast:
         who = self._who(on)
         held = self.world.get(who, Defences) if who is not None else None
         return {t: n for t, n in (held.resist if held else {}).items() if n}
+
+    def vulnerabilities(self, *, on: int | None = None) -> dict[DamageType, int]:
+        """What the creature takes extra from, by type, right now.
+
+        `c.resistances`' mirror, and missing for the same reason it was: "if
+        it is already vulnerable, increase it" and "the target loses that
+        vulnerability" both need the current number before a delta can be
+        handed over, and **9 content sites reach past `Cast` into the
+        `Defences` component** because this was not here. #391.
+
+        Purely additive -- no existing row changes behaviour -- which is why
+        it rides in a batch rather than warranting its own sweep.
+
+        Does **not** unblock the write side. Eleven rows carry a marker for a
+        gated or conditional `c.vulnerable(...)`; this is the reader, and
+        `i1444p1`'s `c.is_vulnerable()` is the one marker it answers.
+
+        A copy, and types the creature is not vulnerable to are left out.
+        """
+        from .components import Defences
+
+        who = self._who(on)
+        held = self.world.get(who, Defences) if who is not None else None
+        return {t: n for t, n in (held.vulnerable if held else {}).items() if n}
 
     def grant_row(
         self,
@@ -6106,6 +6141,53 @@ class Cast:
             if z.aura and z.owner == self.me and (not label or label in (z.label or ""))
         ]
         return mine[-1] if mine else 0
+
+    def resize_aura(
+        self, label: str = "", *, plus: int = 0, to: int = 0, cap: int = 0
+    ) -> int:
+        """Change a standing aura's radius in place, and say so.
+
+        `Zones.refresh` re-cuts `zone.squares` from `zone.aura` on every tick,
+        so the radius is live and one field is the whole lever. Two rows had
+        worked that out and were mutating it by hand -- correctly -- and both
+        sat in `audit.KNOWN_SILENT` because **nothing was announced**, so the
+        audit had no event to credit and called a working row invisible. #375.
+
+        `plus` widens by that much, `to` sets it outright, `cap` is the
+        printed ceiling ("to a maximum of aura 5"). Returns the new radius, or
+        0 if the caster has no such aura -- which is a real answer and not a
+        failure: a row that widens its aura does nothing if nothing made one.
+        """
+        from .events import ZoneResized
+
+        zid = self.my_aura(label=label)
+        if not zid:
+            return 0
+        zone = dict(self.world.zones.all()).get(zid)
+        if zone is None or zone.aura is None:
+            return 0
+        was = zone.aura
+        now = to if to else was + plus
+        if cap:
+            now = min(cap, now)
+        now = max(0, now)
+        if now == was:
+            # Nothing moved, so nothing is announced: a row already at its
+            # printed ceiling has not done something, and crediting it would
+            # be the over-crediting #216 was about.
+            return was
+        zone.aura = now
+        # **Redrawn at once, not on the next tick.** `Zones.refresh` would get
+        # to it anyway, but a row that widens its aura and then asks who is
+        # standing in it would read the old footprint. Of the three hand-rolled
+        # versions this replaces, only `level_13/lurkers_sa.py`'s called this --
+        # so two of them had the stale-footprint window and the third did not,
+        # which is the argument for one verb rather than three.
+        self.world.zones.refresh()
+        self.world.bus.emit(
+            ZoneResized(zone=zid, actor=self.me, from_=was, to=now)
+        )
+        return now
 
     def in_my_aura(self, who: int | None = None, *, label: str = "") -> bool:
         """Is that creature standing inside an aura of mine?

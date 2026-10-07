@@ -2969,16 +2969,6 @@ def _aura_radius(c: Cast, label: str) -> int:
     return 0 if zone is None or zone.aura is None else zone.aura
 
 
-def _resize_aura(c: Cast, label: str, radius: int) -> None:
-    """Set an aura's radius and let the zone system redraw it."""
-    zid = c.my_aura(label)
-    zone = c.world.get(zid, Zone) if zid else None
-    if zone is None:
-        return
-    zone.aura = radius
-    c.world.zones.refresh()
-
-
 @power(
     "m6651a0",
     level=13,
@@ -3087,7 +3077,7 @@ def m6651a4(c: Cast) -> None:
         TurnStart,
         lambda ev: ev.actor == me and _aura_radius(c, _M6651_AURA) < 5,
     )
-    _resize_aura(c, _M6651_AURA, _aura_radius(c, _M6651_AURA) + 2)
+    c.resize_aura(_M6651_AURA, plus=2)
 
 
 @power(
@@ -3128,7 +3118,7 @@ def m6651a5(c: Cast) -> None:
         if c.landed:
             c.slide(3, on=foe)
             c.prone(on=foe)
-    _resize_aura(c, _M6651_AURA, 1)
+    c.resize_aura(_M6651_AURA, to=1)
 
 
 @power(

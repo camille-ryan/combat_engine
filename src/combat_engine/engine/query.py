@@ -455,10 +455,16 @@ def kinds_of(world: World, eid: int) -> frozenset[str]:
     words: set[str] = set()
     gone: set[str] = set()
     for eff in world.effects.of(eid):
-        if eff.label.startswith("origin:"):
-            words.add(eff.label.split(":", 1)[1])
-        elif eff.label.startswith("unorigin:"):
-            gone.add(eff.label.split(":", 1)[1])
+        # **Searched for, not anchored.** The label leads with the laying
+        # row's ref so that `audit._claimed` can credit it (#374), so the
+        # marker is no longer at position zero. `unorigin:` is tested first
+        # because `origin:` is a substring of it and splitting on the shorter
+        # one would read "natural" out of "unorigin:natural".
+        tag = eff.label
+        if "unorigin:" in tag:
+            gone.add(tag.split("unorigin:", 1)[1])
+        elif "origin:" in tag:
+            words.add(tag.split("origin:", 1)[1])
     row = stat_block(world, eid)
     if row:
         import json

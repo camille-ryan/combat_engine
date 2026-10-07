@@ -87,6 +87,7 @@ from combat_engine.engine.triggers import (
     by_melee,
     enemy_within,
     hits_me,
+    not_critical,
     targets_me,
 )
 
@@ -1230,13 +1231,13 @@ def m6107a1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     trigger="when it is reduced to 0 hit points",
-    on=Trigger(Dropped, about_me, "it is reduced to 0 hit points"),
-    dropped=("Dropped.critical",),
+    on=Trigger(Dropped, both(about_me, not_critical),
+               "it is reduced to 0 hit points, but not by a critical hit"),
 )
 def m6107a2(c: Cast) -> None:
-    """"But not by a critical hit" cannot be asked: `Dropped` carries `actor`,
-    `dead` and `source`, and nothing about how the blow was rolled -- the same
-    absence `Dropped.power` names. So the row fires on any drop.
+    """"But not by a critical hit" is asked now: `Dropped` carries
+    `critical` since #428, and `triggers.not_critical` reads it. The row
+    fired on any drop before that, including the one its card excludes.
     """
 
     def scorch() -> None:
@@ -1314,13 +1315,13 @@ def m6569a0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     trigger="when it is reduced to 0 hit points",
-    on=Trigger(Dropped, about_me, "it is reduced to 0 hit points"),
-    dropped=("Dropped.critical",),
+    on=Trigger(Dropped, both(about_me, not_critical),
+               "it is reduced to 0 hit points, but not by a critical hit"),
 )
 def m6569a1(c: Cast) -> None:
-    """"But not by a critical hit" cannot be asked -- `Dropped` says nothing
-    about how the blow was rolled. A minion is dead rather than dying, so
-    getting back up is `c.reanimate` and not a heal."""
+    """"But not by a critical hit" is asked now, off `Dropped.critical`
+    (#428). A minion is dead rather than dying, so getting back up is
+    `c.reanimate` and not a heal."""
     _clings_on(c)
 
 

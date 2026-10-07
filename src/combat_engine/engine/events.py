@@ -526,6 +526,12 @@ class SurgeSpent(Event):
     Emitted from every place that decrements one, which is the only way a
     row reading "when a creature spends a healing surge in this aura" can
     ever see it happen -- three separate sites were decrementing silently.
+
+    **Not a `Decision` yet, and #386 is why.** Making it refusable is two
+    lines and unblocks nothing on its own: the verb that would read it,
+    `c.no_surges`, has 14 rows waiting, and two of those are empty-bodied
+    traits needing a watcher rather than a call. Landing the refusal without
+    them turns `todo.py` red for a symbol that exists and is unused.
     """
 
     actor: int
@@ -635,11 +641,22 @@ class Dropped(Event):
     waves in a row routed that line off `DamageApplied` instead, which
     carries a source but announces before the creature is down, and a third
     left its row out. `by_me` works on this now.
+
+    `critical` is whether the blow that did it was a critical hit, for the
+    two rows printing "reduced to 0 hit points, **but not by a critical
+    hit**" -- a clause that could not be asked at all. #428.
+
+    Smaller than it looked: `crit` is already in scope at the one site that
+    emits this, so it is a parameter rather than a new fact to thread.
+    Defaults to `False`, which is also the honest answer for the deaths that
+    no blow caused -- ongoing damage, a failed death save -- where there is
+    no attack to have been critical.
     """
 
     actor: int
     dead: bool = False
     source: int | None = None
+    critical: bool = False
 
 
 @dataclass
@@ -830,6 +847,26 @@ class ZoneCreated(Event):
 class ZoneEnded(Event):
     zone: int
     why: str
+
+
+@dataclass
+class ZoneResized(Event):
+    """An aura's radius changed in place, on a zone that already exists.
+
+    `Zones.refresh` re-cuts `zone.squares` from `zone.aura` every tick, so
+    widening an aura is a one-field mutation and nothing announced it. Two
+    rows do exactly that and both sat in `audit.KNOWN_SILENT` with the reason
+    written out: "widens its own aura, which emits no event for the audit to
+    see". The rows were correct and invisible, not inert. #375.
+
+    Both radii, because "while its aura is smaller than 5" is a printed
+    recharge condition and a row reading this wants to know which way it went.
+    """
+
+    zone: int
+    actor: int
+    from_: int
+    to: int
 
 
 @dataclass

@@ -234,10 +234,9 @@ KNOWN_SILENT = {
     # Driven since, with the aura laid first: the row *does* widen it, 1 to 3. It
     # is silent because resizing a zone **announces nothing** -- the radius is a
     # plain field that `Zones.refresh` re-reads, so there is no event for
-    # `DID_SOMETHING` to recognise. The row is correct and invisible, not inert.
-    # A `c.resize_aura()` that mutates and announces would fix both; filed.
-    "m6655a5": "widens its own aura, which emits no event for the audit to see",
-    "m6650a4": "widens its own aura, which emits no event for the audit to see",
+    # `DID_SOMETHING` to recognise. **Both of those are gone**: `c.resize_aura`
+    # mutates and emits `ZoneResized`, so the two rows that widened an aura are
+    # credited for it rather than excused. #375.
     "m3637a4": "rerolls an attack roll; fired alone there is no roll behind it",
     "m3473a2": "lets m3473a1 ignore its own Requirement; nothing has attacked "
                "this creature yet when it is fired",
@@ -723,7 +722,7 @@ DID_SOMETHING = {
     "ForcedMove", "RelationSet", "RelationCleared", "ZoneCreated",
     "EffectExpired", "EffectApplied", "ConditionEnded",
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
-    "SurgeSpent", "ActionGranted",
+    "SurgeSpent", "ActionGranted", "ZoneResized",
 }  # fmt: skip
 # `RelationCleared` for the same reason `ConditionEnded` is here and
 # `RelationSet` already was: **taking a relation off is as much a thing as
