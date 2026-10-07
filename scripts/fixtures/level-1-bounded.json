@@ -744,7 +744,7 @@
   "Bloodied(actor=8, source=3)",
   "DamageRolled(source=3, target=8, amount=14, dtype=<DamageType.UNTYPED: 'untyped'>, detail='mba')",
   "DamageApplied(source=3, target=8, amount=14, dtype=<DamageType.UNTYPED: 'untyped'>, absorbed=0, hp=-1, detail='mba')",
-  "Dropped(actor=8, dead=True, source=3)",
+  "Dropped(actor=8, dead=True, source=3, critical=True)",
   "EffectExpired(actor=2, what='e52[p3069, end of encounter]', why='the oath is discharged')",
   "Note(text='2 regains the use of p3069')",
   "Died(actor=8)",
