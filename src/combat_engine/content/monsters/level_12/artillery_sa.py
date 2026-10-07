@@ -84,7 +84,6 @@ from collections.abc import Callable
 from typing import Any
 
 from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
-from combat_engine.content.monsters.level_03.controllers_sa import _also
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_10.lurkers import EVERY_DEFENCE
@@ -563,7 +562,7 @@ def _m1091_afflict(c: Cast, who: int, *conditions: Condition) -> Effect | None:
     for eff in c.world.effects.of(who):
         if eff.label == _M1091_STATUS:
             for cond in conditions:
-                _also(c, eff, cond)
+                c.worsen(eff, cond)
             return eff
     return c.world.effects.apply(
         who, c.me, When.SAVE_ENDS, label=_M1091_STATUS, conditions=conditions
@@ -1203,7 +1202,7 @@ def _petrifying(c: Cast, victim: int) -> Effect | None:
         stage["n"] += 1
         if stage["n"] == 1:
             _refuse(c, victim, Condition.SLOWED)
-            _also(c, eff, Condition.IMMOBILIZED)
+            c.worsen(eff, Condition.IMMOBILIZED)
         elif stage["n"] == 2:
             c.world.effects.end(eff, "turned to stone")
             c.condition(Condition.PETRIFIED, until=When.ENCOUNTER, on=victim)
@@ -1304,7 +1303,7 @@ def _m1609_venom(c: Cast, victim: int) -> Effect | None:
     def worse(eff: Effect) -> None:
         stage["n"] += 1
         if stage["n"] == 1:
-            _also(c, eff, Condition.WEAKENED)
+            c.worsen(eff, Condition.WEAKENED)
         elif stage["n"] == 2:
             c.world.effects.end(eff, "the venom finishes its work")
             c.condition(Condition.UNCONSCIOUS, until=When.ENCOUNTER, on=victim)

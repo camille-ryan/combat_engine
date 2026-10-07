@@ -105,7 +105,6 @@ from combat_engine.engine import (
     power,
     spread,
 )
-from combat_engine.engine.components import Conditions
 from combat_engine.engine.events import (
     AttackDeclared,
     Bloodied,
@@ -257,37 +256,6 @@ def _let_it_swing(c: Cast, mate: int, *, step: int = 0) -> None:
     reachable = [foe for foe in c.enemies() if c.adjacent_to(foe, mate)]
     if reachable:
         c.basic(who=mate, on=reachable[0])
-
-
-def _also(c: Cast, eff: Effect, cond: Condition) -> None:
-    """Add a condition to a hold that is already standing.
-
-    "First Failed Saving Throw: the target is **also** dazed (save ends
-    both)" is one effect carrying two conditions, because that is what makes
-    one save end both -- a second save-ends effect laid beside it would hand
-    the victim a second saving throw against one printed sentence.
-    `Effects.end` takes off everything in `eff.conditions`, so joining the
-    tuple is the whole of the teardown.
-
-    What the tuple alone does **not** do is reach `Conditions`, which is the
-    cache `Effects.apply` fills as it installs and `query.is_` reads. Joining
-    the tuple and stopping there left the hold saying "dazed" and every
-    question about the creature saying no -- finished-looking and inert, and
-    measured that way before this existed.
-    """
-    if cond in eff.conditions:
-        return
-    eff.conditions = (*eff.conditions, cond)
-    conds = c.world.get(eff.owner, Conditions)
-    if conds is not None and conds.add(cond):
-        c.world.bus.emit(
-            ConditionApplied(
-                source=c.me,
-                target=eff.owner,
-                condition=cond,
-                duration=eff.when.value,
-            )
-        )
 
 
 def _hurts_when_it_moves(c: Cast) -> None:
@@ -1965,7 +1933,7 @@ def m4734a1(c: Cast) -> None:
     c.hit()
 
     def failed(eff: Effect) -> None:
-        _also(c, eff, Condition.DAZED)
+        c.worsen(eff, Condition.DAZED)
 
     c.condition(Condition.BLINDED, until=When.SAVE_ENDS, escalate=failed)
 

@@ -3842,8 +3842,23 @@ def m919a7(c: Cast) -> None:
 # ==========================================================================
 
 
-@power("m954a0", level=8, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
+@power("m954a0", level=8, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL,
+       target=NO_TARGET, dropped=("etl.monster.weapon()",))
 def m954a0(c: Cast) -> None:
+    """"While armed with a halberd, it can make opportunity attacks against
+    enemies within 2 squares of it."
+
+    **The weapon clause is a condition on the ability and went in bare**, so the
+    creature held the zone unconditionally. `c.threatens(when=)` exists now
+    (#425) and the gate still cannot be written: a monster carries no
+    equipment -- `content/loader.py` spawns every stat block with a bare
+    `Gear()` -- so `c.wielding` and the three verbs beside it are permanently
+    false for one and the halberd cannot be asked about. #366.
+
+    Left ungated rather than gated on something that is always false, which
+    would take the zone away in every fight instead of granting it wrongly in
+    some. The marker is what says which of the two this is.
+    """
     c.threatens(2, on=c.me, until=When.ENCOUNTER)
 
 

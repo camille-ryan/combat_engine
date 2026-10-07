@@ -321,6 +321,44 @@ class Effects:
             self.end(eff, "instant")
         return eff
 
+    def worsen(self, eff: Effect, cond: Condition, source: int = 0) -> bool:
+        """Add a condition to a hold that is already standing.
+
+        "First Failed Saving Throw: the target is **also** dazed (save ends
+        both)" is **one** effect carrying two conditions, because that is what
+        makes one save end both -- a second save-ends effect laid beside it
+        hands the victim a second saving throw against one printed sentence.
+
+        **Joining `eff.conditions` is not enough and looks like it is.** `end`
+        reads the mutated tuple, so teardown works perfectly: the hold expires
+        and clears a daze it never imposed. What the tuple alone does not reach
+        is `Conditions`, the cache `apply` fills as it installs and every
+        `query.is_` reads -- so the effect said "dazed" and every question about
+        the creature said no. Finished-looking and inert, and measured that way.
+
+        This is why it is here rather than in content. The three steps -- join
+        the tuple, reach `Conditions`, emit `ConditionApplied` -- were a helper
+        in a level-3 monster file, imported across two other content files and
+        reaching into `engine.components` from a component that has no business
+        there. #367.
+
+        Returns whether anything changed, so a second failed save does not
+        double a condition the first one already imposed.
+        """
+        if cond in eff.conditions:
+            return False
+        eff.conditions = (*eff.conditions, cond)
+        conds = self.world.get(eff.owner, Conditions)
+        if conds is None or not conds.add(cond):
+            return False
+        self.world.bus.emit(
+            ConditionApplied(
+                source=source or eff.owner, target=eff.owner,
+                condition=cond, duration=eff.when.value,
+            )
+        )
+        return True
+
     # -- ending --------------------------------------------------------------
 
     def end(self, eff: Effect, why: str = "expired") -> None:

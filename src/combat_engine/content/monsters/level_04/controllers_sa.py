@@ -61,7 +61,6 @@ from combat_engine.content.monsters.level_02.soldiers_sa import _save_ends_on_me
 from combat_engine.content.monsters.level_03.artillery_sa import _death_throe
 from combat_engine.content.monsters.level_03.controllers_sa import (
     _ally_used,
-    _also,
     _hold_while_inside,
     _let_it_swing,
 )
@@ -631,7 +630,7 @@ def m1657a2(c: Cast) -> None:
     c.hit()
 
     def failed(eff: Effect) -> None:
-        _also(c, eff, Condition.IMMOBILIZED)
+        c.worsen(eff, Condition.IMMOBILIZED)
 
     c.condition(Condition.SLOWED, until=When.SAVE_ENDS, escalate=failed)
 
@@ -1820,7 +1819,7 @@ def m4634a0(c: Cast) -> None:
     c.hit()
 
     def failed(eff: Effect) -> None:
-        _also(c, eff, Condition.DOMINATED)
+        c.worsen(eff, Condition.DOMINATED)
 
     burn = c.ongoing(5, DamageType.PSYCHIC)
     if burn is not None:
@@ -2861,12 +2860,19 @@ def m5890a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.threatens(when=)",),
+    dropped=("movement._threat(against=)",),
 )
 def m6116a0(c: Cast) -> None:
     """The ring is widened, which is most of the card. What is dropped is
-    "against bloodied creatures": `c.threatens` sets a distance and the window
-    opens for everybody inside it."""
+    "against bloodied creatures".
+
+    **The marker moved from `c.threatens(when=)` to the gap one layer down.**
+    That parameter exists now (#425) and does not reach this: `movement._threat`
+    takes only the threatener and calls `mods.total("threatening_reach", {})`
+    with an **empty context**, so a gate can read the creature's own state and
+    has nothing to say about who is walking past. All three call sites know the
+    mover and none passes it. #443.
+    """
     c.threatens(2, on=c.me)
 
 
@@ -2960,9 +2966,9 @@ def m6116a4(c: Cast) -> None:
     def failed(eff: Effect) -> None:
         misses.append(1)
         if len(misses) == 1:
-            _also(c, eff, Condition.WEAKENED)
+            c.worsen(eff, Condition.WEAKENED)
         else:
-            _also(c, eff, Condition.DOMINATED)
+            c.worsen(eff, Condition.DOMINATED)
 
     burn = c.ongoing(5, DamageType.POISON, on=victim)
     if burn is not None:
@@ -3254,7 +3260,7 @@ def m6397a3(c: Cast) -> None:
     standing = _ongoing_of(c, victim, DamageType.POISON)
     worse = c.ongoing(standing + 5, DamageType.POISON, on=victim)
     if worse is not None:
-        _also(c, worse, Condition.WEAKENED)
+        c.worsen(worse, Condition.WEAKENED)
 
 @power(
     "m6397a4",

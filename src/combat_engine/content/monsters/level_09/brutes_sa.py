@@ -1418,7 +1418,24 @@ def m3786a4(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m3786a5(c: Cast) -> None:
-    c.threatens(2, on=c.me, until=When.ENCOUNTER)
+    """"( usable when large-sized ) ... opportunity attacks against all enemies
+    within his reach (2 squares)."
+
+    **The size clause is a condition on the ability, not flavour**, and this
+    went in bare -- so the creature held a two-square threat zone from the
+    start of the encounter, which its card grants only while grown.
+    `m3786a4` beside it is what lays `Size.LARGE`, and `c.threatens(when=)`
+    carries the gate onto both modifiers. #425.
+
+    Read at the moment the zone is consulted rather than at the moment it is
+    laid, which is the whole point: the creature grows and shrinks within one
+    encounter and a gate evaluated once would be wrong for half of it.
+    """
+    me = c.me
+    c.threatens(
+        2, on=me, until=When.ENCOUNTER,
+        when=lambda _ctx: c.size_of(me) is Size.LARGE,
+    )
 
 
 # ==========================================================================

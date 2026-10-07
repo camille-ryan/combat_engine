@@ -178,17 +178,34 @@ class Cast:
     def cancel(self) -> bool:
         """Stop the thing that triggered this.
 
-        Only an immediate interrupt can: by the time a reaction runs, its
-        window has already closed and the attack has happened. Calling it
-        from a reaction does nothing, which is the printed rule rather than
-        an oversight.
+        **The printed rule is that only an immediate interrupt can, and this
+        engine does not enforce it.** This docstring used to claim it did --
+        "calling it from a reaction does nothing, which is the printed rule
+        rather than an oversight" -- and that was measured false: the same
+        `cancel()` from an AFTER-window listener returns True *and* stops the
+        damage.
+
+            interrupt (BEFORE)   cancel() -> True   hp 33 -> 33
+            reaction  (AFTER)    cancel() -> True   hp 33 -> 33
+
+        So the gap is real and is left open deliberately for now, because a
+        shipped row depends on it. What is fixed is the lie: a page saying a
+        rule is enforced when it is not is worse than the gap, because it
+        stops anybody looking. Enforcing it means breaking that row first --
+        #444. #384.
 
         Most events cannot be refused at all -- `cancel` lives on `Decision`,
         and `ConditionApplied`, `Moved` and `DamageApplied` are plain
-        announcements of something that has already happened. Asking anyway
-        used to raise `AttributeError` from inside the row, which reads as a
-        bug in the content; it is a fact about the event. Returns whether
-        anything was actually stopped.
+        announcements of something that has already happened. `Dropped` is one
+        of those and should not be: "when reduced to 0 hit points (immediate
+        interrupt): the triggering attack misses" names it and cannot be
+        declared on it -- #445. Asking anyway used to raise `AttributeError`
+        from inside the row, which reads as a bug in the content; it is a fact
+        about the event.
+
+        Returns whether anything was actually stopped -- which today means
+        "whether the event could be refused at all", not "whether this window
+        was allowed to".
         """
         stop = getattr(self.trigger, "cancel", None)
         if stop is None:
@@ -732,6 +749,26 @@ class Cast:
                 self.world.effects.save(effect)
                 return effect.ended
         return False
+
+    def worsen(self, eff: Effect, cond: Condition) -> bool:
+        """"First Failed Saving Throw: the target is **also** dazed (save ends
+        both)" -- add a condition to a hold that is already standing.
+
+        One effect carrying two conditions, which is what makes one save end
+        both: a second save-ends effect laid beside it would hand the victim a
+        second saving throw against one printed sentence.
+
+        **Not `eff.conditions = (*eff.conditions, cond)`.** That is the obvious
+        way and it is silently false: `Effects.end` reads the mutated tuple so
+        teardown works, but nothing fills the `Conditions` cache that every
+        `query.is_` reads -- so the hold says "dazed" and the creature says it
+        is not. See `Effects.worsen` for the three steps. #367.
+
+        `escalate=` on the effect is how "each failed saving throw" gets here.
+        Returns False when the condition was already on, so a second failed save
+        does not double it.
+        """
+        return self.world.effects.worsen(eff, cond, source=self.me)
 
     def reroll_save(self, *, bonus: int = 0, keep: str = "new") -> bool:
         """Roll the **triggering** saving throw again. Returns the new result.
@@ -4080,7 +4117,8 @@ class Cast:
         return held
 
     def threatens(
-        self, squares_: int = 2, *, on: int | None = None, until: When = When.ENCOUNTER
+        self, squares_: int = 2, *, on: int | None = None, until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """How far this creature threatens for opportunity attacks.
 
@@ -4101,10 +4139,22 @@ class Cast:
         creature's window is not fixed at one, and `reach` says how far.
         """
         who = on or self.me
-        self.bonus("threatening_reach", 1, on=who, until=until, kind="untyped")
+        # **`when=` is a passthrough, not a mechanism.** Both halves are
+        # `bonus` calls and `bonus` has always taken a gate, so "against
+        # bloodied creatures" and "while armed with its halberd" were sayable
+        # one layer down and unsayable here. Three rows wanted it: one carried
+        # `dropped=("c.threatens(when=)",)` and two more went in bare and
+        # threatened unconditionally where their cards gate it. #425.
+        #
+        # It must reach **both** modifiers. Gating only `reach` would leave the
+        # flag standing, and `movement._threat` reads the flag first -- so the
+        # window would open at one square whenever the gate was false, which is
+        # a different wrong answer rather than no answer.
+        self.bonus("threatening_reach", 1, on=who, until=until, kind="untyped",
+                   when=when)
         return self.bonus(
             "reach", max(0, squares_ - 1), on=who, until=until,
-            kind="untyped",
+            kind="untyped", when=when,
         )
 
     def resist_forced(
