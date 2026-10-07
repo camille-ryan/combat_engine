@@ -131,6 +131,22 @@ uv run scripts/check.py --fast    skip the two that start a server
 uv run scripts/check.py --all     audit every row, not only changed ones
 ```
 
+**Cadence, which is the thing that was actually costing.** Wide audit sweeps
+were 36% of everything this suite had ever cost, at 12x the per-catch price of
+a narrow run — so the rule is *rare, not fast*:
+
+* **`check.py` per commit.** Narrow; seconds to a couple of minutes.
+* **`check.py --all` once before a push**, not once per commit. It is the only
+  invocation that settles the whole-tree debt, and `check.py` now names that
+  debt and **withholds "all instruments clean"** until it is paid.
+* **After a rebuild the next run is wide, once.** `data/game.db` is git-ignored
+  and every monster number is read from it, so a rebuild moves rows no path test
+  can see.
+* **`--only <name>`** while iterating on one instrument's finding.
+* **`--only scorecard` on a `policy/` change**, with `scorecard.py --save` when
+  the change *is* the improvement. It is paused out of the default run: 2 red
+  runs in 108 is not a gate, it is a measurement.
+
 `audit.py` is the expensive one: about ten minutes for all 12,197 rows, and
 that cost has been measured and **cannot be tuned away** — see
 `_changed`'s docstring before trying. Use the narrow forms:

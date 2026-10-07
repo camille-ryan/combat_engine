@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -37,9 +38,16 @@ class Instrument:
     catches: str
     #: Starts a server and drives a browser. Slow, and skipped by `--fast`.
     heavy: bool = False
-    #: Not run unless asked for by name. For an instrument whose failure is
-    #: known and not yet understood: leaving it in the default run trains
-    #: people to re-run until it passes, which is worse than not running it.
+    #: Not run unless asked for by name. Two reasons, and the text should say
+    #: which:
+    #:
+    #: * **its failure is known and not yet understood** -- leaving it in the
+    #:   default run trains people to re-run until it passes, which is worse
+    #:   than not running it;
+    #: * **its value is conditional on what changed** -- a before/after
+    #:   measurement is worth its minute on the change it measures and worth
+    #:   nothing on the other ninety-nine, and `--history` is where that shows
+    #:   up as a cost per catch nobody can defend.
     paused: str = ""
 
 
@@ -82,8 +90,17 @@ CHECKS = (
     Instrument("winrate", ("uv", "run", "scripts/winrate.py",
                            "--seeds", "2", "--level", "5", "--draw", "scored"),
                "the batch fight runner still runs"),
+    # **Paused on its own numbers.** 108 runs, 13,114s -- 12.8% of everything
+    # this suite has ever cost -- and 2 of those runs red, which is 6,557s a
+    # catch. Its own docstring calls it "the gate on a policy change", and it
+    # self-reports a baseline 111 commits stale, so on an ordinary commit it
+    # spends a minute comparing against a number that no longer means what it
+    # meant. Run it where it is the measurement: `--only scorecard` on a
+    # `policy/` change, and `scorecard.py --save` when the change is the
+    # improvement.
     Instrument("scorecard", ("uv", "run", "scripts/scorecard.py", "--level", "5"),
-               "the policy scorecard still measures"),
+               "the policy scorecard still measures",
+               paused="value is conditional: a policy/ change, not every commit"),
     Instrument("api", ("uv", "run", "scripts/api_smoke.py"),
                "the wire: options, streams, names off", heavy=True),
     # Un-paused. The intermittent failure was never `check.py` and was never
@@ -149,7 +166,8 @@ def main() -> int:
         tail = _summary(done.stdout) or _summary(done.stderr)
         mark = "ok  " if done.returncode == 0 else "FAIL"
         print(f"  {mark}  {c.name:{width}}  {took:5.1f}s  {tail}")
-        _record(c.name, took, done.returncode == 0, at)
+        _record(c.name, took, done.returncode == 0, at,
+                _scope(done.stdout))
         if done.returncode != 0:
             failed.append(c.name)
             if not args.verbose:
@@ -161,11 +179,68 @@ def main() -> int:
             print("\n".join(f"          {x}" for x in done.stdout.splitlines()[-25:]))
 
     print()
+    owed = _sweep_owed()
     if failed:
         print(f"{len(failed)} unhappy: {', '.join(failed)}")
+    elif owed:
+        # **The one sentence that means "nothing is outstanding" is withheld
+        # while something is.** Every instrument still ran and still reported;
+        # the verdict is not narrowed, only the claim.
+        print(f"{len(wanted)} instruments clean, {owed}")
     else:
         print(f"all {len(wanted)} instruments clean")
     return len(failed)
+
+
+#: Where `audit.py` records the commit of the last sweep that looked at every
+#: row. Read rather than written here -- this only reports the debt.
+WATERMARK = ROOT / "scripts" / "fixtures" / "audited.json"
+
+
+def _sweep_owed() -> str:
+    """Is a whole-tree audit outstanding, and since when?
+
+    **The saving this pairs with is only safe if the sweep still happens.** The
+    wide sweep is 36% of everything this suite has ever cost and 12x the
+    per-catch price of a narrow run, so the protocol is one of them before a
+    push rather than one per commit -- and a protocol nobody is reminded of is
+    a protocol that lapses. `audit.py` already prints its own baseline age for
+    exactly this reason (#291); this is the same discipline one level up, where
+    the decision to pay is actually made.
+
+    **Not an exit code.** An owed sweep is not a failure of the change in hand,
+    and a run that goes red for a reason unrelated to what you just did is how
+    red gets ignored -- which is the failure `scripts/CLAUDE.md` records about a
+    check that could not pass.
+
+    Two ways to owe one, and the second is the one a path test cannot see: the
+    database is git-ignored, so a rebuild moves every number a row reads with no
+    source change to notice. Same argument as `audit._database_moved`.
+    """
+    try:
+        mark = json.loads(WATERMARK.read_text())
+    except (OSError, ValueError):
+        return "no whole-tree sweep on record -- `check.py --all` writes one"
+    sha = mark.get("sha") or ""
+    if not sha:
+        return "no whole-tree sweep on record -- `check.py --all` writes one"
+
+    database = ROOT / "data" / "game.db"
+    try:
+        rebuilt = database.stat().st_mtime > WATERMARK.stat().st_mtime
+    except OSError:
+        rebuilt = False
+
+    done = subprocess.run(["git", "rev-list", "--count", f"{sha}..HEAD"],
+                          cwd=ROOT, capture_output=True, text=True)
+    behind = int(done.stdout.strip()) if done.returncode == 0 and done.stdout.strip() else 0
+    if rebuilt:
+        return (f"wide sweep owed: the database was rebuilt after {sha[:9]}"
+                f" -- `check.py --all`")
+    if behind:
+        return (f"wide sweep owed since {sha[:9]}, {behind} commit(s) back"
+                f" -- `check.py --all`")
+    return ""
 
 
 # --------------------------------------------------------------------------
@@ -185,14 +260,33 @@ def main() -> int:
 LEDGER = ROOT / "logs" / "instruments.jsonl"
 
 
-def _record(name: str, seconds: float, ok: bool, at: str) -> None:
+#: `audit.py`'s declared contract for how wide a run was. See the note beside
+#: the `print` that emits it: keyed on the exact prefix so that moving it makes
+#: the field **absent** rather than wrong.
+SCOPE = re.compile(r"^# scope: (\d+) of (\d+) declared rows$", re.M)
+
+
+def _scope(text: str) -> tuple[int, int] | None:
+    """How many rows an instrument covered, out of how many there are."""
+    found = SCOPE.search(text)
+    return (int(found.group(1)), int(found.group(2))) if found else None
+
+
+def _record(name: str, seconds: float, ok: bool, at: str,
+            scope: tuple[int, int] | None = None) -> None:
     try:
         LEDGER.parent.mkdir(parents=True, exist_ok=True)
+        row = {
+            "when": datetime.now(tz=UTC).isoformat(timespec="seconds"),
+            "name": name, "seconds": round(seconds, 2), "ok": ok, "commit": at,
+        }
+        # **Only when the instrument said**, so a missing field means "this run
+        # did not report its scope" and never "it covered nothing". `history`
+        # counts the silent ones out loud rather than averaging over them.
+        if scope:
+            row["refs"], row["of"] = scope
         with LEDGER.open("a") as fh:
-            fh.write(json.dumps({
-                "when": datetime.now(tz=UTC).isoformat(timespec="seconds"),
-                "name": name, "seconds": round(seconds, 2), "ok": ok, "commit": at,
-            }) + "\n")
+            fh.write(json.dumps(row) + "\n")
     except OSError:
         pass  # never let bookkeeping be the thing that fails a check run
 
@@ -212,11 +306,24 @@ def history() -> int:
         print("# nothing recorded yet")
         return 0
 
+    # **Split by how wide a run was, not by how long it took.** Answering
+    # "is the wide sweep worth it" needed bucketing by duration, which is a
+    # proxy for scope that breaks on a faster machine or a bigger corpus. The
+    # answer was worth having -- wide sweeps were 36% of everything this suite
+    # had cost, at 12x the per-catch price of a narrow run -- so the scope is
+    # recorded now and this reads it. `audit.py` is the only instrument that
+    # reports one; the rest fall through unsplit.
     by: dict[str, list[dict]] = {}
+    quiet = 0
     for r in rows:
-        by.setdefault(r["name"], []).append(r)
+        name = r["name"]
+        if r.get("of"):
+            name = f"{name} {'wide' if r['refs'] >= r['of'] else 'narrow'}"
+        elif r["name"] == "audit":
+            quiet += 1
+        by.setdefault(name, []).append(r)
 
-    print(f"  {'instrument':10} {'runs':>5} {'median':>7} {'spent':>8} "
+    print(f"  {'instrument':13} {'runs':>5} {'median':>7} {'spent':>8} "
           f"{'caught':>7} {'per catch':>10}  last catch")
     order = sorted(by, key=lambda n: -sum(r["seconds"] for r in by[n]))
     for name in order:
@@ -226,13 +333,19 @@ def history() -> int:
         caught = [r for r in runs if not r["ok"]]
         per = f"{spent / len(caught):.0f}s" if caught else "never"
         last = caught[-1]["when"][:10] if caught else "--"
-        print(f"  {name:10} {len(runs):5} {secs[len(secs) // 2]:6.1f}s "
+        print(f"  {name:13} {len(runs):5} {secs[len(secs) // 2]:6.1f}s "
               f"{spent:7.0f}s {len(caught):7} {per:>10}  {last}")
 
     total = sum(r["seconds"] for r in rows)
     caught = sum(1 for r in rows if not r["ok"])
     print(f"\n  {total:.0f}s spent over {len(rows)} instrument-runs, "
           f"{caught} of them caught something")
+    # Named rather than folded into either half: a run from before the scope
+    # was recorded is not a narrow run, and counting it as one would flatter
+    # whichever side it landed on. They stay in the undecorated `audit` row.
+    if quiet:
+        print(f"  {quiet} audit run(s) predate the scope being recorded and are "
+              f"counted in the plain `audit` row, not in wide or narrow")
     # Fruitless *and* expensive. An instrument that has never caught
     # anything but has cost fourteen seconds in total is not the one to cut,
     # and flagging it on catches alone invited exactly that mistake.

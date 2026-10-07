@@ -17,7 +17,8 @@ entirely only when there is nothing to decorate.
 ## Checking your work
 
 ```
-uv run scripts/check.py            # all ten instruments; `--list` names them
+uv run scripts/check.py            # every instrument; `--list` names them
+uv run scripts/check.py --only x   # just these, including a paused one
 uv run scripts/check.py --fast     # skip the two that start a server
 uv run scripts/check.py --all      # audit every row, not just changed ones
 uv run scripts/check.py --history  # what each has cost, and what it has caught
@@ -35,6 +36,43 @@ runs, it should have to justify its seconds.
 to everything the moment anything under `engine/` is touched — an engine
 change moves every row at once, so a narrowed run there would not be narrow,
 it would be wrong.
+
+### How often to run it
+
+`--history` was asked the obvious question and gave an uncomfortable answer:
+**the wide audit sweep was 36% of everything this suite had ever cost** — 10.3
+hours over 35 runs — at 4,128s per red run against 344s for a narrow one. On one
+day it ran 17 times in 25 invocations.
+
+Most of that was a defect rather than a policy: `full` was false whenever
+`--changed` was passed, so a run that widened back to the whole tree could not
+record that it had, `_database_moved` stayed true, and **every run after a
+rebuild paid the full sweep and settled nothing.** Fixed — a run that selected
+every row now leaves the watermark whatever flag got it there.
+
+What is left is a protocol, and it is the economy `engine/CLAUDE.md` already
+states for a single change ("pay for the wide one once") applied across a
+session:
+
+* **per commit** — `check.py`, narrow.
+* **once before a push** — `check.py --all`. The only invocation that settles
+  the whole-tree debt.
+* **after a rebuild** — the next run is wide, once. That is correct: the
+  database is git-ignored and no path test can see it move.
+* **while iterating on a finding** — `--only <name>`.
+* **on a `policy/` change** — `--only scorecard`, and `scorecard.py --save` when
+  the change is the improvement.
+
+`check.py` names the outstanding debt and **withholds the "all instruments
+clean" line while one is owed**. It does not fail the run: an owed sweep is not
+a failure of the change in hand, and a run that goes red for an unrelated reason
+is how red gets ignored. Only the sentence meaning *nothing is outstanding* is
+withheld, because something is.
+
+**`scorecard` is paused out of the default run** on the same evidence: 108 runs,
+13,114s, 2 of them red, and it self-reports a baseline over a hundred commits
+stale. It is a before/after measurement, worth its minute on the change it
+measures and nothing on the rest. `--list` shows it as `PAUSED` with the reason.
 
 ## Writing content
 
