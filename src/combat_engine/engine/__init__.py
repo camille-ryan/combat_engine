@@ -160,6 +160,7 @@ from .triggers import (
 )
 from .turns import Encounter
 from .types import (
+    DEFENCES,
     Ability,
     ActionType,
     Condition,
@@ -185,6 +186,8 @@ STR, CON, DEX, INT, WIS, CHA = (
     Ability.CHA,
 )
 AC, FORT, REF, WILL = Defense.AC, Defense.FORT, Defense.REF, Defense.WILL
+# `ANY` is not a fifth defence -- see `Defense.ANY`. `DEFENCES` is the four.
+ANY = Defense.ANY
 AT_WILL, ENCOUNTER, DAILY = Usage.AT_WILL, Usage.ENCOUNTER, Usage.DAILY
 STANDARD, MOVE, MINOR, FREE = (
     ActionType.STANDARD,

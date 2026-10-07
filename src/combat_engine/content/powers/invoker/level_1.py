@@ -15,6 +15,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     AC,
     AT_WILL,
+    DEFENCES,
     EACH_CREATURE,
     EACH_ENEMY,
     EACH_OTHER,
@@ -33,7 +34,6 @@ from combat_engine.engine import (
     CloseBurst,
     Condition,
     DamageType,
-    Defense,
     Keyword,
     MoveEnd,
     Ranged,
@@ -209,7 +209,7 @@ def p7152(c: Cast) -> None:
 def p7153(c: Cast) -> None:
     if c.strike():
         c.damage("2d6" if c.level >= 21 else "1d6", c.wis_mod, dtype=DamageType.PSYCHIC)
-        for d in Defense:
+        for d in DEFENCES:
             c.penalty(d, 1, until=When.SONT)
 
 

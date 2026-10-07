@@ -190,6 +190,15 @@ def main() -> int:
         print(f"{ref}: {why}")
         faults += 1
 
+    for where, _enum in _iterates_the_defence_enum():
+        print(
+            f"{where}: iterates `Defense`, which has five members and only"
+            f" four are defences a creature has. `Defense.ANY` is an"
+            f" instruction -- whichever is lowest -- so this reaches one more"
+            f" than it means and says nothing about it. Use `DEFENCES`."
+        )
+        faults += 1
+
     for ref, pred, event, has in _dead_triggers():
         print(
             f"{ref}: `{pred}` reads a field {event} does not have"
@@ -572,6 +581,49 @@ def _scan() -> dict[str, object]:
                 if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                     seen.setdefault(node.name, []).append(node.lineno)
     return {"used": used, "scopes": scopes}
+
+
+def _iterates_the_defence_enum() -> list[tuple[str, str]]:
+    """`for d in Defense` / `*Defense`, which no longer means the four.
+
+    `Defense.ANY` is a fifth member and is an *instruction* -- "whichever
+    defence is lowest" -- not a defence a creature has. So iterating the enum
+    to mean "all defences" now reaches one more thing than the author meant,
+    and both halves of that are silent: a `c.bonus` laid under `ANY` is read
+    by nothing, and `Defenses(values=dict.fromkeys(Defense, 0))` gives a
+    creature a defence that is not one.
+
+    Thirteen sites existed when `ANY` was added -- two of them `Cast`'s own
+    second wind and total defence, i.e. +2 to all defences on every character
+    who has ever taken either. All thirteen were rewritten to `DEFENCES`, and
+    this walk is what stops the fourteenth being written.
+
+    **Why a walk rather than trusting the docstring.** Fifteen content files
+    had already hand-written `ALL_DEFENCES = (AC, FORT, REF, WILL)` before the
+    engine owned the tuple, which is fifteen authors independently reaching for
+    the four and not finding them. The next one reaches for the enum. #360.
+    """
+    out: list[tuple[str, str]] = []
+    for path in _every_py():
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        where = path.relative_to(ROOT)
+        for node in ast.walk(tree):
+            # `for x in Defense:` and any comprehension over it.
+            iters = []
+            if isinstance(node, ast.For | ast.comprehension):
+                iters.append(node.iter)
+            elif isinstance(node, ast.Starred):
+                iters.append(node.value)
+            elif isinstance(node, ast.Call):
+                # `dict.fromkeys(Defense, 0)`, `list(Defense)`, `set(Defense)`.
+                iters.extend(node.args[:1])
+            for each in iters:
+                if isinstance(each, ast.Name) and each.id == "Defense":
+                    out.append((f"{where}:{node.lineno}", "Defense"))
+    return out
 
 
 def _duplicate_defs() -> list[tuple[str, str, str, int]]:

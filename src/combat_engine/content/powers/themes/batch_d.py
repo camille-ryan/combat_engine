@@ -27,6 +27,7 @@ from combat_engine.engine import (
     ANY_CREATURE,
     AT_WILL,
     DAILY,
+    DEFENCES,
     EACH_OTHER,
     ENCOUNTER,
     FREE,
@@ -51,7 +52,6 @@ from combat_engine.engine import (
     CloseBurst,
     Condition,
     DamageType,
-    Defense,
     Health,
     Keyword,
     Melee,
@@ -153,7 +153,7 @@ def _by_attack(ref: str) -> bool:
 def _defences(c: Cast, value: int, *, until: When, on: int | None = None) -> None:
     """"A +N power bonus to all defenses" -- all four, not just AC."""
     who = c.me if on is None else on
-    for defence in Defense:
+    for defence in DEFENCES:
         c.bonus(defence, value, kind="power", on=who, until=until)
 
 
@@ -205,7 +205,7 @@ def p11804(c: Cast) -> None:
     """
     spirit = c.conjure(until=When.ENCOUNTER, sustain=None)
     ring = c.aura(1, on=spirit, until=When.ENCOUNTER, label=c.ref)
-    for defence in Defense:
+    for defence in DEFENCES:
         c.grants_in(ring, defence, 1, side="team", kind="power")
     hold = c.effect(c.ref, until=When.ENCOUNTER, on=c.me)
 
@@ -215,7 +215,7 @@ def p11804(c: Cast) -> None:
         if foe is not None and c.attack(_primary(c), REF, on=foe, from_=spirit):
             c.damage("1d10", c.primary_mod, on=foe)
             c.penalty("attack", 2, on=foe, until=When.EONT)
-            for defence in Defense:
+            for defence in DEFENCES:
                 c.penalty(defence, 2, on=foe, until=When.EONT)
         c.dispel(spirit)
 
@@ -238,7 +238,7 @@ def p11807(c: Cast) -> None:
     conjuration."""
     spirit = c.conjure(until=When.ENCOUNTER, sustain=None)
     ring = c.aura(1, on=spirit, until=When.ENCOUNTER, label=c.ref)
-    for defence in Defense:
+    for defence in DEFENCES:
         c.grants_in(ring, defence, 1, side="team", kind="power")
     hold = c.effect(c.ref, until=When.ENCOUNTER, on=c.me)
 
@@ -1411,7 +1411,7 @@ def p16068(c: Cast) -> None:
     c.shift_as(MINOR, 1, on=c.me, until=When.STANCE)
     _defences(c, 2, until=When.STANCE)
     ring = c.aura(1, on=c.me, until=When.STANCE, label=c.ref)
-    for defence in Defense:
+    for defence in DEFENCES:
         c.grants_in(ring, defence, 2, side="ally", kind="power")
 
 
@@ -1978,7 +1978,7 @@ def p16614(c: Cast) -> None:
     damage context does not -- a defence is read during the attack, so this
     is the right side of the line."""
     foe = c.trigger.attacker
-    for defence in Defense:
+    for defence in DEFENCES:
         c.bonus(
             defence,
             2,

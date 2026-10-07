@@ -90,8 +90,18 @@ _ABILITY = re.compile(r"m\d+a\d+")
 #: Three of 7,812 is not worth a regex on its own -- it is worth one because
 #: without it those three have no card value and this check is **silent** about
 #: them, which reads exactly like approval.
+#: `Any` and `all defenses` are the same printed construction -- the attack
+#: lands if it would land on any defence -- and `Defense.ANY` is what the
+#: header says it with. **`any other defense` is deliberately not in here**:
+#: that is a different line, printing one bonus against AC and a lower one
+#: against everything else, and reading it as this one would credit a header
+#: that names a single defence with matching a card that names two bonuses.
+#: Two rows print it and neither is waiting on `ANY`. #360.
 _ATTACK = re.compile(
-    r"([+-]\s*\d+)\s+vs\.?\s+(Armor Class|AC|Fortitude|Reflex|Will)\b", re.I
+    r"([+-]\s*\d+)\s+vs\.?\s+"
+    r"(Armor Class|AC|Fortitude|Reflex|Will|all defenses|all defences|Any)"
+    r"(?!\s+other)\b",
+    re.I,
 )
 
 #: `1d8 + 8`, `1d4+4`, `2d6 + 5`. **The word `damage` is not required to
@@ -187,7 +197,8 @@ _DURATION = re.compile(r"\bend of (?:the|its|his|her)\b[^.;]{0,24}$", re.I)
 _AS_PROSE = re.compile(r"\b(?:an?|the|each|this|every)\s+$", re.I)
 
 _DEFENCES = {"ac": "AC", "armor class": "AC",
-             "fortitude": "FORT", "reflex": "REF", "will": "WILL"}
+             "fortitude": "FORT", "reflex": "REF", "will": "WILL",
+             "any": "ANY", "all defenses": "ANY", "all defences": "ANY"}
 
 #: Rows whose header disagrees with its card for a reason a person has looked
 #: at. Four of 2,630, every one found by this check on its first run, and

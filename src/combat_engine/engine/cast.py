@@ -41,6 +41,7 @@ from .query import (
 from .resolve import AttackResult, attack, deal_damage, heal, temp_hp
 from .rng import average
 from .types import (
+    DEFENCES,
     Ability,
     ActionType,
     Condition,
@@ -4224,7 +4225,7 @@ class Cast:
         # second way: a card reading "+1 AC and +3 to the others" would
         # have to be written against the bug and would go to +5 AC the
         # day it was fixed.
-        for defence in Defense:
+        for defence in DEFENCES:
             self.bonus(defence, 2, until=When.SONT, on=who, kind="untyped")
         return True
 
@@ -4260,7 +4261,7 @@ class Cast:
         from .events import TotalDefence
 
         who = on if on is not None else self.me
-        for defence in Defense:
+        for defence in DEFENCES:
             self.bonus(defence, amount, until=When.SONT, on=who, kind="untyped")
         self.world.bus.emit(TotalDefence(actor=who, amount=amount))
         return True
@@ -8134,7 +8135,11 @@ class Cast:
                 Health(hp=hp, max_hp=hp),
                 # "Attacks against it hit automatically", which is a defence
                 # of nothing rather than a special case in the attack.
-                Defenses(values=dict.fromkeys(Defense, 0), scale="none"),
+                # `DEFENCES` and not the enum: `Defense.ANY` is an instruction
+                # rather than a defence, and a creature holding a zero under
+                # that key would be answering a question `query.defence`
+                # resolves for itself.
+                Defenses(values=dict.fromkeys(DEFENCES, 0), scale="none"),
                 Barrier(by=self.me, squares=frozenset(laid), zone=zone),
                 Ident(ref=f"{self.ref}:wall"),
             )

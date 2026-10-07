@@ -70,6 +70,7 @@ from combat_engine.content.monsters.level_04.misc_sa import _ridden_by_fifth_lev
 from combat_engine.content.monsters.level_05.artillery_sa import _shot_me_from_afar
 from combat_engine.engine import (
     AC,
+    ANY,
     AT_WILL,
     EACH_ENEMY,
     EACH_OTHER,
@@ -985,18 +986,22 @@ def m3232a0(c: Cast) -> None:
     level=5,
     usage=AT_WILL,
     action=STANDARD,
-    reach=PERSONAL,
+    reach=Melee(1),
     target=NO_TARGET,
-    dropped=("compendium.attack_defence",),
+    attack=Attack(vs=ANY, printed=6),
+    damage=Damage("1d8", 6),
 )
 def m3232a1(c: Cast) -> None:
-    """The trample's attack line lost its defence -- "+6 vs Any" -- so the blow
-    and the prone that rides on it cannot be declared at all and are named
-    rather than guessed; the other block here printing the same trample kept
-    "vs Reflex" and plays whole. What survived intact is the move: `c.overrun`
-    walks through occupied squares and ends in a free one, which `c.move`
-    refuses to do."""
-    c.overrun()
+    """`NO_TARGET` for `m3781a1`'s reason -- the victims are whoever the walk
+    crossed, and are not known until it has happened.
+
+    **The defence was never missing; this row was marked as though it were.**
+    It carried `dropped=("compendium.attack_defence",)`, which says the card
+    does not state one. The card states `+6 vs Any`: the attack lands if it
+    would land on any defence, and `Defense.ANY` is the member that says so
+    (`query.defence` resolves it to the lowest of the four, level and
+    modifiers included). A source marker on an engine gap. #360."""
+    _trample(c)
 
 
 @power(

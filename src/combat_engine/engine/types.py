@@ -23,6 +23,30 @@ class Defense(StrEnum):
     FORT = "fort"
     REF = "ref"
     WILL = "will"
+    #: **Not a defence a creature has.** An instruction about which one to
+    #: roll against: a printed line reading "vs. Any" hits if it would hit
+    #: any defence, which is one roll against whichever is lowest. Resolved
+    #: in `query.defence`, so it gains level, modifiers and conditions the
+    #: same way the other four do -- the row that needed this first worked
+    #: it out from `Defenses.base`, which has none of those in it.
+    #:
+    #: Never iterate `Defense` to mean "all of a creature's defences". Use
+    #: `DEFENCES` below; that is what this member is excluded from.
+    ANY = "any"
+
+
+#: The four a creature actually has, in printed order.
+#:
+#: **`Defense` is not this set and must not be iterated as though it were.**
+#: `ANY` is a fifth member and an instruction rather than a defence, so a
+#: `for d in Defense` loop laying "+2 to all defences" would lay a fifth
+#: modifier nothing reads -- the exact "spelled right, does almost the right
+#: thing" shape `engine/CLAUDE.md` lists first. Fifteen content files had
+#: already written this tuple out by hand before it lived here, which is its
+#: own argument for the engine owning it. #360.
+DEFENCES: tuple[Defense, ...] = (
+    Defense.AC, Defense.FORT, Defense.REF, Defense.WILL,
+)
 
 
 class ActionType(StrEnum):

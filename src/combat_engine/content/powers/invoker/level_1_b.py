@@ -5,6 +5,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     AC,
     DAILY,
+    DEFENCES,
     EACH_CREATURE,
     EACH_ENEMY,
     EACH_OTHER,
@@ -26,7 +27,6 @@ from combat_engine.engine import (
     Damage,
     DamageApplied,
     DamageType,
-    Defense,
     Keyword,
     Miss,
     Ranged,
@@ -96,7 +96,7 @@ def p7155(c: Cast) -> None:
     if c.strike():
         c.damage("2d6", c.wis_mod, dtype=DamageType.LIGHTNING)
         size = c.con_mod if c.build("wrath") else 1
-        for d in Defense:
+        for d in DEFENCES:
             c.penalty(d, size, until=When.EONT)
 
 
@@ -167,7 +167,7 @@ def p11283(c: Cast) -> None:
     if c.first:
         light = c.zone(c.area(), until=When.SUSTAIN, sustain=MINOR)
         for foe in c.enemies():
-            for what in ("attack", "save", *Defense):
+            for what in ("attack", "save", *DEFENCES):
                 c.penalty(
                     what,
                     2,

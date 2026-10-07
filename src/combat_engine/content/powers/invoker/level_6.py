@@ -9,6 +9,7 @@ from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     ANY_CREATURE,
     DAILY,
+    DEFENCES,
     EACH_ALLY,
     ENCOUNTER,
     INTERRUPT,
@@ -95,7 +96,7 @@ def p11290(c: Cast) -> None:
         picked = c.choose(mates, "who is shielded") if mates else None
         if picked is None:
             return
-        for d in Defense:
+        for d in DEFENCES:
             c.bonus(d, 2, on=picked, until=When.EONT)
 
     c.watch(PowerUsed, bless, until=When.STANCE)

@@ -24,7 +24,7 @@ from .components import (
 )
 from .conditions import rules
 from .grid import Square, between, linked_spread, spread
-from .types import Condition, Cover, DamageType, Defense, Relation, Team
+from .types import DEFENCES, Condition, Cover, DamageType, Defense, Relation, Team
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -309,7 +309,18 @@ def defence(world: World, eid: int, d: Defense, ctx: dict | None = None) -> int:
     The stored value has no level in it -- see `engine/scaling.py` -- so this
     is the one place a defence gains one, and turning scaling off turns it
     off everywhere at once.
+
+    **`Defense.ANY` resolves here**, to the lowest of the four. A printed
+    "vs. Any" hits if it would hit any defence, and one roll against the
+    weakest answers that identically -- so the whole construction is a
+    lookup rather than four rolls. Doing it here rather than in a row is
+    what makes it correct: the row that needed it first chose its target
+    defence from `Defenses.base`, which carries no level, no modifier and
+    no condition, so a creature whose Reflex was being penalised was still
+    attacked on whatever it was weakest at before the fight started. #360.
     """
+    if d is Defense.ANY:
+        return min(defence(world, eid, each, ctx) for each in DEFENCES)
     defs = world.need(eid, Defenses)
     base = defs.base(d) + level_term(world, eid, defs.scale)
     mods = world.get(eid, Mods)

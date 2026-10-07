@@ -20,10 +20,12 @@ Conventions, inherited from the sweeps below this level:
   once, at the moment it arms (`docs/AUTHORING.md`'s warning about traits).
 
 One block (`m790`) is a solo whose own attack line prints "+13 vs. Any" --
-no single named defence -- so the body reads the target's four defence
-scores and rolls once against whichever is lowest, which is mechanically
-the same question the card asks. The header can only ever name one
-defence, so it is marked `dropped=("Attack.vs",)`.
+no single named defence. That is `Defense.ANY`, and the header says it
+directly: `query.defence` resolves it to the lowest of the four with level,
+modifiers and conditions in, which is mechanically the same question the
+card asks. The body used to work it out from `Defenses.base`, which has
+none of those three in it, and the row was marked `dropped=("Attack.vs",)`
+while the header could not name the defence at all. #360.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.engine import (
     AC,
+    ANY,
     AT_WILL,
     DAILY,
     ENCOUNTER,
@@ -64,7 +67,7 @@ from combat_engine.engine import (
     World,
     power,
 )
-from combat_engine.engine.components import Defenses, Stats
+from combat_engine.engine.components import Stats
 from combat_engine.engine.events import Hit, MoveStart
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.triggers import Trigger, targets_me
@@ -505,26 +508,29 @@ def m790a0(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.COLD, Keyword.FIRE, Keyword.LIGHTNING],
-    attack=Attack(vs=AC, printed=13),
+    attack=Attack(vs=ANY, printed=13),
     damage=Damage("1d8", 6),
-    dropped=("Attack.vs",),
 )
 def m790a1(c: Cast) -> None:
     """"+13 vs. Any ... the beam hits if it hits any defence" is one roll
-    against whichever defence is weakest, which is the same question as
-    rolling against each and taking the best outcome. The header can only
-    ever name one defence."""
-    victim = c.target
-    if victim is None:
-        return
-    defs = c.world.get(victim, Defenses)
-    weakest = AC if defs is None else min(ALL_DEFENCES, key=defs.base)
-    bonus = c.world.scaling.trim(13, c.level)
-    if c.attack(bonus, weakest, on=victim):
+    against whichever defence is lowest, which answers the printed line
+    identically.
+
+    **The defence was written in the body because the header could not say
+    it**, and `Defense.ANY` is now the member that can. The hand-rolled
+    version chose its defence with `min(..., key=defs.base)`, and
+    `Defenses.base` is the stored number -- no level, no modifier, no
+    condition -- so a creature whose Reflex was being penalised was still
+    attacked on whatever it was weakest at before the fight started.
+    `query.defence` resolves `ANY` with all three in. #360.
+
+    The damage stays in the body and this row stays in #420's population:
+    it is one roll of three types, `c.hit` forwards `d.dtype` alone, and
+    `Damage` has one field for it."""
+    if c.strike():
         c.damage(
             "1d8", 6,
             dtypes=(DamageType.COLD, DamageType.FIRE, DamageType.LIGHTNING),
-            on=victim,
         )
 
 
