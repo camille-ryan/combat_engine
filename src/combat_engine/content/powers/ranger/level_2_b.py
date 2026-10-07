@@ -15,6 +15,8 @@ asking a question that is always false is what a broken rider looks like.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -76,14 +78,59 @@ def _climbing_athletics(world: World, me: int, ev: object) -> bool:
 
 
 def _has_beast(world: World, eid: int) -> bool:
-    """"You must have a ... beast companion."
-
-    The species half cannot be asked -- see the module docstring -- so this
-    is the half that can: the ranger owns a companion.
-    """
+    """"You must have a beast companion", with no species named."""
     return any(
         world.get(who, Companion).owner == eid for who in world.having(Companion)
     )
+
+
+#: Each printed beast category, by the `companion` table ref that holds its
+#: block. **Refs rather than the printed words**, which is the only reason this
+#: can be in a tracked file at all: the category names are printed names and
+#: live in `localization/`.
+#:
+#: The one category implemented is the bear (#235 / Camille's call), so eight of
+#: the nine rows below are refused in play today -- correctly, and that is the
+#: point. They were all gated on `_has_beast`, which asks only whether the
+#: ranger owns *a* companion, so **fielding any beast made all nine usable** and
+#: eight of them were wrong. Measured with a bear: 9 usable before, 1 after.
+_CATEGORY = {
+    "raptor": "comp:5",
+    "cat": "comp:3",
+    "simian": "comp:91",
+    "lizard": "comp:4",
+    "serpent": "comp:6",
+    "boar": "comp:2",
+    "bear": "comp:1",
+    "spider": "comp:7",
+    "wolf": "comp:8",
+}
+
+
+def _beast_is(category: str) -> Callable[[World, int], bool]:
+    """"You must have a **<species>** beast companion" -- the half that used to
+    be unaskable.
+
+    The module docstring of `beast_sb.py` says the species "belongs to a
+    *species*, which this engine does not model", and that was true when it was
+    written: a ref-less companion is built from a copy of its owner and has no
+    category at all. It is not true now. `chargen` records the category beside
+    the leg as `beast:comp:N`, `c.call_beast` reads it back, and
+    `Companion.ref` carries it on the board -- so the species is exactly as
+    askable as the block's die, which every row here already rolls.
+
+    Refused when the ranger has no companion at all, and when the one it has is
+    a different category. Both are the printed Requirement.
+    """
+    want = _CATEGORY[category]
+
+    def gate(world: World, eid: int) -> bool:
+        return any(
+            (mine := world.get(who, Companion)).owner == eid and mine.ref == want
+            for who in world.having(Companion)
+        )
+
+    return gate
 
 
 def _would_hit(ev: AttackRolled) -> bool:
@@ -117,7 +164,7 @@ def _shoved_us(world: World, me: int, ev: ForcedMove) -> bool:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_has_beast,
+    requires=_beast_is("raptor"),
     requires_text="you must have a raptor beast companion",
 )
 def p13696(c: Cast) -> None:
@@ -143,7 +190,7 @@ def p13696(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_has_beast,
+    requires=_beast_is("cat"),
     requires_text="you must have a cat beast companion",
     trigger=_HIT_ON_AC_OR_REF,
     on=Trigger(AttackRolled, when=_hit_on_ac_or_ref, text=_HIT_ON_AC_OR_REF),
@@ -179,7 +226,7 @@ def p13698(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_has_beast,
+    requires=_beast_is("simian"),
     requires_text="you must have a simian beast companion",
 )
 def p13699(c: Cast) -> None:
@@ -200,7 +247,7 @@ def p13699(c: Cast) -> None:
     reach=CloseBurst(5),
     target=NO_TARGET,
     keywords=MARTIAL,
-    requires=_has_beast,
+    requires=_beast_is("lizard"),
     requires_text="you must have a lizard beast companion",
     trigger=_SHOVED,
     on=Trigger(ForcedMove, when=_shoved_us, text=_SHOVED, window=Window.BEFORE),
@@ -230,7 +277,7 @@ def p13700(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_has_beast,
+    requires=_beast_is("serpent"),
     requires_text="you must have a serpent beast companion",
 )
 def p13701(c: Cast) -> None:
@@ -250,7 +297,7 @@ def p13701(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_has_beast,
+    requires=_beast_is("boar"),
     requires_text="you must have a boar beast companion",
     trigger=_MELEE_DAMAGE,
     on=Trigger(
@@ -280,7 +327,7 @@ def p13702(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL_STANCE,
-    requires=_has_beast,
+    requires=_beast_is("bear"),
     requires_text="you must have a bear beast companion",
 )
 def p13703(c: Cast) -> None:
@@ -306,7 +353,7 @@ def p13703(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_has_beast,
+    requires=_beast_is("spider"),
     requires_text="you must have a spider beast companion",
     trigger=_CLIMB_OR_SAVE,
     on=Trigger(SkillCheck, _climbing_athletics, _A_CLIMB_CHECK, window=Window.BEFORE),
@@ -339,7 +386,7 @@ def p13704(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_has_beast,
+    requires=_beast_is("wolf"),
     requires_text="you must have a wolf beast companion",
     trigger=_MELEE_DAMAGE,
     on=Trigger(DamageApplied, when=both(targets_me, by_melee), text=_MELEE_DAMAGE),

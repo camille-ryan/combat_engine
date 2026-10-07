@@ -719,7 +719,28 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         # by the hand pass that found the other five: that pass only compared a
         # leg whose page stated *both* abilities, and this one states only the
         # secondary. 35 of the 90 entries state one or neither. #235.
-        Build("companion", STR, DEX, (SHORTSWORD, SHORTSWORD), companion="comp:8"),
+        # **The beast is `comp:1`, and it is the only category implemented.**
+        # The machinery is category-agnostic -- `loader.companion` reads any of
+        # the eleven blocks and `call_companion` fields it -- so every category
+        # would work the moment a ranger could choose one. **A ranger cannot.**
+        # The category is one printed choice *with* the fighting style, and
+        # `chargen` has no second axis to put it on, which is the same gap as
+        # the warlock's pacts and the wizard's implements (#432). So the leg
+        # names one, the way the warlock's elemental leg names one damage type.
+        #
+        # Camille's call: the bear, and only the bear. It is the toughest and
+        # slowest printed category, and the numbers come off its own block
+        # rather than from here -- measured against the wolf this used to name,
+        # same seeds, nothing else changed:
+        #
+        #     bear comp:1   1d12   hp 16 + 10/level   speed 5   Str 16
+        #     wolf comp:8   1d8    hp 14 +  8/level   speed 7   Str 14
+        #     at level 10:  116 hp against 94, and 2d12 against 2d8 on a
+        #                   beast power -- 17 against 7 on one shared seed
+        #
+        # So the category is genuinely exercised rather than nominally
+        # present: swap the ref and every beast power swings differently.
+        Build("companion", STR, DEX, (SHORTSWORD, SHORTSWORD), companion="comp:1"),
     ),
     # V -- which pact was made. Two more pacts arrived with the later books
     # and each prints a boon row of its own, so each needs a leg for the

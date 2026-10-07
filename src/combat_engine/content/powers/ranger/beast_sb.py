@@ -14,18 +14,24 @@ numbers are being used:
 * `Range(from_="companion")` was already here for the shaman and does the
   aiming.
 
-**Where the beast's numbers come from.** No card in this batch prints a
-block for it and there is no database ref, so nothing here invents one: a
-ref-less companion is built with a copy of its owner's level and scores,
-which is what `c.call_companion` has always done, and `c.b` falls back to
-the same `d4` `c.w` gives a creature with nothing in its hands. The moment
-the beast is given a die -- `c.call_companion(damage=...)`, a `summon=`
-block, or a database ref -- every row here rolls it instead. The die is the
-one number left open, and it is open because it belongs to a *species*,
-which this engine does not model.
+**Where the beast's numbers come from, and this paragraph used to be wrong.**
+It said the die "is the one number left open, and it is open because it
+belongs to a *species*, which this engine does not model". That was true of a
+**ref-less** companion -- built from a copy of its owner, with `c.b` falling
+back to the `d4` that `c.w` gives empty hands -- and it is not true of a
+ranger's beast. `chargen` records the category beside the leg as
+`beast:comp:N`, `c.call_beast` reads it back, and `loader.companion` reads the
+printed block. Measured on one seed, nothing changed but the category:
 
-For the same reason every `Beast:` rider that pays out only for a named
-species is dropped rather than asked, which is what `level_2_b` settled.
+    bear comp:1   1d12   hp 16 + 10/level   116 at level 10   2d12 on a row
+    wolf comp:8   1d8    hp 14 +  8/level    94 at level 10   2d8
+
+So the species *is* modelled, and the sentence that followed from it --
+"every `Beast:` rider that pays out only for a named species is dropped rather
+than asked" -- was wrong too. `Companion.ref` answers the species exactly, and
+`level_2_b._beast_is` is the gate. Nine rows there name a category; all nine
+used to gate on "owns a companion", so fielding any beast made all nine usable
+and eight were wrong.
 """
 
 from __future__ import annotations
