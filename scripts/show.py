@@ -87,7 +87,41 @@ def main() -> int:
     cursor = len(world.bus.log)
 
     print("=== what it did " + "=" * 54)
-    if not use(world, caster, args.ref):
+    try:
+        ran = use(world, caster, args.ref)
+    except AttributeError as broke:
+        # **A row driven outside its trigger, reported rather than raised.**
+        # 365 rows read `c.trigger.<field>` with no guard, and `c.trigger` is
+        # `None` unless the row was fired *by* that trigger -- so driving one
+        # here died inside the content with a traceback that reads as a bug in
+        # the row. It is not: the row is fine and this instrument asked it the
+        # wrong question.
+        #
+        # Narrow on purpose. Only the `'NoneType' has no attribute` shape is
+        # caught, and only when the row declares `on=`; any other
+        # `AttributeError` is a real fault in the row and must keep its
+        # traceback. Matching on the message is ugly and is the only thing that
+        # distinguishes the two without a guard in all 365 rows -- which is the
+        # option #435 argues against, and it is right: the convention is clean
+        # in the most-written part of the tree, with class powers at zero.
+        #
+        # **A verdict and not a synthesised trigger.** #435 prefers
+        # synthesising, and so would I: it would make 365 rows readable rather
+        # than merely explained. That is the same provocation machinery #214
+        # wants for `audit.py`, now tracked on the sweeps milestone, and doing
+        # it twice is how it ends up different in two places.
+        if declared.on is None or "'NoneType' object has no attribute" not in str(broke):
+            raise
+        field = str(broke).rsplit("attribute ", 1)[-1].strip("'\"")
+        print(f"  this row needs its trigger: the body reads "
+              f"`c.trigger.{field}`, and nothing fired it")
+        event = declared.on.event
+        print(f"  it is declared on {getattr(event, '__name__', event)} "
+              f"-- {declared.on.text or 'no printed text'}")
+        print("  not a fault in the row: `c.trigger` is None unless the "
+              "trigger is what used the row. #435")
+        return 1
+    if not ran:
         from combat_engine.engine import usable
 
         print(f"  could not be used: {usable(world, caster, declared)[1]}")
