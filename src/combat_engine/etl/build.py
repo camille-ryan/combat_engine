@@ -3055,17 +3055,31 @@ def _named_feats(spec: str, by_feat: dict[str, str], own: str) -> str:
     power card has the card filed under `f1091b` with the parent's name
     on it, so the pair share a name and the child would otherwise
     resolve onto the parent and back.
+
+    **Any contiguous run, not only a suffix.** This tried suffixes alone, and
+    the corpus does not put the name last -- it writes the name, then `as a
+    bonus`, then the noun. So the capture was `<name> as a bonus`, the loop
+    tried that whole run and then `as a bonus`, `a bonus`, `bonus`, and never
+    the words that were the name. The name sat at the *head* of the run, where
+    a suffix loop cannot reach it, on **4 rows** -- three of them a ranger leg
+    and one a rogue feature, each granting a feat whose ref already existed.
+    Nothing reported them: all four names are two ordinary English words, which
+    `identifies` waives deliberately, which is the same gap #439 was in and has
+    the same answer -- not a looser test, but the position-proved pass doing
+    what its own docstring says. #440.
     """
     base = re.sub(r"[a-z]\d*$", "", own)
 
     def swap(m: re.Match) -> str:
         words = m.group(1).split()
         for size in range(len(words), 0, -1):
-            ref = by_feat.get(_low(" ".join(words[-size:])))
-            if not ref or ref in (own, base):
-                continue
-            head = " ".join(words[:-size])
-            return " ".join(w for w in (head, ref, "feat") if w)
+            for start in range(len(words) - size + 1):
+                ref = by_feat.get(_low(" ".join(words[start: start + size])))
+                if not ref or ref in (own, base):
+                    continue
+                head = " ".join(words[:start])
+                tail = " ".join(words[start + size:])
+                return " ".join(w for w in (head, ref, tail, "feat") if w)
         return m.group(0)
 
     return _NAMED_FEAT.sub(swap, spec)
