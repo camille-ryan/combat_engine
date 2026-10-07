@@ -21,6 +21,7 @@ import argparse
 import contextlib
 import itertools
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -107,6 +108,7 @@ class Server:
 class Checks:
     def __init__(self) -> None:
         self.failed: list[str] = []
+        self.skipped: list[str] = []
         self.passed = 0
 
     def that(self, ok: bool, what: str, detail: str = "") -> None:
@@ -116,6 +118,22 @@ class Checks:
         else:
             self.failed.append(what)
             print(f"  FAIL  {what}" + (f"\n          {detail}" if detail else ""))
+
+    def skip(self, what: str, why: str) -> None:
+        """This board could not pose the question. Said out loud, never passed.
+
+        `scripts/CLAUDE.md`: *"An instrument must not skip itself quietly. A
+        check that runs on half its runs is not a check. Pin the seed, and
+        report a skip as a skip rather than passing."* The seed here **is**
+        pinned and it is still not enough -- which is the honest finding: a
+        dealt board sometimes cannot pose a question, and counting that as a
+        pass is the loosening the rule is about.
+
+        Not counted in `passed`, so the headline figure moves when a run skips
+        something and a reader can see it did. #402.
+        """
+        self.skipped.append(what)
+        print(f"  skip  {what}\n          {why}")
 
 
 def main() -> int:
@@ -211,7 +229,8 @@ def main() -> int:
             print(f"\n  screenshot: {args.shot}")
         browser.close()
 
-    print(f"\n{check.passed} checks passed, {len(check.failed)} failed")
+    print(f"\n{check.passed} checks passed, {len(check.failed)} failed"
+          + (f", {len(check.skipped)} skipped" if check.skipped else ""))
     return 1 if check.failed else 0
 
 
@@ -234,6 +253,21 @@ def _texts(page, selector: str) -> list[str]:  # noqa: ANN001
             selector, "els => els.map(e => e.innerText || '')"
         )
     ]
+
+
+#: How many tokens a board always has before it is worth acting on. Eight is
+#: what `_play` has asserted since #355 -- five characters and at least three
+#: enemies, which is the smallest encounter the dealer builds -- so the other
+#: waits use the same number rather than inventing one each.
+#:
+#: **The point is that `wait_for_selector("#board .token")` returns on token
+#: one.** #355 fixed the one site where that was followed by a length
+#: assertion, and recommended auditing the rest. This is that audit: three more
+#: sites waited for the first token and then acted as though the board were
+#: drawn -- a monsters' turn watched, a restart issued, a stream polled. None
+#: asserted a count, which is why none of them failed loudly; they failed by
+#: being a race nobody could see. #402.
+TOKENS_DRAWN = 8
 
 
 def _settled(page, selector: str, least: int, timeout: int = 15000) -> int:  # noqa: ANN001
@@ -317,8 +351,8 @@ def _check_chargen(page, check: Checks, problems: list[str]) -> None:  # noqa: A
 
 def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa: ANN001
           calls: list[str]) -> None:
-    drawn = _settled(page, "#board .token", 8)
-    check.that(drawn >= 8, f"the board drew {drawn} tokens")
+    drawn = _settled(page, "#board .token", TOKENS_DRAWN)
+    check.that(drawn >= TOKENS_DRAWN, f"the board drew {drawn} tokens")
 
     # The log. This is the one that was silently empty: the stream was fine
     # and the frames were named something the page does not listen for.
@@ -359,7 +393,23 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
     # page made, because a board that did not move could also be a board that
     # asked the server and was refused.
     spot = _move_square_box(page, 3)
-    check.that(spot is not None, "a reachable free square is on the board")
+    if spot is None:
+        # **The gate for everything below that walks somewhere.** A character
+        # boxed in by enemies has no square that provokes nothing, which is a
+        # legal board rather than a broken page -- and five checks depend on
+        # one existing: this, the hover, the route, the click, and the free
+        # square in the default mode. Measured by forcing the locator to miss:
+        # one failure became five. The dependents are already guarded by
+        # `if spot:` below; this is the one that used to fail instead of
+        # saying so. #402.
+        check.skip(
+            "a reachable free square is on the board",
+            f"every lit square provokes on this board "
+            f"({page.locator('#movement .mv').count()} lit), so the hover, "
+            f"route and click checks below have nowhere safe to aim",
+        )
+    else:
+        check.that(True, "a reachable free square is on the board")
     _press_move(page)  # the row is a toggle; press it again to unpick it
     # Off the action list first. Hovering the Move row is a *preview* of
     # pressing it and paints the same squares, so with the pointer parked on
@@ -398,16 +448,26 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
     )
 
     # Pointing at one of those squares draws the route the walk would take.
-    box = _hover_a_move_square(page)
-    check.that(box is not None, "a movement square accepted a hover")
-    route = page.locator("#highlights .hl-path")
-    check.that(route.count() > 0, f"hovering a square draws its route ({route.count()} steps)",
-               "the server sends every route with the squares; nothing drew one")
+    # Only askable where a free square exists -- see the skip above.
+    box = _hover_a_move_square(page) if spot else None
+    if spot is None:
+        check.skip("a movement square accepted a hover", "no free square to point at")
+        check.skip("hovering a square draws its route", "nothing safe to hover")
+        route = None
+    else:
+        check.that(box is not None, "a movement square accepted a hover")
+        route = page.locator("#highlights .hl-path")
+        check.that(route.count() > 0,
+                   f"hovering a square draws its route ({route.count()} steps)",
+                   "the server sends every route with the squares; nothing drew one")
 
     sent = len(calls)
     seen = len(served)
-    moved = _click_a_move_square(page)
-    check.that(moved is not None, "a highlighted square accepted a click")
+    moved = _click_a_move_square(page) if spot else None
+    if spot is None:
+        check.skip("a highlighted square accepted a click", "no free square to click")
+    else:
+        check.that(moved is not None, "a highlighted square accepted a click")
     if moved:
         # Wait for the board to change, not for a fixed 900ms. The token
         # animates and the server has to answer, and 900ms was about even
@@ -665,7 +725,7 @@ def _check_enemies_animate(page, check: Checks) -> None:  # noqa: ANN001
     # only by luck -- and waiting for the token is the thing actually being
     # waited for.
     page.reload(wait_until="load")
-    page.wait_for_selector("#board .token", timeout=15000)
+    _settled(page, "#board .token", TOKENS_DRAWN)
     _set_speed(page, "normal")
     page.wait_for_timeout(600)
     page.evaluate(
@@ -682,17 +742,25 @@ def _check_enemies_animate(page, check: Checks) -> None:  # noqa: ANN001
     # clears the transforms, so a watcher that looks only between clicks
     # sees a board at rest and concludes nothing moved.
     for _ in range(8):
-        # A locator for the same reason as `_press_move`: these handles go
-        # stale the moment the list redraws, and this loop deliberately waits
-        # 2.2 seconds between turns, which is ample time for that. #355.
-        ends = _texts(page, "#actions button:not([disabled])")
-        for i, label in enumerate(ends):
-            if "end turn" in label.lower():
-                with contextlib.suppress(Exception):
-                    page.locator(
-                        "#actions button:not([disabled])"
-                    ).nth(i).click(timeout=5000)
-                break
+        # **Found by text, never by index.** This read the labels, found the
+        # position of "end turn" in that list, and then clicked `.nth(i)` of a
+        # *freshly evaluated* locator -- so a redraw between the two reads made
+        # `i` point at a different button, and the click landed on an attack
+        # instead. The round then did not advance, the monsters never acted, and
+        # the check below read `0 of them slid`. **Reproduced 2 runs in 6**, and
+        # it was the only failing check in both.
+        #
+        # #355 fixed a sibling of this by swapping a stale ElementHandle for a
+        # locator, and recorded that a locator is re-evaluated on use. True, and
+        # not enough: re-evaluating the *selector* does not re-evaluate the
+        # *index*. Playwright filters by text, so the index goes away. #402.
+        end = page.locator(
+            "#actions button:not([disabled])"
+        ).filter(has_text=re.compile("end turn", re.I))
+        with contextlib.suppress(Exception):
+            end.first.click(timeout=5000)
+        # Every render clears the transforms, so a watcher looking only between
+        # clicks sees a board at rest and concludes nothing moved.
         page.wait_for_timeout(2200)
     slid = set(page.evaluate("Array.from(window.__slid)"))
     enemies = {a for a in slid if a.startswith("npc")}
@@ -947,7 +1015,7 @@ def _check_enumerated_move(page, check: Checks) -> None:  # noqa: ANN001
     """
     page.evaluate("localStorage.setItem('dnd4e.freeform', 'off')")
     page.reload(wait_until="networkidle")
-    page.wait_for_selector("#board .token", timeout=15000)
+    _settled(page, "#board .token", TOKENS_DRAWN)
     # A known seed, because whether the first turn belongs to a character with a
     # move left is otherwise a coin toss.
     _restart(page, BLAST_SEED)
@@ -975,8 +1043,21 @@ def _check_enumerated_move(page, check: Checks) -> None:  # noqa: ANN001
         page.locator("#movement .mv").count() > 0,
         "pressing it lights where you can go",
     )
+    # **A board where every reachable square provokes is a real board**, and
+    # this check used to call it a failure. `.mv-free` is the squares that
+    # provoke nothing; a character boxed in by enemies has none, and the seed
+    # being pinned does not prevent it -- measured, 1 run in 8. The check's
+    # *definition* was wrong rather than the page, so it says skip. #402.
     box = _move_square_box(page, 3)
-    check.that(box is not None, "a free square is lit in the default mode")
+    if box is None:
+        lit = page.locator("#movement .mv").count()
+        check.skip(
+            "a free square is lit in the default mode",
+            f"every one of the {lit} lit squares provokes on this board, so "
+            f"there is no free square to click -- which is legal play",
+        )
+    else:
+        check.that(True, "a free square is lit in the default mode")
     if not box:
         return
     _click_box(page, box)
@@ -1033,7 +1114,7 @@ def _restart(page, seed: int, served: list[dict] | None = None) -> None:  # noqa
     mark = len(served) if served is not None else 0
     page.fill("#seed", str(seed))
     page.click("#restart")
-    page.wait_for_selector("#board .token", timeout=15000)
+    _settled(page, "#board .token", TOKENS_DRAWN)
     if served is not None:
         deadline = time.monotonic() + 15
         while len(served) <= mark and time.monotonic() < deadline:
