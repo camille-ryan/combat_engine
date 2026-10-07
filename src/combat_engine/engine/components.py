@@ -917,6 +917,25 @@ class Gear:
     #: -- so the bonus is withheld only when there **is** a record and the
     #: weapon in hand is not in it. `chargen.spawn` is what fills it. #242.
     trained: frozenset[str] = frozenset()
+    #: The **bands** this creature is proficient in, as the class page prints
+    #: them -- `{"simple:melee", "military:melee"}`, or `"weapon:<slug>"` for
+    #: the classes whose line names weapons one at a time.
+    #:
+    #: `trained` above is a set of refs and answers "was this exact weapon
+    #: dealt to me"; this answers "does my page allow it", which is the
+    #: question a *human* choosing gear asks and the one #285 was about. A
+    #: fighter dealt a longsword was refused the bonus on a warhammer its page
+    #: plainly grants.
+    #:
+    #: **A band is never expanded into the weapons it covers.** Camille's call
+    #: (#436): "if a character has proficiency in all simple and military
+    #: weapons, that should hold true and not be parsed into individual
+    #: proficiencies." So coverage is decided by asking the `Weapon`, not by
+    #: membership in a precomputed list -- which also means a weapon added
+    #: later is covered without anything being regenerated.
+    #:
+    #: Empty means "nobody recorded any", exactly as `trained` does.
+    bands: frozenset[str] = frozenset()
     #: Magic items being worn, by slot. A weapon's own magic is on the
     #: `Weapon` -- it is a longsword with properties -- so this holds the
     #: armour, the neck, and the eight small slots that had nowhere to go.
@@ -925,6 +944,47 @@ class Gear:
     #: a worn item is on the creature for the whole fight and a piece of
     #: ammunition is gone the moment it is loosed.
     quiver: list[Ammo] = field(default_factory=list)
+
+    def proficient_with(self, arm: Weapon) -> bool:
+        """Does a recorded band or grant cover this weapon?
+
+        Three shapes, which is every one of the 19 terms the 25 class pages
+        print between them:
+
+            simple:melee / military:ranged    a category and a reach
+            military:light blade              a category and a weapon group
+            weapon:<slug>                     one weapon, named
+
+        Asked of the `Weapon` rather than against an expanded list, so a band
+        covers a weapon nobody thought about when the band was recorded --
+        which is what "proficiency in all simple and military weapons should
+        hold true" means (#436).
+
+        **An unrecognised qualifier does not match**, and that is deliberate.
+        The assassin prints "simple **one-handed** melee" and `Weapon` carries
+        no `hands`, so that band covers nothing here: the class keeps the
+        weapons it was dealt through `Gear.trained`, and the band adds
+        nothing until the column exists. Withholding is the safe direction --
+        the same reasoning `Cast._trained_with` uses for an empty record.
+        """
+        if f"weapon:{arm.slug}" in self.bands:
+            return True
+        cat = (arm.category or "").lower()
+        if not cat:
+            return False
+        reach = "ranged" if arm.ranged is not None else "melee"
+        want = {
+            f"{cat}:",                    # the whole category
+            f"{cat}:{reach}",             # ...or one half of it
+        }
+        if arm.group:
+            want.add(f"{cat}:{arm.group.lower()}")
+        # "simple one-handed melee" is narrower than "simple melee" and the
+        # assassin is the only class that prints it. Reading it as the wider
+        # band would hand the class two-handed weapons its page withholds.
+        if arm.hands:
+            want.add(f"{cat}:{arm.hands.lower()} {reach}")
+        return bool(want & self.bands)
 
     def __post_init__(self) -> None:
         """Start with a grip that a pair of hands could actually make.
@@ -1109,6 +1169,11 @@ class Weapon:
     #: beside the group. A handful of rows carry "you must use this power
     #: with a simple weapon" as their Requirement and had nothing to ask.
     category: str = ""
+    #: `one-handed`, `two-handed` or `double`, as the page prints it. Here
+    #: because the assassin's proficiency line is "simple **one-handed**
+    #: melee" and without it that band could match nothing, which refused the
+    #: class its own dagger. #285.
+    hands: str = ""
     properties: frozenset[str] = frozenset()
     #: A magic weapon's enhancement bonus, which adds to its attack and its
     #: damage. Zero is a plain weapon, and everything `chargen` hands out is

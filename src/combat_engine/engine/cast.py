@@ -1135,9 +1135,14 @@ class Cast:
         than the one being fixed. So the bonus is withheld only when there is a
         record and the weapon is not in it.
         """
-        if arm is None or not gear.trained:
+        if arm is None or not (gear.trained or gear.bands):
             return True
-        return arm.ref in gear.trained
+        # **The band first, because it is the broader claim.** `trained` is the
+        # handful of weapons this character was dealt; `bands` is what its page
+        # allows. A fighter dealt a longsword was refused the bonus on a
+        # warhammer its page plainly grants, which is #285 -- the fix for #242
+        # was right about the superior weapon and wrong about the warhammer.
+        return gear.proficient_with(arm) or arm.ref in gear.trained
 
     def _wielded(self) -> Weapon | None:
         """The weapon this power swings or fires.

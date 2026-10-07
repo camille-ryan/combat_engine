@@ -83,6 +83,12 @@ class ClassLine:
     #: The ability most of its powers attack with.
     key: Ability
     scores: dict[Ability, int] = field(default_factory=dict)
+    #: The printed proficiency line as bands -- `{"simple:melee",
+    #: "military:melee"}`. `weapons` above is one representative weapon per
+    #: entry, which answers what a character *holds*; this answers what it is
+    #: allowed to hold, which is a different question and the one `#285` was
+    #: about. Defaulted because the three hardcoded lines below predate it.
+    bands: frozenset[str] = frozenset()
     #: Power points at first level, for a class that augments its powers.
     #: **Only the first-level number is settled.** `game.db` carries no
     #: power point column and the by-level table is not in it, so this does
@@ -144,32 +150,92 @@ ORB = Weapon(ref="w:orb", damage="1d4", proficiency=0, group="implement")
 HOLY_SYMBOL = Weapon(ref="w:holy-symbol",
                      damage="1d4", proficiency=0, group="implement")
 
+#: The three printed weapon categories, longest first so "simple one-handed
+#: melee" is read as `simple` and not matched on a bare word.
+_CATEGORIES = ("superior", "military", "simple")
+
+
+def _bands(printed: str) -> frozenset[str]:
+    """The printed proficiency line as **bands**, which is what it is.
+
+    `_arms` below turns this same line into one representative weapon per
+    entry, which is right for deciding what a character *holds* and wrong for
+    deciding what it is *allowed* to hold -- so a fighter dealt a longsword and
+    a greataxe was recorded as trained with those two and refused the bonus on
+    a warhammer its page plainly grants. #285.
+
+    **A band stays a band and is never expanded into the weapons it covers**,
+    which is Camille's call on #436: "if a character has proficiency in all
+    simple and military weapons, that should hold true and not be parsed into
+    individual proficiencies." So this returns tokens, and
+    `Gear.proficient_with` decides coverage against `Weapon`'s own columns.
+
+    Nineteen distinct terms appear across the 25 classes, in three shapes:
+
+        simple melee / military ranged      a category and a reach
+        military light blade                a category and a weapon group
+        dagger, sling, longsword            one weapon, by its slug
+
+    A bare weapon word is a **slug**, not a name -- `weapon.slug` holds exactly
+    these, thirty of them are in `sanitise.RULES_TERMS`, and none is in
+    `names.json`. That is this project's own ruling that a weapon type is
+    mechanics (#339), which is why matching on the word here is not a leak.
+
+    `simple one-handed melee` is the assassin's and keeps its middle word: it
+    is narrower than `simple melee` and reading it as that would hand the
+    class two-handed weapons the page withholds.
+    """
+    out: set[str] = set()
+    for part in re.split(r",|\band\b", printed.lower()):
+        term = part.strip().rstrip(".")
+        if not term:
+            continue
+        for cat in _CATEGORIES:
+            if term.startswith(cat):
+                rest = term[len(cat):].strip()
+                # A category with nothing after it is every weapon in it.
+                out.add(f"{cat}:{rest}" if rest else f"{cat}:")
+                break
+        else:
+            # Not a category, so a single weapon by its printed word.
+            out.add(f"weapon:{term.replace(' ', '-')}")
+    return frozenset(out)
+
+
 #: The eight Player's Handbook classes. Numbers off the class pages.
 CLASSES: dict[str, ClassLine] = {
     "fighter": ClassLine(
         "fighter", 15, 6, 9, {"fort": 2}, "scale", 2, (LONGSWORD,), STR,
         {STR: 18, CON: 14, DEX: 13, INT: 10, WIS: 12, CHA: 8},
+        # "Simple melee, military melee, simple ranged, military ranged"
+        bands=_bands("simple melee, military melee, simple ranged, military ranged"),
         role="defender",
     ),
     "cleric": ClassLine(
         "cleric", 12, 5, 7, {"will": 2}, "chain", 0, (MACE, HOLY_SYMBOL), WIS,
         {STR: 14, CON: 13, DEX: 10, INT: 8, WIS: 18, CHA: 12},
+        bands=_bands("simple melee, simple ranged"),
         role="leader",
     ),
     "rogue": ClassLine(
         "rogue", 12, 5, 6, {"ref": 2}, "leather", 0, (DAGGER, CROSSBOW), DEX,
         {STR: 12, CON: 13, DEX: 18, INT: 10, WIS: 8, CHA: 14},
+        # "Dagger, hand crossbow, short sword, shuriken, sling" -- five
+        # named weapons and no band, which is the rogue's whole list.
+        bands=_bands("dagger, hand crossbow, short sword, shuriken, sling"),
         role="striker",
     ),
     "wizard": ClassLine(
         "wizard", 10, 4, 6, {"will": 2}, "cloth", 0, (ORB,), INT,
         {STR: 10, CON: 13, DEX: 14, INT: 18, WIS: 12, CHA: 8},
+        bands=_bands("dagger, quarterstaff"),
         role="controller",
     ),
     "paladin": ClassLine(
         "paladin", 15, 6, 10, {"fort": 1, "ref": 1, "will": 1}, "plate", 2,
         (LONGSWORD, HOLY_SYMBOL), STR,
         {STR: 16, CON: 13, DEX: 10, INT: 8, WIS: 12, CHA: 16},
+        bands=_bands("simple melee, military melee, simple ranged"),
         role="defender",
     ),
     # Two blades and a bow. The two-weapon build is the one several of its
@@ -179,16 +245,19 @@ CLASSES: dict[str, ClassLine] = {
         "ranger", 12, 5, 6, {"fort": 1, "ref": 1}, "leather", 0,
         (SHORTSWORD, SHORTSWORD, LONGBOW), DEX,
         {STR: 14, CON: 13, DEX: 18, INT: 8, WIS: 12, CHA: 10},
+        bands=_bands("simple melee, military melee, simple ranged, military ranged"),
         role="striker",
     ),
     "warlock": ClassLine(
         "warlock", 12, 5, 6, {"ref": 1, "will": 1}, "leather", 0, (ROD,), CHA,
         {STR: 10, CON: 14, DEX: 13, INT: 12, WIS: 8, CHA: 18},
+        bands=_bands("simple melee, simple ranged"),
         role="striker",
     ),
     "warlord": ClassLine(
         "warlord", 12, 5, 7, {"fort": 1, "will": 1}, "chain", 1, (LONGSWORD,), STR,
         {STR: 18, CON: 12, DEX: 10, INT: 14, WIS: 8, CHA: 13},
+        bands=_bands("simple melee, military melee, simple ranged"),
         role="leader",
     ),
 }
@@ -267,6 +336,7 @@ def _printed_weapons() -> dict[str, Weapon]:
             # `Weapon.slug`. #339.
             slug=row["slug"] or "",
             category=row["category"],
+            hands=row["hands"] or "",
             damage=row["damage"],
             proficiency=row["proficiency"],
             reach=row["reach"],
@@ -411,6 +481,7 @@ def _from_the_book() -> dict[str, ClassLine]:
             _arms(row["weapons"] or "", row["implements"] or ""),
             _abilities(row["abilities"] or "")[0],
             _spread(_abilities(row["abilities"] or "")),
+            bands=_bands(row["weapons"] or ""),
             role=(row["role"] or "").lower(),
         )
     return out
@@ -2192,6 +2263,12 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
                 w.ref for w in (*line.weapons, *carried, *belt,
                                 *from_feats, *from_race)
             ),
+            # **And what the page allows, not just what was dealt.** The two
+            # answer different questions and #285 is the gap between them:
+            # `trained` is this character's own weapons, `bands` is its
+            # class's printed proficiency line, so a human picking a
+            # different military weapon gets the bonus the book grants.
+            bands=line.bands,
         ),
     )
     # Owned, not held. `Gear.__post_init__` works the grip out from an
