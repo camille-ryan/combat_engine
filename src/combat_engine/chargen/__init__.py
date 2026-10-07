@@ -673,7 +673,11 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # A -- Intelligence either way.
     "wizard": (Build("control", INT, WIS), Build("war", INT, DEX)),
     # V -- swinging or shining.
-    "paladin": (Build("avenging", STR, CHA), Build("protecting", CHA, WIS)),
+    #
+    # The second leg's secondary is **Strength, off its own page** -- it says
+    # "choose Strength for your second-best score, and Wisdom as your third".
+    # It was Wisdom here, which is the third. #235.
+    "paladin": (Build("avenging", STR, CHA), Build("protecting", CHA, STR)),
     # V -- two blades or a bow, and they are different weapons as well as
     # different scores.
     #
@@ -697,11 +701,25 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # `Character` that names no build still takes the first leg and every
     # ranger already dealt stays the ranger it was.
     "ranger": (
-        Build("two-blade", STR, WIS, (SHORTSWORD, SHORTSWORD)),
-        Build("archer", DEX, WIS, (LONGBOW, SHORTSWORD)),
+        # **Wisdom is the ranger's third ability, not its second**, and the
+        # first two legs had it as the second. Each page section names the
+        # other of the pair: the melee leg leans on Dexterity for its AC and
+        # the ranged one on Strength for the melee it still ends up in. The
+        # three legs below were written against these two and are left alone
+        # until their own sections are read. #235.
+        Build("two-blade", STR, DEX, (SHORTSWORD, SHORTSWORD)),
+        Build("archer", DEX, STR, (LONGBOW, SHORTSWORD)),
         Build("hunter", DEX, WIS, (LONGBOW, SHORTSWORD)),
         Build("marauder", STR, WIS, (SHORTSWORD, SHORTSWORD)),
-        Build("companion", STR, WIS, (SHORTSWORD, SHORTSWORD), companion="comp:8"),
+        # Dexterity, off this leg's own section: "you count on Dexterity for
+        # your AC and occasional ranged attacks, so your secondary focus is on
+        # that ability score". Its page states no primary, so Strength stays.
+        #
+        # **Found by `legs.py`'s new check on its first run**, and missed
+        # by the hand pass that found the other five: that pass only compared a
+        # leg whose page stated *both* abilities, and this one states only the
+        # secondary. 35 of the 90 entries state one or neither. #235.
+        Build("companion", STR, DEX, (SHORTSWORD, SHORTSWORD), companion="comp:8"),
     ),
     # V -- which pact was made. Two more pacts arrived with the later books
     # and each prints a boon row of its own, so each needs a leg for the
@@ -774,7 +792,9 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         Build("fey", CHA, CON),
         Build("dark", CON, CHA),
         Build("elemental", CHA, CON, element=DamageType.FIRE),
-        Build("sorcerer-king", CHA, CON),
+        # Intelligence, not Constitution: this pact's own section says
+        # "Intelligence is best as your secondary ability score". #235.
+        Build("sorcerer-king", CHA, INT),
         Build("star", CHA, CON),
         Build("vestige", CHA, CON),
     ),
@@ -786,6 +806,16 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         Build("bravura", STR, CHA),
         Build("insightful", STR, INT),
         Build("resourceful", STR, INT),
+        # **This key is not one of the six the page prints**, and it is the
+        # printed name of a leg of a *different* class -- the swordmage's. So
+        # `c.build()` resolves it against the character's own class, the gate
+        # answers True, and the three rows that ask for it have never looked
+        # wrong. `legs.py` cannot see it either: that check asks whether a
+        # gated leg *exists*, and this one does.
+        #
+        # Left in place deliberately. Renaming it to the sixth printed option
+        # moves three content gates, and `PRINTED_LEG` below is what records
+        # that it has no entry until somebody does that work. #235.
         Build("shielding", STR, CHA),
     ),
     # V -- which soul. The two share Charisma and differ on the secondary
@@ -881,9 +911,11 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         Build("f0s3", DEX, STR),
         Build("f0s4", DEX, STR),
     ),
+    # Three legs, and the middle one's secondary is **Wisdom off its own
+    # page** -- the other two are Charisma and it was given theirs. #235.
     "psion": (
         Build("f0s0", INT, CHA),
-        Build("f0s1", INT, CHA),
+        Build("f0s1", INT, WIS),
         Build("f0s2", INT, CHA),
     ),
     # The second leg is the one that trades the chassis's armour for a
@@ -894,6 +926,146 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         Build("f2s1", STR, WIS, (LONGSWORD, CROSSBOW)),
         Build("f2s2", STR, CON),
     ),
+}
+#: Which printed entry each leg is, by the `b:` ref `build_option` holds (#438).
+#:
+#: **A ledger beside `BUILDS` rather than a field on `Build`, because what is
+#: missing from it is the point.** 70 of the 97 legs map to an entry on their
+#: class's own page; the 27 that do not are four shapes and not 27 oversights:
+#:
+#: * **~17 are a second, orthogonal choice folded into the build field** -- a
+#:   warlock's pacts, a shaman's spirits, a sorcerer's elements (which are a
+#:   variant page's, not the base class's) and an avenger's censures. Content
+#:   rows gate on every one of them, so none can simply go: dropping a leg does
+#:   not break a build, it makes `c.build(...)` answer False forever.
+#: * **5 are sub-options their page does not list as builds at all.** The monk
+#:   prints three legs naming sub-options 0, 3 and 4; the assassin two naming 0
+#:   and 2; the druid three naming 0, 1 and 2; the runepriest two naming 0 and
+#:   2. The rest are sub-options of the feature and not legs.
+#: * **4 are the derived `second-<ability>` fallback** on two classes whose
+#:   pages have printed legs all along.
+#: * **1 is a key the book does not have.** See `BUILDS["warlord"]`.
+#:
+#: A field defaulting to `""` on 97 rows would hide all four. A dict of 70
+#: states them, and `scripts/legs.py` fails if a mapped leg's fork disagrees
+#: with the page or if the mapping shrinks. #235.
+PRINTED_LEG: dict[str, dict[str, str]] = {
+    "ardent": {
+        "f0s0": "b:c529-0",
+        "f0s1": "b:c529-1",
+        "f0s2": "b:c529-2",
+    },
+    "assassin": {
+        "f1s0": "b:c466-0",
+        "f1s2": "b:c466-1",
+    },
+    "avenger": {
+        "pursuit": "b:c129-2",
+    },
+    "barbarian": {
+        "rageblood": "b:c148-0",
+        "thaneborn": "b:c148-1",
+        "thunderborn": "b:c148-2",
+        "whirling": "b:c148-3",
+    },
+    "bard": {
+        "f1s0": "b:c104-0",
+        "f1s1": "b:c104-1",
+        "f1s2": "b:c104-2",
+    },
+    "battlemind": {
+        "f2s0": "b:c124-2",
+        "f2s1": "b:c124-0",
+        "f2s2": "b:c124-1",
+        "f2s3": "b:c124-3",
+    },
+    "cleric": {
+        "devoted": "b:c2-1",
+        "battle": "b:c2-0",
+    },
+    "druid": {
+        "f1s0": "b:c126-0",
+        "f1s1": "b:c126-1",
+        "f1s2": "b:c126-2",
+    },
+    "fighter": {
+        "great-weapon": "b:c3-3",
+        "guardian": "b:c3-4",
+        "arena": "b:c3-0",
+        "battlerager": "b:c3-1",
+        "brawling": "b:c3-2",
+        "tempest": "b:c3-5",
+    },
+    "invoker": {
+        "wrath": "b:c127-2",
+        "preservation": "b:c127-1",
+        "malediction": "b:c127-0",
+    },
+    "monk": {
+        "f0s0": "b:c362-0",
+        "f0s3": "b:c362-1",
+        "f0s4": "b:c362-2",
+    },
+    "paladin": {
+        "avenging": "b:c4-1",
+        "protecting": "b:c4-2",
+    },
+    "psion": {
+        "f0s0": "b:c437-0",
+        "f0s1": "b:c437-1",
+        "f0s2": "b:c437-2",
+    },
+    "ranger": {
+        "two-blade": "b:c5-4",
+        "archer": "b:c5-0",
+        "hunter": "b:c5-2",
+        "marauder": "b:c5-3",
+        "companion": "b:c5-1",
+    },
+    "rogue": {
+        "brawny": "b:c6-1",
+        "trickster": "b:c6-4",
+        "aerialist": "b:c6-0",
+        "shadowy": "b:c6-3",
+        "cutthroat": "b:c6-2",
+    },
+    "runepriest": {
+        "f2s0": "b:c602-0",
+        "f2s2": "b:c602-1",
+    },
+    "shaman": {
+        "world speaker": "b:c147-4",
+    },
+    "sorcerer": {
+        "wild": "b:c128-0",
+        "dragon": "b:c128-2",
+        "f0s2": "b:c128-3",
+    },
+    "swordmage": {
+        "assault": "b:c53-0",
+        "shielding": "b:c53-2",
+        "ensnarement": "b:c53-1",
+    },
+    "warden": {
+        "f1s0": "b:c134-0",
+        "f1s1": "b:c134-1",
+        "f1s2": "b:c134-2",
+        "f1s3": "b:c134-3",
+    },
+    "warlock": {
+        "sorcerer-king": "b:c7-2",
+    },
+    "warlord": {
+        "inspiring": "b:c8-2",
+        "tactical": "b:c8-5",
+        "bravura": "b:c8-0",
+        "insightful": "b:c8-1",
+        "resourceful": "b:c8-3",
+    },
+    "wizard": {
+        "control": "b:c9-0",
+        "war": "b:c9-3",
+    },
 }
 
 

@@ -61,6 +61,13 @@ CHECKS = (
     # its header, so this is most of what can be wrong with one.
     Instrument("cards", ("uv", "run", "scripts/cards.py", "--quiet"),
                "every monster header says the numbers its stat block prints"),
+    # **Added because its new half caught a real fork on its first run**, and
+    # because nothing else asks this question: a leg's fork decides which rows a
+    # character is offered and which race scores best in a draw, and until
+    # `PRINTED_LEG` existed there was nothing to compare it against. Seconds to
+    # run -- an AST walk over `content/` plus one query. #235.
+    Instrument("legs", ("uv", "run", "scripts/legs.py"),
+               "every gated leg exists, and agrees with the page it came off"),
     Instrument("replay", ("uv", "run", "scripts/replay.py", "verify"),
                "the engine still plays the recorded fights"),
     Instrument("fight", ("uv", "run", "scripts/fight.py", "--quiet"),
