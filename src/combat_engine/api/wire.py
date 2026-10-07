@@ -19,6 +19,7 @@ Two separate jobs:
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 
@@ -30,6 +31,28 @@ from combat_engine.etl.build import localisation
 def names_enabled() -> bool:
     """Off in a hosted deployment, which then never serves a printed name."""
     return os.environ.get("CE_NAMES", "on").lower() not in ("off", "0", "false", "no")
+
+
+#: An item block's ref: the item, then `p` for a Power or `x` for a Property,
+#: then which one. `i3152p1`, `i678x2`. The item's own ref is the first group
+#: and is where the printed name lives -- see `Wire.item`.
+_ITEM_BLOCK = re.compile(r"^(i\d+)[px]\d+$")
+
+#: The words an item's printed name uses to mean "whatever this is laid on".
+#: `Wire.item` replaces one of these with the base weapon's own word and
+#: leaves every other head noun alone. Measured: 14 items lead with the first
+#: and 1 with the second, out of 403 in a weapon category. #346.
+_GENERIC_WEAPON_WORDS = frozenset({"weapon", "blade"})
+
+
+def item_of(ref: str) -> str:
+    """The item a block belongs to, or `""` if this is not a block ref.
+
+    Public because `render` needs it to find which weapon the item was laid
+    on, and the alternative was a second copy of the pattern over there.
+    """
+    found = _ITEM_BLOCK.match(ref)
+    return found.group(1) if found else ""
 
 
 @dataclass
@@ -139,11 +162,72 @@ class Wire:
         return self.things.setdefault(eid, f"thing_{eid}")
 
     def power(self, ref: str) -> str:
-        """A power's name, or its id when there is no localisation."""
+        """A power's name, or its id when there is no localisation.
+
+        **An item's row falls through to `item`**, which knows that the name
+        is on the item and not on the block. Done here rather than only at
+        the two call sites that know the wielder, so that every reader of
+        this method gets a name instead of a ref -- the event log and the
+        option label included, which is where `i3152p1` was showing up.
+        """
         if not self.show_names:
             return ref
         entry = localisation().get(ref) or {}
-        return entry.get("name") or _plain(ref)
+        name = entry.get("name")
+        if name:
+            return name
+        return self.item(ref) if _ITEM_BLOCK.match(ref) else _plain(ref)
+
+    def item(self, ref: str, *, slug: str = "") -> str:
+        """What to call a magic item's row: the **item's** name, not the block's.
+
+        **An item block has no name of its own.** Measured over the whole
+        catalogue: every `i<N>p<M>` / `i<N>x<M>` entry in the localisation
+        carries `rules_text` and nothing else, because the compendium prints
+        one name on the item and its Properties and Powers underneath. So
+        `power()` fell through to `_plain`, which has no rule for this shape
+        and returns the ref -- and the page served `i3152p1` as the name of a
+        row a player is being offered. That is #342's shape, which this
+        repository has now fixed three times: an identifier reaching the page
+        around the one boundary that exists to stop it.
+
+        `slug` is the base weapon the item is laid on, and substituting it is
+        Camille's rule on #346: a "Weapon of ..." laid on a dagger should read
+        "Dagger of ...". Two things make that safe to do here rather than
+        anywhere else --
+
+        * the name is read from `localisation()` at display time, so nothing
+          printed enters a tracked file either way;
+        * `Weapon.slug` is the printed word and is **mechanics** by this
+          project's own ruling -- thirty weapon words are in
+          `sanitise.RULES_TERMS` and none is in `names.json`.
+
+        **Only a leading generic word is replaced**, and that is the whole
+        rule. Of 403 items filed under a weapon category, 15 lead with one
+        ("Weapon of ..." 14, "Blade of ..." 1) and 387 do not. The 387 are not
+        this shape at all: "Bracers of ..." is what the thing *is*, not a
+        placeholder standing in for a type, and substituting into those would
+        rename them wrongly.
+
+        Armour and shields are the other half of #346 and are **not** here:
+        there is no `armour` table, so no equivalent of `Weapon.slug` exists
+        to substitute, and shields print light/heavy/barbed which nothing
+        extracts. That half is ETL work and is the prerequisite.
+        """
+        if not self.show_names:
+            return ref
+        block = _ITEM_BLOCK.match(ref)
+        whole = block.group(1) if block else ref
+        entry = localisation().get(whole) or {}
+        name = entry.get("name")
+        if not name:
+            return _plain(ref)
+        if not slug:
+            return name
+        head, _, rest = name.partition(" ")
+        if head.lower() in _GENERIC_WEAPON_WORDS and rest:
+            return f"{slug[:1].upper()}{slug[1:]} {rest}"
+        return name
 
     def build(self, cls: str, leg: str) -> str:
         """What a build leg is called on the class's page.

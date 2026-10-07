@@ -494,6 +494,41 @@ def _weapon_word(session: Session, actor: int, ref: str) -> str:
     return ref
 
 
+def _row_label(session: Session, actor: int, ref: str) -> str:
+    """What this row is called, with a magic item named after the base it is on.
+
+    Camille's rule on #346: an enchanted weapon should say what *kind* of
+    weapon it is, whether or not it is currently in hand. The pairing that
+    makes it answerable is `Weapon.item` -- `equipment._onto_weapon` writes
+    the item's ref onto the weapon it was laid on -- so the base type is known
+    from the creature's gear and does not depend on what it happens to be
+    holding.
+
+    **That pairing is the only thing that can answer it.** `item.base` is a
+    *restriction* and not a type: 8 of the 15 read `["any melee"]`, so there
+    is no base to name without knowing which weapon the item went onto.
+
+    `Gear.weapons` rather than `held`, deliberately and for `_weapon_word`'s
+    reason: a stowed weapon is still a weapon this creature owns, and the
+    whole point of the rule is that the display does not change when it is
+    put away.
+    """
+    from combat_engine.api.wire import item_of
+    from combat_engine.engine.components import Gear
+
+    owner = item_of(ref)
+    if not owner:
+        return session.wire.power(ref)
+    gear = session.world.get(actor, Gear)
+    slug = ""
+    if gear is not None:
+        for weapon in gear.weapons:
+            if weapon.item == owner and weapon.slug:
+                slug = weapon.slug.replace("-", " ")
+                break
+    return session.wire.item(ref, slug=slug)
+
+
 def _option_label(session: Session, action: Action, p, actor: int = 0) -> str:  # noqa: ANN001
     """What this option says on its button.
 
@@ -618,7 +653,7 @@ def _traits(session: Session, eid: int) -> list[dto.PowerDTO]:
         printed = session.wire.printed(ref)
         out.append(
             dto.PowerDTO(
-                name=session.wire.power(ref),
+                name=_row_label(session, eid, ref),
                 action=p.action.value,
                 cost=p.action.value,
                 usage="always on",
@@ -686,7 +721,7 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
             ok, why = False, "no action left"
         out.append(
             dto.PowerDTO(
-                name=session.wire.power(ref),
+                name=_row_label(session, actor, ref),
                 action=p.action.value,
                 cost=p.action.value,
                 usage=p.usage.value + (f" {p.recharge}+" if p.recharge else ""),
