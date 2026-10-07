@@ -89,6 +89,10 @@ class ClassLine:
     #: allowed to hold, which is a different question and the one `#285` was
     #: about. Defaulted because the three hardcoded lines below predate it.
     bands: frozenset[str] = frozenset()
+    #: The compendium's own id for this class -- `c3`. `class.ref` has carried
+    #: it since `30e72c6`, which was step 1 of #339; this is what lets anything
+    #: resolve a class *by* it, which is step 2.
+    ref: str = ""
     #: Power points at first level, for a class that augments its powers.
     #: **Only the first-level number is settled.** `game.db` carries no
     #: power point column and the by-level table is not in it, so this does
@@ -209,12 +213,14 @@ CLASSES: dict[str, ClassLine] = {
         {STR: 18, CON: 14, DEX: 13, INT: 10, WIS: 12, CHA: 8},
         # "Simple melee, military melee, simple ranged, military ranged"
         bands=_bands("simple melee, military melee, simple ranged, military ranged"),
+        ref="c3",
         role="defender",
     ),
     "cleric": ClassLine(
         "cleric", 12, 5, 7, {"will": 2}, "chain", 0, (MACE, HOLY_SYMBOL), WIS,
         {STR: 14, CON: 13, DEX: 10, INT: 8, WIS: 18, CHA: 12},
         bands=_bands("simple melee, simple ranged"),
+        ref="c2",
         role="leader",
     ),
     "rogue": ClassLine(
@@ -223,12 +229,14 @@ CLASSES: dict[str, ClassLine] = {
         # "Dagger, hand crossbow, short sword, shuriken, sling" -- five
         # named weapons and no band, which is the rogue's whole list.
         bands=_bands("dagger, hand crossbow, short sword, shuriken, sling"),
+        ref="c6",
         role="striker",
     ),
     "wizard": ClassLine(
         "wizard", 10, 4, 6, {"will": 2}, "cloth", 0, (ORB,), INT,
         {STR: 10, CON: 13, DEX: 14, INT: 18, WIS: 12, CHA: 8},
         bands=_bands("dagger, quarterstaff"),
+        ref="c9",
         role="controller",
     ),
     "paladin": ClassLine(
@@ -236,6 +244,7 @@ CLASSES: dict[str, ClassLine] = {
         (LONGSWORD, HOLY_SYMBOL), STR,
         {STR: 16, CON: 13, DEX: 10, INT: 8, WIS: 12, CHA: 16},
         bands=_bands("simple melee, military melee, simple ranged"),
+        ref="c4",
         role="defender",
     ),
     # Two blades and a bow. The two-weapon build is the one several of its
@@ -246,18 +255,21 @@ CLASSES: dict[str, ClassLine] = {
         (SHORTSWORD, SHORTSWORD, LONGBOW), DEX,
         {STR: 14, CON: 13, DEX: 18, INT: 8, WIS: 12, CHA: 10},
         bands=_bands("simple melee, military melee, simple ranged, military ranged"),
+        ref="c5",
         role="striker",
     ),
     "warlock": ClassLine(
         "warlock", 12, 5, 6, {"ref": 1, "will": 1}, "leather", 0, (ROD,), CHA,
         {STR: 10, CON: 14, DEX: 13, INT: 12, WIS: 8, CHA: 18},
         bands=_bands("simple melee, simple ranged"),
+        ref="c7",
         role="striker",
     ),
     "warlord": ClassLine(
         "warlord", 12, 5, 7, {"fort": 1, "will": 1}, "chain", 1, (LONGSWORD,), STR,
         {STR: 18, CON: 12, DEX: 10, INT: 14, WIS: 8, CHA: 13},
         bands=_bands("simple melee, military melee, simple ranged"),
+        ref="c8",
         role="leader",
     ),
 }
@@ -482,6 +494,7 @@ def _from_the_book() -> dict[str, ClassLine]:
             _abilities(row["abilities"] or "")[0],
             _spread(_abilities(row["abilities"] or "")),
             bands=_bands(row["weapons"] or ""),
+            ref=row["ref"] or "",
             role=(row["role"] or "").lower(),
         )
     return out
@@ -926,8 +939,44 @@ for _name, _line in CLASSES.items():
     )
 
 
+#: Class ref -> the class word, built once from `CLASSES` itself so there is
+#: no second list to go stale.
+_BY_REF: dict[str, str] = {}
+
+
+def class_word(key: str) -> str:
+    """The class word for either spelling -- `"fighter"` or `"c3"`.
+
+    **Step 2 of #339**, which is "teach `wire` and `chargen` to resolve either
+    form". The migration rewrites 9,249 `cls=` sites from a word to a ref, and
+    every one of them is only safe to change once both spellings answer.
+
+    **Not aliases on `CLASSES`**, which is the obvious implementation and is
+    wrong: four places iterate that dict as "the 25 class words" -- three of
+    them in `etl/build.py`, matching compendium pages by name -- so adding
+    `c3` as a key would have those match a page called `c3` and quietly change
+    what the build reads.
+
+    An unknown key comes back unchanged. That keeps this usable as a filter on
+    a `cls` column that also holds `item`, a race ref and a theme ref, which
+    is what `audit.py` and `show.py` already have to cope with.
+    """
+    if not _BY_REF:
+        _BY_REF.update({line.ref: word for word, line in CLASSES.items() if line.ref})
+    return _BY_REF.get(key, key)
+
+
+def class_line(key: str) -> ClassLine | None:
+    """One class's chassis, by word or by ref. `None` if it is neither."""
+    return CLASSES.get(class_word(key))
+
+
 def build_of(cls: str, name: str = "") -> Build:
-    """One class's build, by name, or the first it lists."""
+    """One class's build, by name, or the first it lists.
+
+    `cls` may be the word or the compendium ref -- see `class_word` (#339).
+    """
+    cls = class_word(cls)
     options = BUILDS.get(cls) or ()
     if not options:
         return Build("", CLASSES[cls].key, CON)
@@ -1312,7 +1361,7 @@ class Character:
 
     @property
     def line(self) -> ClassLine:
-        return CLASSES[self.cls]
+        return CLASSES[class_word(self.cls)]
 
     @property
     def ref(self) -> str:
