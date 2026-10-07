@@ -3335,28 +3335,12 @@ def main() -> int:
               f"--all is {len(REGISTRY)} and takes about "
               f"{len(REGISTRY) * 0.05:.0f}s across ten cores.\n"
               f"# Adding a verb? `--calls <symbol>` is seconds.\n")
-    # **A run that selected every row has looked at every row**, whatever flag
-    # got it there -- and it used not to be allowed to say so. `full` was false
-    # whenever `--changed` was passed, including when `_changed` had widened the
-    # selection back to the whole tree, so the watermark was never written;
-    # `_database_moved` therefore stayed true and **every run after a rebuild
-    # paid the full sweep and cleared nothing.** 17 wide sweeps in 25 `check.py`
-    # runs on one day, 4.3 hours, for a debt only a bare `audit.py` could settle.
-    #
-    # The guard on the watermark write still holds -- "a narrowed run has not
-    # looked at the rest of the tree" -- because this fires only when the run
-    # was not narrowed *in fact*.
-    #
-    # **After `--sample`, not before.** A sample is drawn from `wanted` and
-    # replaces it, so testing this any earlier would call a 300-row sample of a
-    # whole-tree selection a full sweep, which is the lie this guard exists to
-    # prevent.
-    if not full and len(wanted) == len(REGISTRY):
-        full = True
     chosen: list[str] = []
     inert: list[str] = []
     partial: list[tuple[str, tuple[str, ...], str]] = []
     retired: list[tuple[str, tuple[str, ...], str]] = []
+    #: Rows the selection actually reached, for the `# scope:` line below.
+    reached = 0
     for ref in wanted:
         p = get(ref)
         if p is None:
@@ -3368,6 +3352,12 @@ def main() -> int:
             continue
         if args.monsters and not ref.startswith("m"):
             continue
+        # **Counted here and nowhere else.** See the `# scope:` line below for
+        # what this answers. Summing the four buckets instead was wrong by the
+        # number of `dropped=` rows, because a dropped row lands in `partial`
+        # *and* falls through to `chosen` -- deliberately, so that it fires --
+        # and a 40-row sample duly reported a scope of 44.
+        reached += 1
         if p.obsolete:
             # **Retired by a rules change, not unfinished.** `usable` refuses it
             # for a different reason than `todo` does, and firing it would only
@@ -3521,11 +3511,6 @@ def main() -> int:
     # `scripts/CLAUDE.md` says an instrument must never do: report a skip as a
     # skip rather than passing. The exit code is unchanged -- nothing was wrong,
     # because nothing was looked at -- but the line now says which.
-    if not chosen:
-        print("\n  SKIPPED -- no row was in scope, so nothing was checked")
-        print("  (`--changed` reads `git status`; on a clean tree use `--since` "
-              "for everything touched since the last full sweep)")
-        return 0
     # **For the ledger rather than for a reader.** `check.py` records the scope
     # of every run so that `--history` can price a wide sweep against a narrow
     # one directly. It had to bucket by *duration* to answer that, which is a
@@ -3533,10 +3518,47 @@ def main() -> int:
     # answer mattered: wide sweeps turned out to be 36% of everything the suite
     # has ever cost, at 12x the per-catch price of a narrow run.
     #
+    # **Rows this run reached, which is neither `chosen` nor `wanted`.** Both
+    # were tried and both are wrong:
+    #
+    # * `chosen` drops the `todo=`, obsolete and out-of-combat rows, so a full
+    #   sweep is 21,270 of 23,009 and `check.py` duly filed it as *narrow* --
+    #   the one thing this line exists to get right.
+    # * `wanted` is the selection before `--class`, `--level` and `--monsters`
+    #   narrow it inside the loop above, so `--class wizard --level 1` would
+    #   report the whole registry and be filed as *wide*.
+    #
+    # So it is counted in the loop, once per row that got past those filters.
+    #
+    # **Before the SKIPPED return**, so a run that covered nothing records a
+    # zero rather than nothing: absent has to keep meaning "did not report".
+    #
     # Keyed by this exact prefix, which makes it a contract: move it and the
-    # recorded field goes **absent** rather than wrong, and `--history` says how
+    # recorded field goes absent rather than wrong, and `--history` says how
     # many runs are missing it instead of quietly averaging over them.
-    print(f"\n# scope: {len(chosen)} of {len(REGISTRY)} declared rows")
+    print(f"\n# scope: {reached} of {len(REGISTRY)} declared rows")
+    # **A run that reached every row has looked at every row**, whatever flag got
+    # it there -- and it used not to be allowed to say so. `full` was false
+    # whenever `--changed` was passed, including when `_changed` had widened the
+    # selection back to the whole tree, so the watermark was never written;
+    # `_database_moved` therefore stayed true and **every run after a rebuild
+    # paid the full sweep and settled nothing.** 17 wide sweeps in 25 `check.py`
+    # runs on one day, 4.3 hours, for a debt only a bare `audit.py` could clear.
+    #
+    # **Decided here, on `reached`, and not up beside the flag test.** The first
+    # attempt asked `len(wanted) == len(REGISTRY)` before the loop, and
+    # `--class`/`--level`/`--monsters` narrow *inside* the loop -- so
+    # `--class wizard --level 1` passed that test and wrote a watermark claiming
+    # 71 rows as a whole-tree sweep, **wiping a 205-ref baseline**. That is
+    # exactly the lie the guard below exists to prevent, so the test has to use
+    # the same number the line above reports and for the same reason.
+    if reached == len(REGISTRY):
+        full = True
+    if not chosen:
+        print("\n  SKIPPED -- no row was in scope, so nothing was checked")
+        print("  (`--changed` reads `git status`; on a clean tree use `--since` "
+              "for everything touched since the last full sweep)")
+        return 0
     print(f"\n  {ok} of {len(chosen)} rows fire and do something")
     # **Fires and does something is not the same as finished.** A `dropped=`
     # row is fired and lands in this total, which is honest about what it did
