@@ -1720,7 +1720,7 @@ def affordable(world: World, actor: int, p: Power) -> tuple[int, ...]:
 
 def usable(
     world: World, actor: int, p: Power, *, dying: bool = False, spent_ok: bool = False,
-    augment: int = 0,
+    augment: int = 0, aimed: bool = False,
 ) -> tuple[bool, str]:
     """Can this power be used, and if not, why not?
 
@@ -1815,7 +1815,21 @@ def usable(
         # `requires_text` hid the failure from `chargen.build_for`, which
         # then handed a bow-only row to a ranger holding two blades.
         return False, p.requires_text or "requirement not met"
-    if p.is_attack_at(augment) and not any(
+    # **Skipped when the caller has already named who it is swinging at.** This
+    # scan asks "is anybody hostile *to the swinger* within reach", which is the
+    # wrong question for a forced attack: `c.basic(who=victim, on=<the victim's
+    # own ally>)` makes the victim the swinger, so the row was refused unless
+    # something hostile to the *victim* happened to stand nearby. Measured:
+    # `usable(world, victim, "m145a0") -> (False, 'nearest is 8 squares away')`
+    # on a swing the card describes exactly. **Every "turn them on each other"
+    # row in the tree worked by accident.**
+    #
+    # Two questions, asked separately now: *can this creature make this attack*
+    # stays here, and *is that particular target legal* is `_within_reach`,
+    # which `use`'s explicit-target arm has enforced per target since #381. The
+    # callers that do the offering -- `actions.legal`, the trigger dispatcher --
+    # name no targets and so keep the scan and its greyed-card reason. #429.
+    if p.is_attack_at(augment) and not aimed and not any(
         _can_land(world, actor, p, b, augment) for b in open_branches
     ):
         return False, _no_targets(world, actor, p)
@@ -2145,7 +2159,11 @@ def use(
         and getattr(trigger, "actor", None) == actor
         and not alive(world, actor)
     )
-    ok, _why = usable(world, actor, p, dying=dying, spent_ok=reentrant, augment=augment)
+    # `aimed=` because the caller below has already said who: see the scan in
+    # `usable` that this turns off, and `_within_reach` further down, which is
+    # the question that replaces it. #429.
+    ok, _why = usable(world, actor, p, dying=dying, spent_ok=reentrant,
+                      augment=augment, aimed=targets is not None)
     if not ok:
         return False
     # **The points go before the targets are chosen.** An augmented form
