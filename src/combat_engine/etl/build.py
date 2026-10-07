@@ -257,14 +257,23 @@ CREATE TABLE race (
 --
 -- `ref` is positional (`rt:r44-t2`), mirroring `cf:<class>-<build>-f<i>`: the
 -- identity is where the trait sits on the page, never what it is called.
--- `slug` is the printed label, lowered and hyphenated, and is a **matching
--- key** rather than an identity -- the distinction the weapon work settled, and
--- the thing that lets content's 94 invented refs be re-pointed mechanically.
+--
+-- **There was a `slug` column and it held the printed label on 147 of the 151
+-- rows.** It was added as a *matching key* on the weapon precedent -- a slug
+-- serving as a key is fine, a slug serving as the identity is the fault -- and
+-- that precedent does not transfer: a weapon's name is mechanics, with thirty
+-- of them in `sanitise.RULES_TERMS` and none in `names.json`, while a racial
+-- trait's label is an ordinary printed name with an ordinary localisation
+-- entry. The key it was for -- re-pointing content's 94 invented refs -- is
+-- work that finished, and **nothing read the column afterwards**: not
+-- `coverage.py`, not `spec.py` (whose `rt:` branch omits it deliberately), not
+-- the ETL. A name kept for a job that is over, one `SELECT *` away from an
+-- author, which is exactly how 15 reward titles reached one from `item.slot`.
+-- Dropped with its index. #433.
 CREATE TABLE racial_trait (
-  ref TEXT PRIMARY KEY, race TEXT, ord INTEGER, slug TEXT, spec TEXT
+  ref TEXT PRIMARY KEY, race TEXT, ord INTEGER, spec TEXT
 );
 CREATE INDEX racial_trait_race ON racial_trait(race);
-CREATE INDEX racial_trait_slug ON racial_trait(slug);
 
 -- A prerequisite clause that is a printed name rather than a mechanic: a
 -- race, a deity, a regional background. Keyed on a **global** dictionary
@@ -2353,6 +2362,16 @@ def _cross_reference_rest(
         if not held_by or (len(ref), ref) < (len(held_by), held_by):
             by_feat[name] = ref
 
+    # **The racial traits' own index**, for `_named_traits`. Apart from
+    # `by_name` for the reason `by_feat` is: the position proves *which kind* of
+    # thing is named, so the index must hold only that kind or the position is
+    # wasted. #434.
+    by_trait: dict[str, str] = {}
+    for (ref,) in out.execute("SELECT ref FROM racial_trait"):
+        name = _low(((names.get(ref) or {}).get("name") or "").strip())
+        if len(name) >= 3:
+            by_trait.setdefault(name, ref)
+
     # **The names that are not rows**, for `_elsewhere`. A ritual, a disease,
     # a hazard, a deity, a theme and a paragon path are compendium pages with
     # an entry in `names.json` and no row in any table -- 4,700 of them -- so
@@ -2546,6 +2565,11 @@ def _cross_reference_rest(
             # ordinary words -- `quick draw`, `ritual caster` -- which
             # is precisely what `identifies` waives.
             fixed = _named_feats(fixed, by_feat, ref)
+            # **Outside the `others` guard for the third time**, same argument:
+            # a racial trait's name is two ordinary words -- every one of the
+            # thirty involved -- which `identifies` waives, and the noun behind
+            # it is what makes the position proof. #434.
+            fixed = _named_traits(fixed, by_trait, ref)
             # **Outside the `others` guard**, for the third time and the same
             # reason the two passes above are: that guard skips a row whose
             # spec names nothing `identifies` believes, and a ritual or a
@@ -2709,8 +2733,14 @@ _NAMED_FEAT = re.compile(
 #: "the Detect Object, x0_42, Find the Path, and x0_262 rituals". With `\s+`
 #: the run stopped at the first comma and only the final member resolved --
 #: which is how eight more names survived the first version of this pass.
+#: **A later word may start with a digit; the first may not.** The corpus writes
+#: "<name> and another 1st-level ritual", and requiring every word in the run to
+#: be letter-initial meant the run could not reach back *past* `1st-level` to the
+#: name -- no match at all, and the name survived into the brief. A ritual's own
+#: name always starts with a letter, so only the repeat is widened. One row.
+#: #340.
 _NAMED_RITUAL = re.compile(
-    r"\b([A-Za-z][\w'\u2019-]*(?:[\s,]+[A-Za-z][\w'\u2019-]*){0,16}?)\s+rituals?\b"
+    r"\b([A-Za-z][\w'\u2019-]*(?:[\s,]+[\w'\u2019-]+){0,16}?)\s+rituals?\b"
 )
 
 #: **A disease, named where the sentence says it is one.** "the target
@@ -3083,6 +3113,53 @@ def _named_feats(spec: str, by_feat: dict[str, str], own: str) -> str:
         return m.group(0)
 
     return _NAMED_FEAT.sub(swap, spec)
+
+
+#: **A racial trait, named where the sentence says it is one.** "the power you
+#: chose through your *<name>* racial trait", "you must have the *<name>* racial
+#: trait". Non-greedy and bounded like `_NAMED_FEAT`, and for the same reason:
+#: the noun behind the run is what makes the position proof, so the run must not
+#: swallow the sentence before it. #434.
+_NAMED_TRAIT = re.compile(
+    r"\b([A-Za-z][\w'\u2019-]*(?:\s+[A-Za-z][\w'\u2019-]*){0,4}?)"
+    r"\s+racial\s+traits?\b"
+)
+
+
+def _named_traits(spec: str, by_trait: dict[str, str], own: str) -> str:
+    """Swap `<name> racial trait` for `<ref> racial trait`.
+
+    The same shape as `_named_feats`, and filed because `identifies` cannot
+    help here: **every one of the thirty names involved is two ordinary English
+    words**, which it waives deliberately as coincidence. The noun is what
+    settles it. `leaks.py --specs` was green over all of them for exactly that
+    reason -- and so is `leaks.py` over this comment, which is why the names are
+    not in it: a worked example here would be the leak this pass removes.
+
+    **Any contiguous sub-run, not only a suffix**, which is #440's lesson paid
+    forward rather than relearned: the corpus writes "the power you chose
+    through your `<name>` racial trait", so the name sits in the *middle* of the
+    captured run and both a prefix and a suffix loop miss it.
+
+    30 positions resolve at the time of writing -- 15 feats and 15 items -- where
+    #434 counted 9 by a name search without a position. 16 more positions hold no
+    trait name at all ("your own racial trait") and are left alone.
+    """
+    base = re.sub(r"[a-z]\d*$", "", own)
+
+    def swap(m: re.Match) -> str:
+        words = m.group(1).split()
+        for size in range(len(words), 0, -1):
+            for start in range(len(words) - size + 1):
+                ref = by_trait.get(_low(" ".join(words[start: start + size])))
+                if not ref or ref in (own, base):
+                    continue
+                head = " ".join(words[:start])
+                tail = " ".join(words[start + size:])
+                return " ".join(w for w in (head, ref, tail, "racial trait") if w)
+        return m.group(0)
+
+    return _NAMED_TRAIT.sub(swap, spec)
 
 
 def _elsewhere(spec: str, by_other: dict[str, str], rules: set[str]) -> str:

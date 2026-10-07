@@ -156,11 +156,6 @@ def _trait_lines(spec: str, skip: dict[str, str]) -> list[tuple[str, str]]:
     return out
 
 
-def trait_slug(label: str) -> str:
-    """The printed label as a matching key. Never an identity -- see the table."""
-    return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
-
-
 def races(
     source: sqlite3.Connection,
     out: sqlite3.Connection,
@@ -233,8 +228,8 @@ def races(
             rows.append((trait_ref, i, label, rules))
         for trait_ref, i, label, rules in rows:
             out.execute(
-                "INSERT OR REPLACE INTO racial_trait VALUES (?,?,?,?,?)",
-                (trait_ref, ref, i, trait_slug(label),
+                "INSERT OR REPLACE INTO racial_trait VALUES (?,?,?,?)",
+                (trait_ref, ref, i,
                  scrub(rules, {name: ref, **trait_refs, **options})),
             )
             # The label where every other printed name lives, and the rules text

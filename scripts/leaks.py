@@ -386,6 +386,14 @@ VOCABULARY_COLUMNS = (
     ("feat", "tier"),
     ("monster", "role"),
     ("monster", "origin"),
+    # **`weapon.slug` is deliberately absent, and `racial_trait` has no slug to
+    # add.** The asymmetry is the point and is worth leaving written down: a
+    # weapon's name is mechanics -- thirty are in `sanitise.RULES_TERMS` and
+    # none has a `names.json` entry -- so that column cannot hold a name by
+    # construction. A racial trait's label is an ordinary printed name, its slug
+    # held it on 147 of 151 rows, and adding the column here duly went red on
+    # 17 of them. Nothing read the column, so it was dropped rather than
+    # exempted; see the note on the table in `etl/build.py`. #433.
 )
 
 
