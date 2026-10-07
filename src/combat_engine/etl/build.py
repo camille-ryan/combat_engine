@@ -2093,14 +2093,34 @@ def _other_names(
 
 
 
-#: A race sub-option's ref, as `item.sub_options` mints them.
-_SUB_OPTION = re.compile(r"rt:r\d+-s\d+")
+#: A sub-option's ref: a race's, as `item.sub_options` mints them, and a class
+#: feature's, as `_sub_features` does.
+#:
+#: **Both, because the argument for one is the argument for the other.** This was
+#: the race pattern alone, and nothing widened it when class features arrived --
+#: so `cf:ranger-f0`'s entire spec was "choose one of the following <kind>s and
+#: gain its benefit:" followed by **five printed names**, with the five refs that
+#: are the answer appearing nowhere. 50 specs across 6 tables were in that state.
+#: #439.
+_SUB_OPTION = re.compile(r"rt:r\d+-s\d+|cf:[a-z0-9-]+-f\d+s\d+")
 
 
 def _swap_sub_options(
     out: sqlite3.Connection, names: dict[str, dict[str, str]]
 ) -> int:
-    """Swap a race's "choose one" labels out of every other table's spec.
+    """Swap a "choose one" label out of every other table's spec.
+
+    Races and class features both, and the second half is #439: a class feature's
+    sub-options carry a ref each and 50 specs went on printing their names -- 25
+    of them a parent feature listing its own children, which is the one thing a
+    brief must not do and the one thing nothing reported.
+
+    **Nothing reported it, and neither the checker nor `identifies` is wrong.**
+    40 of the 41 names involved are two or three ordinary English words, which
+    `identifies` waives deliberately; and both halves skip a candidate whose ref
+    is a prefix of the row's or the reverse, which is right for a card reprinting
+    its parent's heading and is exactly what lets a parent print its children.
+    Which is why a direct mapping is the fix and not a wider test.
 
     `item.races` swaps them inside the race's own spec, but **the powers pass has
     already run by then** and the feats pass scrubs its own text, so the 10 feats
