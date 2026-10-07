@@ -80,6 +80,27 @@ it improves, red when it regresses, never a bare allowance. #372.
   one hidden among spurious ones costs more. A full sweep is ~750s: wait it out,
   and do not start a content wave underneath it either.
 
+  **And `scripts/build.py` counts as changing the tree.** `etl.build` opens with
+  `GAME.unlink(missing_ok=True)` -- the database is deleted and rebuilt from
+  scratch, by design, because that is the only way to be sure what is in it. So
+  a rebuild started under a running sweep pulls `data/game.db` out from under
+  every worker reading it. Never run the two together.
+
+* **A stalled sweep and a slow one look identical, and two obvious diagnostics
+  lie.** `audit.py` prints a progress line to stderr every 200 rows for exactly
+  this reason (#343). Before reaching for `ps`, know that:
+
+  * **the parent sits at 0.0% CPU for the whole of a healthy sweep** -- it is
+    blocked in `pool.map` -- so "the parent is idle" says nothing;
+  * **the ten processes doing the work do not match the instrument's name.**
+    Their command line is the multiprocessing bootstrap, so
+    `pgrep -f scripts/audit.py` finds one process and `pgrep -f
+    multiprocessing.spawn` finds the sweep.
+
+  A `SIGTERM` to the parent now takes the workers with it -- measured, 10 to 0
+  -- and does **not** take the caller's shell, which an earlier `killpg` version
+  of the same fix did.
+
 ## What each is for
 
 | | |

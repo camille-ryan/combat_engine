@@ -2852,10 +2852,78 @@ def _run_all(refs: list[str], jobs: int = 0) -> list[Result]:
     if jobs == 1 or len(refs) < 8:
         return [audit(ref) for ref in refs]
 
+    import os
+    import signal
+    import sys
+    import time
     from concurrent.futures import ProcessPoolExecutor
 
-    with ProcessPoolExecutor(max_workers=jobs or None) as pool:
-        return list(pool.map(audit, refs, chunksize=8))
+    # **A heartbeat, because ten minutes of silence and a stall look identical.**
+    # #343 spent real time on a sweep that had hung, and the diagnosis that
+    # looked obvious was wrong twice over: the parent sits at **0.0% CPU for the
+    # whole of a healthy sweep** -- it is blocked in `pool.map` -- and the ten
+    # processes doing the work have `multiprocessing.spawn` as their command
+    # line, so neither `ps` on the instrument's name nor the parent's CPU says
+    # anything. A line every 15 seconds does.
+    #
+    # To stderr, so `check.py`'s `_summary` -- which reads the last
+    # non-`#` line of stdout -- is untouched, and a terminal still sees it.
+    #
+    # **And a signal takes the workers with it.** `pkill -f "scripts/audit.py"`
+    # does not reach them: their command line is the multiprocessing bootstrap,
+    # not this file, so they survive and are re-parented to init. Reproduced
+    # today -- killing a sweep needed a second command nobody would guess
+    # (`pkill -f multiprocessing.spawn`) -- and #343 records 40 orphans left
+    # behind by two kill attempts.
+    #
+    # **By PID and not by process group**, which is where this went wrong on
+    # the first attempt. `scripts/CLAUDE.md`'s fix for the spawned servers is
+    # `killpg`, and it works there because `start_new_session=True` puts the
+    # *server* in a group of its own. This process has no such luxury: it is
+    # launched by `check.py` through `subprocess.run`, or by hand from a shell,
+    # so its group is the caller's. `os.killpg(os.getpgid(0), ...)` duly killed
+    # the test harness and the shell that ran it. `os.setsid()` would fix the
+    # grouping and detach the controlling terminal with it, so Ctrl-C would stop
+    # reaching an interactive run -- which is the thing most worth keeping.
+    #
+    # So the children are terminated individually. `pool._processes` is private
+    # and is the only place the pool says who they are; the alternative is
+    # guessing from parentage, which is worse.
+    started = time.monotonic()
+    done = 0
+    out: list[Result] = []
+    pool = ProcessPoolExecutor(max_workers=jobs or None)
+
+    def _stop(signum: int, _frame: object) -> None:
+        children = list(getattr(pool, "_processes", {}).values())
+        pool.shutdown(wait=False, cancel_futures=True)
+        for child in children:
+            with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+                os.kill(child.pid, signal.SIGTERM)
+        # Restored first, so re-raising kills this process rather than
+        # re-entering here.
+        signal.signal(signum, signal.SIG_DFL)
+        os.kill(os.getpid(), signum)
+
+    previous = [
+        (sig, signal.signal(sig, _stop))
+        for sig in (signal.SIGINT, signal.SIGTERM)
+    ]
+    try:
+        for result in pool.map(audit, refs, chunksize=8):
+            out.append(result)
+            done += 1
+            since = time.monotonic() - started
+            if done % 200 == 0 or (done == len(refs) and len(refs) > 200):
+                rate = done / since if since else 0.0
+                left = (len(refs) - done) / rate if rate else 0.0
+                print(f"#   {done}/{len(refs)} rows, {since:.0f}s elapsed, "
+                      f"~{left:.0f}s left", file=sys.stderr, flush=True)
+        pool.shutdown(wait=True)
+    finally:
+        for sig, handler in previous:
+            signal.signal(sig, handler)
+    return out
 
 
 def _attempts(out: Result):  # noqa: ANN202
