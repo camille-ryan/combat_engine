@@ -852,13 +852,21 @@ def m3782a2(c: Cast) -> None:
 def m3782a3(c: Cast) -> None:
     """Stays hidden when one of its ranged attacks misses.
 
-    **This was written as a `Miss` watch calling `c.hide()`, and it was
-    inert.** `resolve.attack` ends with
-    `clear_source(HIDDEN_FROM, attacker, "attacked")`, and that line sits
-    below the loop emitting `Hit` and `Miss` -- so hiding laid from a `Miss`
-    listener is wiped a moment later. Driven on four seeds it read
+    **Three watches, and the obvious one-watch version is inert.**
+    `resolve.attack` ends with
+    `clear_source(HIDDEN_FROM, attacker, "attacked")` and that line sits
+    *below* the loop emitting `Hit` and `Miss` -- so hiding laid from a `Miss`
+    listener is wiped a moment later. Driven on four seeds this read
     `hidden-from 8 -> 0` every time, including the miss it exists for, and it
     carried no marker: a row that looked finished and never applied. #390.
+
+    **Moving the clear above the emit was tried and refused by `replay`.** Six
+    fixtures were the reordering alone and `level-5-full` was not: a
+    combat-advantage rider fires on `Hit` and asks whether the attacker has it,
+    being hidden is what grants it, and clearing first made a rogue silently
+    lose its feature damage (`amount=8, detail='cf:rogue-scoundrel-f4'` became
+    `amount=10, detail='mba'`). So the ordering stays and this row keeps the
+    windows it needs -- #446 is the real fix.
 
     `AttackDeclared`'s AFTER window is the first moment after that clear, so
     the work goes there. Who it was hidden from has to be taken in the BEFORE

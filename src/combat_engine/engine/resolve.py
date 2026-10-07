@@ -461,6 +461,20 @@ def attack(
         # fight and drew combat advantage on every attack it ever made. A
         # row that keeps its concealment says so by hiding again -- which is
         # what the printed ones do, and it reads the same way.
+        #
+        # **Below the emit, and #390 asked for it to move above.** It was moved,
+        # and `replay` refused it: six fixtures were the reordering alone and
+        # `level-5-full` was not --
+        #
+        #     was: DamageRolled(amount=8,  detail='cf:rogue-scoundrel-f4')
+        #     now: DamageRolled(amount=10, detail='mba')     2043 -> 1925 events
+        #
+        # A combat-advantage rider fires on `Hit` and asks whether the attacker
+        # has it. Being hidden is what grants it, so clearing first makes every
+        # such rider read the *post-attack* state and a rogue silently loses its
+        # feature damage. The roll was already right; it is the riders that are
+        # not. So the ordering stays and the real fix is to let a rider read the
+        # attack-time state -- #446.
         world.relations.clear_source(Relation.HIDDEN_FROM, attacker, "attacked")
 
     announced = AttackDeclared(attacker=attacker, target=target, power=power, vs=vs)
