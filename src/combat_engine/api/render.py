@@ -105,7 +105,23 @@ def board(session: Session) -> dto.BoardDTO:
         height=world.grid.height,
         blocking=sorted(world.grid.blocking),
         difficult=sorted(world.difficult()),
-        obscuring=[],
+        # **The rule existed for nine days before anything served it.**
+        # `Zone.blocks_sight` landed in `3905bae`, `query.py` reads it inside
+        # line of sight, and `cast.py` lays it -- while this field was `[]`, so
+        # the page drew no obscuring square and `board.js` had a `t-obscuring`
+        # class nothing could ever reach.
+        #
+        # #333 was filed as "the engine has no concept of obscuring terrain" on
+        # the strength of a `grep` for "obscur", which could not have found it:
+        # the engine spells it `blocks_sight`. The half that really was missing
+        # is the *grade* -- concealment against total concealment -- and that is
+        # #424.
+        obscuring=sorted(
+            square
+            for _eid, zone in world.each(Zone)
+            if zone.blocks_sight
+            for square in zone.squares
+        ),
         zones=[
             dto.ZoneDTO(
                 id=wire.zone(eid),
