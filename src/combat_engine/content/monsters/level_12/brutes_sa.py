@@ -1143,7 +1143,7 @@ def m1952a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=NO_TARGET,
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m1952a1(c: Cast) -> None:
     """The card's own attack line comes out of extraction as "+13 vs ;" with

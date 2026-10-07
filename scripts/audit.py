@@ -3366,6 +3366,13 @@ def main() -> int:
             # would read as playing.
             retired.append((ref, (p.obsolete,), "GONE"))
             continue
+        if p.defect:
+            # **The source is missing what the row needs, so no symbol
+            # finishes it.** Counted with `todo=` it would report ready the
+            # moment some unrelated verb landed; counted done it would read as
+            # playing. Its own bucket, like `obsolete=` above. #360.
+            partial.append((ref, (p.defect,), "DEFECT"))
+            continue
         if p.todo:
             # Declared unfinished. `usable` refuses it, so firing it here
             # would only prove the refusal works -- and reporting it SILENT
@@ -3580,7 +3587,7 @@ def main() -> int:
         # check below, and shadowing it handed an int to `len()` -- which
         # took out the one check in this file that catches the engine
         # announcing a thing and then doing it anyway.
-        inert_rows = sum(1 for _, _, how in partial if how == "TODO")
+        inert_rows = sum(1 for _, _, how in partial if how in ("TODO", "DEFECT"))
         print(
             f"  {len(partial)} unfinished -- {inert_rows} refused in play, "
             f"{len(partial) - inert_rows} playing with a clause missing"

@@ -3137,7 +3137,7 @@ def m4244a1(c: Cast) -> None:
     keywords=[Keyword.POISON, Keyword.CLOSE],
     requires=lambda world, eid: bool((h := world.get(eid, Health)) and h.bloodied),
     requires_text="usable only while bloodied",
-    todo=("etl.monster.attack_defence()", "c.aura(shrinks=)"),
+    todo=("compendium.attack_defence", "c.aura(shrinks=)"),
 )
 def m4244a2(c: Cast) -> None:
     """Both defence names are gone -- "+12 vs or (whichever is lower)" --

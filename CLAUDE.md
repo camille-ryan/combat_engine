@@ -88,9 +88,19 @@ name.** Those are different questions and only the second is forbidden.
   The one exception is a small `_feature(ref, what)`-style helper for a run
   of rows that genuinely share a marker.
 * **A row is fully implemented before it is added, or it carries a
-  marker.** Three markers, not two: `todo=` (refused in play), `dropped=`
-  (plays, one clause missing), `narrative=` (finished, no combat meaning).
-  Symbols only — prose is refused at import. See the content component file.
+  marker.** `todo=` (refused in play), `dropped=` (plays, one clause
+  missing), `narrative=` (finished, no combat meaning), `obsolete=` (retired
+  by a rules change), `defect=` (**the compendium is missing what the row
+  would be written from**). Symbols only for the first three — prose is
+  refused at import. The last two take plain words, because there is no
+  symbol to wait for. See the content component file.
+* **If a spec is garbled, refer it up rather than guessing.** An authoring
+  agent cannot read the compendium; the main session can. It answers with
+  what the page says, or the row is flagged `defect=`. **On a monster, one
+  defective row defects the whole stat block** — `loader.defective` derives
+  it and `pick` stops offering the creature. Blank attack defences run
+  5–11x the corpus rate in the magazine imports, so a garbled card is
+  usually a bad import rather than a misreading. #360.
 * **There are no unit tests and none should be written.** The instruments
   in `scripts/` play the real thing. Never create a test file.
 * **Never loosen an instrument to make a number look better.** If a check

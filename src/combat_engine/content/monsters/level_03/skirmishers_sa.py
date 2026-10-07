@@ -1471,7 +1471,7 @@ def m2022a0(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m2022a1(c: Cast) -> None:
     """A mobile attack, written as the movement it is printed as.
@@ -3494,7 +3494,7 @@ def m850a1(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it hits a bloodied enemy",
     on=Trigger(Hit, _hit_a_bloodied_enemy, "it hits a bloodied enemy"),
-    todo=("etl.monster.attack_defence()",),
+    defect="the printed attack line has no defence in the compendium",
 )
 def m850a2(c: Cast) -> None:
     """The extraction lost both defences this attack names.

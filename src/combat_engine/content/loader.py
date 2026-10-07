@@ -360,9 +360,35 @@ UNUSABLE: dict[str, str] = {
 }
 
 
+def defective(ref: str) -> str:
+    """Why this monster cannot be fielded, when one of its own rows cannot be.
+
+    **Camille's rule: a defective ability defects the whole monster.** A stat
+    block with one ability the compendium never gave us is not a monster missing
+    a detail -- it is a monster that would walk onto every board without the
+    thing its card is *about*, with nothing saying so. That is the silently-false
+    shape this repository is organised against, and the three creatures it
+    currently applies to each have the defect on an attack.
+
+    **Derived from the rows, never listed again.** `defect=` on the row is the
+    one place the fact lives, so a second list cannot go stale against it -- the
+    mistake `UNUSABLE` would invite if a human had to keep both in step. Returns
+    the row's own reason, prefixed with the ref, or `""`.
+
+    A `todo=` or `dropped=` row does **not** reach here, deliberately: those say
+    somebody can finish the row, so the monster is unfinished rather than wrong,
+    and `pick` already declines to offer a stat block whose abilities are not all
+    written. #360.
+    """
+    for row, p in REGISTRY.items():
+        if row.startswith(f"{ref}a") and getattr(p, "defect", ""):
+            return f"{row}: {p.defect}"
+    return ""
+
+
 def usable(ref: str) -> bool:
-    """Is this monster fit to put on a board? See `UNUSABLE`."""
-    return ref not in UNUSABLE
+    """Is this monster fit to put on a board? See `UNUSABLE` and `defective`."""
+    return ref not in UNUSABLE and not defective(ref)
 
 
 def pick(

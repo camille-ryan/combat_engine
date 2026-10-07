@@ -785,7 +785,7 @@ def m1981a0(c: Cast) -> None:
         side="enemy", count=1, label="creature grabbed by it",
         relation=Relation.GRABBED_BY,
     ),
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m1981a1(c: Cast) -> None:
     """The printed line is two damage fragments the extraction never

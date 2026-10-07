@@ -1498,7 +1498,7 @@ def m3520a0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.FIRE],
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m3520a1(c: Cast) -> None:
     """The run plays; the attack line the card also prints cannot be declared.

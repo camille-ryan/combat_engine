@@ -26,7 +26,7 @@ the AI policy without running anything — and **the body is code** against a
   declared `on=`, the body runs only when the trigger fires, so modifiers
   laid there are never laid.
 
-## Markers — three, not two
+## Markers — five, and two of them take words
 
 * `todo=(symbols,)` — nothing works. Refused in play.
 * `dropped=(symbols,)` — plays, one named clause missing.
@@ -38,6 +38,26 @@ the AI policy without running anything — and **the body is code** against a
   ever want. Refused by `usable` and excluded from every chargen draw, so it
   reaches neither a player's list nor the dealer's.
   Requires a docstring saying why.
+* `defect="why"` — **the compendium is missing what the row would be written
+  from.** Not a gap in this engine: a gap in the source, so no symbol will ever
+  close it and `todo=`/`dropped=` both lie by naming one. Refused by `usable`
+  and excluded from every chargen draw, like `obsolete=`, and it **cannot** be
+  combined with any other marker or with `out_of_combat`.
+
+  **Only when nothing survives.** A blank defence on a row that never rolls that
+  line still plays, and takes `dropped=` with the clause named. Of 26 rows with
+  a blank attack defence, **23 play and 3 do not** — flagging all 26 would have
+  refused 23 working rows.
+
+  **On a monster it defects the whole stat block.** `loader.defective` derives
+  it from the rows and `pick` stops offering the creature — a monster fielded
+  without the ability its card is about is wrong in every fight. `todo=` and
+  `dropped=` do not do this: those mean unfinished, not wrong.
+
+  **You do not decide this yourself.** An authoring agent cannot read the
+  compendium. Refer the garbled line up to the main session, which can, and
+  which answers with what the page says or tells you to flag it. See
+  `docs/AUTHORING.md`, "When you cannot *read* the card". #360.
 
 Plus `out_of_combat=True` for a row that is complete and inert in a fight.
 

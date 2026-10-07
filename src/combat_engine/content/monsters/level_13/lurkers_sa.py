@@ -55,7 +55,9 @@ gate on `actor` alone would have fired the burst on any killing blow.
 
 **m2515a1's card prints no defence at all** -- "+16 vs ;" is the whole of
 the attack line -- and the row is that attack, so there is no half to play.
-`etl.monster.attack_defence()` is the symbol twenty-eight rows carry.
+`compendium.attack_defence` is the symbol the other rows carry -- renamed off
+`etl.monster.attack_defence()`, which named a parser fix that cannot exist
+(#360).
 
 **Two stat blocks print the same pair of polymorph forms**, m6183a4 and
 m6184a2, so the pair is one helper. The still form is sayable outright; the
@@ -1138,7 +1140,7 @@ def m2515a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC],
     requires_text="requires combat advantage",
-    todo=("etl.monster.attack_defence()",),
+    defect="the printed attack line has no defence in the compendium",
 )
 def m2515a1(c: Cast) -> None:
     """The card prints "+16 vs ;" and no defence at all, and the row is that

@@ -35,9 +35,11 @@ shifts, so it provokes. That is the marked clause.
 
 **m2346a1's card prints no defence at all** -- "+14 vs ;" is the whole of the
 attack line in the compendium -- and the row is nothing but that attack, so
-there is no half to play. `etl.monster.attack_defence()` is the symbol
-twenty-four other rows already carry for the same loss, and m1135a1 settled
-that a lost defence is named and not guessed.
+there is no half to play. `compendium.attack_defence` is the symbol the other
+rows carry for the same loss, and m1135a1 settled that a lost defence is named
+and not guessed. **It used to read `etl.monster.attack_defence()`**, which told
+a reader to go and write a parser: the blanks are in `Monster.Txt` as shipped
+and no parser change can recover them (#360).
 
 **A statue and a thicket are the same shape as m290a7**, which `lurkers.py`
 settled: `Condition.STUNNED` would make the printed way *out* of the form
@@ -880,7 +882,7 @@ _M2346_FELL = "the m2346 is reduced to 0 hit points"
     target=EACH_ENEMY,
     trigger=_M2346_FELL,
     on=Trigger(Dropped, when=about_me, text=_M2346_FELL),
-    todo=("etl.monster.attack_defence()",),
+    defect="the printed attack line has no defence in the compendium",
 )
 def m2346a1(c: Cast) -> None:
     """The compendium's attack line for this row is "+14 vs ;" -- the defence

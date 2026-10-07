@@ -388,7 +388,7 @@ def barbarian_whirling(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PRIMAL,
-    todo=("Keyword.RAGE", "c.expend()"),
+    todo=("Keyword.RAGE",),
 )
 def barbarian_rage(c: Cast) -> None:
     """Two sentences and neither can be said.
@@ -396,8 +396,14 @@ def barbarian_rage(c: Cast) -> None:
     Every daily attack power of the class carries a keyword nothing
     declares, so no row can be told to be a rage; and the level-5 row the
     second sentence grants is `cf:barbarian-f2c0`, which is blocked on that
-    same keyword and on expending a row without using it. This is the
-    `cf:barbarian-rage` entry in `docs/blocked.json`, which now has a ref.
+    same keyword. This is the `cf:barbarian-rage` entry in
+    `docs/blocked.json`, which now has a ref.
+
+    **The marker named `c.expend()` and no longer does.** Spending a row's use
+    without running it is `c.expend_row`, which exists -- so that half was never
+    missing and the marker was reporting a gap that was not one. `todo.py` could
+    not notice, because it fires on the marker string and nothing relates
+    `c.expend()` to `c.expend_row`. #418.
     """
 
 
@@ -413,7 +419,7 @@ def barbarian_rage(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
     uses=2,
     requires_text="must be raging and have at least one unused rage power",
-    todo=("Keyword.RAGE", "c.expend()"),
+    todo=("Keyword.RAGE",),
 )
 def barbarian_rage_strike(c: Cast) -> None:
     """The card `cf:barbarian-f2` grants, and the first ref it has ever had.

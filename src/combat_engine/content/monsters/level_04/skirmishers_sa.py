@@ -1646,7 +1646,7 @@ def m3548a1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m3548a2(c: Cast) -> None:
     """The movement and the swing are the whole of what this does and both
@@ -1857,7 +1857,7 @@ def m3560a0(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m3560a1(c: Cast) -> None:
     """Both defences this attack names were lost in extraction, so there is no
@@ -1874,7 +1874,7 @@ def m3560a1(c: Cast) -> None:
     reach=CloseBurst(1),
     target=EACH_ENEMY,
     keywords=[Keyword.WEAPON],
-    dropped=("spec.weapon_ref()", "etl.monster.attack_defence()"),
+    dropped=("spec.weapon_ref()", "compendium.attack_defence"),
 )
 def m3560a2(c: Cast) -> None:
     """A burst that swings the creature's own basic attack at everything
@@ -1940,7 +1940,7 @@ def m3562a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     charges=True,
-    dropped=("spec.weapon_ref()", "etl.monster.attack_defence()"),
+    dropped=("spec.weapon_ref()", "compendium.attack_defence"),
 )
 def m3562a1(c: Cast) -> None:
     """`charges=True` or the engine measures a sword's reach before the run
@@ -2250,7 +2250,15 @@ def m4507a1(c: Cast) -> None:
 def m4507a2(c: Cast) -> None:
     """No damage of its own -- the whole hit is the swings it hands out, and
     `c.grant_attack` uses each ally's own basic attack rather than a
-    hand-rolled copy of one."""
+    hand-rolled copy of one.
+
+    **Unmarked on purpose, and it is the one row of its family that can be.**
+    Its printed attack line is a "whichever is lower" pair, which is the shape
+    25 rows carry `compendium.attack_defence` for -- except that this card
+    prints *the same defence twice*, so the choice is vacuous and a plain attack
+    vs Reflex is the whole of it. Written rather than marked, by reading the
+    card rather than by any parser fix. #360.
+    """
     if not c.strike():
         return
     victim = c.target
@@ -3508,7 +3516,7 @@ def m977a0(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.NECROTIC],
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m977a1(c: Cast) -> None:
     """The extraction lost the defence this attack rolls against, so the

@@ -1141,7 +1141,7 @@ def m3546a3(c: Cast) -> None:
     reach=CloseBurst(5),
     target=Target("ally", 1, label="the creature or one of its allies"),
     keywords=[Keyword.HEALING],
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m3546a4(c: Cast) -> None:
     """The compendium prints an attack line with no defence behind it (#360),
@@ -1384,7 +1384,7 @@ _M3559_ALLY_SLIPPED = "an ally uses m3559a4"
     target=NO_TARGET,
     trigger=_M3559_ALLY_SLIPPED,
     on=Trigger(PowerUsed, _ally_used("m3559a4"), _M3559_ALLY_SLIPPED),
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m3559a3(c: Cast) -> None:
     """The compendium prints an attack line with no defence behind it (#360);

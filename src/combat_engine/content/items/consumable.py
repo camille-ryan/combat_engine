@@ -10,7 +10,12 @@ Seven judgements run through the file.
   used and nothing tracks that; `usage=DAILY` is the closest the engine
   comes. Only the rows whose printed text makes the spending a clause of
   its own -- "using this power turns it to dust" -- carry
-  `dropped=("c.expend()",)`.
+  `dropped=("c.consume()",)`.
+
+  **Named `c.expend()` until #418.** That collided with `c.expend_row`, which
+  exists and spends a *power's* use -- a different thing from an item being
+  destroyed -- so the marker read as waiting on a verb the engine already had,
+  and `todo.py` could not see the collision because it fires on the string.
 * **A coating cannot be tied to a weapon.** "Apply this to your weapon or
   one piece of ammunition; the next creature you hit with it..." has no
   way to ask which weapon a swing came from, so those rows fire on the
@@ -1546,11 +1551,16 @@ def i1444x1(c: Cast) -> None:
 @power("i1444p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(2, 5), target=NO_TARGET,
        keywords=[Keyword.RADIANT, Keyword.ZONE],
-       dropped=("c.is_vulnerable()", "c.expend()"))
+       dropped=("c.consume()",))
 def i1444p1(c: Cast) -> None:
     """The zone stands. What it pays out is "as if it had taken radiant
-    damage", which is the creature's own vulnerability read back at it --
-    and nothing reports what a creature is vulnerable to."""
+    damage", which is the creature's own vulnerability read back at it.
+
+    **Two markers, both stale, for two different reasons (#418).**
+    `c.is_vulnerable()` is gone because `c.vulnerabilities()` landed with #391
+    and answers exactly this -- so the payout is writable now and is content
+    work rather than a gap. `c.expend()` is renamed to `c.consume()`: see the
+    note at the head of this file."""
     c.zone(c.area(), until=When.ENCOUNTER)
 
 

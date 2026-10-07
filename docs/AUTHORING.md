@@ -513,6 +513,15 @@ content file for style**. The examples are the style.
 
 * Numbers — hp, AC, Fort/Ref/Will, speed, ability scores, resistances —
   **load from the database. Never hand-write them.**
+* **A monster carries no equipment, so the four gear verbs are permanently
+  false for one.** `content/loader.py:156` spawns every stat block with a bare
+  `Gear()`, because the compendium gives a monster no inventory to read.
+  `c.wielding`, `c.held_item`, `c.has_weapon` and `c.gear` all exist and all
+  answer "nothing" on a monster — no error, just a gate that never fires. So a
+  card printing *"while armed with its handaxe"* cannot have its Requirement
+  asked, and a row that writes the gate anyway is offered unconditionally while
+  looking finished. Mark it `dropped=("etl.monster.weapon()",)` and say so in
+  the docstring; three rows do. #366.
 * The attack line goes in the header as `Attack(vs=AC, printed=6)`, printed
   exactly as the spec shows. The engine subtracts the level term itself.
 * The damage line goes in the header as `Damage("1d10", 5)` and the body
@@ -652,6 +661,68 @@ is `narrative=` — see "When the clause is not missing", below.
 training in a skill is usually an ordinary combat power with an entry
 requirement, and should be written properly. It is narrative-only when the
 *Effect itself* is a skill bonus and nothing else.
+
+## When you cannot *read* the card — refer it up, never guess
+
+**This one comes before everything else below**, because it is about the card
+rather than about the engine.
+
+If the spec you were handed is garbled, truncated or blank where a number or a
+defence should be — `+6 vs ;` with no defence word, a damage expression that
+stops mid-air, a Trigger that is half a sentence — **you do not guess, invent, or
+reason it out from the monster's level.** You say so in your report and refer the
+line back to the main session.
+
+The main session can do something you cannot: **it may read the compendium.**
+That is the only asymmetry in this arrangement, and it exists for exactly this.
+It will come back with one of two answers:
+
+* **the compendium has it** — you are told what it says, in mechanical terms, and
+  you write the row normally;
+* **the compendium does not have it** — the row is flagged
+  `defect="<plain words>"`, and that is the end of it.
+
+```python
+@power("m2515a1", ..., defect="the printed attack line has no defence in the compendium")
+def m2515a1(c: Cast) -> None:
+    """The card prints "+16 vs ;" and no defence at all, and the row is that
+    attack -- so there is nothing left to play and nothing to guess."""
+```
+
+`defect=` is the fifth marker and the only one whose value is **plain words
+rather than a symbol**, because there is no symbol: no verb anybody writes will
+put a missing sentence back into the source. It refuses the row in play, like
+`todo=`, and excludes it from every chargen draw, like `obsolete=`. It **cannot**
+be combined with `todo=`, `dropped=`, `obsolete=` or `out_of_combat` — those all
+promise that something could finish the row, and this says nothing can.
+
+**Plain words about the defect, never the card's own prose.** The one rule is
+unchanged by any of this. You are describing what is missing, not quoting what is
+there.
+
+**Only when nothing survives.** A blank defence on a row that never rolls that
+line — one that hands out a basic attack, or whose content is an effect — is not
+a defect that blocks anything. That row **plays**, and takes `dropped=` with the
+clause named. Of 26 rows with a blank attack defence, 23 are in exactly that
+state and only 3 have no surviving half; flagging all 26 would have refused 23
+rows that were working. Check whether the body still does something before
+reaching for this.
+
+**On a monster, one defective row defects the whole stat block.** Camille's
+rule, and it is not a tidiness one: a creature fielded without the ability its
+card is *about* is wrong in every fight it appears in, with nothing saying so.
+`content.loader.defective` derives it from the rows — so `defect=` on the row
+stays the only place the fact lives — and `pick` then declines to offer the
+creature at all, exactly as it already declines the two entries in `UNUSABLE`.
+The three creatures this currently applies to cost 3 of 228, 167 and 189
+monsters offered at their levels.
+
+A `todo=` or `dropped=` row does **not** do this. Those say somebody can come
+back and finish it, so the monster is unfinished rather than wrong.
+
+Measured when this landed: blank attack defences run **5–11× the corpus rate of
+0.86%** in Dragon and Dungeon magazine imports, so if a card looks garbled, look
+at where it was published before assuming you misread it. #360.
 
 ## When you cannot say something
 

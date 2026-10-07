@@ -456,7 +456,7 @@ def m4717a0(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     no_provoke=True,
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m4717a1(c: Cast) -> None:
     """The row's own printed attack line has **no defence** -- "+3 vs or

@@ -832,7 +832,7 @@ def m3547a1(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it scores a critical hit",
     on=Trigger(Hit, _my_crit, "it scores a critical hit"),
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m3547a2(c: Cast) -> None:
     """The swing is the whole of what the card does. The attack line above it
@@ -2333,7 +2333,7 @@ def m784a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=UpTo(2),
-    dropped=("query.moved_this_turn(world, eid)", "etl.monster.attack_defence()"),
+    dropped=("query.moved_this_turn(world, eid)", "compendium.attack_defence"),
 )
 def m784a1(c: Cast) -> None:
     """Two basic attacks against two adjacent creatures, which plays. The
@@ -2476,7 +2476,7 @@ def m817a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=UpTo(2),
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m817a1(c: Cast) -> None:
     """Two basic attacks, spread or doubled up as the chooser likes. The attack

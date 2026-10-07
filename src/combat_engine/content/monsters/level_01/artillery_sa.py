@@ -338,7 +338,7 @@ def m1135a0(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.WEAPON],
     requires=_is_bloodied,
     requires_text="usable only while bloodied",
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m1135a1(c: Cast) -> None:
     """The card carries a second attack line -- "+6 vs ; 2d10+3" -- whose

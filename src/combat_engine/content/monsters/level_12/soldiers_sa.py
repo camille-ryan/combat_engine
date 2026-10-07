@@ -601,7 +601,7 @@ _M1147_BLOODIED = "the m1147 is first bloodied"
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     trigger=_M1147_BLOODIED,
     on=Trigger(Bloodied, when=about_me, text=_M1147_BLOODIED),
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m1147a1(c: Cast) -> None:
     """The two sentences that survived intact, and the one that did not.
@@ -2221,7 +2221,7 @@ def m2340a0(c: Cast) -> None:
     reach=Melee(1),
     target=UpTo(2),
     keywords=[Keyword.POISON],
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m2340a1(c: Cast) -> None:
     """The two claws play. This card's Secondary Attack line lost its whole

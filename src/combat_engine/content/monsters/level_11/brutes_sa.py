@@ -1089,7 +1089,7 @@ def m2085a0(c: Cast) -> None:
     damage=Damage("2d6", 5),
     requires=_has_hold,
     requires_text="the m2085 must be grabbing a creature",
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m2085a1(c: Cast) -> None:
     """The card's attack line comes out of extraction as "+12 vs ;" with no
@@ -3567,7 +3567,7 @@ def m947a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=UpTo(2),
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m947a1(c: Cast) -> None:
     """The card's declared attack comes out of extraction as "+12 vs ;" with

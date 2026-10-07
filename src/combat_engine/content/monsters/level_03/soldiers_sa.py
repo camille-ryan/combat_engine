@@ -1959,7 +1959,7 @@ _M3525_FELLED = "it drops to 0 hit points"
     target=NO_TARGET,
     trigger=_M3525_FELLED,
     on=Trigger(Dropped, about_me, _M3525_FELLED),
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m3525a2(c: Cast) -> None:
     """The bite on the way down is the whole of what plays. Its attack line
@@ -3827,7 +3827,7 @@ def m857a0(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=Target(side="other_ally", everyone=True),
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m857a1(c: Cast) -> None:
     """The rally plays and the attack half does not. Its line extracted as

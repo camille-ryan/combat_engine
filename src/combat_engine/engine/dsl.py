@@ -829,6 +829,35 @@ class Power:
     #: Camille's instruction being that an obsolete option is offered neither to a
     #: player nor to the dealer.
     obsolete: str = ""
+    #: The row cannot be written because **the compendium is missing what it
+    #: would be written from**. Not a gap in this engine: a gap in the source.
+    #:
+    #: The fifth marker, and the four before it all say the wrong thing here.
+    #: `todo=` and `dropped=` name a symbol and so promise that somebody coming
+    #: back with that symbol finishes the row -- and nobody can, because the
+    #: sentence the row needs is not in the data. 30 rows carried
+    #: `todo=("etl.monster.attack_defence()",)`, which told every reader to go
+    #: and write a parser for text that is blank in both HTML dialects as
+    #: shipped. `obsolete=` is the closest and still wrong: that row was retired
+    #: by a rules change and this one was never imported properly.
+    #:
+    #: The value is the reason in plain words, as `obsolete=` is and for the same
+    #: reason -- there is no symbol to wait for. **Plain words about the defect,
+    #: never the card's own prose**: the one rule is unchanged here, and the
+    #: whole point is that the prose is what is missing.
+    #:
+    #: Refused by `usable`, like `todo=` and `obsolete=`, so the row is as inert
+    #: in play as an absence and says why.
+    #:
+    #: **The procedure, which is Camille's and is the reason this exists.** An
+    #: authoring agent that cannot parse a printed line does not guess and does
+    #: not invent: it refers the line back to the main session, which may read
+    #: the compendium. If the compendium has it, the main session says what it
+    #: says and the row gets written. If the compendium does not, the row is
+    #: flagged here. Measured when this landed: blank attack defences run 5-11x
+    #: the corpus rate of 0.86% in Dragon and Dungeon magazine imports, so the
+    #: defect is concentrated in the periodicals rather than scattered. #360.
+    defect: str = ""
     #: Base items this row lets a character carry, by weapon ref --
     #: `("w3607",)`. **Build-time data, never run.** "You gain
     #: proficiency with all hammers" cannot be a body: a `Cast` opens on a
@@ -1140,6 +1169,7 @@ def power(
     dropped: Iterable[str] = (),
     narrative: Iterable[str] = (),
     obsolete: str = "",
+    defect: str = "",
     proficiency: Iterable[str] = (),
     swap: Swap | None = None,
     augments: Iterable[Augment] = (),
@@ -1167,6 +1197,16 @@ def power(
     if todo and dropped:
         # One says nothing here works, the other says the rest of it does.
         raise ValueError(f"{ref}: todo and dropped cannot both be set")
+    if defect and (todo or dropped or obsolete or out_of_combat):
+        # `defect=` says no symbol will ever finish this row, because the
+        # sentence it needs is not in the source. Every other marker promises
+        # the opposite -- a symbol to wait for, a clause that plays, or a
+        # deliberate retirement -- so a row claiming both tells the tools two
+        # incompatible things and gets counted by whichever asks first.
+        raise ValueError(
+            f"{ref}: defect cannot be combined with todo, dropped, obsolete "
+            f"or out_of_combat -- it means no symbol can finish this row"
+        )
 
     narrative = tuple(narrative)
     skills = []
@@ -1239,6 +1279,7 @@ def power(
             dropped=dropped,
             narrative=narrative,
             obsolete=obsolete,
+            defect=defect,
             proficiency=tuple(proficiency),
             swap=swap,
             augments=tuple(augments),
@@ -1703,6 +1744,11 @@ def usable(
     # says what it is waiting for.
     if p.obsolete:
         return False, "superseded by a rules change"
+    if p.defect:
+        # **The compendium is missing what this row would be written from.**
+        # Refused rather than offered half-written, for the reason above: a
+        # wrong result is harder to see than a missing one. #360.
+        return False, "the compendium is missing what this row needs"
     if p.todo:
         return False, "not finished yet"
 

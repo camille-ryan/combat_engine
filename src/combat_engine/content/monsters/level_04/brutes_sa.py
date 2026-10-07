@@ -755,7 +755,7 @@ def m1510a0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     trigger="it is first bloodied",
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m1510a1(c: Cast) -> None:
     """The swing is the whole of what the card does; the attack line above it
@@ -817,7 +817,7 @@ def m1527a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m1527a1(c: Cast) -> None:
     """Two swings, which plays. The attack line printed above them came out of

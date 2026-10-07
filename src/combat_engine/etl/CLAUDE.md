@@ -45,6 +45,21 @@ list would itself have been the leak.
   level-1 traps print Perception DCs from 9 to 22 and the per-level median
   wanders from `level + 3.5` to `level + 18`. A formula would have been
   wrong by ten, silently, on the number that decides what a player sees.
+* **Two `spec` columns are parsed for numbers, and nine are not.** "A spec is
+  prose and reaches no rule" is in three commit messages and is **false**:
+
+  ```
+  race.spec       -> chargen/__init__.py:1331   speed, fly speed, skill
+                                                bonuses, the surge step
+  companion.spec  -> content/loader.py:260      the whole stat block
+  ```
+
+  The other nine (`power`, `monster_power`, `class_feature`, `build_option`,
+  `feat`, `item`, `item_block`, `racial_trait`, `trap`) are read by
+  `api/wire.py:264` for display and by `scripts/spec.py` for a brief, and by
+  nothing that decides an outcome. So "the spec moved, therefore no rule moved"
+  is a safe inference for nine tables and a wrong one for two — and the two are
+  every character and every companion in the game. #442.
 * **Two HTML dialects, always.** The compendium holds a later layout
   (`<table class="bodytable">`, `<h2>` action headings) and an earlier one
   (everything in one `<p class="flavor">`), roughly half the heroic monsters

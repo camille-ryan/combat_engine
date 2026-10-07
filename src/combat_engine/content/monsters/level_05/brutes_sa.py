@@ -987,7 +987,7 @@ def m3232a0(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m3232a1(c: Cast) -> None:
     """The trample's attack line lost its defence -- "+6 vs Any" -- so the blow

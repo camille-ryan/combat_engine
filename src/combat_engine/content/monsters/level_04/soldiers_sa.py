@@ -926,7 +926,7 @@ def m3543a1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=ONE_ALLY,
-    dropped=("etl.monster.attack_defence()",),
+    dropped=("compendium.attack_defence",),
 )
 def m3543a2(c: Cast) -> None:
     """The compendium prints this row's attack line with no defence at all --
