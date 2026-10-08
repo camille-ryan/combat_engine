@@ -2520,12 +2520,15 @@ def m6233a2(c: Cast) -> None:
     keywords=[Keyword.LIGHTNING, Keyword.THUNDER, Keyword.ZONE],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("2d6", 5, dtype=DamageType.LIGHTNING, kind=LIMITED),
-    dropped=("c.zone(obscures=)",),
+    dropped=("c.zone(obscured=)",),
 )
 def m6233a3(c: Cast) -> None:
     """"Lightly obscured to creatures outside it" is one-directional and
     `Zone.blocks_sight` is not -- it blinds both ways, which `c.zone`'s own
-    caution already warns against reaching for here. The damage-at-turn-end
+    caution already warns against reaching for here. The marker is the same
+    `c.zone(obscured=)` the eleven plain rows wait on, because one kwarg
+    serves both and a second symbol would split the gap; what is particular
+    here is that it has to take a **direction**, not just a grade. The damage-at-turn-end
     half is sayable and written: `c.burns` bites on entering or starting a
     turn, not on ending one, so this is a `TurnEnd` watch hung on the zone's
     own effect the way `level_08/controllers.py`'s `m4989a3` already does."""
