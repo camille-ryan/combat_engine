@@ -465,10 +465,8 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
         )
         check.skip("and says why instead of moving", "nothing safe to click")
     _press_move(page)  # back to picked, for the walk the rest of this checks
-    check.that(
-        page.locator("#movement .mv").count() > 0,
-        "pressing Move again brings the range back",
-    )
+    back = _settled(page, "#movement .mv", 1)
+    check.that(back > 0, f"pressing Move again brings the range back ({back})")
 
     # Pointing at one of those squares draws the route the walk would take.
     # Only askable where a free square exists -- see the skip above.
@@ -956,9 +954,10 @@ def _check_aimless_area(page, check: Checks, state: dict | None,  # noqa: ANN001
     check.that(True, f"{row['name']} is offered rather than greyed")
     mine.hover()
     page.wait_for_timeout(300)
+    shown = _settled(page, "#highlights .hl-affected", 1)
     check.that(
-        page.locator("#highlights .hl-affected").count() > 0,
-        f"hovering it lights the {len(row['shows'])} squares it covers",
+        shown > 0,
+        f"hovering it lights the {len(row['shows'])} squares it covers ({shown})",
         "the board drew nothing, which is the bug",
     )
     # Asked before clicking, because a greyed row makes Playwright retry for
@@ -1071,10 +1070,15 @@ def _check_enumerated_move(page, check: Checks) -> None:  # noqa: ANN001
 
     before = _positions(page)
     check.that(_press_move(page), "the default list offers Move")
-    check.that(
-        page.locator("#movement .mv").count() > 0,
-        "pressing it lights where you can go",
-    )
+    # **`_settled`, not a bare `count()`.** This failed once inside
+    # `check.py --all` and never in six standalone runs: pressing Move paints
+    # the squares asynchronously, so an idle machine wins the race and a
+    # machine that has just finished a 20-minute ten-process audit sweep does
+    # not. `_press_move`'s own docstring records the same shape -- sixty round
+    # trips were acting as an accidental sleep and removing them "did not
+    # cause the bug, it stopped hiding it" (#355).
+    lit = _settled(page, "#movement .mv", 1)
+    check.that(lit > 0, f"pressing it lights where you can go ({lit} squares)")
     # **A board where every reachable square provokes is a real board**, and
     # this check used to call it a failure. `.mv-free` is the squares that
     # provoke nothing; a character boxed in by enemies has none, and the seed
