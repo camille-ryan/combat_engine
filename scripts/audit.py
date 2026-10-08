@@ -137,6 +137,24 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # Its printed Requirement is an obscured square to vanish from, and the
+    # board is lit everywhere -- so the row correctly declines. Enforcing
+    # the Requirement is what made it silent; before the light model it was
+    # offered at-will with the Requirement ignored, which was the wrong
+    # trade. The dummy posing a darkened square would retire this (#437).
+    "m6534a5": "needs an obscured square to vanish from; the board is lit",
+    # Requires its own square to be dim or dark before it teleports, and
+    # the board is lit everywhere -- so the row correctly declines and does
+    # nothing. Written against `c.unlit`; the alternative was leaving the
+    # Requirement unwritten, which would teleport her from anywhere.
+    "m6276a5": "needs an unlit square to jump from; the board is lit",
+    # Lends a nearby ally's senses, and the board fields this creature
+    # alone -- so there is no ally to lend one and the row correctly does
+    # nothing. Written against `c.has_sense` and right; the guess that
+    # preceded it granted both senses unconditionally, which this list
+    # would also have hidden. The real fix is the configurable dummy
+    # posing an ally that has a sense (#437), not a wider board.
+    "m4736a4": "lends an ally's senses; the board fields it alone",
     "m135a3": "targets a destroyed undead ally; the board has none",
     # Gives back the use of one named sibling row, and the harness fires
     # each row once on a fresh board -- so that sibling has never been

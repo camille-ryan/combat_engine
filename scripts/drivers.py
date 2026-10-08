@@ -352,8 +352,107 @@ def configured_dummy(out: Result) -> None:
     )
 
 
+def lighting(out: Result) -> None:
+    """Dim light conceals, darkness conceals totally, and a sense cancels it.
+
+    The printed rules, in the order they have to compose:
+
+    * dim light gives the creature standing in it **partial** concealment, -2;
+    * darkness gives **total** concealment, -5;
+    * low-light vision answers dim and **not** darkness, which is the
+      distinction 14 rows turn on;
+    * darkvision answers both;
+    * a carried light brightens the square it is standing in, however dark the
+      terrain under it.
+
+    Driven rather than left to `replay`, for the reason `phasing` and
+    `blindness` are: the fixtures never darken a board, so none of this is
+    rolled incidentally and a regression would be invisible. And it is the
+    *attack modifier* that is asserted, not `light_level` -- reading the model
+    back proves the model, where the thing worth protecting is that
+    `resolve.situational_attack` consults it. A light level nothing subtracted
+    would be the commonest bug in this component.
+
+    The negative controls are the two that matter and are easy to get wrong:
+    a bright board must cost nothing, and low-light vision must **not** rescue
+    a creature looking into the dark.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.query import enemies, light_level, squares
+    from combat_engine.engine.resolve import situational_attack
+    from combat_engine.engine.types import Light
+
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    square = next(iter(squares(world, foe)))
+
+    def penalty() -> int:
+        return situational_attack(world, caster, foe, "drivers:lighting", {})
+
+    base = penalty()
+    out.that(light_level(world, square) is Light.BRIGHT,
+             "a board nobody darkened is bright everywhere")
+
+    world.grid.light[square] = Light.DIM
+    out.that(penalty() == base - 2,
+             "dim light is partial concealment, -2 to the attack",
+             f"{penalty():+d} against {base - 2:+d}")
+
+    world.grid.light[square] = Light.DARK
+    out.that(penalty() == base - 5,
+             "darkness is total concealment, -5",
+             f"{penalty():+d} against {base - 5:+d}")
+
+    sees = Cast(world=world, me=caster, ref="drivers:lighting")
+    sees.low_light()
+    out.that(penalty() == base - 5,
+             "low-light vision does NOT answer darkness",
+             f"{penalty():+d} against {base - 5:+d}")
+
+    world.grid.light[square] = Light.DIM
+    out.that(penalty() == base,
+             "low-light vision does answer dim light",
+             f"{penalty():+d} against {base:+d}")
+
+    world.grid.light[square] = Light.DARK
+    sees.darkvision()
+    out.that(penalty() == base,
+             "darkvision answers darkness",
+             f"{penalty():+d} against {base:+d}")
+
+    # **A printed range stops the sense answering past it**, which is what
+    # several cards print -- "darkvision out to 5 squares" -- and what an
+    # earlier draft of these verbs could not say at all. Asked of `sees_in`
+    # directly rather than through an attack, because the board puts the only
+    # foe one square away and a range test needs more room than that.
+    from combat_engine.engine.query import sees_in
+
+    world, caster, _ = _board()
+    Cast(world=world, me=caster, ref="drivers:lighting").darkvision(5)
+    out.that(sees_in(world, caster, Light.DARK, 5),
+             "a sense with a printed range answers inside it")
+    out.that(not sees_in(world, caster, Light.DARK, 6),
+             "and stops answering past it")
+
+    world, caster, _ = _board()
+    Cast(world=world, me=caster, ref="drivers:lighting").darkvision()
+    out.that(sees_in(world, caster, Light.DARK, 40),
+             "no printed range means no limit")
+
+    # A carried light, on a fresh board so the senses above do not mask it.
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    square = next(iter(squares(world, foe)))
+    world.grid.light[square] = Light.DARK
+    out.that(light_level(world, square) is Light.DARK, "the square starts dark")
+    Cast(world=world, me=foe, ref="drivers:lighting").light(2)
+    out.that(light_level(world, square) is Light.BRIGHT,
+             "a carried light brightens the square it stands in")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
+    "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
     "blindness": (blindness, "a blinded creature cannot see, and can again after"),
     "hiding": (hiding, "attacking gives you away, and AFTER is where you get it back"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
