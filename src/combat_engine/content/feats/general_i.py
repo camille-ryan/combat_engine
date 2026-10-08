@@ -58,6 +58,7 @@ from combat_engine.engine import (
     ActionPointSpent,
     ActionType,
     Attack,
+    AttackDeclared,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -1282,12 +1283,57 @@ def f1395(c: Cast) -> None:
 
 
 @power("f1396", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.stay_hidden()",))
+       reach=PERSONAL, target=SELF)
 def f1396(c: Cast) -> None:
-    """Staying hidden and staying invisible through an attack that misses
-    everything. `c.hide` and `c.invisible` set the state and the attack
-    clears it from inside the resolver, so there is no seam between "the
-    attack missed" and "you were given away" to hold the state across."""
+    """"Whenever you make an attack and miss every target while hidden, you
+    remain hidden" -- and the same sentence again for invisible, which is the
+    same held state here (`c.hide` is `c.invisible` with a named watcher).
+
+    **The seam this row said did not exist is `AttackDeclared`'s AFTER
+    window.** It was marked `c.stay_hidden()`, a verb nobody will ever write:
+    the clear sits below the loop that emits `Hit`/`Miss` and cannot move --
+    being hidden grants combat advantage and a striker's extra damage asks for
+    that live, at the moment of the hit -- so the fix is a window, not a call.
+    A marker naming a verb that will never arrive is invisible to `todo.py`,
+    which fires when a *named symbol* appears. #390, #446.
+
+    The idiom is `m2304a5`'s, and the three watches are each load-bearing:
+    who you were hidden from is taken BEFORE, while the answer is still the
+    one the card means; `Hit` clears the flag so "miss **every** target" is
+    what is tested rather than "missed the last one"; AFTER is the first
+    moment past the clear.
+
+    The ritual clause has no combat meaning and needs no marker: the row is
+    not `out_of_combat`, because the half above is a fight rule."""
+    from combat_engine.engine.query import alive, hidden_from
+    from combat_engine.engine.types import Window
+
+    me = c.me
+    was: list[int] = []
+    missed = [False]
+
+    def before(ev: AttackDeclared) -> None:
+        if ev.attacker != me:
+            return
+        was[:] = list(hidden_from(c.world, me))
+        missed[0] = True
+
+    def landed(ev: Hit) -> None:
+        if ev.attacker == me:
+            missed[0] = False
+
+    def after(ev: AttackDeclared) -> None:
+        if ev.attacker != me or not missed[0]:
+            return
+        for watcher in was:
+            if alive(c.world, watcher):
+                c.hide(from_=watcher, until=When.ENCOUNTER)
+
+    c.watch(AttackDeclared, before, until=When.ENCOUNTER, window=Window.BEFORE,
+            on=me, label=f"{c.ref} sighting")
+    c.watch(Hit, landed, until=When.ENCOUNTER, on=me, label=f"{c.ref} hit")
+    c.watch(AttackDeclared, after, until=When.ENCOUNTER, window=Window.AFTER,
+            on=me, label=c.ref)
 
 
 @power("f1397", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

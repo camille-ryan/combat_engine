@@ -179,21 +179,30 @@ class Cast:
     def cancel(self) -> bool:
         """Stop the thing that triggered this.
 
-        **The printed rule is that only an immediate interrupt can, and this
-        engine does not enforce it.** This docstring used to claim it did --
-        "calling it from a reaction does nothing, which is the printed rule
-        rather than an oversight" -- and that was measured false: the same
-        `cancel()` from an AFTER-window listener returns True *and* stops the
-        damage.
+        **Only an immediate interrupt may stop an *attack*, and that is now
+        enforced.** The printed rule is about attacks specifically, which is
+        narrower than the way this docstring used to state it and is why the
+        wholesale version could not be enforced: 6 rows cancel from a
+        non-interrupt window and every one of them refuses forced movement,
+        a move, or damage -- things a reaction or a free action legitimately
+        undoes ("you ignore the triggering forced movement", "you take half
+        damage from the triggering attack").
 
-            interrupt (BEFORE)   cancel() -> True   hp 33 -> 33
-            reaction  (AFTER)    cancel() -> True   hp 33 -> 33
+        Measured over every row in the tree that calls this, by what it
+        refuses:
 
-        So the gap is real and is left open deliberately for now, because a
-        shipped row depends on it. What is fixed is the lie: a page saying a
-        rule is enforced when it is not is worse than the gap, because it
-        stops anybody looking. Enforcing it means breaking that row first --
-        #444. #384.
+            ForcedMove     15 interrupt  + 2 free + 1 reaction
+            MoveStart       4 interrupt  + 1 opportunity + 1 reaction
+            DamageRolled    2 interrupt  + 1 free
+            AttackDeclared  4 interrupt
+            AttackRolled    2 interrupt
+            Hit             7 interrupt
+
+        **Every row refusing an attack event is already an interrupt, 13 of
+        13.** So #444's worry that "a shipped row depends on the gap" is true
+        of the wholesale rule and false of the printed one -- nothing in the
+        tree changes behaviour, and the next row that gets it wrong is caught
+        instead of working by accident.
 
         Most events cannot be refused at all -- `cancel` lives on `Decision`,
         and `ConditionApplied`, `Moved` and `DamageApplied` are plain
@@ -204,15 +213,42 @@ class Cast:
         from inside the row, which reads as a bug in the content; it is a fact
         about the event.
 
-        Returns whether anything was actually stopped -- which today means
-        "whether the event could be refused at all", not "whether this window
-        was allowed to".
+        Returns whether anything was actually stopped: False both for an event
+        that cannot be refused and for a window that is not allowed to refuse
+        this one.
         """
         stop = getattr(self.trigger, "cancel", None)
         if stop is None:
             return False
+        if self._refusing_an_attack() and not self._declared_as_interrupt():
+            return False
         stop()
         return True
+
+    #: Refusing one of these *is* refusing the attack, which the printed rule
+    #: reserves to an immediate interrupt. `DamageRolled` is deliberately not
+    #: here: a card reading "you take half damage from the triggering attack"
+    #: is a free action in the book and refuses the damage, not the swing.
+    _ATTACK_DECISIONS = ("AttackDeclared", "AttackRolled", "Hit", "Miss")
+
+    def _refusing_an_attack(self) -> bool:
+        return type(self.trigger).__name__ in self._ATTACK_DECISIONS
+
+    def _declared_as_interrupt(self) -> bool:
+        """Whether this row's card prints an immediate interrupt.
+
+        The **declared** action rather than the bus window, because the
+        printed rule is about what kind of action the card is, and that is
+        what an author writes and a reader checks. A row whose action cannot
+        be read -- no registry entry -- is allowed through: refusing on
+        missing information would turn an unrelated gap into a silently
+        dead clause, which is the failure this component produces most.
+        """
+        from .dsl import get
+
+        p = get(self.ref)
+        action = getattr(p, "action", None) if p is not None else None
+        return action is None or action is ActionType.IMMEDIATE_INTERRUPT
 
     # -- who and where -------------------------------------------------------
 
@@ -1029,8 +1065,37 @@ class Cast:
         The same held state as `c.invisible` and a different duration: being
         invisible runs out on a clock, being hidden lasts until you do
         something about it -- and attacking does. `resolve.attack` breaks it
-        for whoever swung, so a row that keeps its concealment hides again
-        afterwards, which is how the printed ones read.
+        for whoever swung.
+
+        **"It remains hidden if the attack misses" goes in the
+        `AttackDeclared` AFTER window, not in a `Miss` watch.** This docstring
+        used to say a row "hides again afterwards, which is how the printed
+        ones read", and that is true from a power's *body* and false from a
+        `Miss` watch -- which is exactly where a printed "remains hidden on a
+        miss" wants to live, so the obvious reading fails silently. One
+        shipped row was inert that way.
+
+        The clear sits **below** the loop that emits `Hit`/`Miss`, and it has
+        to:
+
+        * being hidden is one of the things that grants combat advantage
+          (`query.hidden_from` -> `has_combat_advantage`);
+        * a striker's extra damage asks for combat advantage **live, at the
+          moment of the hit** -- `extra_damage(applies=...)` in
+          `features/strikers.py`, whose docstring gives the reason: flanking
+          ends the instant an ally steps away and a stored flag would not
+          notice;
+        * so clearing before the emit makes every such rider read the
+          *post-attack* board. Measured: moving it cost a rogue its 2d6 on
+          `level-5-full`, 2043 events down to 1925, with
+          `DamageRolled(detail='cf:rogue-scoundrel-f4')` becoming a plain
+          `'mba'`.
+
+        The `AttackDeclared` AFTER window runs once the whole attack is done,
+        past the clear, so a re-hide laid there sticks. `m2304a5` documents
+        the three-watch idiom: take who you were hidden from in BEFORE,
+        remember the outcome from the announcement, restore in AFTER.
+        #390, #446.
         """
         return self.invisible(to=from_, until=until)
 

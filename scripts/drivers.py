@@ -183,9 +183,111 @@ def blindness(out: Result) -> None:
     out.that(not blinded(world, caster), "and can see again once it ends")
 
 
+def hiding(out: Result) -> None:
+    """Attacking gives you away, and the AFTER window is where you get it back.
+
+    Two printed rules in one ordering, and the ordering is the whole subject:
+
+    * "attacking gives you away" -- `resolve.attack` clears `HIDDEN_FROM` for
+      whoever swung;
+    * "it remains hidden if the attack misses" -- which has to be laid *after*
+      that clear or it is wiped a moment later.
+
+    **The clear cannot move earlier**, and that is the thing most likely to be
+    re-tried: being hidden grants combat advantage, and a striker's extra
+    damage asks for combat advantage **live at the moment of the hit**
+    (`features/strikers.py`). #390 proposed moving it, #446 measured the cost
+    -- a rogue silently lost its 2d6 and `level-5-full` went 2043 events to
+    1925 -- and it was reverted.
+
+    So this driver asserts the ordering rather than a verb, because there is no
+    verb: `c.stay_hidden()` was a marker on three rows and nothing will ever
+    arrive under that name. `replay` cannot cover it either -- the fixtures
+    roll it incidentally at best -- which is the same argument that put
+    `phasing` and `blindness` here.
+    """
+    from combat_engine.engine.events import AttackDeclared, Miss
+    from combat_engine.engine.query import enemies, hidden_from
+    from combat_engine.engine.resolve import attack
+    from combat_engine.engine.types import Defense, Relation, Window
+
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+
+    def hide_from_everyone() -> set[int]:
+        for who in enemies(world, caster):
+            world.relations.set(Relation.HIDDEN_FROM, caster, who)
+        return set(hidden_from(world, caster))
+
+    before = hide_from_everyone()
+    out.that(bool(before), f"a creature can be hidden from {len(before)} enemies")
+
+    # **The positive control for the clear**: swinging gives it away. +30 so
+    # the attack lands whatever the board rolls.
+    attack(world, caster, foe, 30, Defense.AC, power="driver")
+    out.that(
+        not hidden_from(world, caster),
+        "attacking gives you away -- the first printed rule",
+        "the hidden-from list survived a swing, so nothing is clearing it",
+    )
+
+    # **And the negative control, which is the half #390 is about**: a re-hide
+    # laid in the AFTER window is past the clear and sticks. A `Miss` watch is
+    # not, and that is exactly the trap -- so this asserts the window the
+    # docstring now sends authors to.
+    hide_from_everyone()
+    restored: list[int] = []
+
+    def after(ev: AttackDeclared) -> None:
+        if ev.attacker != caster:
+            return
+        world.relations.set(Relation.HIDDEN_FROM, caster, foe)
+        restored.append(foe)
+
+    world.bus.on(AttackDeclared, after, window=Window.AFTER)
+    attack(world, caster, foe, 30, Defense.AC, power="driver")
+    out.that(
+        bool(restored) and foe in hidden_from(world, caster),
+        "a re-hide in AttackDeclared's AFTER window survives the clear",
+        "the AFTER window runs before the clear, so the documented idiom "
+        "for 'remains hidden on a miss' does not work",
+    )
+
+    # The trap itself, asserted as a trap: the same re-hide from a `Miss`
+    # watch is wiped. **On a fresh board**, because the AFTER listener above
+    # is still subscribed and would re-hide on this attack too -- which it
+    # did, and this assertion caught it. A driver that reuses a world carries
+    # the previous arm's subscriptions into the next one.
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    for who in enemies(world, caster):
+        world.relations.set(Relation.HIDDEN_FROM, caster, who)
+    laid = []
+
+    def on_miss(ev: Miss) -> None:
+        if ev.attacker == caster:
+            world.relations.set(Relation.HIDDEN_FROM, caster, foe)
+            laid.append(foe)
+
+    world.bus.on(Miss, on_miss)
+    # -30 so it misses whatever the board rolls.
+    attack(world, caster, foe, -30, Defense.AC, power="driver")
+    out.that(
+        bool(laid),
+        "the control attack really did miss, so the Miss watch ran",
+        "it hit instead, and the assertion below would pass without asking",
+    )
+    out.that(
+        foe not in hidden_from(world, caster),
+        "and a re-hide from a Miss watch is still wiped -- #390's trap",
+        "a Miss watch now works, so the ordering moved and the docs are stale",
+    )
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "blindness": (blindness, "a blinded creature cannot see, and can again after"),
+    "hiding": (hiding, "attacking gives you away, and AFTER is where you get it back"),
 }
 
 

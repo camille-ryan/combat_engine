@@ -146,7 +146,7 @@ def step(
         for other in sorted(watchers):
             if other not in foes:
                 continue
-            reach = _threat(world, other)
+            reach = _threat(world, other, eid)
             if reach == 1:
                 left = not (after_reach & squares(world, other))
             else:
@@ -313,14 +313,30 @@ def _reachers(world: World, eid: int) -> set[int]:
         # modifiers, which was sound while a modifier was the only thing that
         # could stretch a reach and is wrong now that a weapon and a row can:
         # a creature with a glaive and no modifiers reaches two and was skipped.
-        reach = _threat(world, other)
+        reach = _threat(world, other, eid)
         if reach > 1 and spread(squares(world, other), reach) & mine:
             out.add(other)
     return out
 
 
-def _threat(world: World, eid: int) -> int:
+def _threat(world: World, eid: int, against: int | None = None) -> int:
     """How far this creature threatens, in squares.
+
+    `against` is **who is walking past**, and it is what makes a `when=` gate
+    on a threat zone able to say anything about them. Without it the context
+    handed to `mods.total` was `{}`, so `c.threatens(when=)` -- which landed
+    with #425 -- could read the threatener's own state and nothing else. The
+    one row in the tree whose printed threat clause is about the *target*
+    rather than the threatener could not be written at all. #443.
+
+    Passed as `target`, not a new key: `resolve`'s attack context already
+    calls the creature being swung at that, and the creature walking past a
+    threat zone is exactly the prospective target. The threatener is
+    `attacker` for the same reason. A gate reads whichever it means.
+
+    `None` when nobody in particular is walking past -- `reachable`'s preview
+    asks how far a creature threatens in the abstract -- and a gate that
+    needs a target gets `None` and should answer False rather than guess.
 
     Three things can stretch it and only the first was read: a `"reach"`
     modifier, **the weapon in its hand**, and **the reach of the row it would
@@ -355,8 +371,9 @@ def _threat(world: World, eid: int) -> int:
     # Nothing sets `threatening_reach` yet, so this is adjacency for everybody
     # today. The 76 want the flag off their blocks and that is #306; being wrong
     # for 76 monsters is better than for 938 plus the whole party.
-    if mods is not None and mods.items and mods.total("threatening_reach", {}) > 0:
-        return max(1, 1 + mods.total("reach", {}))
+    ctx = {"attacker": eid, "target": against}
+    if mods is not None and mods.items and mods.total("threatening_reach", ctx) > 0:
+        return max(1, 1 + mods.total("reach", ctx))
     return 1
 
 
@@ -491,7 +508,7 @@ def risk_along(world: World, eid: int, path: list[Square]) -> str:
     # made this preview disagree with `step`, which has always spread by the
     # watcher's reach. A creature with a reach weapon provoked in play and not in
     # the preview the policy scores against.
-    spans = {foe: _threat(world, foe) for foe in foes}
+    spans = {foe: _threat(world, foe, eid) for foe in foes}
     for nxt in path:
         next_space = footprint(nxt, pos.size)
         # Leaving a square somebody threatens, and not staying in their

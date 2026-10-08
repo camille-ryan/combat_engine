@@ -95,7 +95,23 @@ from `combat_engine.engine`: `targets_me`, `by_me`, `about_me`, `not_me`,
 `both(...)` to combine them. Events are in `engine/events.py`.
 
 Inside the body, `c.trigger` is the event being answered and `c.cancel()`
-stops it -- only an interrupt can, which is the printed rule.
+stops it.
+
+**Only an immediate interrupt may cancel an *attack*, and that is enforced.**
+`c.cancel()` returns False if the row's declared action is anything else and
+the event is `AttackDeclared`, `AttackRolled`, `Hit` or `Miss`. Everything
+else a `Decision` carries -- forced movement, a move, the damage roll -- any
+window may refuse, because the cards say so: "you ignore the triggering forced
+movement" is a reaction and "you take half damage from the triggering attack"
+is a free action. Measured over the tree: 13 of 13 rows refusing an attack
+were already interrupts, so this breaks nothing and catches the next one. #444.
+
+**"Reduced to 0 hit points: the triggering attack misses" does not go on
+`Dropped`.** That event is an announcement -- the hit points are already gone
+-- so `c.cancel()` answers False and the row does nothing, quietly. Declare on
+**`DamageRolled`**, which is a `Decision`, carries the amount, and fires while
+the hit points are still there, so "would be reduced to 0" is a predicate on
+the number. Worked example: `i652p1` in `content/items/waist.py`. #445.
 
 If no predicate expresses the printed sentence, **say so in your report**
 rather than approximating it. Thirteen rows were once declared with prose

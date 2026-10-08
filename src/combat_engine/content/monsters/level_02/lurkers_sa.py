@@ -1068,12 +1068,20 @@ def m5281a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.stay_hidden()",),
+    todo=("c.hide(despite_cover=)",),
 )
 def m5281a1(c: Cast) -> None:
     """The whole of this row is a hidden creature *keeping* a hiding place it
     has stopped qualifying for. Being unseen here is a relation that the loss of
-    cover ends, with nothing to hold it open."""
+    cover ends, with nothing to hold it open.
+
+    **Re-pointed off `c.stay_hidden()`**, which was the wrong symbol twice
+    over: it is shared with a row about re-hiding after a missed attack, and
+    that need turned out to be met by a *window* rather than a verb -- the
+    `AttackDeclared` AFTER window, see `f1396`. So nothing would ever have
+    arrived under that name and `todo.py` could not say so, because it fires
+    when a named symbol appears. This row waits on something else entirely:
+    hiddenness surviving the loss of cover. #390."""
 
 
 @power(

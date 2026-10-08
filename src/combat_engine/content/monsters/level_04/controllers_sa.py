@@ -2860,20 +2860,25 @@ def m5890a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("movement._threat(against=)",),
 )
 def m6116a0(c: Cast) -> None:
-    """The ring is widened, which is most of the card. What is dropped is
-    "against bloodied creatures".
+    """"opportunity attacks against **bloodied** creatures within 2 squares".
 
-    **The marker moved from `c.threatens(when=)` to the gap one layer down.**
-    That parameter exists now (#425) and does not reach this: `movement._threat`
-    takes only the threatener and calls `mods.total("threatening_reach", {})`
-    with an **empty context**, so a gate can read the creature's own state and
-    has nothing to say about who is walking past. All three call sites know the
-    mover and none passes it. #443.
-    """
-    c.threatens(2, on=c.me)
+    The widened ring and the condition on who it applies to, which is the whole
+    card. The gate reads `target` -- the creature walking past -- which
+    `movement._threat` now passes to `mods.total` and did not: the context was
+    `{}`, so a `when=` could read this creature's own state and nothing about
+    anybody else's. #443.
+
+    `target` is absent when nothing in particular is walking past, which is
+    `reachable`'s abstract preview, and then the extended ring does not apply:
+    the printed clause is about a creature, so with no creature there is no
+    claim to make."""
+    def past_a_bloodied_creature(ctx: dict) -> bool:
+        who = ctx.get("target")
+        return who is not None and c.bloodied(on=who)
+
+    c.threatens(2, on=c.me, when=past_a_bloodied_creature)
 
 
 @power(

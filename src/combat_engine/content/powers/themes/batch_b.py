@@ -1011,12 +1011,20 @@ def p14212(c: Cast) -> None:
         both(about_me, by_keyword(Keyword.TELEPORTATION)),
         "you use a teleportation power",
     ),
-    dropped=("c.stay_hidden()",),
+    dropped=("c.hide(partial_cover=)",),
 )
 def p14213(c: Cast) -> None:
     """The three states and their "until you attack" end are exact. Hiding
     on partial cover or on cover an ally is giving you is a relaxation of
-    the stealth rules and nothing holds one."""
+    the stealth rules and nothing holds one.
+
+    **Re-pointed off `c.stay_hidden()`.** That symbol was doing duty for
+    three different needs and one of them -- re-hiding after a missed attack
+    -- is met by the `AttackDeclared` AFTER window and never wanted a verb at
+    all (`f1396`). What this row waits on is permission to hide on *partial*
+    cover, which is a different question from keeping hiddenness once cover
+    is gone (`m5281a1`). One symbol for three needs cannot go green correctly
+    for any of them. #390."""
     held = [
         c.insubstantial(on=c.me, until=When.EONT),
         c.phasing(on=c.me, until=When.EONT),

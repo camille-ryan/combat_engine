@@ -651,6 +651,31 @@ class Dropped(Event):
     Defaults to `False`, which is also the honest answer for the deaths that
     no blow caused -- ongoing damage, a failed death save -- where there is
     no attack to have been critical.
+
+    ## This is not a `Decision`, and a card that wants one declares elsewhere
+
+    **"When you are reduced to 0 hit points (immediate interrupt): the
+    triggering attack misses" names this event and must not be declared on
+    it.** `Dropped` is an announcement of something already true: hit points
+    are at zero by the time it is emitted and the resolve path has moved on,
+    so `c.cancel()` answers False and the row does nothing -- quietly, because
+    `cancel` deliberately does not raise for an event that cannot be refused.
+
+    Making it refusable is not a widening like `source` and `critical` were.
+    It would have to mean one of two things and both are worse than the gap:
+
+    * **move the announcement earlier**, which reorders every death throe and
+      every "when an enemy drops" rider in the tree, for one sentence; or
+    * **let cancel mean "restore it"**, which is not what cancel means
+      anywhere else in this engine -- everywhere else it prevents a thing that
+      has not happened yet.
+
+    **Declare on `DamageRolled` instead.** It is a `Decision`, it carries the
+    amount, and it fires while the hit points are still there -- so "would be
+    reduced to 0" is a predicate on the number rather than a fact about the
+    creature. The worked example is `i652p1` in `content/items/waist.py`:
+    `on=Trigger(DamageRolled, _would_drop_me, "an attack would drop you")`,
+    whose docstring states the reasoning. #445.
     """
 
     actor: int
