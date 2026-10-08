@@ -97,6 +97,32 @@ chargen.SCORED_CHOICES = False
 
 ROOT = Path(__file__).resolve().parents[1]
 
+
+def _corpus() -> list[str]:
+    """Every **game** row, which is not the same as every declared row.
+
+    `content/dummy.py` declares two rows of its own -- the crash test dummy's
+    melee and ranged basic attacks -- and they are this harness's furniture,
+    not content. `REGISTRY` cannot tell the difference, so a wide sweep fed
+    them to `board()`, which deals a *character* for the row's `cls`, and
+    `chargen.CLASSES["dummy"]` raised `KeyError: 'dummy'` on both. Two raises
+    in `check.py --all`, which is the one number this project treats as
+    inviolable, for a row no player will ever hold.
+
+    **Derived from `cls`, never listed.** A ref list would go stale the next
+    time the dummy gained a row -- which is how it got these two, and the
+    count moved 23,009 -> 23,011 with it. That jump is the whole signature:
+    the corpus did not grow, the prop did.
+
+    Excluded from the **scope and the totals both**, because the fullness test
+    compares what a run reached against this number. Leaving the totals alone
+    would have made a wide sweep reach 23,009 of 23,011 forever, never record
+    itself as full, and so leave every later run paying for a debt it had
+    already cleared -- the failure the `reached` comment below was written for.
+    """
+    return sorted(r for r, p in REGISTRY.items() if p.cls != "dummy")
+
+
 #: Events that mean the power did something. A power that emits none of
 #: these on any attempt has not been written, whatever the file says.
 #: Rows that fire and do nothing **on this board**, with the reason each.
@@ -2719,12 +2745,12 @@ def _changed() -> list[str]:
         cwd=ROOT, capture_output=True, text=True,
     )
     if done.returncode != 0:
-        return sorted(REGISTRY)
+        return _corpus()
     files = [line[3:].strip() for line in done.stdout.splitlines() if line[3:].strip()]
     if any(f.startswith(WIDE) and not f.startswith(NARROW) for f in files):
-        return sorted(REGISTRY)
+        return _corpus()
     if _database_moved():
-        return sorted(REGISTRY)
+        return _corpus()
 
     refs: list[str] = []
     for name in files:
@@ -2745,10 +2771,18 @@ def _changed() -> list[str]:
         # Detected by shape rather than by a path list, so the next one is
         # caught without editing this: under `content/`, no rows declared means
         # everything depends on it.
-        if not found:
-            return sorted(REGISTRY)
+        #
+        # **And no *game* rows declared means the same thing**, which the test
+        # above cannot see. `content/dummy.py` declares two rows and both are
+        # the harness's own -- so it passed `if not found` and selected only
+        # those two, which `_corpus` then removed, leaving a change to the
+        # creature standing on every posed board auditing **nothing**. The
+        # widening and the exclusion have to agree, or the exclusion becomes a
+        # blind spot rather than a correction.
+        if not set(found) & set(_corpus()):
+            return _corpus()
         refs += found
-    return sorted({r for r in refs if r in REGISTRY})
+    return sorted(set(refs) & set(_corpus()))
 
 
 
@@ -2830,10 +2864,10 @@ def _since(sha: str) -> list[str]:
     got = subprocess.run(["git", "diff", "--name-only", f"{sha}..HEAD"],
                          cwd=ROOT, capture_output=True, text=True)
     if got.returncode != 0:
-        return sorted(REGISTRY)
+        return _corpus()
     files = [f.strip() for f in got.stdout.splitlines() if f.strip()]
     if any(f.startswith(WIDE) and not f.startswith(NARROW) for f in files):
-        return sorted(REGISTRY)
+        return _corpus()
     refs: list[str] = []
     for name in files:
         if "/content/" not in name or not name.endswith(".py"):
@@ -2843,10 +2877,10 @@ def _since(sha: str) -> list[str]:
             continue
         found = re.findall(r'@power\(\s*"([^"]+)"', path.read_text())
         if not found:
-            return sorted(REGISTRY)
+            return _corpus()
         refs += found
     # Uncommitted work too: a sweep is only honest about *now*.
-    return sorted({r for r in refs + _changed() if r in REGISTRY})
+    return sorted((set(refs) | set(_changed())) & set(_corpus()))
 
 
 def _run_all(refs: list[str], jobs: int = 0) -> list[Result]:
@@ -3409,7 +3443,7 @@ def main() -> int:
         _calls(args.calls) if args.calls
         else _changed() if args.changed
         else _since(mark["sha"]) if args.since and mark.get("sha")
-        else sorted(REGISTRY)
+        else _corpus()
     )
     if args.since and not mark.get("sha"):
         print("# --since has no watermark to work from; auditing everything.\n")
@@ -3422,17 +3456,17 @@ def main() -> int:
         # Seeded, so two runs compare. A moving sample cannot show a number
         # moving.
         wanted = sorted(random.Random(0xA0D17).sample(wanted, min(args.sample, len(wanted))))
-        print(f"# a {len(wanted)}-row sample of {len(REGISTRY)}. For a "
+        print(f"# a {len(wanted)}-row sample of {len(_corpus())}. For a "
               f"direction, not a number.\n")
     if args.calls and not args.refs:
         print(f"# {len(wanted)} row(s) name {', '.join(args.calls)} -- in their "
-              f"source or in a marker. --all is {len(REGISTRY)}.\n"
+              f"source or in a marker. --all is {len(_corpus())}.\n"
               f"# Blind to a row that changes without naming it, so this is "
               f"evidence the verb works, not that nothing else broke.\n")
     if args.changed and not args.refs:
         print(f"# {len(wanted)} row(s) in changed files. "
-              f"--all is {len(REGISTRY)} and takes about "
-              f"{len(REGISTRY) * 0.05:.0f}s across ten cores.\n"
+              f"--all is {len(_corpus())} and takes about "
+              f"{len(_corpus()) * 0.05:.0f}s across ten cores.\n"
               f"# Adding a verb? `--calls <symbol>` is seconds.\n")
     chosen: list[str] = []
     inert: list[str] = []
@@ -3642,7 +3676,7 @@ def main() -> int:
     # Keyed by this exact prefix, which makes it a contract: move it and the
     # recorded field goes absent rather than wrong, and `--history` says how
     # many runs are missing it instead of quietly averaging over them.
-    print(f"\n# scope: {reached} of {len(REGISTRY)} declared rows")
+    print(f"\n# scope: {reached} of {len(_corpus())} declared rows")
     # **A run that reached every row has looked at every row**, whatever flag got
     # it there -- and it used not to be allowed to say so. `full` was false
     # whenever `--changed` was passed, including when `_changed` had widened the
@@ -3658,7 +3692,7 @@ def main() -> int:
     # 71 rows as a whole-tree sweep, **wiping a 205-ref baseline**. That is
     # exactly the lie the guard below exists to prevent, so the test has to use
     # the same number the line above reports and for the same reason.
-    if reached == len(REGISTRY):
+    if reached == len(_corpus()):
         full = True
     if not chosen:
         print("\n  SKIPPED -- no row was in scope, so nothing was checked")
