@@ -70,6 +70,29 @@ ever be looked at:
   variable, a commit message, an issue, a column. `scripts/leaks.py` checks
   both halves and has caught a real one (15 reward titles sitting in
   `item.slot`). This half is absolute.
+
+  **But the places are not equally urgent, and reading them as equal has cost
+  real effort.** Camille's ordering, #447:
+
+  | | where | |
+  |---|---|---|
+  | 1 | **a player is shown it without `localization/`** | *critical* |
+  | 2 | in the code | near-critical |
+  | 3 | in an issue or a commit message | avoid, do not chase |
+
+  The list above reads flat — a commit message named in the same breath as a
+  column — and on that reading a session built a verified scrub for 20 issue
+  bodies and asked for a permission grant to apply it. Camille had already
+  said *"I'm not too worried about git history. It's only truly important that
+  none of it gets in code, and CRITICALLY that no wotc content gets displayed
+  to a user who doesn't have the localization file."*
+
+  So: fix tier 2 when you find it, and **strive** for tier 3 — a pre-commit
+  `leaks.py --history --staged` is the right amount of effort there, since a
+  message is editable for exactly one moment. Never rewrite tracker history
+  for it. Tier 1 is the one worth building an instrument for, and `#467` is
+  that gap: nothing verifies what the page renders when the localisation is
+  absent.
 * **A content agent is shown no name, ever.** It writes rows from the
   mechanics in its spec, which is what keeps the output clean by
   construction.
