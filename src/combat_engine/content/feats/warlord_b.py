@@ -304,7 +304,7 @@ def f822(c: Cast) -> None:
         ev.amount += c.int_mod
 
     c.watch(Healed, more, on=c.me, until=When.EOT, window=Window.BEFORE,
-            label=f"{c.ref} inspiring word")
+            label=f"{c.ref} heal rider")
 
 
 # -- Combat Leader ----------------------------------------------------------

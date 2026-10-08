@@ -234,7 +234,7 @@ def p10925(c: Cast) -> None:
             team(c.world, shooter) is team(c.world, me) and c.distance(shooter) <= 2
         ):
             return
-        ev.cancel(f"{c.ref}: covering fire")
+        ev.cancel(f"{c.ref}: the shot is covered")
 
     c.watch(
         OpportunityWindow,
@@ -242,7 +242,7 @@ def p10925(c: Cast) -> None:
         until=When.ENCOUNTER,
         window=Window.BEFORE,
         on=me,
-        label=f"{c.ref} covering fire",
+        label=f"{c.ref} veto",
     )
 
 

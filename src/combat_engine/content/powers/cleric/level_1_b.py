@@ -419,7 +419,7 @@ def p12410(c: Cast) -> None:
 
     c.watch(
         Miss, again, until=When.EONT, window=Window.BEFORE, on=c.me,
-        label=f"{c.ref} second chance",
+        label=f"{c.ref} reroll",
     )
 
 
@@ -709,7 +709,7 @@ def p12605(c: Cast) -> None:
 
     c.watch(
         Miss, again, until=When.ENCOUNTER, window=Window.BEFORE, on=c.me,
-        label=f"{c.ref} second chance",
+        label=f"{c.ref} reroll",
     )
 
 

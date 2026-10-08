@@ -1708,7 +1708,7 @@ def m6041a1(c: Cast) -> None:
             paid.append(True)
             c.flat(2, on=foe)
 
-    c.watch(Moved, stirred, until=When.SONT, on=c.me, label=f"{c.ref} parting shot")
+    c.watch(Moved, stirred, until=When.SONT, on=c.me, label=f"{c.ref} on move")
 
 
 # --------------------------------------------------------------------------
