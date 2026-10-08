@@ -540,6 +540,22 @@ def _scores(m: Monster, body: str) -> None:
 # --------------------------------------------------------------------------
 
 _USAGES = ("at-will", "encounter", "recharge", "daily")
+
+#: `Recharge <img src="images/symbol/5a.gif">` -- the die faces as a picture,
+#: with the threshold in the filename. Allows tags between the word and the
+#: image, because the later dialect sometimes closes a `<b>` in between.
+_RECHARGE_GLYPH = re.compile(
+    r"recharge\s*(?:<[^>]*>\s*)*?<img[^>]*?/symbol/(\d)", re.I
+)
+
+#: `Recharge 5`, `Recharge on a 6`. **The digit must follow the word**, which
+#: is the whole fix here: the pattern was `recharge\D*(\d)`, and `\D*` crosses
+#: a whole sentence -- so "recharges when the aura is aura 1" parsed as
+#: `recharge=1`, which on a d6 is *every turn*, and "recharges when it drops
+#: to 0 hit points" parsed as `recharge=0`, which `actions.recharge` skips so
+#: the power never returned. 81 rows were reading a digit out of their own
+#: condition's prose. #335.
+_RECHARGE_DIGIT = re.compile(r"recharge\s*(?:on\s+(?:a\s+)?)?(\d)\b", re.I)
 _ACTIONS = (
     "standard", "move", "minor", "free", "immediate interrupt",
     "immediate reaction", "opportunity", "no action",
@@ -613,10 +629,32 @@ def _one_ability(head: str, index: int, section: str) -> Ability | None:
             break
     else:
         a.usage = "none" if section == "trait" else "at-will"
-    recharge = re.search(r"recharge\D*(\d)", low)
-    if recharge:
-        a.recharge = int(recharge.group(1))
+    # **The threshold is a picture, and `text()` throws it away.** The
+    # compendium prints "Recharge" followed by an `<img>` of the die faces,
+    # and the filename is the number: `images/symbol/5a.gif` is "recharge on
+    # a 5 or 6". 2,521 of those glyphs are in `Monster.Txt`. Read off `head`,
+    # which is raw HTML, because `low` is the scrubbed text and the picture
+    # is gone by then -- which is why this looked like a card that printed no
+    # threshold rather than one this parser could not see.
+    #
+    # It matters more than a missing number usually would: the ETL supplied
+    # **6** for every one of them, and 6 is 16% of the printed thresholds.
+    # The commonest is 5, by four to one, so ~1,500 monster powers were
+    # coming back one turn in six where the page says two. #335.
+    glyph = _RECHARGE_GLYPH.search(head)
+    printed = _RECHARGE_DIGIT.search(low)
+    if glyph:
+        a.recharge = int(glyph.group(1))
+    elif printed:
+        a.recharge = int(printed.group(1))
     elif "recharge" in low:
+        # **A conditional recharge, and 6 is still invented here.** "Recharge
+        # when first bloodied" prints no die at all, and `etl/CLAUDE.md`'s
+        # rule says store nothing rather than guess -- but a conditional
+        # recharge that parses to no die never comes back, which moves what
+        # ~1,000 monsters can do. That is a balance change and wants its own
+        # measurement, so it is deliberately left alone here and the glyph
+        # half lands on its own.
         a.recharge = 6
 
     words: list[str] = []

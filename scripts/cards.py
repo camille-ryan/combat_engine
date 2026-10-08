@@ -70,13 +70,32 @@ natural-language disambiguation `bonuses.py` accumulated. It reports a
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from collections import Counter
+from pathlib import Path
 
 from combat_engine.content import declared
 from combat_engine.engine.dsl import REGISTRY
 from combat_engine.etl.build import game
+
+#: The declared thresholds that predate #335's glyph parse, as
+#: `ref -> [declared, printed]`. **A baseline that may shrink and not grow.**
+#:
+#: It exists because the printed threshold is a *picture* -- `Recharge` followed
+#: by an `<img>` of the die faces -- so it survives in the `monster_power`
+#: column and nowhere in the scrubbed spec. `_card_usage` reads the spec, which
+#: means this check was structurally unable to see a wrong threshold and 1,029
+#: rows carried one: the ETL supplied 6 for every glyph it could not read, and 6
+#: is 16% of the printed values.
+#:
+#: Not `KNOWN`, which is eight hand-argued waivers. A thousand entries is a debt
+#: and wants the shape `audited.json` and `localisation.json` already have --
+#: tightened when it improves, red when it regresses, never a bare allowance.
+#: Paying it is a content sweep that moves what a thousand monsters can do, so
+#: it is its own issue rather than a line in this one.
+_DEBT_FILE = Path(__file__).resolve().parent / "fixtures" / "recharge_debt.json"
 
 #: A monster ability's ref. Nothing else is in scope: a character power's card
 #: names an ability rather than a finished total, so `printed` is None there and
@@ -377,6 +396,28 @@ def _card_usage(spec: str) -> tuple[str, int | None] | None:
     return kind, None
 
 
+def _debt() -> dict[str, list[int]]:
+    """The frozen recharge baseline, or empty if it has not been written."""
+    if not _DEBT_FILE.exists():
+        return {}
+    return json.loads(_DEBT_FILE.read_text())
+
+
+def _recharge_fault(ref: str, power: object, printed: int) -> str:
+    """Declared threshold against the one the card prints, from the column.
+
+    **Read from `monster_power.recharge`, not from the spec**, and that is the
+    whole point of this check existing separately from the usage comparison
+    above. The threshold is printed as a glyph, `text()` strips it, so the
+    spec `_card_usage` reads has no digit in it at all -- which is why this
+    instrument reported every one of these as agreeing. #335.
+    """
+    declared_at = getattr(power, "recharge", 0)
+    if not printed or not declared_at or declared_at == printed:
+        return ""
+    return f"recharge {declared_at} but the card prints {printed}"
+
+
 def _check(ref: str, power: object, spec: str) -> list[str]:
     """Every disagreement between one header and one stat block."""
     out: list[str] = []
@@ -442,6 +483,10 @@ def main() -> int:
         r["ref"]: r["spec"]
         for r in db.execute("SELECT ref, spec FROM monster_power")
     }
+    printed_recharge = {
+        r["ref"]: r["recharge"]
+        for r in db.execute("SELECT ref, recharge FROM monster_power")
+    }
     if args.level is not None:
         wanted = {
             r["ref"]
@@ -475,6 +520,8 @@ def main() -> int:
             return 1
 
     faults: dict[str, list[str]] = {}
+    recharge_faults: dict[str, list[int]] = {}
+    debt = _debt()
     nocard = checked = skipped = 0
     for ref in refs:
         power = REGISTRY[ref]
@@ -489,6 +536,13 @@ def main() -> int:
             continue
         checked += 1
         bad = _check(ref, power, spec)
+        hit = _recharge_fault(ref, power, printed_recharge.get(ref, 0))
+        if hit:
+            recharge_faults[ref] = [
+                getattr(power, "recharge", 0), printed_recharge.get(ref, 0)
+            ]
+            if debt.get(ref) != recharge_faults[ref]:
+                bad = [*bad, hit]
         if bad:
             faults[ref] = bad
 
@@ -522,6 +576,20 @@ def main() -> int:
     if stale:
         print(f"  {len(stale)} waiver(s) no longer needed, remove from KNOWN: "
               + ", ".join(stale))
+    # The recharge debt, reported separately because it is a queue rather than a
+    # verdict: every entry is a row whose declared threshold predates the glyph
+    # parse. Shrink-only -- a ref that has been corrected is named so the file
+    # can come down, and a *new* disagreement is already in `fresh` above.
+    if debt and wanted is None:
+        paid = sorted(set(debt) - set(recharge_faults))
+        if paid:
+            print(f"  {len(paid)} recharge row(s) corrected since the baseline"
+                  f" -- rewrite {_DEBT_FILE.name}: " + ", ".join(paid[:8])
+                  + (" ..." if len(paid) > 8 else ""))
+        carried = len(set(debt) & set(recharge_faults))
+        if carried:
+            print(f"  {carried} declared recharge threshold(s) still disagree"
+                  f" with the card, all of them known -- see {_DEBT_FILE.name}")
     if nocard:
         print(f"  {nocard} have no stat-block text to compare against")
     if skipped:
