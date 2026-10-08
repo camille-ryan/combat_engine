@@ -2847,8 +2847,9 @@ _THE = r"(?:your|the|a|an|this|that|its|his|her|their|each|one)"
 #: `_NAMED` never starts.
 #:
 #: **And the bare possessive**, which is the same claim with the verb left
-#: out: "your *oath of enmity* ends", "the bonus your *inspiring presence*
-#: grants". `your` is taken and `the` is not: a character's possessive
+#: out: "your *<name>* ends", "the bonus your *<name>* grants" --
+#: `cf:avenger-f3` and `cf:warlord-marshal-f4s2` are the two.
+#: `your` is taken and `the` is not: a character's possessive
 #: says the thing belongs to them, which is what a power does, while
 #: `the` in running prose introduces an ordinary noun phrase far more
 #: often than it introduces a name.

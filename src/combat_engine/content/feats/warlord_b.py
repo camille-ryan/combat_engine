@@ -267,7 +267,7 @@ def f2302(c: Cast) -> None:
         c.resist(amount, dtype, on=who, until=When.EONT)
 
 
-# -- inspiring word, which is a ref -----------------------------------------
+# -- p1590, which is a ref --------------------------------------------------
 
 
 @power("f2063", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

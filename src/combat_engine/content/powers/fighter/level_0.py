@@ -71,7 +71,7 @@ MARTIAL_STANCE = [Keyword.MARTIAL, Keyword.STANCE]
 #: The two rows a character's basic attack can be.
 BASICS = (MELEE, RANGED)
 
-#: The label the defender aura's hold wears.
+#: The label the aura's hold wears. See `m6474a0` for the printed feature.
 AURA = "defender aura"
 
 

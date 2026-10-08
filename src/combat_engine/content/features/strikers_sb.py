@@ -302,7 +302,7 @@ def avenger_censure(c: Cast) -> None:
             return
         if team(world, ev.attacker) is team(world, me):
             return
-        # "Any enemy **other than** your oath of enmity target."
+        # "Any enemy **other than** your sworn target" -- `cf:avenger-f3`.
         if sworn(world, me, ev.attacker):
             return
         c.bonus(

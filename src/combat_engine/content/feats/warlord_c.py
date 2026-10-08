@@ -380,7 +380,7 @@ def f2716(c: Cast) -> None:
     )
 
 
-# -- inspiring word, which is a ref -----------------------------------------
+# -- p1590, which is a ref --------------------------------------------------
 
 
 @power("f2407", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
