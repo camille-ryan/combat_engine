@@ -229,8 +229,18 @@ def main() -> int:
             print(f"\n  screenshot: {args.shot}")
         browser.close()
 
+    # **The three must add up to the same total every run**, and that is the
+    # whole reason this line says `of N asked`. A run reported
+    # `55 checks passed, 0 failed, 1 skipped` where every other run said 57 --
+    # and 55 + 1 is not 57, which is the only thing that gave away two checks
+    # skipping with nothing recorded. Eight sites were doing it: seven counted
+    # a skip as a *pass* (`check.that(True, "... (skipped)")`, the parenthetical
+    # admitting it) and one cluster was guarded by a bare `if spot:` with no
+    # `else`. #402's fix introduced `skip` and missed all eight.
+    asked = check.passed + len(check.failed) + len(check.skipped)
     print(f"\n{check.passed} checks passed, {len(check.failed)} failed"
-          + (f", {len(check.skipped)} skipped" if check.skipped else ""))
+          + (f", {len(check.skipped)} skipped" if check.skipped else "")
+          + f"  (of {asked} asked)")
     return 1 if check.failed else 0
 
 
@@ -441,6 +451,19 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
             f"{parked} vs {after_bare} | calls: {moves or None} | status: {status!r}",
         )
         check.that(bool(status), "and says why instead of moving", f"status: {status!r}")
+    else:
+        # **The two above were skipping quietly.** Every other dependent of
+        # `spot` says so out loud; this cluster was guarded by a bare
+        # `if spot:` with no `else`, so on a board with no free square the
+        # headline went 57 to 55 with one skip line to account for it -- and
+        # 55 + 1 does not equal 57, which is the only reason it was noticed.
+        # #402's own fix missed this pair.
+        check.skip(
+            "a bare board click with nothing picked moves nobody",
+            "no free square, and 'nothing moved' is only evidence on a square "
+            "that would otherwise have moved somebody",
+        )
+        check.skip("and says why instead of moving", "nothing safe to click")
     _press_move(page)  # back to picked, for the walk the rest of this checks
     check.that(
         page.locator("#movement .mv").count() > 0,
@@ -592,7 +615,11 @@ def _check_usage_bars(page, check: Checks) -> None:  # noqa: ANN001
     for word, want in BANDS.items():
         seen = {c for u, c in rows if u.replace("-", " ").startswith(word.replace("-", " "))}
         if not seen:
-            print(f"        no {word} power in this turn's kit (skipped)")
+            # A bare `print` recorded nothing, so the headline could not say a
+            # band had gone unchecked -- the same fault as counting a skip as a
+            # pass, one step quieter.
+            check.skip(f"{word} powers show the {word} colour",
+                       f"no {word} power in this turn's kit")
             continue
         check.that(seen == {want}, f"{word} powers show the {word} colour", f"got {sorted(seen)}")
 
@@ -859,7 +886,8 @@ def _check_area_aiming(check: Checks, state: dict | None) -> None:
     anywhere else did nothing at all.
     """
     if not state or not state.get("roster"):
-        check.that(True, "nobody with a kit is acting just now (skipped)")
+        check.skip("an area power offers somewhere to aim",
+                   "nobody with a kit is acting on this board")
         return
     areas = [
         p
@@ -867,7 +895,8 @@ def _check_area_aiming(check: Checks, state: dict | None) -> None:
         if "burst" in p["range_text"].lower() or "blast" in p["range_text"].lower()
     ]
     if not areas:
-        check.that(True, "the acting creature has no area power (skipped)")
+        check.skip("an area power offers somewhere to aim",
+                   "the acting creature has no burst or blast")
         return
     here = next(a["square"] for a in state["actors"] if a["id"] == state["current"])
     for p in areas:
@@ -898,7 +927,8 @@ def _check_aimless_area(page, check: Checks, state: dict | None,  # noqa: ANN001
     does not ask for an aim, and pressing it **acts**.
     """
     if not state or not state.get("roster"):
-        check.that(True, "nobody with a kit is acting just now (skipped)")
+        check.skip("an aimless area power acts when pressed",
+                   "nobody with a kit is acting on this board")
         return
     row = next(
         (p for p in state["roster"]
@@ -906,7 +936,8 @@ def _check_aimless_area(page, check: Checks, state: dict | None,  # noqa: ANN001
         None,
     )
     if row is None:
-        check.that(True, "the acting creature has no aimless area power (skipped)")
+        check.skip("an aimless area power acts when pressed",
+                   "the acting creature has none that asks for no aim")
         return
     check.that(
         len(row["shows"]) > 1,
@@ -982,7 +1013,8 @@ def _check_things(page, check: Checks, state: dict | None) -> None:  # noqa: ANN
     )
     trap = next((t for t in things if t["kind"] == "trap"), None)
     if trap is None:
-        check.that(True, "no trap on this board (skipped)")
+        check.skip("a trap draws on the board",
+                   "no trap is sprung or noticed on this board")
         return
     # An unsprung trap being visible at all means a character noticed it,
     # which is the whole of the information decision in #224.
@@ -1134,11 +1166,13 @@ def _check_footprint(page, check: Checks, state: dict | None) -> None:  # noqa: 
     the problem.
     """
     if not state or not state.get("roster"):
-        check.that(True, "nobody with a kit is acting just now (skipped)")
+        check.skip("a large creature draws its whole footprint",
+                   "nobody with a kit is acting on this board")
         return
     power = next((p for p in state["roster"] if p.get("footprints")), None)
     if power is None:
-        check.that(True, "the acting creature has no blast or burst (skipped)")
+        check.skip("a large creature draws its whole footprint",
+                   "the acting creature has no blast or burst to draw one from")
         return
 
     name = power["name"].lower()

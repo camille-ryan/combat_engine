@@ -47,6 +47,22 @@ it improves, red when it regresses, never a bare allowance. #372.
 * **An instrument must not skip itself quietly.** A check that runs on half
   its runs is not a check. Pin the seed, and report a skip as a skip rather
   than passing.
+
+  **And make the total reconcile, because the rule alone did not hold.**
+  `browser.py` has a `Checks.skip` whose docstring quotes this rule, and
+  **eight sites in the same file were still breaking it**: seven wrote
+  `check.that(True, "... (skipped)")` — the parenthetical admitting it while
+  `that(True, ...)` increments `passed` — and one cluster sat under a bare
+  `if spot:` with no `else`, so two checks vanished with nothing recorded.
+
+  None of that was found by a failing check. It was found by arithmetic: a run
+  printed `55 passed, 0 failed, 1 skipped` where every other run said 57, and
+  **55 + 1 ≠ 57**. So the summary now prints `(of N asked)` and
+  passed + failed + skipped has to come to the same N every run. A check that
+  disappears cannot hide behind a plausible headline.
+
+  Worth copying to any instrument with a conditional check. A count of passes
+  says nothing about how many questions were asked.
 * **Prove a new check is load-bearing** by breaking the thing it watches and
   confirming it goes red. A check that has never failed has never been shown
   to work.
