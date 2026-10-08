@@ -105,6 +105,15 @@ def main() -> int:
         )
         faults += 1
 
+    for where, read, event in _event_attrs():
+        print(
+            f"{where}: `{read}` -- a {event} has no such attribute and nothing"
+            f" attaches one, so the handler raises the first time it fires."
+            f" `audit` credits these rows: the trigger arms and the board never"
+            f" produces the state the clause is about."
+        )
+        faults += 1
+
     for where, read, what in _effect_attrs():
         hint = ("an Effect has no such field, so this raises the moment the row"
                 " runs. The duration is `when`." if what == "effect" else
@@ -1194,6 +1203,113 @@ def _predicates(when: object, _depth: int = 0) -> list[str]:
     if parts and _depth < 4:
         return [n for part in parts for n in _predicates(part, _depth + 1)]
     return [getattr(when, "__name__", "")]
+
+
+def _event_attrs_known() -> tuple[dict[str, set[str]], set[str]]:
+    """What each event carries, and what the engine bolts on afterwards.
+
+    Two sets, and the second is what makes this walk usable. **An event's
+    declared fields are not its whole surface**: `resolve.py:384` sets
+    `landed.result`, `:385` sets `landed.among`, `movement.py:175` sets
+    `moved.kind_` and `expect.py:269-270` sets both on a rehearsed attack. So
+    `Hit` has no `result` field and **18 rows read `ev.result` correctly**.
+
+    The attached set is **derived** by scanning `engine/` for an attribute
+    assignment rather than listed, and over-collects deliberately: a name this
+    picks up spuriously only makes the walk quieter, while a name it misses is
+    a false accusation against a working row. That is the opposite direction
+    from `_common_words`' guard and for the opposite reason -- there the costly
+    error is the hidden leak, here it is the wrong finding.
+    """
+    import dataclasses
+    import re as _re
+
+    from combat_engine.engine import events as _events
+
+    declared: dict[str, set[str]] = {}
+    for name in dir(_events):
+        cls = getattr(_events, name)
+        if isinstance(cls, type) and dataclasses.is_dataclass(cls):
+            declared[name] = {f.name for f in dataclasses.fields(cls)} | set(dir(cls))
+
+    attached: set[str] = set()
+    for path in (ROOT / "src/combat_engine/engine").rglob("*.py"):
+        for hit in _re.finditer(r"^\s*\w+\.(\w+)\s*=\s*[^=]", path.read_text(), _re.M):
+            attached.add(hit.group(1))
+    return declared, attached
+
+
+def _event_attrs() -> list[tuple[str, str, str]]:
+    """Reads of an attribute the watched event does not have and never gets.
+
+    `_effect_attrs` one object over, and the same failure: a name spelled
+    correctly against the wrong class. `scorecard.py` raised
+    `'Dropped' object has no attribute 'ghost'` in a level-10 aura whose whole
+    job is to react when an ally drops inside it -- so the handler could only
+    ever crash -- and **`audit.py` reported that row `1 of 1 rows fire and do
+    something`**, because the trait arms, the aura goes down, and nothing drops
+    inside it on that board.
+
+    `ghost` is declared on `TurnStart` and `TurnEnd` only and assigned in one
+    place, `turns.py:425-426`, where a **dead** creature's turn is ticked so
+    durations measured against it can end. A dead creature does not move and
+    does not drop again, so `ev.ghost` on `Moved` or `Dropped` is meaningless
+    as well as fatal: the clause comes out rather than getting a replacement.
+
+    **Nested handlers are not walked through**, which cost two false
+    accusations before it was fixed: these watchers nest, `ast.walk` descends
+    into an inner `def`, and reads belonging to an inner `SavingThrow` handler
+    were being charged to the outer `Hit` one. The sweep's number went 164 ->
+    40 -> 7 -> 5 across three corrections, every earlier figure plausible and
+    wrong, so the shape of each cut is recorded in `_event_attrs_known` and
+    here rather than re-derived.
+    """
+    declared, attached = _event_attrs_known()
+
+    def body_of(fn: ast.AST) -> list[ast.AST]:
+        """This handler's own nodes, stopping at any nested callable."""
+        out: list[ast.AST] = []
+        stack = list(fn.body)  # type: ignore[attr-defined]
+        while stack:
+            node = stack.pop()
+            if isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+            ):
+                continue
+            out.append(node)
+            stack.extend(ast.iter_child_nodes(node))
+        return out
+
+    out = []
+    for path in _asked_for():
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for fn in ast.walk(tree):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            args = fn.args.args
+            if len(args) != 1 or args[0].annotation is None:
+                continue
+            annotation = args[0].annotation
+            event = annotation.id if isinstance(annotation, ast.Name) else None
+            if event not in declared:
+                continue
+            known, bound = declared[event], args[0].arg
+            for inner in body_of(fn):
+                if (
+                    isinstance(inner, ast.Attribute)
+                    and isinstance(inner.value, ast.Name)
+                    and inner.value.id == bound
+                    and inner.attr not in known
+                    and inner.attr not in attached
+                ):
+                    rel = path.relative_to(ROOT)
+                    out.append(
+                        (f"{rel}:{inner.lineno}", f"{bound}.{inner.attr}", event)
+                    )
+    return out
 
 
 def _effect_fields() -> set[str]:

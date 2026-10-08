@@ -996,7 +996,7 @@ def m2330a0(c: Cast) -> None:
     me = c.me
 
     def moved(ev: Moved) -> None:
-        if ev.ghost or ev.actor != victim:
+        if ev.actor != victim:
             return
         c.flat(5, on=victim)
 

@@ -1066,7 +1066,7 @@ def m2248a4(c: Cast) -> None:
     me = c.me
 
     def strike_after(ev: Moved) -> None:
-        if ev.ghost or ev.actor != me or ev.kind_ != "charge":
+        if ev.actor != me or ev.kind_ != "charge":
             return
         for foe in list(c.enemies()):
             if distance_between(c.world, me, foe) <= 1:

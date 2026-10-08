@@ -1420,7 +1420,7 @@ def m3641a2(c: Cast) -> None:
         victim = c.target
 
         def retaliate(ev: AttackDeclared) -> None:
-            if ev.actor == victim:
+            if ev.attacker == victim:
                 c.basic(on=victim)
 
         c.watch(AttackDeclared, retaliate, until=When.EONT, on=c.me, once=True, label=c.ref)
@@ -2375,7 +2375,7 @@ def m5491a6(c: Cast) -> None:
         return
 
     def ended_early(ev: AttackDeclared) -> None:
-        if ev.actor == c.me:
+        if ev.attacker == c.me:
             c.world.effects.end(held, "it attacked")
 
     c.watch(AttackDeclared, ended_early, until=When.EONT, on=c.me, once=True, label=c.ref)

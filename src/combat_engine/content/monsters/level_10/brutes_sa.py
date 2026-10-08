@@ -3048,7 +3048,7 @@ def m6284a0(c: Cast) -> None:
     c.aura(3, label=f"{c.ref} aura", until=When.ENCOUNTER, on=me)
 
     def granted(ev: Dropped) -> None:
-        if ev.ghost or team(c.world, ev.actor) is not team(c.world, me):
+        if team(c.world, ev.actor) is not team(c.world, me):
             return
         if not c.in_my_aura(ev.actor, label=f"{c.ref} aura"):
             return
