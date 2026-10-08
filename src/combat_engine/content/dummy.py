@@ -91,9 +91,10 @@ from combat_engine.engine import (
     World,
     power,
 )
+from combat_engine.engine.durations import When
 from combat_engine.engine.monster_math import FITTED
 from combat_engine.engine.movement import place
-from combat_engine.engine.types import Defense
+from combat_engine.engine.types import Condition, Defense, Relation
 
 #: What a standard monster of this level has, by defence. See the module note --
 #: Will is deliberately a point lower than Fortitude and Reflex.
@@ -139,8 +140,45 @@ def dummy_rba(c: Cast) -> None:
 def spawn(
     world: World, level: int = 1, square: tuple[int, int] = (12, 5),
     *, team: Team = Team.ENEMY,
+    types: tuple[str, ...] = (),
+    conditions: tuple[Condition, ...] = (),
+    grabbed_by: int = 0,
 ) -> int:
     """Put a dummy on the board and return its entity id.
+
+    ## The three knobs, and why these three
+
+    A dummy with no state answers "does this row work against a plain
+    creature". Most of what `audit.py` cannot ask is not that. `KNOWN_SILENT`
+    is **231** hand-written excuses, and a read of a random 20 found **19
+    blaming the harness** rather than the row. Classified by the state the
+    harness would have to produce:
+
+        63  grabbed                 <- `grabbed_by=`
+        37  a condition applied     <- `conditions=`
+        13  a creature type         <- `types=`
+        11  terrain       10  a second creature
+         7  a sibling's effect   7  prone   5  dying or dead
+         3  a form        2  bloodied      73  unclassified
+
+    So these are the top three by a wide margin and `grabbed_by` alone is
+    27% of the file. **Creature type was the knob asked for first and is a
+    tenth of the problem** -- worth having, and not where to start. #437, #286.
+
+    `types=` needs no schema change, which is the pleasant surprise:
+    `query.kinds_of` reads a creature's type words off its stat block *and*
+    off any effect labelled `origin:<word>`, and the dummy has no stat block
+    at all. So a type word is an effect, the same mechanism `c.set_origin`
+    already uses -- rather than a fake row in the monster table.
+
+    `conditions=` lays one hold carrying all of them, `When.ENCOUNTER`, so a
+    row asking "a dazed creature" finds one and a row that *removes* a
+    condition has something to remove.
+
+    `grabbed_by=` is the id of the creature doing the grabbing, which is the
+    direction the excuses want: they read *"attacks or acts on a creature it
+    has grabbed"*, so it is the row's own caster that must be holding the
+    dummy, not the other way round.
 
     Assembled the way `loader.spawn` assembles a monster, including
     `scale="monster"` on the defences and the initiative: those numbers are
@@ -177,4 +215,41 @@ def spawn(
         Gear(),
     )
     place(world, eid, square)
+    _configure(world, eid, types, conditions, grabbed_by)
     return eid
+
+
+def _configure(
+    world: World,
+    eid: int,
+    types: tuple[str, ...],
+    conditions: tuple[Condition, ...],
+    grabbed_by: int,
+) -> None:
+    """Lay the requested state, after the creature is on the board.
+
+    **After `place`, not during the spawn.** A grab is a relation between two
+    entities and the grabber has to exist; a condition is an `Effect` and
+    `Effects.apply` reads the owner's components. Both are things done *to* a
+    creature that is already there, which is also how a row would do them.
+
+    One effect per concern rather than one carrying everything, so a test can
+    end a grab without ending the conditions, and so the labels say which knob
+    put each one there.
+    """
+    for word in types:
+        # `origin:<word>` is what `query.kinds_of` reads, and the label must
+        # lead with a ref for `audit._claimed` -- see that function.
+        world.effects.apply(
+            eid, eid, When.ENCOUNTER, label=f"dummy:setup origin:{word}",
+        )
+    if conditions:
+        world.effects.apply(
+            eid, eid, When.ENCOUNTER, conditions=tuple(conditions),
+            label="dummy:setup conditions",
+        )
+    if grabbed_by:
+        world.effects.apply(
+            eid, grabbed_by, When.ENCOUNTER, label="dummy:setup grab",
+            relations=[(Relation.GRABBED_BY, grabbed_by, eid)],
+        )

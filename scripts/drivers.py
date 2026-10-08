@@ -284,10 +284,79 @@ def hiding(out: Result) -> None:
     )
 
 
+def configured_dummy(out: Result) -> None:
+    """The crash test dummy can be handed the state a row needs to see.
+
+    **Why this is a driver and not a count.** `audit.py`'s `KNOWN_SILENT` is
+    231 hand-written excuses for rows that fire and do nothing, and a read of
+    a random 20 found **19 blaming the harness** rather than the row -- the
+    board could not pose the question. Classified by the state needed:
+
+        63  grabbed       37  a condition      13  a creature type
+
+    Those are `dummy.spawn`'s three new knobs, and `grabbed_by` alone is 27%
+    of the file. Creature type was the knob asked for first and is a tenth of
+    the problem, which is worth knowing before building in that order.
+
+    **Every arm has its negative control on the same board**, because the
+    failure these guard against is a knob that silently does nothing: a
+    `types=` that lays an effect `kinds_of` does not read, or a `conditions=`
+    hold that expires before anybody asks. A plain dummy spawned beside each
+    configured one is what makes the assertion mean something.
+    """
+    from combat_engine.content import dummy
+    from combat_engine.engine.query import holds_somebody, is_, kinds_of
+    from combat_engine.engine.types import Condition
+
+    world, caster, _ = _board()
+
+    plain = dummy.spawn(world, level=5, square=(2, 2))
+    out.that(not kinds_of(world, plain), "a plain dummy has no creature type")
+    out.that(not is_(world, plain, Condition.DAZED), "and no conditions")
+    out.that(not is_(world, plain, Condition.GRABBED), "and nobody is holding it")
+    out.that(not holds_somebody(world, caster), "and the caster holds nobody")
+
+    # `types=` is an effect labelled `origin:<word>`, which is what
+    # `query.kinds_of` reads off a creature with no stat block.
+    tagged = dummy.spawn(world, level=5, square=(2, 4), types=("undead", "humanoid"))
+    out.that(
+        kinds_of(world, tagged) >= {"undead", "humanoid"},
+        "types= gives a dummy its creature type words",
+        f"kinds_of says {sorted(kinds_of(world, tagged))}",
+    )
+
+    held = dummy.spawn(world, level=5, square=(2, 6),
+                       conditions=(Condition.DAZED, Condition.PRONE))
+    out.that(
+        is_(world, held, Condition.DAZED) and is_(world, held, Condition.PRONE),
+        "conditions= lays every condition asked for",
+    )
+    out.that(
+        not is_(world, held, Condition.STUNNED),
+        "and only those -- a condition not asked for is absent",
+        "something is laying conditions nobody requested",
+    )
+
+    # The direction the excuses want: *"attacks or acts on a creature it has
+    # grabbed"*, so the row's own caster must be the holder.
+    caught = dummy.spawn(world, level=5, square=(2, 8), grabbed_by=caster)
+    out.that(
+        is_(world, caught, Condition.GRABBED),
+        "grabbed_by= puts the dummy in a grab",
+        "the relation was filed and `Condition.GRABBED` does not follow from it",
+    )
+    out.that(
+        holds_somebody(world, caster),
+        "and the named creature is the one holding it",
+        "`requires=holds_somebody` would still refuse the row this is for",
+    )
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "blindness": (blindness, "a blinded creature cannot see, and can again after"),
     "hiding": (hiding, "attacking gives you away, and AFTER is where you get it back"),
+    "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 
 
