@@ -2747,6 +2747,43 @@ _CONTRACTED = re.compile(
     r"([A-Za-z][\w'\u2019-]*(?:\s+[A-Za-z][\w'\u2019-]*){0,3})"
 )
 
+#: **A deity, named where the requirement says it is one.** "You must
+#: worship *<name>* to use this holy symbol." Bounded by `to use` or the
+#: full stop rather than by a word count, which is what makes it work: the
+#: names here run to five words ("the spirits of the past") and a pattern
+#: allowing three caught two of eight. All eight resolve with the bound.
+#:
+#: A list, often -- "worship the traveler or the dark six" -- which the
+#: conjunction splitting in `_elsewhere` handles. #340.
+_WORSHIPS = re.compile(r"\bworships?\s+(.{0,60}?)(?=\s+to use\b|\.|$)", re.I | re.S)
+
+#: **What a patch of ground turns into.** "a close burst 1 centered on the
+#: creature becomes *<name>*", where the name is a hazard page.
+#:
+#: **The position is not the filter and must not be trusted as one.**
+#: `becomes` appears 486 times in the corpus and is a name in 4: the rest
+#: are "becomes invisible", "becomes a zone", "becomes bloodied". What makes
+#: this safe is the pair of tests every one of these passes through -- the
+#: phrase must *be* a page in `by_other` and must satisfy
+#: `sanitise.cited` -- so the 482 are refused by not being pages rather than
+#: by anything this pattern knows. Measured: 4 resolve, 482 do not. #340.
+#: **Bounded, because `_elsewhere.one` anchors at the end of the run.** That
+#: is right for `<name> ritual`, where the name is the last thing before the
+#: noun, and wrong here: the name comes *after* the verb, so an open-ended run
+#: trails "until the end of the encounter" into the candidate and the
+#: longest-from-the-end search never tries the name alone. Caught by driving
+#: it rather than by reading it.
+_BECOMES = re.compile(
+    r"\bbecomes\s+(.{0,46}?)(?=\s+(?:until|while|and|or|that|for)\b|[.,;]|$)",
+    re.I | re.S,
+)
+
+#: "the mark of *<name>*" -- a deity's or a dragonmark's. Six occurrences.
+_MARK_OF = re.compile(
+    r"\bmark of\s+(.{0,46}?)(?=\s+(?:until|while|and|or|that|for)\b|[.,;]|$)",
+    re.I | re.S,
+)
+
 #: The same name on the other side of the noun: "you gain the barbarian
 #: **class feature** *<name>*". Rare -- one row in the corpus asks for it
 #: -- and a name by construction in that position, exactly as a label
@@ -3209,12 +3246,19 @@ def _elsewhere(spec: str, by_other: dict[str, str], rules: set[str]) -> str:
         # position and not between two other members of a list. Separators are
         # kept and put back, so a spec reads as the compendium set it.
         run = m.group(1)
-        parts = re.split(r"(\s*,\s*|\s+and\s+)", run)
+        # **`or` as well as `and` and the comma.** "worship the traveler or
+        # the dark six" is two deities and one requirement, and without the
+        # alternation the run was one unresolvable five-word phrase. The same
+        # is true of "contracts X or Y" and of a ritual list.
+        parts = re.split(r"(\s*,\s*|\s+and\s+|\s+or\s+)", run)
         done = "".join(p if i % 2 else one(p) for i, p in enumerate(parts))
         return m.group(0).replace(run, done, 1)
 
     spec = _NAMED_RITUAL.sub(swap, spec)
-    return _CONTRACTED.sub(swap, spec)
+    spec = _CONTRACTED.sub(swap, spec)
+    spec = _WORSHIPS.sub(swap, spec)
+    spec = _MARK_OF.sub(swap, spec)
+    return _BECOMES.sub(swap, spec)
 
 
 def _label_refs(
