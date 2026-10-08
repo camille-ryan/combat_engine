@@ -172,7 +172,8 @@ they explain why `c.class_feature()` has resisted two sweeps:
   carry one.** That is a direct bridge and nothing reads it.
 * **`_NAMED` misses four shapes**, largest first: no noun at all
   ("your &lt;Title Case Name&gt;", 45 rows); a typographic apostrophe,
-  since `[\w']` does not span `’` ("preserver’s rebuke", 9 rows);
+  since `[\w']` does not span `’` (a possessive name, `cf:invoker-f1c0`,
+  9 rows);
   `feature`/`trait` without "class" (4); the name *after* the noun
   (1).
 

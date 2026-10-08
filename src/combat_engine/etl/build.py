@@ -954,7 +954,7 @@ def _weapons(
 
 #: A feature heading inside the class-features section: the page sets each
 #: in bold capitals. Lower-case bold is a *sub-option* of the feature above
-#: it ("Centered Breath" under MONASTIC TRADITION), which is why the case
+#: it (`cf:monk-f0s0` under MONASTIC TRADITION), which is why the case
 #: matters and a bare `<b>` would run them together.
 _TRAILING_ESSAY = re.compile(
     r"<br\s*/?>\s*<br\s*/?>\s*[A-Z][A-Z0-9 \u2019'&/-]{6,}\s*<br"
@@ -1084,7 +1084,7 @@ def _features(source: sqlite3.Connection, out: sqlite3.Connection,
             # introduces it and drop the card from the *parent's* spec, so
             # the two do not disagree -- and file the card as a row of its
             # own below rather than deleting it, which is what left
-            # "Warlock's Curse" unnameable.
+            # `cf:warlock-f4` unnameable.
             #
             # The same cut serves the sub-options: everything from the
             # first of them belongs to *it* and not to the heading above.
@@ -2235,7 +2235,7 @@ def _cross_reference_rest(
     # the name the monster still arrived first and still won, and every
     # caller then threw the answer away for not being character-side --
     # so a class feature the index could have named was refused
-    # instead. `Inspiring Presence` is a warlord build and also an
+    # instead. `cf:warlord-marshal-f4s2` is a warlord build and also an
     # ability of one stat block, and that is why four warlord powers
     # printed the build's name to an author.
     # **Every power row this build holds**, which is not the same set as
@@ -2263,7 +2263,7 @@ def _cross_reference_rest(
             if _rank(ref) > _rank(by_name.get(key, "")):
                 by_name[key] = ref
         # **A name can be a power for one class and a feature for
-        # another.** "Arcane Empowerment" is a sorcerer daily *and* the
+        # another.** One printed name is a sorcerer daily *and* the
         # artificer's class feature, and preferring a `p` on a tie sent
         # two artificer feats at the sorcerer's spell. Names are unique
         # within a kind, so the card's own noun decides -- keep a second
@@ -2271,7 +2271,7 @@ def _cross_reference_rest(
         #
         # **And a name can be a feature of several classes at once.**
         # Four divine classes print `Channel Divinity`, five classes
-        # print `Ritual Casting`, three print `Psionic Augmentation`.
+        # print `cf:artificer-f3`'s name, three print `cf:ardent-f2`'s.
         # Both indexes are single-valued, so whichever class was
         # imported first won, and 213 rows that are not avenger rows --
         # cleric, paladin, invoker, runepriest -- were told they use
@@ -2472,7 +2472,7 @@ def _cross_reference_rest(
                     # worse than a bad pointer.
                     # **Ask the ranked index before giving up on a name.**
                     # `by_word` is keyed on a name's first word, and that word
-                    # is cut with `[A-Za-z']+` -- so `Stone's Endurance` indexes
+                    # is cut with `[A-Za-z']+` -- so `m2987a5`'s possessive name indexes
                     # under `stone's` and `Stone\u2019s Endurance`, the same name
                     # with the curly apostrophe the pages actually set, indexes
                     # under `stone`. Different buckets for one name. The spec's
@@ -2486,9 +2486,9 @@ def _cross_reference_rest(
                     # ranks a power over a feature over a stat block. Consulting
                     # it here is what makes that ranking reach this decision.
                     # 25 names are written both ways and 10 of those split a
-                    # monster from a character: `Stone's Endurance` on a warden
-                    # feat, and `Hunter's Quarry`, `Nature's Wrath` and
-                    # `Warlock's Curse` over core class features.
+                    # monster from a character: `m2987a5`'s name on a warden
+                    # feat, and `cf:ranger-f1`, `cf:warden-f2` and
+                    # `cf:warlock-f4` over core class features.
                     ranked = by_name.get(_low(name), "")
                     if _rank(ranked) > _rank(other):
                         other = ranked
@@ -2511,8 +2511,8 @@ def _cross_reference_rest(
             # **The clause label is not a feat's construction.** It was
             # found on a feat and the pass was written where it was
             # found, and so 331 rows kept a printed name for want of
-            # being asked. A power's build riders -- `Star Pact:`,
-            # `Brutal Scoundrel:`, `Covenant of Wrath:` -- are the same
+            # being asked. A power's build riders -- `cf:warlock-f1s5:`,
+            # `cf:rogue-scoundrel-f1s1:`, `cf:invoker-f1s2:` -- are the same
             # thing exactly: one clause per build, keyed by the build's
             # printed name, in a list the card prints. So are a race's
             # traits and a zone's modes.
@@ -2520,13 +2520,13 @@ def _cross_reference_rest(
             # **Outside the `others` guard**, for the reason
             # `_racial_labels` is: that guard skips a row whose spec
             # names nothing `identifies` believes, and a build name is
-            # two ordinary words -- `star pact`, `iron soul` -- which is
+            # two ordinary words -- `cf:warlock-f1s5`, `cf:monk-f0s3` -- which is
             # precisely what `identifies` waives. The rows this serves
             # are the ones it was skipping.
             # **A racial card's labelled trait names that race's own
             # row.** Same guard as the monster one above and for the
             # same reason: a label is proof of *a* name and not of
-            # whose. The gnoll's `Pack Attack` is also the printed name
+            # whose. The gnoll's trait (`m105a3`) is also the printed name
             # of a theme power imported by `_theme_powers`, and with
             # every name in one index the label resolved onto it -- a
             # ref an author would read as settled and write a race's
@@ -2558,7 +2558,7 @@ def _cross_reference_rest(
             # **Outside the `others` guard**, for the same reason
             # `_label_refs` is: that guard skips a row whose spec names
             # nothing `identifies` believes, and a feat name is two
-            # ordinary words -- `quick draw`, `ritual caster` -- which
+            # ordinary words -- `f157`, `f159` -- which
             # is precisely what `identifies` waives.
             fixed = _named_feats(fixed, by_feat, ref)
             # **Outside the `others` guard for the third time**, same argument:
@@ -2650,7 +2650,7 @@ def _racial_labels(spec: str, by_race: dict[str, str]) -> str:
 #: **The curly apostrophe is in neither `\w` nor `[']`**, the same hole
 #: `_NAMED`'s docstring calls out and fixes there. The pages set every
 #: possessive with it, so this pattern stopped dead in the middle of
-#: `Hunter's Quarry :` and every other label whose name owns something,
+#: `cf:ranger-f1 :` and every other label whose name owns something,
 #: and those are among the most-cited names in the corpus.
 #:
 #: **And a pattern that can cross it is only half the fix.** `by_name`'s
@@ -2669,10 +2669,10 @@ _LABEL = re.compile(
 #: power's name, whatever `identifies` thinks of the phrase on its own.
 #:
 #: **The qualifier is part of the match, not part of the name.** A card
-#: writes "your *fade away* **racial** power" and "your *Combat
-#: Challenge* **class feature**, and the old pattern captured "your fade
-#: away racial" and then looked up its tails -- "racial", "away racial",
-#: "fade away racial" -- never "fade away". So 111 racial powers and 81
+#: writes "your *<name>* **racial** power" and "your *<name>* **class
+#: feature**", and the old pattern captured "your <name> racial" and then
+#: looked up its tails -- "racial", "<last word> racial", "<name> racial"
+#: -- never the name by itself. So 111 racial powers and 81
 #: class features that `by_name` could resolve were reaching authors as
 #: prose, and 134 rows across the corpus carry a marker for want of a
 #: name the database had all along. Measured before the verbs they
@@ -2702,9 +2702,8 @@ _NAMED = re.compile(
 #: The position is the whole of the argument, exactly as it is for
 #: *power* and *class feature*: a run of words immediately before the
 #: word *feat* is a feat's name. `identifies` is waived here for the
-#: reason it is waived before a colon -- "Quick Draw" and "Ritual
-#: Caster" are two ordinary words each and would never pass it in
-#: running prose.
+#: reason it is waived before a colon -- `f157` and `f159` are two
+#: ordinary words each and would never pass it in running prose.
 #:
 #: **Its own index, never `by_name`.** `_rank` prefers a `p` and then a
 #: `cf:`, so a feat sharing its name with the power it grants -- and
@@ -2750,7 +2749,7 @@ _CONTRACTED = re.compile(
 #: **A deity, named where the requirement says it is one.** "You must
 #: worship *<name>* to use this holy symbol." Bounded by `to use` or the
 #: full stop rather than by a word count, which is what makes it work: the
-#: names here run to five words ("the spirits of the past") and a pattern
+#: names here run to five words (`x1_130`) and a pattern
 #: allowing three caught two of eight. All eight resolve with the bound.
 #:
 #: A list, often -- "worship the traveler or the dark six" -- which the
@@ -2898,10 +2897,11 @@ def _named_powers(
         words = phrase.split()
         qual = quals.split()
         # **A qualifier word can also be the last word of the name**, and
-        # nothing was trying it. "the sneak attack class feature" parsed
-        # as the phrase "the sneak" plus the qualifier "attack", so the
-        # lookup saw "sneak", "the sneak" and never "sneak attack" -- the
-        # mirror image of the bug the qualifier group was added to fix.
+        # nothing was trying it. A two-word name whose **second** word is
+        # also a qualifier (`cf:rogue-scoundrel-f4`) parsed as "the <first
+        # word>" plus that qualifier, so the lookup saw the first word with
+        # and without "the" and never the whole name -- the mirror image of
+        # the bug the qualifier group was added to fix.
         # Fold them in from the right, most first, and fall back to the
         # plain reading.
         for take in range(len(qual), -1, -1):
@@ -3110,8 +3110,8 @@ def _named_feats(spec: str, by_feat: dict[str, str], own: str) -> str:
 
     See `_NAMED_FEAT` for why the position is proof and why the index is
     the feats' own. Longest match first, so a three-word name is not
-    left as a fragment of a two-word one -- `Student of the Plague`
-    rather than `the Plague`.
+    left as a fragment of a shorter one -- `f651` whole, rather than its
+    last two words.
 
     **The row's own name is not a reference to itself.** A feat page
     says "this feat" and never its own name, but a feat that prints a
@@ -3268,7 +3268,7 @@ def _label_refs(
 
     Done outside `identifies` on purpose, and this is the one place that
     is right. That test waives a two-word phrase built of two ordinary
-    words -- "sly flourish", "careful attack" -- because in running prose
+    words -- `m1126a2`, `p917` -- because in running prose
     such a phrase is usually a coincidence, and the docstring says out
     loud that the cost is missing a real name of that shape.
 
@@ -3403,7 +3403,7 @@ def _associated_refs(spec: str, by_name: dict[str, str], imported: set[str]) -> 
     The same argument as `_label_refs`, one step further along. A
     list under the heading *Associated Powers* is a list
     of power names by construction, so `identifies` is rightly waived:
-    "Sure Strike" and "Crushing Blow" are two ordinary words each and
+    `p1758` and `p622` are two ordinary words each and
     would never pass it in running prose.
 
     **A name that does not resolve is not a failure and is not dropped
@@ -3438,7 +3438,7 @@ def _associated_refs(spec: str, by_name: dict[str, str], imported: set[str]) -> 
                 if clause:
                     clauses.setdefault(head, clause)
                 continue
-            # `_low`, not `.lower()`: the list prints `Hunter's Quarry`
+            # `_low`, not `.lower()`: the list prints `cf:ranger-f1`'s name
             # with a curly apostrophe and `by_name`'s keys carry the
             # ASCII one, so the two spellings only meet if the lookup
             # side normalises as well as the key side.
@@ -3560,10 +3560,12 @@ def _common_words(
     # names as ordinary English, so `sanitise.identifies` answered False for them
     # and `leaks.py` routed them to its quiet pile. Measured before the fix:
     #
-    #     identifies('deceptive veil')        -> False   silently quiet
-    #     identifies('fang titan drake')      -> False   silently quiet
+    #     identifies(<a two-word name>)       -> False   silently quiet
+    #     identifies(<a three-word name>)     -> False   silently quiet
     #
-    # The first of those is a Glossary *Rules* entry **and** a power's name. So
+    # The two-word one is `m1062a3`; the three-word one is a creature whose
+    # name the index does not hold as a key, which is its own small finding.
+    # The first is a Glossary *Rules* entry **and** a power's name. So
     # the check that exists to keep names out of the tree was blind to exactly
     # the names most easily mistaken for vocabulary.
     #

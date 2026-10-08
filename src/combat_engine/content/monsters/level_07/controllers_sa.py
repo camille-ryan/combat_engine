@@ -3810,7 +3810,7 @@ def m5784a3(c: Cast) -> None:
 def m5784a4(c: Cast) -> None:
     """"Difficult terrain for creatures without forest walk" and "5
     damage to those without it" are both read as applying to enemies --
-    this creature's own side, being the sort "forest walk" belongs to in
+    this creature's own side, being the sort that movement mode belongs to in
     the first place, is spared. The terrain cost itself is uniform
     (`Zones.difficult_squares` reads every zone the same way); the damage
     tick is the half written to spare an ally."""

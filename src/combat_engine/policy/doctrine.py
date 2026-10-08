@@ -635,7 +635,8 @@ def running(world: Any, actor: int, ref: str) -> bool:
     """Is what this row lays already in place on this creature?
 
     **Three places to look, and the effect label alone is not enough.** A fighter's
-    aura row leaves an effect labelled `defender aura` on its caster -- nothing with
+    aura row labels its effect with the feature's own printed words rather than
+    its ref (`p12660`), so there is nothing with
     the ref in it -- and puts the ref on the *zone* instead, via
     `c.aura(1, label=c.ref)`. Checking labels alone therefore missed it entirely, and
     the row was re-cast twice a turn for seven consecutive rounds while its wizard

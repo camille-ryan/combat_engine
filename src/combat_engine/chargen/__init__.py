@@ -769,7 +769,8 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     #
     # Named for what the **rows** ask about, which is the feature option
     # rather than the build headline -- a row says `c.build("wrath")`
-    # where the page's build line says "Wrathful Invoker". The rows were
+    # where the page's build line prints a two-word title (`b:c127-2`). The
+    # rows were
     # written first and are the consumers; renaming them to match the
     # headline would be churn for nothing.
     #

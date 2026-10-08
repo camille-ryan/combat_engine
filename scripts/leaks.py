@@ -602,6 +602,10 @@ def main() -> int:
     ) + r")\b") if parts else None
     findings: list[tuple[Path, int, str, list[str]]] = []
     quiet: list[tuple[Path, int, str, list[str]]] = []
+    #: The quoted-position pass. Kept apart from `findings` so the two report
+    #: separately: a name in running prose and a name in a quoted label are
+    #: found by different tests and fixed by different edits.
+    quoted_names: list[tuple[Path, int, str, list[str]]] = []
     #: (file, word) -> the first line it was seen on.
     components: dict[tuple[Path, str], int] = {}
     deferred_seen: set[str] = set()
@@ -612,13 +616,18 @@ def main() -> int:
         if any(part in SKIP_DIRS for part in path.relative_to(ROOT).parts):
             continue
         try:
-            lines = path.read_text(errors="ignore").splitlines()
+            text = path.read_text(errors="ignore")
         except OSError:
             continue
+        lines = text.splitlines()
+        prose = _prose_lines(path, text)
         for n, line in enumerate(lines, 1):
             for name, refs in _hits(line, index):
                 where = findings if _identifies(name, refs, rules, line) else quiet
                 where.append((path.relative_to(ROOT), n, name, refs))
+            if n in prose:
+                for name, refs in _quoted(line, index, rules):
+                    quoted_names.append((path.relative_to(ROOT), n, name, refs))
             # The component pass. One alternation over every candidate rather
             # than a pass per word: there are a few thousand and 2,800 files.
             # **Recorded per word and file, not per line** -- one fixture
@@ -643,6 +652,11 @@ def main() -> int:
         # sent looking for a row called that would not find one.
         print(f"{path}:{n}: {word!r} names part of {', '.join(parts[word][:3])}")
 
+    for path, n, name, refs in quoted_names:
+        shown = printed.get(name, name)
+        print(f"{path}:{n}: quotes {shown!r}, the printed name of "
+              f"{', '.join(refs[:3])}")
+
     if quiet:
         words = sorted({name for _, _, name, _ in quiet})
         print(
@@ -663,16 +677,165 @@ def main() -> int:
             "and the entry should go: " + ", ".join(stale)
         )
 
-    if findings or components:
+    if findings or components or quoted_names:
         whole = f"{len(findings)} whole" if findings else ""
         part = f"{len(components)} partial" if components else ""
-        print(f"\n{', '.join(x for x in (whole, part) if x)} leaks. "
+        said = f"{len(quoted_names)} quoted" if quoted_names else ""
+        print(f"\n{', '.join(x for x in (whole, part, said) if x)} leaks. "
               "Names belong in localization/, not in the tree.")
+        if quoted_names:
+            print("  A quoted run is a position: `sanitise.cited`, not "
+                  "`identifies`. Rewrite the sentence -- most of these are "
+                  "comments *about* a name, where a ref says nothing. #461.")
         return 1
     if stale:
         return 1
     print("no printed names in tracked files")
     return 0
+
+
+#: A quoted or backticked run, which is a **position** rather than prose.
+#:
+#: **Single quotes are in, and they earned it.** The first version took only
+#: backticks and double quotes, which is what this codebase writes -- and the
+#: plant test exposed the gap, because `repr()` produces single quotes and the
+#: planted name went straight through. Adding the alternation found exactly
+#: **one** more real name, in a comment quoting a function call, and no false
+#: positives: a stray apostrophe pair captures a phrase like `t matter. The
+#: elf` and that is simply not an index key.
+_QUOTED = re.compile(r"`([^`\n]{3,80})`|\"([^\"\n]{3,80})\"|'([^'\n]{3,80})'")
+
+#: A backticked Python identifier is not a quoted name, and it was the largest
+#: false-positive class -- 15 of the first 74 findings. `_fold` drops `_` and
+#: `.`, which is right for prose and wrong for code: `_mobile_attack` folds to
+#: a two-word phrase that really is a printed name, and so do `prime_shot` and
+#: `Weapon.proficiency`.
+_CODEY = re.compile(r"[_.(){}\[\]=<>]|::")
+
+#: **The whole quoted run only, and the trade is stated because it is real.**
+#:
+#: A run *containing* a name is missed: `etl/feat.py` quotes a four-word phrase
+#: whose first two words are a class feature, and no whole-run lookup resolves
+#: that. Sub-spans were tried and measured:
+#:
+#:     whole run only   52 findings
+#:     max 3 words      46      max 6 words   86
+#:     max 4 words      53      max 8 words  105
+#:
+#: No knee in the curve, and reading the extra findings says why: **this
+#: codebase quotes the card's printed rules text in docstrings constantly**,
+#: and rules text contains mechanic phrases that collide with printed names.
+#: Three of the four extra findings at a four-word cap were quoted *rules
+#: text* -- a resistance line, a terrain line, a vulnerability line -- where
+#: the colliding phrase is a mechanic and the quote is correct. So sub-spans
+#: bought one real miss and three false accusations, and a word cap does not
+#: separate a label from a sentence.
+#:
+#: The other fix tried and refused: waive a phrase whose every word is a rules
+#: term rather than a dictionary word. It waives the resistance line correctly
+#: and also waives two **confirmed** printed names, which is loosening an
+#: instrument to make a number look better.
+_WHOLE_RUN_ONLY = True
+
+
+def _prose_lines(path: Path, text: str) -> set[int]:
+    """Line numbers a human wrote *about* the code, rather than code.
+
+    **Not every quoted run in a `.py` file**, and that restriction is measured:
+    about seven of the findings were rules vocabulary used as a code literal --
+    a zone's `difficult=` label, a `c.may()` prompt, an `OATH` constant -- and
+    those are mechanics that must stay waived. A string literal is the engine
+    saying a thing; a comment or a docstring is somebody explaining it, and
+    only the second is a position that names a row.
+
+    Markdown is prose throughout. Python is `tokenize` for comments plus `ast`
+    for docstrings, because those are the two a human writes in and neither can
+    be told from a literal by a regex that does not know about string nesting.
+    """
+    if path.suffix.lower() in {".md", ".txt"}:
+        return set(range(1, text.count("\n") + 2))
+    if path.suffix.lower() != ".py":
+        return set()
+
+    import ast
+    import io
+    import tokenize
+
+    out: set[int] = set()
+    try:
+        for token in tokenize.generate_tokens(io.StringIO(text).readline):
+            if token.type == tokenize.COMMENT:
+                out.add(token.start[0])
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        pass
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return out
+    for node in ast.walk(tree):
+        if not isinstance(
+            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ) or not node.body:
+            continue
+        first = node.body[0]
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            out.update(range(first.lineno, (first.end_lineno or first.lineno) + 1))
+    return out
+
+
+def _quoted(
+    line: str, index: dict[str, list[str]], rules: set[str]
+) -> list[tuple[str, list[str]]]:
+    """Printed names sitting in a quoted run, which `_identifies` waives.
+
+    **The fourth walk, and it exists because `leaks.py` was green over about
+    forty-five of them.** `identifies` waives a two-word name made of two
+    ordinary words and says why -- *"two ordinary words in a row is chance
+    [...] reporting them taught the reader to skim"* -- which is right for
+    running prose. Inside quotes it is not chance: somebody is naming a thing.
+
+    That is the distinction `sanitise.cited` is written from, and every caller
+    of it was in the ETL reading compendium HTML. This is the first one pointed
+    at our own text.
+
+    `cited` omits the waivers `identifies` applies *first* -- a class's name, a
+    base weapon's, a race's on a line that says it is one -- so they are
+    applied here. Without them a base weapon came back as a finding by
+    construction.
+    """
+    from combat_engine.etl.sanitise import (
+        cited,
+        class_names,
+        names_a_race,
+        weapon_names,
+    )
+
+    classes, weapons = class_names(), weapon_names()
+    found: list[tuple[str, list[str]]] = []
+    for match in _QUOTED.finditer(line):
+        inner = next(g for g in match.groups() if g is not None)
+        if _CODEY.search(inner):
+            continue
+        words = re.findall(r"[a-z']+", _fold(inner.lower()))
+        if not words:
+            continue
+        # The whole run, never a span inside it -- see `_WHOLE_RUN_ONLY`. A
+        # quoted sentence simply is not an index key, so no length cap is
+        # needed to exclude one.
+        phrase = " ".join(words)
+        refs = index.get(phrase)
+        if not refs or _identifies(phrase, refs, rules, line):
+            continue
+        if phrase in classes or phrase in weapons or phrase in ALLOWED:
+            continue
+        if names_a_race(phrase, line) or not cited(phrase, rules):
+            continue
+        found.append((phrase, refs))
+    return found
 
 
 def _hits(line: str, index: dict[str, list[str]]) -> list[tuple[str, list[str]]]:

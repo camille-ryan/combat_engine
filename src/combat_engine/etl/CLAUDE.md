@@ -27,8 +27,8 @@ uv run scripts/leaks.py --specs    ...or into a spec or a vocabulary column
 ```
 
 — and the second half exists because a name sat in `item.slot` for months:
-the column held 15 printed reward titles ("Divine Boon", "Grandmaster
-Training") because `_slot` echoed the printed label. The fix was an
+the column held 15 printed reward titles -- `f1087` and `x9_765` among them
+-- because `_slot` echoed the printed label. The fix was an
 **allow-list** of the words the column may hold, because writing the deny
 list would itself have been the leak.
 

@@ -414,8 +414,8 @@ def _head(head: str) -> tuple[str, list[str], int | None, str, str]:
     """The slot, the base-item restriction, the price, and the bonus lines.
 
     **The base line is the first labelled line, whatever it is called.** The
-    books head it `Weapon`, `Neck Slot`, `Wondrous Item`, `Divine Boon` and
-    28 other ways, so matching by label means keeping a list of 32 phrases
+    books head it `Weapon`, `Neck Slot`, `Wondrous Item`, a reward title
+    (`f1087`) and 28 other ways, so matching by label means keeping a list of 32 phrases
     -- one of which is also the printed name of an item, and would therefore
     be a leak the moment it was written down. Position is exact: all 1,862
     non-set heroic pages put it first.

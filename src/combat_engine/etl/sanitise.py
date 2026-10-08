@@ -368,8 +368,8 @@ def description(document: str) -> str:
 
 #: An item head line whose label is read straight into a column of `item`.
 #: The **base-item line is not here**, and cannot be: its label is a
-#: different phrase on every page -- `Weapon`, `Neck Slot`, `Divine Boon`,
-#: 32 of them in the heroic tier -- and one of those phrases is also the
+#: different phrase on every page -- `Weapon`, `Neck Slot`, a reward title
+#: (`f1087`), 32 of them in the heroic tier -- and one of those phrases is also the
 #: printed name of an item, so writing the list into tracked source would be
 #: a leak as well as a thing to keep feeding. It is found by position below.
 _ITEM_COLUMNS = ("enhancement bonus", "critical")
@@ -1126,12 +1126,14 @@ def identifies(
         # A phrase is a name worth reporting when **some word in it is not a
         # word** -- an invented one -- or when it is long enough that the
         # collision is not chance. Two ordinary words in a row is chance:
-        # "blink out", "threatening reach", "guarded area" and "poison
-        # weapon" are all published names and all things a rules sentence
-        # says by accident, and reporting them taught the reader to skim.
+        # `m1580a5`, `m147a1`, `m2065a2` and `m6514a0` are four published
+        # names of two ordinary words each, and all four are things a rules
+        # sentence says by accident -- reporting them taught the reader to
+        # skim. Refs rather than the words, because this file is tracked and
+        # the waiver described here is exactly what would let them through.
         #
         # The cost is real and worth stating: a genuine two-word name made
-        # of two ordinary words -- "writhing coils" -- is now missed. That
+        # of two ordinary words -- `m5171a2` -- is now missed. That
         # is the trade, and the ETL scrubber is the other line of defence.
         return len(words) >= 3 or any(
             w not in rules and _stem(w) not in rules for w in words

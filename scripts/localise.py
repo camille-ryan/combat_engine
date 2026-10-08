@@ -459,7 +459,7 @@ _REF_SHAPED = re.compile(r"[a-z]+\d+(?:[a-z]+\d+)*")
 #: rather than a compromise: #349 asked for "the same labelled lines in the same
 #: order" and that cannot be written, because a clause label can be
 #:
-#:   * a printed name            `Vestige Pact:`  -> `cf:warlock-f1s6:`
+#:   * a printed name            `<name>:`         -> `cf:warlock-f1s6:`
 #:   * a name plus a word        `<name> Augment:` -> `p6855 Augment:`
 #:   * a name spanning a newline  two lines collapse into one when substituted
 #:   * a monster's own ability name, which its own spec scrubs
@@ -487,8 +487,9 @@ def _printed_labels() -> frozenset[str]:
     """Every printed name that could appear as a clause label, lowered.
 
     **The discriminator is data, not shape.** A build rider's label *is* a
-    printed name -- 523 rows carry one -- and nothing about `brutal scoundrel`
-    or `aegis of assault` looks different from `hit` or `effect` until you ask
+    printed name -- 523 rows carry one -- and nothing about the label on
+    `cf:rogue-scoundrel-f1s1` or `cf:swordmage-f1s0` looks different from `hit`
+    or `effect` until you ask
     whether the localisation knows it as a name. It does, so ask.
     """
     out = set()
@@ -594,8 +595,8 @@ def rules_against_spec(db) -> tuple[int, int, list[str]]:  # noqa: ANN001
             # Three comparisons were tried and each failed on a *correct*
             # difference between the two halves:
             #
-            # * label text -- a label can BE a printed name, so `Vestige Pact:`
-            #   legitimately becomes `cf:warlock-f1s6:`. 489 rows.
+            # * label text -- a label can BE a printed name, so a pact's own
+            #   printed label legitimately becomes `cf:warlock-f1s6:`. 489 rows.
             # * line count -- a printed name can span a line break, and the ref
             #   replacing it is one token, so two lines collapse into one. 13
             #   rows, `p3839` among them.
