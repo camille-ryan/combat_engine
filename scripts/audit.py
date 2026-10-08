@@ -1088,7 +1088,7 @@ def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
             return
 
 
-def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
+def board(ref: str, seed: int, pose: bool = False) -> tuple[World, int, set[str]]:
     """A caster with the row, four creatures in reach, and the fight started.
 
     The third value is what got emitted while the encounter was starting,
@@ -1576,7 +1576,8 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     # in the tree would inherit the opening round's damage and conditions
     # and nothing could ever report SILENT again.
     world.fight_cursor = mark
-    _pose(world, caster, declared, foe_team)
+    if pose:
+        _pose(world, caster, declared, foe_team)
     return world, caster, armed
 
 
@@ -2941,12 +2942,28 @@ def _run_all(refs: list[str], jobs: int = 0) -> list[Result]:
 
 
 def _attempts(out: Result):  # noqa: ANN202
-    """`(seed, face)` pairs, giving up on a face once the row has shown itself."""
-    for face in LOADED:
-        for seed in range(1, TRIES + 1):
-            if out.fired and (out.events & DID_SOMETHING):
-                break
-            yield seed, face
+    """`(seed, face, posed)`, giving up once the row has shown itself.
+
+    **Unposed first, and every unposed attempt before any posed one.** A row
+    that can show itself on a plain board must never meet a configured dummy:
+    the first version posed inside `board()` for any row whose text mentioned
+    a grab, which fired for **428 rows to help 50** -- 371 of them already
+    working -- and two raised `KeyError: 'dummy'`. A pattern cannot tell "needs
+    this state posed" from "creates this state", and it does not have to:
+    `_attempts` already knows which rows have shown nothing, so the posed
+    retry is free of collateral by construction.
+
+    This is also what #437 says the cost shape is: *"`_attempts` already stops
+    once a row shows itself, so the full 8 seeds x 3 faces is paid only by rows
+    that never show anything"* -- 1,374 of 21,270. The posed pass is paid by
+    the same few.
+    """
+    for posed in (False, True):
+        for face in LOADED:
+            for seed in range(1, TRIES + 1):
+                if out.fired and (out.events & DID_SOMETHING):
+                    return
+                yield seed, face, posed
 
 
 @contextlib.contextmanager
@@ -3127,9 +3144,9 @@ def audit(ref: str) -> Result:
     # something on this face, the rest re-prove the same thing. Eight of them
     # meant twenty-four boards for every row, and the audit builds a hundred
     # thousand boards.
-    for seed, face in _attempts(out):
+    for seed, face, posed in _attempts(out):
         try:
-            world, caster, _armed = board(ref, seed)
+            world, caster, _armed = board(ref, seed, pose=posed)
             world.rng.loaded = face
             if not (trait or triggered):
                 # The rows this one is printed beside, **before** the
