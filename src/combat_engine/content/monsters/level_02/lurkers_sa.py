@@ -53,6 +53,7 @@ from combat_engine.engine import (
     CloseBlast,
     Condition,
     Damage,
+    DamageApplied,
     DamageType,
     Health,
     Keyword,
@@ -1314,13 +1315,32 @@ def _misted(c: Cast) -> bool:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.no_surges()",),
 )
 def m5746a0(c: Cast) -> None:
-    """The whole of this row is a creature being barred from spending healing
-    surges. `c.no_healing` refuses a heal outright, which is a different and
-    stronger sentence, and nothing stands between a creature and its own
-    surges."""
+    """"Whenever it deals damage to an enemy **granting combat advantage to
+    it**, that enemy cannot spend healing surges (save ends)."
+
+    The third trait of this shape in the tree -- `m1763a3` and `m2515a3` are
+    the other two -- and the only one with no weapon named, so it fires on
+    any damage this creature deals rather than on one row's.
+
+    `DamageApplied` and not `Hit`: the card says *deals damage*, and a hit
+    reduced to nothing deals none. Combat advantage is asked **live at the
+    blow**, because a stored answer is wrong the moment an ally steps away
+    from a flank -- `features/strikers.py` states that reasoning.
+
+    `c.no_surges` rather than `c.no_healing`, which refuses every sort of
+    healing and would take away a leader's word too. #386.
+    """
+    me = c.me
+
+    def withers(ev: DamageApplied) -> None:
+        if ev.source != me or ev.amount <= 0:
+            return
+        if has_combat_advantage(c.world, me, ev.target):
+            c.no_surges(on=ev.target, until=When.SAVE_ENDS)
+
+    c.watch(DamageApplied, withers, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(

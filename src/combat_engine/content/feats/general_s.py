@@ -88,6 +88,7 @@ from combat_engine.engine import (
     TurnEnd,
     TurnStart,
     When,
+    Window,
     World,
     about_me,
     distance,
@@ -342,15 +343,18 @@ def f3686(c: Cast) -> None:
 
 
 @power("f3688", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("SurgeSpent.healed",))
+       reach=PERSONAL, target=SELF)
 def f3688(c: Cast) -> None:
-    """`resolve.spend_surge` is the only place a surge is decremented and
-    it announces every one of them, so this fires for `c.spend_surge` --
-    a surge spent for no hit points -- as well as for the healing kind the
-    card names. `SurgeSpent` carries no way to tell them apart."""
+    """`resolve.spend_surge` is the only place a surge is decremented and it
+    announces every one of them -- including `c.spend_surge`, a surge paid
+    for no hit points at all, which this card does **not** name.
+
+    `SurgeSpent.healed` is what tells the two apart (#386): it carries what
+    the surge paid out, and is 0 for a surge spent for nothing. So the gate
+    is that it actually healed."""
 
     def spent(ev: Any) -> None:
-        if ev.actor == c.me:
+        if ev.actor == c.me and ev.healed > 0:
             c.bonus("attack", 1, on=c.me, until=When.EONT)
 
     c.watch(SurgeSpent, spent, until=When.ENCOUNTER)
@@ -1520,13 +1524,47 @@ def f3769(c: Cast) -> None:
 
 
 @power("f3770", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("SurgeSpent.power",))
+       reach=PERSONAL, target=SELF)
 def f3770(c: Cast) -> None:
-    """`c.regain_surge` and `c.spend_surge` between them would say "the
-    ally keeps its surge and I lose one" -- but only for a surge my own
-    power asked for, and `SurgeSpent` does not say which power caused it.
-    Armed on every surge anybody spends, this would pay for the enemy's
-    second wind."""
+    """"When you use a power that allows an ally to spend a healing surge to
+    regain hit points, you **can** lose a healing surge on that ally's
+    behalf, so the ally benefits from the healing but does not spend one."
+
+    Three things had to be true and `SurgeSpent` now carries all three
+    (#386): who is spending (`actor`), that **I** caused it (`source`, so
+    this never pays for an enemy's second wind), and that the surge actually
+    heals (`healed`, which is 0 for `c.spend_surge` -- a surge paid for
+    nothing, which this card does not cover).
+
+    The swap is the awkward half and is why the refusal alone will not do:
+    cancelling the ally's `SurgeSpent` also stops `Cast.surge`'s heal, which
+    returns 0 on a refusal. So the heal is paid out here instead, by the
+    amount the event was about to grant -- the ally gets the hit points and
+    keeps the surge, which is exactly what the sentence says.
+
+    A printed **can**, so `c.may`. And only while this creature has a surge
+    of its own to lose.
+    """
+    me = c.me
+
+    def instead(ev: SurgeSpent) -> None:
+        health = c.world.get(me, Health)
+        if ev.source != me or ev.actor == me or ev.healed <= 0:
+            return
+        if health is None or health.surges <= 0:
+            return
+        if not c.may("lose a surge on the ally's behalf", who=me):
+            return
+        ally = ev.actor
+        worth = ev.healed
+        ev.cancel("paid on the ally's behalf")
+        if c.spend_surge(on=me):
+            c.heal(worth, on=ally)
+
+    c.watch(
+        SurgeSpent, instead, until=When.ENCOUNTER, on=me,
+        window=Window.BEFORE, label=c.ref,
+    )
 
 
 f3771 = _grants("f3771", "f3771b")

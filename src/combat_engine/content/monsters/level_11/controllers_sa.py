@@ -142,12 +142,14 @@ from combat_engine.engine import (
     Size,
     SkillCheck,
     Square,
+    SurgeSpent,
     Target,
     TurnEnd,
     TurnStart,
     UpTo,
     Usage,
     When,
+    Window,
     World,
     footprint,
     power,
@@ -3087,18 +3089,34 @@ def m5820a5(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.NECROTIC, Keyword.PSYCHIC],
-    dropped=("c.no_surges()",),
 )
 def m5870a0(c: Cast) -> None:
     """The toll and the temporary hit points are exact; a blow of two types is
     `c.flat(dtypes=)`, which takes a list where the header cannot.
 
-    Barring healing surges is the clause with no verb: `c.no_healing` refuses
-    *all* healing, which is a different rule, and `SurgeSpent` is a plain
-    event with nothing to cancel.
+    **"Enemies can't spend healing surges in the aura" is one watcher, not a
+    refusal per creature.** `c.no_surges(on=X)` bars one named creature, and
+    the printed line is about a *region*: whoever is standing in it when they
+    try, including somebody who walked in after this row armed. So the
+    refusal is written out here and asks the two questions the card asks --
+    is the spender an enemy, and is it inside the ring -- at the moment of
+    the spend.
+
+    `SurgeSpent` is a `Decision` now, which is what makes this sayable at
+    all; before, there was nothing to cancel. Not `c.no_healing`, which
+    refuses *all* healing and is a different rule. #386.
     """
     me = c.me
     ring = c.aura(1, until=When.ENCOUNTER)
+
+    def barred(ev: SurgeSpent) -> None:
+        if ev.actor in c.enemies() and c.in_my_aura(ev.actor):
+            ev.cancel("inside the aura")
+
+    c.watch(
+        SurgeSpent, barred, until=When.ENCOUNTER, on=me,
+        window=Window.BEFORE, label=f"{c.ref} no surges",
+    )
 
     def drain(who: int) -> None:
         if who not in c.enemies():
@@ -3246,14 +3264,17 @@ _M5870_BLED = "it is first bloodied"
     attack=Attack(vs=FORT, printed=14),
     trigger=_M5870_BLED,
     on=Trigger(Bloodied, by_me, _M5870_BLED),
-    dropped=("c.no_surges()",),
 )
 def m5870a5(c: Cast) -> None:
-    """No damage line: the shove is the whole of a hit. Barring healing surges
-    is the same gap m5870a0 has -- `c.no_healing` would refuse every kind of
-    healing, which the card does not say."""
+    """No damage line: the shove is the whole of a hit.
+
+    "and the target can't spend healing surges (save ends)" is `c.no_surges`,
+    the verb `m5870a0` on this same block also waited on. Not
+    `c.no_healing`, which refuses every kind of healing and is not what
+    either card says. #386."""
     if c.strike():
         c.push(3)
+        c.no_surges(until=When.SAVE_ENDS)
 
 
 # ==========================================================================

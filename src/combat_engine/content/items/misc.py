@@ -2286,12 +2286,25 @@ def i1742p1(c: Cast) -> None:
 
 
 @power("i1807x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("SurgeSpent.source",))
+       reach=PERSONAL, target=SELF)
 def i1807x1(c: Cast) -> None:
-    """The resistance is exact. `SurgeSpent` names the creature whose
-    surge went and not who took it, so "if an enemy causes you to lose
-    one" cannot be told from spending one yourself."""
-    c.resist(5, DamageType.NECROTIC, on=c.me, until=When.ENCOUNTER)
+    """The resistance is exact, and the conditional half is sayable now.
+
+    "If an **enemy** causes you to lose a healing surge" needed to be told
+    apart from spending one yourself, and `SurgeSpent.source` is who caused
+    it (#386). A surge the creature pays on its own account has `source`
+    equal to itself, so the test is that somebody else -- and an enemy --
+    did it.
+    """
+    me = c.me
+
+    def taken(ev: SurgeSpent) -> None:
+        if ev.actor != me or ev.source in (0, me):
+            return
+        if ev.source in c.enemies():
+            c.resist(5, DamageType.NECROTIC, on=me, until=When.ENCOUNTER)
+
+    c.watch(SurgeSpent, taken, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("i2101p1", level=7, cls=ITEM, usage=ENCOUNTER, action=FREE,

@@ -22,6 +22,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
+    DEFENCES,
     EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
@@ -67,6 +68,7 @@ from combat_engine.engine import (
     Ranged,
     SavingThrow,
     SkillCheck,
+    SurgeSpent,
     Target,
     Trigger,
     TurnEnd,
@@ -129,6 +131,24 @@ def _is_social(world: World, me: int, ev: Any) -> bool:
     """One of the four skills the card names, whoever rolled it."""
     return getattr(ev, "skill", "") in (
         "bluff", "diplomacy", "intimidate", "streetwise",
+    )
+
+
+def _ally_i_enabled(world: World, me: int, ev: Any) -> bool:
+    """An ally spending a surge that **I** caused -- p16053's printed half.
+
+    `SurgeSpent.source` is who caused the spend and `actor` is who paid it
+    (#386). A creature paying on its own account is its own source, so "I
+    enabled it" is a source of me and a spender who is not me.
+    """
+    from combat_engine.engine.query import allies
+
+    spender = getattr(ev, "actor", None)
+    return (
+        getattr(ev, "source", 0) == me
+        and spender is not None
+        and spender != me
+        and spender in allies(world, me)
     )
 
 
@@ -658,18 +678,25 @@ def p14219(c: Cast) -> None:
 @power("p14220", level=10, cls="x7_875", usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.ARCANE, Keyword.POLYMORPH],
-       dropped=("c.no_surges()", "c.flat(unpreventable=)"))
+       dropped=("c.flat(unpreventable=)",))
 def p14220(c: Cast) -> None:
     """Everything hangs on one sustained hold so the whole form ends
-    together. Two clauses are short: nothing bars spending a healing surge
-    while still allowing other healing, and the self-damage is printed as
-    unpreventable, which `c.flat` cannot say."""
+    together -- **including the surge refusal**, which is what "while this
+    effect persists" means: `When.SUSTAIN`, the same clock as the AC bonus,
+    the fly speed and the fire resistance, so dropping the form restores the
+    surges along with everything else. `c.no_surges` exists now (#386) and is
+    deliberately not `c.no_healing`: the card bars *your own surges* and says
+    nothing about a cleric healing you.
+
+    One clause is still short: the self-damage is printed as unpreventable,
+    which `c.flat` cannot say."""
     held = c.effect(c.ref, until=When.SUSTAIN, on=c.me, sustain=MINOR)
     c.bonus(AC, 2, kind="power", on=c.me, until=When.SUSTAIN)
     c.mode("fly", c.speed_of(c.me), until=When.SUSTAIN, on=c.me)
     have = c.resistances(on=c.me).get(DamageType.FIRE, 0)
     c.resist(have + 5 if have else 5 + c.level, DamageType.FIRE,
              until=When.SUSTAIN, on=c.me)
+    c.no_surges(on=c.me, until=When.SUSTAIN)
     swung: list[int] = []
 
     def saw(ev: Any) -> None:
@@ -776,17 +803,41 @@ def p16052(c: Cast) -> None:
 @power("p16053", level=2, cls="x7_942", usage=DAILY, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.DIVINE],
        trigger="you grant an ally a power bonus or a healing surge",
-       todo=("EffectApplied.mods", "SurgeSpent.source"))
+       on=Trigger(SurgeSpent, _ally_i_enabled,
+                  "you enable an ally to spend a healing surge"),
+       dropped=("EffectApplied.mods",))
 def p16053(c: Cast) -> None:
-    """**Re-aimed off `EffectApplied.kind`.** `Event.kind` is a property on
-    the base class returning the event's own type name, so that marker read
-    as arrived on every event there is while the gap stayed wide open: the
-    announcement carries a source, a target, a duration and a label, and
-    nothing about the modifiers the effect holds -- so "a **power** bonus"
-    cannot be told from any other kind. `SurgeSpent` still names only who
-    spent, not who enabled it. Neither half of the printed trigger can be
-    declared, so the row cannot fire at all and the working Effect below it
-    has nothing to hang on."""
+    """The printed trigger is an **or** -- "you grant an ally a power bonus
+    **or** enable him or her to spend a healing surge" -- and the second half
+    is declarable now, so the row fires where it could not before.
+
+    `SurgeSpent.source` is who caused the spend (#386), so "an ally I
+    enabled" is a spender on my side whose surge I am the source of. A surge
+    somebody pays on their own account has itself as the source.
+
+    **Re-aimed off `EffectApplied.kind` first.** `Event.kind` is a property
+    on the base class returning the event's own type name, so that marker
+    read as *arrived* on every event there is while the gap stayed wide open.
+    That half is still open and is now the only marker: the announcement
+    carries a source, a target, a duration and a label, and nothing about the
+    modifiers the effect holds -- so "a **power** bonus" cannot be told from
+    any other kind.
+
+    So this is `dropped=` rather than `todo=`: one of the two printed
+    triggers works and the Effect below has something to hang on.
+
+    All three Effect clauses are sayable. The third -- "the ally's healing
+    surge value is reduced by one-half your level" -- is a modifier on
+    `surge_value`, which `query.surge_value` reads for every place a surge
+    is cashed, so it reaches the ally's second wind and its death-save
+    twenty as well as the next surge a leader hands it."""
+    ev = c.trigger
+    ally = getattr(ev, "actor", None)
+    for defence in DEFENCES:
+        c.bonus(defence, 2, kind="power", on=c.me, until=When.ENCOUNTER)
+    c.temp_hp(c.surge_value(), on=c.me)
+    if ally is not None:
+        c.penalty("surge_value", c.level // 2, on=ally, until=When.ENCOUNTER)
 
 
 @power("p16054", level=6, cls="x7_942", usage=ENCOUNTER, action=MINOR,

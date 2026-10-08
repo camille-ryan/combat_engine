@@ -1200,17 +1200,29 @@ def m2515a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.no_surges()",),
 )
 def m2515a3(c: Cast) -> None:
-    """Filed as a standard action and plainly a trait, and the whole of it is
-    the one clause the engine cannot say.
+    """Filed as a standard action and plainly a trait.
 
-    "Cannot spend healing surges" has no verb: `c.no_healing` stops healing
-    outright, which is wider than the card prints. Nothing else is in the
-    sentence, so this is `todo=` -- an empty body offered in play would
-    report working.
+    The same card as `m1763a3` one level down, and written the same way: a
+    **claw** attack (`m2515a0`, not the other), that **damages**, against a
+    target the creature has combat advantage over -- asked live at the blow,
+    because a stored answer goes stale the moment an ally steps away from a
+    flank.
+
+    `DamageApplied` rather than `Hit`, since a hit reduced to nothing did not
+    damage anybody. `c.no_surges` rather than `c.no_healing`, which is the
+    wider sentence. #386.
     """
+    me = c.me
+
+    def bite(ev: DamageApplied) -> None:
+        if ev.source != me or ev.detail != "m2515a0" or ev.amount <= 0:
+            return
+        if has_combat_advantage(c.world, me, ev.target):
+            c.no_surges(on=ev.target, until=When.EONT)
+
+    c.watch(DamageApplied, bite, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # ==========================================================================

@@ -2024,18 +2024,19 @@ def m2354a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=17),
     damage=Damage("4d6", 7, dtype=DamageType.NECROTIC),
-    dropped=("SurgeSpent.cancel",),
 )
 def m2354a2(c: Cast) -> None:
-    """"Can't use healing surges" is narrower than anything the engine has.
+    """"and the target can't use healing surges until the end of its next
+    turn" -- `c.no_surges`, which exists now that `SurgeSpent` is a
+    `Decision` (#386).
 
-    `c.no_healing` refuses every kind of healing, which is a different and
-    larger rule -- a leader's heal would stop landing too. A surge is
-    announced as a plain `Event` rather than a `Decision`, so there is
-    nothing to refuse, and the clause is named rather than widened.
+    Still not `c.no_healing`: that refuses every kind of healing, so a
+    leader's heal would stop landing too, which is a larger rule than this
+    card's.
     """
     if c.strike(plus=_m2354_plus(c)):
         c.hit()
+        c.no_surges(until=When.EONT)
 
 
 @power(

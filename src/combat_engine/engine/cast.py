@@ -856,7 +856,10 @@ class Cast:
         """
         from .resolve import spend_surge
 
-        return spend_surge(self.world, on if on is not None else self.me)
+        return spend_surge(
+            self.world, on if on is not None else self.me,
+            source=self.me, power=self.ref,
+        )
 
     def size_of(self, on: int | None = None):  # noqa: ANN201
         from .components import Position
@@ -2004,9 +2007,19 @@ class Cast:
 
         who = self._who(on)
         health = self.world.get(who, Health) if who else None
-        if health is None or not spend_surge(self.world, who):
+        if health is None:
             return 0
-        return heal(self.world, self.me, who, surge_value(self.world, who) + bonus)
+        worth = surge_value(self.world, who) + bonus
+        # `healed` is announced as what the surge is *about* to pay out,
+        # which is the number the printed riders on it ask about -- and the
+        # heal is capped by the pool, so this is a forecast rather than the
+        # applied total. The one row reading it ("when you spend a surge and
+        # regain hit points") wants the surge's worth, not the shortfall.
+        if not spend_surge(
+            self.world, who, source=self.me, power=self.ref, healed=worth
+        ):
+            return 0
+        return heal(self.world, self.me, who, worth)
 
     def temp_hp(self, amount: int, *, on: int | None = None) -> None:
         who = self._who(on)
@@ -4280,7 +4293,13 @@ class Cast:
         worth = surge_value(self.world, who)
         coming = min(worth, max(0, health.max_hp - max(0, health.hp)))
         self.world.bus.emit(SecondWind(actor=who, healed=coming, cost=cost))
-        spend_surge(self.world, who)
+        # The creature pays its own, so `source` is itself and there is no
+        # granter. A refusal here stops the surge and the heal below still
+        # runs -- which is wrong, and is why the return is read.
+        if not spend_surge(
+            self.world, who, source=who, power="second-wind", healed=worth
+        ):
+            return False
         self.world.heal(who, who, worth)
         # **All four defences, not just AC.** The printed rule is "+2 to
         # all defences until the start of your next turn" and this gave
@@ -5175,6 +5194,49 @@ class Cast:
         return self.watch(
             Healed, refuse, until=until, window=Window.BEFORE, on=who,
             label=f"{self.ref} cannot heal",
+        )
+
+    def no_surges(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"The target cannot spend healing surges."
+
+        **Not `c.no_healing`**, which is what 14 rows had to reach for and is
+        a strictly stronger line than any of their cards print: a creature
+        that cannot surge can still be healed by a cleric. `SurgeSpent` is a
+        `Decision` now, so this refuses the spend itself.
+
+        `resolve.spend_surge` is the only place `Health.surges` is
+        decremented, so one refusal covers all three routes a surge leaves by
+        -- the second wind, a leader's power granting one, and a monster
+        paying its own. Shaped exactly like `c.no_healing`, which refuses
+        `Healed` the same way.
+
+        **`when=` is for a card whose clause has no duration of its own**:
+        "while taking this ongoing damage, the target cannot spend healing
+        surges" (`m1882a4`). A `When` cannot say that -- the burn is a
+        save-ends effect and a second save-ends refusal would be a *second*
+        save, where the card means one condition. The gate reads the burn's
+        own lifetime instead, which is the same idiom `c.conceal(when=)` and
+        `c.threatens(when=)` use. #386.
+        """
+        from .events import SurgeSpent
+
+        who = self._who(on)
+        if who is None:
+            return None
+
+        def refuse(ev: SurgeSpent) -> None:
+            if ev.actor != who:
+                return
+            if when is not None and not when({"actor": who}):
+                return
+            ev.cancel("cannot spend healing surges")
+
+        return self.watch(
+            SurgeSpent, refuse, until=until, window=Window.BEFORE, on=who,
+            label=f"{self.ref} cannot surge",
         )
 
     def no_miss_damage(

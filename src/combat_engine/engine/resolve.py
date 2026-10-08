@@ -1089,20 +1089,50 @@ def heal(world: World, source: int, target: int, amount: int) -> int:
     return health.hp - before
 
 
-def spend_surge(world: World, eid: int) -> bool:
-    """Take one healing surge off a creature. False if it had none.
+def spend_surge(
+    world: World, eid: int, *,
+    source: int = 0, granted_by: int = 0, power: str = "", healed: int = 0,
+) -> bool:
+    """Take one healing surge off a creature. False if it had none, or if
+    something refused it.
 
     The only place a surge is decremented. Four sites were each doing it by
     hand and none announced it, so "when a creature spends a healing surge"
     was a sentence the engine could not observe.
+
+    **A proposal now, not an announcement.** `SurgeSpent` is a `Decision`, so
+    "the target cannot spend healing surges" is writable (`c.no_surges`, 14
+    rows). The decrement is passed as `emit`'s second argument rather than
+    done here, which is what `Decision`'s own docstring requires:
+
+    > *"A proposal is refused by a listener and honoured by the emitter, and
+    > four separate bugs came from an emitter that announced something and
+    > then went ahead from its own local variables."*
+
+    So a refused surge leaves the pool untouched, and the caller learns it
+    from the return rather than from the pool.
+
+    `left` is announced as what the pool *would* be and corrected by the
+    resolve, so a BEFORE listener reads the proposal and an AFTER listener
+    reads the fact. The alternative -- announcing the pre-spend value --
+    would have the two windows disagree about the same field.
     """
     health = world.get(eid, Health)
     if health is None or health.surges <= 0:
         return False
 
-    health.surges -= 1
-    world.bus.emit(SurgeSpent(actor=eid, left=health.surges))
-    return True
+    def take(ev: SurgeSpent) -> None:
+        health.surges -= 1
+        ev.left = health.surges
+
+    spent = world.bus.emit(
+        SurgeSpent(
+            actor=eid, left=health.surges - 1, source=source,
+            granted_by=granted_by, power=power, healed=healed,
+        ),
+        take,
+    )
+    return not spent.cancelled
 
 
 def temp_hp(world: World, source: int, target: int, amount: int) -> None:

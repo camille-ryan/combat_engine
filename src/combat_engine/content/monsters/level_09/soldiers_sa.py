@@ -130,6 +130,7 @@ from combat_engine.engine.events import (
     MoveStart,
     PowerUsed,
     RelationCleared,
+    SurgeSpent,
     TurnEnd,
     TurnStart,
     ZoneEntered,
@@ -2438,14 +2439,32 @@ def m5785a5(c: Cast) -> None:
 @power(
     "m5877a0", level=9, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
     keywords=[Keyword.COLD, Keyword.NECROTIC],
-    dropped=("c.no_healing(surges_only=)",),
 )
 def m5877a0(c: Cast) -> None:
-    """"Cannot spend healing surges in the aura" has no narrower verb than
-    `c.no_healing`, which bars every route back to full and would overreach
-    a line that only names the surge."""
+    """"Enemies can't spend healing surges in the aura."
+
+    The same card as `m5870a0` two levels up, and written the same way: one
+    watcher for the whole region rather than a refusal laid on each
+    creature, because the printed line is about whoever is standing in it
+    when they try -- including somebody who walked in after this armed.
+
+    **It was marked under a different spelling**, `c.no_healing(surges_only=)`,
+    where its twin said `c.no_surges()`. One need under two symbols, so
+    clearing one of them left this row invisible to `blocked.py`'s group --
+    the failure the root file's "a marker names one gap" rule is about,
+    seen from the other side. #386.
+    """
     me = c.me
     ring = c.aura(1, until=When.ENCOUNTER)
+
+    def barred(ev: SurgeSpent) -> None:
+        if ev.actor in c.enemies() and ev.actor in c.world.zones.occupants(ring):
+            ev.cancel("inside the aura")
+
+    c.watch(
+        SurgeSpent, barred, until=When.ENCOUNTER, on=me,
+        window=Window.BEFORE, label=f"{c.ref} no surges",
+    )
 
     def bite(ev: TurnEnd) -> None:
         if ev.ghost or ev.actor == me or ev.actor not in c.enemies():

@@ -335,15 +335,19 @@ def _last_blow_on(world: World, who: int) -> DamageApplied | None:
     keywords=[Keyword.FIRE, Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("1d10", 5, dtype=DamageType.FIRE),
-    dropped=("c.no_surges()",),
 )
 def m1043a0(c: Cast) -> None:
     """No range is printed, and melee 1 is what a stat block giving none
-    means. "Cannot spend healing surges" is the dropped clause: `c.no_healing`
-    stops healing outright, which is wider than the card, so the narrower
-    sentence is named rather than approximated."""
+    means.
+
+    "The target can't spend healing surges until the end of its next turn"
+    is `c.no_surges`, which exists now (#386). It is deliberately not
+    `c.no_healing`: that refuses *all* healing, so it would take away a
+    leader's word as well as this creature's own second wind, which is a
+    wider sentence than the card prints."""
     if c.strike():
         c.hit()
+        c.no_surges(until=When.EONT)
 
 
 @power(
@@ -3297,15 +3301,17 @@ _M2522_SAW_BLOOD = "an enemy within sight of the m2522 becomes bloodied"
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=WILL, printed=17),
     damage=Damage("4d8", 7, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("c.no_surges()",),
 )
 def m2522a3(c: Cast) -> None:
     """The printed recharge sentence is laid on top of the die: the number
     stays in the header, because that is what `actions.recharge` rolls and
     what the card shows, and the two only ever make the row available sooner.
 
-    Barring healing surges is the dropped clause -- `c.no_healing` stops
-    healing outright, which is wider than the card.
+    "and the target can't use healing surges until the end of its next turn"
+    is `c.no_surges`, which exists now. #386 recorded this card as one whose
+    clause "did not extract cleanly" and wanted it read -- it extracts fine:
+    the duration is the end of this creature's next turn, like the other
+    two at this level.
     """
     if c.first:
         _recharge_on(
@@ -3316,6 +3322,7 @@ def m2522a3(c: Cast) -> None:
         )
     if c.strike():
         c.hit()
+        c.no_surges(until=When.EONT)
 
 
 @power(
@@ -6170,18 +6177,22 @@ def m5815a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d10", 9),
-    dropped=("c.no_surges()",),
 )
 def m5815a3(c: Cast) -> None:
-    """Only something it already holds. Barring healing surges is the dropped
-    clause -- `c.no_healing` stops healing outright, which is wider than the
-    card."""
+    """Only something it already holds.
+
+    "and the target cannot spend healing surges until the **start** of its
+    next turn" -- `When.SONT`, not `EONT`, which is the shorter of the two
+    and is what this card prints where its neighbours print the other.
+    `c.no_surges` rather than `c.no_healing`, which stops healing outright
+    and is wider than the card. #386."""
     held = set(_holding(c.world, c.me))
     victim = _restricted_to(c, 1, lambda who: who in held)
     if victim is None:
         return
     if c.strike(on=victim):
         c.hit(on=victim)
+        c.no_surges(on=victim, until=When.SONT)
 
 
 @power(

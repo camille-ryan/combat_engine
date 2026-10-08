@@ -2020,16 +2020,26 @@ def m1882a3(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=20),
     damage=Damage("2d8", 9, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("c.no_surges()",),
 )
 def m1882a4(c: Cast) -> None:
-    """The burn is exact. "Cannot spend healing surges while taking it" is
-    narrower than `c.no_healing`, which stops every sort of healing -- using
-    that would take away a leader's word as well as the victim's own second
-    wind, so the clause waits on a verb of its own."""
-    if c.strike():
-        c.hit()
-        c.ongoing(10, DamageType.NECROTIC)
+    """"**While taking this ongoing damage**, the target cannot spend healing
+    surges" -- a clause with no duration of its own, tied to the burn's.
+
+    So the refusal is gated on the burn rather than given a `When`. A
+    save-ends `c.no_surges` would be a **second** save-ends effect and
+    therefore a second saving throw, where the card means one condition: the
+    creature stops being barred when the burn stops, on that burn's own save.
+    `Effect.ended` is what says so.
+
+    Not `c.no_healing`, which stops every sort of healing -- that would take
+    away a leader's word as well as the victim's own second wind. #386.
+    """
+    if not c.strike():
+        return
+    c.hit()
+    burn = c.ongoing(10, DamageType.NECROTIC)
+    if burn is not None:
+        c.no_surges(until=When.ENCOUNTER, when=lambda _ctx: not burn.ended)
 
 
 @power(

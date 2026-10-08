@@ -1987,12 +1987,17 @@ def m3764a1(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.NECROTIC, Keyword.RANGED],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("1d8", 4, dtype=DamageType.NECROTIC),
-    dropped=("SurgeSpent.granted_by",),
 )
 def m3764a2(c: Cast) -> None:
-    """"Allows another creature to spend a healing surge" has no granter
-    on `SurgeSpent` to read -- the half that is the target's own surge is
-    written; the half about one it hands to somebody else is dropped."""
+    """"Whenever the target spends a healing surge **or allows another
+    creature to spend** a healing surge, this creature regains 10 hit
+    points."
+
+    Both halves now. `SurgeSpent.granted_by` is the second one (#386) and is
+    a different question from `source`: the granter is whoever handed the
+    surge over, where the source is whoever caused the spend. A leader's
+    power grants; the spender spends.
+    """
     if not c.strike():
         return
     c.hit()
@@ -2002,7 +2007,7 @@ def m3764a2(c: Cast) -> None:
     me = c.me
 
     def gained(ev: SurgeSpent) -> None:
-        if ev.actor == victim:
+        if victim in (ev.actor, ev.granted_by):
             c.heal(10, on=me)
 
     c.watch(SurgeSpent, gained, until=When.ENCOUNTER, on=me, label=c.ref)

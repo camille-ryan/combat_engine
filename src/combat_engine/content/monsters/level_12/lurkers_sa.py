@@ -892,17 +892,35 @@ def m1763a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.no_surges()",),
 )
 def m1763a3(c: Cast) -> None:
-    """Filed as a standard action and plainly a trait, and the whole of it is
-    the one clause the engine cannot say.
+    """Filed as a standard action and plainly a trait.
 
-    "Cannot spend healing surges" has no verb: `c.no_healing` stops healing
-    outright, which is wider than the card prints. There is nothing else in
-    the sentence, so this is `todo=` and not `dropped=` -- a row with an
-    empty body offered in play would report working.
+    "When it uses a **claw** attack to damage a target it has combat
+    advantage against, the target cannot spend healing surges until the end
+    of its next turn." Three conditions and all three are asked:
+
+    * the claw and not the other attack -- `m1763a0` is the one, so the
+      watcher narrows on `ev.power` rather than firing on every hit;
+    * **damage**, which is why this watches `DamageApplied` and not `Hit`: a
+      hit that is reduced to nothing did not damage anything;
+    * combat advantage **at the moment of the blow**, asked live. A stored
+      answer would be wrong for the reason `features/strikers.py` gives:
+      flanking ends the instant an ally steps away.
+
+    `c.no_surges` rather than `c.no_healing`, which refuses every sort of
+    healing and would take away a leader's word as well as the victim's own
+    second wind. #386.
     """
+    me = c.me
+
+    def bite(ev: DamageApplied) -> None:
+        if ev.source != me or ev.detail != "m1763a0" or ev.amount <= 0:
+            return
+        if has_combat_advantage(c.world, me, ev.target):
+            c.no_surges(on=ev.target, until=When.EONT)
+
+    c.watch(DamageApplied, bite, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # ==========================================================================
@@ -1662,14 +1680,15 @@ def _the_double(c: Cast) -> int | None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=19),
     damage=Damage("1d10", 6),
-    dropped=("c.no_surges()",),
 )
 def m2342a0(c: Cast) -> None:
-    """The blow plays. "Cannot spend healing surges" has no verb --
-    `c.no_healing` stops healing outright, which is wider than the card
-    prints -- so the narrower sentence is named rather than approximated."""
+    """"and the target cannot spend healing surges (save ends)".
+
+    `c.no_surges` rather than `c.no_healing`: the latter refuses every sort
+    of healing, which is a wider sentence than this card prints. #386."""
     if c.strike():
         c.hit()
+        c.no_surges(until=When.SAVE_ENDS)
 
 
 @power(
@@ -3134,7 +3153,6 @@ def m5761a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("4d8", 12, kind=LIMITED, half_on_miss=True),
-    dropped=("c.no_surges()",),
 )
 def m5761a2(c: Cast) -> None:
     """Gone this turn and swinging on the next, which is two turns and one
@@ -3146,8 +3164,9 @@ def m5761a2(c: Cast) -> None:
     `SELF`, because the creature it ends up beside is not knowable when the
     targets are chosen.
 
-    "Cannot spend healing surges" has no verb -- `c.no_healing` is wider than
-    the card prints -- so the narrower sentence is named.
+    "and the target cannot spend healing surges (save ends)" is `c.no_surges`,
+    on the Hit branch only: the card's Miss line is half damage and nothing
+    else. Not `c.no_healing`, which is wider than the card prints. #386.
     """
     me = c.me
     _recharge_on(c, Bloodied, lambda ev: ev.actor == me)
@@ -3167,6 +3186,7 @@ def m5761a2(c: Cast) -> None:
         victim = prey[0]
         if c.strike(on=victim):
             c.hit(on=victim)
+            c.no_surges(on=victim, until=When.SAVE_ENDS)
         else:
             c.hit(on=victim, half=True)
 

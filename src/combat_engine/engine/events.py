@@ -520,22 +520,59 @@ class Healed(Decision):
 
 
 @dataclass
-class SurgeSpent(Event):
-    """A healing surge left somebody's pool.
+class SurgeSpent(Decision):
+    """A healing surge leaving somebody's pool, and refusable.
 
     Emitted from every place that decrements one, which is the only way a
     row reading "when a creature spends a healing surge in this aura" can
     ever see it happen -- three separate sites were decrementing silently.
 
-    **Not a `Decision` yet, and #386 is why.** Making it refusable is two
-    lines and unblocks nothing on its own: the verb that would read it,
-    `c.no_surges`, has 14 rows waiting, and two of those are empty-bodied
-    traits needing a watcher rather than a call. Landing the refusal without
-    them turns `todo.py` red for a symbol that exists and is unused.
+    **A `Decision`, so "the target cannot spend healing surges" is
+    writable.** `c.no_surges` is the verb and 14 rows waited on it.
+    `c.no_healing` was the wrong tool for every one of them: it cancels
+    *all* healing, which is a strictly stronger line than any of these
+    cards print -- a creature that cannot surge can still be healed by a
+    cleric.
+
+    `resolve.spend_surge` is the **only** place `Health.surges` is
+    decremented, confirmed by walking the tree, so one refusal reaches all
+    three routes a surge is spent by: the second wind, a leader's power
+    granting one, and a monster paying its own.
+
+    ## The four extra fields, and why they land together
+
+    Promoting this for `cancel` alone would have left five marker groups
+    naming fields it still did not carry:
+
+        SurgeSpent.source       i1807x1, p16053
+        SurgeSpent.granted_by   m3764a2
+        SurgeSpent.power        f3770
+        SurgeSpent.healed       f3688
+
+    So the event is done once rather than widened four more times. Each is
+    `0`/`""` when nothing supplied it, which is the honest answer for a
+    surge nobody granted and no row caused -- `spend_surge` is reachable
+    from a bare `c.spend_surge()` with no context to pass.
+
+    `healed` is what the surge paid out, which is **not** always a quarter
+    of maximum: `c.spend_surge` is "spend one and gain nothing", and 80-odd
+    rows use it that way. Zero there is the printed answer, not a missing
+    one. #386.
     """
 
     actor: int
     left: int
+    #: Who caused the spend, when a row did. The creature itself for a
+    #: second wind; the row's caster for "the target loses a healing surge".
+    source: int = 0
+    #: Who *gave* the surge, for "when an ally grants you a healing surge".
+    #: Different from `source`: a leader grants, the spender spends.
+    granted_by: int = 0
+    #: The row that caused it, for a rider narrowing by power.
+    power: str = ""
+    #: Hit points the surge actually restored. 0 for a surge spent for
+    #: nothing, which is most of them.
+    healed: int = 0
 
 
 @dataclass

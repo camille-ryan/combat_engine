@@ -4192,20 +4192,30 @@ _M5502_BLOODIED = "the m5502 is first bloodied"
                   half_on_miss=True),
     trigger=_M5502_BLOODIED,
     on=Trigger(Bloodied, when=about_me, text=_M5502_BLOODIED),
-    dropped=("c.no_surges()",),
 )
 def m5502a3(c: Cast) -> None:
-    """Both damage branches play, and both clocks are laid.
+    """Both damage branches play, and **both clocks are different**, which is
+    the whole reason this row is written out rather than leaning on
+    `half_on_miss`:
 
-    "Cannot spend healing surges" has no verb: `c.no_healing` stops healing
-    outright, which is a wider sentence than the card prints, so the
-    narrower one is named rather than approximated. `half_on_miss` is
-    declared data nothing reads, so the Miss branch is written out.
+        Hit:  ... and the target cannot spend healing surges (save ends).
+        Miss: Half damage, and the target cannot spend healing surges
+              until the end of this creature's next turn.
+
+    So a miss still bars the surges and bars them for less time. A single
+    `c.no_surges` after the branch would give the Miss line the Hit line's
+    duration, which is the commoner mistake here and the reason the two
+    calls sit inside their own branches.
+
+    `c.no_surges` rather than `c.no_healing`, which stops healing outright
+    and is a wider sentence than either line. #386.
     """
     if c.strike():
         c.hit()
+        c.no_surges(until=When.SAVE_ENDS)
     else:
         c.hit(half=True)
+        c.no_surges(until=When.EONT)
 
 
 # ==========================================================================

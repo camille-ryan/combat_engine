@@ -724,7 +724,6 @@ def m5075a2(c: Cast) -> None:
     target=NO_TARGET,
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("1d10", 3, dtype=DamageType.NECROTIC),
-    dropped=("c.no_surges()",),
 )
 def m5075a3(c: Cast) -> None:
     """Three powers behind one card, so the choice is offered rather than
@@ -734,10 +733,9 @@ def m5075a3(c: Cast) -> None:
     `c.strike` has no `c.target` to swing at under `NO_TARGET`.
 
     "All of her rings go dark" is a printed **can**, so it is a `c.may`. The
-    withering branch's rider -- the target cannot spend healing surges -- is the
-    one clause missing: `c.no_healing` refuses a heal outright, which is a
-    stronger sentence than the card's, and nothing stands between a creature and
-    its own surges.
+    withering branch's rider is `c.no_surges` (save ends), which exists now --
+    and is deliberately not `c.no_healing`, which refuses a heal outright and
+    is a stronger sentence than this card's. #386.
     """
     lit = _alight(c)
     dark = 5 - lit
@@ -752,6 +750,7 @@ def m5075a3(c: Cast) -> None:
         victim = c.choose(reachable, "who withers") if reachable else None
         if victim is not None and c.attack(c.world.scaling.trim(6, c.level), FORT, on=victim):
             c.hit(on=victim)
+            c.no_surges(on=victim, until=When.SAVE_ENDS)
     if lit and c.may("let the rings go dark"):
         for effect in list(c.world.effects.of(c.me)):
             if _RING in effect.label:
