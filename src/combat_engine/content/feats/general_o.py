@@ -917,11 +917,12 @@ def f3047(c: Cast) -> None:
 
 @power("f3064", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.darkvision()",))
+       )
 def f3064(c: Cast) -> None:
-    """Dropped: darkvision, which is not a sense the sight code knows.
-    The Stealth bonus is not a fight."""
+    """Darkvision out to 5 squares, so the range is passed. The Stealth
+    bonus is not a fight."""
     c.set_origin("shadow", until=When.ENCOUNTER)
+    c.darkvision(5)
 
 
 _granted("f3065", "f3065b", swap=Swap(3, Usage.ENCOUNTER))
@@ -951,7 +952,7 @@ _granted("f3066", "f3066b", swap=Swap(6, utility=True))
 @power("f3066b", level=6, cls="", usage=ENCOUNTER, action=MINOR,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.SHADOW, Keyword.TELEPORTATION],
-       dropped=("c.low_light()",))
+       dropped=("c.teleport(into=)",))
 def f3066b(c: Cast) -> None:
     """The destination must contain dim light or darkness. Lighting is
     not on the board, so the teleport is unrestricted and the
@@ -967,7 +968,7 @@ _granted("f3067", "f3067b", swap=Swap(9, Usage.DAILY))
        keywords=[Keyword.COLD, Keyword.NECROTIC, Keyword.SHADOW,
                  Keyword.WEAPON],
        attack=Attack(DEX, vs=FORT),
-       dropped=("c.low_light()",))
+       dropped=("c.conceal(from_light=)",))
 def f3067b(c: Cast) -> None:
     """The damage is one roll that is cold *and* necrotic, which is what
     `dtypes=` says: a creature resisting only one of them takes all of
@@ -1497,11 +1498,11 @@ def f3136(c: Cast) -> None:
 
 
 @power("f3137", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.darkvision()",))
+       reach=PERSONAL, target=SELF)
 def f3137(c: Cast) -> None:
-    """Darkvision out to 2 squares. Sight is line of effect plus
-    visibility, with no notion of light level behind it, so there is no
-    state for this to set."""
+    """Darkvision out to 2 squares -- a printed range, so it is passed, and
+    `query.sees_in` stops answering past it."""
+    c.darkvision(2)
 
 
 @power("f3138", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

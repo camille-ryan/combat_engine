@@ -431,9 +431,10 @@ def i899p1(c: Cast) -> None:
 
 
 @power("i2014p1", level=2, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.low_light()",))
+       reach=PERSONAL, target=SELF)
 def i2014p1(c: Cast) -> None:
-    """Low-light vision is not a sense the board keeps."""
+    """Low-light vision until the end of your next turn."""
+    c.low_light(until=When.EONT)
 
 
 @power("i2099p1", level=2, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -699,7 +700,7 @@ def i473p1(c: Cast) -> None:
 
 @power("i687p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(1, 10), target=EACH_CREATURE,
-       attack=Attack(vs=FORT, printed=6), dropped=("c.blindsight()",))
+       attack=Attack(vs=FORT, printed=6))
 def i687p1(c: Cast) -> None:
     """"The target treats all nonadjacent creatures as having concealment"
     is concealment pointed the wrong way, and what concealment *does* is a
@@ -708,11 +709,14 @@ def i687p1(c: Cast) -> None:
     it: the attack context carries `target`, so "nonadjacent" is asked of
     the board at the moment of the swing.
 
-    Re-aimed. What is left is "creatures that do not rely on sight are
-    immune", which is the blindsight gap the tree already names."""
+    "Creatures that do not rely on sight are immune" is written now:
+    `c.has_sense` asks the target whether it sees without eyes, and such a
+    creature takes nothing from a cloud of dust."""
     if not c.strike():
         return
     victim = c.target
+    if c.has_sense("blindsight", on=victim) or c.has_sense("tremorsense", on=victim):
+        return
     c.penalty(
         "attack", 2, on=victim, until=When.EONT,
         when=lambda ctx: not c.adjacent_to(victim, ctx["target"]),
@@ -776,15 +780,22 @@ def i1134p1(c: Cast) -> None:
 
 @power("i1243p1", level=4, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Ranged(2), target=ONE_CREATURE, keywords=[Keyword.POISON],
-       attack=Attack(vs=FORT, printed=7), dropped=("c.blindsight()",))
+       attack=Attack(vs=FORT, printed=7))
 def i1243p1(c: Cast) -> None:
-    """Re-aimed. The aftereffect is `_after` off the blinding, which is a
-    clocked hold rather than a save-ends one; what is still missing is the
-    sight clause, which both exempts a creature that does not see from the
-    blinding and hands it the aftereffect as the initial effect."""
+    """The aftereffect is `_after` off the blinding, which is a clocked hold
+    rather than a save-ends one.
+
+    The sight clause is written: a creature that sees without eyes is not
+    blinded, and takes the aftereffect as its initial effect instead -- which
+    is both halves of the printed exemption, not just the immunity."""
     if not c.strike():
         return
     victim = c.target
+    eyeless = (c.has_sense("blindsight", on=victim)
+               or c.has_sense("tremorsense", on=victim))
+    if eyeless:
+        c.penalty("attack", 2, on=victim, until=When.SAVE_ENDS)
+        return
     held = c.blinded(until=When.EONT)
     _after(c, held, lambda: c.penalty(
         "attack", 2, on=victim, until=When.SAVE_ENDS))
@@ -1202,7 +1213,7 @@ def i3321p1(c: Cast) -> None:
 @power("i1311p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(1), target=EACH_OTHER, keywords=[Keyword.ZONE],
        attack=Attack(vs=FORT, printed=10),
-       dropped=("c.blindsight()",))
+       dropped=("c.unseen_by(sense=)",))
 def i1311p1(c: Cast) -> None:
     """The free Stealth check is `c.hide(from_=)`, which is what being
     hidden from one enemy is. The smoke is the zone and `_obscured` is the
@@ -1314,7 +1325,7 @@ def i1412p1(c: Cast) -> None:
 
 
 @power("i1470p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.blindsight()",))
+       reach=PERSONAL, target=SELF, todo=("c.unseen_by(sense=)",))
 def i1470p1(c: Cast) -> None:
     """Blindsight is not a sense the board keeps, so there is nothing to
     be invisible to."""

@@ -3388,7 +3388,6 @@ def m6583a1(c: Cast) -> None:
     keywords=[Keyword.POISON, Keyword.ZONE],
     attack=Attack(vs=REF, printed=6),
     damage=Damage("2d6", 4, dtype=DamageType.POISON, kind=LIMITED, half_on_miss=True),
-    dropped=("c.zone(obscured=)",),
 )
 def m6583a2(c: Cast) -> None:
     """The cloud it leaves shelters it, and the shelter is hung on the zone.
@@ -3403,7 +3402,7 @@ def m6583a2(c: Cast) -> None:
     else:
         c.hit(half=True)
     if c.first:
-        cloud = c.zone(c.area(), until=When.EONT)
+        cloud = c.zone(c.area(), until=When.EONT, obscured="dim")
         for defence in (AC, FORT, REF, WILL):
             c.grants_in(cloud, defence, 2, side="team", kind="power")
         _recharge_when_bloodied(c)

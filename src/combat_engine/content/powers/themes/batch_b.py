@@ -988,12 +988,12 @@ def p14162(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=SHADOW,
-    todo=("c.blindsight()",),
-)
+    )
 def p14212(c: Cast) -> None:
-    """Blindsight is the whole row. `c.truesight` is a different sense and
-    `c.see_invisible` is narrower than either."""
-    ...
+    """Blindsight 10 is the whole row, until the end of your next turn.
+    `c.truesight` is a different sense and `c.see_invisible` is narrower
+    than either, which is why neither was used as a stand-in."""
+    c.blindsight(10, until=When.EONT)
 
 
 @power(
@@ -1067,7 +1067,7 @@ def p14214(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.SHADOW, Keyword.TELEPORTATION],
-    dropped=("c.grant_action('teleport')", "c.light()"),
+    dropped=("c.grant_action('teleport')", "c.teleport(into=)"),
 )
 def p14216(c: Cast) -> None:
     """The opening teleport is exact. The standing once-a-round 3-square

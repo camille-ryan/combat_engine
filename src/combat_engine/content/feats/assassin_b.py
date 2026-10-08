@@ -477,15 +477,16 @@ def f2821(c: Cast) -> None:
 
 
 @power("f2815", level=1, cls="", usage=AT_WILL, action=ActionType.FREE,
-       reach=PERSONAL, target=SELF, dropped=("c.darkvision()",))
+       reach=PERSONAL, target=SELF)
 def f2815(c: Cast) -> None:
     """Spends one named row to get another back: `c.expend_row` is the
     price, `c.restore_use` is the payout, and the order matters -- the
     restore only happens if the payment went through.
 
-    Dropped: darkvision is the smaller clause and sight in the dark is
-    not modelled, so it is named rather than approximated.
+    The darkvision is granted whether or not the trade goes through: the
+    card prints it as a standing "in addition", not as part of the price.
     """
+    c.darkvision()
     if c.expend_row("p9402"):
         c.restore_use("p2482", on=c.me)
 

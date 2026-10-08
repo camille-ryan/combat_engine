@@ -317,10 +317,14 @@ def p15895(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=SHADOW,
-    todo=("c.darkvision()", "c.light()"),
-)
+    )
 def p15896(c: Cast) -> None:
-    """Both clauses are senses and light, and the engine has neither."""
+    """Both clauses play now. The light is a free action the card offers
+    rather than requires, and a shed radius costs its bearer nothing, so it
+    is laid with the sense rather than held for a second action nobody would
+    decline."""
+    c.darkvision()
+    c.light(2)
 
 
 @power(

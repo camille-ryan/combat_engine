@@ -3122,7 +3122,7 @@ def m997a4(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.TELEPORTATION],
-    dropped=("query.light_level(world, square)",),
+    dropped=("c.teleport(into=)",),
 )
 def m997a5(c: Cast) -> None:
     """The blink plays; where it has to end does not. Nothing on a square

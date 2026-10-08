@@ -1285,13 +1285,11 @@ def p16469(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.tremorsense()",),
-)
+    )
 def p16472(c: Cast) -> None:
-    """Truesight is the nearest sense the engine holds. A tremorsense whose
-    radius can be spent up to is what the card wants, and with it the
-    once-a-round minor that widens it."""
-    c.truesight(5, on=c.me, until=When.ENCOUNTER)
+    """Tremorsense 5 for the encounter, which is what the card prints --
+    `c.truesight` was standing in for it and answers a different question."""
+    c.tremorsense(5, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

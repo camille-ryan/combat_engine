@@ -1225,18 +1225,16 @@ def p16057(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ELEMENTAL],
-    dropped=("c.darkvision()",),
-)
+    )
 def p16058(c: Cast) -> None:
     """Advantage on melee attacks against a bloodied enemy, and darkvision.
 
-    The advantage half is written. Both of its narrowings are per swing -- the
-    shape of the power, and whether the enemy is bloodied *at the moment the
-    attack is made* -- and `c.gains_advantage` is asked then rather than when
-    the power is used.
+    Both of the advantage's narrowings are per swing -- the shape of the
+    power, and whether the enemy is bloodied *at the moment the attack is
+    made* -- and `c.gains_advantage` is asked then rather than when the power
+    is used.
 
-    Darkvision stays dropped and is one clause: there are no light levels on a
-    board, so nothing on a square says it is dark. The row plays without it."""
+    The darkvision lasts the encounter, as the card prints it."""
     from combat_engine.engine.dsl import get
 
     def melee_at_the_bloodied(ctx: dict[str, Any]) -> bool:
@@ -1498,7 +1496,7 @@ def p16414(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.low_light()", "c.forbid(keyword=)"),
+    dropped=("c.forbid(keyword=)",),
 )
 def p16525(c: Cast) -> None:
     """`revert=None` and `c.endable` instead of `c.form(revert=MINOR)`,
@@ -1511,6 +1509,7 @@ def p16525(c: Cast) -> None:
     """
     shape = c.form(until=When.ENCOUNTER, revert=None, label=c.ref)
     c.endable(shape, MINOR, then=lambda: c.shift(1))
+    c.low_light(until=When.ENCOUNTER)
 
 
 @power(

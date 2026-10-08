@@ -1971,7 +1971,6 @@ def p16669(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.blindsight()",),
 )
 def p16670(c: Cast) -> None:
     """Both printed ways out are declared -- taking damage and swinging --
@@ -1995,3 +1994,6 @@ def p16670(c: Cast) -> None:
 
     c.watch(DamageApplied, hurt, until=When.ENCOUNTER, once=True)
     c.watch(AttackDeclared, swung, until=When.ENCOUNTER, once=True)
+    # Blindsight 1, which is the printed range -- adjacent only, so it is a
+    # much narrower sense than the skill bonuses beside it.
+    held.append(c.blindsight(1, on=c.me, until=When.ENCOUNTER))

@@ -5171,7 +5171,7 @@ def m6276a1(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC, Keyword.ZONE],
     attack=Attack(vs=WILL, printed=17),
     damage=Damage("1d10", 9, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("c.zone(obscured=)",),
+    dropped=("c.zone(obscured_for=)",),
 )
 def m6276a2(c: Cast) -> None:
     """"In the origin square of the burst" is `c.origin`, which is the square
@@ -5230,14 +5230,18 @@ def m6276a4(c: Cast) -> None:
     target=SELF,
     keywords=[Keyword.TELEPORTATION],
     requires_text="she must be in a square of dim light or darkness",
-    dropped=("query.light_level(world, square)",),
+    dropped=("c.teleport(into=)",),
 )
 def m6276a5(c: Cast) -> None:
-    """The jump is exact; both ends of the printed Requirement are the dropped
-    clause. There is no light model, so neither where she stands nor where she
-    lands can be asked -- which is also why the Requirement is not written as
-    a `requires=`: a gate that is false when the row arms refuses it once and
-    for good."""
+    """The near end of the Requirement is written: she must be standing in
+    dim light or darkness, which `c.unlit` asks at the moment the row runs.
+    Deliberately not a `requires=` gate -- that is evaluated once when the
+    row arms, and the light she stands in changes as she moves.
+
+    Still dropped: the far end, that she must *land* somewhere unlit.
+    `c.teleport` picks its own destination and takes no filter."""
+    if not c.unlit():
+        return
     c.teleport(10)
 
 
@@ -5341,7 +5345,7 @@ def m6587a1(c: Cast) -> None:
     keywords=[Keyword.COLD, Keyword.THUNDER, Keyword.ZONE],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage("3d6", 15, dtype=DamageType.COLD, kind=LIMITED, half_on_miss=True),
-    dropped=("c.zone(obscured=)",),
+    dropped=("c.zone(obscured_for=)",),
 )
 def m6587a2(c: Cast) -> None:
     """The miss line is written out, because `half_on_miss=True` is declared

@@ -285,7 +285,10 @@ def _hurts_when_it_moves(c: Cast) -> None:
     )
 
 
-def _sustained_zone(c: Cast, squares_: Any, far: int, *, until: When = When.SUSTAIN) -> int:
+def _sustained_zone(
+    c: Cast, squares_: Any, far: int, *, until: When = When.SUSTAIN,
+    obscured: str = "",
+) -> int:
     """A zone that is kept up as a minor action and walks when it is.
 
     "Sustain Minor: the zone persists, and it can be moved up to N squares"
@@ -294,7 +297,7 @@ def _sustained_zone(c: Cast, squares_: Any, far: int, *, until: When = When.SUST
     hangs it -- `c.zone` hands back the zone's id, and `Zone.effect` is the
     hold that id's duration lives on.
     """
-    zone = c.zone(squares_, until=until, sustain=MINOR)
+    zone = c.zone(squares_, until=until, sustain=MINOR, obscured=obscured)
     body = c.world.get(zone, Zone)
     if body is not None and far:
         c.on_sustain(body.effect, lambda: c.move_zone(zone, far))
@@ -1468,7 +1471,6 @@ def m4229a0(c: Cast) -> None:
     reach=AreaBurst(1, 10),
     target=EACH_CREATURE,
     attack=Attack(vs=REF, printed=6),
-    dropped=("c.blindsight()",),
 )
 def m4229a1(c: Cast) -> None:
     """Concealment is a -2 to the attack, and the creature that suffers it is
@@ -1476,10 +1478,13 @@ def m4229a1(c: Cast) -> None:
     swinging at, which is the only way round to say "it treats everything
     further off than arm's reach as concealed".
 
-    "Creatures that do not rely on sight are immune" is the dropped clause:
-    nothing in the engine has blindsight to be asked about."""
+    "Creatures that do not rely on sight are immune" is written: `c.has_sense`
+    asks the target, and a creature seeing by sound or tremor takes nothing
+    from a swarm of insects in its eyes."""
     victim = c.target
     if victim is None or not c.strike():
+        return
+    if c.has_sense("blindsight", on=victim) or c.has_sense("tremorsense", on=victim):
         return
 
     def at_a_distance(ctx: dict[str, Any]) -> bool:
@@ -1709,7 +1714,7 @@ def m4589a2(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(5),
     target=NO_TARGET,
-    todo=("c.light()",),
+    todo=("c.light(square=)",),
 )
 def m4589a3(c: Cast) -> None:
     """The whole printed Effect is light: nothing else happens. The engine has
@@ -2938,7 +2943,7 @@ def m6269a0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.RADIANT],
-    todo=("query.light_level(world, square)",),
+    todo=("query.in_sunlight(world, square)",),
 )
 def m6269a1(c: Cast) -> None:
     """The whole trait is a toll for standing in sunlight, and the engine has
@@ -3472,14 +3477,13 @@ def m6578a2(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(obscured=)",),
 )
 def m6578a3(c: Cast) -> None:
     """Lightly obscured is concealment, not blocked sight, and `c.zone` has
     only the second -- `blocks_sight=True` would stop the creature seeing out
     of its own cloud, which is a different and stronger thing. The zone itself
     stands and is sustained."""
-    _sustained_zone(c, c.area(), 0)
+    _sustained_zone(c, c.area(), 0, obscured="dim")
 
 
 # --------------------------------------------------------------------------
@@ -3527,7 +3531,6 @@ def m6585a1(c: Cast) -> None:
     keywords=[Keyword.ACID, Keyword.ZONE],
     attack=Attack(vs=REF, printed=6),
     damage=Damage("1d6", 3, dtype=DamageType.ACID, kind=LIMITED, half_on_miss=True),
-    dropped=("c.zone(obscured=)",),
 )
 def m6585a2(c: Cast) -> None:
     """"Or until it uses this power again" is one zone at a time, and the old
@@ -3536,7 +3539,7 @@ def m6585a2(c: Cast) -> None:
     if c.first:
         _replace_my_zone(c)
         area = c.area()
-        c.zone(area, until=When.ENCOUNTER)
+        c.zone(area, until=When.ENCOUNTER, obscured="dim")
         _ends_turn_in_zone(c, area, 5, DamageType.ACID)
     if c.strike():
         c.hit()

@@ -320,10 +320,10 @@ def f2276(c: Cast) -> None:
 
 
 @power("f2277", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.low_light()",))
+       reach=PERSONAL, target=SELF)
 def f2277(c: Cast) -> None:
-    """Low-light vision while shaped. Nothing models the dark by degrees,
-    which is the symbol f194 named."""
+    """Low-light vision while shaped. The Perception bonus is not a fight."""
+    c.low_light()
 
 
 @power("f2279", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

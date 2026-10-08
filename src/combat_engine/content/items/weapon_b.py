@@ -5194,11 +5194,15 @@ def i1466p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.brutal()", "c.darkvision()"),
+    dropped=("c.brutal()",),
 )
 def i1467x1(c: Cast) -> None:
-    """Rerolling the lowest damage dice is a weapon property with no verb,
-    and sight in the dark is not a sense the board keeps."""
+    """The darkvision plays -- the card grants it to whoever is wielding the
+    weapon, which is the caster of an item trait.
+
+    Still dropped: rerolling the lowest damage dice is a weapon property
+    with no verb."""
+    c.darkvision()
 
 
 @power(

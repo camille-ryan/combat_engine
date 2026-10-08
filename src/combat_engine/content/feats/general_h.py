@@ -1878,7 +1878,7 @@ _swap("f1347", "f1347b")
        target=SELF, keywords=[Keyword.STANCE],
        requires=lambda world, eid: not _is_bloodied(world, eid),
        requires_text="you must be not bloodied",
-       dropped=("c.light()",))
+       )
 def f1347b(c: Cast) -> None:
     """"Enemies take a -2 penalty to attack rolls made against you" is
     written as +2 to each of your defences, which is the same arithmetic
@@ -1890,10 +1890,10 @@ def f1347b(c: Cast) -> None:
     the four bonuses go with it -- they are separate effects clocked on
     the stance, and nothing else would come for them.
 
-    Dropped, and re-aimed off `c.end_effect`: the light it sheds lights
-    nothing the engine models.
+    The bright light it sheds within 6 squares is laid with the stance and
+    clocked on it, so it goes out when the stance does.
     """
-    holds = [c.stance(on=c.me, label=c.ref)]
+    holds = [c.stance(on=c.me, label=c.ref), c.light(6, on=c.me)]
     for defence in (AC, FORT, REF, WILL):
         holds.append(c.bonus(defence, 2, on=c.me, until=When.STANCE))
 

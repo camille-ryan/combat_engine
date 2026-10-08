@@ -2520,7 +2520,7 @@ def m6233a2(c: Cast) -> None:
     keywords=[Keyword.LIGHTNING, Keyword.THUNDER, Keyword.ZONE],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("2d6", 5, dtype=DamageType.LIGHTNING, kind=LIMITED),
-    dropped=("c.zone(obscured=)",),
+    dropped=("c.zone(obscured_for=)",),
 )
 def m6233a3(c: Cast) -> None:
     """"Lightly obscured to creatures outside it" is one-directional and

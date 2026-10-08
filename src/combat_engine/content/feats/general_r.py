@@ -128,7 +128,6 @@ BORROW = ("spec.feature_ref()",)
 ARMOUR = ("chargen.armor_proficiency()",)
 TRAINING = ("chargen.skill_training()",)
 #: Dim light and darkness are not states of a square this engine keeps.
-LOW_LIGHT = ("c.low_light()",)
 #: Changing the dice another row rolls -- up, down, or maximised.
 DICE = ("c.change_dice()",)
 
@@ -582,17 +581,29 @@ def f3568(c: Cast) -> None:
 
 
 @power("f3569", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=LOW_LIGHT)
+       reach=PERSONAL, target=SELF)
 def f3569(c: Cast) -> None:
-    """`SecondWind` says the second wind happened; the light in a square
-    is still not a thing the grid keeps, and the whole benefit is gated on
-    it."""
+    """Asked at the moment the second wind happens, not when the feat arms:
+    the creature may have moved into shadow since. `c.unlit` reads the
+    square it is standing in then."""
+    me = c.me
+
+    def extra(ev: SecondWind) -> None:
+        if getattr(ev, "actor", None) == me and c.unlit(on=me):
+            c.heal(c.surge_value(on=me) // 2, on=me)
+
+    c.watch(SecondWind, extra, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f3570", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=LOW_LIGHT)
+       reach=PERSONAL, target=SELF)
 def f3570(c: Cast) -> None:
-    """The whole benefit is gated on standing in dim light or darkness."""
+    """+1 to all defences while standing in dim light or darkness. The gate
+    is live rather than settled when the feat arms -- `c.unlit` is asked each
+    time the modifier is consulted, so walking into shadow turns it on."""
+    for which in ALL_DEFENCES:
+        c.bonus(which, 1, on=c.me, until=When.ENCOUNTER,
+                when=lambda ctx: c.unlit())
 
 
 @power("f3571", level=1, cls="", usage=AT_WILL, action=NONE,
@@ -624,10 +635,18 @@ def f3572(c: Cast) -> None:
 
 
 @power("f3573", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=LOW_LIGHT)
+       reach=PERSONAL, target=SELF,
+       todo=("c.ignores_difficult(when=)",))
 def f3573(c: Cast) -> None:
-    """`c.ignores_difficult` names a *sort* of rough ground -- ice, rubble
-    -- and the printed gate here is the light over it instead."""
+    """Ignoring difficult terrain **in unlit squares**, and the gate is the
+    whole of it: written ungated this is free movement over every kind of
+    rough going anywhere, which is a far bigger feat than the card.
+
+    The light half is readable now -- `c.unlit` answers it -- so what is left
+    is a *gated* ignore. `Movement.ignores` is a set of labels with nowhere to
+    hang a predicate, so `c.ignores_difficult` takes no `when=`. Re-pointed
+    there rather than at the light: 33 rows want that kwarg, which is the
+    largest single one in the tree."""
 
 
 @power("f3574", level=1, cls="", usage=AT_WILL, action=NONE,
@@ -2122,11 +2141,15 @@ def f3679(c: Cast) -> None:
 
 
 @power("f3680", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=LOW_LIGHT)
+       reach=PERSONAL, target=SELF, narrative=("skill:stealth",))
 def f3680(c: Cast) -> None:
-    """Both halves are gated on the light in a square, which the grid
-    does not keep. The second wind is announced now; the darkness is not
-    askable."""
+    """The Stealth half is a skill check and is why this carries
+    `narrative=`: a +5 to hide is not a thing a fight rolls.
+
+    What *is* written is the other half of the card, and it is gated on
+    standing in darkness, which `c.unlit` now answers."""
+    c.bonus("skill:stealth", 5, kind="feat", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: c.unlit())
 
 
 @power("f3682", level=1, cls="", usage=AT_WILL, action=NONE,

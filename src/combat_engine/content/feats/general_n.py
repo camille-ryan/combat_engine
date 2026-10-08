@@ -865,7 +865,12 @@ def f2108b(c: Cast) -> None:
     c.watch(Hit, follow_up, on=me, until=When.ENCOUNTER)
 
 
-_granted("f2117", "f2117b", swap=Swap(2, utility=True), dropped=("c.light()",))
+# The light is an *action* the feat grants -- "as a minor action, you can
+# shed bright light out to 4 squares until you end it as a free action" --
+# not a standing effect. `c.light` exists now and writing it here would
+# shed the light permanently, which is a different and better feat.
+_granted("f2117", "f2117b", swap=Swap(2, utility=True),
+         dropped=("c.grant_action('light')",))
 
 
 @power("f2117b", level=1, cls="", usage=ENCOUNTER, action=FREE,

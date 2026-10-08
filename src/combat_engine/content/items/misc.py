@@ -2248,7 +2248,7 @@ def i1255p1(c: Cast) -> None:
 
 @power("i1704x1", level=7, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("query.light_level(world, square)",))
+       todo=("c.conceal(from_light=)",))
 def i1704x1(c: Cast) -> None:
     """Concealment from obscured squares is not kept per square, so there
     is nothing to carry out of the square the wearer is leaving."""
@@ -2325,7 +2325,7 @@ def i2159x1(c: Cast) -> None:
 
 
 @power("i2159p1", level=7, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=("c.blindsight()",),
+       reach=PERSONAL, target=SELF, dropped=("c.unseen_by(sense=)",),
        trigger="you roll initiative",
        on=Trigger(InitiativeRolled, about_me, "you roll initiative"))
 def i2159p1(c: Cast) -> None:
@@ -2867,7 +2867,7 @@ def i3400p1(c: Cast) -> None:
 
 @power("i3455x1", level=9, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("query.light_level(world, square)", "SavingThrow.ongoing"))
+       todo=("SavingThrow.ongoing",))
 def i3455x1(c: Cast) -> None:
     """Neither half can be said. The vision half is re-aimed at the same
     missing light model `i1704x1` wants, since low-light vision is only a

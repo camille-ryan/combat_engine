@@ -443,10 +443,11 @@ def m115741a1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.tremorsense()",),
-)
+    )
 def m115741a2(c: Cast) -> None:
-    """"Cannot take actions except to end the effect" is the shape
+    """Tremorsense 10 comes with the form, as the card prints it.
+
+    "Cannot take actions except to end the effect" is the shape
     `level_09/lurkers.py` already settled: `Condition.STUNNED` would make the
     printed way out unreachable, so its own attacks are taken away instead and
     given back when the form ends."""
@@ -1443,7 +1444,7 @@ def m5302a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("query.light_level(world, square)",),
+    dropped=("query.in_sunlight(world, square)",),
 )
 def m5302a1(c: Cast) -> None:
     me = c.me
@@ -2206,13 +2207,15 @@ def m6534a4(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d6", 4),
-    dropped=("query.light_level(world, square)",),
 )
 def m6534a5(c: Cast) -> None:
-    """Whether it stands in an obscured square has nowhere to be read, so the
-    Requirement is not enforced and the row is offered at-will; the roll-gated
-    half of the duration still plays."""
+    """The printed Requirement is enforced now: it must be standing in an
+    obscured square, which `c.unlit` reads. Asked in the body rather than as
+    a `requires=` gate, because that is settled once when the row arms and
+    the light it stands in changes as it moves."""
     me = c.me
+    if not c.unlit():
+        return
     veil = c.invisible(on=me, until=When.ENCOUNTER)
     if veil is not None:
         c.bonus(

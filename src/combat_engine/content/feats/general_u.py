@@ -683,10 +683,10 @@ def f3460b(c: Cast) -> None:
 
 
 @power("f3462", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.darkvision()",))
+       reach=PERSONAL, target=SELF)
 def f3462(c: Cast) -> None:
-    """The swap is writable; the sight is not -- darkvision is not a sense
-    the engine grants."""
+    """Darkvision 5 -- a printed range, so it is passed."""
+    c.darkvision(5)
     c.bonus("skill:stealth", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
     c.forbid(SHADOW_JAUNT, on=c.me, until=When.ENCOUNTER)
     c.grant_row("f3462b", on=c.me, until=When.ENCOUNTER)
@@ -694,7 +694,7 @@ def f3462(c: Cast) -> None:
 
 @power("f3462b", level=1, cls="", usage=ENCOUNTER, action=MOVE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
-       dropped=("c.light()",))
+       dropped=("c.teleport(into=)",))
 def f3462b(c: Cast) -> None:
     """The longer hop to a dark square is dropped: how brightly a square is
     lit is not something the board records."""
@@ -800,8 +800,10 @@ def f3475(c: Cast) -> None:
 
 
 @power("f3476", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.low_light()",))
+       reach=PERSONAL, target=SELF)
 def f3476(c: Cast) -> None:
-    """A racial bonus, not a feat one -- the card prints the word."""
+    """A racial bonus, not a feat one -- the card prints the word. The
+    low-light vision is the other half and is written."""
+    c.low_light()
     c.bonus("skill:dungeoneering", 2, kind="racial", on=c.me,
             until=When.ENCOUNTER)

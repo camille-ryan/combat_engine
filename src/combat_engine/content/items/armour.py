@@ -119,6 +119,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import Bloodied, Event, ForcedMove
+from combat_engine.engine.grid import spread
 from combat_engine.engine.zones import Zone
 
 ITEM = "item"
@@ -1184,10 +1185,13 @@ def i1848x1(c: Cast) -> None:
 
 @power("i1877x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("query.light_level(world, square)",))
+       )
 def i1877x1(c: Cast) -> None:
-    """Light is not on the board, so "in darkness or dim light" is a gate
-    that would be false in every fight."""
+    """+1 to AC while in darkness or dim light, asked live."""
+    # Untyped, which is what the card prints -- `bonuses.py` caught me
+    # typing it "item" because the thing granting it is one.
+    c.bonus(AC, 1, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: c.unlit())
 
 
 @power("i1911x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -1969,7 +1973,7 @@ def i2401p1(c: Cast) -> None:
 
 
 @power("i2413x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.tremorsense()",))
+       reach=PERSONAL, target=SELF, todo=("c.unseen_by(sense=)",))
 def i2413x1(c: Cast) -> None:
     """Tremorsense is not a sense the board has."""
 
@@ -2335,9 +2339,20 @@ def i2446x1(c: Cast) -> None:
 
 
 @power("i2446p1", level=5, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.light()",))
+       reach=PERSONAL, target=SELF)
 def i2446p1(c: Cast) -> None:
-    """Dim light and darkness are not on the board."""
+    """"In bright light, your space and all adjacent squares become
+    shrouded in dim light" -- so the shroud is a zone of dim light laid on
+    the caster's own footprint and its neighbours, which conceals whoever
+    stands in it from anyone without low-light vision.
+
+    The "in bright light" condition is the card narrowing itself: shrouding
+    an already-dim square buys nothing, and `query.light_level` returning
+    anything but bright is exactly that case."""
+    if c.unlit():
+        return
+    c.zone(spread({c.here}, 1), label=c.ref, until=When.EONT,
+           obscured="dim")
 
 
 @power("i2465p1", level=5, cls=ITEM, usage=ENCOUNTER, action=REACTION,
@@ -3433,11 +3448,16 @@ def i3043p1(c: Cast) -> None:
 
 @power("i3484x1", level=10, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.blindsight()", "c.malfunction()"))
+       dropped=("c.malfunction()",))
 def i3484x1(c: Cast) -> None:
-    """Blindsight and tremorsense are not senses the board keeps, and
-    the malfunction turns on a natural 1 on an attack roll doing
-    something to the roller, which nothing watches for."""
+    """Both senses, at a range equal to the armour's enhancement -- so the
+    radius is read off the item rather than printed as a number.
+
+    Still dropped: the malfunction turns on a natural 1 on an attack roll
+    doing something to the roller, which nothing watches for."""
+    reach = c.enhancement or 1
+    c.blindsight(reach)
+    c.tremorsense(reach)
 
 
 @power("i3484p1", level=10, cls=ITEM, usage=ENCOUNTER, action=MINOR,

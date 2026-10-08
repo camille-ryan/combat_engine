@@ -415,13 +415,12 @@ def m6670a1(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.blindsight()",),
 )
 def m6670a2(c: Cast) -> None:
     """The cloud is a zone that blocks sight and blinds whatever stands in it,
-    arrived there or caught by it. The creature's own exemption is the dropped
-    clause: `blocks_sight` is a property of the squares and there is no sense
-    that reads through one, which is what `c.blindsight` would be.
+    arrived there or caught by it. A creature that sees without eyes walks
+    through untroubled -- `c.has_sense` is the exemption, asked of whoever is
+    caught rather than of the squares.
 
     A Close burst 1 is three squares across, so a Medium creature inside it is
     "entirely in the cloud" by standing there at all.
@@ -429,12 +428,16 @@ def m6670a2(c: Cast) -> None:
     me = c.me
     fog = c.area()
     cloud = c.zone(fog, blocks_sight=True, until=When.EONT, label=f"{c.ref} cloud")
+    def eyeless(who: int) -> bool:
+        return (c.has_sense("blindsight", on=who)
+                or c.has_sense("tremorsense", on=who))
+
     for caught in c.in_squares(fog):
-        if caught != me:
+        if caught != me and not eyeless(caught):
             c.blinded(until=When.EONT, on=caught)
 
     def walked_in(ev: ZoneEntered) -> None:
-        if ev.zone == cloud and ev.actor != me:
+        if ev.zone == cloud and ev.actor != me and not eyeless(ev.actor):
             c.blinded(until=When.EONT, on=ev.actor)
 
     c.watch(ZoneEntered, walked_in, until=When.EONT, on=me, label=f"{c.ref} cloud")

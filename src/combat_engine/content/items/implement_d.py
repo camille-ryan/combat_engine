@@ -2320,11 +2320,11 @@ def i3179p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.darkvision()",),
 )
 def i3188x1(c: Cast) -> None:
-    """`c.see_invisible` and `c.truesight` are different senses; seeing in
-    the dark has no verb, and the rest of the block is skill bonuses."""
+    """`c.see_invisible` and `c.truesight` are different senses. The rest of
+    the block is skill bonuses, which no fight reads."""
+    c.darkvision()
 
 
 @power(

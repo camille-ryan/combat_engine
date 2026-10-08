@@ -607,20 +607,27 @@ def i912p1(c: Cast) -> None:
 
 @power("i1424x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("query.light_level(world, square)",))
+       narrative=("skill:stealth",))
 def i1424x1(c: Cast) -> None:
-    """Light is not on the board, so "in dim light or darkness" is a gate
-    that would be false in every fight."""
+    """A Stealth bonus, gated on standing in dim light or darkness --
+    `c.unlit` answers the gate now, and the bonus is laid behind it rather
+    than flat.
+
+    `narrative=` because the clause is a skill check: no roll in a fight is
+    a Stealth check, so the number is laid and never consulted. The gate is
+    written all the same, so the row is honest about when it would apply."""
+    c.bonus("skill:stealth", c.enhancement or 1, kind="item", on=c.me,
+            until=When.ENCOUNTER, when=lambda ctx: c.unlit())
 
 
 @power("i1424p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=CloseBurst(10), target=SELF, keywords=[Keyword.ZONE],
-       todo=("c.light()",))
+       )
 def i1424p1(c: Cast) -> None:
-    """A zone whose whole content is the light level in it, and light is
-    not a thing the board has -- neither making it nor reading it. Laid as
-    a zone with no rider it would be a shape nothing consults. Named for
-    the verb the other eight rows of this shape want."""
+    """A zone whose whole content is the light level in it, which
+    `c.zone(obscured=)` now carries. Dim light conceals whoever stands in
+    the zone from anyone without low-light vision."""
+    c.zone(c.area(), label=c.ref, until=When.ENCOUNTER, obscured="dim")
 
 
 @power("i1904x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -1228,12 +1235,16 @@ def i3567x1(c: Cast) -> None:
 
 
 @power("i3567p1", level=7, cls=ITEM, usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(10), target=SELF, dropped=("c.blindsight()",))
+       reach=CloseBurst(10), target=SELF)
 def i3567p1(c: Cast) -> None:
-    """Truesight is the half that exists: nothing stays unseen inside it.
-    Seeing through a closed door is line of effect, which truesight does
-    not waive."""
+    """Knowing where everything is, out to 10 squares, regardless of light
+    or obstacle -- which is blindsight 10 plus truesight 10: the first makes
+    the light irrelevant, the second leaves nothing unseen.
+
+    Seeing through a closed door is line of effect, which neither waives,
+    and is the one part of the sentence still approximated."""
     c.truesight(10, on=c.me, until=When.EOT)
+    c.blindsight(10, on=c.me, until=When.EOT)
 
 
 @power("i505p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1635,13 +1646,15 @@ def i3560x1(c: Cast) -> None:
 
 @power("i3560p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=PERSONAL, target=SELF, keywords=[Keyword.POLYMORPH],
-       dropped=("c.tremorsense()", "c.restrict_action()"))
+       dropped=("c.restrict_action()",))
 def i3560p1(c: Cast) -> None:
     """`c.form` holds the shape and gives back the minor action that ends
-    it. What the shape forbids -- everything but a second wind -- and its
-    tremorsense are the two clauses with no verb."""
+    it. The tremorsense is written now, at the printed 10.
+
+    Still dropped: what the shape forbids -- everything but a second wind."""
     c.form(until=When.ENCOUNTER, revert=MINOR, label="statue")
     c.resist(20, on=c.me, until=When.ENCOUNTER)
+    c.tremorsense(10, until=When.ENCOUNTER)
 
     def hardening(ev: TurnStart) -> None:
         if getattr(ev, "actor", None) == c.me:

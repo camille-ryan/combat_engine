@@ -349,7 +349,7 @@ def m3134a4(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.light()",),
+    todo=("c.douse_lights()",),
 )
 def m3134a5(c: Cast) -> None:
     """Extinguishing every light source in the encounter has no verb at all
@@ -2080,13 +2080,12 @@ def m5836a1(c: Cast) -> None:
     reach=AreaBurst(1, 5),
     target=EACH_CREATURE,
     attack=Attack(vs=FORT, printed=8),
-    dropped=("c.zone(obscured=)",),
 )
 def m5836a2(c: Cast) -> None:
     if c.strike():
         c.condition(Condition.DAZED, until=When.SAVE_ENDS, ongoing=(10, DamageType.UNTYPED))
     if c.first:
-        c.zone(c.area(), until=When.ENCOUNTER, label=c.ref)
+        c.zone(c.area(), until=When.ENCOUNTER, label=c.ref, obscured="dim")
 
 
 @power(

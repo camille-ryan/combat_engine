@@ -1113,14 +1113,17 @@ def i1515p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE],
-    dropped=("c.light()",),
 )
 def i1533p1(c: Cast) -> None:
     """`c.deals` is an override and covers every attack rather than only
     the melee and close ones -- the damage context does not carry the
     weapon, so it cannot be narrowed. Re-taking this is harmless: the same
-    override lands on top of itself."""
+    override lands on top of itself.
+
+    The bright light it sheds out to 5 squares is written and carried, so it
+    moves with the wielder."""
     c.deals(DamageType.FIRE, on=c.me, until=When.ENCOUNTER, implement=True)
+    c.light(5, on=c.me, until=When.ENCOUNTER)
 
 
 @power(
@@ -2196,7 +2199,7 @@ def i2610p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.RADIANT],
-    todo=("c.light()",),
+    todo=("query.lit_by(world, ref)",),
 )
 def i2612p1(c: Cast) -> None:
     """Re-aimed. `p1225` is printed and declared, so the ref is no longer
@@ -3326,14 +3329,15 @@ def i630p1(c: Cast) -> None:
         both(by_me, either(by_keyword(Keyword.FIRE), by_keyword(Keyword.RADIANT))),
         "you hit with fire or radiant",
     ),
-    dropped=("c.light()",),
 )
 def i630p2(c: Cast) -> None:
-    """Combat advantage is the half with teeth; the lit radius is the
-    dropped clause, as nothing on the board is lit or unlit."""
+    """Combat advantage is the half with teeth. The light is carried by the
+    creature that was hit, out to 20 squares, and is clocked on the same save
+    -- a target that shakes the effect stops glowing with it."""
     foe = _struck(c)
     if foe is not None:
         c.grants_advantage(on=foe, until=When.SAVE_ENDS, to="team")
+        c.light(20, on=foe, until=When.SAVE_ENDS)
 
 
 @power(

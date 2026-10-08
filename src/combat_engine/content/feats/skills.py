@@ -212,20 +212,16 @@ def f1072(c: Cast) -> None:
 
 
 @power("f194", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.low_light()",))
+       reach=PERSONAL, target=SELF)
 def f194(c: Cast) -> None:
-    """The Perception half is narrative -- a +1 that no roll in a fight
-    is close enough for to matter is still a number, and it is laid
-    nowhere because the card's weight is elsewhere. Low-light vision
-    is the benefit, it decides what a creature can see and therefore
-    what it can attack, and there is no verb for it: `c.see_invisible`
-    and `c.truesight` exist, this does not.
+    """Low-light vision is the benefit: it decides what a creature can see
+    and therefore what it can attack. The Perception half is a +1 that no
+    roll in a fight is close enough for to matter, and is laid nowhere.
 
-    **`todo`, not `dropped`.** Nothing in the body lands, so a row
-    marked `dropped` would be offered in play and do nothing at all,
-    which is the shape this project exists to catch. Fourteen rows want
-    the same symbol.
-    """
+    This was `todo=` rather than `dropped=` precisely because nothing in the
+    body landed -- a `dropped=` row would have been offered in play and done
+    nothing. It lands now."""
+    c.low_light()
 
 
 @power("f1864", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

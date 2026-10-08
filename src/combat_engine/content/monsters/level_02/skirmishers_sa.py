@@ -3045,13 +3045,13 @@ def m6608a3(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(obscured=)",),
 )
 def m6608a4(c: Cast) -> None:
     """Heavily obscured is more than sight-blocking terrain -- it is also
     total concealment for anything inside it -- and `c.zone` has one flag,
     which buys the half that stops a line of sight."""
-    c.zone(spread({c.here}, 2), blocks_sight=True, until=When.EONT, label=c.ref)
+    c.zone(spread({c.here}, 2), blocks_sight=True, until=When.EONT,
+           label=c.ref, obscured="dark")
 
 
 # --------------------------------------------------------------------------

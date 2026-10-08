@@ -458,7 +458,7 @@ def m1435a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("query.light_level(world, square)",),
+    todo=("query.in_sunlight(world, square)",),
 )
 def m1435a5(c: Cast) -> None:
     """Both halves of this are about how bright the creature's square is, and

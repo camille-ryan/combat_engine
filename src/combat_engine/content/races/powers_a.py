@@ -807,12 +807,10 @@ def p16548(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.SHADOW, Keyword.ZONE],
-    dropped=("c.light()",),
-)
+    )
 def p14017(c: Cast) -> None:
-    """The zone is real; what it is a zone *of* is not -- nothing sets a
-    light level, so the dimness is the dropped half."""
-    c.zone(c.area(), until=When.EONT)
+    """A zone of dim light, which is the whole of it."""
+    c.zone(c.area(), until=When.EONT, obscured="dim")
 
 
 @power(
@@ -885,12 +883,13 @@ def p16476(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH, Keyword.SHADOW],
-    dropped=("c.darkvision()",),
-)
+    )
 def p14022(c: Cast) -> None:
     """A polymorph, not a stance: you are in the form and may step out of
-    it for a minor, which is what `revert` means."""
+    it for a minor, which is what `revert` means. The darkvision belongs to
+    the form and ends with it."""
     c.form(until=When.ENCOUNTER, revert=MINOR, label=c.ref)
+    c.darkvision(until=When.ENCOUNTER)
     c.cannot_attack(on=c.me, until=When.ENCOUNTER)
     c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
     for skill in ("athletics", "perception", "stealth"):
@@ -1254,11 +1253,12 @@ def p2478(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.blindsight()",),
-)
+    )
 def p16551(c: Cast) -> None:
-    """Blindsight is not truesight -- one ignores concealment within its
-    radius, the other pierces invisibility -- and only the second exists."""
+    """Blindsight 10, until the end of your next turn. Not truesight: one
+    ignores concealment within its radius, the other pierces invisibility,
+    and the row wants the first."""
+    c.blindsight(10, until=When.EONT)
 
 
 # -- deliberately inert: the printed effect is not a combat effect ------------

@@ -616,9 +616,12 @@ def i3546x1(c: Cast) -> None:
 
 
 @power("i841p1", level=6, cls=ITEM, usage=ENCOUNTER, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.darkvision()",))
+       reach=PERSONAL, target=SELF)
 def i841p1(c: Cast) -> None:
-    """Darkvision is not a sense the board keeps."""
+    """Spent as a minor action, so the sense lasts the encounter rather than
+    standing permanently -- which is the difference between this and the
+    racial grants."""
+    c.darkvision()
 
 
 @power("i976x1", level=6, cls=ITEM, action=ActionType.NONE,
@@ -805,16 +808,21 @@ def i1371p1(c: Cast) -> None:
 
 @power("i1816p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(1), target=ONE_CREATURE,
-       dropped=("c.darkvision()",))
+       )
 def i1816p1(c: Cast) -> None:
     """"Intelligence, Wisdom, or Charisma" is a choice with no downside,
-    so it is the best of the three and needs no verb of its own.
-    Borrowing the target's sight while it is blinded is the half that has
-    none. The sustain repeats the attack, which `c.on_sustain` runs with
-    no target of its own."""
+    so it is the best of the three and needs no verb of its own. The
+    sustain repeats the attack, which `c.on_sustain` runs with no target of
+    its own.
+
+    The borrowed sight is granted **only on a hit**, and for as long as the
+    blindness it is borrowed from: the card hangs it on "while the target is
+    blinded". Its own half -- not suffering the negatives of blindness -- is
+    already true of the caster, who is not the one blinded."""
     best = max(c.int_mod, c.wis_mod, c.cha_mod)
     if c.attack(best + c.level // 2 + 2, WILL).hit:
         c.blinded(until=When.EONT)
+        c.darkvision(on=c.me, until=When.EONT)
 
 
 @power("i2372x1", level=8, cls=ITEM, usage=AT_WILL, action=ActionType.NONE,
@@ -835,9 +843,10 @@ def i2372x1(c: Cast) -> None:
 
 
 @power("i2668x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.low_light()",))
+       reach=PERSONAL, target=SELF)
 def i2668x1(c: Cast) -> None:
-    """Light levels are not modelled, so neither is seeing in them."""
+    """Low-light vision, standing while the item is worn."""
+    c.low_light()
 
 
 @power("i3470x1", level=8, cls=ITEM, action=ActionType.NONE,
@@ -1129,9 +1138,9 @@ def i831x1(c: Cast) -> None:
 
 @power("i887x1", level=10, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.darkvision()",))
+       )
 def i887x1(c: Cast) -> None:
-    """Three clauses, each gated on a nearby ally's race.
+    """Three clauses, each gated on a nearby ally's race, and all three play.
 
     **The ref'd one now plays.** A race's traits are `rt:<race>-<what>`
     and land in the character's known rows, which is the only place a

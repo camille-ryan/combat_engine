@@ -1033,10 +1033,11 @@ def p14323(c: Cast) -> None:
 @power(
     "p14324", level=6, cls=X7_886, usage=ENCOUNTER, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE, Keyword.SHADOW],
-    todo=("c.darkvision()",),
-)
+    )
 def p14324(c: Cast) -> None:
-    """The whole printed Effect is darkvision, and nothing grants it."""
+    """The whole printed Effect is darkvision, until the end of your next
+    turn."""
+    c.darkvision(until=When.EONT)
 
 
 @power(
@@ -1459,7 +1460,7 @@ def p16432(c: Cast) -> None:
 @power(
     "p16530", level=0, cls=X7_993, usage=ENCOUNTER, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.POLYMORPH],
-    dropped=("spec.inline_block()", "c.low_light()", "c.forbid(keyword=)"),
+    dropped=("spec.inline_block()", "c.forbid(keyword=)"),
 )
 def p16530(c: Cast) -> None:
     """The form itself is written: it holds until the encounter ends, it is
@@ -1480,6 +1481,7 @@ def p16530(c: Cast) -> None:
         c.shift(1)
 
     c.endable(beast, MINOR, then=back)
+    c.low_light(until=When.ENCOUNTER)
 
 
 @power(

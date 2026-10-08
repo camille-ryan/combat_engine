@@ -752,12 +752,12 @@ def f1986(c: Cast) -> None:
 
 
 @power("f1988", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.darkvision()",))
+       reach=PERSONAL, target=SELF)
 def f1988(c: Cast) -> None:
     """Re-aimed from `c.low_light()`, which is the weaker sight this card
     does not print: the whole benefit is darkvision, and the light in the
-    eyes is flavour. Light levels are not modelled, so the grant has
-    nothing to be an exception to."""
+    eyes is flavour. No printed range, so the sense has no limit."""
+    c.darkvision()
 
 
 @power("f2029", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

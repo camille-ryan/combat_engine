@@ -676,7 +676,6 @@ def m6010a4(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(obscured=)",),
 )
 def m6010a5(c: Cast) -> None:
     """The cloud is a sight-blocking zone, and the blindness is hung on the
@@ -690,7 +689,8 @@ def m6010a5(c: Cast) -> None:
     out of. The caster's own immunity is the `!= me` on every branch.
     """
     me = c.me
-    cloud = c.zone(c.area(), until=When.EONT, blocks_sight=True, label=f"{c.ref} cloud")
+    cloud = c.zone(c.area(), until=When.EONT, blocks_sight=True,
+                   label=f"{c.ref} cloud", obscured="dark")
     held: dict[int, Effect | None] = {}
 
     def blind(who: int) -> None:

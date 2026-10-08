@@ -1661,10 +1661,11 @@ def f1026(c: Cast) -> None:
 
 
 @power("f1106", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.low_light()",))
+       reach=PERSONAL, target=SELF)
 def f1106(c: Cast) -> None:
-    """Low-light vision. `c.truesight` and `c.see_invisible` exist and
-    this is neither of them."""
+    """Low-light vision, which is neither `c.truesight` nor
+    `c.see_invisible` -- it answers dim light and not darkness."""
+    c.low_light()
 
 
 @power("f1148", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -505,15 +505,20 @@ def p16571(c: Cast) -> None:
        trigger="a creature hits you with a melee or a ranged attack",
        on=Trigger(Hit, both(targets_me, either(by_melee, by_ranged)),
                   "a creature hits you with a melee or ranged attack"),
-       dropped=("c.darkvision()",))
+       )
 def p16572(c: Cast) -> None:
-    """The narrow half is written and the wide half waits on darkvision
-    being a thing a creature can be asked about."""
+    """Both halves now. The penalty is -2 against the caster only, and
+    **against everything the attacker swings at** if it can see in the dark
+    -- which is `c.has_sense`, the reader this row wanted rather than a
+    grant."""
     foe = getattr(c.trigger, "attacker", None)
     if foe is None:
         return
-    c.penalty("attack", 2, on=foe, until=When.EONT,
-              when=lambda ctx: ctx["target"] == c.me)
+    if c.has_sense("darkvision", on=foe):
+        c.penalty("attack", 2, on=foe, until=When.EONT)
+    else:
+        c.penalty("attack", 2, on=foe, until=When.EONT,
+                  when=lambda ctx: ctx["target"] == c.me)
 
 
 @power("p16573", level=10, cls="x7_1000", usage=ENCOUNTER, action=MOVE,
@@ -857,9 +862,11 @@ def p16054(c: Cast) -> None:
 @power("p16055", level=10, cls="x7_942", usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.DIVINE, Keyword.FEAR, Keyword.POLYMORPH],
-       dropped=("c.darkvision()",))
+       )
 def p16055(c: Cast) -> None:
+    """The form lasts the encounter and the darkvision lasts with it."""
     c.form(until=When.ENCOUNTER, label=c.ref)
+    c.darkvision(until=When.ENCOUNTER)
     c.resist(10, DamageType.FIRE, until=When.ENCOUNTER, on=c.me)
     for d in (FORT, WILL):
         c.bonus(d, 2, kind="power", on=c.me, until=When.ENCOUNTER)
@@ -1103,12 +1110,12 @@ def p16590(c: Cast) -> None:
 
 @power("p16591", level=10, cls="x7_1004", usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-       todo=("c.tremorsense()",))
+       )
 def p16591(c: Cast) -> None:
-    """The whole Effect is one sense the engine has not got.
-    `c.truesight` and `c.see_invisible` are a different question -- seeing
-    what is hidden from sight -- and granting one of those instead would be
-    a row that reads finished and is not the printed rule."""
+    """The whole Effect is tremorsense 10 for the encounter. `c.truesight`
+    and `c.see_invisible` answer a different question -- seeing what is
+    hidden from sight -- which is why neither was used as a stand-in."""
+    c.tremorsense(10, until=When.ENCOUNTER)
 
 
 # --------------------------------------------------------------- x7_1018 --

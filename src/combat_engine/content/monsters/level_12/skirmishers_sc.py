@@ -1390,7 +1390,7 @@ def m2322a3(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
     trigger=_M2322_SPLIT,
     on=Trigger(Bloodied, about_me, _M2322_SPLIT),
-    dropped=("c.low_light()",),
+    dropped=(),
 )
 def m2322a4(c: Cast) -> None:
     """What it sheds is flavour; what the row does is swap half its action
@@ -1408,6 +1408,7 @@ def m2322a4(c: Cast) -> None:
         c.grant_row(ref, on=c.me, until=When.ENCOUNTER)
     for ref in ("m2322a0", "m2322a1"):
         c.forbid(ref, on=c.me, until=When.ENCOUNTER)
+    c.low_light(until=When.ENCOUNTER)
 
 
 @power(
@@ -3983,7 +3984,6 @@ def m5895a1(c: Cast) -> None:
     target=NO_TARGET,
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d8", 11),
-    dropped=("c.darkvision()",),
 )
 def m5895a2(c: Cast) -> None:
     """Declared with no target: the blink comes before the swing and changes
@@ -4001,9 +4001,11 @@ def m5895a2(c: Cast) -> None:
     if c.strike(on=foe):
         c.hit(on=foe)
     dark = squares(c.world, foe)
-    c.zone(dark, label=c.ref, until=When.EONT, blocks_sight=True)
+    c.zone(dark, label=c.ref, until=When.EONT, blocks_sight=True,
+           obscured="dark")
     for who in sorted(c.in_squares(dark)):
-        c.blinded(until=When.EONT, on=who)
+        if not c.has_sense("darkvision", on=who):
+            c.blinded(until=When.EONT, on=who)
 
 
 @power(
@@ -4435,7 +4437,6 @@ def m6610a3(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(obscured=)",),
 )
 def m6610a4(c: Cast) -> None:
     """Blocking sight is what a board can be told; "heavily obscured" is a
@@ -4443,7 +4444,8 @@ def m6610a4(c: Cast) -> None:
     zones hold no such setting."""
     me = c.me
     _recharge_on(c, Bloodied, lambda ev: ev.actor == me)
-    c.zone(c.area(), label=c.ref, until=When.EONT, blocks_sight=True)
+    c.zone(c.area(), label=c.ref, until=When.EONT, blocks_sight=True,
+           obscured="dark")
 
 
 @power(

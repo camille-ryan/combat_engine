@@ -861,14 +861,18 @@ def m4201a4(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d6", 5),
-    dropped=("query.light_level(world, square)",),
-)
+    )
 def m4737a0(c: Cast) -> None:
-    """The blow lands. How dark the square is has no reader: the grid holds
-    terrain and cover and no light level, so the +2 and the extra 6 damage
-    the card pays in dim light or darkness have nothing to ask."""
+    """The card pays +2 to the attack and 6 extra damage in dim light or
+    darkness. Both are asked of the creature's **own** square at the moment
+    it swings, which is what `c.unlit` reads."""
+    dark = c.unlit()
+    if dark:
+        c.bonus("attack", 2, on=c.me, until=When.EONT, kind=c.ref)
     if c.strike():
         c.hit()
+        if dark:
+            c.flat(6)
 
 
 @power(

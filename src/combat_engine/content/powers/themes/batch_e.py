@@ -1192,7 +1192,6 @@ def p16069b(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE, Keyword.ELEMENTAL],
-    dropped=("c.light()",),
 )
 def p16070(c: Cast) -> None:
     """The flame, what ends it, and the attack it exists for.
@@ -1216,6 +1215,11 @@ def p16070(c: Cast) -> None:
     if flame is not None:
         c.endable(flame, MINOR)
     c.grant_row("p16070b", on=c.me, until=When.ENCOUNTER)
+    # The bright light the flame emits, out to 10 squares, clocked on the
+    # same encounter the flame is. This docstring used to argue the verb
+    # should not exist because nothing would read it; `query.light_level`
+    # reads it now.
+    c.light(10, until=When.ENCOUNTER)
 
 
 @power(
@@ -1628,12 +1632,14 @@ def p16626(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.SHADOW],
-    dropped=("c.darkvision()",),
-)
+    )
 def p16627(c: Cast) -> None:
     """Ignoring concealment is `c.ignore_cover`, which sits on the eye and
-    covers both; seeing in the dark is a sense the engine has not got."""
+    covers both. The darkvision is the other half and is written now --
+    they overlap but are not the same: ignoring concealment waives the
+    penalty whatever its source, where darkvision answers the dark."""
     c.ignore_cover(on=c.me, until=When.EONT)
+    c.darkvision(until=When.EONT)
 
 
 @power(

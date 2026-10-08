@@ -450,15 +450,21 @@ def f800(c: Cast) -> None:
 
 
 @power("f651", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.darkvision()",))
+       reach=PERSONAL, target=SELF, dropped=("c.extend_reach(once=)",))
 def f651(c: Cast) -> None:
     """A campaign-setting option offering a choice of three traits.
 
-    Re-aimed off the multiclass symbol, which was never what this row
-    wanted: its three options are spelled out in full rather than named,
-    so there is no feature to borrow and nothing to look up. Two of the
-    three have no verb -- switchable darkvision of 1 square, and adding
-    to the reach of one attack -- and `c.choose` among three where two
-    do nothing would quietly make the third compulsory. The speed option
-    alone is writable and is a third of the card, so the row stays
-    refused rather than playing a third of itself."""
+    **Two of the three are writable now**, which is what changed: darkvision
+    of 1 square has a verb, and the speed option always did. `c.choose`
+    between them is therefore a real choice rather than one live option and
+    two dead ones -- which is the reason this row was refused outright
+    before, since choosing among three where two do nothing makes the third
+    compulsory.
+
+    Still dropped: adding to the reach of one attack, which has no verb and
+    is one row's want."""
+    pick = c.choose(["darkvision", "speed"], f"{c.ref}: which trait")
+    if pick == "darkvision":
+        c.darkvision(1)
+    else:
+        c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER)

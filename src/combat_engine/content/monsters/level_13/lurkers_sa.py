@@ -1161,7 +1161,7 @@ def m2515a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC, Keyword.ZONE],
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("1d6", 6, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("c.zone(exempt=)", "c.light()"),
+    dropped=("c.zone(exempt=)", "c.douse_lights()"),
 )
 def m2515a2(c: Cast) -> None:
     """The blast, and a patch of dark that bites at the start of a turn.
@@ -2611,17 +2611,21 @@ def m6161a7(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("query.light_level(world, square)",),
 )
 def m6162a0(c: Cast) -> None:
-    """The concealment plays and the upgrade cannot be asked for.
+    """Partial concealment always, and **invisibility instead** whenever the
+    concealment would have come from dim light -- which is the swap the card
+    prints and which needed a light level to ask about.
 
-    Partial concealment is a standing hold and is laid outright. The second
-    sentence turns on where the light is, and the board holds no light level
-    at all -- twelve rows wait on the same reader -- so there is no moment at
-    which the swap could be made.
+    Asked at arming and not re-asked: a creature that walks out of the murk
+    keeps the invisibility until the encounter ends. The card does not say
+    otherwise, and the alternative is a gate on a hold that `c.invisible`
+    does not take.
     """
-    c.conceal(on=c.me, until=When.ENCOUNTER)
+    if c.unlit():
+        c.invisible(on=c.me, until=When.ENCOUNTER)
+    else:
+        c.conceal(on=c.me, until=When.ENCOUNTER)
 
 
 @power(

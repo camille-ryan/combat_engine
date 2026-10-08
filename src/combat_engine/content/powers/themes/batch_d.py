@@ -987,11 +987,18 @@ def p14141(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE],
-    todo=("c.darkvision()",),
+    dropped=("c.see_from(square)",),
 )
 def p14142(c: Cast) -> None:
-    """The remote viewing is scenery and no board reads it; the darkvision
-    is the half that would matter in a fight and there is no verb."""
+    """The darkvision is written now and lasts as long as the card says.
+
+    Still dropped: seeing *from* a chosen spot 20 squares away, with no line
+    of sight to it. That is a second vantage point, and every sight question
+    in the engine measures from the creature's own squares -- so it is a real
+    missing clause rather than flavour, and `narrative=` would be a lie about
+    it. One row wants it, which is below the threshold #468 sets, so it is
+    named and left."""
+    c.darkvision(until=When.EONT)
 
 
 @power(
@@ -1614,7 +1621,7 @@ def p16436(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=("Keyword.BEAST_FORM", "c.low_light()"),
+    dropped=("Keyword.BEAST_FORM",),
 )
 def p16535(c: Cast) -> None:
     """The form and the printed alternative -- end it as a minor action and
@@ -1627,6 +1634,7 @@ def p16535(c: Cast) -> None:
     `c.best_ability()` this row was waiting on."""
     shape = c.form(until=When.ENCOUNTER, revert=None, label=c.ref)
     c.endable(shape, MINOR, then=lambda: c.shift(1, who=c.me))
+    c.low_light(until=When.ENCOUNTER)
 
 
 @power(

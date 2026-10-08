@@ -320,13 +320,12 @@ def m115799a2(c: Cast) -> None:
     reach=AreaBurst(1, 10),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(obscured=)",),
 )
 def m115799a3(c: Cast) -> None:
     """The zone is laid; what is dropped is the *level* of obscurity. "Lightly
     obscured" is concealment for whoever is inside, and `c.zone` has terrain
     that blocks sight outright or terrain that does nothing in between."""
-    c.zone(c.area(), label=c.ref, until=When.EONT)
+    c.zone(c.area(), label=c.ref, until=When.EONT, obscured="dim")
 
 
 # --------------------------------------------------------------------------
@@ -1043,13 +1042,22 @@ def m4736a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.blindsight()", "c.darkvision()"),
-)
+    )
 def m4736a4(c: Cast) -> None:
-    """Borrowing a nearby ally's special senses. Neither sense exists to be
-    lent: sight is cover and concealment measured between two squares and
-    there is no per-creature sense to read, let alone copy. Two symbols,
-    because a row that could borrow one and not the other is still wrong."""
+    """Borrowing a nearby ally's special senses -- *any* of them it has.
+
+    Written against `c.has_sense`, which is the reader this needed: granting
+    a sense and asking whether somebody else has one are different jobs, and
+    only the first had a verb. The guess I wrote before that reader existed
+    granted both unconditionally and `audit` caught it firing 48 times and
+    doing nothing on a board with no such ally.
+
+    It lends nothing when no ally is near, which is the card and is why this
+    row can be silent on a board that fields the creature alone."""
+    for mate in c.within(5, side="ally"):
+        for sense in ("blindsight", "darkvision"):
+            if c.has_sense(sense, on=mate):
+                getattr(c, sense)()
 
 
 # --------------------------------------------------------------------------

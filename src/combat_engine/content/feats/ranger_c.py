@@ -560,11 +560,10 @@ def f2469(c: Cast) -> None:
 
 
 @power("f2473", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.low_light()",))
+       reach=PERSONAL, target=SELF)
 def f2473(c: Cast) -> None:
-    """Low-light vision, and the whole benefit is that. There are no
-    light levels, so there is nothing for the sight to see through --
-    the same gap `skills.py` named from its other side."""
+    """Low-light vision, and the whole benefit is that."""
+    c.low_light()
 
 
 # -- the beast companion ----------------------------------------------------

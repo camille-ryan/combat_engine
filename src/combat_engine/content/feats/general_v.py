@@ -1072,9 +1072,10 @@ def f3520(c: Cast) -> None:
 
 
 @power("f3521", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.low_light()",))
+       reach=PERSONAL, target=SELF)
 def f3521(c: Cast) -> None:
-    """Sight in dim light is not a state a creature can be put into."""
+    """Low-light vision, the whole benefit."""
+    c.low_light()
 
 
 @power("f3522", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1445,7 +1446,6 @@ def _my_necrotic_hit(world: Any, me: int, ev: Any) -> bool:
 
 @power("f3546", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.light()",),
        trigger="you use a divine necrotic encounter or daily attack power",
        on=Trigger(PowerResolved, _my_necrotic_use, "you use a necrotic power"))
 def f3546(c: Cast) -> None:
@@ -1457,9 +1457,10 @@ def f3546(c: Cast) -> None:
     on it. It used to pay for every attack an ally made from inside, which is a
     wider feat than the printed one.
 
-    Dim light is still not a level the engine tracks, which is the one clause
-    left."""
-    zone = c.zone(_burst(c, 1), label=c.ref, until=When.EONT)
+    "Bright light in the zone becomes dim light" is the zone's own light
+    level, which `c.zone(obscured=)` now carries -- so the zone conceals
+    whoever stands in it from anyone who cannot see in dim light."""
+    zone = c.zone(_burst(c, 1), label=c.ref, until=When.EONT, obscured="dim")
     c.grants_in(
         zone, "attack", 1, side="ally", kind="power",
         when=lambda ctx: Keyword.NECROTIC in getattr(
@@ -1718,20 +1719,21 @@ ORIGINS = ("aberrant", "elemental", "fey", "immortal", "natural")
 
 
 @power("f3559", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("query.light_level(world, square)",))
+       reach=PERSONAL, target=SELF)
 def f3559(c: Cast) -> None:
     """`c.set_origin` writes the word onto the creature and `c.kinds_of`
     unions it with the stat block, so "your origin changes to shadow" is
     a word laid and the rest taken off -- "changes to", not "also counts
     as", and an origin is exclusive.
 
-    How bright a square is is not a thing the board records, so the
-    saving throw half is dropped rather than laid ungated: a standing +1
-    to every save is a bigger number than the card gives."""
+    The saving-throw half is gated on standing in dim light or darkness
+    rather than laid flat -- an ungated +1 to every save is a bigger number
+    than the card gives, which is why it waited for a light model."""
     for word in ORIGINS:
         c.set_origin(instead_of=word, on=c.me)
     c.set_origin("shadow", on=c.me)
+    c.bonus("save", 1, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: c.unlit())
 
 
 @power("f3561", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -902,14 +902,14 @@ def m4200a1(c: Cast) -> None:
     damage=Damage("2d6", 3, kind=LIMITED),
     trigger="it drops to 0 hit points",
     on=Trigger(Dropped, about_me, "it drops to 0 hit points"),
-    dropped=("c.zone(obscured=)",),
 )
 def m4200a2(c: Cast) -> None:
     """The burst plays and the zone is laid. What the zone *is* -- lightly
     obscured -- has nowhere to live: `c.zone` carries difficult terrain and a
     sight block, and an obscurement is neither."""
     if c.first:
-        c.zone(spread({c.here}, 2), until=When.ENCOUNTER, label=c.ref)
+        c.zone(spread({c.here}, 2), until=When.ENCOUNTER, label=c.ref,
+               obscured="dim")
     if c.strike():
         c.hit()
 

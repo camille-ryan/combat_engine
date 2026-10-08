@@ -1175,14 +1175,15 @@ def m4124a1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.tremorsense()",),
-)
+    )
 def m4124a2(c: Cast) -> None:
-    """"Loses all other senses" is written as blindness, which is the only
-    sense the engine holds; the tremorsense that is supposed to replace it has
-    nowhere to go, so this form is strictly worse than the card's by the one
-    marked clause."""
+    """"Loses all other senses" is blindness, and the tremorsense 10 that
+    replaces it is granted alongside -- which is the card: blind to sight,
+    and sensing through the ground instead. `query.sees_in` answers True for
+    tremorsense whatever the light, so the form is no longer strictly worse
+    than printed."""
     _stone_form(c, 25, 3, blind=True)
+    c.tremorsense(10, until=When.ENCOUNTER)
 
 
 # ==========================================================================
