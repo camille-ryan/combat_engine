@@ -256,6 +256,31 @@ def _features(db, args: argparse.Namespace) -> list:  # noqa: ANN001
 
     Dropped only when the twin is **actually declared** -- an alias pointing at
     a ref nobody has written is still work, just filed under the other name.
+
+    ## And a card whose parent feature pays it inline, which is 11 more
+
+    A feature's *card* -- `cf:<cls>-f<N>c<M>`, the `c` segment -- is one of the
+    things that feature hands out, and several are paid inside the parent's own
+    `c.build(...)` branch rather than declared separately. Declaring them is
+    what three waves correctly **refused** to do: it would put the same card in
+    a character's menu twice.
+
+    `duplicate_of` cannot see these and is right not to -- they are not
+    byte-identical to anything, because the card is not reprinted elsewhere,
+    it is *paid* elsewhere. So the rule is the parent:
+
+        an undeclared card ref, no `duplicate_of`, parent feature declared
+
+    which selects exactly the **11** #416 names, with no sub-option-to-build
+    join and no new column. That issue reasoned a join was needed and measured
+    24 by a looser proxy; the parent test is tighter because a card belongs to
+    its feature by construction.
+
+    **Named rather than silently dropped**, the same way the 72 aliases are: a
+    reader sees the claim and can check it. The risk the naming covers is a
+    card whose parent is declared and genuinely does *not* pay it -- a real gap
+    wearing this exemption. All 11 were read by a wave and all 11 are paid; the
+    12th should be read too, not assumed. #416.
     """
     sql = "SELECT ref, class, build, duplicate_of FROM class_feature"
     params: list = []
@@ -265,12 +290,41 @@ def _features(db, args: argparse.Namespace) -> list:  # noqa: ANN001
     rows = list(db.execute(sql + " ORDER BY class, build, ref", params))
     written = declared()
     out = []
+    paid: list[str] = []
     for r in rows:
         twin = r["duplicate_of"]
         if twin and twin in written:
             continue
+        # **Only when there is no `duplicate_of` at all.** A card whose twin
+        # is recorded but unwritten is still work filed under the other name,
+        # which the paragraph above says -- and letting the parent rule absorb
+        # those took this from 11 to 18. The number not matching the 11 derived
+        # by hand is what caught it.
+        # And only for a card nobody has written: a declared card is
+        # declared, and absorbing it would quietly lower the numerator.
+        parent = "" if twin or r["ref"] in written else _parent_feature(r["ref"])
+        if parent and parent in written:
+            paid.append(r["ref"])
+            continue
         out.append({"ref": r["ref"], "class": r["class"], "build": r["build"] or "-"})
+    if paid and not args.cls:
+        print(f"  {len(paid)} card(s) paid inline by a declared parent feature, "
+              f"not counted as work: {', '.join(sorted(paid)[:4])}"
+              + (" ..." if len(paid) > 4 else ""))
     return out
+
+
+def _parent_feature(ref: str) -> str:
+    """The feature a card belongs to: `cf:x-f0c1` -> `cf:x-f0`.
+
+    Only a **card** has a parent in this sense. A sub-option (`f0s1`) is a
+    choice the character makes and is its own row; a card is something the
+    feature hands over, so if the feature is written the card is paid. #416.
+    """
+    import re
+
+    found = re.match(r"^(cf:.*f\d+)c\d+$", ref)
+    return found.group(1) if found else ""
 
 
 def _traits(db, args: argparse.Namespace) -> list:  # noqa: ANN001
