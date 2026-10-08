@@ -276,6 +276,26 @@ class Cover(IntEnum):
     SUPERIOR = 5
 
 
+class Light(StrEnum):
+    """How well lit a square is. Absent from `Grid.light` means `BRIGHT`.
+
+    Three values because the books print three, and the two below bright are
+    an **attack penalty on whoever is standing there**, not a property of the
+    looker: dim light conceals, darkness conceals totally.
+    `query.light_concealment` turns a level into a `Cover`, which is the
+    existing grade, so the light model buys no second scale.
+
+    A closed enum rather than the free labels `Grid.difficult` carries,
+    because difficult going is open-ended -- mud, rubble, ice, and a row may
+    invent one -- while there is no fourth light level to invent, and the
+    three have an order that `light_concealment` depends on.
+    """
+
+    BRIGHT = "bright"
+    DIM = "dim"
+    DARK = "dark"
+
+
 class Speed(StrEnum):
     WALK = "walk"
     FLY = "fly"

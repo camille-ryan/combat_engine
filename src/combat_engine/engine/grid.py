@@ -225,6 +225,16 @@ class Grid:
     #: creature that wades through mud but not through rubble had nothing to
     #: test. An empty label means rough ground of no particular kind.
     difficult: dict[Square, str] = field(default_factory=dict)
+    #: How well lit a square is, where it is not bright. Absent means
+    #: `Light.BRIGHT`, which is the whole board until something darkens it --
+    #: so the map is empty on every board that never mentions light, and the
+    #: attack path's new light term reads nothing. That is deliberate: the
+    #: reader lands with the model, and costs nothing until a row fills it.
+    #:
+    #: Same shape as `difficult` above and read the same way. A dict rather
+    #: than two sets because the levels have an order and
+    #: `query.light_concealment` compares them.
+    light: dict[Square, str] = field(default_factory=dict)
     occupants: dict[Square, int] = field(default_factory=dict)
     #: Where the floor of a square is, in squares above or below the board's
     #: own level. Absent means 0, which is everywhere until something digs.

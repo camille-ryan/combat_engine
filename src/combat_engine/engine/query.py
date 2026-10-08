@@ -24,7 +24,16 @@ from .components import (
 )
 from .conditions import rules
 from .grid import Square, between, linked_spread, spread
-from .types import DEFENCES, Condition, Cover, DamageType, Defense, Relation, Team
+from .types import (
+    DEFENCES,
+    Condition,
+    Cover,
+    DamageType,
+    Defense,
+    Light,
+    Relation,
+    Team,
+)
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -945,6 +954,162 @@ def concealment_of(
     if n >= int(Cover.SUPERIOR):
         return Cover.SUPERIOR
     return Cover.PARTIAL if n > 0 else Cover.NONE
+
+
+def light_level(
+    world: World, square: Square, dark_zones: list[Any] | None = None
+) -> Light:
+    """How well lit this square is.
+
+    Two sources, worst wins: the terrain map (`Grid.light`) and any zone
+    standing over the square that darkens it. A zone is checked because
+    darkness is overwhelmingly *laid* rather than built into a board -- the
+    rows asking for this are powers that put out the lights.
+
+    Bright everywhere by default, so a board that never mentions light
+    answers `BRIGHT` for every square and the attack path's light term is a
+    no-op. 13 rows wait on this; it is the model the other seven light
+    symbols are written against.
+    """
+    worst = Light(world.grid.light.get(square, Light.BRIGHT))
+    # `dark_zones` is the caller's own scan, passed in so a loop over the
+    # target's squares does not re-walk every zone on the board for each one.
+    if dark_zones is None:
+        dark_zones = world.zones.dark()
+    for zone in dark_zones:
+        if square in zone.squares:
+            level = Light(zone.obscured)
+            if _DARKER[level] > _DARKER[worst]:
+                worst = level
+    if worst is Light.BRIGHT:
+        return worst
+    # **A carried light moves, so it cannot be written into the terrain.**
+    # `c.light(n)` lays a radius on the creature and this is what reads it:
+    # anything within that radius is bright however dark the square itself
+    # is. Written as a search over carriers rather than a grid write because
+    # the alternative is repainting the map on every step, which is the bug
+    # `Zones.refresh` exists to avoid for the same reason.
+    for eid, mods in world.each(Mods):
+        if not mods.items:
+            continue
+        radius = mods.total("light_radius", {})
+        if radius <= 0:
+            continue
+        for mine in squares(world, eid):
+            if abs(mine[0] - square[0]) <= radius and abs(mine[1] - square[1]) <= radius:
+                return Light.BRIGHT
+    return worst
+
+
+#: A sense with no printed range. The board is never more than a few dozen
+#: squares across, so any number past it is "everywhere" -- and a sentinel is
+#: better than `None` here because the value is summed through `Mods.total`
+#: like every other modifier, and `None` would have to be special-cased at
+#: every read.
+UNLIMITED_SENSE = 100
+
+
+#: The order the levels compare in. `Light` is a `StrEnum`, so `<` on it is
+#: alphabetical -- "bright" < "dark" < "dim" -- which is wrong twice over.
+_DARKER = {Light.BRIGHT: 0, Light.DIM: 1, Light.DARK: 2}
+
+
+def sees_in(world: World, eid: int, level: Light, distance: int = 0) -> bool:
+    """Can this creature see normally at that light level?
+
+    The senses are `Mods` keys rather than components, for the reason every
+    other standing modifier is: they are granted for an encounter by a row
+    and have to come off when it ends.
+
+    * `darkvision` -- darkness is bright. Covers dim light too, which is why
+      it is tested first: a creature that sees in the dark is not inconvenienced
+      by shade.
+    * `low_light` -- dim light is bright, darkness is not.
+    * `blindsight` and `tremorsense` -- light is irrelevant entirely. They are
+      separate keys because the printed ranges differ and a row may grant one
+      without the other, and both answer True here.
+    """
+    if level is Light.BRIGHT:
+        return True
+    mods = world.get(eid, Mods)
+    if mods is None or not mods.items:
+        return False
+
+    def reaches(key: str) -> bool:
+        """Does this sense answer, and does it reach that far?
+
+        The printed range is the modifier's value and `0` means the sense is
+        absent. `UNLIMITED_SENSE` is what the verbs store when the card
+        prints no range, so the comparison needs no second branch.
+        """
+        radius = mods.total(key, {})
+        return radius > 0 and radius >= distance
+
+    if reaches("blindsight") or reaches("tremorsense") or reaches("darkvision"):
+        return True
+    return level is Light.DIM and reaches("low_light")
+
+
+def has_sense(world: World, eid: int, sense: str) -> bool:
+    """Does this creature have that named sense at all?
+
+    `sees_in` answers the question the attack path asks -- *can you see at
+    this level, this far* -- and three rows ask a different one: whether a
+    creature **has** a sense, as a fact about it. "If the creature has
+    darkvision, the penalty applies to all its attacks"; "creatures without
+    darkvision are blinded while in the area"; "gains any blindsight or
+    darkvision of an allied creature within 5 squares".
+
+    So this is the per-key public reader `Mods` did not expose, and writing
+    those three rows without it means guessing. One of them was written as a
+    guess first and `audit` caught it firing 48 times and doing nothing.
+
+    `sense` is the modifier key: `"darkvision"`, `"low_light"`,
+    `"blindsight"`, `"tremorsense"`.
+    """
+    mods = world.get(eid, Mods)
+    return bool(mods is not None and mods.items and mods.total(sense, {}) > 0)
+
+
+def light_concealment(world: World, attacker: int, target: int) -> Cover:
+    """The concealment the target gets from standing somewhere badly lit.
+
+    **Kept apart from `concealment_of` on purpose.** That one answers "what
+    is this creature carrying", is called from thirty-odd content rows with
+    only a target, and 60 of those calls would have had to change to pass an
+    attacker. Light is a fact about a square *and* about who is looking --
+    darkness conceals from me and not from the creature with darkvision --
+    so it cannot be a modifier the target carries.
+
+    `resolve.attack_mods` takes the larger of this, cover and carried
+    concealment, which is the printed rule that they do not add.
+    """
+    # **The bright-board fast path, and it is not an optimisation to taste.**
+    # This runs on *every attack*, and the first version walked the zone list
+    # once per square of the target before concluding that a board nobody has
+    # darkened is bright. Measured: the wide audit went from ~43 minutes to a
+    # projected ~73. So the cheapest question is asked first -- is there any
+    # light on this board at all -- and on every board that never mentions
+    # light the answer is no and nothing else is read.
+    if not world.grid.light and not world.zones.darkening:
+        return Cover.NONE
+    dark_zones = world.zones.dark()
+
+    # The distance matters: a sense with a printed range stops answering past
+    # it, which is the whole of what the range is for.
+    far = distance_between(world, attacker, target)
+    if sees_in(world, attacker, Light.DARK, far):
+        return Cover.NONE
+    worst = Light.BRIGHT
+    for square in squares(world, target):
+        level = light_level(world, square, dark_zones)
+        if _DARKER[level] > _DARKER[worst]:
+            worst = level
+    if sees_in(world, attacker, worst, far):
+        return Cover.NONE
+    if worst is Light.DARK:
+        return Cover.SUPERIOR
+    return Cover.PARTIAL if worst is Light.DIM else Cover.NONE
 
 
 def cover_waived(

@@ -31,7 +31,7 @@ from .events import (
 )
 from .grid import Square, spread
 from .query import creatures, squares
-from .types import ActionType
+from .types import ActionType, Light
 
 if TYPE_CHECKING:
     from .durations import Effect
@@ -48,6 +48,19 @@ class Zone:
     #: False, True, or what sort of going it is -- see `Grid.difficult`.
     difficult: bool | str = False
     blocks_sight: bool = False
+    #: How well lit the zone's squares are, when it darkens them -- a
+    #: `Light` value, or `""` for a zone that does not touch the light.
+    #:
+    #: **Not the same as `blocks_sight` and that is the whole point.** That
+    #: flag is binary and symmetric: it blinds both sides, which is terrain.
+    #: A zone that is "lightly obscured" conceals whoever stands in it from
+    #: whoever cannot see in that light, which is a grade and is directional
+    #: through the looker's senses. 12 rows wanted `c.zone(obscured=)` and 14
+    #: more wanted `c.conceal_in()`; those are one gap, and this is it. #424.
+    #:
+    #: Read by `query.light_level`, which the attack path consults through
+    #: `query.light_concealment`.
+    obscured: str = ""
     #: The effect whose duration this zone lives on.
     effect: Effect | None = field(default=None, repr=False)
 
@@ -64,6 +77,13 @@ class Zones:
         #: `on_end` list, which also threw away every callback a *row* had
         #: hung there ("when the zone ends, ..."), silently.
         self._ending: set[int] = set()
+        #: Zone ids that darken their squares, kept as an index rather than
+        #: rediscovered. **`all()` is a full component scan materialised into
+        #: a list**, and the attack path asks "is anything dark" on every
+        #: single attack -- doing it by scan cost +45% on a 400-row audit
+        #: sample, measured. Maintained here and in `end`, which is the only
+        #: pair of places a zone appears and disappears.
+        self.darkening: set[int] = set()
         world.bus.on(MoveEnd, lambda _: self.refresh())
         world.bus.on(EnterSquare, lambda _: self.refresh())
         world.bus.on(LeaveSquare, lambda _: self.refresh())
@@ -79,14 +99,28 @@ class Zones:
         *,
         difficult: bool | str = False,
         blocks_sight: bool = False,
+        obscured: str = "",
         sustain: ActionType | None = None,
     ) -> int:
+        if obscured:
+            # **Checked, because the alternative is silent.** `difficult=`
+            # next door takes a free label on purpose -- a row may invent
+            # "mud" -- but the light levels are a closed set of three, so a
+            # misspelling is a zone that darkens nothing and reads as if it
+            # does. That is this component's named failure mode, and the
+            # check is two lines.
+            #
+            # Validated here rather than typed as `Light` on the dataclass so
+            # content files can pass the printed word without importing an
+            # enum into forty monster modules.
+            obscured = Light(obscured)
         zone = Zone(
             owner=owner,
             label=label,
             squares=frozenset(squares_),
             difficult=difficult,
             blocks_sight=blocks_sight,
+            obscured=obscured,
         )
         return self._spawn(zone, when, sustain)
 
@@ -115,6 +149,8 @@ class Zones:
             sustain_cost=sustain,
         )
         self.inside[eid] = set()
+        if zone.obscured:
+            self.darkening.add(eid)
         self.world.bus.emit(
             ZoneCreated(
                 zone=eid, owner=zone.owner, squares=sorted(zone.squares), label=zone.label
@@ -128,6 +164,7 @@ class Zones:
         if zone is None or eid in self._ending:
             return
         self._ending.add(eid)
+        self.darkening.discard(eid)
         try:
             for actor in sorted(self.inside.pop(eid, set())):
                 self.world.bus.emit(ZoneExited(zone=eid, actor=actor))
@@ -142,6 +179,19 @@ class Zones:
 
     def all(self) -> list[tuple[int, Zone]]:
         return list(self.world.each(Zone))
+
+    def dark(self) -> list[Zone]:
+        """The live zones that darken their squares, by index not by scan.
+
+        Empty on every board that never lays one, which is the case the
+        attack path needs to answer cheaply. See `darkening`.
+        """
+        out = []
+        for eid in self.darkening:
+            zone = self.world.get(eid, Zone)
+            if zone is not None and zone.obscured:
+                out.append(zone)
+        return out
 
     def refresh(self) -> None:
         """Recompute aura footprints and diff who is standing in what."""

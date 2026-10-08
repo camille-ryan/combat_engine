@@ -28,6 +28,7 @@ from .grid import Square, spread
 from .grid import distance as _distance
 from .movement import forced, shift, teleport, walk
 from .query import (
+    UNLIMITED_SENSE,
     adjacent,
     alive,
     allies,
@@ -49,6 +50,7 @@ from .types import (
     Defense,
     Forced,
     Keyword,
+    Light,
     Relation,
     Size,
     Team,
@@ -6277,11 +6279,21 @@ class Cast:
         until: When = When.EONT,
         difficult: bool | str = False,
         blocks_sight: bool = False,
+        obscured: str = "",
         sustain: ActionType | None = None,
     ) -> int:
+        """`obscured=Light.DIM` is "lightly obscured", `Light.DARK` is
+        "heavily obscured" or a zone of darkness.
+
+        **Not `blocks_sight`**, which is terrain and blinds both sides --
+        `c.zone`'s long-standing caution against reaching for it here was
+        correct and now has somewhere else to point. 12 rows asked for this
+        kwarg and 14 more asked for `c.conceal_in()`; they are one gap. #424.
+        """
         return self.world.zones.create(
             self.me, label or self.ref, frozenset(area), until,
-            difficult=difficult, blocks_sight=blocks_sight, sustain=sustain,
+            difficult=difficult, blocks_sight=blocks_sight,
+            obscured=obscured, sustain=sustain,
         )
 
     def aura(
@@ -6704,6 +6716,143 @@ class Cast:
         what = f"truesight:{of}" if of is not None else "truesight"
         return self.bonus(
             what, max(1, radius), on=who, until=until, kind=self.ref,
+        )
+
+    def light(
+        self, radius: int = 2, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You shed bright light in a 2-square radius."
+
+        15 rows print it, and one of them records in its own docstring why it
+        was left unwritten: *"a verb recording 'bright light out to 10
+        squares' would be a modifier nothing consults, which is the commonest
+        bug in this component."* That was correct until the light model
+        landed; `query.light_level` is the reader, and it treats anything
+        within `radius` as bright however dark the square is underneath.
+
+        **Carried, not painted.** The radius lives on the creature so the
+        light moves with it, which is what the printed line means and what a
+        grid write could not do without repainting the map on every step.
+
+        Lighting a dark board changes nothing on its own -- light only ever
+        *removes* a concealment penalty, so on a board that was never
+        darkened this is inert, which is the honest answer for a torch in
+        daylight.
+        """
+        return self.bonus(
+            "light_radius", max(1, radius), on=on if on is not None else self.me,
+            until=until, kind=self.ref,
+        )
+
+    def unlit(self, *, on: int | None = None) -> bool:
+        """Is this creature standing in dim light or darkness? Defaults to the
+        **caster**, because every row that asks is about itself.
+
+        Nineteen rows print "while you are in dim light or darkness" as a gate
+        -- a saving-throw bonus, a defence bonus, ignoring difficult terrain,
+        a teleport that must land somewhere unlit. They all want this one
+        question, and opening it up nineteen times would be nineteen chances
+        to read `Grid.light` slightly differently.
+
+        **Safe inside a `when=` gate**, which is where most of these live: the
+        lambda closes over the `Cast`, so it reaches the world without needing
+        the modifier context to carry a square it does not have.
+
+        The worst-lit square the creature occupies decides it, matching
+        `query.light_concealment` -- a creature half in shadow is in shadow.
+        """
+        from .query import light_level, squares
+
+        who = on if on is not None else self.me
+        return any(
+            light_level(self.world, sq) is not Light.BRIGHT
+            for sq in squares(self.world, who)
+        )
+
+    def has_sense(self, sense: str, *, on: int | None = None) -> bool:
+        """Does this creature have that sense? Defaults to `c.target`.
+
+        The question three rows ask about somebody *else* -- "if the creature
+        has darkvision", "creatures without darkvision are blinded". Granting
+        a sense and asking after one are different jobs, and only the first
+        had a verb.
+        """
+        from .query import has_sense as _has
+
+        return _has(self.world, on if on is not None else self.target, sense)
+
+    def darkvision(
+        self, radius: int = 0, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You have darkvision." Darkness does not conceal from you.
+
+        21 rows print it, mostly racial. Read by `query.sees_in`, which the
+        attack path consults through `query.light_concealment` -- so this is
+        a sense that cancels a penalty rather than one that grants a bonus,
+        and it covers dim light as well: a creature that sees in the dark is
+        not inconvenienced by shade.
+
+        A sense of yours, so it defaults to the **caster**, like
+        `c.see_invisible` and `c.truesight`.
+        """
+        return self.bonus(
+            "darkvision", radius or UNLIMITED_SENSE,
+            on=on if on is not None else self.me, until=until, kind=self.ref,
+        )
+
+    def low_light(
+        self, radius: int = 0, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You have low-light vision." Dim light does not conceal from you.
+
+        The weaker half of `c.darkvision`, and the distinction is the whole
+        point for the 14 rows that print this one: darkness still conceals.
+        `query.sees_in` is where the two come apart.
+        """
+        return self.bonus(
+            "low_light", radius or UNLIMITED_SENSE,
+            on=on if on is not None else self.me, until=until, kind=self.ref,
+        )
+
+    def blindsight(
+        self, radius: int = 0, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Blindsight 5". Light is irrelevant to you entirely.
+
+        Stronger than `c.darkvision`: that one answers the dark, this one
+        does not consult the light at all. Kept a separate key from
+        `c.tremorsense` because the printed ranges differ and a creature may
+        be granted one without the other -- `query.sees_in` answers True for
+        either, which is all the light model needs to know.
+
+        `radius` is the printed range and **is** read: `query.sees_in` is
+        handed the distance to the creature being looked at, so a sense with
+        a range stops answering past it. `0` means no limit, which is how the
+        books print the commonest case.
+        """
+        return self.bonus(
+            "blindsight", radius or UNLIMITED_SENSE,
+            on=on if on is not None else self.me, until=until, kind=self.ref,
+        )
+
+    def tremorsense(
+        self, radius: int = 0, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Tremorsense 10". Senses through the ground, so light is irrelevant.
+
+        Answers `query.sees_in` exactly as `c.blindsight` does. The two are
+        not folded into one key because the printed lines are different
+        senses with different ranges, and a later rule that cares which --
+        a creature that is not touching the ground -- needs them apart.
+        """
+        return self.bonus(
+            "tremorsense", radius or UNLIMITED_SENSE,
+            on=on if on is not None else self.me, until=until, kind=self.ref,
         )
 
     def sight_range(

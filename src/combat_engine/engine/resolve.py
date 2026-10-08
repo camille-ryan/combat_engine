@@ -46,6 +46,7 @@ from .query import (
     deals_half,
     defence,
     has_combat_advantage,
+    light_concealment,
     takes_half,
 )
 from .types import Condition, DamageType, Defense, Relation
@@ -139,6 +140,13 @@ def situational_attack(
             int(cover_between(world, attacker, target,
                               ranged=_is_ranged(power, branch))),
             int(concealment_of(world, target, ctx)),
+            # **Standing somewhere badly lit**, which is a fact about the
+            # square and about who is looking -- so it cannot be a modifier
+            # the target carries the way the line above is. Reads `Grid.light`,
+            # which is empty on every board until a row darkens one, so this
+            # is a no-op until then. `query.light_concealment` cancels it for
+            # darkvision, low-light vision, blindsight and tremorsense.
+            int(light_concealment(world, attacker, target)),
         )
         # A standing waiver -- `c.ignore_cover` on the attacker or
         # `c.no_cover` on the target -- reads the same context the
