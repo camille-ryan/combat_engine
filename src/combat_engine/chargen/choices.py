@@ -34,6 +34,7 @@ the only ones.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from random import Random
@@ -131,6 +132,22 @@ WEIGHTS: dict[str, float] = {
     # a cleric carries a mace *and* a holy symbol and is a real candidate,
     # which a filter on "is a caster" would get wrong.
     "implement_only_build": -9.0,
+    # **The companion pair, and it is the weapon pair's shape exactly.** 84
+    # feats pay out through a beast companion and `Build.companion` says which
+    # leg has one -- and nothing here read it, so the one leg in the game with
+    # a beast was dealt 6 feats and 0 of them companion-relevant. #450.
+    #
+    # Priced rather than filtered, for the reason stated just above and because
+    # `choices.sample` is a weighted draw: *"potentially with some variance"* is
+    # Camille's own framing of the ask, and a filter would make every such
+    # ranger take the same six feats.
+    "leans_on_companion": 4.0,
+    # The mirror, and the half that matters as much. A companion feat on a
+    # build with no companion is not a weaker choice, it is the wrong build's
+    # choice -- the same sentence `_on_a_dump_stat` is written from. It takes
+    # `implement_only_build`'s weight because it is the identical case: a
+    # chassis the feat's whole payoff cannot reach.
+    "companionless_build": -9.0,
     # A feat that hands over a card is a power slot for a feat slot.
     "grants_a_row": 3.0,
     # Feats chain. Taking one that others need is worth something even when
@@ -271,6 +288,38 @@ def _pays_off_through(declared) -> set[str]:  # noqa: ANN001
     except (OSError, TypeError):
         return set()
     return {a.value for a in Ability if f"c.{a.value}_mod" in body}
+
+
+#: Does a row pay out through a beast companion?
+#:
+#: Read off the body the way `_pays_off_through` reads an ability modifier, and
+#: for the same reason: **no header field says so.** A companion feat is an
+#: ordinary trait whose body reaches the creature, so the only place the fact
+#: lives is the source -- and `requires_text` carries it on exactly **1** of the
+#: 84, which is why the Requirement alone is not the test.
+#:
+#: Two words, because the books use both and a row may use either: the printed
+#: term and the creature's own kind. Both are mechanics, so neither is a name.
+_COMPANION = re.compile(r"companion|\bbeast\b", re.I)
+
+
+def _leans_on_companion(declared) -> bool:  # noqa: ANN001
+    """Does this option's payoff go through a beast companion?
+
+    84 of 2,536 feats do. Measured against the issue's own figure before the
+    term was wired in, so the population the weight acts on is known rather
+    than assumed -- `WEIGHTS` records what happens when it is not.
+    """
+    import inspect
+
+    try:
+        body = inspect.getsource(declared.body) if declared.body else ""
+    except (OSError, TypeError):
+        body = ""
+    return bool(
+        _COMPANION.search(body)
+        or _COMPANION.search(getattr(declared, "requires_text", "") or "")
+    )
 
 
 def _on_a_dump_stat(declared, leg: Build) -> bool:  # noqa: ANN001
@@ -543,6 +592,7 @@ def feat_options(
             for w in (getattr(declared, "proficiency", ()) or ())
         ]
         weapons = [w for w in opened if w is not None and w.group != "implement"]
+        beastly = _leans_on_companion(declared)
         score, terms = _priced(
             {
                 "leans_on_build": float(_leaning(declared, leg, ref)),
@@ -551,6 +601,8 @@ def feat_options(
                     armed and any(w.category == "superior" for w in weapons)
                 ),
                 "implement_only_build": float(bool(weapons) and not armed),
+                "leans_on_companion": float(beastly and bool(leg.companion)),
+                "companionless_build": float(beastly and not leg.companion),
                 "grants_a_row": float(_granting(declared, ref)),
                 "unlocks_other_feats": float(unlocks.get(ref, 0)),
                 "carries_a_marker": float(bool(getattr(declared, "dropped", ()) or ())),
