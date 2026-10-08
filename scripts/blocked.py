@@ -71,6 +71,14 @@ def main() -> int:
 # --------------------------------------------------------------------------
 
 
+#: Prefix for a want that names the **source** rather than our code. A row
+#: whose every want starts with this is not unstarted work -- the compendium
+#: does not print what the row would be written from, so no symbol can arrive.
+#: Kept as a prefix rather than a list so a second source gap is counted the
+#: day somebody names one, with no edit here.
+SOURCE_GAP = "compendium."
+
+
 def _report(
     marked: list[tuple[str, tuple[str, ...]]],
     entries: dict,
@@ -78,7 +86,7 @@ def _report(
     have: dict[str, object],
     only_ready: bool,
 ) -> int:
-    ready = partial = waiting = 0
+    ready = partial = waiting = sourced = capped = 0
     lines: list[str] = []
     for ref, todo in marked:
         arrived = [w for w in todo if _one(w, have)]
@@ -92,10 +100,34 @@ def _report(
             left = [w for w in todo if w not in arrived]
             lines.append(f"  partial {ref:<10} {', '.join(arrived)} exists; "
                          f"still waiting on {', '.join(left)}")
+        elif all(w.startswith(SOURCE_GAP) for w in todo):
+            # **Waiting on the compendium is not waiting on work.** 22 rows
+            # name `compendium.attack_defence`: the page prints no defence on
+            # that attack line, so no symbol can ever arrive and the row is as
+            # finished as it will ever be. Counting them with the genuinely
+            # unstarted rows made the headline mix "nobody has done this" with
+            # "nobody can". #360 settled the fact; this stops the queue
+            # reporting it as a backlog item.
+            #
+            # They keep `dropped=` and that is deliberate -- `content/CLAUDE.md`
+            # is explicit that `defect=` here would be wrong: *"Of 26 rows with
+            # a blank attack defence, 23 play and 3 do not -- flagging all 26
+            # would have refused 23 working rows."*
+            sourced += 1
+            if not only_ready:
+                lines.append(f"  source  {ref:<10} {', '.join(todo)} "
+                             f"— the page does not print it; nothing to build")
         else:
             waiting += 1
+            # A row wanting the source *and* real work can be worked on and
+            # still never clear. Four of them. Counted as waiting, because the
+            # work is real, and named so the ceiling is not a surprise.
+            if any(w.startswith(SOURCE_GAP) for w in todo):
+                capped += 1
             if not only_ready:
-                lines.append(f"  blocked {ref:<10} {', '.join(todo)}")
+                cap = " (capped: also waits on the source)" if any(
+                    w.startswith(SOURCE_GAP) for w in todo) else ""
+                lines.append(f"  blocked {ref:<10} {', '.join(todo)}{cap}")
     if lines:
         print("  in the tree, marked `todo=`")
         print("\n".join(lines))
@@ -128,7 +160,11 @@ def _report(
         for ref, wants in stale:
             print(f"  written {ref:<10} was waiting on {wants}; drop it from the list")
 
-    print(f"\n  tree: {ready} ready, {partial} partial, {waiting} still blocked")
+    print(f"\n  tree: {ready} ready, {partial} partial, "
+          f"{waiting} still blocked, {sourced} waiting on the compendium")
+    if capped:
+        print(f"  of the {waiting} blocked, {capped} also want something the "
+              f"page does not print, so they cannot fully clear")
     print(f"  {BLOCKED.relative_to(ROOT)}: {len(jready)} ready, "
           f"{len(jwaiting)} still blocked, {len(stale)} to remove")
     if unchecked:
