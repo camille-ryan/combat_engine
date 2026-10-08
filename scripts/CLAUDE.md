@@ -73,6 +73,26 @@ it improves, red when it regresses, never a bare allowance. #372.
 * **`--history` exists because the previous attempt grew a suite nobody could
   afford to run.** An instrument that has caught nothing in dozens of runs
   should justify its seconds.
+
+  **`leaks.py --history` is deliberately not in `check.py`**, and the reason is
+  that rule applied to itself. The commit half reports 17 messages that name
+  something and **cannot ever go green** -- a pushed message is append-only, and
+  `#438` made old messages into findings by importing 90 build-option names into
+  the index. A line printing 17 every run is the noise `--history` exists to
+  prevent. The issue half needs the network and would hold the suite red until
+  20 issues are edited.
+
+  Same call `localise.py --drift` gets, for the same reason: *"every legitimate
+  ETL change moves a value, so a gate on it would be red most of the time and
+  get ignored."*
+
+  **The gate that is worth having is pre-commit**, which is the one moment a
+  message is still editable:
+
+      uv run scripts/leaks.py --history --staged    # reads .git/COMMIT_EDITMSG
+
+  Proven by writing a racial trait's printed name into a staged message: exit 1,
+  naming the ref. #447.
 * **Kill a spawned server by process group.** `self.proc` is the `uv`
   wrapper, not the server; `terminate()` orphaned the uvicorn underneath and
   69 of them accumulated over three and a half days. `start_new_session=True`
@@ -124,7 +144,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `check.py` | runs every instrument; `--fast`, `--all`, `--history` |
 | `audit.py` | fire every declared row; catches raises and silent rows |
 | `lint.py` | ruff, plus two structural walks. Python only — never `web/` |
-| `leaks.py` | has a printed name got into the repo, or into a spec |
+| `leaks.py` | has a printed name got into the repo, a spec, a commit message or an issue; `--specs`, `--history`, `--issues`, `--staged` |
 | `blocked.py` | unfinished rows and what each waits on; the work queue |
 | `todo.py` | are the markers still true; fails when a wanted symbol arrives |
 | `coverage.py` | written / not written / half-written on purpose |

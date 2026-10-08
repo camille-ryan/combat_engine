@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """Has a printed name got into the repository?
 
-    uv run scripts/leaks.py            every tracked file
-    uv run scripts/leaks.py --specs    every spec an author is shown
+    uv run scripts/leaks.py             every tracked file
+    uv run scripts/leaks.py --specs     every spec an author is shown
+    uv run scripts/leaks.py --history   commit messages, and issue text
 
 The engine holds ids. Names live in `localization/names.json`, which is built
 from your own copy of the compendium and is not committed. This is what holds
@@ -46,6 +47,7 @@ name to authors with nothing saying so. See `names_a_race` in
 from __future__ import annotations
 
 import contextlib
+import json
 import re
 import sqlite3
 import subprocess
@@ -456,9 +458,132 @@ def columns(index: dict[str, list[str]]) -> int:
     return 0
 
 
+def history() -> int:
+    """The third walk: commit messages, and issue text with `--issues`.
+
+    **The root `CLAUDE.md` names six places a printed name must not go** -- a
+    comment, a docstring, a variable, a **commit message**, an **issue**, a
+    column -- and said "`scripts/leaks.py` checks both halves" while checking
+    four. Nothing read a message and nothing read an issue. Measured when this
+    was filed, by the same `_hits` + `_identifies` pair the file walk uses:
+
+        commit messages                665     names found    22
+        issues (title, body, comments) 447     names found    45
+
+    So the issue half is the larger one, and it is the only one of the six
+    where a find has a **remedy**: a commit message is append-only, an issue
+    is editable. (GitHub keeps edit history, so a scrub is a correction and
+    not an erasure.)
+
+    ## Why a historical find is information rather than a failure
+
+    `#438` imported 90 printed build-option names into `names.json`, and
+    commit messages written weeks earlier **became** findings the moment the
+    index grew. A tracked file can be reworded -- that commit reworded 13
+    comments -- and a message that is already pushed cannot. So this exits
+    non-zero only on `--issues`, where something can be done, and reports the
+    commit half as a count.
+
+    **The gate that matters is pre-commit**, which is the one moment a message
+    is editable, and that is what `--staged` is for.
+
+    ## What this walk does not catch, stated because it bit twice today
+
+    `identifies` waives a multi-word phrase unless it has three or more
+    non-stopwords or one word that is not a dictionary word. So
+    `<ordinary word> of <ordinary word>` is waived by design -- its own
+    docstring says *"a genuine two-word name made of two ordinary words is now
+    missed. That is the trade, and the ETL scrubber is the other line of
+    defence."*
+
+    **For a message or an issue there is no other line of defence.** Four
+    printed item names of that exact shape passed this gate in a draft today
+    and were caught only because somebody remembered reading them out of
+    `localisation()` ten minutes earlier. This walk would have passed them
+    too. It is a floor, not a ceiling. #447.
+    """
+    names = localisation()
+    if not names:
+        print("localization/names.json is missing.", file=sys.stderr)
+        return 0
+    index, _printed = _index(names)
+    rules = vocabulary()
+
+    def scan(text: str) -> list[tuple[str, str]]:
+        out: list[tuple[str, str]] = []
+        for line in text.splitlines():
+            for name, refs in _hits(line, index):
+                if _identifies(name, refs, rules, line):
+                    out.append((name, refs[0]))
+        return out
+
+    staged = "--staged" in sys.argv
+    if staged:
+        # The pre-commit gate: the message being written, nothing else.
+        path = ROOT / ".git" / "COMMIT_EDITMSG"
+        text = path.read_text() if path.exists() else ""
+        found = scan(text)
+        for _name, ref in found:
+            print(f"  the staged message names {ref}")
+        print(f"\n{len(found)} name(s) in the staged commit message")
+        return 1 if found else 0
+
+    log = subprocess.run(
+        ["git", "log", "--format=%H%x00%B%x01"], cwd=ROOT,
+        capture_output=True, text=True, check=False,
+    ).stdout
+    messages = [m for m in log.split("\x01") if m.strip()]
+    hits: dict[str, list[tuple[str, str]]] = {}
+    for entry in messages:
+        sha, _, body = entry.partition("\x00")
+        found = scan(body)
+        if found:
+            hits[sha.strip()[:9]] = found
+    print(f"  {len(messages)} commit message(s) read")
+    for sha, found in list(hits.items())[:10]:
+        refs = ", ".join(sorted({r for _n, r in found}))
+        print(f"  {sha} names {refs}")
+    print(
+        f"\n{len(hits)} commit message(s) name something in the index"
+        + ("  -- append-only, so this is a count rather than a gate"
+           if hits else "")
+    )
+
+    if "--issues" not in sys.argv:
+        print("  (pass --issues to read the tracker too; it needs the network)")
+        return 0
+
+    raw = subprocess.run(
+        ["gh", "issue", "list", "--state", "all", "--limit", "600",
+         "--json", "number,title,body,comments"],
+        cwd=ROOT, capture_output=True, text=True, check=False,
+    )
+    if raw.returncode:
+        print("  gh could not read the tracker; skipped", file=sys.stderr)
+        return 0
+    issues = json.loads(raw.stdout or "[]")
+    bad: dict[int, set[str]] = {}
+    units = 0
+    for issue in issues:
+        spots = [issue.get("title") or "", issue.get("body") or ""]
+        spots += [c.get("body") or "" for c in issue.get("comments") or []]
+        for text in spots:
+            units += 1
+            for _name, ref in scan(text):
+                bad.setdefault(issue["number"], set()).add(ref)
+    print(f"\n  {len(issues)} issue(s), {units} text unit(s) read")
+    for number, refs in sorted(bad.items()):
+        print(f"  #{number} names {', '.join(sorted(refs))}")
+    print(f"\n{len(bad)} issue(s) name something in the index")
+    print("  an issue is editable, which is why this one exits non-zero")
+    return 1 if bad else 0
+
+
 def main() -> int:
     if "--specs" in sys.argv:
         return specs()
+    if "--history" in sys.argv:
+        return history()
     names = localisation()
     if not names:
         print(
