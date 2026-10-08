@@ -64,10 +64,15 @@ BEFORE=$(git show "HEAD:scripts/fixtures/audited.json" 2>/dev/null)
 {
     echo "nightly wide sweep -- $(date '+%F %T') at ${AT}"
     echo
+    # **`PYTHONUNBUFFERED`, or the log is blind until the run ends.** Python
+    # block-buffers stdout through a pipe, so `tee` received nothing for
+    # thirty-seven minutes and the log held only the header -- which reads
+    # exactly like a crash, and is how this was misdiagnosed the first time.
+    # A 43-minute job has to be watchable while it runs.
     if [ "${1:-}" = "--fast" ]; then
-        uv run scripts/check.py --all --fast
+        PYTHONUNBUFFERED=1 uv run scripts/check.py --all --fast
     else
-        uv run scripts/check.py --all
+        PYTHONUNBUFFERED=1 uv run scripts/check.py --all
     fi
 } 2>&1 | tee "$LOG"
 VERDICT=${PIPESTATUS[0]}
