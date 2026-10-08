@@ -302,6 +302,41 @@ def _settled(page, selector: str, least: int, timeout: int = 15000) -> int:  # n
     return count
 
 
+def _cleared(page, selector: str, timeout: int = 5000) -> int:  # noqa: ANN001
+    """Wait until `selector` matches nothing; return what it reached.
+
+    **`_settled`'s other half, and #451 asked for it by arguing it could not
+    exist** -- *"waiting for absence has no condition to wait on"*. That is
+    true of one of the two absence cases in this file and false of the other,
+    and the two want opposite treatment:
+
+    * **Absence after something was removed** -- unpicking Move and reading
+      that the range is gone. There *is* a condition: becoming empty. A late
+      removal makes a bare `count() == 0` a false **red**, not a false green,
+      and polling for it is the ordinary fix. The two sites that read this way
+      were resting on a 200 ms `wait_for_timeout`, which is the sleep #451
+      declined to paper over with -- correctly, because a sleep is a guess at
+      a duration where this is a wait on the fact.
+    * **Absence with a paint pending and nothing yet asked to draw** -- "the
+      range is not drawn until it is asked for". Polling cannot help: it is
+      already zero and would return at once, and a *later* paint would arrive
+      after the check had passed. Those two reads are instead anchored on a
+      sibling that **is** settled -- `_settled(page, "#board .token", ...)`
+      runs ahead of both -- so the render pass that would have drawn the range
+      has provably completed and the zero is a real zero.
+
+    So the honest count is **four** absence assertions, not the nine #451
+    estimated from a grep: four assertions over five reads, two of each shape.
+    Neither shape is now a check that cannot fail.
+    """
+    deadline = time.monotonic() + timeout / 1000
+    count = page.locator(selector).count()
+    while count and time.monotonic() < deadline:
+        page.wait_for_timeout(100)
+        count = page.locator(selector).count()
+    return count
+
+
 def _check_chargen(page, check: Checks, problems: list[str]) -> None:  # noqa: ANN001
     """The advisor page: ranked, explained, and choosing nothing by itself.
 
@@ -385,6 +420,11 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
     # longer painted on every render -- `Move` is a thing you press and the
     # squares are the answer to having pressed it -- so the check presses it.
     before = _positions(page)
+    # **A bare `count()`, and defensibly so.** This reads absence with nothing
+    # asked to draw, which `_cleared` cannot help with -- it is already zero.
+    # What makes the zero real rather than early is the `_settled` on
+    # `#board .token` above: the render pass that would have painted the range
+    # has provably finished. #451.
     check.that(
         page.locator("#movement .mv").count() == 0,
         "the movement range is not drawn until it is asked for",
@@ -427,15 +467,20 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
     # which is why the state being tested is the picked class, and the range
     # is only read once nothing is being pointed at.
     page.mouse.move(4, 4)
-    page.wait_for_timeout(200)
+    # `_cleared`, not a 200 ms sleep: these read absence *after* a removal, so
+    # becoming empty is a condition and can be waited on. See #451.
+    board_picked = _cleared(page, "#board.aiming")
+    button_picked = _cleared(page, "#actions button.aiming")
     check.that(
-        page.locator("#board.aiming").count() == 0
-        and page.locator("#actions button.aiming").count() == 0,
+        board_picked == 0 and button_picked == 0,
         "unpicking Move leaves nothing picked",
+        f"board {board_picked}, button {button_picked}",
     )
+    put_away = _cleared(page, "#movement .mv")
     check.that(
-        page.locator("#movement .mv").count() == 0,
+        put_away == 0,
         "and puts the range away again",
+        f"{put_away} square(s) still lit",
     )
     if spot:
         sent = len(calls)
@@ -1063,6 +1108,7 @@ def _check_enumerated_move(page, check: Checks) -> None:  # noqa: ANN001
         "and offers Run, which only the enumerated squares used to carry",
         f"rows: {labels[:12]}",
     )
+    # Anchored the same way, on the `_settled` token wait above. #451.
     check.that(
         page.locator("#movement .mv").count() == 0,
         "the default board draws no range until Move is pressed",
