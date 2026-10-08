@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import inspect
 import re
 import traceback
 from dataclasses import dataclass, field
@@ -55,7 +56,7 @@ from functools import cache, lru_cache
 from pathlib import Path
 
 from combat_engine import chargen
-from combat_engine.content import loader
+from combat_engine.content import dummy, loader
 from combat_engine.engine import (
     Bus,
     Cast,
@@ -204,10 +205,6 @@ KNOWN_SILENT = {
     # grab before every row would change what every other row on the board is
     # being tested against. Each card's target line was read to confirm the
     # dependency rather than inferred from the verdict.
-    "m5302a3": "attacks a creature grabbed by it; the grab is m5302a2's",
-    "m5302a4": "attacks a creature grabbed by it; the grab is m5302a2's",
-    "m5838a2": "attacks a creature grabbed by it; the grab is m5838a1's",
-    "m3556a3": "acts on what it has grabbed; the grab is m3556a2's",
     "m5602a4": "commands a conjuration; m5602a3 is what conjures one",
     "m3219a5": "reanimates a dead ally; the board's one ally is at full health",
     # The two that are not a sibling dependency, and each is a different gap.
@@ -228,8 +225,6 @@ KNOWN_SILENT = {
     #
     # A sibling's grab, aura or earlier attack. The harness fires each row once
     # on a fresh board, so the sibling never ran -- `m467a2`'s family.
-    "m1929a1": "attacks a creature grabbed by it; the grab is m1929a0's",
-    "m1936a3": "hauls what it has grabbed; the harness never makes it grab",
     # **This reason was wrong and is the kind of wrong that matters.** I wrote it
     # in round 7 as "m6655a0 has not laid one here", which reads as a board gap.
     # Driven since, with the aura laid first: the row *does* widen it, 1 to 3. It
@@ -275,10 +270,7 @@ KNOWN_SILENT = {
     "m5825a4": "finishes a dying humanoid; nobody here is dying",
     # A sibling's grab. The harness fires each row once on a fresh board, so the
     # row that does the grabbing never ran -- `m467a2`'s family again.
-    "m1981a1": "attacks a creature grabbed by it; the grab is m1981's own",
-    "m2233a1": "grabbed target only; nothing here is grabbed",
     "m4645a2": "grabbed target only; nothing here is grabbed",
-    "m5857a3": "acts on what it has grabbed; the grab is m5857a2's",
     # Terrain and geometry the bare grid does not have.
     "m3993a7": "requires being submerged in water; the board has none",
     "m4148a7": "requires being submerged in water; the board has none",
@@ -297,11 +289,7 @@ KNOWN_SILENT = {
     #
     # A grab a sibling row lays, which the harness never runs. `m467a2`'s family,
     # now the largest of these groups by some distance.
-    "m1937a1": "attacks a creature grabbed by its stablemate; nothing grabs here",
-    "m4012a1": "attacks a creature grabbed by it; the grab is a sibling's",
-    "m4755a2": "attacks a grabbed creature; nothing here is grabbed",
     "m5128a4": "sustains a grab; there is none to sustain",
-    "m6436a3": "acts on what it has grabbed; nothing here is grabbed",
     # A target state `_provoke` does not produce. It makes an attack; it does not
     # slow, immobilise, stun or mark.
     "m4296a1": "targets a slowed or immobilized creature; nothing here is either",
@@ -328,7 +316,6 @@ KNOWN_SILENT = {
     # A target state `_provoke` does not produce.
     "m1812a4": "targets a prone creature; nothing here is",
     "m2245a2": "targets an unconscious creature; nothing here is",
-    "m3300a2": "targets a grabbed creature; nothing here is grabbed",
     "m5574a2": "targets an immobilized, stunned or unconscious creature; "
                "the board has none of the three",
     "m5466a3": "ends an ongoing effect or condition; the target carries neither",
@@ -354,22 +341,10 @@ KNOWN_SILENT = {
     # never happened. `m467a2` opened this family and it has grown every round --
     # at this rate it is the single biggest structural limit of the monster board,
     # and worth a line in #214 rather than more entries here if it keeps growing.
-    "m3474a3": "attacks what it has grabbed; the grab is its own sibling's",
-    "m5098a2": "its Requirement is holding a grab; it holds none",
     "m6092a2": "attacks a humanoid it has grabbed; nothing here is grabbed",
-    "m1177a1": "affects what it has grabbed; nothing here is grabbed",
-    "m1915a2": "attacks what it has grabbed; nothing here is grabbed",
-    "m1949a1": "attacks what its stablemate has grabbed; nothing here is grabbed",
     "m1982a2": "hits each creature it has grabbed; it has grabbed none",
     "m1982a3": "sustains a grab as a free action; there is none to sustain",
-    "m2078a2": "grabbed targets only; nothing here is grabbed",
-    "m3988a3": "attacks what it has grabbed; nothing here is grabbed",
-    "m4005a1": "attacks what it has grabbed; nothing here is grabbed",
-    "m5654a3": "attacks a Large or smaller creature it has grabbed; none is",
-    "m6113a3": "attacks what it is grabbing; it is grabbing nothing",
     "m6172a2": "attacks a creature it has grabbed; nothing here is grabbed",
-    "m6174a1": "attacks what it has grabbed; nothing here is grabbed",
-    "m6663a2": "attacks what it has grabbed; nothing here is grabbed",
     # An ally of a kind the board's one ally cannot be. It is a copy of the caster,
     # so a row wanting an ally of a *different* kind finds none -- checked rather
     # than assumed: both casters below read as `humanoid`, never undead or animate.
@@ -412,15 +387,9 @@ KNOWN_SILENT = {
     # grab-or-condition family again; each was driven with the state set.
     "m1617a1": "needs an immobilized enemy within 5. Driven with one: hits "
                "for 13 necrotic and heals 10",
-    "m2082a1": "affects a creature it is grabbing; the board arranges none. "
-               "Driven after its own grab: 10 necrotic to the held creature, "
-               "and aimed elsewhere it redirects to the one it holds",
     "m5124a4": "affects a creature it is grabbing. Driven with the relation "
                "set: hits, 10 damage, shares its space, restrained save-ends "
                "with ongoing 10",
-    "m5492a3": "needs a creature grabbed by the caster. Driven with the grab "
-               "set: +14 vs Fort, 4d10+5 necrotic, releases the grab, heals "
-               "10, and applies unconscious when the blow crosses bloodied",
     # #375's family, and the clearest case of it yet: the row's whole effect
     # is two extra initiative slots, and `Encounter.extra_turn` / `_splice`
     # announce nothing, so there is no event for the audit to count. Driven,
@@ -476,19 +445,11 @@ KNOWN_SILENT = {
     # that state set before it was admitted.
     "m2073a1": "its printed target must be prone; nothing here is. Driven "
                "with one: hits for 13",
-    "m2529a1": "needs a creature it is grabbing. Driven with the grab set: "
-               "hits for 5, slides 3, knocks prone, and releases the grab",
     "m4484a3": "its printed target must be blinded; nothing here is. Driven "
                "with one: hits for 20",
     "m6162a3": "needs a dominated creature adjacent, which the board never "
                "arranges. Driven with one: shifts, then slides the thrall "
                "back to adjacent",
-    "m6183a3": "needs a creature it is grabbing. Driven with the grab set: "
-               "it hits",
-    "m6185a7": "affects a creature it is grabbing. Driven with the grab set: "
-               "10 acid to the held creature",
-    "m6516a1": "its printed target is one creature grabbed by it. Driven with "
-               "the relation set: 15 to the held creature",
     # **The reach guard's one casualty, and it is the board.** #381 closed the
     # explicit-target arm of `dsl.use`, which used to let a granted swing
     # connect at any distance. This row nominates an enemy within 10 squares of
@@ -524,25 +485,7 @@ KNOWN_SILENT = {
     # which has led every round since `m467a2` and is now unambiguously the
     # board's biggest structural limit -- a row wanting a creature its own sibling
     # has grabbed, fired alone on a fresh board.
-    "m115863a4": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m3795a1": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m4007a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m5160a3": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m6642a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m1089a1": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m1089a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m1163a3": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m5814a3": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m5813a3": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m5330a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
     "m4014a1": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m4014a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m5529a3": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m5997a7": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m115875a1": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m3997a1": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m115910a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
-    "m5132a2": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
     # A target state `_provoke` does not produce. It makes an attack; it does not
     # daze, slow, immobilise, stun, knock prone or mark.
     "m1101a1": "its target must carry a condition the board never applies",
@@ -1633,7 +1576,78 @@ def board(ref: str, seed: int) -> tuple[World, int, set[str]]:
     # in the tree would inherit the opening round's damage and conditions
     # and nothing could ever report SILENT again.
     world.fight_cursor = mark
+    _pose(world, caster, declared, foe_team)
     return world, caster, armed
+
+
+#: What a row needs the board to have *done to somebody* before it can show
+#: itself, derived from the row rather than listed per ref.
+#:
+#: **This is #437's configurable dummy, aimed by the row's own text.**
+#: `KNOWN_SILENT` is 231 hand-written excuses and a read of a random 20 found
+#: 19 blaming the harness rather than the row. The largest single group is
+#: **grabbed, 63 entries** -- *"attacks or acts on a creature it has grabbed;
+#: nothing here is grabbed"* -- against 13 for a creature type, which was the
+#: knob asked for first.
+#:
+#: Derived, not tabulated: **57 of those 63 name a grab in their own body**
+#: and 35 again in their target line, so the harness can read what to pose.
+#: A 63-entry table would go stale the first time a row was rewritten.
+_WANTS = (
+    ("grab", re.compile(r"grabb|GRABBED|c\.grabbing")),
+)
+
+#: A printed Requirement that wants the state *absent*. Posing it for one of
+#: these refuses the row rather than arming it. See `_pose`.
+_NEGATED = re.compile(r"\bmust not\b|\bno longer\b|\bwithout\b|\bis not\b", re.I)
+
+
+def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
+    """Put a configured dummy on the board when the row asks for one.
+
+    **Per row, never on the shared recipe**, and that is the whole design.
+    `KNOWN_SILENT` records what widening the common board costs: a casual one
+    *"took every other monster's legal shift with it"*. A dummy spawned for
+    the row being audited cannot have that side effect, because this board is
+    built fresh per `(ref, seed)` and nothing else sees it.
+    """
+    from combat_engine.engine import Health
+
+    if declared is None:
+        return
+    try:
+        src = inspect.getsource(declared.body) if declared.body else ""
+    except (OSError, TypeError):
+        src = ""
+    asking = f"{src} {getattr(declared, 'requires_text', '') or ''} " \
+             f"{getattr(declared, 'target', '')}"
+    for what, pattern in _WANTS:
+        if not pattern.search(asking):
+            continue
+        # **A row can want the state to be absent**, and posing it then
+        # refuses the row outright. `m5124a4`'s Requirement is "must *not*
+        # have a creature grabbed", so the derived pose turned a silent row
+        # into a refused one -- the same shape as the casual board widening
+        # `KNOWN_SILENT` records, inside a per-row pose that was supposed to
+        # be immune to it. The negation is in the printed Requirement, which
+        # is the one place it is stated plainly.
+        if _NEGATED.search(getattr(declared, "requires_text", "") or ""):
+            continue
+        if what == "grab":
+            # Adjacent, and **held by the caster** -- which is the direction
+            # the excuses want: they read "a creature *it* has grabbed", so
+            # the row's own creature must be the grabber.
+            # **(6, 7), and the square matters.** The first version used
+            # (5, 8) for a monster row, which is where `board` already
+            # spawns the chargen ally -- so `grid.place` refused the dummy
+            # and 11 of the 13 rows that stayed quiet went on reporting
+            # "nothing here is grabbed" while something was. Adjacent to
+            # the caster at (6, 8) and free of every other placement here.
+            held = dummy.spawn(
+                world, level=max(1, getattr(declared, "level", 1)),
+                square=(6, 7), team=foe_team, grabbed_by=caster,
+            )
+            world.need(held, Health).hp -= 5
 
 
 #: What starting a fight emits no matter who is in it. Subtracted from what
