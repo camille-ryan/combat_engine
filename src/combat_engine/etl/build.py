@@ -23,7 +23,6 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-import threading
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -31,14 +30,11 @@ from functools import lru_cache
 from html import unescape
 from pathlib import Path
 
+from combat_engine.db import GAME, NAMES, SOURCE, localisation
+
 from . import feat, item, sanitise, wields
 from . import monster as monster_parser
 from . import power as power_parser
-
-ROOT = Path(__file__).resolve().parents[3]
-SOURCE = ROOT / "compendium.sqlite"
-GAME = ROOT / "data" / "game.db"
-NAMES = ROOT / "localization" / "names.json"
 
 #: The project's scope, from the README: characters to 10, monsters to 13.
 MAX_POWER_LEVEL = 10
@@ -3644,53 +3640,6 @@ def _digest(path: Path) -> str:
     return h.hexdigest()
 
 
-#: One connection per **thread**, not per process.
-#:
-#: This was `@lru_cache(maxsize=1)` plus `check_same_thread=False`, with a docstring
-#: reasoning that "read-only, so sharing it is safe". That is not what
-#: `check_same_thread` does: it makes sqlite3 *permit* cross-thread use, it does not
-#: serialise it. One `Connection` has shared statement and cursor state, so two threads
-#: executing on it interleave -- read-only prevents the *data* being corrupted, not one
-#: thread's `fetchone()` being answered from another thread's cursor.
-#:
-#: Measured. `POST /api/encounter` runs on a FastAPI worker thread, deliberately
-#: (`api/app.py:113-118`), and eight concurrent creates returned **seven 500s and one
-#: 200**. The tracebacks all landed in `content/loader.load` and `loader.pick`, with
-#: `KeyError: 'no monster m1010'` for a ref that exists and `IndexError: tuple index out
-#: of range` -- the two classic shapes of a cursor read from the wrong thread. Run
-#: sequentially the same eight all returned 200.
-#:
-#: It also made `scripts/browser.py` -- the entire cover for `web/` -- non-deterministic:
-#: 5 failures, then 3, then 3, on byte-identical code.
-_connections = threading.local()
-
-
-def _open_game() -> sqlite3.Connection:
-    db = getattr(_connections, "game", None)
-    if db is None:
-        if not GAME.exists():
-            raise SystemExit(f"{GAME} is missing. Run: uv run scripts/build.py")
-        # `check_same_thread` can go back to its default now: each connection is only
-        # ever touched by the thread that opened it, which is the actual invariant.
-        db = sqlite3.connect(f"file:{GAME}?mode=ro", uri=True)
-        db.row_factory = sqlite3.Row
-        _connections.game = db
-    return db
-
-
-def game() -> sqlite3.Connection:
-    """The built database. The engine reads this, never the compendium.
-
-    One connection per thread, opened once and kept. It used to open a fresh one on
-    every call, and `loader.spawn` calls it several times per creature -- so building an
-    audit board opened six connections, and an audit builds a hundred thousand boards.
-    That optimisation is intact; what changed is that the cache is per thread rather than
-    per process, because a `sqlite3.Connection` cannot be used from two at once. See
-    `_connections`.
-    """
-    return _open_game()
-
-
 #: Which namespaces are asked for which inflected form, and why. The same
 #: question `scripts/localise.py` asks, answered in the one place that can
 #: write them -- a second table would be a second opinion.
@@ -3765,19 +3714,6 @@ def _inflect(names: dict[str, dict[str, str]]) -> int:
         if derived:
             entry["derived"] = sorted(derived)
     return filled
-
-
-@lru_cache(maxsize=1)
-def localisation() -> dict[str, dict[str, str]]:
-    """Printed names, if this machine has them. The engine never calls this.
-
-    Cached: it is seventeen thousand entries, it is read once per name looked
-    up, and re-parsing it each time was a quarter of the time taken to draw
-    the board. Call `localisation.cache_clear()` after a rebuild.
-    """
-    if not NAMES.exists():
-        return {}
-    return json.loads(NAMES.read_text())
 
 
 if __name__ == "__main__":

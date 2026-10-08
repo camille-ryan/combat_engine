@@ -63,7 +63,7 @@ def printed_trap(level: int, pick: Random | None = None) -> dict | None:
     Returns a plain dict rather than a component, so `arm` stays the only
     thing that knows which columns it wants.
     """
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     try:
         rows = list(game().execute(

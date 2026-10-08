@@ -410,7 +410,7 @@ def _prerequisite_counts() -> dict[str, int]:
 
     if _PREREQS is not None:
         return _PREREQS
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     counts: dict[str, int] = {}
 
@@ -439,7 +439,7 @@ def feat_gates() -> dict[str, dict | None]:
     global _GATES
 
     if _GATES is None:
-        from combat_engine.etl.build import game
+        from combat_engine.db import game
 
         _GATES = {
             row["ref"]: (json.loads(row["prereq"]) if row["prereq"] else None)
@@ -722,7 +722,7 @@ def _wields() -> dict[str, set[str]]:
     """
     global _WIELDS
     if _WIELDS is None:
-        from combat_engine.etl.build import game
+        from combat_engine.db import game
 
         _WIELDS = {}
         for ref, raw in game().execute(

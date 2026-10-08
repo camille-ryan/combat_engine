@@ -139,7 +139,7 @@ def against_the_book(only: str = "") -> tuple[list[str], int]:
     this has to read one the same way.
     """
     from combat_engine import chargen
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     db = game()
     page = {

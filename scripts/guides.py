@@ -117,7 +117,7 @@ def weapon_groups() -> frozenset[str]:
     """
     try:
         sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
-        from combat_engine.etl.build import game
+        from combat_engine.db import game
 
         bare = [norm(r[0]) for r in game().execute(
             "SELECT DISTINCT grp FROM weapon") if r[0]]
@@ -835,7 +835,7 @@ def agreement(rated: dict[str, float], guide: Guide) -> tuple[int, int, Counter]
     The accuracy check that needs no human and no name. A wizard guide naming a
     fighter power has mis-resolved, and this counts it.
     """
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     g = game()
     owner = {r["ref"]: (r["class"] or "").lower()
@@ -935,7 +935,7 @@ def discover() -> int:
 
 
 def _power_owners() -> dict[str, str]:
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     if not hasattr(_power_owners, "_c"):
         _power_owners._c = {

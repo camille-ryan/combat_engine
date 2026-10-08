@@ -81,10 +81,19 @@ list would itself have been the leak.
   (`DamageType`, `Ability`, `Keyword`, `SKILLS`). Keep them function-local:
   `feat.py` records that a top-level import "pulls in the whole rules
   kernel".
-* `content` and `api/wire.py` import **from** ETL (`build.game`,
-  `build.localisation`). So an ETL schema change can reach both — including
-  `engine`, transitively through `content/loader.py`. A naive "engine does
-  not import etl" reading is wrong about this.
+* **Nothing imports ETL to *read* the database any more.** `game()` and
+  `localisation()` live in `src/combat_engine/db.py`, below every component,
+  and ETL imports them like everybody else. So this file used to warn that
+  `content` and `api/wire.py` import from ETL and that an ETL change therefore
+  reached `engine` transitively through `content/loader.py` — that route is
+  gone. The one remaining import of this package from outside it is
+  `scripts/build.py`, which calls `build()`, the writer. #334.
+
+  What a schema change still reaches is every **reader** of the column, which
+  is the honest version of the old warning: the tables are shared, the module
+  is not. `lint.py` fails if `db.py` ever imports from `combat_engine`, because
+  the moment it does, one of the five readers is reaching through another for a
+  sqlite file again.
 
 ## Checking
 

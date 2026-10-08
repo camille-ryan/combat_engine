@@ -23,9 +23,9 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from combat_engine.db import localisation
 from combat_engine.engine import Ident, Side, Team, World
 from combat_engine.engine.zones import Zone
-from combat_engine.etl.build import localisation
 
 
 def names_enabled() -> bool:
@@ -337,7 +337,7 @@ def _spec_lines(ref: str) -> dict[str, str]:
 
     Neither file is redistributable. Both are built from your own compendium.
     """
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     text = (localisation().get(ref) or {}).get("rules_text") or ""
     if not text:

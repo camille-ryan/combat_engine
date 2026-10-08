@@ -841,7 +841,7 @@ def _gates() -> dict[str, dict]:
     import json
 
     if not _GATES:
-        from combat_engine.etl.build import game
+        from combat_engine.db import game
 
         for row in game().execute("SELECT ref, prereq FROM feat WHERE prereq IS NOT NULL"):
             node = json.loads(row["prereq"]) if row["prereq"] else None
@@ -893,7 +893,7 @@ def _associated() -> dict[str, list[str]]:
     card a feat is a *prerequisite* on, and this is the list it riders. A feat can
     have either, both or neither. #214.
     """
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     out: dict[str, list[str]] = {}
     try:
@@ -1012,7 +1012,7 @@ def _wields_of(ref: str) -> list[str]:
     if _WIELDS is None:
         import json
 
-        from combat_engine.etl.build import game
+        from combat_engine.db import game
 
         _WIELDS = {}
         for row, raw in game().execute(

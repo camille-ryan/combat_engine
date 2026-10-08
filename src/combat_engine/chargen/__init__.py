@@ -333,7 +333,7 @@ def _printed_weapons() -> dict[str, Weapon]:
     `_fits_base` already looks: a khopesh is an axe that a heavy-blade
     item may still be laid on.
     """
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     out: dict[str, Weapon] = {}
     try:
@@ -466,7 +466,7 @@ def _from_the_book() -> dict[str, ClassLine]:
     hit points, per level and surges agree exactly -- which is the only
     reason to trust it for the rest.
     """
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     picks = {
         "cloth": (), "leather": (), "hide": (),
@@ -1332,7 +1332,7 @@ def _races_from_the_book() -> dict[str, RaceLine]:
     not races anybody can be. A row with no size is skipped rather than
     dealt as a race with no numbers at all.
     """
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     out: dict[str, RaceLine] = {}
     try:
@@ -2022,7 +2022,7 @@ def treasure(who: Character, rng: Random) -> list:
     or light blade" may only be laid on a heavy or light blade the
     character is actually carrying.
     """
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     plus = band(who.level)
     carried = list(who.chosen.weapons or who.line.weapons)
@@ -2122,7 +2122,7 @@ def magic_for(ref: str, *, plus: int = 0, powers: tuple[str, ...] = ()) -> Magic
     heroic floor, and to 1 for an item with no ladder -- a body reading
     "equal to the enhancement bonus" wants a number either way.
     """
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     row = game().execute(
         "SELECT i.ref, i.slot, i.crit, i.enh_to, i.base, "

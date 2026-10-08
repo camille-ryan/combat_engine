@@ -91,7 +91,7 @@ def _who(ev: dict) -> str:
 
 def _namer():  # noqa: ANN202
     """Printed names, if this clone has them. Ids otherwise."""
-    from combat_engine.etl.build import localisation
+    from combat_engine.db import localisation
 
     table = localisation()
 

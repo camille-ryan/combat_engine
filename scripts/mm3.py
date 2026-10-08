@@ -21,9 +21,9 @@ import re
 import statistics
 from collections import defaultdict
 
+from combat_engine.db import game
 from combat_engine.engine.monster_math import LIMITED, MM3, NORMAL, OLD
 from combat_engine.engine.rng import average
-from combat_engine.etl.build import game
 
 DICE = re.compile(r"(\d+d\d+(?:\s*\+\s*\d+)?)")
 ATTACK = re.compile(r"([+-]\d+)\s*vs\.?\s*AC", re.I)

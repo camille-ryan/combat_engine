@@ -190,6 +190,16 @@ def main() -> int:
         print(f"{ref}: {why}")
         faults += 1
 
+    for where, what in _db_reaches_upward():
+        print(
+            f"{where}: imports `{what}`. `db.py` is the read path to game.db and"
+            f" sits below every component -- five of them read it and none"
+            f" writes. An import from `combat_engine` here gives it a direction"
+            f" and puts a component back to reaching through another for a"
+            f" sqlite file, which is what #334 moved it out of."
+        )
+        faults += 1
+
     for where, _enum in _iterates_the_defence_enum():
         print(
             f"{where}: iterates `Defense`, which has five members and only"
@@ -581,6 +591,41 @@ def _scan() -> dict[str, object]:
                 if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                     seen.setdefault(node.name, []).append(node.lineno)
     return {"used": used, "scopes": scopes}
+
+
+def _db_reaches_upward() -> list[tuple[str, str]]:
+    """`db.py` must import nothing from `combat_engine`. It sits below everything.
+
+    That is the whole property the module exists for. ETL, content, chargen,
+    story and the API all read `game.db` through it, so the moment it imports
+    any of them it has a direction and one of those five is reaching through
+    another to get to a sqlite file -- which is the state #334 was filed about,
+    when the read path lived in `etl/build.py` and four components pulled 3,828
+    lines of compendium parsing to open a read-only database.
+
+    Measured at the time of the move:
+
+        import combat_engine.db           13.7 ms   2 modules, 0 parsers
+        import combat_engine.etl.build    67.8 ms  11 modules, 7 parsers
+
+    A static check rather than that timing, because the timing varies and the
+    import graph does not. #334.
+    """
+    path = ROOT / "src/combat_engine/db.py"
+    if not path.exists():
+        return []
+    out: list[tuple[str, str]] = []
+    tree = ast.parse(path.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            name = node.module or ""
+            if node.level or name.startswith("combat_engine"):
+                out.append((f"db.py:{node.lineno}", name or "a relative import"))
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith("combat_engine"):
+                    out.append((f"db.py:{node.lineno}", alias.name))
+    return out
 
 
 def _iterates_the_defence_enum() -> list[tuple[str, str]]:

@@ -325,7 +325,7 @@ def _cards() -> dict[str, tuple[set[str], bool]]:
     """What bonus types each row's printed text names, and whether it also
     prints a bonus with no type word at all."""
     sys.argv = sys.argv[:1]
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     out: dict[str, tuple[set[str], bool]] = {}
     # **Every table that holds a spec.** A monster ability prints a bonus

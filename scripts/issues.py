@@ -38,7 +38,7 @@ import subprocess
 from collections import defaultdict
 
 from combat_engine.content import declared
-from combat_engine.etl.build import game
+from combat_engine.db import game
 
 ROOT_TITLE = re.compile(r"^(?P<cls>\w+) level (?P<level>\d+): ", re.I)
 MONSTER_TITLE = re.compile(r"^Level (?P<level>\d+) monsters: ", re.I)

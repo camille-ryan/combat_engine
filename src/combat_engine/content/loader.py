@@ -13,6 +13,7 @@ import json
 import re
 from dataclasses import dataclass
 
+from combat_engine.db import game
 from combat_engine.engine import (
     AC,
     FORT,
@@ -41,7 +42,6 @@ from combat_engine.engine import (
 from combat_engine.engine.dsl import REGISTRY
 from combat_engine.engine.movement import place
 from combat_engine.engine.types import ActionType, DamageType
-from combat_engine.etl.build import game
 
 SIZES = {
     "tiny": Size.TINY, "small": Size.SMALL, "medium": Size.MEDIUM,

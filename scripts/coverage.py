@@ -45,7 +45,7 @@ import json
 from collections import defaultdict
 
 from combat_engine.content import declared
-from combat_engine.etl.build import game
+from combat_engine.db import game
 
 #: Heroic is `tier` when the page printed one and `min_level` when it did
 #: not -- 758 of the heroic feats print no tier line at all. `etl/feat.py`

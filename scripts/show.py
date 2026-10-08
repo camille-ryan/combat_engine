@@ -22,6 +22,7 @@ import re
 from combat_engine import chargen
 from combat_engine.content import loader
 from combat_engine.content.loader import SIZES
+from combat_engine.db import game
 from combat_engine.engine import (
     Bus,
     Conditions,
@@ -37,7 +38,6 @@ from combat_engine.engine import (
     use,
 )
 from combat_engine.engine.scaling import PRESETS
-from combat_engine.etl.build import game
 
 #: This used to be a four-entry map with a fighter fallback, from when only
 #: four classes existed -- so every warlord, paladin, ranger and warlock row

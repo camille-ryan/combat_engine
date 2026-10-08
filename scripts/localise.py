@@ -56,7 +56,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
-from combat_engine.etl.build import game, localisation
+from combat_engine.db import game, localisation
 
 #: Heroic is `tier` when the page printed one and `min_level` when it did not.
 #: Lifted from `scripts/coverage.py` deliberately -- one definition, two

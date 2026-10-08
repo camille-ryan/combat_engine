@@ -53,7 +53,7 @@ import json
 import re
 from collections import Counter, defaultdict
 
-from combat_engine.etl.build import game
+from combat_engine.db import game
 
 ABIL = {
     "Strength": "str", "Constitution": "con", "Dexterity": "dex",

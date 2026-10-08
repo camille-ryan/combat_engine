@@ -77,8 +77,8 @@ from collections import Counter
 from pathlib import Path
 
 from combat_engine.content import declared
+from combat_engine.db import game
 from combat_engine.engine.dsl import REGISTRY
-from combat_engine.etl.build import game
 
 #: The declared thresholds that predate #335's glyph parse, as
 #: `ref -> [declared, printed]`. **A baseline that may shrink and not grow.**

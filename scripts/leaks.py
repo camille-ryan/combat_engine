@@ -52,7 +52,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from combat_engine.etl.build import ROOT, SOURCE, game, localisation
+from combat_engine.db import ROOT, SOURCE, game, localisation
 from combat_engine.etl.sanitise import (
     ALLOWED,
     COMMON_ENOUGH,

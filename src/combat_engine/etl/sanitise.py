@@ -811,7 +811,7 @@ def vocabulary() -> set[str]:
         )
     # An older game.db has no such table.
     with contextlib.suppress(Exception):
-        from .build import game
+        from combat_engine.db import game
 
         out.update(r["word"] for r in game().execute("SELECT word FROM common_word"))
     for name in dir(types):
@@ -921,7 +921,7 @@ def weapon_names() -> frozenset[str]:
         return _WEAPON_NAMES
     found: set[str] = set()
     with contextlib.suppress(Exception):
-        from .build import game
+        from combat_engine.db import game
 
         for (slug,) in game().execute(
             "SELECT slug FROM weapon WHERE slug != '' AND priced = 1"
@@ -948,7 +948,7 @@ def class_names() -> frozenset[str]:
         return _CLASS_NAMES
     found: set[str] = set()
     with contextlib.suppress(Exception):
-        from .build import game
+        from combat_engine.db import game
 
         for (name,) in game().execute("SELECT name FROM class"):
             low = (name or "").strip().lower()
@@ -964,7 +964,7 @@ def races() -> frozenset[str]:
     found: set[str] = set()
     # No database, no names file, or an older one with no `race` table.
     with contextlib.suppress(Exception):
-        from .build import game, localisation
+        from combat_engine.db import game, localisation
 
         names = localisation()
         for (ref,) in game().execute("SELECT ref FROM race"):

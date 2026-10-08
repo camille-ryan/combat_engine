@@ -126,12 +126,17 @@ say so in the commit.
 | AI Policy | `src/combat_engine/policy/` | what the AI chooses, not what the rules allow. |
 | Chargen | `src/combat_engine/chargen/` | builds every character. Persistence does not exist. |
 | Story Engine | `src/combat_engine/story/` | fields an encounter: who is on the board, and where. `docs/STORY_ENGINE.md` is the charter; the rest of it is not built. |
+| Database | `src/combat_engine/db.py` | where `game.db` and the localisation are, and how to read them. Below every component; imports nothing from the package. |
 | Instruments | `scripts/` | belongs to no component. |
 
 Measured seams, so a claim about them can be checked: `etl` → `content` is
 **zero** imports (content reads the built database). `engine` → `content` is
 **five** sites and is a known leak. Nothing imports `api/` in Python at all
-— `web/` reaches it over HTTP, which is the cleanest boundary here.
+— `web/` reaches it over HTTP, which is the cleanest boundary here. And
+**nothing imports `etl/` to read the database**: `game()` lives in `db.py`,
+which imports nothing from the package, so five readers reach a sqlite file
+without reaching through each other. `scripts/build.py` calling `build()` is
+the one import of ETL from outside it. #334.
 
 ## Checking
 

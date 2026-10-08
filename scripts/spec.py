@@ -33,7 +33,7 @@ import json
 import re
 import sys
 
-from combat_engine.etl.build import game
+from combat_engine.db import game
 
 #: Heroic is `tier` when the page printed one and `min_level` when it did
 #: not. `etl/feat.py` argues it; `coverage.py` asks the same question.

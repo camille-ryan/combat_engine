@@ -374,7 +374,7 @@ def harvest(world: World, party: Party) -> None:
 
 def mixed(pool: list[str]) -> list[str]:
     """Reorder a pool so consecutive picks come from different roles."""
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     db = game()
     by_role: dict[str, list[str]] = {}
@@ -440,7 +440,7 @@ def budget(level: int) -> int:
     rule. Read off the database rather than from a table here, so it cannot
     disagree with what the monsters are actually worth.
     """
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     # **A *standard* monster's XP**, which the rank filter is for: taking the
     # first row with an XP at all picked up a solo at 2,500 and declared the
@@ -509,7 +509,7 @@ def _compose(level: int, paradigm: str, draw: Random | None) -> list[str]:
     not so a level-5 party meets a level-8 solo; sorting by distance keeps the
     band as variety rather than as difficulty.
     """
-    from combat_engine.etl.build import game
+    from combat_engine.db import game
 
     db = game()
     total = budget(level)
