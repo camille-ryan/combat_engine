@@ -66,6 +66,38 @@ it improves, red when it regresses, never a bare allowance. #372.
 * **Prove a new check is load-bearing** by breaking the thing it watches and
   confirming it goes red. A check that has never failed has never been shown
   to work.
+
+  **And break it the way a real author would, not the way you built it.** Two
+  of these went wrong in one session and both were instructive:
+
+  * `browser.py`'s absence checks: the first break removed `clear(el.movement)`
+    and everything stayed green, which proved the *line was dead* -- `render()`
+    already clears the overlay -- and proved nothing about the check. Breaking
+    the painter instead turned two red, and breaking `isMoveMode` turned a
+    third.
+  * `leaks.py`'s quoted-name walk: the planted name went straight through a
+    run reporting clean, because the plant used `repr()` and the pattern took
+    only backticks and double quotes. **The plant test found a real gap in the
+    pattern, not in the plant.** Adding single quotes found one more genuine
+    name in the tree.
+
+  So a plant that fails to go red is a finding either way. Do not adjust the
+  plant until you know which of the two is wrong.
+
+* **A check that passes over its own subject matter is the one to distrust.**
+  `leaks.py` reported "no printed names in tracked files" on every run on
+  record while about **44** sat in comments and docstrings -- because
+  `identifies` waives a two-word name made of two ordinary words in running
+  prose, which is correct, and nothing tested the *positions* where a waiver
+  does not apply. `sanitise.cited` existed for exactly that and every caller
+  was in the ETL.
+
+  The live consequence for anyone writing here: **gating your text is
+  necessary and not sufficient.** A commit message or issue comment can pass
+  `leaks.py` and still name two rows. Hand-read every quoted or backticked
+  phrase before posting, and be most careful quoting a docstring out of this
+  repo -- the places that explain the rule are the places that instance names
+  to explain it. #461.
 * **Measure before optimising.** `audit.py`'s ten minutes were blamed on
   `chunksize`; benchmarking showed the current setting is already the best
   available and repeat runs of the same config vary 15%. The conclusion is in
@@ -144,7 +176,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `check.py` | runs every instrument; `--fast`, `--all`, `--history` |
 | `audit.py` | fire every declared row; catches raises and silent rows |
 | `lint.py` | ruff, plus two structural walks. Python only — never `web/` |
-| `leaks.py` | has a printed name got into the repo, a spec, a commit message or an issue; `--specs`, `--history`, `--issues`, `--staged` |
+| `leaks.py` | has a printed name got into the repo, a spec, a **quoted run in a comment**, a commit message or an issue; `--specs`, `--history`, `--issues`, `--staged` |
 | `blocked.py` | unfinished rows and what each waits on; the work queue |
 | `todo.py` | are the markers still true; fails when a wanted symbol arrives |
 | `coverage.py` | written / not written / half-written on purpose |
