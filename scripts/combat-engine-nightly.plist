@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The nightly wide sweep. Install once:
+
+      cp scripts/combat-engine-nightly.plist ~/Library/LaunchAgents/
+      launchctl bootstrap gui/$UID ~/Library/LaunchAgents/combat-engine-nightly.plist
+
+  Check it is loaded:   launchctl print gui/$UID/com.combat-engine.nightly
+  Run it now:           launchctl kickstart -p gui/$UID/com.combat-engine.nightly
+  Remove it:            launchctl bootout gui/$UID/com.combat-engine.nightly
+
+  02:07 rather than 02:00 on purpose: nothing else wants that minute, and a
+  round hour is where every scheduled job on the machine lands at once.
+
+  `RunAtLoad` is false -- installing it should not start a 43-minute sweep.
+  stdout and stderr go to logs/, which is git-ignored, and `nightly.sh` writes
+  its own dated log besides.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.combat-engine.nightly</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/camille/proj/combat_engine/scripts/nightly.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/camille/proj/combat_engine</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>2</integer>
+        <key>Minute</key>
+        <integer>7</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/camille/proj/combat_engine/logs/launchd-nightly.out</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/camille/proj/combat_engine/logs/launchd-nightly.err</string>
+
+    <!-- `uv` lives in ~/.local/bin, which a launchd job does not inherit. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/camille/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+</dict>
+</plist>

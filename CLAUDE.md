@@ -177,6 +177,30 @@ a narrow run — so the rule is *rare, not fast*:
 * **`check.py --all` once before a push**, not once per commit. It is the only
   invocation that settles the whole-tree debt, and `check.py` now names that
   debt and **withholds "all instruments clean"** until it is paid.
+* **Or let the nightly pay it.** `scripts/nightly.sh` runs the wide sweep at
+  02:07 (`scripts/combat-engine-nightly.plist`, installed once with
+  `launchctl bootstrap`). The sweep is a **net, not a gate** — everything that
+  catches a regression in *seconds* already runs per commit — so a regression
+  that lands at 10am being found at 2am is the right trade against a
+  43-minute gate people route around.
+
+  **Read the result without being asked to**: the next `check.py` in any
+  session stops printing `wide sweep owed since <sha>` once a nightly has paid
+  it, which needs nobody to remember. Beyond that, `logs/nightly-latest.log`
+  holds the verdict and **`logs/NIGHTLY-FAILED` exists if and only if the last
+  run was red** — a one-line check at the start of a session, and the first
+  thing to look at before trusting a clean narrow run.
+
+  It refuses a dirty tree, because a sweep over uncommitted edits certifies no
+  commit, and it never commits the `audited.json` the sweep rewrites — it
+  reports whether a row changed sides or only the sha moved. #469.
+* **`--calls` is the per-commit evidence for a new verb**, and it is the thing
+  five wide sweeps in one session were paid for instead.
+  `audit.py --calls 'c.light()'` is seconds. `_changed` widens to all 21,304
+  rows for **any** change under `engine/` or `etl/` — a comment included — so
+  an engine change has no narrow option and `--calls` is the answer rather
+  than the widen. It is evidence the verb works, never that nothing broke;
+  the nightly is what says the second thing.
 * **After a rebuild the next run is wide, once.** `data/game.db` is git-ignored
   and every monster number is read from it, so a rebuild moves rows no path test
   can see.
