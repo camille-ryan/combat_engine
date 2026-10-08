@@ -12,7 +12,8 @@ revisit:
 races, powers, class features, deities and skills in the publisher's prose,
 so it can be stored neither raw nor scrubbed: `sanitise.scrub` only swaps
 strings it has a name table for, and there is no name table for a deity or
-for "you have a spellscar". A scrubbed raw column would therefore have
+for a setting condition a character simply has. A scrubbed raw column
+would therefore have
 shipped those sentences verbatim into a spec an authoring agent reads.
 
 So it is a JSON expression tree of atoms, each of which is an id, a number

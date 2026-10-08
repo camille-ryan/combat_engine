@@ -118,6 +118,13 @@ RULES_TERMS = {
     "holy symbol", "orb", "rod", "wand", "tome", "totem",
     "leather armor", "hide armor", "chainmail", "scale armor", "plate armor",
     "light shield", "heavy shield", "bow", "sword", "axe",
+    # **Being off the ground is a state the engine models.**
+    # `engine/falling.py` holds `AIRBORNE = ("fly", "hover", "levitate",
+    # "climb")` and decides who falls by it, so the word is this engine's
+    # own vocabulary. It is listed here because its only other claim to
+    # being ordinary English was a `common_word` seat earned by page
+    # frequency, and `_components` stopped trusting that source. #462.
+    "airborne",
     # Magic items. A slot is printed beside the price because it is
     # mechanics, and several items are named after the slot they fill --
     # so without these, scrubbing takes the word "neck" out of a neck

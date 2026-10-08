@@ -1,5 +1,5 @@
-"""General feats, the twelfth batch: action-point riders, the spellscar
-family, and a long tail of weapon and posture feats.
+"""General feats, the twelfth batch: action-point riders, one setting
+condition's family (`m6393a2`), and a long tail of weapon and posture feats.
 
 Four shapes account for most of this file.
 
@@ -8,7 +8,7 @@ point. `ActionPointSpent` names its subject `actor`, so `by_me` is false
 on it forever -- it reads `attacker` then `source` -- and every one of
 these predicates is written out by hand.
 
-**The spellscar tail.** Eighteen rows share one gate and every one of
+**The `f651` tail.** Eighteen rows share one gate and every one of
 them ends "If you have `f651`, ...". The ETL gives that feat a ref now,
 so `c.feat("f651")` is an ordinary question and the clause is *written*
 rather than dropped -- `spec.feat_ref()` has left this file entirely. A

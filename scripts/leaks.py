@@ -100,7 +100,17 @@ CORE = set(RULES_TERMS)
 #: parentheses included, so `_type_words` excuses it and the entry was dead.
 DEFERRED = {
     "battlerager": "#339 -- a sub-option name used as a BUILDS key",
+    # Found by `_components` the moment it stopped deferring to a
+    # `common_word` seat. The same shape as the entry above and the same fix:
+    # it is a `BUILDS` key, `c.build(...)` gates content rows on it, and
+    # renaming it is the re-model rather than an edit. #462 found it, #339
+    # removes it.
+    "thunderborn": "#339 -- a sub-option name used as a BUILDS key",
 }
+
+#: Read once each. `_components` asks them per candidate word.
+_DICT: frozenset[str] | None = None
+_TRUSTED: frozenset[str] | None = None
 
 SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__", "data", "localization"}
 TEXT_SUFFIXES = {".py", ".md", ".js", ".css", ".html", ".json", ".toml", ".txt", ".sql"}
@@ -279,15 +289,103 @@ def _components(names: dict, rules: set[str]) -> dict[str, list[str]]:
                 break
         return bare in types or word in types or bare in ALLOWED
 
+    # **`rules` does not get to overrule the three tests above it**, and that
+    # was silencing this walk for exactly the words it exists to find.
+    #
+    # `vocabulary()`'s fourth source is "every word appearing on at least a
+    # handful of compendium pages", and #337 already found that route hands
+    # proper nouns to this script as English. The guard it added -- in
+    # `build._common_words` -- asks whether a word is the **whole** printed
+    # name of a few rows, so a word that only ever appears *inside* a longer
+    # name is never tested and keeps its seat. Measured: 93 constituent words
+    # are seated that way, and **26 of them pass every other test here** and
+    # were excluded by `word not in rules` alone. All 26.
+    #
+    # So the seat is evidence about *frequency*, and by this point the walk has
+    # already established the word is rare and not an ordinary word in any
+    # inflection. Deferring to the seat lets the weaker test win. A word that
+    # **is** in a dictionary keeps its exemption, which is what preserves the
+    # cases `_common_words`' own comment is careful about -- an ordinary word
+    # some row happens to be called.
+    #
+    # Load-bearing: it reports a sub-option name that has been a `BUILDS` key
+    # with this check green since it was written. #462.
     return {
         word: sorted(refs)
         for word, refs in inside.items()
         if len(refs) <= COMMON_ENOUGH
-        and word not in rules
+        and word not in _trusted_vocabulary()
         and word not in ALLOWED
         and not excused(word)
         and not ordinary(word)
     }
+
+
+def _trusted_vocabulary() -> frozenset[str]:
+    """`vocabulary()` minus the one source that cannot be trusted here.
+
+    Three of `vocabulary`'s four sources answer "is this ordinary or
+    mechanical" honestly: the system dictionary, the engine's own enumerations,
+    and the hand-written `RULES_TERMS`. The fourth is **word frequency across
+    compendium pages**, and #337 already found that it hands proper nouns to
+    this script as English -- a deity is named on every page that invokes it.
+    `build._common_words` guards against that by refusing a word that is the
+    **whole** printed name of a few rows, which is why a word appearing only
+    *inside* longer names is never tested and keeps its seat.
+    
+    So this walk asks the three it can trust and ignores the fourth. Measured:
+    93 constituent words are seated by frequency alone and 26 of them pass
+    every other test here.
+
+    **Not simply "is it in a dictionary"**, which was the first attempt and was
+    too blunt: it overrode `RULES_TERMS` as well, and re-reported an armour
+    band that is deliberately listed there. The corpus half is the untrusted
+    one; the hand-written half is the most trusted thing in the file.
+    """
+    global _TRUSTED
+    if _TRUSTED is None:
+        from enum import EnumMeta
+
+        from combat_engine.engine import types
+
+        out = {w.lower() for w in RULES_TERMS} | {w.lower() for w in ALLOWED}
+        for name in dir(types):
+            member = getattr(types, name)
+            if isinstance(member, EnumMeta):
+                for item in member:
+                    if isinstance(item.value, str):
+                        out.add(item.value.lower().replace("_", " "))
+                    out.add(item.name.lower().replace("_", " "))
+        out |= set(_dictionary())
+        _TRUSTED = frozenset(out)
+    return _TRUSTED
+
+
+def _dictionary() -> frozenset[str]:
+    """The system word list, on its own.
+
+    Deliberately **not** `vocabulary()`, which is this plus the corpus's own
+    word frequencies plus the engine's enums -- and the corpus half is what
+    seats a proper noun. The question `_components` asks is only "does a
+    dictionary have this word", so only the dictionary is asked.
+
+    Absent on a machine without one, in which case every word looks invented
+    and the report gets noisier rather than wrong -- the same direction
+    `vocabulary` takes for the same reason.
+    """
+    global _DICT
+    if _DICT is None:
+        from combat_engine.etl.sanitise import DICTIONARY
+
+        words: set[str] = set()
+        if DICTIONARY.exists():
+            words = {
+                line.strip().lower()
+                for line in DICTIONARY.read_text(errors="ignore").splitlines()
+                if line.strip()
+            }
+        _DICT = frozenset(words)
+    return _DICT
 
 
 def tracked() -> list[Path]:

@@ -2777,7 +2777,8 @@ _BECOMES = re.compile(
     re.I | re.S,
 )
 
-#: "the mark of *<name>*" -- a deity's or a dragonmark's. Six occurrences.
+#: "the mark of *<name>*" -- a deity's, or a hereditary mark's (`m6439a1`).
+#: Six occurrences.
 _MARK_OF = re.compile(
     r"\bmark of\s+(.{0,46}?)(?=\s+(?:until|while|and|or|that|for)\b|[.,;]|$)",
     re.I | re.S,
