@@ -286,7 +286,7 @@
   "EffectExpired(actor=2, what=\"e14[cf:rogue-scoundrel-f0 advantage, start of target's next turn]\", why='start of turn')",
   "ActionSpent(actor=2, cost=<ActionType.MINOR: 'minor'>)",
   "PowerUsed(actor=2, power='p1455', targets=[4])",
-  "SurgeSpent(actor=4, left=6)",
+  "SurgeSpent(actor=4, left=6, source=2, power='p1455', healed=5)",
   "EffectApplied(source=6, target=4, duration=\"end of target's next turn\", label='m2821a0')",
   "ConditionApplied(source=6, target=4, condition=<Condition.WEAKENED: 'weakened'>, duration=\"end of target's next turn\")",
   "Healed(source=2, target=4, amount=8, hp=18)",
