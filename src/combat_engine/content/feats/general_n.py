@@ -1185,18 +1185,23 @@ _granted("f2130", "f2130b", swap=Swap(2, utility=True))
        reach=PERSONAL, target=SELF,
        trigger="you hit with an attack",
        on=Trigger(Hit, _i_hit, "you hit an enemy with an attack"),
-       dropped=("SkillCheck.target", "c.aftereffect()"))
+       dropped=("SkillCheck.target",))
 def f2130b(c: Cast) -> None:
     """Half the printed trigger is declared. `SkillCheck` says who rolled
     and against what skill but never who it was aimed at, so "the
     creature you intimidated" has no referent; the attack half does.
 
-    The aftereffect -- a shorter penalty once the save lands -- has no
-    verb. The Intimidate bonus is a check rather than a fight.
+    The aftereffect is the same penalty again, for a turn, once the save
+    lands -- `When.EOTNT`, because the card clocks it on the *target's* next
+    turn and not the caster's. The Intimidate bonus is a check, not a fight.
     """
     me = c.me
-    c.penalty("attack", c.cha_mod, on=c.trigger.target, until=When.SAVE_ENDS,
-              when=lambda ctx: ctx.get("target") == me)
+    victim = c.trigger.target
+    held = c.penalty("attack", c.cha_mod, on=victim, until=When.SAVE_ENDS,
+                     when=lambda ctx: ctx.get("target") == me)
+    c.aftereffect(held, lambda: c.penalty(
+        "attack", c.cha_mod, on=victim, until=When.EOTNT,
+        when=lambda ctx: ctx.get("target") == me))
 
 
 @power("f2132", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

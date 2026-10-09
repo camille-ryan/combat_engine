@@ -1448,15 +1448,15 @@ def m1423a5(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=15),
-    dropped=("c.aftereffect()",),
 )
 def m1423a6(c: Cast) -> None:
     """The stun plays. An Aftereffect fires when the save *succeeds* and the
     condition ends, which is the one moment nothing announces -- `escalate`
     is the opposite half and answers a save that failed."""
     if c.strike():
-        c.stunned(until=When.EONT)
-
+        victim = c.target
+        held = c.stunned(until=When.EONT)
+        c.aftereffect(held, lambda: c.penalty("attack", 2, until=When.SAVE_ENDS, on=victim))
 
 # ==========================================================================
 # m1564

@@ -1126,17 +1126,22 @@ def i3164x1(c: Cast) -> None:
 @power("i3471x1", level=5, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with a bow or crossbow attack",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.aftereffect()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i3471x1(c: Cast) -> None:
-    """The bow-or-crossbow half of the printed trigger *is* sayable --
-    `c.wielding` reads the weapon's group -- so it is asked here rather than
-    dropped. The aftereffect is not: nothing fires when a save ends an
-    effect."""
+    """Ongoing poison, and a last 5 points when the burn finally stops.
+
+    The bow-or-crossbow half of the printed trigger is read off the weapon's
+    group. The aftereffect used to be dropped for want of anything that
+    fires when a save ends an effect; `c.aftereffect` is that.
+    """
+    victim = c.target
     if not c.ammunition():
         return
     if c.wielding("bow") or c.wielding("crossbow"):
-        c.ongoing(5, DamageType.POISON)
+        burn = c.ongoing(5, DamageType.POISON)
+        c.aftereffect(
+            burn, lambda: c.flat(5, dtype=DamageType.POISON, on=victim)
+        )
 
 
 @power("i660x1", level=5, cls=ITEM, action=ActionType.NONE,

@@ -1038,6 +1038,103 @@ def two_types(out: Result) -> None:
 
 
 
+
+############################################################
+
+def aftereffect(out: Result) -> None:
+    """A second clause that lands when the first one ends.
+
+    "The target is stunned until the end of its next turn. **Aftereffect:**
+    the target takes a -2 penalty to attack rolls (save ends)" -- 22 rows
+    print one. It is the mirror of `escalate=`, which runs on a *failed* save
+    and worsens the hold in place: this runs when the hold is **over**, by a
+    save or by its clock.
+
+    Three things are asserted and the last two are the ones that could go
+    quietly wrong:
+
+    * it lands when the hold ends, and not before;
+    * it lands **once**, not once per end -- `on_end` can be reached twice
+      for one effect if anything ends it again;
+    * it does **not** land when the encounter closes. `on_end` is handed no
+      reason and runs for every end alike, so without a guard every
+      aftereffect in play would pay out as the board is torn down, laying
+      conditions on a decided fight.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies, is_
+    from combat_engine.engine.types import Condition
+
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    c = Cast(world=world, me=caster, ref="drivers:aftereffect")
+
+    held = c.condition(Condition.STUNNED, until=When.ENCOUNTER, on=foe)
+    c.aftereffect(held, lambda: c.condition(
+        Condition.SLOWED, until=When.SAVE_ENDS, on=foe))
+    out.that(is_(world, foe, Condition.STUNNED), "the hold is on")
+    out.that(not is_(world, foe, Condition.SLOWED),
+             "and the aftereffect has NOT landed yet")
+
+    world.effects.end(held, "driver")
+    out.that(not is_(world, foe, Condition.STUNNED), "the hold goes")
+    out.that(is_(world, foe, Condition.SLOWED),
+             "and the aftereffect lands as it goes")
+
+    # Once, not once per end.
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    c = Cast(world=world, me=caster, ref="drivers:aftereffect")
+    count: list[int] = []
+    held = c.condition(Condition.STUNNED, until=When.ENCOUNTER, on=foe)
+    c.aftereffect(held, lambda: count.append(1))
+    world.effects.end(held, "driver")
+    world.effects.end(held, "driver again")
+    out.that(len(count) == 1, "it lands once, not once per end",
+             f"landed {len(count)} times")
+
+    # **And not when the fight is over**, which is the guard worth having.
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    c = Cast(world=world, me=caster, ref="drivers:aftereffect")
+    late: list[int] = []
+    held = c.condition(Condition.STUNNED, until=When.ENCOUNTER, on=foe)
+    c.aftereffect(held, lambda: late.append(1))
+    world.effects.end_encounter()
+    out.that(not late,
+             "the encounter ending does NOT pay out the aftereffect",
+             f"landed {len(late)} times")
+
+    # **And not when the creature holding it dies**, which the audit found
+    # and this driver was not looking for: `i1621p1` raised inside `_die`,
+    # two frames under `bereave`, reaching for a creature no longer on the
+    # board. A hold cleared by death has no aftereffect to pay -- the card's
+    # clause is about the hold ending, not about the victim being removed.
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    c = Cast(world=world, me=caster, ref="drivers:aftereffect")
+    posthumous: list[int] = []
+    held = c.condition(Condition.STUNNED, until=When.ENCOUNTER, on=foe)
+    c.aftereffect(held, lambda: posthumous.append(1))
+    hurt = world.get(foe, Health)
+    world.damage(caster, foe, hurt.max_hp + 50, detail="drivers:aftereffect")
+    out.that(not posthumous,
+             "a holder dying does NOT pay out the aftereffect",
+             f"landed {len(posthumous)} times")
+
+    # The negative control: `escalate=` is a different clause and still is.
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    c = Cast(world=world, me=caster, ref="drivers:aftereffect")
+    worse: list[int] = []
+    c.condition(Condition.STUNNED, until=When.SAVE_ENDS, on=foe,
+                escalate=lambda eff: worse.append(1))
+    out.that(not worse, "escalate has not run either, on a fresh hold")
+
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -1047,6 +1144,7 @@ DRIVERS = {
     "sure_footed": (sure_footed, "difficult terrain ignored when shifting, and only then"),
     "reentry": (reentry, "a watcher is not re-entered by an event it caused"),
     "two_types": (two_types, "one roll that is two types, and resistance reads both"),
+    "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

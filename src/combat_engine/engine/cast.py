@@ -6403,6 +6403,61 @@ class Cast:
         holder.append(effect)
         return effect
 
+    def aftereffect(
+        self,
+        held: Effect | None,
+        clause: Callable[[], Any],
+    ) -> Effect | None:
+        """A second clause that lands when the first one ends.
+
+        "The target is stunned until the end of its next turn.
+        **Aftereffect:** the target takes a -2 penalty to attack rolls (save
+        ends)" -- 22 rows print one, and it is a standard clause rather than
+        a special case: when the hold goes, the aftereffect arrives.
+
+        **Not `escalate=`, which is its mirror.** That one runs on a *failed*
+        saving throw and worsens the hold in place; this runs when the hold
+        is *over*, whether a save ended it or its clock did. A row given
+        `escalate` for an Aftereffect line would pay out exactly when the
+        card says it should not.
+
+        **It does not fire when the encounter ends, nor when the creature
+        holding it dies.** `on_end` is handed no reason and runs for every end
+        alike, so without the guards every aftereffect in play would land as
+        the board was torn down, and every one on a dying creature would land
+        as `bereave` cleared it. `Effects.closing` covers the first;
+        `query.alive` covers the second, and the audit found it -- `i1621p1`
+        raised inside `_die`, two frames below `bereave`, reaching for a
+        creature that was no longer on the board.
+
+        **There is no "only on a save" switch and an attempt at one was
+        deleted.** It read `held.ended`, which `end` sets *before* it runs
+        `on_end` -- so the test was False on every call and the parameter did
+        nothing, which is this component's commonest bug wearing a keyword.
+        Telling a save from a clock needs the reason `on_end` is not given;
+        if a card ever needs that distinction, that is the change to make.
+
+        Returns the effect it was given, so a row can keep hold of it.
+        """
+        if held is None:
+            return None
+
+        def land() -> None:
+            # No once-only latch: `end` returns early on an effect it has
+            # already ended and `on_end` is run nowhere else, so this cannot
+            # be reached twice. A latch was written and deleted -- the plant
+            # test for it stayed green, which is the evidence.
+            from .query import alive
+
+            if self.world.effects.closing:
+                return
+            if not alive(self.world, held.owner):
+                return
+            clause()
+
+        held.on_end.append(land)
+        return held
+
     def suspend_when(
         self,
         held: Effect | None,

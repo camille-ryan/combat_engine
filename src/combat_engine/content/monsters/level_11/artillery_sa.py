@@ -1380,7 +1380,6 @@ def m4143a6(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=16),
-    dropped=("c.aftereffect()",),
 )
 def m4143a7(c: Cast) -> None:
     """No damage is printed on the hit line, so there is no `damage=` and no
@@ -1392,8 +1391,9 @@ def m4143a7(c: Cast) -> None:
     the card charges two.
     """
     if c.strike():
-        c.stunned(until=When.EONT)
-
+        victim = c.target
+        held = c.stunned(until=When.EONT)
+        c.aftereffect(held, lambda: c.penalty("attack", 2, until=When.SAVE_ENDS, on=victim))
 
 # ==========================================================================
 # m4482 -- a minion. Its single hit point is in the database and

@@ -1901,17 +1901,22 @@ def m5429a1(c: Cast) -> None:
     ),
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=9),
-    dropped=("c.aftereffect()",),
 )
 def m5429a2(c: Cast) -> None:
-    """"Save ends both" is one effect carrying the slow and the burn, so the
-    victim gets one throw and not two. The First Failed Saving Throw line is the
-    one remaining gap: `escalate` runs on a failure but nothing routes the
-    printed aftereffect through it."""
+    """Slowed and burning under one save, and immobilized if the first throw fails.
+
+    **This card prints no Aftereffect at all** -- it prints "First Failed
+    Saving Throw", which is `escalate=` and has existed all along. The old
+    marker named the wrong verb, and the old note here argued that nothing
+    routed the clause through `escalate` while describing exactly what
+    `escalate` does.
+    """
+    victim = c.target
     if c.strike():
         c.condition(
             Condition.SLOWED, until=When.SAVE_ENDS,
             ongoing=(10, DamageType.POISON),
+            escalate=lambda eff: c.immobilized(until=When.SAVE_ENDS, on=victim),
         )
 
 

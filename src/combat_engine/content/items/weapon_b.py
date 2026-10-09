@@ -876,13 +876,26 @@ def i1619x1(c: Cast) -> None:
     keywords=[Keyword.FIRE],
     trigger="you hit a target with an attack made with this weapon",
     on=Trigger(Hit, by_me, "you hit with this weapon"),
-    dropped=("c.aftereffect()",),
 )
 def i1621p1(c: Cast) -> None:
-    """The Aftereffect -- what happens when the save finally succeeds -- has
-    no hold to hang from. `c.condition(escalate=)` is the other side of the
-    same coin and fires on a *failed* save."""
-    c.ongoing(5, DamageType.FIRE)
+    """Ongoing fire, and when it stops the burn jumps to a nearby enemy.
+
+    The aftereffect lands on a *different* creature -- "one enemy within 2
+    squares of the original target" -- so the victim is captured now and the
+    neighbour is chosen at the moment the burn ends, which is when the card
+    says to look.
+    """
+    victim = c.target
+    burn = c.ongoing(5, DamageType.FIRE)
+
+    def spreads() -> None:
+        near = [w for w in sorted(c.enemies())
+                if w != victim
+                and query.distance_between(c.world, w, victim) <= 2]
+        if near:
+            c.ongoing(5, DamageType.FIRE, on=near[0])
+
+    c.aftereffect(burn, spreads)
 
 
 @power(

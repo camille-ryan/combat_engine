@@ -1503,7 +1503,6 @@ def m3571a4(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=9),
-    dropped=("c.aftereffect()",),
 )
 def m3571a5(c: Cast) -> None:
     """The stun lands; the Aftereffect -- a penalty that arrives when the stun
@@ -1511,8 +1510,9 @@ def m3571a5(c: Cast) -> None:
     could run it, but "aftereffect" is a named printed concept that eight rows
     now want and one symbol should serve."""
     if c.strike():
-        c.stunned(until=When.EONT)
-
+        victim = c.target
+        held = c.stunned(until=When.EONT)
+        c.aftereffect(held, lambda: c.penalty("attack", 2, until=When.SAVE_ENDS, on=victim))
 
 @power(
     "m3571a6",
@@ -1758,14 +1758,14 @@ def m4142a6(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=9),
-    dropped=("c.aftereffect()",),
 )
 def m4142a7(c: Cast) -> None:
     """The stun lands; the Aftereffect has nothing to hang on -- see
     `m3571a5`, which prints the same two sentences."""
     if c.strike():
-        c.stunned(until=When.EONT)
-
+        victim = c.target
+        held = c.stunned(until=When.EONT)
+        c.aftereffect(held, lambda: c.penalty("attack", 2, until=When.SAVE_ENDS, on=victim))
 
 # ==========================================================================
 # m4621

@@ -1261,7 +1261,6 @@ def m1427a5(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=17),
-    dropped=("c.aftereffect()",),
 )
 def m1427a6(c: Cast) -> None:
     """No damage is printed, so there is no `damage=` and no `c.hit()`: the
@@ -1269,8 +1268,9 @@ def m1427a6(c: Cast) -> None:
     that lands when the first one ends **by a save**, and `on_end` fires for
     the encounter teardown too."""
     if c.strike():
-        c.stunned(until=When.EONT)
-
+        victim = c.target
+        held = c.stunned(until=When.EONT)
+        c.aftereffect(held, lambda: c.penalty("attack", 2, until=When.SAVE_ENDS, on=victim))
 
 @power(
     "m1427a7",
@@ -2167,16 +2167,17 @@ def m1969a2(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=17),
     damage=Damage("2d8", 6, dtype=DamageType.PSYCHIC),
-    dropped=("c.aftereffect()",),
 )
 def m1969a3(c: Cast) -> None:
     """A toll on every attack power the victim spends, under one save.
 
     `c.on_attack` is the watch, hung on the hold so the two end together --
     laid separately the listener would outlive the saving throw that is
-    supposed to stop it. The Aftereffect is dropped: a hold that lands when
-    the first ends **by a save** has nowhere to go, since `on_end` fires for
-    the teardown as well.
+    supposed to stop it.
+
+    The Aftereffect hangs off the same hold. `c.aftereffect` is what the old
+    note here said did not exist, and its objection -- that `on_end` fires
+    for the teardown as well -- is exactly what that verb guards against.
     """
     victim = c.target
     if victim is None or not c.strike():
@@ -2190,6 +2191,7 @@ def m1969a3(c: Cast) -> None:
 
     watch = c.on_attack(toll, by=victim, until=When.ENCOUNTER, label=f"{c.ref} toll")
     hold.on_end.append(lambda: c.world.effects.end(watch, "the toll is paid"))
+    c.aftereffect(hold, lambda: c.dazed(until=When.SAVE_ENDS, on=victim))
 
 
 @power(
@@ -2568,12 +2570,13 @@ def m2329a2(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("2d8", 6, kind=LIMITED),
-    dropped=("c.aftereffect()",),
 )
 def m2329a3(c: Cast) -> None:
+    victim = c.target
     if c.strike():
         c.hit()
-        c.grants_advantage(until=When.SAVE_ENDS, to="team")
+        held = c.grants_advantage(until=When.SAVE_ENDS, to="team")
+        c.aftereffect(held, lambda: c.flat(5, on=victim))
 
 
 @power(
@@ -4906,7 +4909,7 @@ def m6088a0(c: Cast) -> None:
     keywords=[Keyword.CHARM, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=16),
     damage=Damage("2d6", 6, dtype=DamageType.PSYCHIC),
-    dropped=("c.aftereffect()",),
+    dropped=("c.treats_allies_as_enemies()",),
 )
 def m6088a1(c: Cast) -> None:
     """A borrowed swing, and domination only if that swing lands.
@@ -4916,9 +4919,10 @@ def m6088a1(c: Cast) -> None:
     on this row's own. "Charge or make a basic attack" is the victim's
     choice; the creature struck is this card's choice, which `on=` names.
 
-    The Aftereffect is dropped twice over: it is a hold that lands when the
-    first ends by a save, and "treats its allies as enemies for the purpose of
-    opportunity attacks" has no switch -- `c.provoke` opens one window for one
+    **Re-pointed.** Half the old objection is gone -- `c.aftereffect` lands
+    a clause when a hold ends -- and the other half is the whole of what is
+    left: "treats its allies as enemies for the purpose of opportunity
+    attacks" has no switch, because `c.provoke` opens one window for one
     named creature and nothing turns a side around.
     """
     victim = c.target

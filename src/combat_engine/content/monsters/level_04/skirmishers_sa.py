@@ -641,7 +641,6 @@ def m1434a3(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("1d8", 3, dtype=DamageType.POISON, kind=LIMITED),
-    dropped=("c.aftereffect()",),
 )
 def m1434a4(c: Cast) -> None:
     """The aftereffect is the one clause with nowhere to live: nothing fires
@@ -653,8 +652,9 @@ def m1434a4(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(5, DamageType.POISON)
-        c.slowed(until=When.SAVE_ENDS)
-
+        victim = c.target
+        held = c.slowed(until=When.SAVE_ENDS)
+        c.aftereffect(held, lambda: c.slowed(until=When.SAVE_ENDS, on=victim))
 
 # --------------------------------------------------------------------------
 # m1446

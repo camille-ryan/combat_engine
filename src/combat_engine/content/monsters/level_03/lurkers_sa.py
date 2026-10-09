@@ -450,15 +450,15 @@ def m1418a5(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=6),
-    dropped=("c.aftereffect()",),
 )
 def m1418a6(c: Cast) -> None:
     """The stun is exact. The aftereffect -- a second, lesser effect that lands
     when the first one ends -- has nothing to hang from: an effect's end is not
     an event a row can answer and `Effect.on_end` is not reachable from a save."""
     if c.strike():
-        c.stunned(until=When.EONT)
-
+        victim = c.target
+        held = c.stunned(until=When.EONT)
+        c.aftereffect(held, lambda: c.penalty("attack", 2, until=When.SAVE_ENDS, on=victim))
 
 @power(
     "m1418a7",

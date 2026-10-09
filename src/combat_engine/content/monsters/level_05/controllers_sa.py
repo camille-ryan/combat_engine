@@ -1067,12 +1067,13 @@ def m4152a4(c: Cast) -> None:
     keywords=[Keyword.COLD],
     attack=Attack(vs=FORT, printed=9),
     damage=Damage("1d6", 4, dtype=DamageType.COLD, kind=LIMITED, half_on_miss=True),
-    dropped=("c.aftereffect()",),
 )
 def m4152a5(c: Cast) -> None:
+    victim = c.target
     if c.strike():
         c.hit()
-        c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS)
+        held = c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS)
+        c.aftereffect(held, lambda: c.slowed(until=When.SAVE_ENDS, on=victim))
     else:
         c.hit(half=True)
 
@@ -1100,12 +1101,12 @@ def m4152a6(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=7),
-    dropped=("c.aftereffect()",),
 )
 def m4152a7(c: Cast) -> None:
     if c.strike():
-        c.stunned(until=When.EONT)
-
+        victim = c.target
+        held = c.stunned(until=When.EONT)
+        c.aftereffect(held, lambda: c.penalty("attack", 2, until=When.SAVE_ENDS, on=victim))
 
 # ==========================================================================
 # m4190

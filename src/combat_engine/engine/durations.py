@@ -191,6 +191,9 @@ class Effects:
     def __init__(self, world: World) -> None:
         self.world = world
         self.live: dict[int, Effect] = {}
+        #: True only while `end_encounter` is tearing the board down. Read by
+        #: `Cast.aftereffect`, which must not fire then.
+        self.closing = False
         self._next = 0
         world.bus.on(TurnStart, self._on_turn_start)
         # Last in its window. Expiry is the close of the turn, not the start
@@ -555,8 +558,18 @@ class Effects:
                 self.end(eff, why)
 
     def end_encounter(self) -> None:
-        for eff in list(self.live.values()):
-            self.end(eff, "encounter over")
+        # **Flagged while it runs, because an aftereffect must not land on a
+        # finished fight.** `on_end` fires for every end alike -- a save, a
+        # clock, a death, the encounter closing -- and it is handed no reason,
+        # so a clause that is supposed to follow a hold ending would also
+        # follow the whole board being torn down. `Cast.aftereffect` reads
+        # this.
+        self.closing = True
+        try:
+            for eff in list(self.live.values()):
+                self.end(eff, "encounter over")
+        finally:
+            self.closing = False
 
     def of(self, owner: int) -> list[Effect]:
         return [e for e in self.live.values() if e.owner == owner]

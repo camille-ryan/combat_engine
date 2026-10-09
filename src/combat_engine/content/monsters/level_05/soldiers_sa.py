@@ -1014,14 +1014,14 @@ def m1403a5(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=8),
-    dropped=("c.aftereffect()",),
 )
 def m1403a6(c: Cast) -> None:
     """The stun plays. The Aftereffect -- a penalty that follows once the
     stun itself ends -- has no hold to hang on; see the module docstring."""
     if c.strike():
-        c.stunned(until=When.EONT)
-
+        victim = c.target
+        held = c.stunned(until=When.EONT)
+        c.aftereffect(held, lambda: c.penalty("attack", 2, until=When.SAVE_ENDS, on=victim))
 
 # ==========================================================================
 # m1422
@@ -1134,12 +1134,12 @@ def m1422a5(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=8),
-    dropped=("c.aftereffect()",),
 )
 def m1422a6(c: Cast) -> None:
     if c.strike():
-        c.stunned(until=When.EONT)
-
+        victim = c.target
+        held = c.stunned(until=When.EONT)
+        c.aftereffect(held, lambda: c.penalty("attack", 2, until=When.SAVE_ENDS, on=victim))
 
 # ==========================================================================
 # m1436
@@ -2092,15 +2092,21 @@ def m4740a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("1d8", 6, kind=LIMITED),
-    dropped=("c.aftereffect()",),
 )
 def m4740a1(c: Cast) -> None:
-    """The slow and the weaken are one `c.condition` call, so one save ends
-    both. The Aftereffect -- a Fortitude penalty that follows once they
-    end -- is the gap named in the module docstring."""
+    """Slowed and weakened under one save, then a Fortitude penalty after.
+
+    One `c.condition` call carries both conditions, so the card's "save ends
+    both" gets the single throw it prints, and the Aftereffect hangs off that
+    one hold.
+    """
+    victim = c.target
     if c.strike():
         c.hit()
-        c.condition(Condition.SLOWED, Condition.WEAKENED, until=When.SAVE_ENDS)
+        held = c.condition(
+            Condition.SLOWED, Condition.WEAKENED, until=When.SAVE_ENDS
+        )
+        c.aftereffect(held, lambda: c.penalty(FORT, 2, until=When.EONT, on=victim))
 
 
 @power(
@@ -3370,14 +3376,14 @@ def m931a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("2d8", 5, kind=LIMITED),
-    dropped=("c.aftereffect()",),
 )
 def m931a2(c: Cast) -> None:
-    """The immobilize plays. The Aftereffect -- a slow that follows once it
-    ends -- is the gap named in the module docstring."""
+    """Immobilized, and a slow that follows once the immobilize ends."""
+    victim = c.target
     if c.strike():
         c.hit()
-        c.condition(Condition.IMMOBILIZED, until=When.SAVE_ENDS)
+        held = c.condition(Condition.IMMOBILIZED, until=When.SAVE_ENDS)
+        c.aftereffect(held, lambda: c.slowed(until=When.SAVE_ENDS, on=victim))
 
 
 @power(
