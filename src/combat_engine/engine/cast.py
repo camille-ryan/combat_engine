@@ -6343,6 +6343,19 @@ class Cast:
         """
         who = on if on is not None else self.me
         holder: list[Effect] = []
+        # **A handler is not re-entered by an event it caused itself.**
+        # `c.heal` inside a `Healed` watcher emits another `Healed`, which
+        # offers the same subscription again, which heals again -- until the
+        # stack runs out. Four rows in the tree had already hand-rolled a
+        # latch for exactly this and `i661p1`'s comment states the rule;
+        # four more had not, and one of them took the whole audit down with
+        # a `RecursionError` the moment items reached play.
+        #
+        # Scoped to **this** subscription and not to the event: a row whose
+        # handler causes a `Hit` should still let every *other* row see that
+        # hit, and only its own re-entry is the bug. One flag per `watch`,
+        # which is what the four latches each were.
+        running: list[int] = []
 
         def fire(ev: Any) -> None:
             # **A suspended effect's watcher does nothing.** Suspension lifts
@@ -6353,9 +6366,15 @@ class Cast:
             # every watcher-shaped verb in the surface.
             if holder and holder[0].suspended:
                 return
+            if running:
+                return
             before = len(self.world.bus.log)
             held = len(self.world.effects.live)
-            fn(ev)
+            running.append(1)
+            try:
+                fn(ev)
+            finally:
+                running.clear()
             # `once` means "fire once", not "live for one event", and those
             # differ for every trigger with a guard -- which is most of them.
             # Ending unconditionally burned the effect on the first event of

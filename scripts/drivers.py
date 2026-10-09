@@ -821,6 +821,96 @@ def sure_footed(out: Result) -> None:
 
 
 
+
+############################################################
+
+def reentry(out: Result) -> None:
+    """A watcher is not re-entered by an event its own handler caused.
+
+    The printed rules say nothing about this; it is a property of the engine
+    that nine rows depend on. "Whenever you heal a creature, it regains extra
+    hit points" is a `Healed` watcher that heals, and the heal it performs is
+    another `Healed` from the same source -- so the handler answers itself
+    until the stack runs out. **Four of the nine rows had hand-rolled a latch
+    and four had not**, and `i661p1`'s comment states the rule its neighbours
+    were missing: "without the latch it answers its own `Healed` and recurses
+    until the stack runs out."
+
+    It took the whole audit down with a `RecursionError` the moment #448 let
+    item rows reach a dealt character, because that put one of the unlatched
+    four on a board where somebody else healed an ally.
+
+    **Scoped to the one subscription, which is the half worth asserting.** A
+    row whose handler causes an event must still let every *other* row see
+    it; only its own re-entry is the bug. A guard keyed on the event class
+    would have silently stopped the second half, and nothing printed would
+    have complained.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Healed
+
+    world, caster, _ = _board()
+    vital = world.get(caster, Health)
+    vital.hp = max(1, vital.max_hp - 30)
+
+    c = Cast(world=world, me=caster, ref="drivers:reentry")
+    mine: list[int] = []
+
+    def greedy(ev: Healed) -> None:
+        # The shape of all nine rows: heal again, from the same source.
+        mine.append(1)
+        c.heal(1, on=caster)
+
+    c.watch(Healed, greedy, until=When.ENCOUNTER, on=caster)
+    c.heal(1, on=caster)
+    out.that(len(mine) == 1,
+             "a handler that heals is entered ONCE, not once per cascade",
+             f"entered {len(mine)} times")
+
+    # And the other half: a second watcher still sees what the first caused.
+    world, caster, _ = _board()
+    vital = world.get(caster, Health)
+    vital.hp = max(1, vital.max_hp - 30)
+    first = Cast(world=world, me=caster, ref="drivers:reentry:a")
+    second = Cast(world=world, me=caster, ref="drivers:reentry:b")
+    seen_a: list[int] = []
+    seen_b: list[int] = []
+
+    def causes(ev: Healed) -> None:
+        seen_a.append(1)
+        first.heal(1, on=caster)
+
+    def observes(ev: Healed) -> None:
+        seen_b.append(1)
+
+    first.watch(Healed, causes, until=When.ENCOUNTER, on=caster)
+    second.watch(Healed, observes, until=When.ENCOUNTER, on=caster)
+    first.heal(1, on=caster)
+    out.that(len(seen_a) == 1, "the causing watcher fires once",
+             f"{len(seen_a)}")
+    out.that(len(seen_b) >= 2,
+             "the OTHER watcher still sees the event it caused",
+             f"saw {len(seen_b)}")
+
+    # A plain watcher that causes nothing is unaffected -- the negative
+    # control, so the latch cannot be passing by refusing everything.
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:reentry")
+    vital = world.get(caster, Health)
+    vital.hp = max(1, vital.max_hp - 30)
+    count: list[int] = []
+    c.watch(Healed, lambda ev: count.append(1), until=When.ENCOUNTER, on=caster)
+    c.heal(1, on=caster)
+    c.heal(1, on=caster)
+    c.heal(1, on=caster)
+    out.that(len(count) == 3,
+             "three separate heals still fire the watcher three times",
+             f"{len(count)}")
+
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -828,6 +918,7 @@ DRIVERS = {
     "hiding": (hiding, "attacking gives you away, and AFTER is where you get it back"),
     "suspension": (suspension, "a trait switched off by a hit, and back on after"),
     "sure_footed": (sure_footed, "difficult terrain ignored when shifting, and only then"),
+    "reentry": (reentry, "a watcher is not re-entered by an event it caused"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 
