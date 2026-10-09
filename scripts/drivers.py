@@ -1679,6 +1679,90 @@ def counts_as(out: Result) -> None:
              "ended, the printed Requirement refuses again")
     out.that(c.wielding("hammer"), "and the weapon is still what it is")
 
+
+############################################################
+
+def declined(out: Result) -> None:
+    """The sixth marker: **we are not building this.**
+
+    The five before it all say something false about a row nobody intends to
+    finish. `todo=` and `dropped=` name a symbol, so `todo.py` reports the row
+    ready the moment that symbol lands. `narrative=` claims it plays.
+    `defect=` blames the compendium, which has the page. `obsolete=` is the
+    closest and is the one worth keeping clean -- that row was retired by a
+    *rules change*, and a scope decision written into it would blur the one
+    word carrying that argument.
+
+    **It does not mean "refuse the row" wherever the row still works.** Four
+    of the Fortune Card items grant a skill bonus that plays and have only
+    their card clause declined, so they keep `dropped=` and keep firing;
+    `blocked.py` buckets them apart instead. `content/CLAUDE.md` makes the
+    same call for `defect=` and gives the measurement: of 26 rows with a
+    blank attack defence, 23 play, and flagging all 26 would have refused 23
+    working rows.
+    """
+    from combat_engine.engine.dsl import REGISTRY, usable
+
+    world, caster, _ = _board()
+
+    #: Whole benefit declined -- refused in play, and out of the queue.
+    whole = ("i3333p1", "i3334p1", "i3335p1", "i3336p1",
+             "p14363", "p14364", "p14365")
+    #: Only one clause declined -- these play.
+    part = ("i3333x1", "i3334x1", "i3335x1", "i3336x1")
+
+    out.that(all(REGISTRY[r].declined for r in whole),
+             "a row whose whole benefit is declined carries the marker")
+    out.that(all(not REGISTRY[r].unfinished for r in whole),
+             "and is not waiting on anything, so the queue never counts it")
+    ok, why = usable(world, caster, REGISTRY[whole[0]])
+    out.that(not ok, "it is refused in play")
+    out.that(why == "not being built",
+             "and says so in its own words, not `todo=`'s")
+
+    out.that(all(not REGISTRY[r].declined for r in part),
+             "a row that still works does NOT carry it")
+    out.that(all(REGISTRY[r].dropped == ("Fortune.deck",) for r in part),
+             "it keeps `dropped=` naming the one declined clause")
+    # On its **own** board, where the character actually holds the item --
+    # the shared board above belongs to a monster, which refuses every item
+    # row for "not known" and would have proved nothing either way.
+    def playable(ref: str) -> bool:
+        its_world, its_actor, _ = _board(ref)
+        return usable(its_world, its_actor, REGISTRY[ref])[0]
+
+    out.that(all(playable(r) for r in part),
+             "and is still usable on its own board, bonus and all")
+    out.that(not playable(whole[0]),
+             "while the declined one is refused even there")
+    # And the marker is read *before* possession, so the reason a declined
+    # row gives is its own rather than whatever else happens to be wrong.
+    out.that(usable(world, caster, REGISTRY[whole[0]])[1] == "not being built"
+             and usable(world, caster, REGISTRY[part[0]])[1] == "not known",
+             "the marker is read before possession, so the reason is its own")
+
+    # The reason is required to be plain words with the call in it, because
+    # the next reader's question is whether it can be revisited.
+    out.that(all("2026-10-09" in REGISTRY[r].declined for r in whole),
+             "the reason records whose call it was and when")
+
+    # **Two branches here are deliberately unexercised, and saying so is the
+    # point.** `chargen.choices.legal_feats` and `race_options` both exclude
+    # `declined=` rows, added for symmetry with `obsolete=` -- but every
+    # declined row today is an item or a power, so no feat or racial trait
+    # reaches either guard. Planting them leaves this driver green.
+    #
+    # Left in rather than removed: the day a declined feat exists it would
+    # otherwise be dealt to a character, which is the failure `obsolete=`'s
+    # own note says Camille asked to prevent. `replay coverage` exists for
+    # this same reason -- a rule no fixture reaches can be changed freely and
+    # nothing says a word.
+    from combat_engine.chargen.choices import legal_feats
+
+    offered = set(legal_feats(cls="rogue", level=1, race="r7"))
+    out.that(not (offered & set(whole)),
+             "no declined row is offered to a character (vacuously: none is a feat)")
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -1699,6 +1783,8 @@ DRIVERS = {
                    "each damage die that shows a 1, rolled again"),
     "counts_as": (counts_as,
                   "what is in hand standing in for what a card asks"),
+    "declined": (declined,
+                 "the marker for work nobody intends to do"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

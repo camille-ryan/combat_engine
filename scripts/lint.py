@@ -525,7 +525,7 @@ def _strike_without_line() -> list[tuple[str, str, str, str]]:
     is not reported. Six rows when this was written.
 
     A `todo=` row is skipped -- it is refused in play and never reaches either
-    call -- and so are `obsolete=` and `defect=`.
+    call -- and so are `obsolete=`, `declined=` and `defect=`.
     """
     out = []
     for path in _asked_for():
@@ -535,7 +535,8 @@ def _strike_without_line() -> list[tuple[str, str, str, str]]:
             continue
         for start, _end, ref, node in _rows(tree):
             dec = " ".join(ast.unparse(d) for d in node.decorator_list)
-            if "todo=" in dec or "obsolete=" in dec or "defect=" in dec:
+            if any(m in dec for m in
+                   ("todo=", "obsolete=", "declined=", "defect=")):
                 continue
             calls = {
                 n.func.attr for n in ast.walk(node)

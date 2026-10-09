@@ -413,6 +413,7 @@ def race_options(cls: str, level: int = 1, build: Build | None = None) -> list[C
                 "traits_written": float(
                     sum(1 for r in rows
                         if not REGISTRY[r].todo and not REGISTRY[r].obsolete
+                        and not REGISTRY[r].declined
                         and not REGISTRY[r].defect)
                 ),
                 "surges": float(race.surges),
@@ -551,6 +552,10 @@ def legal_feats(
         and not REGISTRY[ref].todo
         # Superseded by a rules change: not a candidate for anybody.
         and not REGISTRY[ref].obsolete
+        # Deliberately not built, so it is not a candidate either -- the same
+        # argument, and the reason `declined=` exists rather than being said
+        # with `obsolete=`.
+        and not REGISTRY[ref].declined
         # The compendium is missing what it would be written from, so it is
         # refused in play and must not be offered to a player or to the dealer
         # either -- the same argument `obsolete=` carries above. #360.

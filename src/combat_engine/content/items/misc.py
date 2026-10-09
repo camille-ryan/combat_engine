@@ -1103,7 +1103,11 @@ def i3333x1(c: Cast) -> None:
 
 
 @power("i3333p1", level=3, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("Fortune.deck",))
+       reach=PERSONAL, target=SELF,
+       declined=(
+           "Fortune Cards are out of scope: "
+           "Camille's call, 2026-10-09 (#482)"
+       ))
 def i3333p1(c: Cast) -> None:
     """Fortune Cards are not modelled: no deck, no hand, no draw."""
 
@@ -1529,7 +1533,11 @@ def i3334x1(c: Cast) -> None:
 
 
 @power("i3334p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("Fortune.deck",))
+       reach=PERSONAL, target=SELF,
+       declined=(
+           "Fortune Cards are out of scope: "
+           "Camille's call, 2026-10-09 (#482)"
+       ))
 def i3334p1(c: Cast) -> None:
     """Fortune Cards are not modelled."""
 
@@ -1541,7 +1549,11 @@ def i3335x1(c: Cast) -> None:
 
 
 @power("i3335p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("Fortune.deck",))
+       reach=PERSONAL, target=SELF,
+       declined=(
+           "Fortune Cards are out of scope: "
+           "Camille's call, 2026-10-09 (#482)"
+       ))
 def i3335p1(c: Cast) -> None:
     """Fortune Cards are not modelled."""
 
@@ -1553,7 +1565,11 @@ def i3336x1(c: Cast) -> None:
 
 
 @power("i3336p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("Fortune.deck",))
+       reach=PERSONAL, target=SELF,
+       declined=(
+           "Fortune Cards are out of scope: "
+           "Camille's call, 2026-10-09 (#482)"
+       ))
 def i3336p1(c: Cast) -> None:
     """Fortune Cards are not modelled."""
 

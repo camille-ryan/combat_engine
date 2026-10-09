@@ -1198,13 +1198,21 @@ FORTUNE = ("Fortune.deck",)
 
 
 @power("p14363", level=2, cls="x7_889", usage=ENCOUNTER, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=FORTUNE)
+       reach=PERSONAL, target=SELF,
+       declined=(
+           "Fortune Cards are out of scope: "
+           "Camille's call, 2026-10-09 (#482)"
+       ))
 def p14363(c: Cast) -> None:
     """Draw two, keep one. There is no deck to draw from."""
 
 
 @power("p14364", level=6, cls="x7_889", usage=DAILY, action=MINOR,
-       reach=CloseBurst(5), target=EACH_ALLY, todo=FORTUNE)
+       reach=CloseBurst(5), target=EACH_ALLY,
+       declined=(
+           "Fortune Cards are out of scope: "
+           "Camille's call, 2026-10-09 (#482)"
+       ))
 def p14364(c: Cast) -> None:
     """Three different effects depending on which sort of card was
     discarded, and nothing knows a card's sort -- or that one was
@@ -1212,7 +1220,11 @@ def p14364(c: Cast) -> None:
 
 
 @power("p14365", level=10, cls="x7_889", usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=FORTUNE)
+       reach=PERSONAL, target=SELF,
+       declined=(
+           "Fortune Cards are out of scope: "
+           "Camille's call, 2026-10-09 (#482)"
+       ))
 def p14365(c: Cast) -> None:
     """Draw three and raise the hand limit for the encounter."""
 

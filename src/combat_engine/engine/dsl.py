@@ -876,6 +876,27 @@ class Power:
     #: Camille's instruction being that an obsolete option is offered neither to a
     #: player nor to the dealer.
     obsolete: str = ""
+    #: **We are not building this.** Not unfinished, not superseded, not a
+    #: gap in the source -- a decision that the mechanism is out of scope.
+    #:
+    #: The sixth marker, and the five before it all say something false.
+    #: `todo=` and `dropped=` name a symbol, so `todo.py` reports the row
+    #: ready the moment that symbol lands -- exactly wrong for a row nobody
+    #: intends to finish. `narrative=` claims it plays. `defect=` blames the
+    #: compendium, which has the page. `obsolete=` is the closest and is the
+    #: one worth keeping clean: that row was **retired by a rules change**,
+    #: and writing a scope decision into it would blur the single word
+    #: carrying that argument.
+    #:
+    #: The value is the reason in plain words, as `obsolete=` is and for the
+    #: same reason -- there is no symbol to wait for, ever. Say whose call it
+    #: was and when, because the next reader's question is "can this be
+    #: revisited" and nothing else in the row answers it.
+    #:
+    #: Refused by `usable` and excluded from every chargen draw, exactly as
+    #: `obsolete=` is: a declined option is offered neither to a player nor
+    #: to the dealer.
+    declined: str = ""
     #: The row cannot be written because **the compendium is missing what it
     #: would be written from**. Not a gap in this engine: a gap in the source.
     #:
@@ -1216,6 +1237,7 @@ def power(
     dropped: Iterable[str] = (),
     narrative: Iterable[str] = (),
     obsolete: str = "",
+    declined: str = "",
     defect: str = "",
     proficiency: Iterable[str] = (),
     swap: Swap | None = None,
@@ -1244,14 +1266,14 @@ def power(
     if todo and dropped:
         # One says nothing here works, the other says the rest of it does.
         raise ValueError(f"{ref}: todo and dropped cannot both be set")
-    if defect and (todo or dropped or obsolete or out_of_combat):
+    if defect and (todo or dropped or obsolete or declined or out_of_combat):
         # `defect=` says no symbol will ever finish this row, because the
         # sentence it needs is not in the source. Every other marker promises
         # the opposite -- a symbol to wait for, a clause that plays, or a
         # deliberate retirement -- so a row claiming both tells the tools two
         # incompatible things and gets counted by whichever asks first.
         raise ValueError(
-            f"{ref}: defect cannot be combined with todo, dropped, obsolete "
+            f"{ref}: defect cannot be combined with todo, dropped, obsolete, declined "
             f"or out_of_combat -- it means no symbol can finish this row"
         )
 
@@ -1326,6 +1348,7 @@ def power(
             dropped=dropped,
             narrative=narrative,
             obsolete=obsolete,
+            declined=declined,
             defect=defect,
             proficiency=tuple(proficiency),
             swap=swap,
@@ -1791,6 +1814,11 @@ def usable(
     # says what it is waiting for.
     if p.obsolete:
         return False, "superseded by a rules change"
+    if p.declined:
+        # **Deliberately not built.** Refused for `obsolete=`'s reason and
+        # not `todo=`'s: nothing is coming, so there is nothing to wait for,
+        # and offering a fraction of it would be worse than the absence.
+        return False, "not being built"
     if p.defect:
         # **The compendium is missing what this row would be written from.**
         # Refused rather than offered half-written, for the reason above: a

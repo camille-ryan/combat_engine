@@ -26,7 +26,7 @@ the AI policy without running anything — and **the body is code** against a
   declared `on=`, the body runs only when the trigger fires, so modifiers
   laid there are never laid.
 
-## Markers — five, and two of them take words
+## Markers — six, and three of them take words
 
 * `todo=(symbols,)` — nothing works. Refused in play.
 * `dropped=(symbols,)` — plays, one named clause missing.
@@ -38,6 +38,25 @@ the AI policy without running anything — and **the body is code** against a
   ever want. Refused by `usable` and excluded from every chargen draw, so it
   reaches neither a player's list nor the dealer's.
   Requires a docstring saying why.
+* `declined="why"` — **we are not building this.** Not unfinished, not
+  superseded, not a gap in the source: a decision that the mechanism is out of
+  scope. A reason in plain words, and **say whose call it was and when** — the
+  next reader's question is "can this be revisited" and nothing else in the row
+  answers it. Refused by `usable` and excluded from every chargen draw, exactly
+  as `obsolete=` is.
+
+  The other five all say something false here. `todo=` and `dropped=` name a
+  symbol, so `todo.py` reports the row ready the moment that symbol lands —
+  exactly wrong for a row nobody intends to finish. `narrative=` claims it
+  plays. `defect=` blames the compendium, which has the page. `obsolete=` is
+  the closest and is the one worth keeping clean: that row was retired by a
+  *rules change*, and writing a scope decision into it would blur the single
+  word carrying that argument.
+
+  Does not count toward `blocked.py`, which reads `todo + dropped` — a
+  declined row is not work owed.
+
+  First use: the 11 Fortune Card rows, Camille's call, 2026-10-09 (#482).
 * `defect="why"` — **the compendium is missing what the row would be written
   from.** Not a gap in this engine: a gap in the source, so no symbol will ever
   close it and `todo=`/`dropped=` both lie by naming one. Refused by `usable`

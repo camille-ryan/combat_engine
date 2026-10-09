@@ -3531,6 +3531,13 @@ def main() -> int:
             # would read as playing.
             retired.append((ref, (p.obsolete,), "GONE"))
             continue
+        if p.declined:
+            # **Deliberately not built.** The same bucket as `obsolete=` and
+            # for the same two reasons: counted with the `todo` rows it would
+            # read as waiting for something, and counted done it would read
+            # as playing. Neither is true of a row nobody intends to write.
+            retired.append((ref, (p.declined,), "GONE"))
+            continue
         if p.defect:
             # **The source is missing what the row needs, so no symbol
             # finishes it.** Counted with `todo=` it would report ready the

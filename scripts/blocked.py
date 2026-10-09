@@ -78,6 +78,24 @@ def main() -> int:
 #: day somebody names one, with no edit here.
 SOURCE_GAP = "compendium."
 
+#: Symbols that will never arrive **by decision**, with whose call it was.
+#:
+#: The third reason a row can be stuck, and the queue has to tell it from the
+#: other two: `SOURCE_GAP` above is "the page does not print it", `waiting` is
+#: "nobody has built it", and this is "nobody is going to".
+#:
+#: A row whose *whole* benefit is declined work carries `declined=` and never
+#: reaches this list -- it is refused in play and is not in `unfinished` at
+#: all. This is for the other case, which `content/CLAUDE.md` is explicit
+#: about for `defect=` and which holds here for the same reason: four of the
+#: Fortune Card items grant a working skill bonus and only their card clause
+#: is declined, so they keep `dropped=` and keep playing. Marking them
+#: `declined=` would have refused four rows that work.
+DECLINED = {
+    "Fortune.deck": "Fortune Cards are out of scope: Camille's call, "
+                    "2026-10-09 (#482)",
+}
+
 
 def _report(
     marked: list[tuple[str, tuple[str, ...]]],
@@ -86,7 +104,7 @@ def _report(
     have: dict[str, object],
     only_ready: bool,
 ) -> int:
-    ready = partial = waiting = sourced = capped = 0
+    ready = partial = waiting = sourced = capped = declined = 0
     lines: list[str] = []
     for ref, todo in marked:
         arrived = [w for w in todo if _one(w, have)]
@@ -100,6 +118,15 @@ def _report(
             left = [w for w in todo if w not in arrived]
             lines.append(f"  partial {ref:<10} {', '.join(arrived)} exists; "
                          f"still waiting on {', '.join(left)}")
+        elif all(w in DECLINED for w in todo):
+            # **Declined is not blocked either.** The row plays and the one
+            # clause it is missing is a clause nobody intends to write, so
+            # counting it with the unstarted rows overstates the backlog by
+            # exactly as much as the compendium rows did before #360.
+            declined += 1
+            if not only_ready:
+                why = DECLINED[todo[0]]
+                lines.append(f"  declined {ref:<9} {', '.join(todo)} — {why}")
         elif all(w.startswith(SOURCE_GAP) for w in todo):
             # **Waiting on the compendium is not waiting on work.** 22 rows
             # name `compendium.attack_defence`: the page prints no defence on
@@ -161,7 +188,8 @@ def _report(
             print(f"  written {ref:<10} was waiting on {wants}; drop it from the list")
 
     print(f"\n  tree: {ready} ready, {partial} partial, "
-          f"{waiting} still blocked, {sourced} waiting on the compendium")
+          f"{waiting} still blocked, {sourced} waiting on the compendium, "
+          f"{declined} declined")
     if capped:
         print(f"  of the {waiting} blocked, {capped} also want something the "
               f"page does not print, so they cannot fully clear")
