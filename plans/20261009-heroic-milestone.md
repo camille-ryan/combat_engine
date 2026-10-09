@@ -1,5 +1,9 @@
 # Finishing the 23 heroic-milestone issues: batch by sweep, not by topic
 
+> The ordered list a `/goal` should follow is
+> **`20261009-heroic-work-order.md`**. This file is the reasoning
+> behind that order; the other one is the work.
+
 The issues already say *what*. This says **in what order and in what batch**,
 because the cost is not the work — it is the verification.
 
