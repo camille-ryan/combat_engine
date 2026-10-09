@@ -77,9 +77,13 @@ def p992(c: Cast) -> None:
 def p1000(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(1), c.str_mod)
-        vacated = c.there
-        if c.push(1):
-            c.shift(to=vacated)  # step into the space it was driven out of
+        def push_and_follow() -> None:
+            vacated = c.there
+            if c.push(1):
+                # step into the space it was driven out of
+                c.shift(to=vacated)
+
+        c.instead_of("push", push_and_follow)
 
 
 @power(

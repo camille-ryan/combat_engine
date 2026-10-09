@@ -5801,7 +5801,9 @@ class Cast:
             for _clause, source in entries
         ]
 
-    def instead_of(self, what: str, default: Callable[[], Any]) -> Any:
+    def instead_of(
+        self, what: str, default: Callable[[], Any], *, on: int | None = None
+    ) -> Any:
         """Run whatever this use substituted for this clause, or the clause.
 
         The read half of `pre_empt`, called inside the row being changed:
@@ -5814,7 +5816,8 @@ class Cast:
 
         `default` is what the card prints, so the row keeps working
         unchanged for everybody who has nothing registered -- the contract
-        `dice_for` holds.
+        `dice_for` holds. `on` names the creature the clause is about when
+        that is not the row's current target.
 
         Reads `c.variant`, which `dsl.use` settled from the chosen menu
         entry **before** the body ran. So a row whose body runs once per
@@ -5851,7 +5854,17 @@ class Cast:
         # who is being hit, and the feat's own `c.target` went stale the
         # moment it finished arming -- the same reason `c.watch` hands its
         # callback the event.
-        return picked(self)
+        #
+        # `on` overrides which creature that is, for a clause about somebody
+        # other than the row's current target: `p2104`'s off-hand damage
+        # lands on a second enemy the body picked, and a feat replacing it
+        # has to be handed that one rather than the primary.
+        was = self.target
+        self.target = on if on is not None else was
+        try:
+            return picked(self)
+        finally:
+            self.target = was
 
     def instead_of_now(
         self, what: str, default: Callable[[], Any], *, on: int | None = None

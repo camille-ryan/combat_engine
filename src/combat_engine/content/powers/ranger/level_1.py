@@ -128,7 +128,8 @@ def p917(c: Cast) -> None:
 def p919(c: Cast) -> None:
     if c.strike():
         c.damage(c.w(1), c.dex_mod)
-    c.shift(1)  # "before or after": after is the half that can be taken here
+    # "Before or after": after is the half that can be taken here.
+    c.instead_of("shift", lambda: c.shift(1))
 
 
 @power(

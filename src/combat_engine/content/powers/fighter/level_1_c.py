@@ -74,7 +74,11 @@ def p2104(c: Cast) -> None:
     others = sorted(e for e in c.within(1, side="enemy") if e != c.target)
     second = c.choose(others, "who the off-hand catches") if others else None
     if second is not None and c.attack(c.str_, AC, on=second):
-        c.damage(c.w(1, hand="off"), on=second)
+        # `on=second` because the clause is about the off-hand's victim and
+        # not the primary target, which is what `c.target` still holds.
+        c.instead_of("off_damage",
+                     lambda: c.damage(c.w(1, hand="off"), on=second),
+                     on=second)
 
 
 @power(
@@ -94,9 +98,15 @@ def p2105(c: Cast) -> None:
     if not c.strike():
         return
     c.damage(c.w(2 if c.level >= 21 else 1), c.str_mod)
-    vacated = c.here
-    if c.shift(1) and vacated is not None:
-        c.slide(1, to=vacated)
+    def step_and_drag() -> None:
+        vacated = c.here
+        if c.shift(1) and vacated is not None:
+            c.slide(1, to=vacated)
+
+    # The shift and the slide into the vacated square are one printed
+    # clause, so they are replaced together: a feat that forgoes the shift
+    # has nothing left for the slide to aim at.
+    c.instead_of("shift", step_and_drag)
 
 
 @power(

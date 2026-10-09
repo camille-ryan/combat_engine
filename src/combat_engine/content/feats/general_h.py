@@ -1415,12 +1415,15 @@ _riders("f1298", {
 
 # p315's clause rides the swing that row hands an ally, p653 the
 # riposte, and the ranger's beast clause is still a printed name.
+# **All four clauses are written, and the marker was stale.** The card
+# lists four powers and each has its own entry above -- `p992` and `p653`
+# on `Hit`, `p315` on the granted swing's `PowerResolved`, and the ranger
+# variant on this row's own. Nothing was waiting for a verb.
 _riders("f1299", {
     "p992": _ongoing_if_alone,
     "p653": _ongoing_on_riposte,
 }, landed={"p315": _ongoing_on_granted_hit},
-   resolved={"p4369": _beast_ongoing_instead},
-   dropped=("c.hit_rider(ref, clause)",))
+   resolved={"p4369": _beast_ongoing_instead})
 
 # p997's clause pays out **on a miss**, which a rider hung on `Hit` never
 # sees; p1061 is the granted attack, which is readable now.
@@ -1431,12 +1434,24 @@ _riders("f1300", {
    dropped=("c.on_miss(ref)",))
 
 
-@_trait("f1301", todo=("c.hit_rider(ref, clause)",))
+@_trait("f1301", dropped=("query.moved_this_turn()",))
 def f1301(c: Cast) -> None:
-    """Both refs resolve. Both clauses rewrite the movement their row
-    already prints -- a shift traded for a move, and a move allowed only
-    if the row's own optional move was declined -- and that choice is
-    made inside the other body with nothing announcing it."""
+    """Two clauses, each rewriting the movement its row prints. One lands.
+
+    **`p919`: a move of 2 in place of its shift of 1.** Written as a
+    substitution -- `p919` reads `c.instead_of("shift", ...)` at its own
+    shift now -- rather than as a rider, which would have moved *and*
+    shifted and given the ranger three squares where the card gives two.
+
+    **`p971`: still held, and the marker is re-aimed.** Its clause is "if
+    you didn't move before the attack, you can shift 1 as a free action
+    after", and `p971`'s move is an unconditional `c.move(2)` on its first
+    use. Nothing records whether a creature moved this turn, so the
+    condition cannot be asked -- which is `query.moved_this_turn()` and not
+    the rider verb this row was marked for. A rider hung on the hit would
+    pay the shift whether the move was taken or not.
+    """
+    c.pre_empt("p919", "shift", lambda using: using.move(2))
 
 
 @_trait("f1302", dropped=("query.provoked_by()",))
