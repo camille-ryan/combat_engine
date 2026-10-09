@@ -2119,7 +2119,6 @@ def m5463a2(c: Cast) -> None:
     keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=13),
     damage=Damage("2d8", 6, dtype=DamageType.FIRE, kind=LIMITED),
-    dropped=("c.kill()",),
     trigger=_M5463_FELLED,
     on=Trigger(Dropped, when=about_me, text=_M5463_FELLED),
 )
@@ -2133,6 +2132,9 @@ def m5463a3(c: Cast) -> None:
     sourced from it, and by the time it ticks there is nothing else of its
     left to over-reach. "The m5463 is destroyed" is the named gap -- a
     creature at 0 hit points is dying, and nothing finishes one off.
+
+    "The m5463 is destroyed" is `c.kill` on itself, fired on the last
+    target so the burst is paid out in full before it leaves the board.
     """
     if c.first:
         c.ignore_resistance(dtype=DamageType.FIRE, on=c.me)
@@ -2141,8 +2143,8 @@ def m5463a3(c: Cast) -> None:
         c.condition(
             Condition.PETRIFIED, until=When.SAVE_ENDS, ongoing=(10, DamageType.FIRE)
         )
-
-
+    if c.last:
+        c.kill(on=c.me)
 # ==========================================================================
 # m5483
 # ==========================================================================

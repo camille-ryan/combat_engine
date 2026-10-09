@@ -768,7 +768,6 @@ def m3938a1(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=WILL, printed=14),
     damage=Damage(bonus=9, kind=MINION),
-    dropped=("c.kill()",),
 )
 def m3938a2(c: Cast) -> None:
     """The pull is what the attack roll buys; the 9 is not an attack at all
@@ -778,6 +777,9 @@ def m3938a2(c: Cast) -> None:
 
     "This destroys the m3938" is the named gap -- nothing takes a creature
     off the board outright.
+
+    "This destroys the m3938" is `c.kill` on itself, after the 9 has landed
+    on everybody the pull left adjacent.
     """
     if c.target is not None and c.strike():
         c.pull(2)
@@ -785,8 +787,7 @@ def m3938a2(c: Cast) -> None:
         return
     for foe in c.within(1, side="enemy"):
         c.hit(on=foe)
-
-
+    c.kill(on=c.me)
 # ==========================================================================
 # m4030
 # ==========================================================================

@@ -1135,6 +1135,77 @@ def aftereffect(out: Result) -> None:
 
 
 
+
+############################################################
+
+def crit_kill(out: Result) -> None:
+    """"A critical hit automatically reduces it to 0 hit points."
+
+    Nine stat blocks print it -- brittle constructs and the like -- and it is
+    **not damage**: no amount is rolled, so resistance does not apply, being
+    insubstantial does not halve it, and immunity to the blow's type does not
+    stop it. Dealing a very large hit instead would be wrong at all four of
+    those joints, which is why `c.kill` exists rather than
+    `c.damage(9999)`.
+
+    What it must still do is go out through the engine's one path from zero,
+    so `Dropped` is announced and the dying conditions or the death land
+    according to `Health.dying_at`. A creature sitting at 0 that nothing
+    noticed is the failure mode here.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences, Health
+    from combat_engine.engine.events import Dropped
+    from combat_engine.engine.query import alive, enemies
+    from combat_engine.engine.types import DamageType as D
+
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    hurt = world.get(foe, Health)
+    hurt.hp = hurt.max_hp
+    seen: list[Dropped] = []
+    world.bus.on(Dropped, seen.append)
+
+    c = Cast(world=world, me=caster, ref="drivers:crit_kill")
+    out.that(alive(world, foe), "the creature starts alive", f"{hurt.hp} hp")
+    out.that(c.kill(on=foe, critical=True), "killing it reports that it moved")
+    out.that(hurt.hp == 0, "it is at 0 hit points", f"{hurt.hp}")
+    out.that(not alive(world, foe), "and it is down")
+    out.that(len(seen) == 1, "`Dropped` was announced once", f"{len(seen)}")
+    out.that(seen and seen[0].critical,
+             "and it carries the critical flag, which the mirror rows read")
+
+    # Killing what is already down does nothing and says so.
+    out.that(not c.kill(on=foe), "killing it again reports no change")
+
+    # **Resistance and immunity do not stop it, because it is not damage.**
+    # This is the half a `c.damage(9999)` implementation would fail.
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    hurt = world.get(foe, Health)
+    hurt.hp = hurt.max_hp
+    held = world.get(foe, Defences) or world.add(foe, Defences())
+    for kind in D:
+        held.immune.add(kind)
+    c = Cast(world=world, me=caster, ref="drivers:crit_kill")
+    out.that(c.kill(on=foe), "immune to every damage type and still killed")
+    out.that(hurt.hp == 0, "at 0 hit points", f"{hurt.hp}")
+
+    # The negative control: ordinary damage *is* stopped by that immunity,
+    # so the board is genuinely immune and the kill is genuinely not damage.
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    hurt = world.get(foe, Health)
+    hurt.hp = hurt.max_hp
+    held = world.get(foe, Defences) or world.add(foe, Defences())
+    held.immune.add(D.FIRE)
+    world.damage(caster, foe, 50, D.FIRE, detail="drivers:crit_kill")
+    out.that(hurt.hp == hurt.max_hp,
+             "50 fire into a fire-immune creature does nothing",
+             f"{hurt.hp}/{hurt.max_hp}")
+
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -1145,6 +1216,7 @@ DRIVERS = {
     "reentry": (reentry, "a watcher is not re-entered by an event it caused"),
     "two_types": (two_types, "one roll that is two types, and resistance reads both"),
     "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
+    "crit_kill": (crit_kill, "a crit drops it to 0, and that is not damage"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

@@ -2883,7 +2883,6 @@ def m5824a4(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     requires=_dying_in_reach,
     requires_text="must have a dying humanoid in reach",
-    dropped=("c.kill()",),
 )
 def m5824a5(c: Cast) -> None:
     """The heal is exact and it works. "The target dies" is the other half and
@@ -2893,8 +2892,12 @@ def m5824a5(c: Cast) -> None:
 
     The type word is the target line now. The gate stays because it asks the
     *dying* half, which is a different clause and not a restatement of this
-    one."""
-    c.heal(15, on=c.me)
+    one.
+    """
+    victim = c.target
+    if victim is not None and c.dying(on=victim):
+        c.kill(on=victim)
+        c.heal(15, on=c.me)
 
 
 # --------------------------------------------------------------------------

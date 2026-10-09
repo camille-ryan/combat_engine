@@ -1186,15 +1186,19 @@ def m1978a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.kill()",),
+    todo=("c.surges_of(ref)",),
 )
 def m1978a5(c: Cast) -> None:
     """Nothing kills outright. `c.coup_de_grace` finishes a helpless creature
     through an attack and the printed line is not an attack; dropping a
     creature to 0 is not death, which is the distinction the row turns on.
-    The languages and the memories are not a combat clause at all."""
+    The languages and the memories are not a combat clause at all.
 
-
+    **Re-pointed.** `c.kill` exists now and is not what this waits on: the
+    kill is conditional on a creature being *reduced to 0 healing surges*
+    by this creature, and nothing tracks another creature's surges or
+    spends them from outside. The death is the easy half.
+    """
 # ==========================================================================
 # m2088
 # ==========================================================================

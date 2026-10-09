@@ -2335,13 +2335,19 @@ def i3188x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.kill()",),
+    dropped=("c.killed_this_turn()",),
 )
 def i3188p1(c: Cast) -> None:
     """The reckoning falls at the **second** turn ending the caster sees,
     because the row is used on his own turn and the first one is that
     turn's. Dropping below 1 hit point kills outright on the card; the
-    damage is dealt and the outright death is the clause nothing says."""
+    damage is dealt and the outright death is the clause nothing says.
+
+    **Re-pointed.** The row's own death is `c.kill` and that exists now.
+    The condition does not: "if you do not kill a creature before the end
+    of your next turn" needs to know whether the wielder killed anything,
+    and nothing keeps that tally.
+    """
     c.bonus("attack", 2, kind="item", on=c.me, until=When.EONT, once=True)
     c.bonus(
         "damage",
@@ -2367,8 +2373,6 @@ def i3188p1(c: Cast) -> None:
 
     c.watch(Dropped, felled, until=When.ENCOUNTER)
     c.watch(TurnEnd, reckon, until=When.ENCOUNTER)
-
-
 @power(
     "i3343x1",
     level=10,

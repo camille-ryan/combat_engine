@@ -1909,18 +1909,24 @@ def _brought_low_under_mark(world: World, me: int, ev: Any) -> bool:
 
 
 @power("i3410p1", level=5, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.kill()",),
+       reach=PERSONAL, target=SELF,
        trigger="you reduce an enemy marked by your p5736 to 10 hit points",
        on=Trigger(DamageApplied, _brought_low_under_mark,
                   "you bring a marked enemy to 10 hit points or fewer"))
 def i3410p1(c: Cast) -> None:
-    """Re-aimed twice. `p5736` is declared after all, and its mark is an
-    ordinary hold read by label, so the trigger is exact. What is still
-    missing is the effect: nothing takes a creature to 0 except by
-    dealing it damage, and damage is resisted and reduced where the
-    printed sentence is not."""
+    """Bring a marked enemy low enough and it drops outright.
 
+    `p5736` is declared and its mark is an ordinary hold read by label, so
+    the trigger is exact. `c.kill` goes out through the engine's one path
+    from zero, so a character lands unconscious and dying -- which is what
+    the card says -- and a monster dies.
 
+    The printed threshold rises at level 15 and 25; the heroic one is 10 and
+    the trigger already carries it.
+    """
+    victim = getattr(c.trigger, "target", None)
+    if victim is not None:
+        c.kill(on=victim)
 @power("i3446x1", level=5, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def i3446x1(c: Cast) -> None:

@@ -58,7 +58,6 @@ from combat_engine.engine import (
     Damage,
     DamageType,
     Event,
-    Health,
     Ident,
     Keyword,
     Melee,
@@ -195,27 +194,24 @@ def _aquatic_edge(c: Cast) -> None:
 def _crit_drops_it(c: Cast) -> None:
     """"Any critical hit to it drops it to 0 hit points."
 
-    Watched after the blow rather than before, so what is taken off is
-    whatever the critical left standing. `c.flat` rather than reaching into
-    `Health`: the drop has to announce itself or nothing downstream -- a
-    `Dropped` watcher, the scorer, the log -- sees the creature fall.
-    
-    **Approximated, and marked.** `c.flat` goes through `deal_damage`, so the
-    blow is absorbed by temporary hit points and stopped outright by resist-all
-    -- and the card says "reduced to 0 hit points" with no condition. Paying it
-    as damage is right about the common case and wrong about the creature that
-    has been given temp hp, which is why the tree's other rows of this shape
-    carry `c.kill()` and these now do too. Two readings of one sentence cannot
-    both be right.
+    `c.kill` and not `c.flat`, which is what this used to be and what the
+    old note here argued against itself about. The card says "reduced to 0
+    hit points" with no condition, and damage equal to the creature's
+    remaining hit points is absorbed by temporary hit points and stopped
+    outright by resist-all -- so the trait failed on exactly the creature
+    that had been given either. `c.kill` writes the hit points and then goes
+    out through `resolve._check_down`, so the fall still announces itself the
+    one way everything else does.
+
+    `critical=True` is passed on because `Dropped` carries it, and the rows
+    printing "reduced to 0 hit points **but not by a critical hit**" are the
+    mirror of this one -- a fall that lied about its cause would arm them.
     """
     me, ref = c.me, c.ref
 
     def shattered(ev: Hit) -> None:
-        if ev.target != me or not ev.critical:
-            return
-        body = c.world.get(me, Health)
-        if body is not None and body.hp > 0:
-            c.flat(body.hp, on=me)
+        if ev.target == me and ev.critical:
+            c.kill(on=me, critical=True)
 
     c.watch(Hit, shattered, until=When.ENCOUNTER, on=me, label=f"{ref} brittle")
 
@@ -697,8 +693,7 @@ def m3533a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-
-    dropped=("c.kill()",),)
+)
 def m3533a4(c: Cast) -> None:
     _crit_drops_it(c)
 
@@ -778,8 +773,7 @@ def m3537a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-
-    dropped=("c.kill()",),)
+)
 def m3537a3(c: Cast) -> None:
     _crit_drops_it(c)
 

@@ -1155,7 +1155,6 @@ def m3639a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.kill()",),
 )
 def m3639a2(c: Cast) -> None:
     """"Any critical hit reduces it to 0 hit points instantly" is paid as damage

@@ -1288,23 +1288,19 @@ def m1877a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.kill()",),
 )
 def m1877a3(c: Cast) -> None:
-    """"A critical hit reduces it to 0" is approximated as damage equal to
-    its current hit points -- `c.flat` goes through resistance and temporary
-    hit points, where a true kill would not, which is the named gap sixteen
-    other rows already carry under this symbol."""
+    """A critical hit against it drops it to 0 hit points, whatever it had.
+
+    `c.kill` and not damage equal to its remaining hit points, which is what
+    this was: a blow goes through resistance and temporary hit points where
+    the card sets no condition at all.
+    """
     me, ref = c.me, c.ref
 
     def shattered(ev: Hit) -> None:
-        if ev.target != me or not ev.critical:
-            return
-        from combat_engine.engine import Health
-
-        body = c.world.get(me, Health)
-        if body is not None and body.hp > 0:
-            c.flat(body.hp, on=me)
+        if ev.target == me and ev.critical:
+            c.kill(on=me, critical=True)
 
     c.watch(Hit, shattered, until=When.ENCOUNTER, on=me, label=f"{ref} brittle")
 

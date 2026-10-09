@@ -1583,7 +1583,7 @@ def m6016a2(c: Cast) -> None:
     damage=Damage(
         "4d8", 4, dtype=DamageType.NECROTIC, kind=LIMITED, half_on_miss=True
     ),
-    dropped=("c.kill()",),
+    dropped=("Effect.failures",),
 )
 def m6016a3(c: Cast) -> None:
     """Both outcomes leave a burn, and only on a creature that already takes
@@ -1594,6 +1594,11 @@ def m6016a3(c: Cast) -> None:
     creature is put down by damage, and a blow large enough to be sure of it
     is a different sentence that resistance and temporary hit points would
     both read.
+
+    **Re-pointed.** `c.kill` exists now; the death is sayable. What is not
+    is *which* failed save it is -- "Second Failed Saving Throw" needs a
+    per-effect count of failures, where `escalate` fires on every one
+    alike and cannot tell the first from the second.
     """
     victim = c.target
     if victim is None:
@@ -1605,8 +1610,6 @@ def m6016a3(c: Cast) -> None:
         c.hit(half=True)
     if _vulnerable_to(c, victim, DamageType.NECROTIC):
         c.ongoing(20 if landed else 10, on=victim)
-
-
 @power(
     "m6016a4",
     level=13,

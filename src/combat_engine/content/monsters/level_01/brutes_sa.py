@@ -56,7 +56,6 @@ from combat_engine.engine import (
     DamageType,
     Defences,
     Effect,
-    Health,
     Keyword,
     Melee,
     Ranged,
@@ -110,30 +109,25 @@ def _crit_line(c: Cast, dice: str, bonus: int) -> None:
 def _shattered(c: Cast) -> None:
     """A critical hit puts this creature down whatever its hit points are.
 
-    Paid as damage equal to whatever it has left rather than by writing to
-    `Health`, so the drop goes through `ecs.damage` and `Dropped` is announced
-    the one way everything else announces it -- which is what the other row on
-    one of these blocks is listening for.
-    
-    **Approximated, and marked.** `c.flat` goes through `deal_damage`, so the
-    blow is absorbed by temporary hit points and stopped outright by resist-all
-    -- and the card says "reduced to 0 hit points" with no condition. Paying it
-    as damage is right about the common case and wrong about the creature that
-    has been given temp hp, which is why the tree's other rows of this shape
-    carry `c.kill()` and these now do too. Two readings of one sentence cannot
-    both be right.
+    **This helper never fired once.** It read `ev.result` and then
+    `result.critical`, and a `Hit` has no `result` -- its fields are
+    `attacker`, `target`, `power` and `critical`. So `getattr` answered None,
+    the guard returned early every time, and the trait was inert on every row
+    that called it while reading as finished. A name spelled correctly
+    against the wrong object, which is this component's signature failure.
+
+    Now `ev.critical` directly, and `c.kill` rather than damage equal to what
+    the creature has left: the card says "reduced to 0 hit points" with no
+    condition, where a blow is absorbed by temporary hit points and stopped
+    outright by resist-all. `c.kill` goes out through `resolve._check_down`,
+    so the fall still announces itself the one way everything else does --
+    which the other row on one of these blocks is listening for.
     """
     me, ref = c.me, c.ref
 
     def struck(ev: Hit) -> None:
-        if ev.target != me:
-            return
-        result = getattr(ev, "result", None)
-        if not (result is not None and result.critical):
-            return
-        health = c.world.get(me, Health)
-        if health is not None and health.hp > 0:
-            c.flat(health.hp, on=me)
+        if ev.target == me and ev.critical:
+            c.kill(on=me, critical=True)
 
     c.watch(Hit, struck, until=When.ENCOUNTER, on=me, label=f"{ref} brittle")
 
@@ -407,8 +401,7 @@ def m4457a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-
-    dropped=("c.kill()",),)
+)
 def m4457a2(c: Cast) -> None:
     _shattered(c)
 
@@ -910,8 +903,7 @@ def m5413a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-
-    dropped=("c.kill()",),)
+)
 def m5448a0(c: Cast) -> None:
     _shattered(c)
 

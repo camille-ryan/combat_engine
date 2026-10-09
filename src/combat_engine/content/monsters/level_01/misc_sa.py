@@ -189,19 +189,22 @@ def m5452a2(c: Cast) -> None:
     target=NO_TARGET,
     trigger=_M5452_STRAY,
     on=Trigger(TurnEnd, when=_master_ended_turn, text=_M5452_STRAY),
-    todo=("c.leash()", "c.kill()"),
+    todo=("c.leash()", "c.walk_toward(square)"),
 )
 def m5452a3(c: Cast) -> None:
-    """A leash, and both of its halves are absent.
+    """A leash, and one of its two halves can be said now.
 
-    Nothing moves a creature *towards* a named square by the most direct
-    route -- `c.move` picks its own destination through the decider and
-    `c.flee` goes the other way -- and nothing drops a creature to 0 hit
-    points outright, which is the price of failing to get there. The trigger
-    is declared, so the row goes live the day either arrives.
+    The price of failing to get back -- dropping to 0 hit points -- is
+    `c.kill`. What is still absent is the walk: nothing moves a creature
+    *towards* a named square by the most direct route, since `c.move` picks
+    its own destination through the decider and `c.flee` goes the other way.
+
+    **Re-pointed there, and the kill deliberately waits with it.** The card
+    only drops the creature if the walk would have been longer than 8
+    squares, and without the walk there is no route to measure -- so firing
+    `c.kill` here would be a guess dressed as a rule. A row that kills on the
+    wrong condition is worse than one that does nothing.
     """
-
-
 # --------------------------------------------------------------------------
 # m6277
 # --------------------------------------------------------------------------

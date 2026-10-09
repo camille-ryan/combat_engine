@@ -1123,7 +1123,7 @@ def m2096a3(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.kill()",),
+    dropped=("c.host_of(ref)",),
 )
 def m2096a4(c: Cast) -> None:
     """Ten of its own hit points for a row back.
@@ -1134,6 +1134,10 @@ def m2096a4(c: Cast) -> None:
     clause -- nothing finishes a named creature outright, and the relation
     that would say which creature that is (`c.master`) is not set by any
     board the engine fields.
+
+    **Re-pointed.** `c.kill` exists now. What this waits on is a *host*:
+    the card kills the creature it is riding and becomes unattached, and
+    nothing on the board records one creature carrying another.
     """
     me = c.me
     health = c.world.get(me, Health)
@@ -1145,8 +1149,6 @@ def m2096a4(c: Cast) -> None:
         c.shift(3)
     else:
         c.flat(10, on=me)
-
-
 @power(
     "m2096a5",
     level=11,

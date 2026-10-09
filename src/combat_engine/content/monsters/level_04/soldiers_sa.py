@@ -1384,13 +1384,16 @@ def m4739a2(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.kill()",),
 )
 def m4739a3(c: Cast) -> None:
     """The ground it leaves behind is exact; the creature going to pieces to
     make it is the named gap, and paying it as damage is the wrong reading --
     "collapses" has no hit points in it. "Any nongoblin creature" is a type
-    word, which `c.is_kind` answers, so it is a gate and not a second marker."""
+    word, which `c.is_kind` answers, so it is a gate and not a second marker.
+
+    The creature going to pieces is `c.kill` on itself. Paying it as damage
+    would be the wrong reading: "collapses" has no hit points in it.
+    """
     ring = c.zone({c.here}, label=c.ref, until=When.ENCOUNTER, difficult=True)
 
     def outsider(ctx: dict[str, Any]) -> bool:
@@ -1398,8 +1401,7 @@ def m4739a3(c: Cast) -> None:
         return isinstance(who, int) and not c.is_kind("goblin", who)
 
     c.grants_in(ring, "attack", -2, side="any", kind="untyped", when=outsider)
-
-
+    c.kill(on=c.me)
 @power(
     "m4739a4",
     level=4,

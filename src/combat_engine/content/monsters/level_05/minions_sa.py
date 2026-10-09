@@ -62,7 +62,7 @@ from combat_engine.engine import (
     World,
     power,
 )
-from combat_engine.engine.events import Bloodied, DamageRolled, Dropped
+from combat_engine.engine.events import Bloodied, DamageRolled, Dropped, TurnEnd
 from combat_engine.engine.monster_math import MINION
 from combat_engine.engine.query import distance_between, enemies, has_combat_advantage
 from combat_engine.engine.triggers import Trigger, about_me, targets_me
@@ -766,15 +766,26 @@ def m820a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.restrict_action()", "c.kill()"),
+    todo=("c.restrict_action()",),
 )
 def m820a1(c: Cast) -> None:
-    """Neither half can be said. Cutting a turn down to a single move action is a
-    ceiling on the action budget rather than a grant, and `c.grant_action` only
-    ever adds; and the creature burning to ash is a reduction to nothing that is
-    not damage, so `c.flat` on its remaining hit point is the wrong reading as
-    well as the only available one. The sunlight itself is readable --
-    `c.terrain` carries the word -- which is why this is a `todo` on two verbs
-    and not on a terrain gap."""
-    if c.terrain("sunlight"):
-        c.note(f"{c.ref}: it is standing in the light")
+    """Sunlight burns it to ash, and that half is written now.
+
+    `c.kill` is the ash: a reduction to nothing that is not damage, so
+    `c.flat` on whatever it had left was the wrong reading as well as the
+    only one then available. The watch is on the turn *ending* in the light,
+    which is what the card says.
+
+    **Re-pointed.** What is still absent is the other half -- cutting a turn
+    down to a single move action is a *ceiling* on the action budget, and
+    `c.grant_action` only ever adds. The sunlight itself is readable, which
+    is why neither marker is a terrain gap.
+    """
+    me = c.me
+
+    def ends_in_the_light(ev: TurnEnd) -> None:
+        if ev.actor == me and c.terrain("sunlight", on=me):
+            c.kill(on=me)
+
+    c.watch(TurnEnd, ends_in_the_light, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} ash")

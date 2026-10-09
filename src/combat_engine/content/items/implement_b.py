@@ -583,18 +583,21 @@ def i3374x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    dropped=("c.kill()",),
 )
 def i3406p1(c: Cast) -> None:
-    """Re-aimed. The Effect is p416, declared and finished, so the attack
-    half plays now. What is still missing is the rider: "if this attack
-    reduces the creature to 5 hit points or fewer, the creature dies" --
-    nothing on `Cast` kills outright, and `c.damage` for the remaining
-    hit points is a different thing (it is damage, so it can be resisted
-    and it feeds every "when you damage" rider on the board)."""
+    """As `p416`, and the creature dies if the blow leaves it at 5 or fewer.
+
+    `c.kill` and not damage for the remainder: a blow is resisted, is halved
+    by being insubstantial, and feeds every "when you damage" rider on the
+    board, where the printed sentence does none of those.
+    """
+    victim = c.target
     c.use_power("p416", on=c.target, spend=False)
-
-
+    if victim is None:
+        return
+    body = c.world.get(victim, Health)
+    if body is not None and 0 < body.hp <= 5:
+        c.kill(on=victim)
 @power(
     "i3406p2",
     level=3,
@@ -605,14 +608,18 @@ def i3406p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you reduce a creature to 15 or fewer hit points with this wand",
     on=Trigger(DamageApplied, by_me, "you damage a creature with this wand"),
-    todo=("c.kill()",),
 )
 def i3406p2(c: Cast) -> None:
-    """Dropping a creature is `c.flat` with a big enough number; killing
-    one outright, past the dying floor a character has, is not something
-    any verb says."""
+    """Reduce a creature to 15 hit points or fewer with this wand and it dies.
 
-
+    The threshold is read off the trigger, which is a `DamageApplied` and
+    carries the hit points the blow left -- so "reduce *to* 15 or fewer" is
+    the state after the damage rather than a second measurement.
+    """
+    victim = getattr(c.trigger, "target", None)
+    left = getattr(c.trigger, "hp", None)
+    if victim is not None and left is not None and 0 < left <= 15:
+        c.kill(on=victim)
 @power(
     "i3434x1",
     level=3,

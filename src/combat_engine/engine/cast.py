@@ -6403,6 +6403,40 @@ class Cast:
         holder.append(effect)
         return effect
 
+    def kill(self, *, on: int | None = None, critical: bool = False) -> bool:
+        """Reduce a creature to 0 hit points outright. Returns whether it moved.
+
+        "A critical hit automatically reduces the creature to 0 hit points" is
+        nine stat blocks, and it is **not damage** -- no amount is rolled, no
+        resistance applies, nothing is halved by being insubstantial. Dealing
+        a very large blow instead would be wrong at every one of those
+        joints, and wrong again on a creature with damage immunity.
+
+        Routed through `resolve._check_down`, which is the engine's one path
+        out of zero: it announces `Dropped`, lets a row that answers its own
+        downfall heal out of it, and then either kills or lays the dying
+        conditions according to `Health.dying_at` -- 0 for a monster, below
+        zero for a character. Setting the hit points and stopping would leave
+        a creature at 0 that nothing had noticed.
+
+        `critical` says whether a critical hit did it, which `Dropped` carries
+        for the rows printing "reduced to 0 hit points, **but not by a
+        critical hit**". Passing it on matters: those rows are the mirror of
+        these, and a kill that claimed not to be a crit would arm them.
+        """
+        from .components import Health
+        from .resolve import _check_down
+
+        who = self._who(on)
+        if who is None:
+            return False
+        health = self.world.get(who, Health)
+        if health is None or health.hp <= 0:
+            return False
+        health.hp = 0
+        _check_down(self.world, who, health, source=self.me, crit=critical)
+        return True
+
     def aftereffect(
         self,
         held: Effect | None,

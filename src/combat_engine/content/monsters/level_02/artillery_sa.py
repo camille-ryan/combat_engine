@@ -498,16 +498,22 @@ def m3564a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.kill()",),
 )
 def m3564a2(c: Cast) -> None:
-    """A critical hit ends the creature outright whatever its hit points.
+    """A critical hit against it drops it to 0 hit points, whatever it had.
 
-    Nothing says "reduce to 0 hit points". `c.flat` of a large number is a
-    *blow*, which resistance, temporary hit points and immunity all read, and
-    this is none of those. The whole trait is the one missing verb, so the row
-    is refused in play rather than half written.
+    `c.kill` and not a very large blow: the card sets no condition, and damage
+    is absorbed by temporary hit points, halved by being insubstantial and
+    stopped outright by resist-all. `critical=True` is carried onto `Dropped`
+    for the rows that ask whether a critical did it.
     """
+    me = c.me
+
+    def shattered(ev: Hit) -> None:
+        if ev.target == me and ev.critical:
+            c.kill(on=me, critical=True)
+
+    c.watch(Hit, shattered, until=When.ENCOUNTER, on=me, label=f"{c.ref} brittle")
 
 
 # --------------------------------------------------------------------------

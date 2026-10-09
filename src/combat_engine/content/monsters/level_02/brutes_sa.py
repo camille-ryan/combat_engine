@@ -342,12 +342,22 @@ def m3563a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.kill()",),
 )
 def m3563a2(c: Cast) -> None:
-    """A critical hit ends the creature outright whatever its hit points, and
-    nothing says "reduce to 0". `c.flat` of a large number is a blow, which
-    resistance and temporary hit points both read, and this is not one."""
+    """A critical hit against it drops it to 0 hit points, whatever it had.
+
+    `c.kill` and not a very large blow: the card sets no condition, and damage
+    is absorbed by temporary hit points, halved by being insubstantial and
+    stopped outright by resist-all. `critical=True` is carried onto `Dropped`
+    for the rows that ask whether a critical did it.
+    """
+    me = c.me
+
+    def shattered(ev: Hit) -> None:
+        if ev.target == me and ev.critical:
+            c.kill(on=me, critical=True)
+
+    c.watch(Hit, shattered, until=When.ENCOUNTER, on=me, label=f"{c.ref} brittle")
 
 
 # --------------------------------------------------------------------------
