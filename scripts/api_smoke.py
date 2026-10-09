@@ -478,7 +478,19 @@ def check_hosted(check: Checks) -> None:
 #: the party finally carried its class features and `cf:rogue-scoundrel-f4` --
 #: which *is* its own id, and is exactly what serving no printed name looks
 #: like -- read as a failure.
-IS_REF = re.compile(r"^(p\d+|m\d+a\d+|cf:[a-z0-9-]+|mba|rba|second-wind)$")
+#: Every shape a row's id can take on the wire. An enumeration rather than
+#: "anything lower-case", so a printed name that happens to be lower-case is
+#: still caught -- which is the whole point of the check.
+#:
+#: **`i\d+[px]\d+` was missing and the check went red for it.** Item blocks
+#: could not reach a roster until #448 granted a dealt character its items'
+#: rows, so no run had ever served one and the pattern had never needed the
+#: shape. The wire was right: it served `i1376p1`, which *is* the ref. Same
+#: shape of gap as `leaks.py`'s missing single quote -- a pattern that had
+#: never been asked the question, found by being asked it.
+IS_REF = re.compile(
+    r"^(p\d+|m\d+a\d+|i\d+[px]\d+|cf:[a-z0-9-]+|mba|rba|second-wind)$"
+)
 
 
 def main() -> int:

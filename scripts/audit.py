@@ -611,12 +611,14 @@ KNOWN_SILENT = {
     # printed row correctly does nothing here -- "if any" is the card's own
     # word for it.
     "p13696": "its only combat clause is a fly-speed bonus; the board's ranger cannot fly",
-    # Undead-only rows. `c.is_kind("undead")` is True for the board's m416,
-    # but a single-target row is aimed by `_auto_targets`, which picks the
-    # nearest enemy and never that one. Driven at it by hand, p12601 deals
-    # radiant, pushes 4 and immobilises; the other two likewise.
-    "p12601": "affects only undead; the auto-targeter never picks the board's one undead",
-    "p5330": "affects only undead; the auto-targeter never picks the board's one undead",
+    # **Two undead-only rows used to be excused here and both outgrew it.**
+    # The excuse was that `_auto_targets` picks the nearest enemy and never
+    # the board's one undead, so the rows correctly did nothing. #448 gave a
+    # dealt character its items' rows, which changed what the board holds,
+    # and the sweep reported both as `OUTGROWN` -- they do something now. The
+    # entries are deleted rather than reworded, which is the tightening the
+    # per-ref baseline exists to force. The third row the comment mentioned
+    # has its own entry below and still earns it.
     # m5423a4 used to sit here -- "targets a dazed creature; the auto-targeter
     # aims by distance -- #361". It was the first of a family of 2,863 monster
     # abilities printing a condition-restricted target line, and the argument
