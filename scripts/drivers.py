@@ -1938,6 +1938,86 @@ def granted_keywords(out: Result) -> None:
         got = keywords_of(its_world, its_actor, REGISTRY[on_ref])
         out.that(kw in got, f"{ref} grants {kw.value} to {on_ref}")
 
+
+############################################################
+
+def item_as_weapon(out: Result) -> None:
+    """A shield that is also a pick, and a rod that is also a mace.
+
+    Four item rows print a full weapon profile on something that is not a
+    weapon. There is no `weapon` table row for them -- they are items -- so
+    the numbers come off the card and are hand-written into the row, which
+    is how every other row in this tree gets its numbers.
+
+    **On the belt, not in hand.** A shield-as-pick is a *second* weapon the
+    character may take up. Arriving held would make `Gear.wield` stow
+    whatever was in the main hand, so laying an item's profile would
+    silently disarm the character -- which is worse than the clause not
+    working.
+
+    The other ten rows that wore this symbol are four different mechanisms
+    and none of them is this one. See `#474`: twelve more are blocked on
+    chargen rather than on any verb, because the pact blades exist in the
+    `weapon` table and nothing deals one.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+
+    world, caster, _ = _board("p5330")
+    gear = world.get(caster, Gear)
+    if gear is None:
+        out.that(False, "the board deals this character gear")
+        return
+    before = len(gear.weapons)
+    held_before = {w.ref for w in gear.held}
+
+    c = Cast(world=world, me=caster, ref="drivers:asweapon")
+    eff = c.as_weapon(damage="1d6", group="pick", proficiency=2,
+                      properties=frozenset({"high crit", "off-hand"}))
+    out.that(eff is not None, "a profile is laid as an effect")
+    out.that(len(gear.weapons) == before + 1, "and the weapon list grows by one")
+
+    arm = next(w for w in gear.weapons if w.ref == "drivers:asweapon")
+    out.that(arm.damage == "1d6" and arm.group == "pick",
+             "carrying the die and group the card printed")
+    out.that(arm.proficiency == 2, "and its proficiency")
+    out.that("high crit" in arm.properties and "off-hand" in arm.properties,
+             "and its properties")
+
+    out.that(arm.ref in gear.stowed, "it starts on the belt")
+    out.that({w.ref for w in gear.held} == held_before,
+             "so nothing that was in hand was disarmed")
+
+    # It answers the questions a row asks about what is in hand, once drawn.
+    gear.wield(arm)
+    out.that(c.wielding("pick"), "drawn, a Requirement for a pick passes")
+    out.that(not c.wielding("crossbow"), "and one for something else does not")
+
+    # Ending it takes the profile away again.
+    world.effects.end(eff, "driver")
+    out.that(len(gear.weapons) == before, "ended, the profile is gone")
+    out.that(not any(w.ref == "drivers:asweapon" for w in gear.weapons),
+             "and the weapon is not left in the list")
+
+    # Suspension, like every other hold (#470).
+    world2, me2, _ = _board("p5330")
+    g2 = world2.get(me2, Gear)
+    c2 = Cast(world=world2, me=me2, ref="drivers:asweapon")
+    sus = c2.as_weapon(damage="1d8", group="mace", proficiency=2)
+    n = len(g2.weapons)
+    world2.effects.suspend(sus)
+    out.that(len(g2.weapons) == n - 1, "suspended, the profile lifts")
+    world2.effects.resume(sus)
+    out.that(len(g2.weapons) == n, "and comes back")
+
+    # The four rows this was built for.
+    for ref in ("i1125x1", "i1281x1", "i1656x1", "i3182x1"):
+        its_world, its_actor, _ = _board(ref)
+        its_gear = its_world.get(its_actor, Gear)
+        got = its_gear is not None and any(
+            w.ref == ref for w in its_gear.weapons)
+        out.that(got, f"{ref} puts its profile in the wearer's gear")
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -1964,6 +2044,8 @@ DRIVERS = {
                     "a clause inside a watcher, replaced"),
     "granted_keywords": (granted_keywords,
                          "a keyword one creature's copy of a row carries"),
+    "item_as_weapon": (item_as_weapon,
+                       "an item that is also a weapon"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

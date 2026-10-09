@@ -380,7 +380,7 @@ def i640x1(c: Cast) -> None:
 
 
 @power("i657x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.as_weapon()",))
+       reach=PERSONAL, target=SELF, todo=("c.as_weapon(natural=)",))
 def i657x1(c: Cast) -> None:
     """An improvised or unarmed attack is not a `Weapon`, so nothing can be
     told to count as a club."""

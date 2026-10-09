@@ -1190,7 +1190,7 @@ def m115787a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.silvered()",),
+    dropped=("compendium.silvered",),
 )
 def m115824a0(c: Cast) -> None:
     """Regeneration lands; the silver that switches it off does not.
@@ -1978,7 +1978,7 @@ def m4184a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.silvered()",),
+    dropped=("compendium.silvered",),
 )
 def m4616a0(c: Cast) -> None:
     """Regeneration plays; nothing marks a weapon as silvered, so the clause

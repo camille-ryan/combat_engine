@@ -746,7 +746,7 @@ def i1843p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.silvered()",),
+    todo=("compendium.silvered",),
 )
 def i1884x1(c: Cast) -> None:
     """No creature in the tree resists anything by material, so there is

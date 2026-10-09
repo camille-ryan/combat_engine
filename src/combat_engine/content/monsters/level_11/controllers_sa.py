@@ -3593,7 +3593,7 @@ _M6418_DOUSED = "m6418a0 suppressed"
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.silvered()",),
+    dropped=("compendium.silvered",),
 )
 def m6418a0(c: Cast) -> None:
     """Regeneration, written out: the engine holds no such thing, and "has at

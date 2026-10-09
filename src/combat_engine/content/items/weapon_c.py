@@ -1354,7 +1354,7 @@ def i1761p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.silvered()",),
+    dropped=("compendium.silvered",),
 )
 def i1880x1(c: Cast) -> None:
     """Silver is a material a base weapon cannot record, so nothing reads
@@ -2639,7 +2639,7 @@ def i3412p3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.silvered()",),
+    dropped=("compendium.silvered",),
 )
 def i3510x1(c: Cast) -> None:
     """"Full damage to insubstantial creatures" is already a verb:
@@ -2790,7 +2790,7 @@ def i553x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_weapon()",),
+    todo=("c.as_weapon(base=)",),
 )
 def i553p1(c: Cast) -> None:
     """Becomes a different base weapon, taking its dice, its reach and its

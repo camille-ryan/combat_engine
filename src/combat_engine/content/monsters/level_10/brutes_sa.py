@@ -2148,7 +2148,7 @@ def m5596a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.silvered()",),
+    dropped=("compendium.silvered",),
 )
 def m5596a1(c: Cast) -> None:
     """5 a turn plays. Suspending it specifically after a silvered

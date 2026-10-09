@@ -3840,7 +3840,7 @@ def _m6470_shape(world: World, eid: int) -> str | None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.silvered()", "c.regeneration(suspended_by=)"),
+    dropped=("compendium.silvered", "c.regeneration(suspended_by=)"),
 )
 def m6470a0(c: Cast) -> None:
     """The regeneration plays. Suspending it for a turn needs two things that

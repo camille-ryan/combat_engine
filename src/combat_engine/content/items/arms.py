@@ -451,13 +451,15 @@ def _my_save_against_hold(world: World, me: int, ev: Any) -> bool:
 
 
 @power("i1281x1", level=1, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.as_weapon()",))
+       reach=PERSONAL, target=SELF, )
 def i1281x1(c: Cast) -> None:
-    """A shield that is also a weapon has to become a `Weapon` in the
-    wearer's hands -- a group, a die, a proficiency and an enhancement --
-    and nothing turns a worn item into one."""
+    """A shield that is also a heavy blade: +3 proficiency, 1d6, off-hand.
 
-
+    `i1125x1`'s sibling and the same argument -- see it for why the profile
+    is hand-written and why the weapon starts on the belt.
+    """
+    c.as_weapon(damage="1d6", group="heavy blade", proficiency=3,
+                properties=frozenset({"off-hand"}))
 @power("i1322x1", level=1, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("c.water()",))
 def i1322x1(c: Cast) -> None:
@@ -642,7 +644,7 @@ def i1296p1(c: Cast) -> None:
 
 
 @power("i1764x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.silvered()",))
+       reach=PERSONAL, target=SELF, todo=("compendium.silvered",))
 def i1764x1(c: Cast) -> None:
     """What a weapon is made of is not a property a creature can be given,
     and nothing on the board resists or fears silver."""
@@ -797,7 +799,7 @@ def i2475p1(c: Cast) -> None:
 
 
 @power("i2478p1", level=4, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.silvered()",))
+       reach=PERSONAL, target=SELF, todo=("compendium.silvered",))
 def i2478p1(c: Cast) -> None:
     """Light is not modelled and neither is what a weapon is made of, so
     both halves of this are absent rather than one."""
@@ -1160,11 +1162,22 @@ def i934x1(c: Cast) -> None:
 
 
 @power("i1125x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.as_weapon()",))
+       reach=PERSONAL, target=SELF, )
 def i1125x1(c: Cast) -> None:
-    """A worn item cannot become a weapon in the wearer's hands."""
+    """A shield that is also a pick: +2 proficiency, 1d6, high crit, off-hand.
 
+    The profile is on the card and hand-written here, because there is no
+    `weapon` row for a shield -- it is an item. `c.as_weapon` puts it in
+    `Gear.weapons` so everything that asks what is in hand finds it, and it
+    carries the shield's own enhancement, which is the printed "+2
+    enhancement bonus to attack rolls and damage rolls when used as a
+    weapon".
 
+    On the belt rather than in hand: it is a second weapon the character
+    may take up, and arriving held would silently disarm the main hand.
+    """
+    c.as_weapon(damage="1d6", group="pick", proficiency=2,
+                properties=frozenset({"high crit", "off-hand"}))
 @power("i2024x1", level=7, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def i2024x1(c: Cast) -> None:

@@ -1973,7 +1973,7 @@ def f2889(c: Cast) -> None:
 
 
 @power("f2893", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.silvered()",))
+       reach=PERSONAL, target=SELF, todo=("compendium.silvered",))
 def f2893(c: Cast) -> None:
     """Counts attacks as silvered against one creature. Silver is a
     material nothing on a weapon or a blow carries."""

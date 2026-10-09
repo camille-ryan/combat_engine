@@ -1478,13 +1478,15 @@ def i3181p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_weapon()",),
+    
 )
 def i3182x1(c: Cast) -> None:
-    """The mirror of `c.as_implement`, which exists; this direction does
-    not, and the base item is a column no body can change."""
+    """A rod usable as a melee weapon, functioning as a mace.
 
-
+    `i1656x1`'s sibling, and the same mace profile for the same reason: the
+    card names the weapon it functions as and prints no numbers of its own.
+    """
+    c.as_weapon(damage="1d8", group="mace", proficiency=2)
 @power(
     "i3193x1",
     level=2,
@@ -2071,12 +2073,20 @@ def i1612p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_weapon()",),
+    
 )
 def i1656x1(c: Cast) -> None:
-    """The mirror of `c.as_implement`, which does not exist."""
+    """A rod that is also a mace, as well as an implement.
 
+    The card gives no die or proficiency of its own -- "functions as a
+    mace" -- so it takes a mace's: a simple one-handed weapon, 1d8, +2
+    proficiency. The enhancement is the rod's own, which is the printed
+    "applies its enhancement bonus to attack and damage rolls".
 
+    It stays an implement: `c.as_weapon` adds a profile and takes nothing
+    away, so `c.as_implement`'s side of the item is untouched.
+    """
+    c.as_weapon(damage="1d8", group="mace", proficiency=2)
 @power(
     "i1656p1",
     level=3,

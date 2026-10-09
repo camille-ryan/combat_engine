@@ -2690,7 +2690,7 @@ def i2901p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.silvered()",),
+    todo=("compendium.silvered",),
 )
 def i2941x1(c: Cast) -> None:
     """What a weapon is made of is not a thing the engine holds, and the

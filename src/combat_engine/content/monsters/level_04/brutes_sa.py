@@ -1789,7 +1789,7 @@ _M5952_SHAPES = ("rat", "human", "hybrid")
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.silvered()",),
+    dropped=("compendium.silvered",),
 )
 def m5952a0(c: Cast) -> None:
     """Regeneration lands; the silver that switches it off does not. Nothing

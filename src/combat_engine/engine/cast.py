@@ -1521,6 +1521,76 @@ class Cast:
 
         return keywords_of(self.world, self.me, p)
 
+    def as_weapon(
+        self,
+        *,
+        damage: str,
+        group: str,
+        proficiency: int = 0,
+        properties: frozenset[str] = frozenset(),
+        hands: int = 1,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"This shield can be used as a one-handed melee weapon."
+
+        Four item rows print a full weapon profile on something that is not
+        a weapon -- two shields and two rods -- and the `weapon` table has
+        no row for them, because they are items. The numbers are on the card
+        and are hand-written here, which is how every other row in this tree
+        gets its numbers.
+
+        The profile is added to `Gear.weapons` so everything that asks what
+        is in hand finds it: `c.w()`, `c.wielding`, `Gear.main`. It carries
+        the item's own enhancement, which is what "applies its enhancement
+        bonus to attack and damage rolls" means.
+
+        **Not held on arrival.** A shield-as-pick is a second weapon the
+        character may take up, so it goes to the belt and
+        `actions._wielding` offers the draw -- otherwise laying the profile
+        would silently disarm whatever was in the main hand.
+        """
+        from .components import Gear, Weapon
+
+        who = on if on is not None else self.me
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return None
+        arm = Weapon(
+            ref=self.ref,
+            slug="",
+            damage=damage,
+            proficiency=proficiency,
+            group=group,
+            category="simple",
+            hands=hands,
+            properties=properties,
+            enhancement=self.enhancement,
+        )
+
+        def lift() -> None:
+            if arm in gear.weapons:
+                gear.weapons.remove(arm)
+            gear.stowed.discard(arm.ref)
+
+        effect = self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} is a weapon",
+        )
+        if effect is None:
+            return None
+        gear.weapons.append(arm)
+        gear.stowed.add(arm.ref)
+        # `on_suspend` only -- `Effects._lift` runs it on expiry too.
+        effect.on_suspend.append(lift)
+
+        def rearm() -> None:
+            if arm not in gear.weapons:
+                gear.weapons.append(arm)
+            gear.stowed.add(arm.ref)
+
+        effect.on_resume.append(rearm)
+        return effect
+
     def counts_as_keyword(
         self,
         ref: str,

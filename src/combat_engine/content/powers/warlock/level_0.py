@@ -202,7 +202,7 @@ def p13679(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.NECROTIC, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p13680(c: Cast) -> None:
     victim = c.target
@@ -229,7 +229,7 @@ def p13680(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=FORT),
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p13681(c: Cast) -> None:
     victim = c.target
@@ -253,7 +253,7 @@ def p13681(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.NECROTIC],
     trigger="an adjacent enemy attacks you",
     on=ADJACENT_SWING,
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p13682(c: Cast) -> None:
     c.flat(5 * (1 + (c.level >= 17) + (c.level >= 27)) + c.cha_mod, dtype=DamageType.FIRE)
@@ -291,7 +291,7 @@ def p13721(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p13722(c: Cast) -> None:
     victim = c.target
@@ -323,7 +323,7 @@ def p13722(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=FORT),
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p13723(c: Cast) -> None:
     """The destination is named rather than measured, so the teleport is
@@ -348,7 +348,7 @@ def p13723(c: Cast) -> None:
     keywords=ARCANE,
     trigger="an adjacent enemy attacks you",
     on=ADJACENT_SWING,
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p13724(c: Cast) -> None:
     c.blinded(until=When.EONT)
@@ -367,7 +367,7 @@ def p13724(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT, Keyword.WEAPON],
     attack=Attack(CHA, vs=REF),
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p13746(c: Cast) -> None:
     victim = c.target
@@ -391,7 +391,7 @@ def p13746(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p13747(c: Cast) -> None:
     """"Vulnerable to *your* attacks" is widened to vulnerable outright: a
@@ -507,7 +507,7 @@ def p13962(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=AC),
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p13963(c: Cast) -> None:
     if c.strike():
@@ -534,7 +534,7 @@ def p13963(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=REF),
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p13964(c: Cast) -> None:
     dice = 1 + (c.level >= 13) + (c.level >= 23)
@@ -556,7 +556,7 @@ def p13964(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.NECROTIC, Keyword.PSYCHIC, Keyword.SHADOW],
     trigger="an adjacent enemy attacks you",
     on=ADJACENT_SWING,
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p13965(c: Cast) -> None:
     flat = 5 * (1 + (c.level >= 13) + (c.level >= 23))
@@ -597,7 +597,7 @@ def p16257(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.IMPLEMENT, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p16258(c: Cast) -> None:
     if c.strike():
@@ -615,7 +615,7 @@ def p16258(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.IMPLEMENT, Keyword.WEAPON],
     attack=Attack(CHA, vs=REF),
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p16259(c: Cast) -> None:
     """The Hit clause stripping the target's resistance and immunity to the
@@ -640,7 +640,7 @@ def p16259(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.PSYCHIC],
     trigger="an adjacent enemy attacks you",
     on=ADJACENT_SWING,
-    dropped=("c.as_weapon()",),
+    dropped=("chargen.pact_blade()",),
 )
 def p16260(c: Cast) -> None:
     flat = 5 * (1 + (c.level >= 17) + (c.level >= 27))

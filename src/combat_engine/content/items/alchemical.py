@@ -1171,7 +1171,7 @@ def i446p1(c: Cast) -> None:
 
 
 @power("i469p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, todo=("c.silvered()",))
+       reach=PERSONAL, target=SELF, todo=("compendium.silvered",))
 def i469p1(c: Cast) -> None:
     """Silver is a material a base weapon does not record and nothing
     reads, so "attacks as a silvered weapon" has nothing to set.

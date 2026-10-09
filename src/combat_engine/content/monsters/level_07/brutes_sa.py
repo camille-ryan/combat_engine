@@ -2413,7 +2413,7 @@ def m5888a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.silvered()",),
+    dropped=("compendium.silvered",),
 )
 def m5956a0(c: Cast) -> None:
     """The regeneration plays. Switching it off for a turn after a silvered

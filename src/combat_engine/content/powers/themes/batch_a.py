@@ -297,7 +297,7 @@ SHADOW_BLADE = Trigger(
     reach=PERSONAL,
     target=SELF,
     keywords=SHADOW,
-    todo=("c.as_weapon()",),
+    todo=("c.conjure_weapon()",),
     requires=_a_hand_free,
     requires_text="must have a hand free",
 )
@@ -377,7 +377,7 @@ def p15898(c: Cast) -> None:
     keywords=[*SHADOW, Keyword.COLD, Keyword.NECROTIC],
     trigger="you hit an enemy with a melee or ranged attack using your weapon",
     on=SHADOW_BLADE,
-    dropped=("c.as_weapon()",),
+    dropped=("c.conjure_weapon()",),
 )
 def p15899(c: Cast) -> None:
     """Two types on one blow, which `dtypes` says and two `c.damage` calls
@@ -400,7 +400,7 @@ def p15899(c: Cast) -> None:
     keywords=[*SHADOW, Keyword.COLD, Keyword.NECROTIC],
     trigger="you hit an enemy with a melee or ranged attack using your weapon",
     on=SHADOW_BLADE,
-    dropped=("c.as_weapon()",),
+    dropped=("c.conjure_weapon()",),
 )
 def p15900(c: Cast) -> None:
     """"Each Failed Saving Throw" is the `escalate` hook, which is handed the
@@ -673,7 +673,7 @@ PRIMAL = [Keyword.PRIMAL]
     target=SELF,
     keywords=[*PRIMAL, Keyword.POLYMORPH],
     once_per_round=True,
-    dropped=("c.as_weapon()",),
+    dropped=("c.as_weapon(natural=)",),
 )
 def p14205(c: Cast) -> None:
     """"Special: once per round" is the header field, not a body check. The
@@ -723,7 +723,7 @@ def p14206(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[*PRIMAL, Keyword.HEALING],
-    dropped=("c.silvered()",),
+    dropped=("compendium.silvered",),
 )
 def p14207(c: Cast) -> None:
     """The silvered-weapon suspension is the dropped clause: nothing marks a
@@ -744,7 +744,7 @@ def p14207(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[*PRIMAL, Keyword.POLYMORPH],
-    dropped=("c.as_weapon()",),
+    dropped=("c.as_weapon(natural=)",),
 )
 def p14208(c: Cast) -> None:
     """Same bite, same reason. Everything else is exact."""

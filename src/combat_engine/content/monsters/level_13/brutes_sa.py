@@ -2066,7 +2066,7 @@ def m6146a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.silvered()",),
+    dropped=("compendium.silvered",),
 )
 def m6146a1(c: Cast) -> None:
     """Regeneration lands, including the printed "and has at least 1 hit

@@ -247,7 +247,7 @@ def f1864(c: Cast) -> None:
 
 
 @power("f1075", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.silvered()",))
+       reach=PERSONAL, target=SELF, todo=("compendium.silvered",))
 def f1075(c: Cast) -> None:
     """Rolling an Endurance check twice is narrative. Treating a weapon
     as silvered is not -- silver is what some creatures' resistances are
