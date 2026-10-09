@@ -1270,8 +1270,7 @@ def m4381a2(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FORCE, Keyword.LIGHTNING],
     attack=Attack(vs=REF, printed=15),
-    damage=Damage("2d8", 5, dtype=DamageType.FORCE, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 5, dtype=[DamageType.FORCE, DamageType.LIGHTNING], kind=LIMITED),
 )
 def m4381a3(c: Cast) -> None:
     if c.strike():
@@ -1446,8 +1445,7 @@ def m5193a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FIRE, Keyword.RADIANT],
     attack=Attack(vs=REF, printed=15),
-    damage=Damage("2d6", 11, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 11, dtype=[DamageType.FIRE, DamageType.RADIANT]),
 )
 def m5193a1(c: Cast) -> None:
     if c.strike():
@@ -2207,8 +2205,7 @@ def m5810a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FIRE, Keyword.IMPLEMENT, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=15),
-    damage=Damage("2d10", 2, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d10", 2, dtype=[DamageType.FIRE, DamageType.NECROTIC]),
 )
 def m5810a1(c: Cast) -> None:
     c.bonus(
@@ -2618,8 +2615,7 @@ def m6372a1(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.LIGHTNING, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=13),
-    damage=Damage("1d10", 8, dtype=DamageType.LIGHTNING, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d10", 8, dtype=[DamageType.LIGHTNING, DamageType.NECROTIC], kind=LIMITED),
 )
 def m6372a2(c: Cast) -> None:
     """The hit roll is one blow of two types, which is all one `Damage`

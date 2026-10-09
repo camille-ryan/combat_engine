@@ -3147,8 +3147,7 @@ def m5948a2(c: Cast) -> None:
     target=EACH_CREATURE,
     keywords=[Keyword.FIRE, Keyword.NECROTIC, Keyword.AREA],
     attack=Attack(vs=FORT, printed=12),
-    damage=Damage("2d10", 8, dtype=DamageType.FIRE, half_on_miss=True),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d10", 8, dtype=[DamageType.FIRE, DamageType.NECROTIC], half_on_miss=True),
 )
 def m5948a3(c: Cast) -> None:
     """"Fire and necrotic damage" rolled once -- `Damage` keeps the first
@@ -3694,8 +3693,7 @@ def m6095a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.IMPLEMENT, Keyword.LIGHTNING, Keyword.PSYCHIC, Keyword.RANGED],
     attack=Attack(vs=REF, printed=12),
-    damage=Damage("2d8", 8, dtype=DamageType.LIGHTNING),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 8, dtype=[DamageType.LIGHTNING, DamageType.PSYCHIC]),
 )
 def m6095a3(c: Cast) -> None:
     """"Lightning and psychic damage" rolled once -- the second type is

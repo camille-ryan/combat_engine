@@ -799,8 +799,7 @@ def m3535a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.COLD, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=8),
-    damage=Damage("1d6", 4, dtype=DamageType.COLD),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d6", 4, dtype=[DamageType.COLD, DamageType.NECROTIC]),
 )
 def m3535a1(c: Cast) -> None:
     """One blow that is both types at once. The header carries one, so the
@@ -2815,8 +2814,7 @@ def m5890a1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.LIGHTNING, Keyword.RADIANT],
     attack=Attack(vs=REF, printed=7),
-    damage=Damage("2d8", 4, dtype=DamageType.LIGHTNING),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 4, dtype=[DamageType.LIGHTNING, DamageType.RADIANT]),
 )
 def m5890a2(c: Cast) -> None:
     """"If the target was already immobilized" is asked before the new hold

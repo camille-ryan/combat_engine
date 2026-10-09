@@ -3108,10 +3108,9 @@ def m5541a3(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.NECROTIC, Keyword.POISON],
     attack=Attack(vs=FORT, printed=13),
-    damage=Damage("3d8", 9, dtype=DamageType.NECROTIC),
+    damage=Damage("3d8", 9, dtype=[DamageType.NECROTIC, DamageType.POISON]),
     trigger="it is first bloodied",
     on=Trigger(Bloodied, when=about_me, text="it is first bloodied"),
-    dropped=("Damage(dtypes=)",),
 )
 def m5541a4(c: Cast) -> None:
     if c.strike():

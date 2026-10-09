@@ -1600,8 +1600,7 @@ def m4458a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.COLD, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=7),
-    damage=Damage("1d8", 3, dtype=DamageType.NECROTIC),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d8", 3, dtype=[DamageType.COLD, DamageType.NECROTIC]),
 )
 def m4458a1(c: Cast) -> None:
     """Cold *and* necrotic on one roll, which resistance reads as a unit.
@@ -1625,8 +1624,13 @@ def m4458a1(c: Cast) -> None:
     ),
     keywords=[Keyword.COLD, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=6),
-    damage=Damage("1d6", 3, dtype=DamageType.NECROTIC, kind=LIMITED, half_on_miss=False),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage(
+        "1d6",
+        3,
+        dtype=[DamageType.COLD, DamageType.NECROTIC],
+        kind=LIMITED,
+        half_on_miss=False,
+    ),
 )
 def m4458a2(c: Cast) -> None:
     """The miss line is not half damage -- it is the same dice and one summon
@@ -2380,8 +2384,7 @@ def m5450a2(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.NECROTIC, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=7),
-    damage=Damage("1d6", 3, dtype=DamageType.NECROTIC),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d6", 3, dtype=[DamageType.NECROTIC, DamageType.PSYCHIC]),
 )
 def m5450a3(c: Cast) -> None:
     """"Vulnerable 3 to all damage" is `c.vulnerable` with no type at all,
@@ -3370,8 +3373,13 @@ def m6555a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.LIGHTNING, Keyword.THUNDER],
     attack=Attack(vs=REF, printed=6),
-    damage=Damage("1d8", 4, dtype=DamageType.LIGHTNING, kind=LIMITED, half_on_miss=True),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage(
+        "1d8",
+        4,
+        dtype=[DamageType.LIGHTNING, DamageType.THUNDER],
+        kind=LIMITED,
+        half_on_miss=True,
+    ),
 )
 def m6555a2(c: Cast) -> None:
     """Lightning *and* thunder on one roll, which resistance reads as a unit;

@@ -890,8 +890,7 @@ def m5942a0(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.FIRE, Keyword.FORCE, Keyword.IMPLEMENT],
     attack=Attack(vs=REF, printed=9),
-    damage=Damage("2d6", 6, dtype=DamageType.FIRE, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 6, dtype=[DamageType.FIRE, DamageType.FORCE], kind=LIMITED),
 )
 def m5942a1(c: Cast) -> None:
     _recharge_when_using(c, "m5942a2")

@@ -1693,8 +1693,17 @@ def m2615a2(c: Cast) -> None:
         Keyword.POISON,
     ],
     attack=Attack(vs=REF, printed=14),
-    damage=Damage("2d6", 4, dtype=DamageType.ACID),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage(
+        "2d6",
+        4,
+        dtype=[
+            DamageType.ACID,
+            DamageType.COLD,
+            DamageType.FIRE,
+            DamageType.LIGHTNING,
+            DamageType.POISON,
+        ],
+    ),
 )
 def m2615a3(c: Cast) -> None:
     """One blow of five types. The header holds one of them; the printed
@@ -1720,8 +1729,18 @@ def m2615a3(c: Cast) -> None:
         Keyword.POISON,
     ],
     attack=Attack(vs=AC, printed=15),
-    damage=Damage("3d10", 4, dtype=DamageType.ACID, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage(
+        "3d10",
+        4,
+        dtype=[
+            DamageType.ACID,
+            DamageType.COLD,
+            DamageType.FIRE,
+            DamageType.LIGHTNING,
+            DamageType.POISON,
+        ],
+        kind=LIMITED,
+    ),
 )
 def m2615a4(c: Cast) -> None:
     """A burst against AC, which is unusual and is what the card prints. Its
@@ -1768,8 +1787,8 @@ def m2615a5(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.PSYCHIC, Keyword.RADIANT],
     attack=Attack(vs=REF, printed=15),
-    damage=Damage("2d4", 5, dtype=DamageType.PSYCHIC),
-    dropped=("Damage(dtypes=)", "c.cannot_attack(opportunity=)"),
+    damage=Damage("2d4", 5, dtype=[DamageType.PSYCHIC, DamageType.RADIANT]),
+    dropped=("c.cannot_attack(opportunity=)",),
 )
 def m2788a0(c: Cast) -> None:
     """Two clauses short of the card and both are narrowings.
@@ -1792,8 +1811,7 @@ def m2788a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.LIGHTNING, Keyword.RADIANT],
     attack=Attack(vs=WILL, printed=15),
-    damage=Damage("1d8", 5, dtype=DamageType.LIGHTNING),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d8", 5, dtype=[DamageType.LIGHTNING, DamageType.RADIANT]),
 )
 def m2788a1(c: Cast) -> None:
     if c.strike():
@@ -2367,8 +2385,7 @@ def m4460a4(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.NECROTIC, Keyword.POISON],
     attack=Attack(vs=REF, printed=15),
-    damage=Damage("1d6", 5, dtype=DamageType.NECROTIC),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d6", 5, dtype=[DamageType.NECROTIC, DamageType.POISON]),
 )
 def m4460a5(c: Cast) -> None:
     """One blow of two types rolled once; the header holds the first."""
@@ -2958,8 +2975,7 @@ def m5820a1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FIRE, Keyword.IMPLEMENT, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=14),
-    damage=Damage("2d6", 7, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 7, dtype=[DamageType.FIRE, DamageType.NECROTIC]),
 )
 def m5820a2(c: Cast) -> None:
     if c.strike():

@@ -1840,8 +1840,13 @@ def m5460a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.LIGHTNING, Keyword.THUNDER, Keyword.ZONE],
     attack=Attack(vs=FORT, printed=11),
-    damage=Damage("2d10", 4, dtype=DamageType.LIGHTNING, kind=LIMITED, half_on_miss=True),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage(
+        "2d10",
+        4,
+        dtype=[DamageType.LIGHTNING, DamageType.THUNDER],
+        kind=LIMITED,
+        half_on_miss=True,
+    ),
 )
 def m5460a2(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2508,8 +2513,7 @@ def m6023a4(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.POISON, Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=9),
-    damage=Damage("1d10", 6, dtype=DamageType.POISON, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d10", 6, dtype=[DamageType.POISON, DamageType.THUNDER], kind=LIMITED),
 )
 def m6023a5(c: Cast) -> None:
     if c.strike():
@@ -2607,8 +2611,7 @@ def _adjacent_free_square(c: Cast, square: Any) -> Any | None:
     no_provoke=True,
     keywords=[Keyword.NECROTIC, Keyword.POISON],
     attack=Attack(vs=REF, printed=11),
-    damage=Damage("2d6", 7, dtype=DamageType.NECROTIC),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 7, dtype=[DamageType.NECROTIC, DamageType.POISON]),
 )
 def m6114a3(c: Cast) -> None:
     from combat_engine.engine.components import Position
@@ -2634,8 +2637,7 @@ def m6114a3(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.NECROTIC, Keyword.POISON],
     attack=Attack(vs=FORT, printed=9),
-    damage=Damage("2d6", 7, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 7, dtype=[DamageType.NECROTIC, DamageType.POISON], kind=LIMITED),
 )
 def m6114a4(c: Cast) -> None:
     """"The m6114a0 increases to aura 2 until the end of its next turn" --

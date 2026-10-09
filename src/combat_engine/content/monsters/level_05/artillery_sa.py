@@ -1145,8 +1145,7 @@ def m5886a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.LIGHTNING, Keyword.RADIANT],
     attack=Attack(vs=REF, printed=10),
-    damage=Damage("1d8", 4, dtype=DamageType.LIGHTNING),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d8", 4, dtype=[DamageType.LIGHTNING, DamageType.RADIANT]),
 )
 def m5886a1(c: Cast) -> None:
     """One roll of two types, which is all one `Damage` can say -- the first

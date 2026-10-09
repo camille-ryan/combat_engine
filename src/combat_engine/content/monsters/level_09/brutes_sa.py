@@ -539,8 +539,8 @@ def m1471a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.ACID, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=10),
-    damage=Damage("3d6", 6, dtype=DamageType.ACID, kind=LIMITED),
-    dropped=("Damage(dtypes=)", "Cast.condition(ongoing=)"),
+    damage=Damage("3d6", 6, dtype=[DamageType.ACID, DamageType.NECROTIC], kind=LIMITED),
+    dropped=("Cast.condition(ongoing=)",),
 )
 def m1471a2(c: Cast) -> None:
     """The hit roll is one blow of two types and the ongoing burn is the

@@ -1908,9 +1908,15 @@ class Cast:
             raise ValueError(f"{self.ref} declared no damage; call c.damage(...)")
         dice = self._converted(d)
         bonus = self._bonus_of(d.bonus)
+        # `dtypes` as well as `dtype`: a header naming two types is one blow
+        # that is both, and resistance reads it as a unit. Passing only the
+        # primary would have let a creature resisting the second half shrug
+        # off nothing.
         if half:
-            return self.half_damage(dice, bonus, dtype=d.dtype, on=on)
-        return self.damage(dice, bonus, dtype=d.dtype, on=on)
+            return self.half_damage(
+                dice, bonus, dtype=d.dtype, dtypes=d.dtypes, on=on
+            )
+        return self.damage(dice, bonus, dtype=d.dtype, dtypes=d.dtypes, on=on)
 
     def _converted(self, d: Damage) -> str:
         """The declared dice, under whichever edition's maths is in force."""
@@ -5020,7 +5026,8 @@ class Cast:
                 # which is `Damage(..., "int")` -- handed to `c.damage` raw it
                 # reached `roll(dice).total + "int"` and every one raised.
                 self.damage(
-                    line.dice, self._bonus_of(line.bonus), dtype=line.dtype, on=on
+                    line.dice, self._bonus_of(line.bonus),
+                    dtype=line.dtype, dtypes=line.dtypes, on=on,
                 )
         finally:
             self.charge = was

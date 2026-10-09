@@ -1940,8 +1940,7 @@ def m4255a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FIRE, Keyword.RADIANT],
     attack=Attack(vs=REF, printed=11),
-    damage=Damage("1d6", 5, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d6", 5, dtype=[DamageType.FIRE, DamageType.RADIANT]),
 )
 def m4255a1(c: Cast) -> None:
     if c.strike():

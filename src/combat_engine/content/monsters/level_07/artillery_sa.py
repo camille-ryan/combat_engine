@@ -421,8 +421,7 @@ def m1823a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FIRE, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=10),
-    damage=Damage("3d10", 5, dtype=DamageType.FIRE, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("3d10", 5, dtype=[DamageType.FIRE, DamageType.NECROTIC], kind=LIMITED),
 )
 def m1823a2(c: Cast) -> None:
     """The bloodied clause prints the same total both ways, so there is

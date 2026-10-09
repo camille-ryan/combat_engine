@@ -1248,8 +1248,7 @@ def m2012a4(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FIRE, Keyword.NECROTIC, Keyword.MELEE],
     attack=Attack(vs=AC, printed=14),
-    damage=Damage("2d8", 4, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 4, dtype=[DamageType.FIRE, DamageType.NECROTIC]),
 )
 def m2507a0(c: Cast) -> None:
     if c.strike():
@@ -1677,8 +1676,7 @@ def m3253a2(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FIRE, Keyword.IMPLEMENT, Keyword.RADIANT, Keyword.AREA],
     attack=Attack(vs=REF, printed=13),
-    damage=Damage("1d6", 3, dtype=DamageType.FIRE, half_on_miss=True),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d6", 3, dtype=[DamageType.FIRE, DamageType.RADIANT], half_on_miss=True),
 )
 def m3253a3(c: Cast) -> None:
     if c.strike():
@@ -2138,8 +2136,7 @@ def m3788a2(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.LIGHTNING, Keyword.THUNDER, Keyword.AREA],
     attack=Attack(vs=REF, printed=12),
-    damage=Damage("1d8", 6, dtype=DamageType.LIGHTNING),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d8", 6, dtype=[DamageType.LIGHTNING, DamageType.THUNDER]),
 )
 def m3788a3(c: Cast) -> None:
     if c.strike():
@@ -3847,8 +3844,7 @@ def m6070a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FIRE, Keyword.NECROTIC, Keyword.MELEE],
     attack=Attack(vs=REF, printed=13),
-    damage=Damage("3d6", 7, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("3d6", 7, dtype=[DamageType.FIRE, DamageType.NECROTIC]),
 )
 def m6070a1(c: Cast) -> None:
     if c.strike():
@@ -3865,8 +3861,7 @@ def m6070a1(c: Cast) -> None:
     target=UpTo(2),
     keywords=[Keyword.NECROTIC, Keyword.PSYCHIC, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=13),
-    damage=Damage("3d6", 7, dtype=DamageType.NECROTIC),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("3d6", 7, dtype=[DamageType.NECROTIC, DamageType.PSYCHIC]),
 )
 def m6070a2(c: Cast) -> None:
     victim = c.target
@@ -4843,8 +4838,8 @@ def m964a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.COLD, Keyword.IMPLEMENT, Keyword.NECROTIC, Keyword.AREA],
     attack=Attack(vs=FORT, printed=13),
-    damage=Damage("2d8", 8, dtype=DamageType.COLD),
-    dropped=("Damage(dtypes=)", "c.conceal_in()"),
+    damage=Damage("2d8", 8, dtype=[DamageType.COLD, DamageType.NECROTIC]),
+    dropped=("c.conceal_in()",),
 )
 def m964a2(c: Cast) -> None:
     """The damage is exact. The lingering cloud's concealment has no
@@ -4884,8 +4879,7 @@ def m964a2(c: Cast) -> None:
         Keyword.RANGED,
     ],
     attack=Attack(vs=REF, printed=13),
-    damage=Damage("2d8", 8, dtype=DamageType.COLD),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 8, dtype=[DamageType.COLD, DamageType.NECROTIC]),
 )
 def m964a3(c: Cast) -> None:
     victim = c.target

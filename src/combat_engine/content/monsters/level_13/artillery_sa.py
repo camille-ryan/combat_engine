@@ -453,8 +453,7 @@ def m1911a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.NECROTIC, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=18),
-    damage=Damage("2d6", 5, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 5, dtype=[DamageType.NECROTIC, DamageType.PSYCHIC], kind=LIMITED),
 )
 def m1911a2(c: Cast) -> None:
     """The healing is not part of the attack: it pays out whether anybody was
@@ -1618,8 +1617,7 @@ def m6016a3(c: Cast) -> None:
     target=EACH_CREATURE,
     keywords=[Keyword.COLD, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=18),
-    damage=Damage("4d6", 4, dtype=DamageType.COLD, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("4d6", 4, dtype=[DamageType.COLD, DamageType.NECROTIC], kind=LIMITED),
 )
 def m6016a4(c: Cast) -> None:
     """"If at least one creature takes damage" pays once for the whole use,

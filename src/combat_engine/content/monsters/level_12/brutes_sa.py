@@ -941,8 +941,7 @@ def m1783a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.COLD, Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=16),
-    damage=Damage("2d10", 5, dtype=DamageType.COLD),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d10", 5, dtype=[DamageType.COLD, DamageType.NECROTIC]),
 )
 def m1909a0(c: Cast) -> None:
     """One roll of two types, and `Damage` holds one. The cold half is
@@ -961,8 +960,7 @@ def m1909a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.COLD, Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=15),
-    damage=Damage("3d10", 5, dtype=DamageType.COLD, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("3d10", 5, dtype=[DamageType.COLD, DamageType.NECROTIC], kind=LIMITED),
 )
 def m1909a1(c: Cast) -> None:
     if c.strike():
@@ -1332,8 +1330,7 @@ def m3844a0(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.COLD, Keyword.FIRE, Keyword.LIGHTNING],
     attack=Attack(vs=REF, printed=15),
-    damage=Damage("3d10", 6, dtype=DamageType.COLD),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("3d10", 6, dtype=[DamageType.COLD, DamageType.FIRE, DamageType.LIGHTNING]),
     trigger=_M3844_BURSTS,
     on=(
         Trigger(Bloodied, when=about_me, text=_M3844_BURSTS),

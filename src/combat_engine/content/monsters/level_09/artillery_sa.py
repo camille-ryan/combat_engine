@@ -1916,8 +1916,7 @@ def m6440a2(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FIRE, Keyword.NECROTIC, Keyword.ZONE],
     attack=Attack(vs=REF, printed=14),
-    damage=Damage("2d6", 10, dtype=DamageType.FIRE, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 10, dtype=[DamageType.FIRE, DamageType.NECROTIC], kind=LIMITED),
 )
 def m6440a3(c: Cast) -> None:
     if c.strike():

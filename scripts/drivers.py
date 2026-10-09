@@ -911,6 +911,133 @@ def reentry(out: Result) -> None:
 
 
 
+
+############################################################
+
+def two_types(out: Result) -> None:
+    """One roll that is two damage types, and resistance reads it as a unit.
+
+    88 stat blocks print "2d6 + 5 cold and necrotic damage" -- one roll that
+    is both -- and `Damage` carried a single `dtype`, so each of those rows
+    was declared as half of what it is. The half that was missing is not the
+    log line: it is that **a creature resisting only the second type shrugged
+    off nothing**, in every fight, invisibly.
+
+    The printed rule is that resistance to a blow of several types applies
+    only as far as the creature resists **all** of them -- so a creature
+    resisting one of two takes it in full, and that is the assertion here
+    rather than the easier one. A driver that only checked "the log says both
+    words" would pass an implementation that typed the blow correctly and
+    priced it wrong.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences, Health
+    from combat_engine.engine.dsl import Damage
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType as D
+
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    vital = world.get(foe, Health)
+
+    def struck(dtypes: tuple, amount: int = 20) -> int:
+        vital.hp = vital.max_hp
+        world.damage(caster, foe, amount, dtypes[0], detail="drivers:two_types",
+                     dtypes=dtypes)
+        return vital.max_hp - vital.hp
+
+    out.that(struck((D.COLD, D.NECROTIC)) == 20,
+             "a two-type blow lands in full on a creature resisting neither")
+
+    held = world.get(foe, Defences) or world.add(foe, Defences())
+    held.resist[D.COLD] = 10
+    out.that(struck((D.COLD, D.NECROTIC)) == 20,
+             "resisting ONE of the two still takes it in full",
+             f"{struck((D.COLD, D.NECROTIC))} of 20")
+    out.that(struck((D.COLD,)) == 10,
+             "and the same resistance does bite a single-type blow",
+             f"{struck((D.COLD,))} of 20")
+
+    held.resist[D.NECROTIC] = 10
+    out.that(struck((D.COLD, D.NECROTIC)) == 10,
+             "resisting BOTH finally reduces it",
+             f"{struck((D.COLD, D.NECROTIC))} of 20")
+
+    # And the header carries it through `c.hit`, which is how all 88 rows
+    # deal their damage -- the field being set is worth nothing if the verb
+    # that reads it drops the second type.
+    line = Damage("2d6", 5, dtype=[D.COLD, D.NECROTIC])
+    out.that(line.dtypes == (D.COLD, D.NECROTIC),
+             "a header line keeps the whole type")
+    out.that(line.dtype is D.COLD,
+             "and its primary is the first the card prints")
+    out.that(str(line) == "2d6 + 5 cold and necrotic damage",
+             "and prints the way the card does", str(line))
+
+    # **Five types, because two could not tell a comma join from "and and
+    # and".** The prototype on #420 rendered "acid and cold and fire and
+    # lightning and poison"; `cards.py` compares this string against the
+    # printed line, and two of the 88 rows name five types. A plant that
+    # broke the join passed a two-type assertion unchanged.
+    five = Damage("3d6", 2, dtype=[D.ACID, D.COLD, D.FIRE, D.LIGHTNING, D.POISON])
+    out.that(str(five) == "3d6 + 2 acid, cold, fire, lightning, and poison damage",
+             "five types read as the card prints them", str(five))
+
+    # **Through `c.hit`, which is how all 88 rows actually deal it.** The
+    # field being set is worth nothing if the verb that reads the header
+    # drops the second type -- #420 named that forwarding line as the known
+    # trap, and a plant removing it passed everything above.
+    from audit import board as _posed
+    from combat_engine.engine.dsl import REGISTRY
+
+    ref = "m2615a3"                      # acid, cold, fire, lightning, poison
+    world, caster, _ = _posed(ref, 1)
+    foe = enemies(world, caster)[0]
+    hurt = world.get(foe, Health)
+    mine = Cast(world=world, me=caster, ref=ref)
+    declared = REGISTRY[ref]
+    out.that(len(declared.damage.dtypes) == 5,
+             f"{ref} declares five types in its header")
+
+    held = world.get(foe, Defences) or world.add(foe, Defences())
+    held.resist[D.ACID] = 100            # one of the five, hugely
+    hurt.hp = hurt.max_hp
+    mine.hit(on=foe)
+    took = hurt.max_hp - hurt.hp
+    out.that(took > 0,
+             "resisting one of five does not stop a c.hit blow at all",
+             f"took {took}")
+
+    for kind in (D.COLD, D.FIRE, D.LIGHTNING, D.POISON):
+        held.resist[kind] = 100
+    hurt.hp = hurt.max_hp
+    mine.hit(on=foe)
+    out.that(hurt.max_hp - hurt.hp == 0,
+             "and resisting all five stops it dead",
+             f"took {hurt.max_hp - hurt.hp}")
+
+    # **The second consumer of a header `Damage` is the summon block**, and
+    # it forwards the whole type too -- but nothing can exercise it: of 31
+    # summon blocks carrying a damage line, **none prints more than one
+    # type**, so a plant that removed that forwarding stays green and will
+    # go on staying green. Asserted as the count rather than the behaviour,
+    # so the day a summon does print two this line goes red and names the
+    # thing that needs covering. #420.
+    summons = [
+        pw for pw in REGISTRY.values()
+        if getattr(pw, "summon", None) is not None
+        and getattr(pw.summon, "damage", None) is not None
+    ]
+    multi = [pw for pw in summons if pw.summon.damage.dtypes]
+    out.that(
+        not multi,
+        f"no summon block prints two types yet, so its forwarding is untested "
+        f"({len(summons)} carry a damage line)",
+        str([pw.ref for pw in multi][:4]),
+    )
+
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -919,6 +1046,7 @@ DRIVERS = {
     "suspension": (suspension, "a trait switched off by a hit, and back on after"),
     "sure_footed": (sure_footed, "difficult terrain ignored when shifting, and only then"),
     "reentry": (reentry, "a watcher is not re-entered by an event it caused"),
+    "two_types": (two_types, "one roll that is two types, and resistance reads both"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

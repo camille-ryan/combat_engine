@@ -2621,8 +2621,7 @@ def m5751a1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FIRE, Keyword.IMPLEMENT, Keyword.RADIANT],
     attack=Attack(vs=REF, printed=9),
-    damage=Damage("1d8", 3, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d8", 3, dtype=[DamageType.FIRE, DamageType.RADIANT]),
 )
 def m5751a2(c: Cast) -> None:
     """Fire *and* radiant on one roll, which resistance reads as a unit.
@@ -2749,8 +2748,13 @@ def m5945a2(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FIRE, Keyword.FORCE, Keyword.IMPLEMENT],
     attack=Attack(vs=FORT, printed=7),
-    damage=Damage("2d6", 2, dtype=DamageType.FIRE, kind=LIMITED, half_on_miss=True),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage(
+        "2d6",
+        2,
+        dtype=[DamageType.FIRE, DamageType.FORCE],
+        kind=LIMITED,
+        half_on_miss=True,
+    ),
 )
 def m5945a3(c: Cast) -> None:
     """The Miss line pushes as well, which is why the else branch exists --

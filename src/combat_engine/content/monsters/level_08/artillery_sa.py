@@ -1957,8 +1957,7 @@ def m6361a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FIRE, Keyword.NECROTIC, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13),
-    damage=Damage("2d8", 5, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 5, dtype=[DamageType.FIRE, DamageType.NECROTIC]),
 )
 def m6361a1(c: Cast) -> None:
     if c.strike():
@@ -1989,8 +1988,13 @@ def m6361a2(c: Cast) -> None:
     target=EACH_CREATURE,
     keywords=[Keyword.FIRE, Keyword.IMPLEMENT, Keyword.THUNDER],
     attack=Attack(vs=REF, printed=13),
-    damage=Damage("2d8", 9, dtype=DamageType.FIRE, kind=LIMITED, half_on_miss=True),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage(
+        "2d8",
+        9,
+        dtype=[DamageType.FIRE, DamageType.THUNDER],
+        kind=LIMITED,
+        half_on_miss=True,
+    ),
 )
 def m6361a3(c: Cast) -> None:
     victim = c.target

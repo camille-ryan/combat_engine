@@ -2113,8 +2113,7 @@ def m3499a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=10),
-    damage=Damage("1d10", 5, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d10", 5, dtype=[DamageType.NECROTIC, DamageType.PSYCHIC], kind=LIMITED),
 )
 def m3499a1(c: Cast) -> None:
     """One roll of two types; the header keeps the first and the second
@@ -2232,8 +2231,7 @@ def m3637a1(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.COLD, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=9),
-    damage=Damage("2d6", 5, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 5, dtype=[DamageType.COLD, DamageType.NECROTIC], kind=LIMITED),
 )
 def m3637a2(c: Cast) -> None:
     if c.strike():

@@ -1775,8 +1775,7 @@ def m5602a3(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC, Keyword.POISON],
     attack=Attack(vs=REF, printed=9),
-    damage=Damage("1d10", 4, dtype=DamageType.NECROTIC),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d10", 4, dtype=[DamageType.NECROTIC, DamageType.POISON]),
 )
 def m5602a4(c: Cast) -> None:
     """Measured from the viper, via `from_=`, not from m5602."""
@@ -3568,8 +3567,12 @@ def m932a4(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.COLD, Keyword.FIRE, Keyword.LIGHTNING],
     attack=Attack(vs=REF, printed=8),
-    damage=Damage("2d6", 5, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage(
+        "2d6",
+        5,
+        kind=LIMITED,
+        dtype=[DamageType.COLD, DamageType.FIRE, DamageType.LIGHTNING],
+    ),
     trigger="it drops to 0 hit points",
     on=Trigger(Dropped, about_me, "it drops"),
 )

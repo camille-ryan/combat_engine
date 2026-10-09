@@ -1776,8 +1776,7 @@ def m3554a3(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FIRE, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=8),
-    damage=Damage("1d8", 3, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d8", 3, dtype=[DamageType.FIRE, DamageType.NECROTIC]),
 )
 def m3558a0(c: Cast) -> None:
     """The blow is fire *and* necrotic -- one roll of two types, which

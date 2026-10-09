@@ -788,8 +788,7 @@ def m1929a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.ACID, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=7),
-    damage=Damage("2d8", 11, dtype=DamageType.ACID),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 11, dtype=[DamageType.ACID, DamageType.NECROTIC]),
 )
 def m1929a2(c: Cast) -> None:
     if c.strike():

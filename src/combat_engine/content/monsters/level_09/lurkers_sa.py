@@ -615,8 +615,7 @@ def m2619a4(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC, Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=12),
-    damage=Damage("2d6", 5, dtype=DamageType.NECROTIC),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 5, dtype=[DamageType.NECROTIC, DamageType.PSYCHIC]),
 )
 def m3299a0(c: Cast) -> None:
     if c.strike():
@@ -632,8 +631,7 @@ def m3299a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC, Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=12),
-    damage=Damage("2d6", 5, dtype=DamageType.NECROTIC),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 5, dtype=[DamageType.NECROTIC, DamageType.PSYCHIC]),
 )
 def m3299a1(c: Cast) -> None:
     if c.strike():
@@ -664,8 +662,7 @@ def m3299a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC, Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=12),
-    damage=Damage("3d8", 5, dtype=DamageType.NECROTIC),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("3d8", 5, dtype=[DamageType.NECROTIC, DamageType.PSYCHIC]),
 )
 def m3299a3(c: Cast) -> None:
     if c.strike():

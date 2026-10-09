@@ -518,8 +518,15 @@ def row_types(ref: str) -> tuple[DamageType, ...]:
     if p is None:
         return (DamageType.UNTYPED,)
     found: set[DamageType] = set()
-    if p.damage is not None and p.damage.dtype is not DamageType.UNTYPED:
-        found.add(p.damage.dtype)
+    if p.damage is not None:
+        # **The whole type, not the primary.** This prices a row by unioning
+        # what it can be resisted as, and a blow that is cold *and* necrotic
+        # is both -- taking `dtype` alone priced 88 rows as half of what they
+        # are, and the second type reached the estimate only if some keyword
+        # happened to carry it.
+        for kind in (p.damage.dtypes or (p.damage.dtype,)):
+            if kind is not DamageType.UNTYPED:
+                found.add(kind)
     named = {d.value: d for d in DamageType}
     for kw in p.keywords or ():
         hit = named.get(getattr(kw, "value", ""))

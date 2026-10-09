@@ -653,16 +653,63 @@ class Damage:
     #: Added on top: a monster's flat bonus, or a character's ability
     #: modifier named as a string -- "str", "dex" -- resolved at use.
     bonus: str | int = 0
-    dtype: DamageType = DamageType.UNTYPED
+    #: The blow's type, or **a list of them** for the 88 rows printing one
+    #: roll that is several -- "2d6 + 5 cold and necrotic damage". Written as
+    #: one field rather than a scalar plus a second list, on Camille's call
+    #: that two keywords is messy: an author says `dtype=[COLD, NECROTIC]`
+    #: and `__post_init__` splits it.
+    dtype: DamageType | Sequence[DamageType] = DamageType.UNTYPED
+    #: The whole type, derived -- never written by an author. Empty is the
+    #: ordinary case and means "just `dtype`".
+    #:
+    #: **The scalar cannot simply go away.** 172 sites read `.dtype` and
+    #: expect one type, across 13 in the engine, 155 in content and 3 in the
+    #: policy, and `resolve.deal_damage`'s own docstring states the
+    #: invariant: `dtype` stays the blow's primary type, which is what the
+    #: events carry and what every existing reader asks about. Making the
+    #: field genuinely polymorphic would turn all 172 into "might be one,
+    #: might be many"; normalising here gets the tidy call site for nothing.
+    dtypes: tuple[DamageType, ...] = ()
     #: `normal`, `limited` (encounter or recharge) or `minion`. MM3 scales
     #: the three differently.
     kind: str = NORMAL
     #: Half on a miss, which most weapon dailies say.
     half_on_miss: bool = False
 
+    def __post_init__(self) -> None:
+        """Split a list of types into the primary plus the whole set.
+
+        Duplicates are dropped and order is kept, so `[COLD, COLD]` is one
+        type and `[FIRE, NECROTIC]` keeps fire as the primary -- the card
+        prints the types in an order and the first of them is the one every
+        scalar reader will see. An empty list means untyped rather than
+        raising: a row that computes its own list should not explode on a
+        board where the list comes out empty.
+        """
+        if isinstance(self.dtype, DamageType):
+            return
+        types = tuple(dict.fromkeys(self.dtype)) or (DamageType.UNTYPED,)
+        object.__setattr__(self, "dtypes", types)
+        object.__setattr__(self, "dtype", types[0])
+
     def __str__(self) -> str:
         tail = "" if not self.bonus else f" + {self.bonus}"
-        kind = "" if self.dtype is DamageType.UNTYPED else f" {self.dtype.value}"
+        # **A comma join with a final "and", because that is what the card
+        # prints** -- "acid, cold, fire, lightning, and poison damage", not
+        # four "and"s. `cards.py` compares this string against the printed
+        # line, and two of the 88 rows name five types.
+        kinds = [
+            k.value for k in (self.dtypes or (self.dtype,))
+            if k is not DamageType.UNTYPED
+        ]
+        if not kinds:
+            kind = ""
+        elif len(kinds) == 1:
+            kind = f" {kinds[0]}"
+        elif len(kinds) == 2:
+            kind = f" {kinds[0]} and {kinds[1]}"
+        else:
+            kind = " " + ", ".join(kinds[:-1]) + f", and {kinds[-1]}"
         return f"{self.dice}{tail}{kind} damage"
 
 

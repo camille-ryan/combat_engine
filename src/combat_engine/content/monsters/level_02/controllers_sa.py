@@ -1225,8 +1225,7 @@ def m6006a6(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.COLD, Keyword.FIRE],
     attack=Attack(vs=AC, printed=7),
-    damage=Damage("1d8", 5, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d8", 5, dtype=[DamageType.COLD, DamageType.FIRE]),
 )
 def m6106a0(c: Cast) -> None:
     """The blow is fire *and* cold -- one roll of two types, which resistance
@@ -1247,10 +1246,15 @@ def m6106a0(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.FIRE, Keyword.FORCE],
     attack=Attack(vs=REF, printed=5),
-    damage=Damage("2d8", 2, dtype=DamageType.FIRE, kind=LIMITED, half_on_miss=True),
+    damage=Damage(
+        "2d8",
+        2,
+        dtype=[DamageType.FIRE, DamageType.FORCE],
+        kind=LIMITED,
+        half_on_miss=True,
+    ),
     trigger="it becomes bloodied",
     on=Trigger(Bloodied, about_me, "it becomes bloodied"),
-    dropped=("Damage(dtypes=)",),
 )
 def m6106a1(c: Cast) -> None:
     """Fire *and* force on one roll, as above: the header holds one type."""

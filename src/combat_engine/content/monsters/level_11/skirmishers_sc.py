@@ -1102,8 +1102,7 @@ def m2096a2(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FIRE, Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=16),
-    damage=Damage("3d8", 3, dtype=DamageType.FIRE, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("3d8", 3, dtype=[DamageType.FIRE, DamageType.NECROTIC], kind=LIMITED),
 )
 def m2096a3(c: Cast) -> None:
     """The Miss line is a smaller roll of one type, not half of the hit, so

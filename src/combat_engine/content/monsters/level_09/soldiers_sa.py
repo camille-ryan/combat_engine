@@ -643,8 +643,8 @@ def m1915a0(c: Cast) -> None:
 @power(
     "m1915a1", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, keywords=[Keyword.FIRE, Keyword.NECROTIC],
-    attack=Attack(vs=AC, printed=16), damage=Damage("2d8", 6, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    attack=Attack(vs=AC, printed=16),
+    damage=Damage("2d8", 6, dtype=[DamageType.FIRE, DamageType.NECROTIC]),
 )
 def m1915a1(c: Cast) -> None:
     """One roll of two types, which is all one `Damage` can say -- fire
@@ -2526,8 +2526,8 @@ def m5877a2(c: Cast) -> None:
 @power(
     "m5877a3", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, keywords=[Keyword.COLD, Keyword.NECROTIC],
-    attack=Attack(vs=FORT, printed=12), damage=Damage("3d6", 7, dtype=DamageType.COLD),
-    dropped=("Damage(dtypes=)",),
+    attack=Attack(vs=FORT, printed=12),
+    damage=Damage("3d6", 7, dtype=[DamageType.COLD, DamageType.NECROTIC]),
 )
 def m5877a3(c: Cast) -> None:
     """One roll of two types, which is all one `Damage` header can say --
@@ -2541,8 +2541,8 @@ def m5877a3(c: Cast) -> None:
 @power(
     "m5877a4", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, keywords=[Keyword.COLD, Keyword.NECROTIC],
-    attack=Attack(vs=FORT, printed=12), damage=Damage("3d6", 7, dtype=DamageType.COLD),
-    dropped=("Damage(dtypes=)",),
+    attack=Attack(vs=FORT, printed=12),
+    damage=Damage("3d6", 7, dtype=[DamageType.COLD, DamageType.NECROTIC]),
 )
 def m5877a4(c: Cast) -> None:
     if c.strike():
@@ -2725,8 +2725,8 @@ def m5926a3(c: Cast) -> None:
 @power(
     "m5962a0", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, keywords=[Keyword.FIRE, Keyword.PSYCHIC, Keyword.WEAPON],
-    attack=Attack(vs=AC, printed=14), damage=Damage("3d6", 6, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    attack=Attack(vs=AC, printed=14),
+    damage=Damage("3d6", 6, dtype=[DamageType.FIRE, DamageType.PSYCHIC]),
 )
 def m5962a0(c: Cast) -> None:
     if c.strike():
@@ -2738,8 +2738,7 @@ def m5962a0(c: Cast) -> None:
     "m5962a1", level=9, usage=ENCOUNTER, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, keywords=[Keyword.FIRE, Keyword.PSYCHIC, Keyword.ZONE],
     attack=Attack(vs=REF, printed=12),
-    damage=Damage("3d10", 5, dtype=DamageType.FIRE, half_on_miss=True),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("3d10", 5, dtype=[DamageType.FIRE, DamageType.PSYCHIC], half_on_miss=True),
 )
 def m5962a1(c: Cast) -> None:
     """"Difficult terrain for good creatures" has no alignment this engine

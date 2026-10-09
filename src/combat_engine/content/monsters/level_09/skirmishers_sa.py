@@ -2451,8 +2451,7 @@ def m5869a3(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.NECROTIC, Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=12),
-    damage=Damage("2d10", 2, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d10", 2, dtype=[DamageType.NECROTIC, DamageType.PSYCHIC], kind=LIMITED),
 )
 def m5869a4(c: Cast) -> None:
     if c.strike():

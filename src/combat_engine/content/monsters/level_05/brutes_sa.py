@@ -1290,13 +1290,12 @@ def m4002a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.NECROTIC, Keyword.POISON],
     attack=Attack(vs=REF, printed=8),
-    damage=Damage("2d6", 3, dtype=DamageType.NECROTIC),
+    damage=Damage("2d6", 3, dtype=[DamageType.NECROTIC, DamageType.POISON]),
     trigger="it is first bloodied, and again when it drops to 0 hit points",
     on=(
         Trigger(Bloodied, about_me, "it is first bloodied"),
         Trigger(Dropped, about_me, "it drops"),
     ),
-    dropped=("Damage(dtypes=)",),
 )
 def m4002a2(c: Cast) -> None:
     if c.strike():

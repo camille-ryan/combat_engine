@@ -578,8 +578,7 @@ def m2073a2(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.NECROTIC, Keyword.POISON],
     attack=Attack(vs=FORT, printed=14),
-    damage=Damage("4d10", 6, dtype=DamageType.POISON, kind=LIMITED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("4d10", 6, dtype=[DamageType.NECROTIC, DamageType.POISON], kind=LIMITED),
 )
 def m2073a3(c: Cast) -> None:
     """One blow of two types, which the header cannot say: `Damage` takes a

@@ -2944,8 +2944,8 @@ def m5830a2(c: Cast) -> None:
 @power(
     "m5830a3", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, keywords=[Keyword.PSYCHIC, Keyword.RADIANT, Keyword.WEAPON],
-    attack=Attack(vs=AC, printed=13), damage=Damage("2d6", 9, dtype=DamageType.PSYCHIC),
-    dropped=("Damage(dtypes=)",),
+    attack=Attack(vs=AC, printed=13),
+    damage=Damage("2d6", 9, dtype=[DamageType.PSYCHIC, DamageType.RADIANT]),
 )
 def m5830a3(c: Cast) -> None:
     if c.strike():
