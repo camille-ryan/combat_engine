@@ -2058,13 +2058,42 @@ def treasure(who: Character, rng: Random) -> list:
         row = _pick_item(pool, who.cls, rng)
         if row is None:
             continue
-        magic = magic_for(row["ref"], plus=row["plus"])
+        magic = magic_for(
+            row["ref"], plus=row["plus"], powers=_blocks_of(row["ref"])
+        )
         if magic is None:
             continue
         if arm is held and arm is not None:
             magic = replace(magic, slot="implement")
         out.append(magic)
     return out
+
+
+def _blocks_of(ref: str) -> tuple[str, ...]:
+    """An item's own rows -- its Properties and its Powers -- in printed order.
+
+    `Magic.powers` has always been documented as "the item's own rows ... which
+    go into `Powers.known` while it is worn", and `equipment.equip` has read it
+    since it was written. Nothing filled it: `treasure` called `magic_for` with
+    no `powers=`, so every character was dealt the *numbers* of three magic
+    items -- enhancement, critical rider, defence bonus, all columns `equip`
+    reads directly -- and none of their text. 285 declared blocks across 64
+    dealt characters, 0 of them in a power list. #448.
+
+    **Only rows the tree declares.** `item_block` lists every printed Property
+    and Power including the ones nobody has written, and a `Powers.known`
+    holding a ref with no declared row is a card the engine cannot resolve.
+    A declared row carrying a marker is granted and then refused by `usable`,
+    which is right: the character does own that property, and the reason it
+    does nothing is the marker rather than the grant.
+    """
+    from combat_engine.db import game
+    from combat_engine.engine.dsl import REGISTRY
+
+    rows = game().execute(
+        "SELECT ref FROM item_block WHERE item_ref = ? ORDER BY idx", (ref,)
+    )
+    return tuple(r["ref"] for r in rows if r["ref"] in REGISTRY)
 
 
 def _pick_item(pool: list, cls: str, rng: Random):  # noqa: ANN202
